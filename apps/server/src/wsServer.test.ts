@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Exit, Layer, PubSub, Scope, Stream } from "effect";
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { createServer } from "./wsServer";
@@ -510,7 +511,7 @@ describe("WebSocket Server", () => {
     const stateDir = makeTempDir("t3code-state-bootstrap-existing-");
     const persistenceLayer = makeSqlitePersistenceLive(
       path.join(stateDir, "state.sqlite"),
-    ) as unknown as Layer.Layer<SqlClient.SqlClient, never>;
+    ).pipe(Layer.provide(NodeServices.layer)) as unknown as Layer.Layer<SqlClient.SqlClient, never>;
     const cwd = "/test/bootstrap-existing";
 
     server = await createTestServer({
