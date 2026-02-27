@@ -42,6 +42,7 @@ import { clamp } from "effect/Number";
 import { Open } from "./open";
 import { ServerConfig } from "./config";
 import { GitCore } from "./git/Services/GitCore.ts";
+import { tryHandleProjectFaviconRequest } from "./projectFaviconRoute";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -230,163 +231,11 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     });
   });
 
-  // Well-known favicon paths checked in order.
-  const FAVICON_CANDIDATES = [
-    "favicon.svg",
-    "favicon.ico",
-    "favicon.png",
-    "public/favicon.svg",
-    "public/favicon.ico",
-    "public/favicon.png",
-    "app/favicon.ico",
-    "app/favicon.png",
-    "app/icon.svg",
-    "app/icon.png",
-    "app/icon.ico",
-    "src/favicon.ico",
-    "src/favicon.svg",
-    "src/app/favicon.ico",
-    "src/app/icon.svg",
-    "src/app/icon.png",
-  ];
-
-  // Files that may contain a <link rel="icon"> or icon metadata declaration.
-  const ICON_SOURCE_FILES = [
-    "index.html",
-    "public/index.html",
-    "app/routes/__root.tsx",
-    "src/routes/__root.tsx",
-    "app/root.tsx",
-    "src/root.tsx",
-    "src/index.html",
-  ];
-
-  // Extract icon href from HTML/TSX source content.
-  // Matches <link rel="icon" href="…"> or { rel: "icon", href: "…" } patterns.
-  const LINK_ICON_HTML_RE = /<link[^>]*rel=["'](?:icon|shortcut icon)["'][^>]*href=["']([^"'?]+)/i;
-  const LINK_ICON_OBJ_RE = /rel:\s*["'](?:icon|shortcut icon)["'][^}]*href:\s*["']([^"'?]+)/i;
-  function extractIconHref(source: string): string | null {
-    const htmlMatch = source.match(LINK_ICON_HTML_RE);
-    if (htmlMatch?.[1]) return htmlMatch[1];
-    const objMatch = source.match(LINK_ICON_OBJ_RE);
-    if (objMatch?.[1]) return objMatch[1];
-    return null;
-  }
-
-  /**
-   * Resolve an icon href (e.g. "/grass-logo.svg") to a file on disk.
-   * For href starting with "/" we look in public/ first, then project root.
-   */
-  function resolveIconHref(projectCwd: string, href: string): string[] {
-    const clean = href.replace(/^\//, "");
-    return [
-      path.join(projectCwd, "public", clean),
-      path.join(projectCwd, clean),
-    ];
-  }
-
-  function serveFaviconFile(
-    filePath: string,
-    res: http.ServerResponse,
-  ): void {
-    const ext = path.extname(filePath);
-    const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
-    fs.readFile(filePath, (readErr, data) => {
-      if (readErr) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Read error");
-        return;
-      }
-      res.writeHead(200, {
-        "Content-Type": contentType,
-        "Cache-Control": "public, max-age=3600",
-      });
-      res.end(data);
-    });
-  }
-
   // HTTP server — serves static files or redirects to Vite dev server
   const httpServer = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
 
-    // Serve project favicons from their working directories.
-    // Handled before the dev redirect so it works in both modes.
-    if (url.pathname === "/api/project-favicon") {
-      const projectCwd = url.searchParams.get("cwd");
-      if (!projectCwd) {
-        res.writeHead(400, { "Content-Type": "text/plain" });
-        res.end("Missing cwd parameter");
-        return;
-      }
-
-      // Phase 1: Check well-known favicon paths.
-      const tryCandidates = (index: number) => {
-        if (index >= FAVICON_CANDIDATES.length) {
-          // Phase 2: Parse source files for icon link declarations.
-          trySourceFiles(0);
-          return;
-        }
-        const candidate = path.join(projectCwd, FAVICON_CANDIDATES[index]!);
-        if (!candidate.startsWith(projectCwd + path.sep)) {
-          tryCandidates(index + 1);
-          return;
-        }
-        fs.stat(candidate, (err, stats) => {
-          if (err || !stats?.isFile()) {
-            tryCandidates(index + 1);
-            return;
-          }
-          serveFaviconFile(candidate, res);
-        });
-      };
-
-      // Phase 2: Read source/HTML files and extract icon href references.
-      const trySourceFiles = (index: number) => {
-        if (index >= ICON_SOURCE_FILES.length) {
-          res.writeHead(404, { "Content-Type": "text/plain" });
-          res.end("No favicon found");
-          return;
-        }
-        const sourceFile = path.join(projectCwd, ICON_SOURCE_FILES[index]!);
-        fs.readFile(sourceFile, "utf8", (err, content) => {
-          if (err) {
-            trySourceFiles(index + 1);
-            return;
-          }
-          const href = extractIconHref(content);
-          if (!href) {
-            trySourceFiles(index + 1);
-            return;
-          }
-          const candidates = resolveIconHref(projectCwd, href);
-          tryResolvedPaths(candidates, 0, () => trySourceFiles(index + 1));
-        });
-      };
-
-      const tryResolvedPaths = (
-        paths: string[],
-        index: number,
-        onExhausted: () => void,
-      ) => {
-        if (index >= paths.length) {
-          onExhausted();
-          return;
-        }
-        const candidate = paths[index]!;
-        if (!candidate.startsWith(projectCwd + path.sep)) {
-          tryResolvedPaths(paths, index + 1, onExhausted);
-          return;
-        }
-        fs.stat(candidate, (err, stats) => {
-          if (err || !stats?.isFile()) {
-            tryResolvedPaths(paths, index + 1, onExhausted);
-            return;
-          }
-          serveFaviconFile(candidate, res);
-        });
-      };
-
-      tryCandidates(0);
+    if (tryHandleProjectFaviconRequest(url, res)) {
       return;
     }
 

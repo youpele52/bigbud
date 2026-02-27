@@ -169,6 +169,15 @@ describe("isLatestTurnSettled", () => {
     ).toBe(false);
   });
 
+  it("returns false while any turn is running to avoid stale latest-turn banners", () => {
+    expect(
+      isLatestTurnSettled(latestTurn, {
+        orchestrationStatus: "running",
+        activeTurnId: TurnId.makeUnsafe("turn-2"),
+      }),
+    ).toBe(false);
+  });
+
   it("returns true once the session is no longer running that turn", () => {
     expect(
       isLatestTurnSettled(latestTurn, {

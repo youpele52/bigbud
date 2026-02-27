@@ -83,9 +83,8 @@ export function isLatestTurnSettled(
   if (!latestTurn?.startedAt) return false;
   if (!latestTurn.completedAt) return false;
   if (!session) return true;
-  return !(
-    session.orchestrationStatus === "running" && session.activeTurnId === latestTurn.turnId
-  );
+  if (session.orchestrationStatus === "running") return false;
+  return true;
 }
 
 export function derivePendingApprovals(
