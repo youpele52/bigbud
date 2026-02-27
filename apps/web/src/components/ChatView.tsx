@@ -83,6 +83,8 @@ import {
   LockOpenIcon,
   Undo2Icon,
   XIcon,
+  CopyIcon,
+  CheckIcon,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./ui/select";
@@ -2333,6 +2335,28 @@ const PendingApprovalsPanel = memo(function PendingApprovalsPanel({
   );
 });
 
+const MessageCopyButton = memo(function MessageCopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [text]);
+
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="outline"
+      onClick={handleCopy}
+      title="Copy message"
+    >
+      {copied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+    </Button>
+  );
+});
+
 interface MessagesTimelineProps {
   hasMessages: boolean;
   isWorking: boolean;
@@ -2549,7 +2573,7 @@ const MessagesTimeline = memo(function MessagesTimeline({
                   const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
                   return (
                     <div className="flex justify-end">
-                      <div className="max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+                      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
                         {userImages.length > 0 && (
                           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
                             {userImages.map(
@@ -2583,17 +2607,21 @@ const MessagesTimeline = memo(function MessagesTimeline({
                           </pre>
                         )}
                         <div className="mt-1.5 flex items-center justify-end gap-2">
-                          {canRevertAgentWork && (
-                            <Button
-                              type="button"
-                              size="xs"
-                              variant="outline"
-                              disabled={isRevertingCheckpoint || isWorking}
-                              onClick={() => onRevertUserMessage(row.message.id)}
-                            >
-                              <Undo2Icon className="size-3" />
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+                            {row.message.text && <MessageCopyButton text={row.message.text} />}
+                            {canRevertAgentWork && (
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="outline"
+                                disabled={isRevertingCheckpoint || isWorking}
+                                onClick={() => onRevertUserMessage(row.message.id)}
+                                title="Revert to this message"
+                              >
+                                <Undo2Icon className="size-3" />
+                              </Button>
+                            )}
+                          </div>
                           <p className="text-right text-[10px] text-muted-foreground/30">
                             {formatTimestamp(row.message.createdAt)}
                           </p>
