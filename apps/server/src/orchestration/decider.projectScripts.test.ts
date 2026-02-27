@@ -152,6 +152,8 @@ describe("decider project scripts", () => {
           },
           model: "gpt-5",
           effort: "high",
+          approvalPolicy: "on-request",
+          sandboxMode: "workspace-write",
           createdAt: now,
         },
         readModel,
@@ -169,5 +171,13 @@ describe("decider project scripts", () => {
       return;
     }
     expect(turnStartEvent.payload.assistantDeliveryMode).toBe("buffered");
+    expect(turnStartEvent.payload).toMatchObject({
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      messageId: asMessageId("message-user-1"),
+      model: "gpt-5",
+      effort: "high",
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+    });
   });
 });

@@ -171,6 +171,8 @@ describe("ProviderCommandReactor", () => {
           text: "hello reactor",
           attachments: [],
         },
+        approvalPolicy: "on-request",
+        sandboxMode: "workspace-write",
         createdAt: now,
       }),
     );
@@ -181,6 +183,8 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
       cwd: "/tmp/provider-project",
       model: "gpt-5-codex",
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());

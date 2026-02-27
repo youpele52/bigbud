@@ -3,7 +3,9 @@ import {
   CommandId,
   EventId,
   type OrchestrationEvent,
+  type ProviderApprovalPolicy,
   type ProviderKind,
+  type ProviderSandboxMode,
   type OrchestrationSession,
   type ThreadId,
   type TurnId,
@@ -128,6 +130,10 @@ const make = Effect.gen(function* () {
   const ensureSessionForThread = Effect.fnUntraced(function* (
     threadId: ThreadId,
     createdAt: string,
+    options?: {
+      readonly approvalPolicy?: ProviderApprovalPolicy;
+      readonly sandboxMode?: ProviderSandboxMode;
+    },
   ) {
     const readModel = yield* orchestrationEngine.getReadModel();
     const thread = readModel.threads.find((entry) => entry.id === threadId);
@@ -153,6 +159,8 @@ const make = Effect.gen(function* () {
       ...(preferredProvider ? { provider: preferredProvider } : {}),
       ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
       ...(thread.model ? { model: thread.model } : {}),
+      ...(options?.approvalPolicy !== undefined ? { approvalPolicy: options.approvalPolicy } : {}),
+      ...(options?.sandboxMode !== undefined ? { sandboxMode: options.sandboxMode } : {}),
     });
 
     yield* setThreadSession({
@@ -180,13 +188,18 @@ const make = Effect.gen(function* () {
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly model?: string;
     readonly effort?: string;
+    readonly approvalPolicy?: ProviderApprovalPolicy;
+    readonly sandboxMode?: ProviderSandboxMode;
     readonly createdAt: string;
   }) {
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
       return;
     }
-    const sessionId = yield* ensureSessionForThread(input.threadId, input.createdAt);
+    const sessionId = yield* ensureSessionForThread(input.threadId, input.createdAt, {
+      ...(input.approvalPolicy !== undefined ? { approvalPolicy: input.approvalPolicy } : {}),
+      ...(input.sandboxMode !== undefined ? { sandboxMode: input.sandboxMode } : {}),
+    });
     const normalizedInput = toNonEmptyProviderInput(input.messageText);
     const normalizedAttachments = input.attachments ?? [];
 
@@ -232,6 +245,8 @@ const make = Effect.gen(function* () {
       ...(event.payload.model !== undefined ? { model: event.payload.model } : {}),
       ...(event.payload.effort !== undefined ? { effort: event.payload.effort } : {}),
       createdAt: event.payload.createdAt,
+      approvalPolicy: event.payload.approvalPolicy,
+      sandboxMode: event.payload.sandboxMode,
     });
   });
 
