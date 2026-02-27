@@ -198,52 +198,27 @@ function EventRouter() {
           return;
         }
 
-        const fallbackSnapshot =
-          payload.bootstrapProjectId && payload.bootstrapThreadId
-            ? null
-            : await api.orchestration.getSnapshot().catch(() => null);
-        if (disposed) {
-          return;
-        }
-
-        const bootstrapProjectId =
-          payload.bootstrapProjectId ??
-          fallbackSnapshot?.projects.find(
-            (project) => project.workspaceRoot === payload.cwd && project.deletedAt === null,
-          )?.id;
-        if (!bootstrapProjectId) {
+        if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
           return;
         }
         dispatch({
           type: "SET_PROJECT_EXPANDED",
-          projectId: bootstrapProjectId,
+          projectId: payload.bootstrapProjectId,
           expanded: true,
         });
 
-        const bootstrapThreadId =
-          payload.bootstrapThreadId ??
-          fallbackSnapshot?.threads
-            .filter((thread) => thread.projectId === bootstrapProjectId && thread.deletedAt === null)
-            .toSorted((a, b) => {
-              const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-              if (byDate !== 0) return byDate;
-              return b.id.localeCompare(a.id);
-            })[0]?.id;
-        if (!bootstrapThreadId) {
-          return;
-        }
         if (pathnameRef.current !== "/") {
           return;
         }
-        if (handledBootstrapThreadIdRef.current === bootstrapThreadId) {
+        if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
           return;
         }
         await navigate({
           to: "/$threadId",
-          params: { threadId: bootstrapThreadId },
+          params: { threadId: payload.bootstrapThreadId },
           replace: true,
         });
-        handledBootstrapThreadIdRef.current = bootstrapThreadId;
+        handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
       })().catch(() => undefined);
     });
     const unsubServerConfigUpdated = onServerConfigUpdated((payload) => {
