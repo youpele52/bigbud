@@ -346,7 +346,7 @@ const make = Effect.gen(function* () {
       const now = event.createdAt;
       const sessionProviderThreadId = thread.session?.providerThreadId ?? null;
       const eventProviderThreadId = toProviderThreadId(event.threadId);
-      const eventTurnId = toTurnId(event.turnId);
+      const eventTurnId = toTurnId("turnId" in event ? event.turnId : undefined);
       const activeTurnId = thread.session?.activeTurnId ?? null;
 
       const matchesThreadScope =

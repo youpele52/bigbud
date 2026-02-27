@@ -11,6 +11,7 @@ import {
   ProjectId,
   ProviderSessionId,
   ProviderThreadId,
+  ProviderTurnId,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -40,6 +41,7 @@ import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 const asSessionId = (value: string): ProviderSessionId => ProviderSessionId.makeUnsafe(value);
 const asProviderThreadId = (value: string): ProviderThreadId => ProviderThreadId.makeUnsafe(value);
+const asProviderTurnId = (value: string): ProviderTurnId => ProviderTurnId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
 
 function createProviderServiceHarness(cwd: string, hasSession = true, sessionCwd = cwd) {
@@ -334,7 +336,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-1"),
+      turnId: asProviderTurnId("turn-1"),
     });
     await waitForGitRefExists(
       harness.cwd,
@@ -349,7 +351,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-1"),
+      turnId: asProviderTurnId("turn-1"),
       status: "completed",
     });
 
@@ -413,7 +415,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-main"),
+      turnId: asProviderTurnId("turn-main"),
     });
     await waitForGitRefExists(
       harness.cwd,
@@ -429,7 +431,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-aux"),
-      turnId: asTurnId("turn-aux"),
+      turnId: asProviderTurnId("turn-aux"),
       status: "completed",
     });
 
@@ -445,7 +447,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-main"),
+      turnId: asProviderTurnId("turn-main"),
       status: "completed",
     });
 
@@ -488,7 +490,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-missing-baseline"),
+      turnId: asProviderTurnId("turn-missing-baseline"),
       status: "completed",
     });
 
@@ -580,7 +582,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-missing"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-missing"),
-      turnId: asTurnId("turn-missing-cwd"),
+      turnId: asProviderTurnId("turn-missing-cwd"),
       status: "completed",
     });
 
@@ -629,7 +631,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-3"),
+      turnId: asProviderTurnId("turn-3"),
       turnCount: 3,
       status: "completed",
     });
@@ -682,7 +684,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-runtime-failure"),
+      turnId: asProviderTurnId("turn-runtime-failure"),
       turnCount: 1,
       status: "completed",
     });
@@ -694,7 +696,7 @@ describe("CheckpointReactor", () => {
       sessionId: asSessionId("sess-1"),
       createdAt: new Date().toISOString(),
       threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
-      turnId: asTurnId("turn-after-runtime-failure"),
+      turnId: asProviderTurnId("turn-after-runtime-failure"),
     });
 
     await waitForGitRefExists(
