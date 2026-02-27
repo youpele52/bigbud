@@ -154,12 +154,13 @@ export function parseDevRunnerArgs(rawArgs) {
 function resolveStateDir(env, envOverrides) {
   const overrideValue = envOverrides?.T3CODE_STATE_DIR?.trim();
   if (overrideValue) {
-    return overrideValue;
+    // Resolve relative paths against cwd (monorepo root) before turbo changes directories
+    return path.resolve(overrideValue);
   }
 
   const envValue = env?.T3CODE_STATE_DIR?.trim();
   if (envValue) {
-    return envValue;
+    return path.resolve(envValue);
   }
 
   return DEFAULT_DEV_STATE_DIR;
