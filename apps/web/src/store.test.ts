@@ -92,3 +92,62 @@ describe("store reducer", () => {
     expect(next).toEqual(initialState);
   });
 });
+
+describe("store terminal activity reducer", () => {
+  it("adds a terminal to runningTerminalIds when subprocess activity starts", () => {
+    const state = makeState(
+      makeThread({
+        terminalIds: [DEFAULT_THREAD_TERMINAL_ID, "alt"],
+        terminalGroups: [
+          {
+            id: `group-${DEFAULT_THREAD_TERMINAL_ID}`,
+            terminalIds: [DEFAULT_THREAD_TERMINAL_ID, "alt"],
+          },
+        ],
+      }),
+    );
+    const next = reducer(state, {
+      type: "SET_THREAD_TERMINAL_ACTIVITY",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      terminalId: "alt",
+      hasRunningSubprocess: true,
+    });
+
+    expect(next.threads[0]?.runningTerminalIds).toEqual(["alt"]);
+  });
+
+  it("removes a terminal from runningTerminalIds when subprocess activity stops", () => {
+    const state = makeState(
+      makeThread({
+        terminalIds: [DEFAULT_THREAD_TERMINAL_ID, "alt"],
+        terminalGroups: [
+          {
+            id: `group-${DEFAULT_THREAD_TERMINAL_ID}`,
+            terminalIds: [DEFAULT_THREAD_TERMINAL_ID, "alt"],
+          },
+        ],
+        runningTerminalIds: ["alt"],
+      }),
+    );
+    const next = reducer(state, {
+      type: "SET_THREAD_TERMINAL_ACTIVITY",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      terminalId: "alt",
+      hasRunningSubprocess: false,
+    });
+
+    expect(next.threads[0]?.runningTerminalIds).toEqual([]);
+  });
+
+  it("ignores activity events for unknown terminal ids", () => {
+    const state = makeState(makeThread());
+    const next = reducer(state, {
+      type: "SET_THREAD_TERMINAL_ACTIVITY",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      terminalId: "missing",
+      hasRunningSubprocess: true,
+    });
+
+    expect(next.threads[0]?.runningTerminalIds).toEqual([]);
+  });
+});

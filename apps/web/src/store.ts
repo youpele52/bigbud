@@ -35,6 +35,12 @@ type Action =
   | { type: "MARK_THREAD_VISITED"; threadId: ThreadId; visitedAt?: string }
   | { type: "MARK_THREAD_UNREAD"; threadId: ThreadId }
   | { type: "TOGGLE_PROJECT"; projectId: Project["id"] }
+  | {
+      type: "SET_THREAD_TERMINAL_ACTIVITY";
+      threadId: ThreadId;
+      terminalId: string;
+      hasRunningSubprocess: boolean;
+    }
   | { type: "TOGGLE_THREAD_TERMINAL"; threadId: ThreadId }
   | { type: "SET_THREAD_TERMINAL_OPEN"; threadId: ThreadId; open: boolean }
   | { type: "SET_THREAD_TERMINAL_HEIGHT"; threadId: ThreadId; height: number }
@@ -370,6 +376,27 @@ function closeThreadTerminal(thread: Thread, terminalId: string): Thread {
   });
 }
 
+function setThreadTerminalActivity(
+  thread: Thread,
+  terminalId: string,
+  hasRunningSubprocess: boolean,
+): Thread {
+  const normalizedThread = normalizeThreadTerminals(thread);
+  if (!normalizedThread.terminalIds.includes(terminalId)) {
+    return normalizedThread;
+  }
+  const runningTerminalIds = new Set(normalizedThread.runningTerminalIds);
+  if (hasRunningSubprocess) {
+    runningTerminalIds.add(terminalId);
+  } else {
+    runningTerminalIds.delete(terminalId);
+  }
+  return normalizeThreadTerminals({
+    ...normalizedThread,
+    runningTerminalIds: [...runningTerminalIds],
+  });
+}
+
 // ── Reducer ──────────────────────────────────────────────────────────
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -533,6 +560,14 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         projects: state.projects.map((p) =>
           p.id === action.projectId ? { ...p, expanded: !p.expanded } : p,
+        ),
+      };
+
+    case "SET_THREAD_TERMINAL_ACTIVITY":
+      return {
+        ...state,
+        threads: updateThread(state.threads, action.threadId, (thread) =>
+          setThreadTerminalActivity(thread, action.terminalId, action.hasRunningSubprocess),
         ),
       };
 

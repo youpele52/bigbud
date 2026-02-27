@@ -1,8 +1,5 @@
-import {
-  Outlet,
-  createRootRouteWithContext,
-  type ErrorComponentProps,
-} from "@tanstack/react-router";
+import { ThreadId } from "@t3tools/contracts";
+import { Outlet, createRootRouteWithContext, type ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
@@ -13,6 +10,7 @@ import { serverConfigQueryOptions, serverQueryKeys } from "../lib/serverReactQue
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
 import { preferredTerminalEditor } from "../terminal-links";
+import { terminalRunningSubprocessFromEvent } from "../terminalActivity";
 import { onServerConfigUpdated, onServerWelcome } from "../wsNativeApi";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 
@@ -170,6 +168,18 @@ function EventRouter() {
       }
       void syncSnapshot();
     });
+    const unsubTerminalEvent = api.terminal.onEvent((event) => {
+      const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
+      if (hasRunningSubprocess === null) {
+        return;
+      }
+      dispatch({
+        type: "SET_THREAD_TERMINAL_ACTIVITY",
+        threadId: ThreadId.makeUnsafe(event.threadId),
+        terminalId: event.terminalId,
+        hasRunningSubprocess,
+      });
+    });
     const unsubWelcome = onServerWelcome(() => {
       void syncSnapshot();
     });
@@ -218,6 +228,7 @@ function EventRouter() {
     return () => {
       disposed = true;
       unsubDomainEvent();
+      unsubTerminalEvent();
       unsubWelcome();
       unsubServerConfigUpdated();
     };
