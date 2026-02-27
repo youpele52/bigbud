@@ -1,4 +1,4 @@
-import { ChevronRightIcon, TerminalIcon } from "lucide-react";
+import { ChevronRightIcon, FolderIcon, TerminalIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_MODEL,
@@ -138,6 +138,50 @@ function T3Wordmark() {
         fill="currentColor"
       />
     </svg>
+  );
+}
+
+/**
+ * Derives the server's HTTP origin (scheme + host + port) from the same
+ * sources WsTransport uses, converting ws(s) to http(s).
+ */
+function getServerHttpOrigin(): string {
+  const bridgeUrl = window.desktopBridge?.getWsUrl();
+  const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
+  const wsUrl =
+    bridgeUrl && bridgeUrl.length > 0
+      ? bridgeUrl
+      : envUrl && envUrl.length > 0
+        ? envUrl
+        : `ws://${window.location.hostname}:${window.location.port}`;
+  // Parse to extract just the origin, dropping path/query (e.g. ?token=…)
+  const httpUrl = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:");
+  try {
+    return new URL(httpUrl).origin;
+  } catch {
+    return httpUrl;
+  }
+}
+
+const serverHttpOrigin = getServerHttpOrigin();
+
+function ProjectFavicon({ cwd }: { cwd: string }) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+
+  const src = `${serverHttpOrigin}/api/project-favicon?cwd=${encodeURIComponent(cwd)}`;
+
+  if (status === "error") {
+    return <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/50" />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className={`size-3.5 shrink-0 rounded-sm object-contain ${status === "loading" ? "hidden" : ""}`}
+      onLoad={() => setStatus("loaded")}
+      onError={() => setStatus("error")}
+    />
   );
 }
 
@@ -573,6 +617,7 @@ export default function Sidebar() {
                           project.expanded ? "rotate-90" : ""
                         }`}
                       />
+                      <ProjectFavicon cwd={project.cwd} />
                       <span className="flex-1 truncate text-xs font-medium text-foreground/90">
                         {project.name}
                       </span>
