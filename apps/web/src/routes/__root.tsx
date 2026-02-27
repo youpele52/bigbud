@@ -1,5 +1,11 @@
 import { ThreadId } from "@t3tools/contracts";
-import { Outlet, createRootRouteWithContext, type ErrorComponentProps } from "@tanstack/react-router";
+import {
+  Outlet,
+  createRootRouteWithContext,
+  type ErrorComponentProps,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
@@ -119,7 +125,10 @@ function errorDetails(error: unknown): string {
 function EventRouter() {
   const { dispatch } = useStore();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const lastConfigIssuesSignatureRef = useRef<string | null>(null);
+  const handledBootstrapThreadIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const api = readNativeApi();
@@ -180,8 +189,31 @@ function EventRouter() {
         hasRunningSubprocess,
       });
     });
-    const unsubWelcome = onServerWelcome(() => {
-      void syncSnapshot();
+    const unsubWelcome = onServerWelcome((payload) => {
+      void (async () => {
+        await syncSnapshot();
+
+        if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
+          return;
+        }
+        dispatch({
+          type: "SET_PROJECT_EXPANDED",
+          projectId: payload.bootstrapProjectId,
+          expanded: true,
+        });
+        if (pathname !== "/") {
+          return;
+        }
+        if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
+          return;
+        }
+        handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
+        await navigate({
+          to: "/$threadId",
+          params: { threadId: payload.bootstrapThreadId },
+          replace: true,
+        });
+      })().catch(() => undefined);
     });
     const unsubServerConfigUpdated = onServerConfigUpdated((payload) => {
       const signature = JSON.stringify(payload.issues);
@@ -232,7 +264,7 @@ function EventRouter() {
       unsubWelcome();
       unsubServerConfigUpdated();
     };
-  }, [dispatch, queryClient]);
+  }, [dispatch, navigate, pathname, queryClient]);
 
   return null;
 }

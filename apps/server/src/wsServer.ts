@@ -16,6 +16,7 @@ import {
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
+  ThreadId,
   TerminalEvent,
   WS_CHANNELS,
   WS_METHODS,
@@ -337,22 +338,56 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
 
   yield* Scope.provide(orchestrationReactor.start, subscriptionsScope);
 
+  let welcomeBootstrapProjectId: ProjectId | undefined;
+  let welcomeBootstrapThreadId: ThreadId | undefined;
+
   if (autoBootstrapProjectFromCwd) {
     yield* Effect.gen(function* () {
       const snapshot = yield* projectionReadModelQuery.getSnapshot();
-      const existing = snapshot.projects.find((project) => project.workspaceRoot === cwd);
-      if (!existing) {
+      const existingProject = snapshot.projects.find(
+        (project) => project.workspaceRoot === cwd && project.deletedAt === null,
+      );
+      let bootstrapProjectId: ProjectId;
+      let bootstrapProjectDefaultModel: string;
+
+      if (!existingProject) {
         const createdAt = new Date().toISOString();
-        const projectName = path.basename(cwd) || "project";
+        bootstrapProjectId = ProjectId.makeUnsafe(crypto.randomUUID());
+        const bootstrapProjectTitle = path.basename(cwd) || "project";
+        bootstrapProjectDefaultModel = "gpt-5-codex";
         yield* orchestrationEngine.dispatch({
           type: "project.create",
           commandId: CommandId.makeUnsafe(crypto.randomUUID()),
-          projectId: ProjectId.makeUnsafe(crypto.randomUUID()),
-          title: projectName,
+          projectId: bootstrapProjectId,
+          title: bootstrapProjectTitle,
           workspaceRoot: cwd,
-          defaultModel: "gpt-5-codex",
+          defaultModel: bootstrapProjectDefaultModel,
           createdAt,
         });
+      } else {
+        bootstrapProjectId = existingProject.id;
+        bootstrapProjectDefaultModel = existingProject.defaultModel ?? "gpt-5-codex";
+      }
+
+      const existingThread = snapshot.threads.find(
+        (thread) => thread.projectId === bootstrapProjectId && thread.deletedAt === null,
+      );
+      if (!existingThread) {
+        const createdAt = new Date().toISOString();
+        const threadId = ThreadId.makeUnsafe(crypto.randomUUID());
+        yield* orchestrationEngine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
+          threadId,
+          projectId: bootstrapProjectId,
+          title: "New thread",
+          model: bootstrapProjectDefaultModel,
+          branch: null,
+          worktreePath: null,
+          createdAt,
+        });
+        welcomeBootstrapProjectId = bootstrapProjectId;
+        welcomeBootstrapThreadId = threadId;
       }
     }).pipe(
       Effect.mapError(
@@ -581,7 +616,12 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
     const welcome: WsPush = {
       type: "push",
       channel: WS_CHANNELS.serverWelcome,
-      data: { cwd, projectName },
+      data: {
+        cwd,
+        projectName,
+        ...(welcomeBootstrapProjectId ? { bootstrapProjectId: welcomeBootstrapProjectId } : {}),
+        ...(welcomeBootstrapThreadId ? { bootstrapThreadId: welcomeBootstrapThreadId } : {}),
+      },
     };
     logOutgoingPush(welcome, 1);
     ws.send(JSON.stringify(welcome));

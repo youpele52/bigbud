@@ -65,14 +65,39 @@ describe("wsNativeApi", () => {
     emitPush(WS_CHANNELS.serverWelcome, payload);
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(payload);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining(payload));
 
     const lateListener = vi.fn();
     onServerWelcome(lateListener);
 
     expect(lateListener).toHaveBeenCalledTimes(1);
-    expect(lateListener).toHaveBeenCalledWith(payload);
+    expect(lateListener).toHaveBeenCalledWith(expect.objectContaining(payload));
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserves bootstrap ids from server.welcome payloads", async () => {
+    const { createWsNativeApi, onServerWelcome } = await import("./wsNativeApi");
+
+    createWsNativeApi();
+    const listener = vi.fn();
+    onServerWelcome(listener);
+
+    emitPush(WS_CHANNELS.serverWelcome, {
+      cwd: "/tmp/workspace",
+      projectName: "t3-code",
+      bootstrapProjectId: "project-1",
+      bootstrapThreadId: "thread-1",
+    });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/tmp/workspace",
+        projectName: "t3-code",
+        bootstrapProjectId: "project-1",
+        bootstrapThreadId: "thread-1",
+      }),
+    );
   });
 
   it("ignores invalid server.welcome payloads and keeps subscription active", async () => {
@@ -87,7 +112,9 @@ describe("wsNativeApi", () => {
     emitPush(WS_CHANNELS.serverWelcome, { cwd: "/tmp/workspace", projectName: "t3-code" });
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith({ cwd: "/tmp/workspace", projectName: "t3-code" });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/tmp/workspace", projectName: "t3-code" }),
+    );
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith("Dropped inbound WebSocket push payload", {
       reason: "decode-failed",

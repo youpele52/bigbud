@@ -41,6 +41,7 @@ type Action =
       terminalId: string;
       hasRunningSubprocess: boolean;
     }
+  | { type: "SET_PROJECT_EXPANDED"; projectId: Project["id"]; expanded: boolean }
   | { type: "TOGGLE_THREAD_TERMINAL"; threadId: ThreadId }
   | { type: "SET_THREAD_TERMINAL_OPEN"; threadId: ThreadId; open: boolean }
   | { type: "SET_THREAD_TERMINAL_HEIGHT"; threadId: ThreadId; height: number }
@@ -568,6 +569,14 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         threads: updateThread(state.threads, action.threadId, (thread) =>
           setThreadTerminalActivity(thread, action.terminalId, action.hasRunningSubprocess),
+        ),
+      };
+
+    case "SET_PROJECT_EXPANDED":
+      return {
+        ...state,
+        projects: state.projects.map((p) =>
+          p.id === action.projectId ? { ...p, expanded: action.expanded } : p,
         ),
       };
 

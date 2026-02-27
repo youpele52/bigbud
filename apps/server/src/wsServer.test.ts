@@ -448,20 +448,59 @@ describe("WebSocket Server", () => {
 
     const ws = await connectWs(port);
     connections.push(ws);
-    await waitForMessage(ws); // welcome
+    const welcome = (await waitForMessage(ws)) as WsPush; // welcome
+    expect(welcome.channel).toBe(WS_CHANNELS.serverWelcome);
+    expect(welcome.data).toEqual(
+      expect.objectContaining({
+        cwd: "/test/bootstrap-workspace",
+        projectName: "bootstrap-workspace",
+        bootstrapProjectId: expect.any(String),
+        bootstrapThreadId: expect.any(String),
+      }),
+    );
 
     const snapshotResponse = await sendRequest(ws, ORCHESTRATION_WS_METHODS.getSnapshot);
     expect(snapshotResponse.error).toBeUndefined();
     const snapshot = snapshotResponse.result as {
-      projects: Array<{ workspaceRoot: string; title: string; defaultModel: string | null }>;
+      projects: Array<{
+        id: string;
+        workspaceRoot: string;
+        title: string;
+        defaultModel: string | null;
+      }>;
+      threads: Array<{
+        id: string;
+        projectId: string;
+        title: string;
+        model: string;
+        branch: string | null;
+        worktreePath: string | null;
+      }>;
     };
+    const bootstrapProjectId = (welcome.data as { bootstrapProjectId?: string }).bootstrapProjectId;
+    const bootstrapThreadId = (welcome.data as { bootstrapThreadId?: string }).bootstrapThreadId;
+    expect(bootstrapProjectId).toBeDefined();
+    expect(bootstrapThreadId).toBeDefined();
 
     expect(snapshot.projects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: bootstrapProjectId,
           workspaceRoot: "/test/bootstrap-workspace",
           title: "bootstrap-workspace",
           defaultModel: "gpt-5-codex",
+        }),
+      ]),
+    );
+    expect(snapshot.threads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: bootstrapThreadId,
+          projectId: bootstrapProjectId,
+          title: "New thread",
+          model: "gpt-5-codex",
+          branch: null,
+          worktreePath: null,
         }),
       ]),
     );
