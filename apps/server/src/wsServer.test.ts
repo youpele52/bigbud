@@ -959,6 +959,7 @@ describe("WebSocket Server", () => {
         text: "hello",
         attachments: [],
       },
+      assistantDeliveryMode: "streaming",
       createdAt,
     });
     expect(startTurnResponse.error).toBeUndefined();

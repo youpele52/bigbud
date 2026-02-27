@@ -46,6 +46,8 @@ export const ProviderSandboxMode = Schema.Literals([
 export type ProviderSandboxMode = typeof ProviderSandboxMode.Type;
 export const ProviderRequestKind = Schema.Literals(["command", "file-change"]);
 export type ProviderRequestKind = typeof ProviderRequestKind.Type;
+export const AssistantDeliveryMode = Schema.Literals(["buffered", "streaming"]);
+export type AssistantDeliveryMode = typeof AssistantDeliveryMode.Type;
 export const ProviderApprovalDecision = Schema.Literals([
   "accept",
   "acceptForSession",
@@ -279,6 +281,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
   }),
   model: Schema.optional(TrimmedNonEmptyString),
   effort: Schema.optional(TrimmedNonEmptyString),
+  assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   createdAt: IsoDateTime,
 });
 
@@ -353,6 +356,7 @@ export const ThreadMessageAssistantCompleteCommand = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   turnId: Schema.optional(TurnId),
+  text: Schema.optional(Schema.String),
   createdAt: IsoDateTime,
 });
 
@@ -492,6 +496,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   messageId: MessageId,
   model: Schema.optional(TrimmedNonEmptyString),
   effort: Schema.optional(TrimmedNonEmptyString),
+  assistantDeliveryMode: Schema.optional(AssistantDeliveryMode),
   createdAt: IsoDateTime,
 });
 

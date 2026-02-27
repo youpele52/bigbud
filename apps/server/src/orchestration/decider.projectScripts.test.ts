@@ -164,5 +164,8 @@ describe("decider project scripts", () => {
     expect(events[0]?.type).toBe("thread.message-sent");
     expect(events[1]?.type).toBe("thread.turn-start-requested");
     expect(events[1]?.causationEventId).toBe(events[0]?.eventId ?? null);
+    expect((events[1]?.payload as { assistantDeliveryMode?: string }).assistantDeliveryMode).toBe(
+      "buffered",
+    );
   });
 });

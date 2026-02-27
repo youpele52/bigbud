@@ -239,6 +239,49 @@ function SettingsRouteView() {
 
             <section className="rounded-2xl border border-border bg-card p-5">
               <div className="mb-4">
+                <h2 className="text-sm font-medium text-foreground">Responses</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Control how assistant output is rendered during a turn.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Stream assistant messages</p>
+                  <p className="text-xs text-muted-foreground">
+                    Show token-by-token output while a response is in progress.
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.enableAssistantStreaming}
+                  onCheckedChange={(checked) =>
+                    updateSettings({
+                      enableAssistantStreaming: Boolean(checked),
+                    })
+                  }
+                  aria-label="Stream assistant messages"
+                />
+              </div>
+
+              {settings.enableAssistantStreaming !== defaults.enableAssistantStreaming ? (
+                <div className="mt-3 flex justify-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() =>
+                      updateSettings({
+                        enableAssistantStreaming: defaults.enableAssistantStreaming,
+                      })
+                    }
+                  >
+                    Restore default
+                  </Button>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="mb-4">
                 <h2 className="text-sm font-medium text-foreground">Keybindings</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Open the persisted <code>keybindings.json</code> file to edit advanced bindings

@@ -14,6 +14,7 @@ import {
 } from "./commandInvariants.ts";
 
 const nowIso = () => new Date().toISOString();
+const DEFAULT_ASSISTANT_DELIVERY_MODE = "buffered" as const;
 
 const defaultMetadata: Omit<OrchestrationEvent, "sequence" | "type" | "payload"> = {
   eventId: crypto.randomUUID() as OrchestrationEvent["eventId"],
@@ -252,6 +253,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           messageId: command.message.messageId,
           ...(command.model !== undefined ? { model: command.model } : {}),
           ...(command.effort !== undefined ? { effort: command.effort } : {}),
+          assistantDeliveryMode: command.assistantDeliveryMode ?? DEFAULT_ASSISTANT_DELIVERY_MODE,
           createdAt: command.createdAt,
         },
       };
@@ -423,7 +425,7 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           threadId: command.threadId,
           messageId: command.messageId,
           role: "assistant",
-          text: "",
+          text: command.text ?? "",
           turnId: command.turnId ?? null,
           streaming: false,
           createdAt: command.createdAt,

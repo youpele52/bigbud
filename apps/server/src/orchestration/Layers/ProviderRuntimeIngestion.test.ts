@@ -2,6 +2,7 @@ import type { ProviderRuntimeEvent } from "@t3tools/contracts";
 import {
   CommandId,
   EventId,
+  MessageId,
   ProjectId,
   ProviderItemId,
   ProviderSessionId,
@@ -33,6 +34,7 @@ const asSessionId = (value: string): ProviderSessionId => ProviderSessionId.make
 const asProviderTurnId = (value: string): ProviderTurnId => ProviderTurnId.makeUnsafe(value);
 const asItemId = (value: string): ProviderItemId => ProviderItemId.makeUnsafe(value);
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
+const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 
 function createProviderServiceHarness() {
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
@@ -256,6 +258,148 @@ describe("ProviderRuntimeIngestion", () => {
     const message = thread.messages.find((entry) => entry.id === "assistant:item-1");
     expect(message?.text).toBe("hello world");
     expect(message?.streaming).toBe(false);
+  });
+
+  it("buffers assistant deltas by default until completion", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-buffered"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-buffered"),
+    });
+    await waitForThread(
+      harness.engine,
+      (thread) =>
+        thread.session?.status === "running" && thread.session?.activeTurnId === "turn-buffered",
+    );
+
+    harness.emit({
+      type: "message.delta",
+      eventId: asEventId("evt-message-delta-buffered"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-buffered"),
+      itemId: asItemId("item-buffered"),
+      delta: "buffer me",
+    });
+
+    await Effect.runPromise(Effect.sleep("30 millis"));
+    const midReadModel = await Effect.runPromise(harness.engine.getReadModel());
+    const midThread = midReadModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(midThread?.messages.some((message) => message.id === "assistant:item-buffered")).toBe(
+      false,
+    );
+
+    harness.emit({
+      type: "message.completed",
+      eventId: asEventId("evt-message-completed-buffered"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-buffered"),
+      itemId: asItemId("item-buffered"),
+    });
+
+    const thread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.messages.some((message) => message.id === "assistant:item-buffered" && !message.streaming),
+    );
+    const message = thread.messages.find((entry) => entry.id === "assistant:item-buffered");
+    expect(message?.text).toBe("buffer me");
+    expect(message?.streaming).toBe(false);
+  });
+
+  it("streams assistant deltas when thread.turn.start requests streaming mode", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-streaming-mode"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("message-streaming-mode"),
+          role: "user",
+          text: "stream please",
+          attachments: [],
+        },
+        assistantDeliveryMode: "streaming",
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(Effect.sleep("30 millis"));
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-streaming-mode"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-streaming-mode"),
+    });
+    await waitForThread(
+      harness.engine,
+      (thread) =>
+        thread.session?.status === "running" &&
+        thread.session?.activeTurnId === "turn-streaming-mode",
+    );
+
+    harness.emit({
+      type: "message.delta",
+      eventId: asEventId("evt-message-delta-streaming-mode"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-streaming-mode"),
+      itemId: asItemId("item-streaming-mode"),
+      delta: "hello live",
+    });
+
+    const liveThread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.messages.some(
+          (message) =>
+            message.id === "assistant:item-streaming-mode" &&
+            message.streaming &&
+            message.text === "hello live",
+        ),
+    );
+    const liveMessage = liveThread.messages.find(
+      (entry) => entry.id === "assistant:item-streaming-mode",
+    );
+    expect(liveMessage?.streaming).toBe(true);
+
+    harness.emit({
+      type: "message.completed",
+      eventId: asEventId("evt-message-completed-streaming-mode"),
+      provider: "codex",
+      sessionId: asSessionId("sess-1"),
+      createdAt: now,
+      turnId: asProviderTurnId("turn-streaming-mode"),
+      itemId: asItemId("item-streaming-mode"),
+    });
+
+    const finalThread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.messages.some(
+          (message) => message.id === "assistant:item-streaming-mode" && !message.streaming,
+        ),
+    );
+    const finalMessage = finalThread.messages.find(
+      (entry) => entry.id === "assistant:item-streaming-mode",
+    );
+    expect(finalMessage?.text).toBe("hello live");
+    expect(finalMessage?.streaming).toBe(false);
   });
 
   it("does not duplicate assistant completion when message.completed is followed by turn.completed", async () => {

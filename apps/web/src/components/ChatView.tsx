@@ -107,6 +107,7 @@ import { Toggle } from "./ui/toggle";
 import { SidebarTrigger } from "./ui/sidebar";
 import { newCommandId, newMessageId } from "~/lib/utils";
 import { readNativeApi } from "~/nativeApi";
+import { useAppSettings } from "../appSettings";
 
 function formatMessageMeta(createdAt: string, duration: string | null): string {
   if (!duration) return formatTimestamp(createdAt);
@@ -332,6 +333,7 @@ interface ChatViewProps {
 
 export default function ChatView({ threadId }: ChatViewProps) {
   const { state, dispatch } = useStore();
+  const { settings } = useAppSettings();
   const navigate = useNavigate();
   const rawSearch = useSearch({
     strict: false,
@@ -1506,6 +1508,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         },
         model: selectedModel || undefined,
         effort: selectedEffort || undefined,
+        assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
         createdAt: messageCreatedAt,
       });
     } catch (err) {
