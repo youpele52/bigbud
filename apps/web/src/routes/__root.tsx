@@ -127,8 +127,10 @@ function EventRouter() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const pathnameRef = useRef(pathname);
   const lastConfigIssuesSignatureRef = useRef<string | null>(null);
   const handledBootstrapThreadIdRef = useRef<string | null>(null);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     const api = readNativeApi();
@@ -201,7 +203,7 @@ function EventRouter() {
           projectId: payload.bootstrapProjectId,
           expanded: true,
         });
-        if (pathname !== "/") {
+        if (pathnameRef.current !== "/") {
           return;
         }
         if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
@@ -264,7 +266,7 @@ function EventRouter() {
       unsubWelcome();
       unsubServerConfigUpdated();
     };
-  }, [dispatch, navigate, pathname, queryClient]);
+  }, [dispatch, navigate, queryClient]);
 
   return null;
 }
