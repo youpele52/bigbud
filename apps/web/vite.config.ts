@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineConfig } from "vite";
 
-const port = Number(process.env.PORT ?? 5173);
+const port = Number(process.env.PORT ?? 5733);
 
 export default defineConfig({
   plugins: [

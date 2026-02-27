@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const BASE_SERVER_PORT = 3773;
-const BASE_WEB_PORT = 5173;
+const BASE_WEB_PORT = 5733;
 const MAX_HASH_OFFSET = 3000;
 export const DEFAULT_DEV_STATE_DIR = path.join(homedir(), ".t3", "dev");
 const MODE_ARGS = {
