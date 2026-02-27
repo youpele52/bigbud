@@ -237,7 +237,7 @@ const make = Effect.gen(function* () {
             return "";
           }
 
-          // Safety valve: spill full buffered text as a persisted assistant delta to cap memory.
+          // Safety valve: flush full buffered text as an assistant delta to cap memory.
           yield* Cache.invalidate(bufferedAssistantTextByMessageId, messageId);
           return nextText;
         }),
