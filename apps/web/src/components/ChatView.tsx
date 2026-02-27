@@ -1466,7 +1466,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         // with the worktree cwd/env instead of briefly using the project root.
         dispatch({
           type: "SET_THREAD_BRANCH",
-          threadId: activeThread.id,
+          threadId: threadIdForSend,
           branch: result.worktree.branch,
           worktreePath: result.worktree.path,
         });
