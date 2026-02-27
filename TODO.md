@@ -22,4 +22,4 @@
 ## Bigger things
 
 - [ ] Queueing messages
-- [ ] External runners (i.e. running the cli on a mac mini)
+- [x] External runners (i.e. running the cli on a mac mini)
