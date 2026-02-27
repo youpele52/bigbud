@@ -194,6 +194,9 @@ function EventRouter() {
     const unsubWelcome = onServerWelcome((payload) => {
       void (async () => {
         await syncSnapshot();
+        if (disposed) {
+          return;
+        }
 
         if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
           return;
@@ -209,12 +212,12 @@ function EventRouter() {
         if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
           return;
         }
-        handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
         await navigate({
           to: "/$threadId",
           params: { threadId: payload.bootstrapThreadId },
           replace: true,
         });
+        handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
       })().catch(() => undefined);
     });
     const unsubServerConfigUpdated = onServerConfigUpdated((payload) => {

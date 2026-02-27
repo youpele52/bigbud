@@ -388,6 +388,9 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         });
         welcomeBootstrapProjectId = bootstrapProjectId;
         welcomeBootstrapThreadId = threadId;
+      } else {
+        welcomeBootstrapProjectId = bootstrapProjectId;
+        welcomeBootstrapThreadId = existingThread.id;
       }
     }).pipe(
       Effect.mapError(

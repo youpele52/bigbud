@@ -38,7 +38,7 @@ import type {
   TerminalWriteInput,
 } from "@t3tools/contracts";
 import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager";
-import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite";
+import { makeSqlitePersistenceLive, SqlitePersistenceMemory } from "./persistence/Layers/Sqlite";
 import { SqlClient } from "effect/unstable/sql";
 import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService";
 import { Open, type OpenShape } from "./open";
@@ -503,6 +503,61 @@ describe("WebSocket Server", () => {
           worktreePath: null,
         }),
       ]),
+    );
+  });
+
+  it("includes bootstrap ids in welcome when cwd project and thread already exist", async () => {
+    const stateDir = makeTempDir("t3code-state-bootstrap-existing-");
+    const persistenceLayer = makeSqlitePersistenceLive(
+      path.join(stateDir, "state.sqlite"),
+    ) as unknown as Layer.Layer<SqlClient.SqlClient, never>;
+    const cwd = "/test/bootstrap-existing";
+
+    server = await createTestServer({
+      cwd,
+      stateDir,
+      persistenceLayer,
+      autoBootstrapProjectFromCwd: true,
+    });
+    let addr = server.address();
+    let port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    expect(port).toBeGreaterThan(0);
+
+    const firstWs = await connectWs(port);
+    connections.push(firstWs);
+    const firstWelcome = (await waitForMessage(firstWs)) as WsPush;
+    const firstBootstrapProjectId = (firstWelcome.data as { bootstrapProjectId?: string })
+      .bootstrapProjectId;
+    const firstBootstrapThreadId = (firstWelcome.data as { bootstrapThreadId?: string })
+      .bootstrapThreadId;
+    expect(firstBootstrapProjectId).toBeDefined();
+    expect(firstBootstrapThreadId).toBeDefined();
+
+    firstWs.close();
+    await closeTestServer();
+    server = null;
+
+    server = await createTestServer({
+      cwd,
+      stateDir,
+      persistenceLayer,
+      autoBootstrapProjectFromCwd: true,
+    });
+    addr = server.address();
+    port = typeof addr === "object" && addr !== null ? addr.port : 0;
+    expect(port).toBeGreaterThan(0);
+
+    const secondWs = await connectWs(port);
+    connections.push(secondWs);
+    const secondWelcome = (await waitForMessage(secondWs)) as WsPush;
+    expect(secondWelcome.channel).toBe(WS_CHANNELS.serverWelcome);
+    expect(secondWelcome.data).toEqual(
+      expect.objectContaining({
+        cwd,
+        projectName: "bootstrap-existing",
+        bootstrapProjectId: firstBootstrapProjectId,
+        bootstrapThreadId: firstBootstrapThreadId,
+      }),
     );
   });
 
