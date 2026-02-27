@@ -491,7 +491,7 @@ const make = Effect.gen(function* () {
         const assistantDeliveryMode = yield* resolveAssistantDeliveryModeForMessage({
           threadId: thread.id,
           sessionId: event.sessionId,
-          turnId,
+          ...(turnId ? { turnId } : {}),
           messageId: assistantMessageId,
         });
         yield* rememberAssistantDeliveryModeForMessage(assistantMessageId, assistantDeliveryMode);
@@ -520,7 +520,7 @@ const make = Effect.gen(function* () {
         const assistantDeliveryMode = yield* resolveAssistantDeliveryModeForMessage({
           threadId: thread.id,
           sessionId: event.sessionId,
-          turnId,
+          ...(turnId ? { turnId } : {}),
           messageId: assistantMessageId,
         });
         yield* rememberAssistantDeliveryModeForMessage(assistantMessageId, assistantDeliveryMode);
