@@ -142,6 +142,8 @@ export const OrchestrationSession = Schema.Struct({
   providerName: Schema.NullOr(TrimmedNonEmptyString),
   providerSessionId: Schema.NullOr(ProviderSessionId),
   providerThreadId: Schema.NullOr(ProviderThreadId),
+  approvalPolicy: Schema.optional(ProviderApprovalPolicy),
+  sandboxMode: Schema.optional(ProviderSandboxMode),
   activeTurnId: Schema.NullOr(TurnId),
   lastError: Schema.NullOr(TrimmedNonEmptyString),
   updatedAt: IsoDateTime,

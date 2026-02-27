@@ -8,6 +8,8 @@ import {
   type ProviderSandboxMode,
   type OrchestrationSession,
   type ThreadId,
+  type ProviderSession,
+  type ProviderThreadId,
   type TurnId,
 } from "@t3tools/contracts";
 import { Cache, Cause, Duration, Effect, Layer, Option, Queue, Stream } from "effect";
@@ -141,11 +143,8 @@ const make = Effect.gen(function* () {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
     }
 
-    const existingSessionId = thread.session?.providerSessionId;
-    if (existingSessionId) {
-      return existingSessionId;
-    }
-
+    const desiredApprovalPolicy = options?.approvalPolicy ?? thread.session?.approvalPolicy;
+    const desiredSandboxMode = options?.sandboxMode ?? thread.session?.sandboxMode;
     const preferredProvider: ProviderKind | undefined =
       thread.session?.providerName === "codex" || thread.session?.providerName === "claudeCode"
         ? thread.session.providerName
@@ -155,30 +154,54 @@ const make = Effect.gen(function* () {
       projects: readModel.projects,
     });
 
-    const startedSession = yield* providerService.startSession(threadId, {
-      ...(preferredProvider ? { provider: preferredProvider } : {}),
-      ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-      ...(thread.model ? { model: thread.model } : {}),
-      ...(options?.approvalPolicy !== undefined ? { approvalPolicy: options.approvalPolicy } : {}),
-      ...(options?.sandboxMode !== undefined ? { sandboxMode: options.sandboxMode } : {}),
-    });
+    const startProviderSession = (resumeThreadId?: ProviderThreadId | null) =>
+      providerService.startSession(threadId, {
+        ...(preferredProvider ? { provider: preferredProvider } : {}),
+        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+        ...(thread.model ? { model: thread.model } : {}),
+        ...(resumeThreadId ? { resumeThreadId } : {}),
+        ...(desiredApprovalPolicy !== undefined ? { approvalPolicy: desiredApprovalPolicy } : {}),
+        ...(desiredSandboxMode !== undefined ? { sandboxMode: desiredSandboxMode } : {}),
+      });
 
-    yield* setThreadSession({
-      threadId,
-      session: {
+    const bindSessionToThread = (session: ProviderSession) =>
+      setThreadSession({
         threadId,
-        status: mapProviderSessionStatusToOrchestrationStatus(startedSession.status),
-        providerName: startedSession.provider,
-        providerSessionId: startedSession.sessionId,
-        providerThreadId: startedSession.threadId ?? null,
-        // Provider turn ids are not orchestration turn ids.
-        activeTurnId: null,
-        lastError: startedSession.lastError ?? null,
-        updatedAt: startedSession.updatedAt,
-      },
-      createdAt,
-    });
+        session: {
+          threadId,
+          status: mapProviderSessionStatusToOrchestrationStatus(session.status),
+          providerName: session.provider,
+          providerSessionId: session.sessionId,
+          providerThreadId: session.threadId ?? null,
+          ...(desiredApprovalPolicy !== undefined ? { approvalPolicy: desiredApprovalPolicy } : {}),
+          ...(desiredSandboxMode !== undefined ? { sandboxMode: desiredSandboxMode } : {}),
+          // Provider turn ids are not orchestration turn ids.
+          activeTurnId: null,
+          lastError: session.lastError ?? null,
+          updatedAt: session.updatedAt,
+        },
+        createdAt,
+      });
 
+    const existingSessionId = thread.session?.providerSessionId;
+    if (existingSessionId) {
+      const approvalPolicyChanged =
+        options?.approvalPolicy !== undefined && options.approvalPolicy !== thread.session?.approvalPolicy;
+      const sandboxModeChanged =
+        options?.sandboxMode !== undefined && options.sandboxMode !== thread.session?.sandboxMode;
+
+      if (!approvalPolicyChanged && !sandboxModeChanged) {
+        return existingSessionId;
+      }
+
+      yield* providerService.stopSession({ sessionId: existingSessionId });
+      const restartedSession = yield* startProviderSession(thread.session?.providerThreadId ?? null);
+      yield* bindSessionToThread(restartedSession);
+      return restartedSession.sessionId;
+    }
+
+    const startedSession = yield* startProviderSession();
+    yield* bindSessionToThread(startedSession);
     return startedSession.sessionId;
   });
 

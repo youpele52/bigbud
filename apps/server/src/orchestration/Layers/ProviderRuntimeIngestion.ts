@@ -371,6 +371,12 @@ const make = Effect.gen(function* () {
             providerName: event.provider,
             providerSessionId: event.sessionId,
             providerThreadId,
+            ...(thread.session?.approvalPolicy !== undefined
+              ? { approvalPolicy: thread.session.approvalPolicy }
+              : {}),
+            ...(thread.session?.sandboxMode !== undefined
+              ? { sandboxMode: thread.session.sandboxMode }
+              : {}),
             activeTurnId,
             lastError,
             updatedAt: now,
@@ -479,6 +485,12 @@ const make = Effect.gen(function* () {
             providerName: event.provider,
             providerSessionId: event.sessionId,
             providerThreadId,
+            ...(thread.session?.approvalPolicy !== undefined
+              ? { approvalPolicy: thread.session.approvalPolicy }
+              : {}),
+            ...(thread.session?.sandboxMode !== undefined
+              ? { sandboxMode: thread.session.sandboxMode }
+              : {}),
             activeTurnId: toTurnId(event.turnId) ?? null,
             lastError: event.message,
             updatedAt: now,

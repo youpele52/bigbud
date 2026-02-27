@@ -71,16 +71,18 @@ describe("ProviderCommandReactor", () => {
   async function createHarness() {
     const now = new Date().toISOString();
     const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
-    const startSession = vi.fn((_: unknown, __: unknown) =>
-      Effect.succeed({
-        sessionId: asSessionId("sess-1"),
+    let nextSessionIndex = 1;
+    const startSession = vi.fn((_: unknown, __: unknown) => {
+      const sessionIndex = nextSessionIndex++;
+      return Effect.succeed({
+        sessionId: asSessionId(`sess-${sessionIndex}`),
         provider: "codex" as const,
         status: "ready" as const,
-        threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
+        threadId: ProviderThreadId.makeUnsafe(`provider-thread-${sessionIndex}`),
         createdAt: now,
         updatedAt: now,
-      }),
-    );
+      });
+    });
     const sendTurn = vi.fn((_: unknown) =>
       Effect.succeed({
         threadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
@@ -190,6 +192,116 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session?.providerSessionId).toBe("sess-1");
+    expect(thread?.session?.approvalPolicy).toBe("on-request");
+    expect(thread?.session?.sandboxMode).toBe("workspace-write");
+  });
+
+  it("reuses the same provider session when runtime mode is unchanged", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-unchanged-1"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-unchanged-1"),
+          role: "user",
+          text: "first",
+          attachments: [],
+        },
+        approvalPolicy: "on-request",
+        sandboxMode: "workspace-write",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-unchanged-2"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-unchanged-2"),
+          role: "user",
+          text: "second",
+          attachments: [],
+        },
+        approvalPolicy: "on-request",
+        sandboxMode: "workspace-write",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.startSession.mock.calls.length).toBe(1);
+    expect(harness.stopSession.mock.calls.length).toBe(0);
+  });
+
+  it("restarts the provider session when runtime mode changes", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-runtime-mode-1"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-runtime-mode-1"),
+          role: "user",
+          text: "first",
+          attachments: [],
+        },
+        approvalPolicy: "never",
+        sandboxMode: "danger-full-access",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-runtime-mode-2"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-runtime-mode-2"),
+          role: "user",
+          text: "second",
+          attachments: [],
+        },
+        approvalPolicy: "on-request",
+        sandboxMode: "workspace-write",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.startSession.mock.calls.length === 2);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+
+    expect(harness.stopSession.mock.calls[0]?.[0]).toEqual({ sessionId: asSessionId("sess-1") });
+    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+      resumeThreadId: ProviderThreadId.makeUnsafe("provider-thread-1"),
+      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write",
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      sessionId: asSessionId("sess-2"),
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.session?.providerSessionId).toBe("sess-2");
+    expect(thread?.session?.approvalPolicy).toBe("on-request");
+    expect(thread?.session?.sandboxMode).toBe("workspace-write");
   });
 
   it("reacts to thread.turn.interrupt-requested by calling provider interrupt", async () => {
