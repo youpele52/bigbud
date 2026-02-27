@@ -1475,7 +1475,6 @@ export default function ChatView({ threadId }: ChatViewProps) {
           await runProjectScript(setupScript, {
             cwd: result.worktree.path,
             worktreePath: result.worktree.path,
-            preferNewTerminal: true,
             rememberAsLastInvoked: false,
           });
         }
