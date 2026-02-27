@@ -288,7 +288,6 @@ const make = Effect.gen(function* () {
         threadId: input.threadId,
         messageId: input.messageId,
         ...(input.turnId ? { turnId: input.turnId } : {}),
-        text: "",
         createdAt: input.createdAt,
       });
       yield* clearAssistantMessageState(input.messageId);
