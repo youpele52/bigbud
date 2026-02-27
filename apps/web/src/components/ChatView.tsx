@@ -53,6 +53,7 @@ import { truncateTitle } from "../truncateTitle";
 import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_THREAD_TERMINAL_COUNT,
+  type ChatMessage,
   type ChatImageAttachment,
   type TurnDiffSummary,
 } from "../types";
@@ -344,8 +345,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const [composerImages, setComposerImages] = useState<ComposerImageAttachment[]>([]);
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
+  const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const [sendPhase, setSendPhase] = useState<SendPhase>("idle");
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnecting, _setIsConnecting] = useState(false);
   const [isRevertingCheckpoint, setIsRevertingCheckpoint] = useState(false);
   const [selectedEffort, setSelectedEffort] = useState(DEFAULT_REASONING);
   const [envMode, setEnvMode] = useState<"local" | "worktree">("local");
@@ -421,9 +423,21 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => derivePendingApprovals(threadActivities),
     [threadActivities],
   );
+  const timelineMessages = useMemo(() => {
+    const serverMessages = activeThread?.messages ?? [];
+    if (optimisticUserMessages.length === 0) {
+      return serverMessages;
+    }
+    const serverIds = new Set(serverMessages.map((message) => message.id));
+    const pendingMessages = optimisticUserMessages.filter((message) => !serverIds.has(message.id));
+    if (pendingMessages.length === 0) {
+      return serverMessages;
+    }
+    return [...serverMessages, ...pendingMessages];
+  }, [activeThread?.messages, optimisticUserMessages]);
   const timelineEntries = useMemo(
-    () => deriveTimelineEntries(activeThread?.messages ?? [], workLogEntries),
-    [activeThread?.messages, workLogEntries],
+    () => deriveTimelineEntries(timelineMessages, workLogEntries),
+    [timelineMessages, workLogEntries],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -964,7 +978,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [lastInvokedScriptByProjectId]);
 
   // Auto-scroll on new messages
-  const messageCount = activeThread?.messages.length ?? 0;
+  const messageCount = timelineMessages.length;
   const workLogCount = workLogEntries.length;
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const scrollContainer = messagesScrollRef.current;
@@ -1024,10 +1038,26 @@ export default function ChatView({ threadId }: ChatViewProps) {
   }, [composerImages]);
 
   useEffect(() => {
+    if (!activeThread?.id) {
+      setOptimisticUserMessages([]);
+      return;
+    }
+    if (activeThread.messages.length === 0) {
+      return;
+    }
+    const serverIds = new Set(activeThread.messages.map((message) => message.id));
+    setOptimisticUserMessages((existing) => {
+      const next = existing.filter((message) => !serverIds.has(message.id));
+      return next.length === existing.length ? existing : next;
+    });
+  }, [activeThread?.id, activeThread?.messages]);
+
+  useEffect(() => {
     setComposerImages((existing) => {
       revokePreviewUrls(existing);
       return [];
     });
+    setOptimisticUserMessages([]);
     setPrompt("");
     promptRef.current = "";
     setSendPhase("idle");
@@ -1370,6 +1400,27 @@ export default function ChatView({ threadId }: ChatViewProps) {
         ? activeThread.branch
         : null;
     const composerImagesSnapshot = [...composerImages];
+    const messageIdForSend = newMessageId();
+    const messageCreatedAt = new Date().toISOString();
+    const optimisticAttachments = composerImagesSnapshot.map((image) => ({
+      type: "image" as const,
+      id: image.id,
+      name: image.name,
+      mimeType: image.mimeType,
+      sizeBytes: image.sizeBytes,
+      previewUrl: image.previewUrl,
+    }));
+    setOptimisticUserMessages((existing) => [
+      ...existing,
+      {
+        id: messageIdForSend,
+        role: "user",
+        text: trimmed,
+        ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
+        createdAt: messageCreatedAt,
+        streaming: false,
+      },
+    ]);
 
     setThreadError(threadIdForSend, null);
     promptRef.current = "";
@@ -1448,14 +1499,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
         commandId: newCommandId(),
         threadId: threadIdForSend,
         message: {
-          messageId: newMessageId(),
+          messageId: messageIdForSend,
           role: "user",
           text: trimmed || IMAGE_ONLY_BOOTSTRAP_PROMPT,
           attachments: turnAttachments,
         },
         model: selectedModel || undefined,
         effort: selectedEffort || undefined,
-        createdAt: new Date().toISOString(),
+        createdAt: messageCreatedAt,
       });
     } catch (err) {
       if (
@@ -1463,6 +1514,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         promptRef.current.length === 0 &&
         composerImagesRef.current.length === 0
       ) {
+        setOptimisticUserMessages((existing) =>
+          existing.filter((message) => message.id !== messageIdForSend),
+        );
         promptRef.current = trimmed;
         setPrompt(trimmed);
         setComposerImages(composerImagesSnapshot);
@@ -1740,7 +1794,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         onScroll={onMessagesScroll}
       >
         <MessagesTimeline
-          hasMessages={activeThread.messages.length > 0}
+          hasMessages={timelineMessages.length > 0}
           isWorking={isWorking}
           scrollContainerRef={messagesScrollRef}
           timelineEntries={timelineEntries}
