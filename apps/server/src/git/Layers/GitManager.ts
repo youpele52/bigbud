@@ -223,6 +223,11 @@ export const makeGitManager = Effect.gen(function* () {
         const right = b.updatedAt ? Date.parse(b.updatedAt) : 0;
         return right - left;
       });
+
+      const latestOpenPr = parsed.find((pr) => pr.state === "open");
+      if (latestOpenPr) {
+        return latestOpenPr;
+      }
       return parsed[0] ?? null;
     });
 

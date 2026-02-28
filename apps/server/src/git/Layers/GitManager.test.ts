@@ -373,6 +373,53 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect("status prefers open PR when merged PR has newer updatedAt", () =>
+    Effect.gen(function* () {
+      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      yield* initRepo(repoDir);
+      yield* runGit(repoDir, ["checkout", "-b", "feature/status-open-over-merged"]);
+
+      const { manager } = yield* makeManager({
+        ghScenario: {
+          prListSequence: [
+            JSON.stringify([
+              {
+                number: 45,
+                title: "Merged PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/45",
+                baseRefName: "main",
+                headRefName: "feature/status-open-over-merged",
+                state: "MERGED",
+                mergedAt: "2026-01-31T10:00:00Z",
+                updatedAt: "2026-02-01T10:00:00Z",
+              },
+              {
+                number: 46,
+                title: "Open PR",
+                url: "https://github.com/pingdotgg/codething-mvp/pull/46",
+                baseRefName: "main",
+                headRefName: "feature/status-open-over-merged",
+                state: "OPEN",
+                updatedAt: "2026-01-30T10:00:00Z",
+              },
+            ]),
+          ],
+        },
+      });
+
+      const status = yield* manager.status({ cwd: repoDir });
+      expect(status.branch).toBe("feature/status-open-over-merged");
+      expect(status.pr).toEqual({
+        number: 46,
+        title: "Open PR",
+        url: "https://github.com/pingdotgg/codething-mvp/pull/46",
+        baseBranch: "main",
+        headBranch: "feature/status-open-over-merged",
+        state: "open",
+      });
+    }),
+  );
+
   it.effect("status is resilient to gh lookup failures and returns pr null", () =>
     Effect.gen(function* () {
       const repoDir = yield* makeTempDir("t3code-git-manager-");
