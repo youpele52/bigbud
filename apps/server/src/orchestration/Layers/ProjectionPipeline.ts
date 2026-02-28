@@ -1,3 +1,4 @@
+import Mime from "@effect/platform-node/Mime";
 import {
   ApprovalRequestId,
   type ChatAttachment,
@@ -112,20 +113,13 @@ function parseBase64DataUrl(
 }
 
 function inferImageExtension(attachment: Extract<ChatAttachment, { type: "image" }>): string {
-  const normalizedMimeType = attachment.mimeType.trim().toLowerCase();
+  const normalizedMimeType = attachment.mimeType.toLowerCase();
   if (normalizedMimeType.startsWith("image/")) {
     const fromMime = IMAGE_EXTENSION_BY_MIME_TYPE[normalizedMimeType];
-    if (fromMime) {
-      return fromMime;
-    }
+    if (fromMime) return fromMime;
   }
-
-  const fromName = attachment.name.includes(".")
-    ? `.${attachment.name.split(".").slice(-1)[0]?.toLowerCase() ?? ""}`
-    : "";
-  if (/^\.[a-z0-9]{1,12}$/.test(fromName) && SAFE_IMAGE_FILE_EXTENSIONS.has(fromName)) {
-    return fromName;
-  }
+  const ext = Mime.getExtension(attachment.mimeType);
+  if (ext && SAFE_IMAGE_FILE_EXTENSIONS.has(ext)) return ext;
   return ".bin";
 }
 
@@ -135,14 +129,10 @@ const materializeAttachmentsForProjection = Effect.fn(function* (input: {
   readonly attachments: ReadonlyArray<ChatAttachment>;
   readonly stageFileWrite: (pendingWrite: PendingAttachmentWrite) => void;
 }) {
-  if (input.attachments.length === 0) {
-    return [] as ReadonlyArray<ChatAttachment>;
-  }
+  if (input.attachments.length === 0) return [];
 
   const serverConfig = yield* Effect.serviceOption(ServerConfig);
-  if (Option.isNone(serverConfig)) {
-    return input.attachments;
-  }
+  if (Option.isNone(serverConfig)) return input.attachments;
 
   const path = yield* Path.Path;
   const attachmentsRootDir = path.join(serverConfig.value.stateDir, ATTACHMENTS_STATE_SUBDIRECTORY);
@@ -166,9 +156,7 @@ const materializeAttachmentsForProjection = Effect.fn(function* (input: {
         }
 
         const bytes = Buffer.from(parsed.base64, "base64");
-        if (bytes.byteLength === 0) {
-          return attachment;
-        }
+        if (bytes.byteLength === 0) return attachment;
 
         const fileName = `${index}${inferImageExtension({
           ...attachment,
@@ -375,9 +363,7 @@ const runAttachmentSideEffects = Effect.fn(function* (input: {
           entries,
           (entry) =>
             Effect.gen(function* () {
-              const threadRelativePath = entry
-                .replace(/^[/\\]+/, "")
-                .replace(/\\/g, "/");
+              const threadRelativePath = entry.replace(/^[/\\]+/, "").replace(/\\/g, "/");
               if (threadRelativePath.length === 0 || threadRelativePath.startsWith("..")) {
                 return;
               }
@@ -411,7 +397,9 @@ const runAttachmentSideEffects = Effect.fn(function* (input: {
     writesByPath.entries(),
     ([absolutePath, bytes]) =>
       Effect.gen(function* () {
-        yield* input.fileSystem.makeDirectory(input.path.dirname(absolutePath), { recursive: true });
+        yield* input.fileSystem.makeDirectory(input.path.dirname(absolutePath), {
+          recursive: true,
+        });
         const alreadyExists = yield* input.fileSystem
           .exists(absolutePath)
           .pipe(Effect.catch(() => Effect.succeed(false)));
@@ -615,7 +603,10 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       }
     });
 
-  const applyThreadMessagesProjection: ProjectorDefinition["apply"] = (event, attachmentSideEffects) =>
+  const applyThreadMessagesProjection: ProjectorDefinition["apply"] = (
+    event,
+    attachmentSideEffects,
+  ) =>
     Effect.gen(function* () {
       switch (event.type) {
         case "thread.message-sent": {
@@ -778,7 +769,10 @@ const makeOrchestrationProjectionPipeline = Effect.gen(function* () {
       });
     });
 
-  const applyThreadTurnsProjection: ProjectorDefinition["apply"] = (event, _attachmentSideEffects) =>
+  const applyThreadTurnsProjection: ProjectorDefinition["apply"] = (
+    event,
+    _attachmentSideEffects,
+  ) =>
     Effect.gen(function* () {
       switch (event.type) {
         case "thread.turn-start-requested": {

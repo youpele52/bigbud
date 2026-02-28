@@ -330,9 +330,7 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         const staticRequestPath = url.pathname === "/" ? "/index.html" : url.pathname;
         const rawStaticRelativePath = staticRequestPath.replace(/^[/\\]+/, "");
         const hasRawLeadingParentSegment = rawStaticRelativePath.startsWith("..");
-        const staticRelativePath = path
-          .normalize(rawStaticRelativePath)
-          .replace(/^[/\\]+/, "");
+        const staticRelativePath = path.normalize(rawStaticRelativePath).replace(/^[/\\]+/, "");
         const hasPathTraversalSegment = staticRelativePath.startsWith("..");
         if (
           staticRelativePath.length === 0 ||
