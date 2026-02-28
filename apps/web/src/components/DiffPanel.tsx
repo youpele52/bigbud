@@ -464,7 +464,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
               </div>
             ) : renderablePatch.kind === "files" ? (
               <Virtualizer
-                className="h-full min-h-0 overflow-auto px-3 py-2"
+                className="diff-render-surface h-full min-h-0 overflow-auto px-3 py-2"
                 config={{
                   overscrollSize: 600,
                   intersectionObserverMargin: 1200,
@@ -475,7 +475,11 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                   const fileKey = buildFileDiffRenderKey(fileDiff);
                   const themedFileKey = `${fileKey}:${resolvedTheme}`;
                   return (
-                    <div key={themedFileKey} data-diff-file-path={filePath} className="rounded-md">
+                    <div
+                      key={themedFileKey}
+                      data-diff-file-path={filePath}
+                      className="diff-render-file rounded-md"
+                    >
                       <FileDiff
                         fileDiff={fileDiff}
                         options={{
