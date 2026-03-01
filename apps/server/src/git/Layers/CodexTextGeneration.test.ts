@@ -21,12 +21,23 @@ function makeFakeCodexBinary(dir: string) {
         "#!/bin/sh",
         'output_path=""',
         "while [ $# -gt 0 ]; do",
+        '  if [ "$1" = "--image" ]; then',
+        "    shift",
+        '    if [ -n "$1" ]; then',
+        '      seen_image="1"',
+        "    fi",
+        "    continue",
+        "  fi",
         '  if [ "$1" = "--output-last-message" ]; then',
         "    shift",
         '    output_path="$1"',
         "  fi",
         "  shift",
         "done",
+        'if [ "$T3_FAKE_CODEX_REQUIRE_IMAGE" = "1" ] && [ "$seen_image" != "1" ]; then',
+        '  printf "%s\\n" "missing --image input" >&2',
+        "  exit 2",
+        "fi",
         "cat >/dev/null",
         'if [ -n "$T3_FAKE_CODEX_STDERR" ]; then',
         '  printf "%s\\n" "$T3_FAKE_CODEX_STDERR" >&2',
@@ -48,6 +59,7 @@ function withFakeCodexEnv<A, E, R>(
     output: string;
     exitCode?: number;
     stderr?: string;
+    requireImage?: boolean;
   },
   effect: Effect.Effect<A, E, R>,
 ) {
@@ -60,6 +72,7 @@ function withFakeCodexEnv<A, E, R>(
       const previousOutput = process.env.T3_FAKE_CODEX_OUTPUT_B64;
       const previousExitCode = process.env.T3_FAKE_CODEX_EXIT_CODE;
       const previousStderr = process.env.T3_FAKE_CODEX_STDERR;
+      const previousRequireImage = process.env.T3_FAKE_CODEX_REQUIRE_IMAGE;
 
       yield* Effect.sync(() => {
         process.env.PATH = `${binDir}:${previousPath ?? ""}`;
@@ -76,6 +89,12 @@ function withFakeCodexEnv<A, E, R>(
         } else {
           delete process.env.T3_FAKE_CODEX_STDERR;
         }
+
+        if (input.requireImage) {
+          process.env.T3_FAKE_CODEX_REQUIRE_IMAGE = "1";
+        } else {
+          delete process.env.T3_FAKE_CODEX_REQUIRE_IMAGE;
+        }
       });
 
       return {
@@ -83,6 +102,7 @@ function withFakeCodexEnv<A, E, R>(
         previousOutput,
         previousExitCode,
         previousStderr,
+        previousRequireImage,
       };
     }),
     () => effect,
@@ -106,6 +126,12 @@ function withFakeCodexEnv<A, E, R>(
           delete process.env.T3_FAKE_CODEX_STDERR;
         } else {
           process.env.T3_FAKE_CODEX_STDERR = previous.previousStderr;
+        }
+
+        if (previous.previousRequireImage === undefined) {
+          delete process.env.T3_FAKE_CODEX_REQUIRE_IMAGE;
+        } else {
+          process.env.T3_FAKE_CODEX_REQUIRE_IMAGE = previous.previousRequireImage;
         }
       }),
   );
@@ -166,6 +192,76 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
         expect(generated.title).toBe("Improve orchestration flow");
         expect(generated.body.startsWith("## Summary")).toBe(true);
         expect(generated.body.endsWith("\n\n")).toBe(false);
+      }),
+    ),
+  );
+
+  it.effect("generates branch names and normalizes branch fragments", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          branch: "  Feat/Session  ",
+        }),
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        const generated = yield* textGeneration.generateBranchName({
+          cwd: process.cwd(),
+          message: "Please update session handling.",
+        });
+
+        expect(generated.branch).toBe("feat/session");
+      }),
+    ),
+  );
+
+  it.effect("passes image attachments through as codex image inputs", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          branch: "fix/ui-regression",
+        }),
+        requireImage: true,
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        const generated = yield* textGeneration.generateBranchName({
+          cwd: process.cwd(),
+          message: "Fix layout bug from screenshot.",
+          attachments: [
+            {
+              type: "image",
+              name: "bug.png",
+              mimeType: "image/png",
+              sizeBytes: 5,
+              dataUrl: "data:image/png;base64,SGVsbG8=",
+            },
+          ],
+        });
+
+        expect(generated.branch).toBe("fix/ui-regression");
+      }),
+    ),
+  );
+
+  it.effect("returns null branch when codex returns the wrong object shape", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          title: "This is not a branch payload",
+        }),
+      },
+      Effect.gen(function* () {
+        const textGeneration = yield* TextGeneration;
+
+        const generated = yield* textGeneration.generateBranchName({
+          cwd: process.cwd(),
+          message: "Fix websocket reconnect flake",
+        });
+
+        expect(generated.branch).toBeNull();
       }),
     ),
   );

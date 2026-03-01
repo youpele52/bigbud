@@ -129,6 +129,7 @@ const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
+const WORKTREE_BRANCH_PREFIX = "t3code";
 
 function readLastInvokedScriptByProjectFromStorage(): Record<string, string> {
   const stored = localStorage.getItem(LAST_INVOKED_SCRIPT_BY_PROJECT_KEY);
@@ -230,6 +231,57 @@ function readFileAsDataUrl(file: File): Promise<string> {
     });
     reader.readAsDataURL(file);
   });
+}
+
+function hashBranchSeed(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function buildTemporaryWorktreeBranchName(message: string): string {
+  const seed = `${Date.now()}:${message.trim().toLowerCase()}:${crypto.randomUUID()}`;
+  return `${WORKTREE_BRANCH_PREFIX}/${hashBranchSeed(seed)}`;
+}
+
+function imageReferenceForBranchNaming(image: ComposerImageAttachment): string {
+  const maybePath = (image.file as File & { path?: unknown }).path;
+  if (typeof maybePath === "string" && maybePath.trim().length > 0) {
+    return maybePath.trim();
+  }
+  return image.name;
+}
+
+function buildBranchNameGenerationMessage(
+  text: string,
+  images: ReadonlyArray<ComposerImageAttachment>,
+): string {
+  const trimmedText = text.trim();
+  const imageReferences = Array.from(
+    new Set(
+      images
+        .map((image) => imageReferenceForBranchNaming(image).trim())
+        .filter((reference) => reference.length > 0),
+    ),
+  );
+  const attachmentsSection =
+    imageReferences.length > 0
+      ? `Attached images:\n${imageReferences.map((reference) => `- ${reference}`).join("\n")}`
+      : "";
+
+  if (trimmedText.length > 0 && attachmentsSection.length > 0) {
+    return `${trimmedText}\n\n${attachmentsSection}`;
+  }
+  if (trimmedText.length > 0) {
+    return trimmedText;
+  }
+  if (attachmentsSection.length > 0) {
+    return attachmentsSection;
+  }
+  return "New worktree change";
 }
 
 const VscodeEntryIcon = memo(function VscodeEntryIcon(props: {
@@ -1478,6 +1530,26 @@ export default function ChatView({ threadId }: ChatViewProps) {
     const composerImagesSnapshot = [...composerImages];
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
+    const branchNameMessage = buildBranchNameGenerationMessage(trimmed, composerImagesSnapshot);
+    const turnAttachmentsPromise = Promise.all(
+      composerImagesSnapshot.map(
+        async (
+          image,
+        ): Promise<{
+          type: "image";
+          name: string;
+          mimeType: string;
+          sizeBytes: number;
+          dataUrl: string;
+        }> => ({
+          type: "image",
+          name: image.name,
+          mimeType: image.mimeType,
+          sizeBytes: image.sizeBytes,
+          dataUrl: await readFileAsDataUrl(image.file),
+        }),
+      ),
+    );
     const optimisticAttachments = composerImagesSnapshot.map((image) => ({
       type: "image" as const,
       id: image.id,
@@ -1506,11 +1578,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
     setComposerHighlightedItemId(null);
 
     let attemptedTurnStart = false;
+    let pendingWorktreeBranchRename: Promise<void> | null = null;
     try {
       // On first message: lock in branch + create worktree if needed.
       if (baseBranchForWorktree) {
         setSendPhase("preparing-worktree");
-        const newBranch = `codething/${crypto.randomUUID().slice(0, 8)}`;
+        const newBranch = buildTemporaryWorktreeBranchName(trimmed);
         const result = await createWorktreeMutation.mutateAsync({
           cwd: activeProject.cwd,
           branch: baseBranchForWorktree,
@@ -1530,6 +1603,36 @@ export default function ChatView({ threadId }: ChatViewProps) {
           threadId: threadIdForSend,
           branch: result.worktree.branch,
           worktreePath: result.worktree.path,
+        });
+        pendingWorktreeBranchRename = (async () => {
+          const turnAttachments = await turnAttachmentsPromise;
+          const renamed = await api.git.generateAndRenameBranch({
+            cwd: result.worktree.path,
+            oldBranch: result.worktree.branch,
+            message: branchNameMessage,
+            attachments: turnAttachments,
+          });
+          if (!renamed.branch || renamed.branch === result.worktree.branch) {
+            return;
+          }
+          await api.orchestration.dispatchCommand({
+            type: "thread.meta.update",
+            commandId: newCommandId(),
+            threadId: threadIdForSend,
+            branch: renamed.branch,
+            worktreePath: result.worktree.path,
+          });
+          dispatch({
+            type: "SET_THREAD_BRANCH",
+            threadId: threadIdForSend,
+            branch: renamed.branch,
+            worktreePath: result.worktree.path,
+          });
+        })().catch((error) => {
+          console.warn("Failed to rename generated worktree branch", {
+            threadId: threadIdForSend,
+            error: error instanceof Error ? error.message : String(error),
+          });
         });
         const setupScript = setupProjectScript(activeProject.scripts);
         if (setupScript) {
@@ -1558,25 +1661,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }
 
       setSendPhase("sending-turn");
-      const turnAttachments = await Promise.all(
-        composerImagesSnapshot.map(
-          async (
-            image,
-          ): Promise<{
-            type: "image";
-            name: string;
-            mimeType: string;
-            sizeBytes: number;
-            dataUrl: string;
-          }> => ({
-            type: "image",
-            name: image.name,
-            mimeType: image.mimeType,
-            sizeBytes: image.sizeBytes,
-            dataUrl: await readFileAsDataUrl(image.file),
-          }),
-        ),
-      );
+      const turnAttachments = await turnAttachmentsPromise;
       attemptedTurnStart = true;
       const approvalPolicy = state.runtimeMode === "full-access" ? "never" : "on-request";
       const sandboxMode =
@@ -1598,6 +1683,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
         sandboxMode,
         createdAt: messageCreatedAt,
       });
+      if (pendingWorktreeBranchRename) {
+        void pendingWorktreeBranchRename;
+      }
     } catch (err) {
       if (
         !attemptedTurnStart &&

@@ -8,6 +8,7 @@
  */
 import { ServiceMap } from "effect";
 import type { Effect } from "effect";
+import type { ChatAttachment } from "@t3tools/contracts";
 
 import type { TextGenerationError } from "../Errors.ts";
 
@@ -37,11 +38,22 @@ export interface PrContentGenerationResult {
   body: string;
 }
 
+export interface BranchNameGenerationInput {
+  cwd: string;
+  message: string;
+  attachments?: ReadonlyArray<ChatAttachment> | undefined;
+}
+
+export interface BranchNameGenerationResult {
+  branch: string | null;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
   ): Promise<CommitMessageGenerationResult>;
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
+  generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
 }
 
 /**
@@ -61,6 +73,13 @@ export interface TextGenerationShape {
   readonly generatePrContent: (
     input: PrContentGenerationInput,
   ) => Effect.Effect<PrContentGenerationResult, TextGenerationError>;
+
+  /**
+   * Generate a concise branch name from a user message.
+   */
+  readonly generateBranchName: (
+    input: BranchNameGenerationInput,
+  ) => Effect.Effect<BranchNameGenerationResult, TextGenerationError>;
 }
 
 /**

@@ -1,4 +1,3 @@
-import Mime from "@effect/platform-node/Mime";
 import {
   ApprovalRequestId,
   type ChatAttachment,
@@ -40,9 +39,8 @@ import {
 } from "../Services/ProjectionPipeline.ts";
 import {
   ATTACHMENTS_ROUTE_PREFIX,
-  IMAGE_EXTENSION_BY_MIME_TYPE,
-  SAFE_IMAGE_FILE_EXTENSIONS,
 } from "../../projectFaviconRoute.ts";
+import { inferImageExtension, parseBase64DataUrl } from "../../imageMime.ts";
 
 export const ORCHESTRATION_PROJECTOR_NAMES = {
   projects: "projection.projects",
@@ -92,30 +90,6 @@ function toSafeThreadAttachmentSegment(threadId: string): string | null {
   return segment;
 }
 
-function parseBase64DataUrl(
-  dataUrl: string,
-): { readonly mimeType: string; readonly base64: string } | null {
-  const match = /^data:([^;,]+);base64,([a-z0-9+/=\r\n]+)$/i.exec(dataUrl.trim());
-  if (!match) return null;
-
-  const mimeType = match[1]?.trim().toLowerCase();
-  const base64 = match[2]?.replace(/\s+/g, "");
-  if (!mimeType || !base64) return null;
-
-  return { mimeType, base64 };
-}
-
-function inferImageExtension(attachment: Extract<ChatAttachment, { type: "image" }>): string {
-  const normalizedMimeType = attachment.mimeType.toLowerCase();
-  if (normalizedMimeType.startsWith("image/")) {
-    const fromMime = IMAGE_EXTENSION_BY_MIME_TYPE[normalizedMimeType];
-    if (fromMime) return fromMime;
-  }
-  const ext = Mime.getExtension(attachment.mimeType);
-  if (ext && SAFE_IMAGE_FILE_EXTENSIONS.has(ext)) return ext;
-  return ".bin";
-}
-
 const materializeAttachmentsForProjection = Effect.fn(function* (input: {
   readonly threadId: string;
   readonly messageId: string;
@@ -159,8 +133,8 @@ const materializeAttachmentsForProjection = Effect.fn(function* (input: {
         if (bytes.byteLength === 0) return attachment;
 
         const fileName = `${index}${inferImageExtension({
-          ...attachment,
           mimeType: parsed.mimeType,
+          fileName: attachment.name,
         })}`;
         const uniqueFileName = `${messageSegment}-${fileName}`;
         const relativePath = `${threadSegment}/${uniqueFileName}`;

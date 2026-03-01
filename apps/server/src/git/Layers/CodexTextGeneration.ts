@@ -4,7 +4,10 @@ import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { TextGenerationError } from "../Errors.ts";
+import { inferImageExtension, parseBase64DataUrl } from "../../imageMime.ts";
 import {
+  type BranchNameGenerationInput,
+  type BranchNameGenerationResult,
   type CommitMessageGenerationResult,
   type PrContentGenerationResult,
   type TextGenerationShape,
@@ -32,6 +35,15 @@ const PR_OUTPUT_SCHEMA_JSON = {
     body: { type: "string" },
   },
   required: ["title", "body"],
+  additionalProperties: false,
+} as const;
+
+const BRANCH_NAME_OUTPUT_SCHEMA_JSON = {
+  type: "object",
+  properties: {
+    branch: { type: "string" },
+  },
+  required: ["branch"],
   additionalProperties: false,
 } as const;
 
@@ -97,6 +109,18 @@ function parsePrOutput(raw: unknown): { title: string; body: string } {
   return { title, body };
 }
 
+function parseBranchNameOutput(raw: unknown): { branch: string } {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Codex returned a non-object branch payload.");
+  }
+  const record = raw as Record<string, unknown>;
+  const branch = typeof record.branch === "string" ? record.branch.trim() : "";
+  if (branch.length === 0) {
+    throw new Error("Codex returned an empty branch name payload.");
+  }
+  return { branch };
+}
+
 function limitSection(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
   const truncated = value.slice(0, maxChars);
@@ -122,6 +146,24 @@ function sanitizePrTitle(raw: string): string {
     return singleLine;
   }
   return "Update project changes";
+}
+
+function sanitizeBranchName(raw: string): string {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/['"`]/g, "")
+    .replace(/^[./\s_-]+|[./\s_-]+$/g, "");
+
+  const branchFragment = normalized
+    .replace(/[^a-z0-9/_-]+/g, "-")
+    .replace(/\/+/g, "/")
+    .replace(/-+/g, "-")
+    .replace(/^[./_-]+|[./_-]+$/g, "")
+    .slice(0, 64)
+    .replace(/[./_-]+$/g, "");
+
+  return branchFragment.length > 0 ? branchFragment : "update";
 }
 
 const makeCodexTextGeneration = Effect.gen(function* () {
@@ -168,20 +210,86 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     );
   };
 
+  const writeTempBinaryFile = (
+    operation: string,
+    prefix: string,
+    bytes: Uint8Array,
+    extension: string,
+  ): Effect.Effect<string, TextGenerationError> => {
+    const normalizedExtension = extension.startsWith(".") ? extension : `.${extension}`;
+    const filePath = path.join(
+      tempDir,
+      `t3code-${prefix}-${process.pid}-${randomUUID()}${normalizedExtension}`,
+    );
+    return fileSystem.writeFile(filePath, bytes).pipe(
+      Effect.mapError(
+        (cause) =>
+          new TextGenerationError({
+            operation,
+            detail: `Failed to write temp file at ${filePath}.`,
+            cause,
+          }),
+      ),
+      Effect.as(filePath),
+    );
+  };
+
   const safeUnlink = (filePath: string): Effect.Effect<void, never> =>
     fileSystem.remove(filePath).pipe(Effect.catch(() => Effect.void));
+
+  const materializeImageAttachments = (
+    operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName",
+    attachments: BranchNameGenerationInput["attachments"],
+  ): Effect.Effect<ReadonlyArray<string>, TextGenerationError> =>
+    Effect.gen(function* () {
+      if (!attachments || attachments.length === 0) {
+        return [];
+      }
+
+      const imagePaths: string[] = [];
+      for (const [index, attachment] of attachments.entries()) {
+        if (attachment.type !== "image") {
+          continue;
+        }
+
+        const parsed = parseBase64DataUrl(attachment.dataUrl);
+        if (!parsed || !parsed.mimeType.startsWith("image/")) {
+          continue;
+        }
+
+        const bytes = Buffer.from(parsed.base64, "base64");
+        if (bytes.byteLength === 0) {
+          continue;
+        }
+
+        const extension = inferImageExtension({
+          mimeType: parsed.mimeType,
+          fileName: attachment.name,
+        });
+        const imagePath = yield* writeTempBinaryFile(
+          operation,
+          `codex-image-${index}`,
+          bytes,
+          extension,
+        );
+        imagePaths.push(imagePath);
+      }
+      return imagePaths;
+    });
 
   const runCodexJson = <T>({
     operation,
     cwd,
     prompt,
     outputSchemaJson,
+    imagePaths = [],
     parse,
   }: {
-    operation: "generateCommitMessage" | "generatePrContent";
+    operation: "generateCommitMessage" | "generatePrContent" | "generateBranchName";
     cwd: string;
     prompt: string;
     outputSchemaJson: object;
+    imagePaths?: ReadonlyArray<string>;
     parse: (raw: unknown) => T;
   }): Effect.Effect<T, TextGenerationError> =>
     Effect.gen(function* () {
@@ -208,6 +316,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
             schemaPath,
             "--output-last-message",
             outputPath,
+            ...imagePaths.flatMap((imagePath) => ["--image", imagePath]),
             "-",
           ],
           {
@@ -254,9 +363,12 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         }
       });
 
-      const cleanup = Effect.all([safeUnlink(schemaPath), safeUnlink(outputPath)], {
-        concurrency: "unbounded",
-      }).pipe(Effect.asVoid);
+      const cleanup = Effect.all(
+        [schemaPath, outputPath, ...imagePaths].map((filePath) => safeUnlink(filePath)),
+        {
+          concurrency: "unbounded",
+        },
+      ).pipe(Effect.asVoid);
 
       return yield* Effect.gen(function* () {
         yield* runCodexCommand.pipe(
@@ -384,9 +496,60 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     );
   };
 
+  const generateBranchName: TextGenerationShape["generateBranchName"] = (input) => {
+    return Effect.gen(function* () {
+      const imagePaths = yield* materializeImageAttachments("generateBranchName", input.attachments);
+      const attachmentLines = (input.attachments ?? []).map(
+        (attachment) => `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
+      );
+
+      const prompt = [
+        "You generate concise git branch names.",
+        "Return a JSON object with key: branch.",
+        "Rules:",
+        "- Branch should describe the requested work from the user message.",
+        "- Keep it short and specific (2-6 words).",
+        "- Use plain words only, no issue prefixes and no punctuation-heavy text.",
+        "- If images are attached, use them as primary context for visual/UI issues.",
+        "",
+        `Image attachments supplied to the model: ${imagePaths.length}`,
+        "",
+        "User message:",
+        limitSection(input.message, 8_000),
+        "",
+        "Attachment metadata:",
+        attachmentLines.length > 0 ? limitSection(attachmentLines.join("\n"), 4_000) : "- none",
+      ].join("\n");
+
+      const generated = yield* runCodexJson({
+        operation: "generateBranchName",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: BRANCH_NAME_OUTPUT_SCHEMA_JSON,
+        imagePaths,
+        parse: (raw) => parseBranchNameOutput(raw),
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            yield* Effect.logWarning("branch-name generation failed, skipping rename", {
+              operation: "generateBranchName",
+              reason: error instanceof Error ? error.message : String(error),
+            });
+            return { branch: null };
+          }),
+        ),
+      );
+
+      return {
+        branch: generated.branch ? sanitizeBranchName(generated.branch) : null,
+      } satisfies BranchNameGenerationResult;
+    });
+  };
+
   return {
     generateCommitMessage,
     generatePrContent,
+    generateBranchName,
   } satisfies TextGenerationShape;
 });
 

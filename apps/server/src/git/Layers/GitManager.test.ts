@@ -41,6 +41,10 @@ interface FakeGitTextGeneration {
     diffSummary: string;
     diffPatch: string;
   }) => Effect.Effect<{ title: string; body: string }, TextGenerationError>;
+  generateBranchName: (input: {
+    cwd: string;
+    message: string;
+  }) => Effect.Effect<{ branch: string }, TextGenerationError>;
 }
 
 function makeTempDir(
@@ -110,6 +114,10 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
         title: "Add stacked git actions",
         body: "## Summary\n- Add stacked git workflow\n\n## Testing\n- Not run",
       }),
+    generateBranchName: () =>
+      Effect.succeed({
+        branch: "update-workflow",
+      }),
     ...overrides,
   };
 
@@ -131,6 +139,17 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
           (cause) =>
             new TextGenerationError({
               operation: "generatePrContent",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateBranchName: (input) =>
+      implementation.generateBranchName(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateBranchName",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

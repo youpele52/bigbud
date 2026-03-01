@@ -17,6 +17,8 @@ import type {
   GitListBranchesInput,
   GitListBranchesResult,
   GitPullResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
@@ -123,6 +125,13 @@ export interface GitCoreShape {
    * Remove an existing worktree.
    */
   readonly removeWorktree: (input: GitRemoveWorktreeInput) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Rename an existing local branch.
+   */
+  readonly renameBranch: (
+    input: GitRenameBranchInput,
+  ) => Effect.Effect<GitRenameBranchResult, GitCommandError>;
 
   /**
    * Create a local branch.

@@ -250,6 +250,43 @@ const makeGitCore = Effect.gen(function* () {
       Effect.map((result) => result.stdout),
     );
 
+  const branchExists = (cwd: string, branch: string): Effect.Effect<boolean, GitCommandError> =>
+    executeGit(
+      "GitCore.branchExists",
+      cwd,
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+      {
+        allowNonZeroExit: true,
+        timeoutMs: 5_000,
+      },
+    ).pipe(Effect.map((result) => result.code === 0));
+
+  const resolveAvailableBranchName = (
+    cwd: string,
+    desiredBranch: string,
+  ): Effect.Effect<string, GitCommandError> =>
+    Effect.gen(function* () {
+      const isDesiredTaken = yield* branchExists(cwd, desiredBranch);
+      if (!isDesiredTaken) {
+        return desiredBranch;
+      }
+
+      for (let suffix = 1; suffix <= 100; suffix += 1) {
+        const candidate = `${desiredBranch}-${suffix}`;
+        const isCandidateTaken = yield* branchExists(cwd, candidate);
+        if (!isCandidateTaken) {
+          return candidate;
+        }
+      }
+
+      return yield* createGitCommandError(
+        "GitCore.renameBranch",
+        cwd,
+        ["branch", "-m", desiredBranch],
+        `Could not find an available branch name for '${desiredBranch}'.`,
+      );
+    });
+
   const resolveCurrentUpstream = (
     cwd: string,
   ): Effect.Effect<
@@ -1028,6 +1065,26 @@ const makeGitCore = Effect.gen(function* () {
       );
     });
 
+  const renameBranch: GitCoreShape["renameBranch"] = (input) =>
+    Effect.gen(function* () {
+      if (input.oldBranch === input.newBranch) {
+        return { branch: input.newBranch };
+      }
+      const targetBranch = yield* resolveAvailableBranchName(input.cwd, input.newBranch);
+
+      yield* executeGit(
+        "GitCore.renameBranch",
+        input.cwd,
+        ["branch", "-m", input.oldBranch, targetBranch],
+        {
+          timeoutMs: 10_000,
+          fallbackErrorMessage: "git branch rename failed",
+        },
+      );
+
+      return { branch: targetBranch };
+    });
+
   const createBranch: GitCoreShape["createBranch"] = (input) =>
     executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
       timeoutMs: 10_000,
@@ -1135,6 +1192,7 @@ const makeGitCore = Effect.gen(function* () {
     listBranches,
     createWorktree,
     removeWorktree,
+    renameBranch,
     createBranch,
     checkoutBranch,
     initRepo,

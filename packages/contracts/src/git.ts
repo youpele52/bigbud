@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas";
+import { ChatAttachment, PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "./orchestration";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 
@@ -69,6 +70,32 @@ export const GitCreateWorktreeInput = Schema.Struct({
 });
 export type GitCreateWorktreeInput = typeof GitCreateWorktreeInput.Type;
 
+export const GitGenerateBranchNameInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  message: TrimmedNonEmptyStringSchema,
+  attachments: Schema.optional(
+    Schema.Array(ChatAttachment).check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS)),
+  ),
+});
+export type GitGenerateBranchNameInput = typeof GitGenerateBranchNameInput.Type;
+
+export const GitGenerateAndRenameBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  oldBranch: TrimmedNonEmptyStringSchema,
+  message: TrimmedNonEmptyStringSchema,
+  attachments: Schema.optional(
+    Schema.Array(ChatAttachment).check(Schema.isMaxLength(PROVIDER_SEND_TURN_MAX_ATTACHMENTS)),
+  ),
+});
+export type GitGenerateAndRenameBranchInput = typeof GitGenerateAndRenameBranchInput.Type;
+
+export const GitRenameBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  oldBranch: TrimmedNonEmptyStringSchema,
+  newBranch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchInput = typeof GitRenameBranchInput.Type;
+
 export const GitRemoveWorktreeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   path: TrimmedNonEmptyStringSchema,
@@ -136,6 +163,21 @@ export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,
 });
 export type GitCreateWorktreeResult = typeof GitCreateWorktreeResult.Type;
+
+export const GitGenerateBranchNameResult = Schema.Struct({
+  branch: Schema.NullOr(TrimmedNonEmptyStringSchema),
+});
+export type GitGenerateBranchNameResult = typeof GitGenerateBranchNameResult.Type;
+
+export const GitGenerateAndRenameBranchResult = Schema.Struct({
+  branch: Schema.NullOr(TrimmedNonEmptyStringSchema),
+});
+export type GitGenerateAndRenameBranchResult = typeof GitGenerateAndRenameBranchResult.Type;
+
+export const GitRenameBranchResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchResult = typeof GitRenameBranchResult.Type;
 
 export const GitRunStackedActionResult = Schema.Struct({
   action: GitStackedAction,

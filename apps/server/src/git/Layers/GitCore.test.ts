@@ -106,6 +106,7 @@ const makeIsolatedGitCore = (gitService: GitServiceShape) =>
       listBranches: (input) => core.listBranches(input),
       createWorktree: (input) => core.createWorktree(input),
       removeWorktree: (input) => core.removeWorktree(input),
+      renameBranch: (input) => core.renameBranch(input),
       createBranch: (input) => core.createBranch(input),
       checkoutBranch: (input) => core.checkoutBranch(input),
       initRepo: (input) => core.initRepo(input),
@@ -151,6 +152,13 @@ function removeGitWorktree(input: Parameters<GitCoreShape["removeWorktree"]>[0])
   return Effect.gen(function* () {
     const core = yield* GitCore;
     return yield* core.removeWorktree(input);
+  });
+}
+
+function renameGitBranch(input: Parameters<GitCoreShape["renameBranch"]>[0]) {
+  return Effect.gen(function* () {
+    const core = yield* GitCore;
+    return yield* core.renameBranch(input);
   });
 }
 
@@ -815,6 +823,94 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* createGitBranch({ cwd: tmp, branch: "dupe" });
         const result = yield* Effect.result(createGitBranch({ cwd: tmp, branch: "dupe" }));
         expect(result._tag).toBe("Failure");
+      }),
+    );
+  });
+
+  // ── renameGitBranch ──
+
+  describe("renameGitBranch", () => {
+    it.effect("renames the current branch", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* createGitBranch({ cwd: tmp, branch: "feature/old-name" });
+        yield* checkoutGitBranch({ cwd: tmp, branch: "feature/old-name" });
+
+        const renamed = yield* renameGitBranch({
+          cwd: tmp,
+          oldBranch: "feature/old-name",
+          newBranch: "feature/new-name",
+        });
+
+        expect(renamed.branch).toBe("feature/new-name");
+
+        const branches = yield* listGitBranches({ cwd: tmp });
+        expect(branches.branches.some((branch) => branch.name === "feature/old-name")).toBe(false);
+        const current = branches.branches.find((branch) => branch.current);
+        expect(current?.name).toBe("feature/new-name");
+      }),
+    );
+
+    it.effect("returns success without git invocation when old/new names match", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const current = (yield* listGitBranches({ cwd: tmp })).branches.find((b) => b.current)!;
+
+        const renamed = yield* renameGitBranch({
+          cwd: tmp,
+          oldBranch: current.name,
+          newBranch: current.name,
+        });
+
+        expect(renamed.branch).toBe(current.name);
+      }),
+    );
+
+    it.effect("appends numeric suffix when target branch already exists", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* createGitBranch({ cwd: tmp, branch: "t3code/feat/session" });
+        yield* createGitBranch({ cwd: tmp, branch: "t3code/tmp-working" });
+        yield* checkoutGitBranch({ cwd: tmp, branch: "t3code/tmp-working" });
+
+        const renamed = yield* renameGitBranch({
+          cwd: tmp,
+          oldBranch: "t3code/tmp-working",
+          newBranch: "t3code/feat/session",
+        });
+
+        expect(renamed.branch).toBe("t3code/feat/session-1");
+        const branches = yield* listGitBranches({ cwd: tmp });
+        expect(branches.branches.some((branch) => branch.name === "t3code/feat/session")).toBe(
+          true,
+        );
+        expect(branches.branches.some((branch) => branch.name === "t3code/feat/session-1")).toBe(
+          true,
+        );
+        const current = branches.branches.find((branch) => branch.current);
+        expect(current?.name).toBe("t3code/feat/session-1");
+      }),
+    );
+
+    it.effect("increments suffix until it finds an available branch name", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* createGitBranch({ cwd: tmp, branch: "t3code/feat/session" });
+        yield* createGitBranch({ cwd: tmp, branch: "t3code/feat/session-1" });
+        yield* createGitBranch({ cwd: tmp, branch: "t3code/tmp-working" });
+        yield* checkoutGitBranch({ cwd: tmp, branch: "t3code/tmp-working" });
+
+        const renamed = yield* renameGitBranch({
+          cwd: tmp,
+          oldBranch: "t3code/tmp-working",
+          newBranch: "t3code/feat/session",
+        });
+
+        expect(renamed.branch).toBe("t3code/feat/session-2");
       }),
     );
   });
