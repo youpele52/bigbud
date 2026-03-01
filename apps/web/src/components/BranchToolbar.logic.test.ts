@@ -1,6 +1,10 @@
 import { ThreadId, type GitBranch } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
-import { deriveSyncedLocalBranch } from "./BranchToolbar.logic";
+import {
+  dedupeRemoteBranchesWithLocalMatches,
+  deriveLocalBranchNameFromRemoteRef,
+  deriveSyncedLocalBranch,
+} from "./BranchToolbar.logic";
 
 const branches: GitBranch[] = [
   {
@@ -55,5 +59,71 @@ describe("deriveSyncedLocalBranch", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("deriveLocalBranchNameFromRemoteRef", () => {
+  it("strips the remote prefix from a remote ref", () => {
+    expect(deriveLocalBranchNameFromRemoteRef("origin/feature/demo")).toBe("feature/demo");
+  });
+
+  it("returns the original name when ref is malformed", () => {
+    expect(deriveLocalBranchNameFromRemoteRef("origin/")).toBe("origin/");
+    expect(deriveLocalBranchNameFromRemoteRef("/feature/demo")).toBe("/feature/demo");
+  });
+});
+
+describe("dedupeRemoteBranchesWithLocalMatches", () => {
+  it("hides remote refs when the matching local branch exists", () => {
+    const input: GitBranch[] = [
+      {
+        name: "feature/demo",
+        current: false,
+        isDefault: false,
+        worktreePath: null,
+      },
+      {
+        name: "origin/feature/demo",
+        isRemote: true,
+        current: false,
+        isDefault: false,
+        worktreePath: null,
+      },
+      {
+        name: "origin/feature/remote-only",
+        isRemote: true,
+        current: false,
+        isDefault: false,
+        worktreePath: null,
+      },
+    ];
+
+    expect(dedupeRemoteBranchesWithLocalMatches(input).map((branch) => branch.name)).toEqual([
+      "feature/demo",
+      "origin/feature/remote-only",
+    ]);
+  });
+
+  it("keeps all entries when no local match exists for a remote ref", () => {
+    const input: GitBranch[] = [
+      {
+        name: "feature/local",
+        current: false,
+        isDefault: false,
+        worktreePath: null,
+      },
+      {
+        name: "origin/feature/remote-only",
+        isRemote: true,
+        current: false,
+        isDefault: false,
+        worktreePath: null,
+      },
+    ];
+
+    expect(dedupeRemoteBranchesWithLocalMatches(input).map((branch) => branch.name)).toEqual([
+      "feature/local",
+      "origin/feature/remote-only",
+    ]);
   });
 });

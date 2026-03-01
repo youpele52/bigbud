@@ -10,7 +10,11 @@ import {
 } from "../lib/gitReactQuery";
 import { readNativeApi } from "../nativeApi";
 import { useStore } from "../store";
-import { deriveSyncedLocalBranch } from "./BranchToolbar.logic";
+import {
+  dedupeRemoteBranchesWithLocalMatches,
+  deriveLocalBranchNameFromRemoteRef,
+  deriveSyncedLocalBranch,
+} from "./BranchToolbar.logic";
 import { Button } from "./ui/button";
 import {
   Combobox,
@@ -29,14 +33,6 @@ interface BranchToolbarProps {
   onEnvModeChange: (mode: "local" | "worktree") => void;
   envLocked: boolean;
   onComposerFocusRequest?: () => void;
-}
-
-function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
-  const separatorIndex = branchName.indexOf("/");
-  if (separatorIndex <= 0 || separatorIndex === branchName.length - 1) {
-    return branchName;
-  }
-  return branchName.slice(separatorIndex + 1);
 }
 
 export default function BranchToolbar({
@@ -63,7 +59,7 @@ export default function BranchToolbar({
 
   const branchesQuery = useQuery(gitBranchesQueryOptions(branchCwd));
 
-  const branches = branchesQuery.data?.branches ?? [];
+  const branches = dedupeRemoteBranchesWithLocalMatches(branchesQuery.data?.branches ?? []);
   const branchNames = branches.map((branch) => branch.name);
   const branchByName = new Map(branches.map((branch) => [branch.name, branch]));
   const trimmedBranchQuery = branchQuery.trim();
