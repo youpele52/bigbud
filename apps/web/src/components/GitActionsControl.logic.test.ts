@@ -608,6 +608,63 @@ describe("when: branch has no upstream configured", () => {
       },
     ]);
   });
+
+  it("resolveQuickAction uses push-only on default branch when no upstream exists", () => {
+    const quick = resolveQuickAction(
+      status({
+        branch: "main",
+        hasUpstream: false,
+        aheadCount: 0,
+        pr: null,
+      }),
+      false,
+      true,
+    );
+    assert.deepInclude(quick, {
+      kind: "run_action",
+      action: "commit_push",
+      label: "Push",
+      disabled: false,
+    });
+  });
+
+  it("buildMenuItems still disables push and create PR when branch is behind", () => {
+    const items = buildMenuItems(
+      status({
+        hasUpstream: false,
+        behindCount: 1,
+        aheadCount: 0,
+        pr: null,
+      }),
+      false,
+    );
+    assert.deepEqual(items, [
+      {
+        id: "commit",
+        label: "Commit",
+        disabled: true,
+        icon: "commit",
+        kind: "open_dialog",
+        dialogAction: "commit",
+      },
+      {
+        id: "push",
+        label: "Push",
+        disabled: true,
+        icon: "push",
+        kind: "open_dialog",
+        dialogAction: "push",
+      },
+      {
+        id: "pr",
+        label: "Create PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_pr",
+      },
+    ]);
+  });
 });
 
 describe("requiresDefaultBranchConfirmation", () => {
