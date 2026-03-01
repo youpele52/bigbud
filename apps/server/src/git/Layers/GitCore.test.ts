@@ -370,6 +370,50 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(result.branches.every((b) => b.isDefault === false)).toBe(true);
       }),
     );
+
+    it.effect("lists local branches first and remote branches last", () =>
+      Effect.gen(function* () {
+        const remote = yield* makeTmpDir();
+        const tmp = yield* makeTmpDir();
+
+        yield* git(remote, ["init", "--bare"]);
+        yield* initRepoWithCommit(tmp);
+        const defaultBranch = (yield* listGitBranches({ cwd: tmp })).branches.find(
+          (branch) => branch.current,
+        )!.name;
+
+        yield* git(tmp, ["remote", "add", "origin", remote]);
+        yield* git(tmp, ["push", "-u", "origin", defaultBranch]);
+
+        yield* createGitBranch({ cwd: tmp, branch: "feature/local-only" });
+
+        const remoteOnlyBranch = "feature/remote-only";
+        yield* checkoutGitBranch({ cwd: tmp, branch: defaultBranch });
+        yield* git(tmp, ["checkout", "-b", remoteOnlyBranch]);
+        yield* git(tmp, ["push", "-u", "origin", remoteOnlyBranch]);
+        yield* git(tmp, ["checkout", defaultBranch]);
+        yield* git(tmp, ["branch", "-D", remoteOnlyBranch]);
+
+        const result = yield* listGitBranches({ cwd: tmp });
+        const firstRemoteIndex = result.branches.findIndex((branch) => branch.isRemote);
+
+        expect(firstRemoteIndex).toBeGreaterThan(0);
+        expect(result.branches.slice(0, firstRemoteIndex).every((branch) => !branch.isRemote)).toBe(
+          true,
+        );
+        expect(result.branches.slice(firstRemoteIndex).every((branch) => branch.isRemote)).toBe(
+          true,
+        );
+        expect(
+          result.branches.some((branch) => branch.name === "feature/local-only" && !branch.isRemote),
+        ).toBe(true);
+        expect(
+          result.branches.some(
+            (branch) => branch.name === "origin/feature/remote-only" && branch.isRemote,
+          ),
+        ).toBe(true);
+      }),
+    );
   });
 
   // ── checkoutGitBranch ──

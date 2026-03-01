@@ -31,6 +31,14 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
 }
 
+function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
+  const separatorIndex = branchName.indexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === branchName.length - 1) {
+    return branchName;
+  }
+  return branchName.slice(separatorIndex + 1);
+}
+
 export default function BranchToolbar({
   threadId,
   envMode,
@@ -174,10 +182,14 @@ export default function BranchToolbar({
       return;
     }
 
+    const selectedBranchName = branch.isRemote
+      ? deriveLocalBranchNameFromRemoteRef(branch.name)
+      : branch.name;
+
     checkoutMutation.mutate(branch.name, {
       onSuccess: () => {
         setThreadError(null);
-        setThreadBranch(branch.name, activeWorktreePath);
+        setThreadBranch(selectedBranchName, activeWorktreePath);
         setIsBranchMenuOpen(false);
         onComposerFocusRequest?.();
       },
@@ -283,6 +295,15 @@ export default function BranchToolbar({
 
               const hasSecondaryWorktree =
                 branch.worktreePath && branch.worktreePath !== activeProject.cwd;
+              const badge = branch.current
+                ? "current"
+                : hasSecondaryWorktree
+                  ? "worktree"
+                  : branch.isRemote
+                    ? "remote"
+                    : branch.isDefault
+                      ? "default"
+                      : null;
               return (
                 <ComboboxItem
                   hideIndicator
@@ -295,11 +316,7 @@ export default function BranchToolbar({
                 >
                   <div className="flex w-full items-center justify-between gap-2">
                     <span className="truncate">{itemValue}</span>
-                    {(branch.current || branch.isDefault || hasSecondaryWorktree) && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground/45">
-                        {branch.current ? "current" : hasSecondaryWorktree ? "worktree" : "default"}
-                      </span>
-                    )}
+                    {badge && <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>}
                   </div>
                 </ComboboxItem>
               );

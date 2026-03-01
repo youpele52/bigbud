@@ -101,7 +101,7 @@ export interface GitCoreShape {
   ) => Effect.Effect<string | null, GitCommandError>;
 
   /**
-   * List local branches and branch metadata.
+   * List local + remote branches and branch metadata.
    */
   readonly listBranches: (
     input: GitListBranchesInput,

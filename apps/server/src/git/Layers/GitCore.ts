@@ -76,6 +76,33 @@ function parsePorcelainPath(line: string): string | null {
   return filePath.length > 0 ? filePath : null;
 }
 
+function parseBranchLine(line: string): { name: string; current: boolean } | null {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) return null;
+
+  const name = trimmed.replace(/^[*+]\s+/, "");
+  // Exclude symbolic refs like: "origin/HEAD -> origin/main".
+  if (name.includes(" -> ")) return null;
+
+  return {
+    name,
+    current: trimmed.startsWith("* "),
+  };
+}
+
+function parseRemoteTrackingCandidate(
+  branchName: string,
+): { remoteRef: string; localBranch: string } | null {
+  const separatorIndex = branchName.indexOf("/");
+  if (separatorIndex <= 0 || separatorIndex === branchName.length - 1) return null;
+  const localBranch = branchName.slice(separatorIndex + 1).trim();
+  if (localBranch.length === 0) return null;
+  return {
+    remoteRef: branchName.trim(),
+    localBranch,
+  };
+}
+
 function commandLabel(args: readonly string[]): string {
   return `git ${args.join(" ")}`;
 }
@@ -264,7 +291,12 @@ const makeGitCore = Effect.gen(function* () {
       const branchRecency = yield* executeGit(
         "GitCore.readBranchRecency",
         cwd,
-        ["for-each-ref", "--format=%(refname:short)%09%(committerdate:unix)", "refs/heads"],
+        [
+          "for-each-ref",
+          "--format=%(refname:short)%09%(committerdate:unix)",
+          "refs/heads",
+          "refs/remotes",
+        ],
         {
           timeoutMs: 15_000,
           allowNonZeroExit: true,
@@ -564,7 +596,7 @@ const makeGitCore = Effect.gen(function* () {
       const branchRecencyPromise = readBranchRecency(input.cwd).pipe(
         Effect.catch(() => Effect.succeed(new Map<string, number>())),
       );
-      const result = yield* executeGit(
+      const localBranchResult = yield* executeGit(
         "GitCore.listBranches.branchNoColor",
         input.cwd,
         ["branch", "--no-color"],
@@ -574,8 +606,8 @@ const makeGitCore = Effect.gen(function* () {
         },
       );
 
-      if (result.code !== 0) {
-        const stderr = result.stderr.trim();
+      if (localBranchResult.code !== 0) {
+        const stderr = localBranchResult.stderr.trim();
         if (stderr.toLowerCase().includes("not a git repository")) {
           return { branches: [], isRepo: false };
         }
@@ -587,7 +619,7 @@ const makeGitCore = Effect.gen(function* () {
         );
       }
 
-      const [defaultRef, worktreeList, branchLastCommit] = yield* Effect.all(
+      const [defaultRef, worktreeList, remoteBranchResult, branchLastCommit] = yield* Effect.all(
         [
           executeGit(
             "GitCore.listBranches.defaultRef",
@@ -604,6 +636,15 @@ const makeGitCore = Effect.gen(function* () {
             ["worktree", "list", "--porcelain"],
             {
               timeoutMs: 5_000,
+              allowNonZeroExit: true,
+            },
+          ),
+          executeGit(
+            "GitCore.listBranches.remoteBranches",
+            input.cwd,
+            ["branch", "--no-color", "--remotes"],
+            {
+              timeoutMs: 10_000,
               allowNonZeroExit: true,
             },
           ),
@@ -636,19 +677,17 @@ const makeGitCore = Effect.gen(function* () {
         }
       }
 
-      const branches = result.stdout
+      const localBranches = localBranchResult.stdout
         .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const name = line.replace(/^[*+]\s+/, "");
-          return {
-            name,
-            current: line.startsWith("* "),
-            isDefault: name === defaultBranch,
-            worktreePath: worktreeMap.get(name) ?? null,
-          };
-        })
+        .map(parseBranchLine)
+        .filter((branch): branch is { name: string; current: boolean } => branch !== null)
+        .map((branch) => ({
+          name: branch.name,
+          current: branch.current,
+          isRemote: false,
+          isDefault: branch.name === defaultBranch,
+          worktreePath: worktreeMap.get(branch.name) ?? null,
+        }))
         .toSorted((a, b) => {
           const aPriority = a.current ? 0 : a.isDefault ? 1 : 2;
           const bPriority = b.current ? 0 : b.isDefault ? 1 : 2;
@@ -659,6 +698,29 @@ const makeGitCore = Effect.gen(function* () {
           if (aLastCommit !== bLastCommit) return bLastCommit - aLastCommit;
           return a.name.localeCompare(b.name);
         });
+
+      const remoteBranches =
+        remoteBranchResult.code === 0
+          ? remoteBranchResult.stdout
+              .split("\n")
+              .map(parseBranchLine)
+              .filter((branch): branch is { name: string; current: boolean } => branch !== null)
+              .map((branch) => ({
+                name: branch.name,
+                current: false,
+                isRemote: true,
+                isDefault: false,
+                worktreePath: null,
+              }))
+              .toSorted((a, b) => {
+                const aLastCommit = branchLastCommit.get(a.name) ?? 0;
+                const bLastCommit = branchLastCommit.get(b.name) ?? 0;
+                if (aLastCommit !== bLastCommit) return bLastCommit - aLastCommit;
+                return a.name.localeCompare(b.name);
+              })
+          : [];
+
+      const branches = [...localBranches, ...remoteBranches];
 
       return { branches, isRepo: true };
     });
@@ -719,7 +781,63 @@ const makeGitCore = Effect.gen(function* () {
 
   const checkoutBranch: GitCoreShape["checkoutBranch"] = (input) =>
     Effect.gen(function* () {
-      yield* executeGit("GitCore.checkoutBranch.checkout", input.cwd, ["checkout", input.branch], {
+      const trackingCandidate = parseRemoteTrackingCandidate(input.branch);
+      if (!trackingCandidate) {
+        yield* executeGit("GitCore.checkoutBranch.checkout", input.cwd, ["checkout", input.branch], {
+          timeoutMs: 10_000,
+          fallbackErrorMessage: "git checkout failed",
+        });
+
+        // Refresh upstream refs in the background so checkout remains responsive.
+        yield* Effect.sync(() => {
+          void Effect.runPromise(
+            refreshCheckedOutBranchUpstream(input.cwd).pipe(Effect.catch(() => Effect.void)),
+          );
+        });
+        return;
+      }
+
+      const [localInputExists, remoteExists, localTrackingExists] = yield* Effect.all(
+        [
+          executeGit(
+            "GitCore.checkoutBranch.localInputExists",
+            input.cwd,
+            ["show-ref", "--verify", "--quiet", `refs/heads/${input.branch}`],
+            {
+              timeoutMs: 5_000,
+              allowNonZeroExit: true,
+            },
+          ).pipe(Effect.map((result) => result.code === 0)),
+          executeGit(
+            "GitCore.checkoutBranch.remoteExists",
+            input.cwd,
+            ["show-ref", "--verify", "--quiet", `refs/remotes/${trackingCandidate.remoteRef}`],
+            {
+              timeoutMs: 5_000,
+              allowNonZeroExit: true,
+            },
+          ).pipe(Effect.map((result) => result.code === 0)),
+          executeGit(
+            "GitCore.checkoutBranch.localTrackingExists",
+            input.cwd,
+            ["show-ref", "--verify", "--quiet", `refs/heads/${trackingCandidate.localBranch}`],
+            {
+              timeoutMs: 5_000,
+              allowNonZeroExit: true,
+            },
+          ).pipe(Effect.map((result) => result.code === 0)),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      const checkoutArgs =
+        localInputExists
+          ? ["checkout", input.branch]
+          : remoteExists && !localTrackingExists
+          ? ["checkout", "--track", trackingCandidate.remoteRef]
+          : ["checkout", localTrackingExists ? trackingCandidate.localBranch : input.branch];
+
+      yield* executeGit("GitCore.checkoutBranch.checkout", input.cwd, checkoutArgs, {
         timeoutMs: 10_000,
         fallbackErrorMessage: "git checkout failed",
       });
