@@ -808,7 +808,6 @@ export default function Sidebar() {
                                           <button
                                             type="button"
                                             aria-label={prStatus.tooltip}
-                                            title={prStatus.tooltip}
                                             className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
                                             onClick={(event) => {
                                               openPrLink(event, prStatus.url);
