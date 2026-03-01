@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-export { IMAGE_EXTENSION_BY_MIME_TYPE, SAFE_IMAGE_FILE_EXTENSIONS } from "./imageMime.ts";
 
 export const ATTACHMENTS_ROUTE_PREFIX = "/attachments";
 

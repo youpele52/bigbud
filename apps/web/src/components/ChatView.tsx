@@ -1486,23 +1486,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
     const turnAttachmentsPromise = Promise.all(
-      composerImagesSnapshot.map(
-        async (
-          image,
-        ): Promise<{
-          type: "image";
-          name: string;
-          mimeType: string;
-          sizeBytes: number;
-          dataUrl: string;
-        }> => ({
-          type: "image",
-          name: image.name,
-          mimeType: image.mimeType,
-          sizeBytes: image.sizeBytes,
-          dataUrl: await readFileAsDataUrl(image.file),
-        }),
-      ),
+      composerImagesSnapshot.map(async (image) => ({
+        type: "image" as const,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+        dataUrl: await readFileAsDataUrl(image.file),
+      })),
     );
     const optimisticAttachments = composerImagesSnapshot.map((image) => ({
       type: "image" as const,
