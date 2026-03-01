@@ -17,8 +17,6 @@ import type {
   GitListBranchesInput,
   GitListBranchesResult,
   GitPullResult,
-  GitRenameBranchInput,
-  GitRenameBranchResult,
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
@@ -46,6 +44,16 @@ export interface GitRangeContext {
   commitSummary: string;
   diffSummary: string;
   diffPatch: string;
+}
+
+export interface GitRenameBranchInput {
+  cwd: string;
+  oldBranch: string;
+  newBranch: string;
+}
+
+export interface GitRenameBranchResult {
+  branch: string;
 }
 
 /**

@@ -913,6 +913,41 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(renamed.branch).toBe("t3code/feat/session-2");
       }),
     );
+
+    it.effect("uses '--' separator for branch rename arguments", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* createGitBranch({ cwd: tmp, branch: "feature/old-name" });
+        yield* checkoutGitBranch({ cwd: tmp, branch: "feature/old-name" });
+
+        const realGitService = yield* GitService;
+        let renameArgs: ReadonlyArray<string> | null = null;
+        const core = yield* makeIsolatedGitCore({
+          execute: (input) => {
+            if (input.args[0] === "branch" && input.args[1] === "-m") {
+              renameArgs = [...input.args];
+            }
+            return realGitService.execute(input);
+          },
+        });
+
+        const renamed = yield* core.renameBranch({
+          cwd: tmp,
+          oldBranch: "feature/old-name",
+          newBranch: "feature/new-name",
+        });
+
+        expect(renamed.branch).toBe("feature/new-name");
+        expect(renameArgs).toEqual([
+          "branch",
+          "-m",
+          "--",
+          "feature/old-name",
+          "feature/new-name",
+        ]);
+      }),
+    );
   });
 
   // ── createGitWorktree + removeGitWorktree ──

@@ -164,7 +164,6 @@ export function createWsNativeApi(): NativeApi {
       runStackedAction: (input) => transport.request(WS_METHODS.gitRunStackedAction, input),
       listBranches: (input) => transport.request(WS_METHODS.gitListBranches, input),
       createWorktree: (input) => transport.request(WS_METHODS.gitCreateWorktree, input),
-      renameBranch: (input) => transport.request(WS_METHODS.gitRenameBranch, input),
       removeWorktree: (input) => transport.request(WS_METHODS.gitRemoveWorktree, input),
       createBranch: (input) => transport.request(WS_METHODS.gitCreateBranch, input),
       checkout: (input) => transport.request(WS_METHODS.gitCheckout, input),

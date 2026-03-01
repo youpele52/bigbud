@@ -371,7 +371,7 @@ describe("WebSocket Server", () => {
       gitManager?: GitManagerShape;
       gitCore?: Pick<
         GitCoreShape,
-        "listBranches" | "initRepo" | "pullCurrentBranch" | "renameBranch"
+        "listBranches" | "initRepo" | "pullCurrentBranch"
       >;
       terminalManager?: TerminalManagerShape;
     } = {},
@@ -1471,7 +1471,6 @@ describe("WebSocket Server", () => {
       }),
     );
     const initRepo = vi.fn(() => Effect.void);
-    const renameBranch = vi.fn(() => Effect.succeed({ branch: "t3code/new-name" }));
     const pullCurrentBranch = vi.fn(() =>
       Effect.fail(
         new GitCommandError({
@@ -1488,7 +1487,6 @@ describe("WebSocket Server", () => {
       gitCore: {
         listBranches,
         initRepo,
-        renameBranch,
         pullCurrentBranch,
       },
     });
@@ -1513,18 +1511,6 @@ describe("WebSocket Server", () => {
     expect(pullResponse.error?.message).toContain("No upstream configured");
     expect(pullCurrentBranch).toHaveBeenCalledWith("/repo/path");
 
-    const renameResponse = await sendRequest(ws, WS_METHODS.gitRenameBranch, {
-      cwd: "/repo/path",
-      oldBranch: "t3code/tmp-456",
-      newBranch: "t3code/new-name",
-    });
-    expect(renameResponse.error).toBeUndefined();
-    expect(renameResponse.result).toEqual({ branch: "t3code/new-name" });
-    expect(renameBranch).toHaveBeenCalledWith({
-      cwd: "/repo/path",
-      oldBranch: "t3code/tmp-456",
-      newBranch: "t3code/new-name",
-    });
   });
 
   it("supports git.status over websocket", async () => {

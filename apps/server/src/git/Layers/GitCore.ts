@@ -282,7 +282,7 @@ const makeGitCore = Effect.gen(function* () {
       return yield* createGitCommandError(
         "GitCore.renameBranch",
         cwd,
-        ["branch", "-m", desiredBranch],
+        ["branch", "-m", "--", desiredBranch],
         `Could not find an available branch name for '${desiredBranch}'.`,
       );
     });
@@ -1075,7 +1075,7 @@ const makeGitCore = Effect.gen(function* () {
       yield* executeGit(
         "GitCore.renameBranch",
         input.cwd,
-        ["branch", "-m", input.oldBranch, targetBranch],
+        ["branch", "-m", "--", input.oldBranch, targetBranch],
         {
           timeoutMs: 10_000,
           fallbackErrorMessage: "git branch rename failed",

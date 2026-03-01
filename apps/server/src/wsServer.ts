@@ -572,11 +572,6 @@ export const createServer = Effect.fn(function* (): Effect.fn.Return<
         return yield* git.createWorktree(body);
       }
 
-      case WS_METHODS.gitRenameBranch: {
-        const body = stripRequestTag(request.body);
-        return yield* git.renameBranch(body);
-      }
-
       case WS_METHODS.gitRemoveWorktree: {
         const body = stripRequestTag(request.body);
         return yield* git.removeWorktree(body);
