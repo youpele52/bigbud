@@ -374,7 +374,7 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
     ),
   );
 
-  it.effect("returns null branch when codex returns the wrong object shape", () =>
+  it.effect("fails with typed TextGenerationError when codex returns wrong branch payload shape", () =>
     withFakeCodexEnv(
       {
         output: JSON.stringify({
@@ -384,12 +384,23 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGenerationLive", (it) => {
       Effect.gen(function* () {
         const textGeneration = yield* TextGeneration;
 
-        const generated = yield* textGeneration.generateBranchName({
-          cwd: process.cwd(),
-          message: "Fix websocket reconnect flake",
-        });
+        const result = yield* textGeneration
+          .generateBranchName({
+            cwd: process.cwd(),
+            message: "Fix websocket reconnect flake",
+          })
+          .pipe(
+            Effect.match({
+              onFailure: (error) => ({ _tag: "Left" as const, left: error }),
+              onSuccess: (value) => ({ _tag: "Right" as const, right: value }),
+            }),
+          );
 
-        expect(generated.branch).toBeNull();
+        expect(result._tag).toBe("Left");
+        if (result._tag === "Left") {
+          expect(result.left).toBeInstanceOf(TextGenerationError);
+          expect(result.left.message).toContain("Codex returned invalid structured output");
+        }
       }),
     ),
   );

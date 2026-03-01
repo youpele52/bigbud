@@ -17,7 +17,10 @@ import {
 import { Cache, Cause, Duration, Effect, Layer, Option, Queue, Stream } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
-import { resolveAttachmentRelativePath, resolveAttachmentRoutePath } from "../../attachmentPaths.ts";
+import {
+  resolveAttachmentRelativePath,
+  resolveAttachmentRoutePath,
+} from "../../attachmentPaths.ts";
 import { ServerConfig } from "../../config.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
@@ -229,7 +232,8 @@ const make = Effect.gen(function* () {
     const existingSessionId = thread.session?.providerSessionId;
     if (existingSessionId) {
       const approvalPolicyChanged =
-        options?.approvalPolicy !== undefined && options.approvalPolicy !== thread.session?.approvalPolicy;
+        options?.approvalPolicy !== undefined &&
+        options.approvalPolicy !== thread.session?.approvalPolicy;
       const sandboxModeChanged =
         options?.sandboxMode !== undefined && options.sandboxMode !== thread.session?.sandboxMode;
 
@@ -237,7 +241,9 @@ const make = Effect.gen(function* () {
         return existingSessionId;
       }
 
-      const restartedSession = yield* startProviderSession(thread.session?.providerThreadId ?? null);
+      const restartedSession = yield* startProviderSession(
+        thread.session?.providerThreadId ?? null,
+      );
       yield* bindSessionToThread(restartedSession);
       yield* providerService.stopSession({ sessionId: existingSessionId }).pipe(
         Effect.catchCause((cause) =>
@@ -286,13 +292,11 @@ const make = Effect.gen(function* () {
     });
   });
 
-  const resolvePersistedAttachments = Effect.fnUntraced(function* (
-    input: {
-      readonly threadId: ThreadId;
-      readonly messageId: string;
-      readonly attachments: ReadonlyArray<ChatAttachment> | undefined;
-    },
-  ) {
+  const resolvePersistedAttachments = Effect.fnUntraced(function* (input: {
+    readonly threadId: ThreadId;
+    readonly messageId: string;
+    readonly attachments: ReadonlyArray<ChatAttachment> | undefined;
+  }) {
     if (!input.attachments || input.attachments.length === 0) {
       return input.attachments ?? [];
     }
@@ -303,54 +307,52 @@ const make = Effect.gen(function* () {
     const threadSegment = encodeURIComponent(input.threadId);
     const messageSegment = encodeURIComponent(input.messageId);
 
-    return yield* Effect.forEach(
-      Array.from(input.attachments.entries()),
-      ([index, attachment]) =>
-        Effect.gen(function* () {
-          if (attachment.type !== "image") {
-            return attachment;
-          }
+    return yield* Effect.forEach(Array.from(input.attachments.entries()), ([index, attachment]) =>
+      Effect.gen(function* () {
+        if (attachment.type !== "image") {
+          return attachment;
+        }
 
-          const resolvedRoutePath = resolveAttachmentRoutePath({
-            stateDir: serverConfig.value.stateDir,
-            dataUrl: attachment.dataUrl,
-          });
-          const resolvedMaterializedPath =
-            resolvedRoutePath ??
-            (() => {
-              const parsed = parseBase64DataUrl(attachment.dataUrl);
-              if (!parsed || !parsed.mimeType.startsWith("image/")) {
-                return null;
-              }
-              const extension = inferImageExtension({
-                mimeType: parsed.mimeType,
-                fileName: attachment.name,
-              });
-              return resolveAttachmentRelativePath({
-                stateDir: serverConfig.value.stateDir,
-                relativePath: `${threadSegment}/${messageSegment}-${index}${extension}`,
-              });
-            })();
-
-          if (!resolvedMaterializedPath) {
-            return attachment;
-          }
-
-          const isFile = yield* Effect.sync(() => {
-            try {
-              return fs.statSync(resolvedMaterializedPath).isFile();
-            } catch {
-              return false;
+        const resolvedRoutePath = resolveAttachmentRoutePath({
+          stateDir: serverConfig.value.stateDir,
+          dataUrl: attachment.dataUrl,
+        });
+        const resolvedMaterializedPath =
+          resolvedRoutePath ??
+          (() => {
+            const parsed = parseBase64DataUrl(attachment.dataUrl);
+            if (!parsed || !parsed.mimeType.startsWith("image/")) {
+              return null;
             }
-          });
-          if (!isFile) {
-            return attachment;
+            const extension = inferImageExtension({
+              mimeType: parsed.mimeType,
+              fileName: attachment.name,
+            });
+            return resolveAttachmentRelativePath({
+              stateDir: serverConfig.value.stateDir,
+              relativePath: `${threadSegment}/${messageSegment}-${index}${extension}`,
+            });
+          })();
+
+        if (!resolvedMaterializedPath) {
+          return attachment;
+        }
+
+        const isFile = yield* Effect.sync(() => {
+          try {
+            return fs.statSync(resolvedMaterializedPath).isFile();
+          } catch {
+            return false;
           }
-          return {
-            ...attachment,
-            dataUrl: resolvedMaterializedPath,
-          } satisfies ChatAttachment;
-        }),
+        });
+        if (!isFile) {
+          return attachment;
+        }
+        return {
+          ...attachment,
+          dataUrl: resolvedMaterializedPath,
+        } satisfies ChatAttachment;
+      }),
     );
   });
 
@@ -382,51 +384,45 @@ const make = Effect.gen(function* () {
     const oldBranch = input.branch;
     const cwd = input.worktreePath;
     const attachments = input.attachments ?? [];
-    const renameEffect = textGeneration
+    yield* textGeneration
       .generateBranchName({
         cwd,
         message: input.messageText,
         ...(attachments.length > 0 ? { attachments } : {}),
       })
       .pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(
+            "provider command reactor failed to generate worktree branch name; skipping rename",
+            { threadId: input.threadId, cwd, oldBranch, reason: error.message },
+          ),
+        ),
         Effect.flatMap((generated) => {
-          if (!generated.branch) {
-            return Effect.void;
-          }
+          if (!generated) return Effect.void;
+
           const targetBranch = buildGeneratedWorktreeBranchName(generated.branch);
-          if (targetBranch === oldBranch) {
-            return Effect.void;
-          }
-          return git
-            .renameBranch({
-              cwd,
-              oldBranch,
-              newBranch: targetBranch,
-            })
-            .pipe(
-              Effect.flatMap((renamed) =>
-                orchestrationEngine.dispatch({
-                  type: "thread.meta.update",
-                  commandId: serverCommandId("worktree-branch-rename"),
-                  threadId: input.threadId,
-                  branch: renamed.branch,
-                  worktreePath: cwd,
-                }),
-              ),
-              Effect.asVoid,
-            );
+          if (targetBranch === oldBranch) return Effect.void;
+
+          return Effect.flatMap(
+            git.renameBranch({ cwd, oldBranch, newBranch: targetBranch }),
+            (renamed) =>
+              orchestrationEngine.dispatch({
+                type: "thread.meta.update",
+                commandId: serverCommandId("worktree-branch-rename"),
+                threadId: input.threadId,
+                branch: renamed.branch,
+                worktreePath: cwd,
+              }),
+          );
         }),
         Effect.catchCause((cause) =>
-          Effect.logWarning("provider command reactor failed to generate or rename worktree branch", {
-            threadId: input.threadId,
-            cwd,
-            oldBranch,
-            cause: Cause.pretty(cause),
-          }),
+          Effect.logWarning(
+            "provider command reactor failed to generate or rename worktree branch",
+            { threadId: input.threadId, cwd, oldBranch, cause: Cause.pretty(cause) },
+          ),
         ),
+        Effect.forkScoped,
       );
-
-    yield* Effect.forkScoped(renameEffect);
   });
 
   const processTurnStartRequested = Effect.fnUntraced(function* (

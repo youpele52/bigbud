@@ -45,7 +45,7 @@ export interface BranchNameGenerationInput {
 }
 
 export interface BranchNameGenerationResult {
-  branch: string | null;
+  branch: string;
 }
 
 export interface TextGenerationService {

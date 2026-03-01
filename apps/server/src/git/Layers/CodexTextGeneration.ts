@@ -552,20 +552,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         outputSchemaJson: BRANCH_NAME_OUTPUT_SCHEMA_JSON,
         imagePaths,
         parse: (raw) => parseBranchNameOutput(raw),
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* Effect.logWarning("branch-name generation failed, skipping rename", {
-              operation: "generateBranchName",
-              reason: error instanceof Error ? error.message : String(error),
-            });
-            return { branch: null };
-          }),
-        ),
-      );
+      });
 
       return {
-        branch: generated.branch ? sanitizeBranchName(generated.branch) : null,
+        branch: sanitizeBranchName(generated.branch),
       } satisfies BranchNameGenerationResult;
     });
   };

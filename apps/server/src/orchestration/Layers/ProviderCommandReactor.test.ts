@@ -18,6 +18,7 @@ import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effe
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { type ServerConfigShape, ServerConfig } from "../../config.ts";
+import { TextGenerationError } from "../../git/Errors.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
@@ -123,7 +124,7 @@ describe("ProviderCommandReactor", () => {
     );
     const generateBranchName = vi.fn((_: unknown) =>
       Effect.succeed({
-        branch: "generated-name" as string | null,
+        branch: "generated-name",
       }),
     );
 
@@ -447,13 +448,16 @@ describe("ProviderCommandReactor", () => {
     expect(harness.renameBranch.mock.calls.length).toBe(1);
   });
 
-  it("skips worktree rename when generated branch is null", async () => {
+  it("skips worktree rename when branch-name generation fails", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
-    harness.generateBranchName.mockImplementationOnce((_: unknown) =>
-      Effect.succeed({
-        branch: null,
-      }),
+    harness.generateBranchName.mockImplementationOnce(() =>
+      Effect.fail(
+        new TextGenerationError({
+          operation: "generateBranchName",
+          detail: "model returned invalid payload",
+        }),
+      ),
     );
 
     await Effect.runPromise(
