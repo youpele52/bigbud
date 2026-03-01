@@ -400,95 +400,73 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     });
   }, [pendingDefaultBranchAction, runGitActionWithToast]);
 
+  const checkoutNewBranchAndRunAction = useCallback(
+    (actionParams: {
+      action: GitStackedAction;
+      commitMessage?: string;
+      forcePushOnlyProgress?: boolean;
+      onConfirmed?: () => void;
+    }) => {
+      const branchName = resolveAutoFeatureBranchName(
+        branchList?.branches.map((branch) => branch.name) ?? [],
+      );
+
+      const checkoutPromise = createBranchAndCheckoutMutation.mutateAsync(branchName);
+      toastManager.promise(checkoutPromise, {
+        loading: { title: `Creating ${branchName}...`, data: threadToastData },
+        success: () => ({
+          title: `Checked out ${branchName}`,
+          data: threadToastData,
+        }),
+        error: (error) => ({
+          title: "Failed to checkout feature branch",
+          description: error instanceof Error ? error.message : "An error occurred.",
+          data: threadToastData,
+        }),
+      });
+
+      void checkoutPromise
+        .then(() => {
+          const statusOverride = gitStatusForActions
+            ? { ...gitStatusForActions, branch: branchName, pr: null }
+            : null;
+          return runGitActionWithToast({
+            ...actionParams,
+            skipDefaultBranchPrompt: true,
+            statusOverride,
+            isDefaultBranchOverride: false,
+          });
+        })
+        .catch(() => undefined);
+    },
+    [
+      branchList?.branches,
+      createBranchAndCheckoutMutation,
+      gitStatusForActions,
+      runGitActionWithToast,
+      threadToastData,
+    ],
+  );
+
   const checkoutFeatureBranchAndContinuePendingAction = useCallback(() => {
     if (!pendingDefaultBranchAction) return;
     const pendingAction = pendingDefaultBranchAction;
-    const branchName = resolveAutoFeatureBranchName(branchList?.branches.map((branch) => branch.name) ?? []);
     setPendingDefaultBranchAction(null);
-
-    const checkoutPromise = createBranchAndCheckoutMutation.mutateAsync(branchName);
-    toastManager.promise(checkoutPromise, {
-      loading: { title: `Creating ${branchName}...`, data: threadToastData },
-      success: () => ({
-        title: `Checked out ${branchName}`,
-        data: threadToastData,
-      }),
-      error: (error) => ({
-        title: "Failed to checkout feature branch",
-        description: error instanceof Error ? error.message : "An error occurred.",
-        data: threadToastData,
-      }),
-    });
-
-    void checkoutPromise
-      .then(() => {
-        const statusOverride = gitStatusForActions
-          ? { ...gitStatusForActions, branch: branchName, pr: null }
-          : null;
-        return runGitActionWithToast({
-          ...pendingAction,
-          skipDefaultBranchPrompt: true,
-          statusOverride,
-          isDefaultBranchOverride: false,
-        });
-      })
-      .catch(() => undefined);
-  }, [
-    branchList?.branches,
-    createBranchAndCheckoutMutation,
-    gitStatusForActions,
-    pendingDefaultBranchAction,
-    runGitActionWithToast,
-    threadToastData,
-  ]);
+    checkoutNewBranchAndRunAction(pendingAction);
+  }, [pendingDefaultBranchAction, checkoutNewBranchAndRunAction]);
 
   const runDialogActionOnNewBranch = useCallback(() => {
     if (!isCommitDialogOpen) return;
-    const action: GitStackedAction = "commit";
     const commitMessage = dialogCommitMessage.trim();
-    const branchName = resolveAutoFeatureBranchName(branchList?.branches.map((branch) => branch.name) ?? []);
 
     setIsCommitDialogOpen(false);
     setDialogCommitMessage("");
 
-    const checkoutPromise = createBranchAndCheckoutMutation.mutateAsync(branchName);
-    toastManager.promise(checkoutPromise, {
-      loading: { title: `Creating ${branchName}...`, data: threadToastData },
-      success: () => ({
-        title: `Checked out ${branchName}`,
-        data: threadToastData,
-      }),
-      error: (error) => ({
-        title: "Failed to checkout feature branch",
-        description: error instanceof Error ? error.message : "An error occurred.",
-        data: threadToastData,
-      }),
+    checkoutNewBranchAndRunAction({
+      action: "commit",
+      ...(commitMessage ? { commitMessage } : {}),
     });
-
-    void checkoutPromise
-      .then(() => {
-        const statusOverride = gitStatusForActions
-          ? { ...gitStatusForActions, branch: branchName, pr: null }
-          : null;
-        return runGitActionWithToast({
-          action,
-          ...(commitMessage ? { commitMessage } : {}),
-          skipDefaultBranchPrompt: true,
-          statusOverride,
-          isDefaultBranchOverride: false,
-        });
-      })
-      .catch(() => undefined);
-  }, [
-    branchList?.branches,
-    createBranchAndCheckoutMutation,
-    dialogCommitMessage,
-    gitStatusForActions,
-    isCommitDialogOpen,
-    runGitActionWithToast,
-    setIsCommitDialogOpen,
-    threadToastData,
-  ]);
+  }, [isCommitDialogOpen, dialogCommitMessage, checkoutNewBranchAndRunAction]);
 
   const runQuickAction = useCallback(() => {
     if (quickAction.kind === "open_pr") {
