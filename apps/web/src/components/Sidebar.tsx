@@ -171,7 +171,7 @@ function T3Wordmark() {
   return (
     <svg
       aria-label="T3"
-      className="h-3 w-auto shrink-0 text-foreground"
+      className="h-2.5 w-auto shrink-0 text-foreground"
       viewBox="15.5309 37 94.3941 56.96"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -312,7 +312,7 @@ export default function Sidebar() {
       const status = target.cwd ? statusByCwd.get(target.cwd) : undefined;
       const branchMatches =
         target.branch !== null && status?.branch !== null && status?.branch === target.branch;
-      map.set(target.threadId, branchMatches ? status?.pr ?? null : null);
+      map.set(target.threadId, branchMatches ? (status?.pr ?? null) : null);
     }
     return map;
   }, [threadGitStatusCwds, threadGitStatusQueries, threadGitTargets]);
@@ -689,9 +689,7 @@ export default function Sidebar() {
       void handleNewThread(projectId, {
         branch: activeThread?.branch ?? activeDraftThread?.branch ?? null,
         worktreePath: activeThread?.worktreePath ?? activeDraftThread?.worktreePath ?? null,
-        envMode:
-          activeDraftThread?.envMode ??
-          (activeThread?.worktreePath ? "worktree" : "local"),
+        envMode: activeDraftThread?.envMode ?? (activeThread?.worktreePath ? "worktree" : "local"),
       });
     };
 
@@ -711,14 +709,14 @@ export default function Sidebar() {
   };
 
   const wordmark = (
-    <div className={`flex items-center gap-2 ${isElectron ? "-translate-y-px" : ""}`}>
+    <div className="flex items-center gap-2">
       <SidebarTrigger className="shrink-0 md:hidden" />
-      <div className="flex min-w-0 flex-1 items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1 mt-2 ml-1">
         <T3Wordmark />
-        <span className="truncate text-base font-medium tracking-tight text-muted-foreground">
+        <span className="truncate text-sm font-medium tracking-tight text-muted-foreground">
           Code
         </span>
-        <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-widest text-muted-foreground/60">
+        <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.18em] text-muted-foreground/60">
           {APP_STAGE_LABEL}
         </span>
       </div>
@@ -740,10 +738,10 @@ export default function Sidebar() {
     <>
       {isElectron ? (
         <>
-          <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[88px]">
+          <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[82px]">
             {wordmark}
           </SidebarHeader>
-          <div className="px-4 pb-2">{newThreadButton}</div>
+          <div className="px-4 py-2">{newThreadButton}</div>
         </>
       ) : (
         <SidebarHeader className="gap-3 px-3 py-2 sm:gap-2.5 sm:px-4 sm:py-3">
