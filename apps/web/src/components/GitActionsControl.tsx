@@ -822,7 +822,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           }
         }}
       >
-        <DialogPopup>
+        <DialogPopup className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {pendingDefaultBranchActionCopy?.title ?? "Run action on default branch?"}
