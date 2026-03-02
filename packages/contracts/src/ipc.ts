@@ -37,12 +37,19 @@ import type {
 } from "./orchestration";
 import { EditorId } from "./editor";
 
+export interface ContextMenuItem<T extends string = string> {
+  id: T;
+  label: string;
+  destructive?: boolean;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
+  prompt: (message: string, defaultValue?: string) => Promise<string | null>;
   showContextMenu: <T extends string>(
-    items: readonly { id: T; label: string }[],
+    items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
   ) => Promise<T | null>;
   openExternal: (url: string) => Promise<boolean>;
@@ -53,6 +60,7 @@ export interface NativeApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
+    prompt: (message: string, defaultValue?: string) => Promise<string | null>;
   };
   terminal: {
     open: (input: TerminalOpenInput) => Promise<TerminalSessionSnapshot>;
@@ -85,7 +93,7 @@ export interface NativeApi {
   };
   contextMenu: {
     show: <T extends string>(
-      items: readonly { id: T; label: string }[],
+      items: readonly ContextMenuItem<T>[],
       position?: { x: number; y: number },
     ) => Promise<T | null>;
   };

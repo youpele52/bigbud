@@ -124,6 +124,16 @@ export function createWsNativeApi(): NativeApi {
         }
         return window.confirm(message);
       },
+      prompt: async (message, defaultValue) => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.prompt(message, defaultValue);
+        }
+        try {
+          return window.prompt(message, defaultValue ?? "");
+        } catch {
+          return null;
+        }
+      },
     },
     terminal: {
       open: (input) => transport.request(WS_METHODS.terminalOpen, input),
@@ -171,11 +181,11 @@ export function createWsNativeApi(): NativeApi {
     },
     contextMenu: {
       show: async <T extends string>(
-        items: readonly { id: T; label: string }[],
+        items: readonly { id: T; label: string; destructive?: boolean }[],
         position?: { x: number; y: number },
       ): Promise<T | null> => {
         if (window.desktopBridge) {
-          return window.desktopBridge.showContextMenu(items) as Promise<T | null>;
+          return window.desktopBridge.showContextMenu(items, position) as Promise<T | null>;
         }
         return showContextMenuFallback(items, position);
       },

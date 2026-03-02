@@ -9,6 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const requestMock = vi.fn<(...args: Array<unknown>) => Promise<unknown>>();
+const showContextMenuFallbackMock = vi.fn<
+  <T extends string>(
+    items: readonly { id: T; label: string; destructive?: boolean }[],
+    position?: { x: number; y: number },
+  ) => Promise<T | null>
+>();
 const channelListeners = new Map<string, Set<(data: unknown) => void>>();
 const subscribeMock = vi.fn<(channel: string, listener: (data: unknown) => void) => () => void>(
   (channel, listener) => {
@@ -33,6 +39,10 @@ vi.mock("./wsTransport", () => {
   };
 });
 
+vi.mock("./contextMenuFallback", () => ({
+  showContextMenuFallback: showContextMenuFallbackMock,
+}));
+
 function emitPush(channel: string, data: unknown): void {
   const listeners = channelListeners.get(channel);
   if (!listeners) return;
@@ -41,11 +51,24 @@ function emitPush(channel: string, data: unknown): void {
   }
 }
 
+function getWindowForTest(): Window & typeof globalThis & { desktopBridge?: unknown } {
+  const testGlobal = globalThis as typeof globalThis & {
+    window?: Window & typeof globalThis & { desktopBridge?: unknown };
+  };
+  if (!testGlobal.window) {
+    testGlobal.window = {} as Window & typeof globalThis & { desktopBridge?: unknown };
+  }
+  return testGlobal.window;
+}
+
 beforeEach(() => {
   vi.resetModules();
   requestMock.mockReset();
+  showContextMenuFallbackMock.mockReset();
   subscribeMock.mockClear();
   channelListeners.clear();
+  Reflect.deleteProperty(getWindowForTest(), "desktopBridge");
+  Reflect.deleteProperty(getWindowForTest(), "prompt");
 });
 
 afterEach(() => {
@@ -306,5 +329,85 @@ describe("wsNativeApi", () => {
       threadId: "thread-1",
       toTurnCount: 1,
     });
+  });
+
+  it("forwards context menu metadata to desktop bridge", async () => {
+    const showContextMenu = vi.fn().mockResolvedValue("delete");
+    Object.defineProperty(getWindowForTest(), "desktopBridge", {
+      configurable: true,
+      writable: true,
+      value: {
+        showContextMenu,
+      },
+    });
+
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+    await api.contextMenu.show(
+      [
+        { id: "rename", label: "Rename thread" },
+        { id: "delete", label: "Delete", destructive: true },
+      ],
+      { x: 200, y: 300 },
+    );
+
+    expect(showContextMenu).toHaveBeenCalledWith(
+      [
+        { id: "rename", label: "Rename thread" },
+        { id: "delete", label: "Delete", destructive: true },
+      ],
+      { x: 200, y: 300 },
+    );
+  });
+
+  it("uses fallback context menu when desktop bridge is unavailable", async () => {
+    showContextMenuFallbackMock.mockResolvedValue("delete");
+    Reflect.deleteProperty(getWindowForTest(), "desktopBridge");
+
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+    await api.contextMenu.show(
+      [{ id: "delete", label: "Delete", destructive: true }],
+      { x: 20, y: 30 },
+    );
+
+    expect(showContextMenuFallbackMock).toHaveBeenCalledWith(
+      [{ id: "delete", label: "Delete", destructive: true }],
+      { x: 20, y: 30 },
+    );
+  });
+
+  it("forwards prompt calls to desktop bridge", async () => {
+    const prompt = vi.fn().mockResolvedValue("renamed");
+    Object.defineProperty(getWindowForTest(), "desktopBridge", {
+      configurable: true,
+      writable: true,
+      value: {
+        prompt,
+      },
+    });
+
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+    const value = await api.dialogs.prompt("Rename thread", "Old title");
+
+    expect(value).toBe("renamed");
+    expect(prompt).toHaveBeenCalledWith("Rename thread", "Old title");
+  });
+
+  it("uses browser prompt fallback when desktop bridge is unavailable", async () => {
+    const prompt = vi.fn().mockReturnValue("renamed");
+    Object.defineProperty(getWindowForTest(), "prompt", {
+      configurable: true,
+      writable: true,
+      value: prompt,
+    });
+
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+    const value = await api.dialogs.prompt("Rename thread", "Old title");
+
+    expect(value).toBe("renamed");
+    expect(prompt).toHaveBeenCalledWith("Rename thread", "Old title");
   });
 });

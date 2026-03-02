@@ -1,5 +1,5 @@
 import { ChevronRightIcon, FolderIcon, GitPullRequestIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_MODEL,
   ProjectId,
@@ -266,6 +266,10 @@ export default function Sidebar() {
   const [newCwd, setNewCwd] = useState("");
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const [isAddingProject, setIsAddingProject] = useState(false);
+  const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
+  const [renamingTitle, setRenamingTitle] = useState("");
+  const renamingCommittedRef = useRef(false);
+  const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const pendingApprovalByThreadId = useMemo(() => {
     const map = new Map<ThreadId, boolean>();
     for (const thread of threads) {
@@ -503,25 +507,74 @@ export default function Sidebar() {
     setIsPickingFolder(false);
   };
 
+  const cancelRename = useCallback(() => {
+    setRenamingThreadId(null);
+    renamingInputRef.current = null;
+  }, []);
+
+  const commitRename = useCallback(
+    async (threadId: ThreadId, newTitle: string, originalTitle: string) => {
+      const trimmed = newTitle.trim();
+      if (trimmed.length === 0) {
+        toastManager.add({ type: "warning", title: "Thread title cannot be empty" });
+        cancelRename();
+        return;
+      }
+      if (trimmed === originalTitle) {
+        cancelRename();
+        return;
+      }
+      const api = readNativeApi();
+      if (!api) {
+        cancelRename();
+        return;
+      }
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.meta.update",
+          commandId: newCommandId(),
+          threadId,
+          title: trimmed,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to rename thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+      cancelRename();
+    },
+    [cancelRename],
+  );
+
   const handleThreadContextMenu = useCallback(
     async (threadId: ThreadId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
         [
+          { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
-          { id: "delete", label: "Delete" },
+          { id: "delete", label: "Delete", destructive: true },
         ],
         position,
       );
+      const thread = threads.find((t) => t.id === threadId);
+      if (!thread) return;
+
+      if (clicked === "rename") {
+        setRenamingThreadId(threadId);
+        setRenamingTitle(thread.title);
+        renamingCommittedRef.current = false;
+        return;
+      }
+
       if (clicked === "mark-unread") {
         markThreadUnread(threadId);
         return;
       }
       if (clicked !== "delete") return;
-
-      const thread = threads.find((t) => t.id === threadId);
-      if (!thread) return;
       if (appSettings.confirmThreadDelete) {
         const confirmed = await api.dialogs.confirm(
           [
@@ -635,7 +688,10 @@ export default function Sidebar() {
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
       if (!api) return;
-      const clicked = await api.contextMenu.show([{ id: "delete", label: "Delete" }], position);
+      const clicked = await api.contextMenu.show(
+        [{ id: "delete", label: "Delete", destructive: true }],
+        position,
+      );
       if (clicked !== "delete") return;
 
       const project = projects.find((entry) => entry.id === projectId);
@@ -901,9 +957,41 @@ export default function Sidebar() {
                                       <span className="hidden md:inline">{threadStatus.label}</span>
                                     </span>
                                   )}
-                                  <span className="min-w-0 flex-1 truncate text-xs">
-                                    {thread.title}
-                                  </span>
+                                  {renamingThreadId === thread.id ? (
+                                    <input
+                                      ref={(el) => {
+                                        if (el && renamingInputRef.current !== el) {
+                                          renamingInputRef.current = el;
+                                          el.focus();
+                                          el.select();
+                                        }
+                                      }}
+                                      className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
+                                      value={renamingTitle}
+                                      onChange={(e) => setRenamingTitle(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          renamingCommittedRef.current = true;
+                                          void commitRename(thread.id, renamingTitle, thread.title);
+                                        } else if (e.key === "Escape") {
+                                          e.preventDefault();
+                                          renamingCommittedRef.current = true;
+                                          cancelRename();
+                                        }
+                                      }}
+                                      onBlur={() => {
+                                        if (!renamingCommittedRef.current) {
+                                          void commitRename(thread.id, renamingTitle, thread.title);
+                                        }
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  ) : (
+                                    <span className="min-w-0 flex-1 truncate text-xs">
+                                      {thread.title}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                                   {terminalStatus && (

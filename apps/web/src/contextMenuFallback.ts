@@ -4,7 +4,7 @@
  * with the clicked item id, or null if dismissed.
  */
 export function showContextMenuFallback<T extends string>(
-  items: readonly { id: T; label: string }[],
+  items: readonly { id: T; label: string; destructive?: boolean }[],
   position?: { x: number; y: number },
 ): Promise<T | null> {
   return new Promise<T | null>((resolve) => {
@@ -41,8 +41,8 @@ export function showContextMenuFallback<T extends string>(
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = item.label;
-      const isDeleteAction = item.id === "delete";
-      btn.className = isDeleteAction
+      const isDestructiveAction = item.destructive === true || item.id === "delete";
+      btn.className = isDestructiveAction
         ? "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-destructive hover:bg-accent cursor-default"
         : "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-popover-foreground hover:bg-accent cursor-default";
       btn.addEventListener("click", () => cleanup(item.id));
