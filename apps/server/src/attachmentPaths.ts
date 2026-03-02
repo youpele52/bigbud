@@ -10,14 +10,6 @@ export function normalizeAttachmentRelativePath(rawRelativePath: string): string
   return normalized.replace(/\\/g, "/");
 }
 
-export function attachmentRouteToRelativePath(dataUrl: string): string | null {
-  const prefix = `${ATTACHMENTS_ROUTE_PREFIX}/`;
-  if (!dataUrl.startsWith(prefix)) {
-    return null;
-  }
-  return normalizeAttachmentRelativePath(dataUrl.slice(prefix.length));
-}
-
 export function resolveAttachmentRelativePath(input: {
   readonly stateDir: string;
   readonly relativePath: string;
@@ -33,18 +25,4 @@ export function resolveAttachmentRelativePath(input: {
     return null;
   }
   return filePath;
-}
-
-export function resolveAttachmentRoutePath(input: {
-  readonly stateDir: string;
-  readonly dataUrl: string;
-}): string | null {
-  const relativePath = attachmentRouteToRelativePath(input.dataUrl);
-  if (!relativePath) {
-    return null;
-  }
-  return resolveAttachmentRelativePath({
-    stateDir: input.stateDir,
-    relativePath,
-  });
 }
