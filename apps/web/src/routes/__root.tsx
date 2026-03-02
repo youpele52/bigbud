@@ -143,11 +143,20 @@ function EventRouter() {
     let syncing = false;
     let pending = false;
 
+    const removeOrphanedTerminalStates =
+      useTerminalStateStore.getState().removeOrphanedTerminalStates;
+
     const flushSnapshotSync = async (): Promise<void> => {
       const snapshot = await api.orchestration.getSnapshot();
       if (disposed) return;
       latestSequence = Math.max(latestSequence, snapshot.snapshotSequence);
       syncServerReadModel(snapshot);
+      const activeThreadIds = new Set(
+        snapshot.threads
+          .filter((t) => t.deletedAt === null)
+          .map((t) => t.id),
+      );
+      removeOrphanedTerminalStates(activeThreadIds);
       if (pending) {
         pending = false;
         await flushSnapshotSync();

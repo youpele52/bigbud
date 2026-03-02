@@ -241,6 +241,7 @@ export default function Sidebar() {
   );
   const getDraftThread = useComposerDraftStore((store) => store.getDraftThread);
   const terminalStateByThreadId = useTerminalStateStore((state) => state.terminalStateByThreadId);
+  const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
   const setProjectDraftThreadId = useComposerDraftStore((store) => store.setProjectDraftThreadId);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const clearProjectDraftThreadId = useComposerDraftStore(
@@ -578,6 +579,7 @@ export default function Sidebar() {
       });
       clearComposerDraftForThread(threadId);
       clearProjectDraftThreadById(thread.projectId, thread.id);
+      clearTerminalState(threadId);
       if (shouldNavigateToFallback) {
         if (fallbackThreadId) {
           void navigate({
@@ -619,6 +621,7 @@ export default function Sidebar() {
       appSettings.confirmThreadDelete,
       clearComposerDraftForThread,
       clearProjectDraftThreadById,
+      clearTerminalState,
       markThreadUnread,
       navigate,
       projects,
