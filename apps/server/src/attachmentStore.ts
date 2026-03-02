@@ -23,6 +23,7 @@ const ATTACHMENT_ID_PATTERN = new RegExp(
 export function toSafeThreadAttachmentSegment(threadId: string): string | null {
   const segment = threadId
     .trim()
+    .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/-+/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "")

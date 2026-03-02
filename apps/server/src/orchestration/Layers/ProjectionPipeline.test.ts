@@ -733,7 +733,7 @@ projectionLayer("OrchestrationProjectionPipeline", (it) => {
           const projectionPipeline = yield* OrchestrationProjectionPipeline;
           const eventStore = yield* OrchestrationEventStore;
           const now = new Date().toISOString();
-          const threadId = ThreadId.makeUnsafe("thread revert.files");
+          const threadId = ThreadId.makeUnsafe("Thread Revert.Files");
           const keepAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000001";
           const removeAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000002";
           const otherThreadAttachmentId =
@@ -948,7 +948,7 @@ projectionLayer("OrchestrationProjectionPipeline", (it) => {
           const projectionPipeline = yield* OrchestrationProjectionPipeline;
           const eventStore = yield* OrchestrationEventStore;
           const now = new Date().toISOString();
-          const threadId = ThreadId.makeUnsafe("thread delete.files");
+          const threadId = ThreadId.makeUnsafe("Thread Delete.Files");
           const attachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000001";
           const otherThreadAttachmentId =
             "thread-delete-files-extra-00000000-0000-4000-8000-000000000002";

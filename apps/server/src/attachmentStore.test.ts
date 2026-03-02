@@ -34,6 +34,15 @@ describe("attachmentStore", () => {
     expect(parseThreadSegmentFromAttachmentId(fooBarId)).toBe("foo-bar");
   });
 
+  it("normalizes created thread segments to lowercase", () => {
+    const attachmentId = createAttachmentId("Thread.Foo");
+    expect(attachmentId).toBeTruthy();
+    if (!attachmentId) {
+      return;
+    }
+    expect(parseThreadSegmentFromAttachmentId(attachmentId)).toBe("thread-foo");
+  });
+
   it("resolves attachment path by id using the extension that exists on disk", () => {
     const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-attachment-store-"));
     try {
