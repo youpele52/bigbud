@@ -58,6 +58,8 @@ interface PendingDefaultBranchAction {
   onConfirmed?: () => void;
 }
 
+type GitActionToastId = ReturnType<typeof toastManager.add>;
+
 function getMenuActionDisabledReason(
   item: GitActionMenuItem,
   gitStatus: GitStatusResult | null,
@@ -245,6 +247,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       skipDefaultBranchPrompt = false,
       statusOverride,
       isDefaultBranchOverride,
+      progressToastId,
     }: {
       action: GitStackedAction;
       commitMessage?: string;
@@ -253,6 +256,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       skipDefaultBranchPrompt?: boolean;
       statusOverride?: GitStatusResult | null;
       isDefaultBranchOverride?: boolean;
+      progressToastId?: GitActionToastId;
     }) => {
       const actionStatus = statusOverride ?? gitStatusForActions;
       const actionIsDefaultBranch = isDefaultBranchOverride ?? isDefaultBranch;
@@ -284,17 +288,28 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         forcePushOnly: forcePushOnlyProgress,
         ...(pushTarget ? { pushTarget } : {}),
       });
-      const progressToastId = toastManager.add({
-        type: "loading",
-        title: progressStages[0] ?? "Running git action...",
-        timeout: 0,
-        data: threadToastData,
-      });
+      const resolvedProgressToastId =
+        progressToastId ??
+        toastManager.add({
+          type: "loading",
+          title: progressStages[0] ?? "Running git action...",
+          timeout: 0,
+          data: threadToastData,
+        });
+
+      if (progressToastId) {
+        toastManager.update(progressToastId, {
+          type: "loading",
+          title: progressStages[0] ?? "Running git action...",
+          timeout: 0,
+          data: threadToastData,
+        });
+      }
 
       let stageIndex = 0;
       const stageInterval = setInterval(() => {
         stageIndex = Math.min(stageIndex + 1, progressStages.length - 1);
-        toastManager.update(progressToastId, {
+        toastManager.update(resolvedProgressToastId, {
           title: progressStages[stageIndex] ?? "Running git action...",
           type: "loading",
           timeout: 0,
@@ -329,10 +344,10 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
           result.push.status === "pushed" &&
           !actionIsDefaultBranch;
         const closeResultToast = () => {
-          toastManager.close(progressToastId);
+          toastManager.close(resolvedProgressToastId);
         };
 
-        toastManager.update(progressToastId, {
+        toastManager.update(resolvedProgressToastId, {
           type: "success",
           title: resultToast.title,
           description: resultToast.description,
@@ -386,7 +401,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
         });
       } catch (err) {
         stopProgressUpdates();
-        toastManager.update(progressToastId, {
+        toastManager.update(resolvedProgressToastId, {
           type: "error",
           title: "Action failed",
           description: err instanceof Error ? err.message : "An error occurred.",
@@ -429,17 +444,11 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
       );
 
       const checkoutPromise = createBranchAndCheckoutMutation.mutateAsync(branchName);
-      toastManager.promise(checkoutPromise, {
-        loading: { title: `Creating ${branchName}...`, data: threadToastData },
-        success: () => ({
-          title: `Checked out ${branchName}`,
-          data: threadToastData,
-        }),
-        error: (error) => ({
-          title: "Failed to checkout feature branch",
-          description: error instanceof Error ? error.message : "An error occurred.",
-          data: threadToastData,
-        }),
+      const checkoutToastId = toastManager.add({
+        type: "loading",
+        title: `Creating ${branchName}...`,
+        timeout: 0,
+        data: threadToastData,
       });
 
       void checkoutPromise
@@ -459,9 +468,17 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             skipDefaultBranchPrompt: true,
             statusOverride,
             isDefaultBranchOverride: false,
+            progressToastId: checkoutToastId,
           });
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          toastManager.update(checkoutToastId, {
+            type: "error",
+          title: "Failed to checkout feature branch",
+          description: error instanceof Error ? error.message : "An error occurred.",
+          data: threadToastData,
+          });
+        });
     },
     [
       branchList?.branches,
