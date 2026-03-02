@@ -37,7 +37,7 @@ import type {
 } from "./orchestration";
 import { EditorId } from "./editor";
 
-export interface ContextMenuItem<T extends string = string> {
+interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
   destructive?: boolean;
