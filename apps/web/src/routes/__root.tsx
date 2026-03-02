@@ -133,9 +133,7 @@ function EventRouter() {
   const lastConfigIssuesSignatureRef = useRef<string | null>(null);
   const handledBootstrapThreadIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    pathnameRef.current = pathname;
-  }, [pathname]);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     const api = readNativeApi();
