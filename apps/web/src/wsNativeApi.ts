@@ -2,6 +2,7 @@ import {
   OrchestrationEvent,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
+  type ContextMenuItem,
   type NativeApi,
   ServerConfigUpdatedPayload,
   TerminalEvent,
@@ -171,7 +172,7 @@ export function createWsNativeApi(): NativeApi {
     },
     contextMenu: {
       show: async <T extends string>(
-        items: readonly { id: T; label: string; destructive?: boolean }[],
+        items: readonly ContextMenuItem<T>[],
         position?: { x: number; y: number },
       ): Promise<T | null> => {
         if (window.desktopBridge) {

@@ -1,5 +1,6 @@
 import {
   CommandId,
+  type ContextMenuItem,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
@@ -11,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const requestMock = vi.fn<(...args: Array<unknown>) => Promise<unknown>>();
 const showContextMenuFallbackMock = vi.fn<
   <T extends string>(
-    items: readonly { id: T; label: string; destructive?: boolean }[],
+    items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
   ) => Promise<T | null>
 >();
