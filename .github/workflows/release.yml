@@ -149,7 +149,7 @@ jobs:
             echo "Signing disabled for ${{ matrix.platform }}."
           fi
 
-          bun run dist:desktop:artifact -- "${args[@]}"
+          bun run dist:desktop:artifact -- "${args[@]}" --verbose
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
