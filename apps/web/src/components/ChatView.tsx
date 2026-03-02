@@ -19,6 +19,7 @@ import {
   type TurnId,
   normalizeModelSlug,
   resolveModelSlug,
+  OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -140,6 +141,7 @@ const ATTACHMENT_PREVIEW_HANDOFF_TTL_MS = 5000;
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
+const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
@@ -611,22 +613,28 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const selectedModel = resolveModelSlug(composerDraft.model ?? baseThreadModel);
   const selectedEffort = composerDraft.effort ?? DEFAULT_REASONING;
-  const modelOptions = getAppModelOptions(settings.customCodexModels, selectedModel);
+  const modelOptions = useMemo(
+    () => getAppModelOptions(settings.customCodexModels, selectedModel),
+    [selectedModel, settings.customCodexModels],
+  );
   const phase = derivePhase(activeThread?.session ?? null);
   const isSendBusy = sendPhase !== "idle";
   const isPreparingWorktree = sendPhase === "preparing-worktree";
   const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
   const nowIso = new Date(nowTick).toISOString();
-  const threadActivities = activeThread?.activities ?? [];
-  const workLogEntries = deriveWorkLogEntries(
-    threadActivities,
-    activeLatestTurn?.turnId ?? undefined,
+  const threadActivities = activeThread?.activities ?? EMPTY_ACTIVITIES;
+  const workLogEntries = useMemo(
+    () => deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined),
+    [activeLatestTurn?.turnId, threadActivities],
   );
-  const latestTurnHasToolActivity = hasToolActivityForTurn(
-    threadActivities,
-    activeLatestTurn?.turnId,
+  const latestTurnHasToolActivity = useMemo(
+    () => hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId),
+    [activeLatestTurn?.turnId, threadActivities],
   );
-  const pendingApprovals = derivePendingApprovals(threadActivities);
+  const pendingApprovals = useMemo(
+    () => derivePendingApprovals(threadActivities),
+    [threadActivities],
+  );
   useEffect(() => {
     attachmentPreviewHandoffByMessageIdRef.current = attachmentPreviewHandoffByMessageId;
   }, [attachmentPreviewHandoffByMessageId]);
@@ -744,7 +752,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
   }, [serverMessages, attachmentPreviewHandoffByMessageId, optimisticUserMessages]);
-  const timelineEntries = deriveTimelineEntries(timelineMessages, workLogEntries);
+  const timelineEntries = useMemo(
+    () => deriveTimelineEntries(timelineMessages, workLogEntries),
+    [timelineMessages, workLogEntries],
+  );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
   const turnDiffSummaryByAssistantMessageId = useMemo(() => {
@@ -755,7 +766,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
     return byMessageId;
   }, [turnDiffSummaries]);
-  const revertTurnCountByUserMessageId = (() => {
+  const revertTurnCountByUserMessageId = useMemo(() => {
     const byUserMessageId = new Map<MessageId, number>();
     for (let index = 0; index < timelineEntries.length; index += 1) {
       const entry = timelineEntries[index];
@@ -786,9 +797,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     }
 
     return byUserMessageId;
-  })();
+  }, [inferredCheckpointTurnCountByTurnId, timelineEntries, turnDiffSummaryByAssistantMessageId]);
 
-  const completionSummary = (() => {
+  const completionSummary = useMemo(() => {
     if (!latestTurnSettled) return null;
     if (!activeLatestTurn?.startedAt) return null;
     if (!activeLatestTurn.completedAt) return null;
@@ -796,8 +807,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
 
     const elapsed = formatElapsed(activeLatestTurn.startedAt, activeLatestTurn.completedAt);
     return elapsed ? `Worked for ${elapsed}` : null;
-  })();
-  const completionDividerBeforeEntryId = (() => {
+  }, [
+    activeLatestTurn?.completedAt,
+    activeLatestTurn?.startedAt,
+    latestTurnHasToolActivity,
+    latestTurnSettled,
+  ]);
+  const completionDividerBeforeEntryId = useMemo(() => {
     if (!latestTurnSettled) return null;
     if (!activeLatestTurn?.startedAt) return null;
     if (!activeLatestTurn.completedAt) return null;
@@ -821,7 +837,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
       }
     }
     return inRangeMatch ?? fallbackMatch;
-  })();
+  }, [
+    activeLatestTurn?.completedAt,
+    activeLatestTurn?.startedAt,
+    completionSummary,
+    latestTurnSettled,
+    timelineEntries,
+  ]);
   const gitCwd = activeThread?.worktreePath ?? activeProject?.cwd ?? null;
   const composerTrigger = useMemo(
     () => detectComposerTrigger(prompt, composerCursor),
