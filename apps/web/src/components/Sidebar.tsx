@@ -970,6 +970,7 @@ export default function Sidebar() {
                                       value={renamingTitle}
                                       onChange={(e) => setRenamingTitle(e.target.value)}
                                       onKeyDown={(e) => {
+                                        e.stopPropagation();
                                         if (e.key === "Enter") {
                                           e.preventDefault();
                                           renamingCommittedRef.current = true;
