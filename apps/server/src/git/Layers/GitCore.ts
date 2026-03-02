@@ -126,10 +126,7 @@ function parseRemoteRefWithRemoteNames(
   return null;
 }
 
-function parseTrackingBranchByUpstreamRef(
-  stdout: string,
-  upstreamRef: string,
-): string | null {
+function parseTrackingBranchByUpstreamRef(stdout: string, upstreamRef: string): string | null {
   for (const line of stdout.split("\n")) {
     const trimmedLine = line.trim();
     if (trimmedLine.length === 0) {
@@ -389,9 +386,12 @@ const makeGitCore = Effect.gen(function* () {
     });
 
   const resolveDefaultBranchName = (cwd: string): Effect.Effect<string | null, GitCommandError> =>
-    executeGit("GitCore.resolveDefaultBranchName", cwd, ["symbolic-ref", "refs/remotes/origin/HEAD"], {
-      allowNonZeroExit: true,
-    }).pipe(
+    executeGit(
+      "GitCore.resolveDefaultBranchName",
+      cwd,
+      ["symbolic-ref", "refs/remotes/origin/HEAD"],
+      { allowNonZeroExit: true },
+    ).pipe(
       Effect.map((result) => {
         if (result.code !== 0) {
           return null;
@@ -888,33 +888,34 @@ const makeGitCore = Effect.gen(function* () {
 
       const [defaultRef, worktreeList, remoteBranchResult, remoteNamesResult, branchLastCommit] =
         yield* Effect.all(
-        [
-          executeGit(
-            "GitCore.listBranches.defaultRef",
-            input.cwd,
-            ["symbolic-ref", "refs/remotes/origin/HEAD"],
-            {
-              timeoutMs: 5_000,
-              allowNonZeroExit: true,
-            },
-          ),
-          executeGit(
-            "GitCore.listBranches.worktreeList",
-            input.cwd,
-            ["worktree", "list", "--porcelain"],
-            {
-              timeoutMs: 5_000,
-              allowNonZeroExit: true,
-            },
-          ),
-          remoteBranchResultEffect,
-          remoteNamesResultEffect,
-          branchRecencyPromise,
-        ],
-        { concurrency: "unbounded" },
-      );
+          [
+            executeGit(
+              "GitCore.listBranches.defaultRef",
+              input.cwd,
+              ["symbolic-ref", "refs/remotes/origin/HEAD"],
+              {
+                timeoutMs: 5_000,
+                allowNonZeroExit: true,
+              },
+            ),
+            executeGit(
+              "GitCore.listBranches.worktreeList",
+              input.cwd,
+              ["worktree", "list", "--porcelain"],
+              {
+                timeoutMs: 5_000,
+                allowNonZeroExit: true,
+              },
+            ),
+            remoteBranchResultEffect,
+            remoteNamesResultEffect,
+            branchRecencyPromise,
+          ],
+          { concurrency: "unbounded" },
+        );
 
-      const remoteNames = remoteNamesResult.code === 0 ? parseRemoteNames(remoteNamesResult.stdout) : [];
+      const remoteNames =
+        remoteNamesResult.code === 0 ? parseRemoteNames(remoteNamesResult.stdout) : [];
       if (remoteBranchResult.code !== 0 && remoteBranchResult.stderr.trim().length > 0) {
         yield* Effect.logWarning(
           `GitCore.listBranches: remote branch lookup returned code ${remoteBranchResult.code} for ${input.cwd}: ${remoteBranchResult.stderr.trim()}. Falling back to an empty remote branch list.`,
@@ -1112,24 +1113,23 @@ const makeGitCore = Effect.gen(function* () {
         { concurrency: "unbounded" },
       );
 
-      const localTrackingBranch =
-        remoteExists
-          ? yield* executeGit(
-              "GitCore.checkoutBranch.localTrackingBranch",
-              input.cwd,
-              ["for-each-ref", "--format=%(refname:short)\t%(upstream:short)", "refs/heads"],
-              {
-                timeoutMs: 5_000,
-                allowNonZeroExit: true,
-              },
-            ).pipe(
-              Effect.map((result) =>
-                result.code === 0
-                  ? parseTrackingBranchByUpstreamRef(result.stdout, input.branch)
-                  : null,
-              ),
-            )
-          : null;
+      const localTrackingBranch = remoteExists
+        ? yield* executeGit(
+            "GitCore.checkoutBranch.localTrackingBranch",
+            input.cwd,
+            ["for-each-ref", "--format=%(refname:short)\t%(upstream:short)", "refs/heads"],
+            {
+              timeoutMs: 5_000,
+              allowNonZeroExit: true,
+            },
+          ).pipe(
+            Effect.map((result) =>
+              result.code === 0
+                ? parseTrackingBranchByUpstreamRef(result.stdout, input.branch)
+                : null,
+            ),
+          )
+        : null;
 
       const localTrackedBranchCandidate = deriveLocalBranchNameFromRemoteRef(input.branch);
       const localTrackedBranchTargetExists =
@@ -1145,16 +1145,15 @@ const makeGitCore = Effect.gen(function* () {
             ).pipe(Effect.map((result) => result.code === 0))
           : false;
 
-      const checkoutArgs =
-        localInputExists
-          ? ["checkout", input.branch]
-          : remoteExists && !localTrackingBranch && localTrackedBranchTargetExists
+      const checkoutArgs = localInputExists
+        ? ["checkout", input.branch]
+        : remoteExists && !localTrackingBranch && localTrackedBranchTargetExists
           ? ["checkout", input.branch]
           : remoteExists && !localTrackingBranch
-          ? ["checkout", "--track", input.branch]
-          : remoteExists && localTrackingBranch
-          ? ["checkout", localTrackingBranch]
-          : ["checkout", input.branch];
+            ? ["checkout", "--track", input.branch]
+            : remoteExists && localTrackingBranch
+              ? ["checkout", localTrackingBranch]
+              : ["checkout", input.branch];
 
       yield* executeGit("GitCore.checkoutBranch.checkout", input.cwd, checkoutArgs, {
         timeoutMs: 10_000,

@@ -415,8 +415,7 @@ const make = Effect.gen(function* () {
             : event.threadId !== undefined
               ? ProviderThreadId.makeUnsafe(event.threadId)
               : null;
-        const providerThreadId =
-          providerThreadIdFromEvent ?? sessionProviderThreadId ?? null;
+        const providerThreadId = providerThreadIdFromEvent ?? sessionProviderThreadId ?? null;
         const status =
           event.type === "turn.started"
             ? "running"

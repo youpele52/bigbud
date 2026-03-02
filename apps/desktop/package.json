@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@t3tools/contracts": "workspace:*",
-    "@types/node": "^22.10.2",
+    "@types/node": "^24.10.13",
     "electronmon": "^2.0.2",
     "tsdown": "^0.20.3",
     "typescript": "^5.7.3",
