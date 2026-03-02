@@ -140,7 +140,7 @@ const BuildEnvConfig = Config.all({
 
 const resolveBooleanFlag = (flag: Option.Option<boolean>, envValue: boolean) =>
   Option.getOrElse(Option.filter(flag, Boolean), () => envValue);
-const mergeOptions = <A,>(a: Option.Option<A>, b: Option.Option<A>, defaultValue: A) =>
+const mergeOptions = <A>(a: Option.Option<A>, b: Option.Option<A>, defaultValue: A) =>
   Option.getOrElse(a, () => Option.getOrElse(b, () => defaultValue));
 
 const resolveBuildOptions = Effect.fn(function* (input: BuildCliInput) {
@@ -195,7 +195,6 @@ const runCommand = Effect.fn(function* (command: ChildProcess.Command) {
   if (exitCode !== 0) {
     return yield* new BuildScriptError({
       message: "Command exited with non-zero exit code",
-      cause: command,
     });
   }
 });
@@ -521,8 +520,18 @@ const buildDesktopArtifact = Effect.fn(function* (options: ResolvedBuildOptions)
   const buildEnv: NodeJS.ProcessEnv = {
     ...process.env,
   };
+  for (const [key, value] of Object.entries(buildEnv)) {
+    if (value === "") {
+      delete buildEnv[key];
+    }
+  }
   if (!options.signed) {
     buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+    delete buildEnv.CSC_LINK;
+    delete buildEnv.CSC_KEY_PASSWORD;
+    delete buildEnv.APPLE_API_KEY;
+    delete buildEnv.APPLE_API_KEY_ID;
+    delete buildEnv.APPLE_API_ISSUER;
   }
 
   yield* Effect.log(
@@ -533,7 +542,7 @@ const buildDesktopArtifact = Effect.fn(function* (options: ResolvedBuildOptions)
       cwd: stageAppDir,
       env: buildEnv,
       ...commandOutputOptions(options.verbose),
-    })`bunx --bun electron-builder ${platformConfig.cliFlag} ${options.target} --${options.arch} --publish never`,
+    })`bunx electron-builder ${platformConfig.cliFlag} ${options.target} --${options.arch} --publish never`,
   );
 
   const stageDistDir = path.join(stageAppDir, "dist");
