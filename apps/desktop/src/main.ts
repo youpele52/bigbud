@@ -40,27 +40,20 @@ let desktopProtocolRegistered = false;
 let destructiveMenuIconCache: Electron.NativeImage | null | undefined;
 
 function getDestructiveMenuIcon(): Electron.NativeImage | undefined {
+  if (process.platform !== "darwin") return undefined;
   if (destructiveMenuIconCache !== undefined) {
     return destructiveMenuIconCache ?? undefined;
   }
   try {
-    const icon =
-      process.platform === "darwin"
-        ? nativeImage.createFromNamedImage("trash").resize({
-            width: 14,
-            height: 14,
-          })
-        : nativeImage.createFromPath(resolveIconPath("png") ?? "").resize({
-            width: 14,
-            height: 14,
-          });
+    const icon = nativeImage.createFromNamedImage("trash").resize({
+      width: 14,
+      height: 14,
+    });
     if (icon.isEmpty()) {
       destructiveMenuIconCache = null;
       return undefined;
     }
-    if (process.platform === "darwin") {
-      icon.setTemplateImage(true);
-    }
+    icon.setTemplateImage(true);
     destructiveMenuIconCache = icon;
     return icon;
   } catch {
