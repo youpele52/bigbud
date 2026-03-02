@@ -163,7 +163,12 @@ const DEFAULT_THREAD_TERMINAL_STATE: ThreadTerminalState = Object.freeze({
 });
 
 function createDefaultThreadTerminalState(): ThreadTerminalState {
-  return { ...DEFAULT_THREAD_TERMINAL_STATE };
+  return {
+    ...DEFAULT_THREAD_TERMINAL_STATE,
+    terminalIds: [...DEFAULT_THREAD_TERMINAL_STATE.terminalIds],
+    runningTerminalIds: [...DEFAULT_THREAD_TERMINAL_STATE.runningTerminalIds],
+    terminalGroups: copyTerminalGroups(DEFAULT_THREAD_TERMINAL_STATE.terminalGroups),
+  };
 }
 
 function getDefaultThreadTerminalState(): ThreadTerminalState {
@@ -403,7 +408,7 @@ function setThreadTerminalActivity(
   return { ...normalized, runningTerminalIds: [...runningTerminalIds] };
 }
 
-function selectThreadTerminalState(
+export function selectThreadTerminalState(
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>,
   threadId: ThreadId,
 ): ThreadTerminalState {
@@ -444,7 +449,6 @@ function updateTerminalStateByThreadId(
 
 interface TerminalStateStoreState {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
-  getTerminalState: (threadId: ThreadId) => ThreadTerminalState;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setTerminalHeight: (threadId: ThreadId, height: number) => void;
   splitTerminal: (threadId: ThreadId, terminalId: string) => void;
@@ -461,7 +465,7 @@ interface TerminalStateStoreState {
 
 export const useTerminalStateStore = create<TerminalStateStoreState>()(
   persist(
-    (set, get) => {
+    (set) => {
       const updateTerminal = (
         threadId: ThreadId,
         updater: (state: ThreadTerminalState) => ThreadTerminalState,
@@ -483,7 +487,6 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
 
       return {
         terminalStateByThreadId: {},
-        getTerminalState: (threadId) => selectThreadTerminalState(get().terminalStateByThreadId, threadId),
         setTerminalOpen: (threadId, open) =>
           updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
         setTerminalHeight: (threadId, height) =>
@@ -501,7 +504,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             setThreadTerminalActivity(state, terminalId, hasRunningSubprocess),
           ),
         clearTerminalState: (threadId) =>
-          updateTerminal(threadId, () => getDefaultThreadTerminalState()),
+          updateTerminal(threadId, () => createDefaultThreadTerminalState()),
       };
     },
     {

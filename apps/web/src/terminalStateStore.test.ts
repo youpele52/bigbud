@@ -1,7 +1,7 @@
 import { ThreadId } from "@t3tools/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useTerminalStateStore } from "./terminalStateStore";
+import { selectThreadTerminalState, useTerminalStateStore } from "./terminalStateStore";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 
@@ -14,7 +14,7 @@ describe("terminalStateStore actions", () => {
   });
 
   it("returns a closed default terminal state for unknown threads", () => {
-    const terminalState = useTerminalStateStore.getState().getTerminalState(THREAD_ID);
+    const terminalState = selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID);
     expect(terminalState).toEqual({
       terminalOpen: false,
       terminalHeight: 280,
@@ -31,7 +31,7 @@ describe("terminalStateStore actions", () => {
     store.setTerminalOpen(THREAD_ID, true);
     store.splitTerminal(THREAD_ID, "terminal-2");
 
-    const terminalState = useTerminalStateStore.getState().getTerminalState(THREAD_ID);
+    const terminalState = selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID);
     expect(terminalState.terminalOpen).toBe(true);
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
     expect(terminalState.activeTerminalId).toBe("terminal-2");
@@ -43,7 +43,7 @@ describe("terminalStateStore actions", () => {
   it("creates new terminals in a separate group", () => {
     useTerminalStateStore.getState().newTerminal(THREAD_ID, "terminal-2");
 
-    const terminalState = useTerminalStateStore.getState().getTerminalState(THREAD_ID);
+    const terminalState = selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID);
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
     expect(terminalState.activeTerminalId).toBe("terminal-2");
     expect(terminalState.activeTerminalGroupId).toBe("group-terminal-2");
@@ -57,12 +57,12 @@ describe("terminalStateStore actions", () => {
     const store = useTerminalStateStore.getState();
     store.splitTerminal(THREAD_ID, "terminal-2");
     store.setTerminalActivity(THREAD_ID, "terminal-2", true);
-    expect(useTerminalStateStore.getState().getTerminalState(THREAD_ID).runningTerminalIds).toEqual([
+    expect(selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID).runningTerminalIds).toEqual([
       "terminal-2",
     ]);
 
     store.setTerminalActivity(THREAD_ID, "terminal-2", false);
-    expect(useTerminalStateStore.getState().getTerminalState(THREAD_ID).runningTerminalIds).toEqual([]);
+    expect(selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID).runningTerminalIds).toEqual([]);
   });
 
   it("resets to default and clears persisted entry when closing the last terminal", () => {
@@ -70,7 +70,7 @@ describe("terminalStateStore actions", () => {
     store.closeTerminal(THREAD_ID, "default");
 
     expect(useTerminalStateStore.getState().terminalStateByThreadId[THREAD_ID]).toBeUndefined();
-    expect(useTerminalStateStore.getState().getTerminalState(THREAD_ID).terminalIds).toEqual(["default"]);
+    expect(selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID).terminalIds).toEqual(["default"]);
   });
 
   it("keeps a valid active terminal after closing an active split terminal", () => {
@@ -79,7 +79,7 @@ describe("terminalStateStore actions", () => {
     store.splitTerminal(THREAD_ID, "terminal-3");
     store.closeTerminal(THREAD_ID, "terminal-3");
 
-    const terminalState = useTerminalStateStore.getState().getTerminalState(THREAD_ID);
+    const terminalState = selectThreadTerminalState(useTerminalStateStore.getState().terminalStateByThreadId, THREAD_ID);
     expect(terminalState.activeTerminalId).toBe("terminal-2");
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
     expect(terminalState.terminalGroups).toEqual([

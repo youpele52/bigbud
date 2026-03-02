@@ -101,7 +101,14 @@ function updateThread(
   threadId: ThreadId,
   updater: (t: Thread) => Thread,
 ): Thread[] {
-  return threads.map((t) => (t.id === threadId ? updater(t) : t));
+  let changed = false;
+  const next = threads.map((t) => {
+    if (t.id !== threadId) return t;
+    const updated = updater(t);
+    if (updated !== t) changed = true;
+    return updated;
+  });
+  return changed ? next : threads;
 }
 
 function mapProjectsFromReadModel(
@@ -277,34 +284,30 @@ export function markThreadVisited(
 ): AppState {
   const at = visitedAt ?? new Date().toISOString();
   const visitedAtMs = Date.parse(at);
-  return {
-    ...state,
-    threads: updateThread(state.threads, threadId, (thread) => {
-      const previousVisitedAtMs = thread.lastVisitedAt ? Date.parse(thread.lastVisitedAt) : NaN;
-      if (
-        Number.isFinite(previousVisitedAtMs) &&
-        Number.isFinite(visitedAtMs) &&
-        previousVisitedAtMs >= visitedAtMs
-      ) {
-        return thread;
-      }
-      return { ...thread, lastVisitedAt: at };
-    }),
-  };
+  const threads = updateThread(state.threads, threadId, (thread) => {
+    const previousVisitedAtMs = thread.lastVisitedAt ? Date.parse(thread.lastVisitedAt) : NaN;
+    if (
+      Number.isFinite(previousVisitedAtMs) &&
+      Number.isFinite(visitedAtMs) &&
+      previousVisitedAtMs >= visitedAtMs
+    ) {
+      return thread;
+    }
+    return { ...thread, lastVisitedAt: at };
+  });
+  return threads === state.threads ? state : { ...state, threads };
 }
 
 export function markThreadUnread(state: AppState, threadId: ThreadId): AppState {
-  return {
-    ...state,
-    threads: updateThread(state.threads, threadId, (thread) => {
-      if (!thread.latestTurn?.completedAt) return thread;
-      const latestTurnCompletedAtMs = Date.parse(thread.latestTurn.completedAt);
-      if (Number.isNaN(latestTurnCompletedAtMs)) return thread;
-      const unreadVisitedAt = new Date(latestTurnCompletedAtMs - 1).toISOString();
-      if (thread.lastVisitedAt === unreadVisitedAt) return thread;
-      return { ...thread, lastVisitedAt: unreadVisitedAt };
-    }),
-  };
+  const threads = updateThread(state.threads, threadId, (thread) => {
+    if (!thread.latestTurn?.completedAt) return thread;
+    const latestTurnCompletedAtMs = Date.parse(thread.latestTurn.completedAt);
+    if (Number.isNaN(latestTurnCompletedAtMs)) return thread;
+    const unreadVisitedAt = new Date(latestTurnCompletedAtMs - 1).toISOString();
+    if (thread.lastVisitedAt === unreadVisitedAt) return thread;
+    return { ...thread, lastVisitedAt: unreadVisitedAt };
+  });
+  return threads === state.threads ? state : { ...state, threads };
 }
 
 export function toggleProject(state: AppState, projectId: Project["id"]): AppState {
@@ -321,19 +324,21 @@ export function setProjectExpanded(
   projectId: Project["id"],
   expanded: boolean,
 ): AppState {
-  return {
-    ...state,
-    projects: state.projects.map((p) =>
-      p.id === projectId ? { ...p, expanded } : p,
-    ),
-  };
+  let changed = false;
+  const projects = state.projects.map((p) => {
+    if (p.id !== projectId || p.expanded === expanded) return p;
+    changed = true;
+    return { ...p, expanded };
+  });
+  return changed ? { ...state, projects } : state;
 }
 
 export function setError(state: AppState, threadId: ThreadId, error: string | null): AppState {
-  return {
-    ...state,
-    threads: updateThread(state.threads, threadId, (t) => ({ ...t, error })),
-  };
+  const threads = updateThread(state.threads, threadId, (t) => {
+    if (t.error === error) return t;
+    return { ...t, error };
+  });
+  return threads === state.threads ? state : { ...state, threads };
 }
 
 export function setThreadBranch(
@@ -342,21 +347,21 @@ export function setThreadBranch(
   branch: string | null,
   worktreePath: string | null,
 ): AppState {
-  return {
-    ...state,
-    threads: updateThread(state.threads, threadId, (t) => {
-      const cwdChanged = t.worktreePath !== worktreePath;
-      return {
-        ...t,
-        branch,
-        worktreePath,
-        ...(cwdChanged ? { session: null } : {}),
-      };
-    }),
-  };
+  const threads = updateThread(state.threads, threadId, (t) => {
+    if (t.branch === branch && t.worktreePath === worktreePath) return t;
+    const cwdChanged = t.worktreePath !== worktreePath;
+    return {
+      ...t,
+      branch,
+      worktreePath,
+      ...(cwdChanged ? { session: null } : {}),
+    };
+  });
+  return threads === state.threads ? state : { ...state, threads };
 }
 
 export function setRuntimeMode(state: AppState, mode: RuntimeMode): AppState {
+  if (state.runtimeMode === mode) return state;
   return { ...state, runtimeMode: mode };
 }
 
@@ -377,7 +382,7 @@ interface AppStore extends AppState {
   setRuntimeMode: (mode: RuntimeMode) => void;
 }
 
-export const useStore = create<AppStore>((set, _get) => ({
+export const useStore = create<AppStore>((set) => ({
   ...readPersistedState(),
   syncServerReadModel: (readModel) =>
     set((state) => syncServerReadModel(state, readModel)),
