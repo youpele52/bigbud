@@ -126,6 +126,9 @@ function errorDetails(error: unknown): string {
 function EventRouter() {
   const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setProjectExpanded = useStore((store) => store.setProjectExpanded);
+  const removeOrphanedTerminalStates = useTerminalStateStore(
+    (store) => store.removeOrphanedTerminalStates,
+  );
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -142,9 +145,6 @@ function EventRouter() {
     let latestSequence = 0;
     let syncing = false;
     let pending = false;
-
-    const removeOrphanedTerminalStates =
-      useTerminalStateStore.getState().removeOrphanedTerminalStates;
 
     const flushSnapshotSync = async (): Promise<void> => {
       const snapshot = await api.orchestration.getSnapshot();
@@ -276,7 +276,7 @@ function EventRouter() {
       unsubWelcome();
       unsubServerConfigUpdated();
     };
-  }, [navigate, queryClient, setProjectExpanded, syncServerReadModel]);
+  }, [navigate, queryClient, removeOrphanedTerminalStates, setProjectExpanded, syncServerReadModel]);
 
   return null;
 }

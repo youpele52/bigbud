@@ -474,7 +474,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const clearComposerDraftContent = useComposerDraftStore((store) => store.clearComposerContent);
   const clearDraftThread = useComposerDraftStore((store) => store.clearDraftThread);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
-  const draftThread = useComposerDraftStore((store) => store.draftThreadsByThreadId[threadId] ?? null);
+  const draftThread = useComposerDraftStore(
+    (store) => store.draftThreadsByThreadId[threadId] ?? null,
+  );
   const promptRef = useRef(prompt);
   const [isDragOverComposer, setIsDragOverComposer] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
@@ -604,7 +606,9 @@ export default function ChatView({ threadId }: ChatViewProps) {
     markThreadVisited,
   ]);
 
-  const baseThreadModel = resolveModelSlug(activeThread?.model ?? activeProject?.model ?? DEFAULT_MODEL);
+  const baseThreadModel = resolveModelSlug(
+    activeThread?.model ?? activeProject?.model ?? DEFAULT_MODEL,
+  );
   const selectedModel = resolveModelSlug(composerDraft.model ?? baseThreadModel);
   const selectedEffort = composerDraft.effort ?? DEFAULT_REASONING;
   const modelOptions = getAppModelOptions(settings.customCodexModels, selectedModel);
@@ -614,8 +618,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
   const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
   const nowIso = new Date(nowTick).toISOString();
   const threadActivities = activeThread?.activities ?? [];
-  const workLogEntries = deriveWorkLogEntries(threadActivities, activeLatestTurn?.turnId ?? undefined);
-  const latestTurnHasToolActivity = hasToolActivityForTurn(threadActivities, activeLatestTurn?.turnId);
+  const workLogEntries = deriveWorkLogEntries(
+    threadActivities,
+    activeLatestTurn?.turnId ?? undefined,
+  );
+  const latestTurnHasToolActivity = hasToolActivityForTurn(
+    threadActivities,
+    activeLatestTurn?.turnId,
+  );
   const pendingApprovals = derivePendingApprovals(threadActivities);
   useEffect(() => {
     attachmentPreviewHandoffByMessageIdRef.current = attachmentPreviewHandoffByMessageId;
@@ -680,13 +690,22 @@ export default function ChatView({ threadId }: ChatViewProps) {
       delete attachmentPreviewHandoffTimeoutByMessageIdRef.current[messageId];
     }, ATTACHMENT_PREVIEW_HANDOFF_TTL_MS);
   }, []);
-  const timelineMessages = (() => {
-    const serverMessages = activeThread?.messages ?? [];
+  const serverMessages = activeThread?.messages;
+  const timelineMessages = useMemo(() => {
+    const messages = serverMessages ?? [];
     const serverMessagesWithPreviewHandoff =
       Object.keys(attachmentPreviewHandoffByMessageId).length === 0
-        ? serverMessages
-        : serverMessages.map((message) => {
-            if (message.role !== "user" || !message.attachments || message.attachments.length === 0) {
+        ? messages
+        : // Spread only fires for the few messages that actually changed;
+          // unchanged ones early-return their original reference.
+          // In-place mutation would break React's immutable state contract.
+          // oxlint-disable-next-line no-map-spread
+          messages.map((message) => {
+            if (
+              message.role !== "user" ||
+              !message.attachments ||
+              message.attachments.length === 0
+            ) {
               return message;
             }
             const handoffPreviewUrls = attachmentPreviewHandoffByMessageId[message.id];
@@ -724,7 +743,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       return serverMessagesWithPreviewHandoff;
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
-  })();
+  }, [serverMessages, attachmentPreviewHandoffByMessageId, optimisticUserMessages]);
   const timelineEntries = deriveTimelineEntries(timelineMessages, workLogEntries);
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -937,8 +956,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     (activeThread.messages.length > 0 ||
       (activeThread.session !== null && activeThread.session.status !== "closed")),
   );
-  const hasReachedTerminalLimit =
-    terminalState.terminalIds.length >= MAX_THREAD_TERMINAL_COUNT;
+  const hasReachedTerminalLimit = terminalState.terminalIds.length >= MAX_THREAD_TERMINAL_COUNT;
   const setThreadError = useCallback(
     (targetThreadId: ThreadId | null, error: string | null) => {
       if (!targetThreadId) return;
@@ -1390,12 +1408,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [
-    activeThread?.id,
-    activeThread?.messages,
-    handoffAttachmentPreviews,
-    optimisticUserMessages,
-  ]);
+  }, [activeThread?.id, activeThread?.messages, handoffAttachmentPreviews, optimisticUserMessages]);
 
   useEffect(() => {
     promptRef.current = prompt;
@@ -1810,7 +1823,10 @@ export default function ChatView({ threadId }: ChatViewProps) {
     const shouldCreateWorktree =
       isFirstMessage && envMode === "worktree" && !activeThread.worktreePath;
     if (shouldCreateWorktree && !activeThread.branch) {
-      setStoreThreadError(threadIdForSend, "Select a base branch before sending in New worktree mode.");
+      setStoreThreadError(
+        threadIdForSend,
+        "Select a base branch before sending in New worktree mode.",
+      );
       return;
     }
 
@@ -1965,8 +1981,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
       setSendPhase("sending-turn");
       const turnAttachments = await turnAttachmentsPromise;
       const approvalPolicy = runtimeMode === "full-access" ? "never" : "on-request";
-      const sandboxMode =
-        runtimeMode === "full-access" ? "danger-full-access" : "workspace-write";
+      const sandboxMode = runtimeMode === "full-access" ? "danger-full-access" : "workspace-write";
       await api.orchestration.dispatchCommand({
         type: "thread.turn.start",
         commandId: newCommandId(),
@@ -2169,11 +2184,14 @@ export default function ChatView({ threadId }: ChatViewProps) {
       workspaceEntriesQuery.isLoading ||
       workspaceEntriesQuery.isFetching);
 
-  const onPromptChange = useCallback((nextPrompt: string, nextCursor: number) => {
-    promptRef.current = nextPrompt;
-    setPrompt(nextPrompt);
-    setComposerCursor(nextCursor);
-  }, [setComposerCursor, setPrompt]);
+  const onPromptChange = useCallback(
+    (nextPrompt: string, nextCursor: number) => {
+      promptRef.current = nextPrompt;
+      setPrompt(nextPrompt);
+      setComposerCursor(nextCursor);
+    },
+    [setComposerCursor, setPrompt],
+  );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (composerMenuOpen && composerMenuItems.length > 0) {
@@ -2402,8 +2420,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
                               </span>
                             }
                           />
-                          <TooltipPopup side="top" className="max-w-64 whitespace-normal leading-tight">
-                            Draft attachment could not be saved locally and may be lost on navigation.
+                          <TooltipPopup
+                            side="top"
+                            className="max-w-64 whitespace-normal leading-tight"
+                          >
+                            Draft attachment could not be saved locally and may be lost on
+                            navigation.
                           </TooltipPopup>
                         </Tooltip>
                       )}
