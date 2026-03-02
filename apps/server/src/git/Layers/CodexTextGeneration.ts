@@ -19,6 +19,17 @@ const CODEX_MODEL = "gpt-5.3-codex";
 const CODEX_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
 
+function toCodexOutputJsonSchema(schema: Schema.Top): unknown {
+  const document = Schema.toJsonSchemaDocument(schema);
+  if (document.definitions && Object.keys(document.definitions).length > 0) {
+    return {
+      ...document.schema,
+      $defs: document.definitions,
+    };
+  }
+  return document.schema;
+}
+
 function normalizeCodexError(
   operation: string,
   error: unknown,
@@ -204,7 +215,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
       const schemaPath = yield* writeTempFile(
         operation,
         "codex-schema",
-        JSON.stringify(Schema.toJsonSchemaDocument(outputSchemaJson).schema),
+        JSON.stringify(toCodexOutputJsonSchema(outputSchemaJson)),
       );
       const outputPath = yield* writeTempFile(operation, "codex-output", "");
 
