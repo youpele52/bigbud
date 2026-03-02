@@ -4,7 +4,6 @@ import { existsSync } from "node:fs";
 import type { ChatAttachment } from "@t3tools/contracts";
 
 import {
-  ATTACHMENTS_ROUTE_PREFIX,
   normalizeAttachmentRelativePath,
   resolveAttachmentRelativePath,
 } from "./attachmentPaths.ts";
@@ -75,10 +74,6 @@ export function resolveAttachmentPath(input: {
     stateDir: input.stateDir,
     relativePath: attachmentRelativePath(input.attachment),
   });
-}
-
-export function attachmentRoutePath(attachment: ChatAttachment): string {
-  return `${ATTACHMENTS_ROUTE_PREFIX}/${encodeURIComponent(attachment.id)}`;
 }
 
 export function resolveAttachmentPathById(input: {
