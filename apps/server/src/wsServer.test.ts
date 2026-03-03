@@ -13,6 +13,7 @@ import { makeServerProviderLayer, makeServerRuntimeServicesLayer } from "./serve
 
 import {
   DEFAULT_TERMINAL_ID,
+  EDITORS,
   EventId,
   ORCHESTRATION_WS_CHANNELS,
   ORCHESTRATION_WS_METHODS,
@@ -340,6 +341,15 @@ function compileKeybindings(bindings: KeybindingsConfig): ResolvedKeybindingsCon
 }
 
 const DEFAULT_RESOLVED_KEYBINDINGS = compileKeybindings([...DEFAULT_KEYBINDINGS]);
+const VALID_EDITOR_IDS = new Set(EDITORS.map((editor) => editor.id));
+
+function expectAvailableEditors(value: unknown): void {
+  expect(Array.isArray(value)).toBe(true);
+  for (const editorId of value as unknown[]) {
+    expect(typeof editorId).toBe("string");
+    expect(VALID_EDITOR_IDS.has(editorId as (typeof EDITORS)[number]["id"])).toBe(true);
+  }
+}
 
 describe("WebSocket Server", () => {
   let server: Http.Server | null = null;
@@ -726,7 +736,9 @@ describe("WebSocket Server", () => {
       keybindingsConfigPath: keybindingsPath,
       keybindings: DEFAULT_RESOLVED_KEYBINDINGS,
       issues: [],
+      availableEditors: expect.any(Array),
     });
+    expectAvailableEditors((response.result as { availableEditors: unknown }).availableEditors);
   });
 
   it("bootstraps default keybindings file when missing", async () => {
@@ -749,7 +761,9 @@ describe("WebSocket Server", () => {
       keybindingsConfigPath: keybindingsPath,
       keybindings: DEFAULT_RESOLVED_KEYBINDINGS,
       issues: [],
+      availableEditors: expect.any(Array),
     });
+    expectAvailableEditors((response.result as { availableEditors: unknown }).availableEditors);
 
     const persistedConfig = JSON.parse(
       fs.readFileSync(keybindingsPath, "utf8"),
@@ -782,7 +796,9 @@ describe("WebSocket Server", () => {
           message: expect.stringContaining("expected JSON array"),
         },
       ],
+      availableEditors: expect.any(Array),
     });
+    expectAvailableEditors((response.result as { availableEditors: unknown }).availableEditors);
     expect(fs.readFileSync(keybindingsPath, "utf8")).toBe("{ not-json");
   });
 
@@ -814,6 +830,7 @@ describe("WebSocket Server", () => {
       keybindingsConfigPath: string;
       keybindings: ResolvedKeybindingsConfig;
       issues: Array<{ kind: string; index?: number; message: string }>;
+      availableEditors: unknown;
     };
     expect(result.cwd).toBe("/my/workspace");
     expect(result.keybindingsConfigPath).toBe(keybindingsPath);
@@ -832,6 +849,7 @@ describe("WebSocket Server", () => {
     expect(result.keybindings).toHaveLength(DEFAULT_RESOLVED_KEYBINDINGS.length);
     expect(result.keybindings.some((entry) => entry.command === "terminal.toggle")).toBe(true);
     expect(result.keybindings.some((entry) => entry.command === "terminal.new")).toBe(true);
+    expectAvailableEditors(result.availableEditors);
   });
 
   it("pushes server.configUpdated issues when keybindings file changes", async () => {
@@ -929,7 +947,9 @@ describe("WebSocket Server", () => {
       keybindingsConfigPath: keybindingsPath,
       keybindings: compileKeybindings(persistedConfig),
       issues: [],
+      availableEditors: expect.any(Array),
     });
+    expectAvailableEditors((response.result as { availableEditors: unknown }).availableEditors);
   });
 
   it("upserts keybinding rules and updates cached server config", async () => {
@@ -974,7 +994,11 @@ describe("WebSocket Server", () => {
       keybindingsConfigPath: keybindingsPath,
       keybindings: compileKeybindings(persistedConfig),
       issues: [],
+      availableEditors: expect.any(Array),
     });
+    expectAvailableEditors(
+      (configResponse.result as { availableEditors: unknown }).availableEditors,
+    );
   });
 
   it("returns error for unknown methods", async () => {

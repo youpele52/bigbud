@@ -7,6 +7,8 @@
  * @module Open
  */
 import { spawn } from "node:child_process";
+import { accessSync, constants, statSync } from "node:fs";
+import { delimiter, extname, join } from "node:path";
 
 import { EDITORS, type EditorId } from "@t3tools/contracts";
 import { ServiceMap, Schema, Effect, Layer } from "effect";
@@ -30,10 +32,120 @@ interface EditorLaunch {
   readonly args: ReadonlyArray<string>;
 }
 
+interface CommandAvailabilityOptions {
+  readonly platform?: NodeJS.Platform;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
 const LINE_COLUMN_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
 
 function shouldUseGotoFlag(editorId: EditorId, target: string): boolean {
   return (editorId === "cursor" || editorId === "vscode") && LINE_COLUMN_SUFFIX_PATTERN.test(target);
+}
+
+function fileManagerCommandForPlatform(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "darwin":
+      return "open";
+    case "win32":
+      return "explorer";
+    default:
+      return "xdg-open";
+  }
+}
+
+function stripWrappingQuotes(value: string): string {
+  return value.replace(/^"+|"+$/g, "");
+}
+
+function resolvePathEnvironmentVariable(env: NodeJS.ProcessEnv): string {
+  return env.PATH ?? env.Path ?? env.path ?? "";
+}
+
+function resolveWindowsPathExtensions(env: NodeJS.ProcessEnv): ReadonlyArray<string> {
+  const rawValue = env.PATHEXT;
+  const fallback = [".COM", ".EXE", ".BAT", ".CMD"];
+  if (!rawValue) return fallback;
+
+  const parsed = rawValue
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => (entry.startsWith(".") ? entry.toUpperCase() : `.${entry.toUpperCase()}`));
+  return parsed.length > 0 ? Array.from(new Set(parsed)) : fallback;
+}
+
+function resolveCommandCandidates(
+  command: string,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): ReadonlyArray<string> {
+  if (platform !== "win32") return [command];
+  if (extname(command).length > 0) return [command];
+
+  const candidates = [command];
+  for (const extension of resolveWindowsPathExtensions(env)) {
+    candidates.push(`${command}${extension}`);
+    candidates.push(`${command}${extension.toLowerCase()}`);
+  }
+  return Array.from(new Set(candidates));
+}
+
+function isExecutableFile(filePath: string, platform: NodeJS.Platform): boolean {
+  try {
+    const stat = statSync(filePath);
+    if (!stat.isFile()) return false;
+    if (platform === "win32") return true;
+    accessSync(filePath, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isCommandAvailable(
+  command: string,
+  options: CommandAvailabilityOptions = {},
+): boolean {
+  const platform = options.platform ?? process.platform;
+  const env = options.env ?? process.env;
+  const commandCandidates = resolveCommandCandidates(command, platform, env);
+
+  if (command.includes("/") || command.includes("\\")) {
+    return commandCandidates.some((candidate) => isExecutableFile(candidate, platform));
+  }
+
+  const pathValue = resolvePathEnvironmentVariable(env);
+  if (pathValue.length === 0) return false;
+  const pathEntries = pathValue
+    .split(delimiter)
+    .map((entry) => stripWrappingQuotes(entry.trim()))
+    .filter((entry) => entry.length > 0);
+
+  for (const pathEntry of pathEntries) {
+    for (const candidate of commandCandidates) {
+      if (isExecutableFile(join(pathEntry, candidate), platform)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function resolveAvailableEditors(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): ReadonlyArray<EditorId> {
+  const available: EditorId[] = [];
+
+  for (const editor of EDITORS) {
+    const command = editor.command ?? fileManagerCommandForPlatform(platform);
+    if (isCommandAvailable(command, { platform, env })) {
+      available.push(editor.id);
+    }
+  }
+
+  return available;
 }
 
 /**
@@ -81,14 +193,7 @@ export const resolveEditorLaunch = Effect.fnUntraced(function* (
     return yield* new OpenError({ message: `Unsupported editor: ${input.editor}` });
   }
 
-  switch (platform) {
-    case "darwin":
-      return { command: "open", args: [input.cwd] };
-    case "win32":
-      return { command: "explorer", args: [input.cwd] };
-    default:
-      return { command: "xdg-open", args: [input.cwd] };
-  }
+  return { command: fileManagerCommandForPlatform(platform), args: [input.cwd] };
 });
 
 export const launchDetached = (launch: EditorLaunch) =>

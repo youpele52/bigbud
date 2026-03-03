@@ -1,6 +1,15 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { assert, describe, it } from "@effect/vitest";
 
-import { launchDetached, resolveEditorLaunch } from "./open";
+import {
+  isCommandAvailable,
+  launchDetached,
+  resolveAvailableEditors,
+  resolveEditorLaunch,
+} from "./open";
 import { Effect } from "effect";
 import { assertSuccess } from "@effect/vitest/utils";
 
@@ -110,4 +119,51 @@ describe("launchDetached", () => {
       assert.equal(result._tag, "Failure");
     }),
   );
+});
+
+describe("isCommandAvailable", () => {
+  function withTempDir(run: (dir: string) => void): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-open-"));
+    try {
+      run(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("resolves win32 commands with PATHEXT", () => {
+    withTempDir((dir) => {
+      fs.writeFileSync(path.join(dir, "code.CMD"), "@echo off\r\n", "utf8");
+      const env = {
+        PATH: dir,
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      } satisfies NodeJS.ProcessEnv;
+      assert.equal(isCommandAvailable("code", { platform: "win32", env }), true);
+    });
+  });
+
+  it("returns false when a command is not on PATH", () => {
+    const env = {
+      PATH: "",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+    } satisfies NodeJS.ProcessEnv;
+    assert.equal(isCommandAvailable("definitely-not-installed", { platform: "win32", env }), false);
+  });
+});
+
+describe("resolveAvailableEditors", () => {
+  it("returns only editors whose launch commands are available", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-editors-"));
+    try {
+      fs.writeFileSync(path.join(dir, "cursor.CMD"), "@echo off\r\n", "utf8");
+      fs.writeFileSync(path.join(dir, "explorer.EXE"), "MZ", "utf8");
+      const editors = resolveAvailableEditors("win32", {
+        PATH: dir,
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      });
+      assert.deepEqual(editors, ["cursor", "file-manager"]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

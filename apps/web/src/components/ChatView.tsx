@@ -147,6 +147,7 @@ const IMAGE_ONLY_BOOTSTRAP_PROMPT =
 const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
+const EMPTY_AVAILABLE_EDITORS: EditorId[] = [];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
@@ -869,10 +870,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const effectivePathQuery = pathTriggerQuery.length > 0 ? debouncedPathQuery : "";
   const branchesQuery = useQuery(gitBranchesQueryOptions(gitCwd));
-  const keybindingsQuery = useQuery({
-    ...serverConfigQueryOptions(),
-    select: (config) => config.keybindings,
-  });
+  const serverConfigQuery = useQuery(serverConfigQueryOptions());
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
       cwd: gitCwd,
@@ -944,7 +942,8 @@ export default function ChatView({ threadId }: ChatViewProps) {
     () => new Set(nonPersistedComposerImageIds),
     [nonPersistedComposerImageIds],
   );
-  const keybindings = keybindingsQuery.data ?? EMPTY_KEYBINDINGS;
+  const keybindings = serverConfigQuery.data?.keybindings ?? EMPTY_KEYBINDINGS;
+  const availableEditors = serverConfigQuery.data?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const threadTerminalRuntimeEnv = useMemo(() => {
@@ -2486,6 +2485,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
             activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
           }
           keybindings={keybindings}
+          availableEditors={availableEditors}
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
@@ -2899,6 +2899,7 @@ interface ChatHeaderProps {
   activeProjectScripts: ProjectScript[] | undefined;
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
+  availableEditors: ReadonlyArray<EditorId>;
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
@@ -2915,6 +2916,7 @@ const ChatHeader = memo(function ChatHeader({
   activeProjectScripts,
   preferredScriptId,
   keybindings,
+  availableEditors,
   diffToggleShortcutLabel,
   gitCwd,
   diffOpen,
@@ -2951,7 +2953,11 @@ const ChatHeader = memo(function ChatHeader({
           />
         )}
         {activeProjectName && (
-          <OpenInPicker keybindings={keybindings} activeThreadId={activeThreadId} />
+          <OpenInPicker
+            keybindings={keybindings}
+            availableEditors={availableEditors}
+            activeThreadId={activeThreadId}
+          />
         )}
         {activeProjectName && <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />}
         <Tooltip>
@@ -3663,9 +3669,11 @@ const ReasoningEffortPicker = memo(function ReasoningEffortPicker(props: {
 
 const OpenInPicker = memo(function OpenInPicker({
   keybindings,
+  availableEditors,
   activeThreadId,
 }: {
   keybindings: ResolvedKeybindingsConfig;
+  availableEditors: ReadonlyArray<EditorId>;
   activeThreadId: ThreadId | null;
 }) {
   const [lastEditor, setLastEditor] = useState<EditorId>(() => {
@@ -3673,28 +3681,45 @@ const OpenInPicker = memo(function OpenInPicker({
     return EDITORS.some((e) => e.id === stored) ? (stored as EditorId) : EDITORS[0].id;
   });
 
-  const options = [
-    {
-      label: "Cursor",
-      Icon: CursorIcon,
-      value: "cursor",
-    },
-    {
-      label: "VS Code",
-      Icon: VisualStudioCode,
-      value: "vscode",
-    },
-    {
-      label: isMacPlatform(navigator.platform)
-        ? "Finder"
-        : isWindowsPlatform(navigator.platform)
-          ? "Explorer"
-          : "Files",
-      Icon: FolderClosedIcon,
-      value: "file-manager",
-    },
-  ] satisfies { label: string; Icon: Icon; value: EditorId }[];
-  const primaryOption = options.find(({ value }) => value === lastEditor);
+  const allOptions = useMemo<Array<{ label: string; Icon: Icon; value: EditorId }>>(
+    () => [
+      {
+        label: "Cursor",
+        Icon: CursorIcon,
+        value: "cursor",
+      },
+      {
+        label: "VS Code",
+        Icon: VisualStudioCode,
+        value: "vscode",
+      },
+      {
+        label: isMacPlatform(navigator.platform)
+          ? "Finder"
+          : isWindowsPlatform(navigator.platform)
+            ? "Explorer"
+            : "Files",
+        Icon: FolderClosedIcon,
+        value: "file-manager",
+      },
+    ],
+    [],
+  );
+  const options = useMemo(
+    () => allOptions.filter((option) => availableEditors.includes(option.value)),
+    [allOptions, availableEditors],
+  );
+
+  const effectiveEditor = options.some((option) => option.value === lastEditor)
+    ? lastEditor
+    : (options[0]?.value ?? null);
+  const primaryOption = options.find(({ value }) => value === effectiveEditor) ?? null;
+
+  useEffect(() => {
+    if (!effectiveEditor || effectiveEditor === lastEditor) return;
+    localStorage.setItem(LAST_EDITOR_KEY, effectiveEditor);
+    setLastEditor(effectiveEditor);
+  }, [effectiveEditor, lastEditor]);
 
   const activeThread = useStore((store) =>
     activeThreadId ? store.threads.find((thread) => thread.id === activeThreadId) : undefined,
@@ -3708,13 +3733,14 @@ const OpenInPicker = memo(function OpenInPicker({
     (editorId: EditorId | null) => {
       const api = readNativeApi();
       if (!api || !activeProject) return;
-      const editor = editorId ?? lastEditor;
+      const editor = editorId ?? effectiveEditor;
+      if (!editor) return;
       const cwd = activeThread?.worktreePath ?? activeProject.cwd;
       void api.shell.openInEditor(cwd, editor);
       localStorage.setItem(LAST_EDITOR_KEY, editor);
       setLastEditor(editor);
     },
-    [activeProject, activeThread, lastEditor, setLastEditor],
+    [activeProject, activeThread, effectiveEditor, setLastEditor],
   );
 
   const openFavoriteEditorShortcutLabel = useMemo(
@@ -3727,18 +3753,24 @@ const OpenInPicker = memo(function OpenInPicker({
       const api = readNativeApi();
       if (!isOpenFavoriteEditorShortcut(e, keybindings)) return;
       if (!api || !activeProject) return;
+      if (!effectiveEditor) return;
 
       e.preventDefault();
       const cwd = activeThread?.worktreePath ?? activeProject.cwd;
-      void api.shell.openInEditor(cwd, lastEditor);
+      void api.shell.openInEditor(cwd, effectiveEditor);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeProject, activeThread, keybindings, lastEditor]);
+  }, [activeProject, activeThread, keybindings, effectiveEditor]);
 
   return (
     <Group aria-label="Subscription actions">
-      <Button size="xs" variant="outline" onClick={() => openInEditor(lastEditor)}>
+      <Button
+        size="xs"
+        variant="outline"
+        disabled={!effectiveEditor || !activeProject}
+        onClick={() => openInEditor(effectiveEditor)}
+      >
         {primaryOption?.Icon && <primaryOption.Icon aria-hidden="true" className="size-3.5" />}
         <span className="sr-only @sm/header-actions:not-sr-only @sm/header-actions:ml-0.5">
           Open
@@ -3750,11 +3782,12 @@ const OpenInPicker = memo(function OpenInPicker({
           <ChevronDownIcon aria-hidden="true" className="size-4" />
         </MenuTrigger>
         <MenuPopup align="end">
+          {options.length === 0 && <MenuItem disabled>No installed editors found</MenuItem>}
           {options.map(({ label, Icon, value }) => (
             <MenuItem key={value} onClick={() => openInEditor(value)}>
               <Icon aria-hidden="true" className="text-muted-foreground" />
               {label}
-              {value === lastEditor && openFavoriteEditorShortcutLabel && (
+              {value === effectiveEditor && openFavoriteEditorShortcutLabel && (
                 <MenuShortcut>{openFavoriteEditorShortcutLabel}</MenuShortcut>
               )}
             </MenuItem>
