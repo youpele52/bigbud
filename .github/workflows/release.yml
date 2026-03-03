@@ -273,13 +273,11 @@ jobs:
         run: bun run build --filter=@t3tools/web --filter=t3
 
       - name: Publish CLI package
-        run: bun publish --access public --tag alpha --ignore-scripts
-        working-directory: apps/server
+        run: node apps/server/scripts/cli.ts publish --tag alpha --provenance
 
   release:
     name: Publish GitHub Release
-    needs: [preflight, build]
-    # needs: [preflight, build, publish_cli]
+    needs: [preflight, build, publish_cli]
     runs-on: ubuntu-24.04
     steps:
       - name: Download all desktop artifacts

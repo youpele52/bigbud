@@ -10,9 +10,17 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "prepare": "effect-language-service patch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "effect": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "@effect/language-service": "0.75.1",
+    "@effect/vitest": "catalog:",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.0"
   }
 }
