@@ -167,6 +167,41 @@ describe("isCommandAvailable", () => {
     } satisfies NodeJS.ProcessEnv;
     assert.equal(isCommandAvailable("definitely-not-installed", { platform: "win32", env }), false);
   });
+
+  it("does not treat bare files without executable extension as available on win32", () => {
+    withTempDir((dir) => {
+      fs.writeFileSync(path.join(dir, "npm"), "echo nope\r\n", "utf8");
+      const env = {
+        PATH: dir,
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      } satisfies NodeJS.ProcessEnv;
+      assert.equal(isCommandAvailable("npm", { platform: "win32", env }), false);
+    });
+  });
+
+  it("appends PATHEXT for commands with non-executable extensions on win32", () => {
+    withTempDir((dir) => {
+      fs.writeFileSync(path.join(dir, "my.tool.CMD"), "@echo off\r\n", "utf8");
+      const env = {
+        PATH: dir,
+        PATHEXT: ".COM;.EXE;.BAT;.CMD",
+      } satisfies NodeJS.ProcessEnv;
+      assert.equal(isCommandAvailable("my.tool", { platform: "win32", env }), true);
+    });
+  });
+
+  it("uses platform-specific PATH delimiter for platform overrides", () => {
+    withTempDir((firstDir) => {
+      withTempDir((secondDir) => {
+        fs.writeFileSync(path.join(secondDir, "code.CMD"), "@echo off\r\n", "utf8");
+        const env = {
+          PATH: `${firstDir};${secondDir}`,
+          PATHEXT: ".COM;.EXE;.BAT;.CMD",
+        } satisfies NodeJS.ProcessEnv;
+        assert.equal(isCommandAvailable("code", { platform: "win32", env }), true);
+      });
+    });
+  });
 });
 
 describe("resolveAvailableEditors", () => {

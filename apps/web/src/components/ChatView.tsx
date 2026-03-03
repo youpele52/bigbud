@@ -3720,12 +3720,6 @@ const OpenInPicker = memo(function OpenInPicker({
     : (options[0]?.value ?? null);
   const primaryOption = options.find(({ value }) => value === effectiveEditor) ?? null;
 
-  useEffect(() => {
-    if (!effectiveEditor || effectiveEditor === lastEditor) return;
-    localStorage.setItem(LAST_EDITOR_KEY, effectiveEditor);
-    setLastEditor(effectiveEditor);
-  }, [effectiveEditor, lastEditor]);
-
   const activeThread = useStore((store) =>
     activeThreadId ? store.threads.find((thread) => thread.id === activeThreadId) : undefined,
   );

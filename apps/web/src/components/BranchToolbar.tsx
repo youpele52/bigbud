@@ -183,6 +183,7 @@ export default function BranchToolbar({
           title: "Failed to checkout branch.",
           description: error instanceof Error ? error.message : "An error occurred.",
         });
+        return;
       }
 
       let nextBranchName = selectedBranchName;
@@ -219,6 +220,7 @@ export default function BranchToolbar({
             title: "Failed to checkout branch.",
             description: error instanceof Error ? error.message : "An error occurred.",
           });
+          return;
         }
       } catch (error) {
         toastManager.add({
@@ -226,6 +228,7 @@ export default function BranchToolbar({
           title: "Failed to create branch.",
           description: error instanceof Error ? error.message : "An error occurred.",
         });
+        return;
       }
 
       setOptimisticBranch(name);
