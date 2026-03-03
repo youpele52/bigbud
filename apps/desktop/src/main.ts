@@ -1,4 +1,4 @@
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
@@ -110,28 +110,13 @@ function resolveEmbeddedCommitHash(): string | null {
   }
 }
 
-function resolveGitCommitHash(): string | null {
-  try {
-    const stdout = execFileSync("git", ["rev-parse", `--short=${COMMIT_HASH_DISPLAY_LENGTH}`, "HEAD"], {
-      cwd: ROOT_DIR,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return normalizeCommitHash(stdout);
-  } catch {
-    return null;
-  }
-}
-
 function resolveAboutCommitHash(): string | null {
   if (aboutCommitHashCache !== undefined) {
     return aboutCommitHashCache;
   }
 
   aboutCommitHashCache =
-    normalizeCommitHash(process.env.T3CODE_COMMIT_HASH) ??
-    resolveEmbeddedCommitHash() ??
-    resolveGitCommitHash();
+    normalizeCommitHash(process.env.T3CODE_COMMIT_HASH) ?? resolveEmbeddedCommitHash();
 
   return aboutCommitHashCache;
 }
@@ -483,11 +468,7 @@ function registerIpcHandlers(): void {
   ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);
   ipcMain.handle(
     CONTEXT_MENU_CHANNEL,
-    async (
-      _event,
-      items: ContextMenuItem[],
-      position?: { x: number; y: number },
-    ) => {
+    async (_event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
       const normalizedItems = items
         .filter((item) => typeof item.id === "string" && typeof item.label === "string")
         .map((item) => ({
@@ -538,7 +519,7 @@ function registerIpcHandlers(): void {
         const menu = Menu.buildFromTemplate(template);
         menu.popup({
           window,
-          ...(popupPosition ?? {}),
+          ...popupPosition,
           callback: () => resolve(null),
         });
       });
