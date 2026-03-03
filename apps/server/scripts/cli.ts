@@ -53,7 +53,7 @@ const buildCmd = Command.make(
           cwd: serverDir,
           stdout: config.verbose ? "inherit" : "ignore",
           stderr: "inherit",
-        })`tsdown`,
+        })`bun tsdown`,
       );
 
       const webDist = path.join(repoRoot, "apps/web/dist");
@@ -63,7 +63,7 @@ const buildCmd = Command.make(
         yield* fs.copy(webDist, clientTarget);
         yield* Effect.log("[cli] Bundled web app into dist/client");
       } else {
-        yield* Effect.log("[cli] Web dist not found — skipping client bundle.");
+        yield* Effect.logWarning("[cli] Web dist not found — skipping client bundle.");
       }
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
@@ -135,11 +135,11 @@ const publishCmd = Command.make(
 
             yield* Effect.log(`[cli] Running: npm ${args.join(" ")}`);
             yield* runCommand(
-              ChildProcess.make("npm", args, {
+              ChildProcess.make({
                 cwd: serverDir,
                 stdout: config.verbose ? "inherit" : "ignore",
                 stderr: "inherit",
-              }),
+              })`npm ${args.join(" ")}`,
             );
           }),
         // Release: restore
