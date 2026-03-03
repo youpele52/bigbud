@@ -198,6 +198,7 @@ jobs:
             --target "${{ matrix.target }}"
             --arch "${{ matrix.arch }}"
             --build-version "${{ needs.preflight.outputs.version }}"
+            --verbose
           )
 
           has_all() {
