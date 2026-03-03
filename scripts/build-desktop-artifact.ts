@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
+
 import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
@@ -84,6 +86,21 @@ class BuildScriptError extends Data.TaggedError("BuildScriptError")<{
   readonly cause?: unknown;
 }> {}
 
+function resolveGitCommitHash(repoRoot: string): string {
+  const result = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    return "unknown";
+  }
+  const hash = result.stdout.trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(hash)) {
+    return "unknown";
+  }
+  return hash.toLowerCase();
+}
+
 interface ResolvedBuildOptions {
   readonly platform: typeof BuildPlatform.Type;
   readonly target: string;
@@ -100,6 +117,7 @@ interface StagePackageJson {
   readonly name: string;
   readonly version: string;
   readonly buildVersion: string;
+  readonly t3codeCommitHash: string;
   readonly private: true;
   readonly description: string;
   readonly author: string;
@@ -436,6 +454,7 @@ const buildDesktopArtifact = Effect.fn(function* (options: ResolvedBuildOptions)
   });
 
   const appVersion = options.version ?? serverPackageJson.version;
+  const commitHash = resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
     prefix: `t3code-desktop-${options.platform}-stage-`,
@@ -490,6 +509,7 @@ const buildDesktopArtifact = Effect.fn(function* (options: ResolvedBuildOptions)
     name: "t3-code-desktop",
     version: appVersion,
     buildVersion: appVersion,
+    t3codeCommitHash: commitHash,
     private: true,
     description: "T3 Code desktop build",
     author: "T3 Tools",
