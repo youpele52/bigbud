@@ -330,42 +330,17 @@ const make = Effect.gen(function* () {
           const targetBranch = buildGeneratedWorktreeBranchName(generated.branch);
           if (targetBranch === oldBranch) return Effect.void;
 
-          return Effect.gen(function* () {
-            const currentBranch = yield* git.statusDetails(cwd).pipe(
-              Effect.map((status) => status.branch),
-              Effect.catch((error) =>
-                Effect.logWarning(
-                  "provider command reactor failed to read active worktree branch",
-                  {
-                    threadId: input.threadId,
-                    cwd,
-                    oldBranch,
-                    targetBranch,
-                    reason: error.message,
-                  },
-                ).pipe(Effect.as(null)),
-              ),
-            );
-
-            if (currentBranch !== oldBranch) {
-              return yield* Effect.logWarning(
-                "provider command reactor skipped worktree branch rename because active branch changed",
-                {
-                  threadId: input.threadId,
-                  cwd,
-                  oldBranch,
-                  targetBranch,
-                  currentBranch,
-                },
-              );
-            }
-
-            yield* git.renameBranch({
-              cwd,
-              oldBranch,
-              newBranch: targetBranch,
-            });
-          });
+          return Effect.flatMap(
+            git.renameBranch({ cwd, oldBranch, newBranch: targetBranch }),
+            (renamed) =>
+              orchestrationEngine.dispatch({
+                type: "thread.meta.update",
+                commandId: serverCommandId("worktree-branch-rename"),
+                threadId: input.threadId,
+                branch: renamed.branch,
+                worktreePath: cwd,
+              }),
+          );
         }),
         Effect.catchCause((cause) =>
           Effect.logWarning(

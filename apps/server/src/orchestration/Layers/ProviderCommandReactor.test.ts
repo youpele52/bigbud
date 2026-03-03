@@ -108,25 +108,9 @@ describe("ProviderCommandReactor", () => {
     const interruptTurn = vi.fn((_: unknown) => Effect.void);
     const respondToRequest = vi.fn((_: unknown) => Effect.void);
     const stopSession = vi.fn((_: unknown) => Effect.void);
-    const statusBranchByCwd = new Map<string, string | null>();
     const renameBranch = vi.fn((_: unknown) =>
       Effect.succeed({
         branch: "t3code/generated-name",
-      }),
-    );
-    const statusDetails = vi.fn((cwd: string) =>
-      Effect.succeed({
-        branch: statusBranchByCwd.get(cwd) ?? null,
-        upstreamRef: null,
-        hasWorkingTreeChanges: false,
-        workingTree: {
-          files: [],
-          insertions: 0,
-          deletions: 0,
-        },
-        hasUpstream: false,
-        aheadCount: 0,
-        behindCount: 0,
       }),
     );
     const generateBranchName = vi.fn<TextGenerationShape["generateBranchName"]>(() =>
@@ -157,12 +141,7 @@ describe("ProviderCommandReactor", () => {
     const layer = ProviderCommandReactorLive.pipe(
       Layer.provideMerge(orchestrationLayer),
       Layer.provideMerge(Layer.succeed(ProviderService, service)),
-      Layer.provideMerge(
-        Layer.succeed(
-          GitCore,
-          { renameBranch, statusDetails } as unknown as GitCoreShape,
-        ),
-      ),
+      Layer.provideMerge(Layer.succeed(GitCore, { renameBranch } as unknown as GitCoreShape)),
       Layer.provideMerge(
         Layer.succeed(TextGeneration, { generateBranchName } as unknown as TextGenerationShape),
       ),
@@ -210,11 +189,7 @@ describe("ProviderCommandReactor", () => {
       respondToRequest,
       stopSession,
       renameBranch,
-      statusDetails,
       generateBranchName,
-      setStatusBranch: (cwd: string, branch: string | null) => {
-        statusBranchByCwd.set(cwd, branch);
-      },
       stateDir,
     };
   }
@@ -260,7 +235,6 @@ describe("ProviderCommandReactor", () => {
   it("generates and renames temporary worktree branch on first turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
-    const worktreeCwd = "/tmp/provider-project/.t3/worktrees/t3code-89abc123";
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -268,10 +242,9 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-thread-meta-set-temp-branch"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         branch: "t3code/89abc123",
-        worktreePath: worktreeCwd,
+        worktreePath: "/tmp/provider-project/.t3/worktrees/t3code-89abc123",
       }),
     );
-    harness.setStatusBranch(worktreeCwd, "t3code/89abc123");
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -302,7 +275,7 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.renameBranch.mock.calls.length === 1);
 
     expect(harness.generateBranchName.mock.calls[0]?.[0]).toEqual({
-      cwd: worktreeCwd,
+      cwd: "/tmp/provider-project/.t3/worktrees/t3code-89abc123",
       message: "Fix visual bug from screenshot",
       attachments: [
         {
@@ -315,14 +288,18 @@ describe("ProviderCommandReactor", () => {
       ],
     });
     expect(harness.renameBranch.mock.calls[0]?.[0]).toEqual({
-      cwd: worktreeCwd,
+      cwd: "/tmp/provider-project/.t3/worktrees/t3code-89abc123",
       oldBranch: "t3code/89abc123",
       newBranch: "t3code/generated-name",
     });
 
-    const readModel = await Effect.runPromise(harness.engine.getReadModel());
-    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
-    expect(thread?.branch).toBe("t3code/89abc123");
+    await waitFor(() => {
+      const readModel = Effect.runSync(harness.engine.getReadModel());
+      const thread = readModel.threads.find(
+        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      );
+      return thread?.branch === "t3code/generated-name";
+    });
   });
 
   it("passes persisted attachment references to branch generation and turn start", async () => {
@@ -396,7 +373,6 @@ describe("ProviderCommandReactor", () => {
   it("skips worktree branch generation after the first user turn", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
-    const worktreeCwd = "/tmp/provider-project/.t3/worktrees/t3code-1234abcd";
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -404,10 +380,9 @@ describe("ProviderCommandReactor", () => {
         commandId: CommandId.makeUnsafe("cmd-thread-meta-set-temp-branch-2"),
         threadId: ThreadId.makeUnsafe("thread-1"),
         branch: "t3code/1234abcd",
-        worktreePath: worktreeCwd,
+        worktreePath: "/tmp/provider-project/.t3/worktrees/t3code-1234abcd",
       }),
     );
-    harness.setStatusBranch(worktreeCwd, "t3code/1234abcd");
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -448,44 +423,6 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.generateBranchName.mock.calls.length).toBe(1);
     expect(harness.renameBranch.mock.calls.length).toBe(1);
-  });
-
-  it("skips worktree rename when active branch already changed", async () => {
-    const harness = await createHarness();
-    const now = new Date().toISOString();
-    const worktreeCwd = "/tmp/provider-project/.t3/worktrees/t3code-badf00d0";
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.meta.update",
-        commandId: CommandId.makeUnsafe("cmd-thread-meta-set-temp-branch-switched"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
-        branch: "t3code/badf00d0",
-        worktreePath: worktreeCwd,
-      }),
-    );
-    harness.setStatusBranch(worktreeCwd, "feature/add-vscode-open-in-support");
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe("cmd-turn-start-worktree-switched"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-worktree-switched"),
-          role: "user",
-          text: "Fix visual bug from screenshot",
-          attachments: [],
-        },
-        approvalPolicy: "on-request",
-        sandboxMode: "workspace-write",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.generateBranchName.mock.calls.length === 1);
-    await Effect.runPromise(Effect.sleep("20 millis"));
-    expect(harness.renameBranch.mock.calls.length).toBe(0);
   });
 
   it("skips worktree rename when branch-name generation fails", async () => {
