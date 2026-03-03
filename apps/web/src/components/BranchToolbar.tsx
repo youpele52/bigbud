@@ -1,6 +1,6 @@
 import type { GitBranch, ThreadId } from "@t3tools/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { newCommandId } from "../lib/utils";
 import {
@@ -14,7 +14,6 @@ import { useStore } from "../store";
 import {
   dedupeRemoteBranchesWithLocalMatches,
   deriveLocalBranchNameFromRemoteRef,
-  deriveSyncedLocalBranch,
 } from "./BranchToolbar.logic";
 import { Button } from "./ui/button";
 import {
@@ -72,6 +71,11 @@ export default function BranchToolbar({
   const branchesQuery = useQuery(gitBranchesQueryOptions(branchCwd));
 
   const branches = dedupeRemoteBranchesWithLocalMatches(branchesQuery.data?.branches ?? []);
+  const currentGitBranch = branches.find((branch) => branch.current)?.name ?? null;
+  const resolvedActiveBranch =
+    effectiveEnvMode === "worktree" && !activeWorktreePath
+      ? activeThreadBranch
+      : (currentGitBranch ?? activeThreadBranch);
   const branchNames = branches.map((branch) => branch.name);
   const branchByName = new Map(branches.map((branch) => [branch.name, branch]));
   const trimmedBranchQuery = branchQuery.trim();
@@ -91,50 +95,6 @@ export default function BranchToolbar({
   const createBranchMutation = useMutation(
     gitCreateBranchAndCheckoutMutationOptions({ cwd: branchCwd, queryClient }),
   );
-
-  // ── Effects ───────────────────────────────────────────────────────────
-
-  // Keep thread branch synced to git current branch for local threads.
-  const queryBranches = branchesQuery.data?.branches;
-  useEffect(() => {
-    const syncedBranch = deriveSyncedLocalBranch({
-      activeThreadId,
-      activeWorktreePath,
-      envMode: effectiveEnvMode,
-      activeThreadBranch,
-      queryBranches,
-    });
-    if (!activeThreadId || !syncedBranch) return;
-    const api = readNativeApi();
-
-    if (api && hasServerThread) {
-      void api.orchestration.dispatchCommand({
-        type: "thread.meta.update",
-        commandId: newCommandId(),
-        threadId: activeThreadId,
-        branch: syncedBranch,
-        worktreePath: null,
-      });
-    }
-    if (hasServerThread) {
-      setThreadBranchAction(activeThreadId, syncedBranch, null);
-      return;
-    }
-    setDraftThreadContext(threadId, {
-      branch: syncedBranch,
-      worktreePath: null,
-    });
-  }, [
-    activeThreadId,
-    activeWorktreePath,
-    activeThreadBranch,
-    queryBranches,
-    effectiveEnvMode,
-    setThreadBranchAction,
-    hasServerThread,
-    setDraftThreadContext,
-    threadId,
-  ]);
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -282,7 +242,7 @@ export default function BranchToolbar({
           }
         }}
         open={isBranchMenuOpen}
-        value={activeThreadBranch}
+        value={resolvedActiveBranch}
       >
         <ComboboxTrigger
           render={<Button variant="ghost" size="xs" />}
@@ -290,10 +250,10 @@ export default function BranchToolbar({
           disabled={branchesQuery.isLoading}
         >
           <span className="max-w-[240px] truncate">
-            {activeThreadBranch
+            {resolvedActiveBranch
               ? effectiveEnvMode === "worktree" && !activeWorktreePath
-                ? `From ${activeThreadBranch}`
-                : activeThreadBranch
+                ? `From ${resolvedActiveBranch}`
+                : resolvedActiveBranch
               : "Select branch"}
           </span>
           <ChevronDownIcon />
@@ -347,7 +307,7 @@ export default function BranchToolbar({
                   key={itemValue}
                   value={itemValue}
                   className={
-                    itemValue === activeThreadBranch ? "bg-accent text-foreground" : undefined
+                    itemValue === resolvedActiveBranch ? "bg-accent text-foreground" : undefined
                   }
                   onClick={() => selectBranch(branch)}
                 >
