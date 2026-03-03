@@ -63,7 +63,11 @@ import {
   normalizeAttachmentRelativePath,
   resolveAttachmentRelativePath,
 } from "./attachmentPaths";
-import { createAttachmentId, resolveAttachmentPath, resolveAttachmentPathById } from "./attachmentStore.ts";
+import {
+  createAttachmentId,
+  resolveAttachmentPath,
+  resolveAttachmentPathById,
+} from "./attachmentStore.ts";
 import { parseBase64DataUrl } from "./imageMime.ts";
 
 /**
