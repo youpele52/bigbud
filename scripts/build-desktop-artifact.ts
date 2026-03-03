@@ -6,6 +6,8 @@ import rootPackageJson from "../package.json" with { type: "json" };
 import desktopPackageJson from "../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../apps/server/package.json" with { type: "json" };
 
+import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
+
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Config, Data, Effect, FileSystem, Logger, Option, Path, Schema } from "effect";
@@ -317,31 +319,6 @@ function validateBundledClientAssets(clientDir: string) {
       });
     }
   });
-}
-
-function resolveCatalogDependencies(
-  dependencies: Record<string, unknown>,
-  catalog: Record<string, unknown>,
-  dependencySourceLabel: string,
-): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(dependencies).map(([dependencyName, spec]) => {
-      if (typeof spec !== "string" || !spec.startsWith("catalog:")) {
-        return [dependencyName, spec];
-      }
-
-      const catalogKey = spec.slice("catalog:".length).trim();
-      const lookupKey = catalogKey.length > 0 ? catalogKey : dependencyName;
-      const resolvedSpec = catalog[lookupKey];
-      if (typeof resolvedSpec !== "string" || resolvedSpec.length === 0) {
-        throw new BuildScriptError({
-          message: `Unable to resolve '${spec}' for ${dependencySourceLabel} dependency '${dependencyName}'. Expected key '${lookupKey}' in root workspace catalog.`,
-        });
-      }
-
-      return [dependencyName, resolvedSpec];
-    }),
-  );
 }
 
 const createBuildConfig = Effect.fn(function* (
