@@ -1,6 +1,6 @@
 import type { GitBranch, ThreadId } from "@t3tools/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useOptimistic, useState } from "react";
 
 import { newCommandId } from "../lib/utils";
 import {
@@ -72,10 +72,14 @@ export default function BranchToolbar({
 
   const branches = dedupeRemoteBranchesWithLocalMatches(branchesQuery.data?.branches ?? []);
   const currentGitBranch = branches.find((branch) => branch.current)?.name ?? null;
-  const resolvedActiveBranch =
+  const canonicalActiveBranch =
     effectiveEnvMode === "worktree" && !activeWorktreePath
       ? activeThreadBranch
       : (currentGitBranch ?? activeThreadBranch);
+  const [resolvedActiveBranch, setOptimisticBranch] = useOptimistic(
+    canonicalActiveBranch,
+    (_currentBranch: string | null, optimisticBranch: string | null) => optimisticBranch,
+  );
   const branchNames = branches.map((branch) => branch.name);
   const branchByName = new Map(branches.map((branch) => [branch.name, branch]));
   const trimmedBranchQuery = branchQuery.trim();
@@ -168,6 +172,7 @@ export default function BranchToolbar({
     const selectedBranchName = branch.isRemote
       ? deriveLocalBranchNameFromRemoteRef(branch.name)
       : branch.name;
+    setOptimisticBranch(selectedBranchName);
 
     checkoutMutation.mutate(branch.name, {
       onSuccess: async () => {
@@ -179,11 +184,13 @@ export default function BranchToolbar({
             nextBranchName = status.branch;
           }
         }
+        setOptimisticBranch(nextBranchName);
         setThreadBranch(nextBranchName, activeWorktreePath);
         setIsBranchMenuOpen(false);
         onComposerFocusRequest?.();
       },
       onError: (error) => {
+        setOptimisticBranch(canonicalActiveBranch);
         setThreadError(error instanceof Error ? error.message : "Failed to checkout branch.");
         setIsBranchMenuOpen(true);
       },
@@ -194,8 +201,10 @@ export default function BranchToolbar({
     const name = rawName.trim();
     const api = readNativeApi();
     if (!api || !activeThreadId || !branchCwd || !name || createBranchMutation.isPending) return;
+    setOptimisticBranch(name);
     createBranchMutation.mutate(name, {
       onSuccess: () => {
+        setOptimisticBranch(name);
         setThreadError(null);
         setThreadBranch(name, activeWorktreePath);
         setBranchQuery("");
@@ -203,6 +212,7 @@ export default function BranchToolbar({
         onComposerFocusRequest?.();
       },
       onError: (error) => {
+        setOptimisticBranch(canonicalActiveBranch);
         setThreadError(error instanceof Error ? error.message : "Failed to create branch.");
       },
     });
@@ -223,9 +233,7 @@ export default function BranchToolbar({
             variant="ghost"
             className="text-muted-foreground/70 hover:text-foreground/80"
             size="xs"
-            onClick={() =>
-              onEnvModeChange(effectiveEnvMode === "local" ? "worktree" : "local")
-            }
+            onClick={() => onEnvModeChange(effectiveEnvMode === "local" ? "worktree" : "local")}
           >
             {effectiveEnvMode === "worktree" ? "New worktree" : "Local"}
           </Button>
@@ -313,7 +321,9 @@ export default function BranchToolbar({
                 >
                   <div className="flex w-full items-center justify-between gap-2">
                     <span className="truncate">{itemValue}</span>
-                    {badge && <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>}
+                    {badge && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>
+                    )}
                   </div>
                 </ComboboxItem>
               );
