@@ -2153,13 +2153,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         }
       }
       const title = truncateTitle(titleSeed);
-      let threadCreateModel = selectedModel;
-      if (!threadCreateModel) {
-        threadCreateModel = activeProject.model;
-      }
-      if (!threadCreateModel) {
-        threadCreateModel = DEFAULT_MODEL;
-      }
+      let threadCreateModel: ModelSlug = selectedModel || (activeProject.model as ModelSlug) || DEFAULT_MODEL;
 
       if (isLocalDraftThread) {
         await api.orchestration.dispatchCommand({
@@ -2228,7 +2222,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
         },
         model: selectedModel || undefined,
         provider: selectedProvider,
-        ...(supportsReasoningEffort ? { effort: selectedEffort } : {}),
+        ...(supportsReasoningEffort && selectedEffort ? { effort: selectedEffort } : {}),
         assistantDeliveryMode: settings.enableAssistantStreaming ? "streaming" : "buffered",
         approvalPolicy,
         sandboxMode,
@@ -2387,7 +2381,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
   );
   const onEffortSelect = useCallback(
     (effort: CodexReasoningEffort) => {
-      setSelectedEffort(effort);
+      setComposerDraftEffort(threadId, effort);
       scheduleComposerFocus();
     },
     [scheduleComposerFocus, setComposerDraftEffort, threadId],
@@ -2850,11 +2844,13 @@ export default function ChatView({ threadId }: ChatViewProps) {
                     <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
 
                     {/* Reasoning effort */}
-                    <ReasoningEffortPicker
-                      effort={selectedEffort}
-                      options={reasoningOptions}
-                      onEffortChange={onEffortSelect}
-                    />
+                    {selectedEffort != null && (
+                      <ReasoningEffortPicker
+                        effort={selectedEffort}
+                        options={reasoningOptions}
+                        onEffortChange={onEffortSelect}
+                      />
+                    )}
                   </>
                 ) : null}
 
