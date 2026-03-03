@@ -115,8 +115,19 @@ function resolveAboutCommitHash(): string | null {
     return aboutCommitHashCache;
   }
 
-  aboutCommitHashCache =
-    normalizeCommitHash(process.env.T3CODE_COMMIT_HASH) ?? resolveEmbeddedCommitHash();
+  const envCommitHash = normalizeCommitHash(process.env.T3CODE_COMMIT_HASH);
+  if (envCommitHash) {
+    aboutCommitHashCache = envCommitHash;
+    return aboutCommitHashCache;
+  }
+
+  // Only packaged builds are required to expose commit metadata.
+  if (!app.isPackaged) {
+    aboutCommitHashCache = null;
+    return aboutCommitHashCache;
+  }
+
+  aboutCommitHashCache = resolveEmbeddedCommitHash();
 
   return aboutCommitHashCache;
 }
