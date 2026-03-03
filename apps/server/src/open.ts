@@ -8,7 +8,7 @@
  */
 import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
-import { delimiter, extname, join } from "node:path";
+import { extname, join } from "node:path";
 
 import { EDITORS, type EditorId } from "@t3tools/contracts";
 import { ServiceMap, Schema, Effect, Layer } from "effect";
@@ -78,29 +78,53 @@ function resolveWindowsPathExtensions(env: NodeJS.ProcessEnv): ReadonlyArray<str
 function resolveCommandCandidates(
   command: string,
   platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv,
+  windowsPathExtensions: ReadonlyArray<string>,
 ): ReadonlyArray<string> {
   if (platform !== "win32") return [command];
-  if (extname(command).length > 0) return [command];
+  const extension = extname(command);
+  const normalizedExtension = extension.toUpperCase();
 
-  const candidates = [command];
-  for (const extension of resolveWindowsPathExtensions(env)) {
+  if (extension.length > 0 && windowsPathExtensions.includes(normalizedExtension)) {
+    const commandWithoutExtension = command.slice(0, -extension.length);
+    return Array.from(
+      new Set([
+        command,
+        `${commandWithoutExtension}${normalizedExtension}`,
+        `${commandWithoutExtension}${normalizedExtension.toLowerCase()}`,
+      ]),
+    );
+  }
+
+  const candidates: string[] = [];
+  for (const extension of windowsPathExtensions) {
     candidates.push(`${command}${extension}`);
     candidates.push(`${command}${extension.toLowerCase()}`);
   }
   return Array.from(new Set(candidates));
 }
 
-function isExecutableFile(filePath: string, platform: NodeJS.Platform): boolean {
+function isExecutableFile(
+  filePath: string,
+  platform: NodeJS.Platform,
+  windowsPathExtensions: ReadonlyArray<string>,
+): boolean {
   try {
     const stat = statSync(filePath);
     if (!stat.isFile()) return false;
-    if (platform === "win32") return true;
+    if (platform === "win32") {
+      const extension = extname(filePath);
+      if (extension.length === 0) return false;
+      return windowsPathExtensions.includes(extension.toUpperCase());
+    }
     accessSync(filePath, constants.X_OK);
     return true;
   } catch {
     return false;
   }
+}
+
+function resolvePathDelimiter(platform: NodeJS.Platform): string {
+  return platform === "win32" ? ";" : ":";
 }
 
 export function isCommandAvailable(
@@ -109,22 +133,25 @@ export function isCommandAvailable(
 ): boolean {
   const platform = options.platform ?? process.platform;
   const env = options.env ?? process.env;
-  const commandCandidates = resolveCommandCandidates(command, platform, env);
+  const windowsPathExtensions = platform === "win32" ? resolveWindowsPathExtensions(env) : [];
+  const commandCandidates = resolveCommandCandidates(command, platform, windowsPathExtensions);
 
   if (command.includes("/") || command.includes("\\")) {
-    return commandCandidates.some((candidate) => isExecutableFile(candidate, platform));
+    return commandCandidates.some((candidate) =>
+      isExecutableFile(candidate, platform, windowsPathExtensions),
+    );
   }
 
   const pathValue = resolvePathEnvironmentVariable(env);
   if (pathValue.length === 0) return false;
   const pathEntries = pathValue
-    .split(delimiter)
+    .split(resolvePathDelimiter(platform))
     .map((entry) => stripWrappingQuotes(entry.trim()))
     .filter((entry) => entry.length > 0);
 
   for (const pathEntry of pathEntries) {
     for (const candidate of commandCandidates) {
-      if (isExecutableFile(join(pathEntry, candidate), platform)) {
+      if (isExecutableFile(join(pathEntry, candidate), platform, windowsPathExtensions)) {
         return true;
       }
     }
