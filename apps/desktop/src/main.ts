@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
@@ -26,6 +26,8 @@ const ROOT_DIR = path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
 const APP_USER_MODEL_ID = "com.t3tools.t3code";
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
+const COMMIT_HASH_DISPLAY_LENGTH = 12;
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
@@ -36,6 +38,7 @@ let restartAttempt = 0;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let isQuitting = false;
 let desktopProtocolRegistered = false;
+let aboutCommitHashCache: string | null | undefined;
 
 let destructiveMenuIconCache: Electron.NativeImage | null | undefined;
 
@@ -79,6 +82,58 @@ function resolveAppRoot(): string {
     return ROOT_DIR;
   }
   return app.getAppPath();
+}
+
+function normalizeCommitHash(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!COMMIT_HASH_PATTERN.test(trimmed)) {
+    return null;
+  }
+  return trimmed.slice(0, COMMIT_HASH_DISPLAY_LENGTH).toLowerCase();
+}
+
+function resolveEmbeddedCommitHash(): string | null {
+  const packageJsonPath = path.join(resolveAppRoot(), "package.json");
+  if (!fs.existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(packageJsonPath, "utf8");
+    const parsed = JSON.parse(raw) as { t3codeCommitHash?: unknown };
+    return normalizeCommitHash(parsed.t3codeCommitHash);
+  } catch {
+    return null;
+  }
+}
+
+function resolveGitCommitHash(): string | null {
+  try {
+    const stdout = execFileSync("git", ["rev-parse", `--short=${COMMIT_HASH_DISPLAY_LENGTH}`, "HEAD"], {
+      cwd: ROOT_DIR,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return normalizeCommitHash(stdout);
+  } catch {
+    return null;
+  }
+}
+
+function resolveAboutCommitHash(): string | null {
+  if (aboutCommitHashCache !== undefined) {
+    return aboutCommitHashCache;
+  }
+
+  aboutCommitHashCache =
+    normalizeCommitHash(process.env.T3CODE_COMMIT_HASH) ??
+    resolveEmbeddedCommitHash() ??
+    resolveGitCommitHash();
+
+  return aboutCommitHashCache;
 }
 
 function resolveBackendEntry(): string {
@@ -277,8 +332,11 @@ function resolveIconPath(ext: "ico" | "icns" | "png"): string | null {
 
 function configureAppIdentity(): void {
   app.setName(APP_DISPLAY_NAME);
+  const commitHash = resolveAboutCommitHash();
   app.setAboutPanelOptions({
     applicationName: APP_DISPLAY_NAME,
+    applicationVersion: app.getVersion(),
+    version: commitHash ?? "unknown",
   });
 
   if (process.platform === "win32") {
