@@ -279,6 +279,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -298,7 +300,7 @@ jobs:
         run: bun run build --filter=@t3tools/web --filter=t3
 
       - name: Publish CLI package
-        run: node apps/server/scripts/cli.ts publish --tag alpha --verbose
+        run: node apps/server/scripts/cli.ts publish --tag alpha --app-version "${{ needs.preflight.outputs.version }}" --verbose
 
   release:
     name: Publish GitHub Release

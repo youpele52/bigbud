@@ -2,7 +2,7 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Data, Effect, FileSystem, Logger, Path } from "effect";
+import { Data, Effect, FileSystem, Logger, Option, Path } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
@@ -77,6 +77,7 @@ const publishCmd = Command.make(
   {
     tag: Flag.string("tag").pipe(Flag.withDefault("latest")),
     access: Flag.string("access").pipe(Flag.withDefault("public")),
+    appVersion: Flag.string("app-version").pipe(Flag.optional),
     provenance: Flag.boolean("provenance").pipe(Flag.withDefault(false)),
     dryRun: Flag.boolean("dry-run").pipe(Flag.withDefault(false)),
     verbose: Flag.boolean("verbose").pipe(Flag.withDefault(false)),
@@ -107,10 +108,11 @@ const publishCmd = Command.make(
           yield* fs.writeFileString(backupPath, original);
 
           // Build package.json for publish
+          const version = Option.getOrElse(config.appVersion, () => serverPackageJson.version);
           const pkg = {
             name: serverPackageJson.name,
             type: serverPackageJson.type,
-            version: serverPackageJson.version,
+            version,
             engines: serverPackageJson.engines,
             files: serverPackageJson.files,
             dependencies: serverPackageJson.dependencies as Record<string, unknown>,
