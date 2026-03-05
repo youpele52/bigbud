@@ -3,6 +3,7 @@ import {
   FolderIcon,
   GitPullRequestIcon,
   RocketIcon,
+  SquarePenIcon,
   TerminalIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,7 +22,7 @@ import { isElectron } from "../env";
 import { APP_STAGE_LABEL } from "../branding";
 import { newCommandId, newProjectId, newThreadId } from "../lib/utils";
 import { useStore } from "../store";
-import { isChatNewLocalShortcut, isChatNewShortcut } from "../keybindings";
+import { isChatNewLocalShortcut, isChatNewShortcut, shortcutLabelForCommand } from "../keybindings";
 import { type Thread } from "../types";
 import { derivePendingApprovals } from "../session-logic";
 import { gitRemoveWorktreeMutationOptions, gitStatusQueryOptions } from "../lib/gitReactQuery";
@@ -46,6 +47,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarHeader,
+  SidebarMenuAction,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -59,6 +61,7 @@ import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 
 const EMPTY_KEYBINDINGS: ResolvedKeybindingsConfig = [];
+const THREAD_PREVIEW_LIMIT = 6;
 
 async function copyTextToClipboard(text: string): Promise<void> {
   if (typeof navigator === "undefined" || navigator.clipboard?.writeText === undefined) {
@@ -291,6 +294,9 @@ export default function Sidebar() {
   const [isAddingProject, setIsAddingProject] = useState(false);
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
+  const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
+    ReadonlySet<ProjectId>
+  >(() => new Set());
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
@@ -857,15 +863,6 @@ export default function Sidebar() {
     };
   }, []);
 
-  const onCreateThreadClick = () => {
-    if (projects.length === 0) {
-      setAddingProject(true);
-      return;
-    }
-    const firstProject = projects[0];
-    if (firstProject) void handleNewThread(firstProject.id);
-  };
-
   const showDesktopUpdateButton = isElectron && shouldShowDesktopUpdateButton(desktopUpdateState);
 
   const desktopUpdateTooltip = desktopUpdateState
@@ -887,6 +884,12 @@ export default function Sidebar() {
         : shouldHighlightDesktopUpdateError(desktopUpdateState)
           ? "text-rose-500 animate-pulse"
         : "text-amber-500 animate-pulse";
+  const newThreadShortcutLabel = useMemo(
+    () =>
+      shortcutLabelForCommand(keybindings, "chat.newLocal") ??
+      shortcutLabelForCommand(keybindings, "chat.new"),
+    [keybindings],
+  );
 
   const handleDesktopUpdateButtonClick = useCallback(() => {
     const bridge = window.desktopBridge;
@@ -946,6 +949,24 @@ export default function Sidebar() {
     }
   }, [desktopUpdateButtonAction, desktopUpdateButtonDisabled, desktopUpdateState]);
 
+  const expandThreadListForProject = useCallback((projectId: ProjectId) => {
+    setExpandedThreadListsByProject((current) => {
+      if (current.has(projectId)) return current;
+      const next = new Set(current);
+      next.add(projectId);
+      return next;
+    });
+  }, []);
+
+  const collapseThreadListForProject = useCallback((projectId: ProjectId) => {
+    setExpandedThreadListsByProject((current) => {
+      if (!current.has(projectId)) return current;
+      const next = new Set(current);
+      next.delete(projectId);
+      return next;
+    });
+  }, []);
+
   const wordmark = (
     <div className="flex items-center gap-2">
       <SidebarTrigger className="shrink-0 md:hidden" />
@@ -959,17 +980,6 @@ export default function Sidebar() {
         </span>
       </div>
     </div>
-  );
-
-  const newThreadButton = (
-    <button
-      type="button"
-      className="flex w-full items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground transition-colors duration-150 hover:bg-accent"
-      onClick={onCreateThreadClick}
-    >
-      <span className="text-foreground">+</span>
-      New thread
-    </button>
   );
 
   return (
@@ -998,12 +1008,10 @@ export default function Sidebar() {
               </Tooltip>
             )}
           </SidebarHeader>
-          <div className="px-4 py-2">{newThreadButton}</div>
         </>
       ) : (
         <SidebarHeader className="gap-3 px-3 py-2 sm:gap-2.5 sm:px-4 sm:py-3">
           {wordmark}
-          {newThreadButton}
         </SidebarHeader>
       )}
 
@@ -1011,13 +1019,19 @@ export default function Sidebar() {
         <SidebarGroup className="px-2 py-2">
           <SidebarMenu>
             {projects.map((project) => {
-              const visibleThreads = threads
+              const projectThreads = threads
                 .filter((thread) => thread.projectId === project.id)
                 .toSorted((a, b) => {
                   const byDate = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                   if (byDate !== 0) return byDate;
                   return b.id.localeCompare(a.id);
                 });
+              const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
+              const hasHiddenThreads = projectThreads.length > THREAD_PREVIEW_LIMIT;
+              const visibleThreads =
+                hasHiddenThreads && !isThreadListExpanded
+                  ? projectThreads.slice(0, THREAD_PREVIEW_LIMIT)
+                  : projectThreads;
 
               return (
                 <Collapsible
@@ -1030,34 +1044,61 @@ export default function Sidebar() {
                   }}
                 >
                   <SidebarMenuItem>
-                    <CollapsibleTrigger
-                      render={
-                        <SidebarMenuButton
-                          size="sm"
-                          className="gap-2 px-2 py-1.5 text-left hover:bg-accent"
+                    <div className="group/project-header relative">
+                      <CollapsibleTrigger
+                        render={
+                          <SidebarMenuButton
+                            size="sm"
+                            className="gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
+                          />
+                        }
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          void handleProjectContextMenu(project.id, {
+                            x: event.clientX,
+                            y: event.clientY,
+                          });
+                        }}
+                      >
+                        <ChevronRightIcon
+                          className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                            project.expanded ? "rotate-90" : ""
+                          }`}
                         />
-                      }
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        void handleProjectContextMenu(project.id, {
-                          x: event.clientX,
-                          y: event.clientY,
-                        });
-                      }}
-                    >
-                      <ChevronRightIcon
-                        className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                          project.expanded ? "rotate-90" : ""
-                        }`}
-                      />
-                      <ProjectFavicon cwd={project.cwd} />
-                      <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                        {project.name}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60">
-                        {visibleThreads.length}
-                      </span>
-                    </CollapsibleTrigger>
+                        <ProjectFavicon cwd={project.cwd} />
+                        <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+                          {project.name}
+                        </span>
+                      </CollapsibleTrigger>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <SidebarMenuAction
+                              render={
+                                <button
+                                  type="button"
+                                  aria-label={`Create new thread in ${project.name}`}
+                                />
+                              }
+                              showOnHover
+                              className="top-1 right-1 size-5 rounded-md p-0 text-muted-foreground/70 hover:bg-secondary hover:text-foreground"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                void handleNewThread(project.id);
+                              }}
+                            >
+                              <SquarePenIcon className="size-3.5" />
+                            </SidebarMenuAction>
+                          }
+                        />
+                        <TooltipPopup side="top">
+                          {newThreadShortcutLabel
+                            ? `New thread (${newThreadShortcutLabel})`
+                            : "New thread"}
+                        </TooltipPopup>
+                      </Tooltip>
+                    </div>
 
                     <CollapsibleContent>
                       <SidebarMenuSub className="mx-1 my-0 w-full translate-x-0 gap-0 px-1.5 py-0">
@@ -1201,19 +1242,34 @@ export default function Sidebar() {
                           );
                         })}
 
-                        <SidebarMenuSubItem className="w-full">
-                          <SidebarMenuSubButton
-                            render={<button type="button" />}
-                            size="sm"
-                            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                            onClick={() => {
-                              void handleNewThread(project.id);
-                            }}
-                          >
-                            <span>+</span>
-                            <span>New thread</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
+                        {hasHiddenThreads && !isThreadListExpanded && (
+                          <SidebarMenuSubItem className="w-full">
+                            <SidebarMenuSubButton
+                              render={<button type="button" />}
+                              size="sm"
+                              className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                              onClick={() => {
+                                expandThreadListForProject(project.id);
+                              }}
+                            >
+                              <span>Show more</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                        {hasHiddenThreads && isThreadListExpanded && (
+                          <SidebarMenuSubItem className="w-full">
+                            <SidebarMenuSubButton
+                              render={<button type="button" />}
+                              size="sm"
+                              className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                              onClick={() => {
+                                collapseThreadListForProject(project.id);
+                              }}
+                            >
+                              <span>Show less</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
