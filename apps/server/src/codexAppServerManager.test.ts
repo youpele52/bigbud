@@ -7,6 +7,7 @@ import { ApprovalRequestId, ThreadId } from "@t3tools/contracts";
 
 import {
   buildCodexInitializeParams,
+  CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
   CodexAppServerManager,
   classifyCodexStderrLine,
@@ -341,6 +342,36 @@ describe("sendTurn", () => {
           model: "gpt-5.3-codex",
           reasoning_effort: "medium",
           developer_instructions: CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+      },
+    });
+  });
+
+  it("passes Codex default mode as a collaboration preset on turn/start", async () => {
+    const { manager, context, sendRequest } = createSendTurnHarness();
+
+    await manager.sendTurn({
+      threadId: asThreadId("thread_1"),
+      input: "PLEASE IMPLEMENT THIS PLAN:\n- step 1",
+      interactionMode: "default",
+    });
+
+    expect(sendRequest).toHaveBeenCalledWith(context, "turn/start", {
+      threadId: "thread_1",
+      input: [
+        {
+          type: "text",
+          text: "PLEASE IMPLEMENT THIS PLAN:\n- step 1",
+          text_elements: [],
+        },
+      ],
+      model: "gpt-5.3-codex",
+      collaborationMode: {
+        mode: "default",
+        settings: {
+          model: "gpt-5.3-codex",
+          reasoning_effort: "medium",
+          developer_instructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
         },
       },
     });

@@ -1,4 +1,10 @@
-import { ProjectId, ThreadId, TurnId, type OrchestrationReadModel } from "@t3tools/contracts";
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  ProjectId,
+  ThreadId,
+  TurnId,
+  type OrchestrationReadModel,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
 import { markThreadUnread, syncServerReadModel, type AppState } from "./store";
@@ -139,6 +145,6 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.model).toBe("gpt-5.3-codex");
+    expect(next.threads[0]?.model).toBe(DEFAULT_MODEL_BY_PROVIDER.codex);
   });
 });
