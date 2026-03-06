@@ -5,7 +5,6 @@ import {
   ApprovalRequestId,
   EventId,
   IsoDateTime,
-  NonNegativeInt,
   ProviderItemId,
   ThreadId,
   TurnId,
@@ -51,19 +50,12 @@ const CodexProviderStartOptions = Schema.Struct({
   homePath: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 
-const ClaudeCodeProviderStartOptions = Schema.Struct({
-  binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
-  permissionMode: Schema.optional(TrimmedNonEmptyStringSchema),
-  maxThinkingTokens: Schema.optional(NonNegativeInt),
-});
-
 const CursorProviderStartOptions = Schema.Struct({
   binaryPath: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 
 const ProviderStartOptions = Schema.Struct({
   codex: Schema.optional(CodexProviderStartOptions),
-  claudeCode: Schema.optional(ClaudeCodeProviderStartOptions),
   cursor: Schema.optional(CursorProviderStartOptions),
 });
 
