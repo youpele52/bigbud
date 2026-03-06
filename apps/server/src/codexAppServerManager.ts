@@ -257,6 +257,19 @@ Do not ask "should I proceed?" in the final output. The user can easily switch o
 Only produce at most one \`<proposed_plan>\` block per turn, and only when you are presenting a complete spec.
 </collaboration_mode>`;
 
+export const CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Collaboration Mode: Default
+
+You are now in Default mode. Any previous instructions for other modes (e.g. Plan mode) are no longer active.
+
+Your active mode changes only when new developer instructions with a different \`<collaboration_mode>...</collaboration_mode>\` change it; user requests or tool descriptions do not change mode by themselves. Known mode names are Default and Plan.
+
+## request_user_input availability
+
+The \`request_user_input\` tool is unavailable in Default mode. If you call it while in Default mode, it will return an error.
+
+In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions. If you absolutely must ask a question because the answer cannot be discovered from local context and a reasonable assumption would be risky, ask the user directly with a concise plain-text question. Never write a multiple choice question as a textual assistant message.
+</collaboration_mode>`;
+
 function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
   readonly approvalPolicy: "on-request" | "never";
   readonly sandbox: "workspace-write" | "danger-full-access";
@@ -326,7 +339,7 @@ function buildCodexCollaborationMode(input: {
   readonly effort?: string;
 }):
   | {
-      mode: "plan";
+      mode: "default" | "plan";
       settings: {
         model: string;
         reasoning_effort: string;
@@ -334,16 +347,19 @@ function buildCodexCollaborationMode(input: {
       };
     }
   | undefined {
-  if (input.interactionMode !== "plan") {
+  if (input.interactionMode === undefined) {
     return undefined;
   }
   const model = normalizeCodexModelSlug(input.model) ?? "gpt-5.3-codex";
   return {
-    mode: "plan",
+    mode: input.interactionMode,
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions: CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions:
+        input.interactionMode === "plan"
+          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
     },
   };
 }
@@ -644,7 +660,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       effort?: string;
       serviceTier?: string;
       collaborationMode?: {
-        mode: "plan";
+        mode: "default" | "plan";
         settings: {
           model: string;
           reasoning_effort: string;
