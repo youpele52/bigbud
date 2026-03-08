@@ -63,6 +63,8 @@ function readPersistedState(): AppState {
   }
 }
 
+let legacyKeysCleanedUp = false;
+
 function persistState(state: AppState): void {
   if (typeof window === "undefined") return;
   try {
@@ -74,12 +76,27 @@ function persistState(state: AppState): void {
           .map((project) => project.cwd),
       }),
     );
-    for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
-      window.localStorage.removeItem(legacyKey);
+    if (!legacyKeysCleanedUp) {
+      legacyKeysCleanedUp = true;
+      for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
+        window.localStorage.removeItem(legacyKey);
+      }
     }
   } catch {
     // Ignore quota/storage errors to avoid breaking chat UX.
   }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function debouncedPersistState(state: AppState): void {
+  if (persistTimer !== null) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persistState(state);
+  }, 500);
 }
 
 // ── Pure helpers ──────────────────────────────────────────────────────
@@ -395,8 +412,19 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => setThreadBranch(state, threadId, branch, worktreePath)),
 }));
 
-// Persist on every state change
-useStore.subscribe((state) => persistState(state));
+// Persist state changes with debouncing to avoid localStorage thrashing
+useStore.subscribe((state) => debouncedPersistState(state));
+
+// Flush pending writes synchronously before page unload to prevent data loss.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    if (persistTimer !== null) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+      persistState(useStore.getState());
+    }
+  });
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
