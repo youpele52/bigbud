@@ -13,7 +13,7 @@ import type {
   ServerProviderStatus,
   ServerProviderStatusState,
 } from "@t3tools/contracts";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { Array, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -312,56 +312,13 @@ export const checkCodexProviderStatus: Effect.Effect<
 export const ProviderHealthLive = Layer.effect(
   ProviderHealth,
   Effect.gen(function* () {
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    let cachedStatuses: ReadonlyArray<ServerProviderStatus> = [
-      {
-        provider: CODEX_PROVIDER,
-        status: "warning",
-        available: false,
-        authStatus: "unknown",
-        checkedAt: new Date().toISOString(),
-        message: "Checking Codex CLI availability...",
-      },
-    ];
-
-    let readyListeners: Array<(statuses: ReadonlyArray<ServerProviderStatus>) => void> = [];
-    let resolved = false;
-
-    const notifyReady = (statuses: ReadonlyArray<ServerProviderStatus>) => {
-      resolved = true;
-      cachedStatuses = statuses;
-      for (const cb of readyListeners) cb(statuses);
-      readyListeners = [];
-    };
-
-    // Run health checks in the background so they don't block server startup.
-    checkCodexProviderStatus.pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.runPromise,
-    ).then((status) => {
-      notifyReady([status]);
-    }).catch(() => {
-      notifyReady([
-        {
-          provider: CODEX_PROVIDER,
-          status: "error",
-          available: false,
-          authStatus: "unknown",
-          checkedAt: new Date().toISOString(),
-          message: "Failed to check Codex CLI status.",
-        },
-      ]);
-    });
+    const codexStatusFiber = yield* checkCodexProviderStatus.pipe(
+      Effect.map(Array.of),
+      Effect.forkScoped,
+    );
 
     return {
-      getStatuses: Effect.sync(() => cachedStatuses),
-      onReady: (cb) => {
-        if (resolved) {
-          cb(cachedStatuses);
-        } else {
-          readyListeners.push(cb);
-        }
-      },
+      getStatuses: Fiber.join(codexStatusFiber),
     } satisfies ProviderHealthShape;
   }),
 );
