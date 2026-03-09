@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { QueryClient, useQueryClient } from "@tanstack/react-query";
+import { Throttler } from "@tanstack/react-pacer";
 
 import { APP_DISPLAY_NAME } from "../branding";
 import { Button } from "../components/ui/button";
@@ -150,6 +151,7 @@ function EventRouter() {
     let latestSequence = 0;
     let syncing = false;
     let pending = false;
+    let needsProviderInvalidation = false;
 
     const flushSnapshotSync = async (): Promise<void> => {
       const snapshot = await api.orchestration.getSnapshot();
@@ -185,21 +187,20 @@ function EventRouter() {
       syncing = false;
     };
 
-    void syncSnapshot().catch(() => undefined);
-
-    // Batch domain events: collect over a short window then sync once.
-    const DOMAIN_EVENT_BATCH_MS = 100;
-    let batchTimer: ReturnType<typeof setTimeout> | null = null;
-    let needsProviderInvalidation = false;
-
-    const flushBatch = () => {
-      batchTimer = null;
-      if (needsProviderInvalidation) {
-        needsProviderInvalidation = false;
-        void queryClient.invalidateQueries({ queryKey: providerQueryKeys.all });
-      }
-      void syncSnapshot();
-    };
+    const domainEventFlushThrottler = new Throttler(
+      () => {
+        if (needsProviderInvalidation) {
+          needsProviderInvalidation = false;
+          void queryClient.invalidateQueries({ queryKey: providerQueryKeys.all });
+        }
+        void syncSnapshot();
+      },
+      {
+        wait: 100,
+        leading: false,
+        trailing: true,
+      },
+    );
 
     const unsubDomainEvent = api.orchestration.onDomainEvent((event) => {
       if (event.sequence <= latestSequence) {
@@ -209,12 +210,7 @@ function EventRouter() {
       if (event.type === "thread.turn-diff-completed" || event.type === "thread.reverted") {
         needsProviderInvalidation = true;
       }
-      // Throttle (not debounce): schedule a flush if none is pending.
-      // This guarantees at most one syncSnapshot per batch window
-      // without starving the UI during sustained event bursts.
-      if (batchTimer === null) {
-        batchTimer = setTimeout(flushBatch, DOMAIN_EVENT_BATCH_MS);
-      }
+      domainEventFlushThrottler.maybeExecute();
     });
     const unsubTerminalEvent = api.terminal.onEvent((event) => {
       const hasRunningSubprocess = terminalRunningSubprocessFromEvent(event);
@@ -299,9 +295,8 @@ function EventRouter() {
     });
     return () => {
       disposed = true;
-      if (batchTimer !== null) {
-        clearTimeout(batchTimer);
-      }
+      needsProviderInvalidation = false;
+      domainEventFlushThrottler.cancel();
       unsubDomainEvent();
       unsubTerminalEvent();
       unsubWelcome();
