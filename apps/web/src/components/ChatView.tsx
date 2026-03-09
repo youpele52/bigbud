@@ -1621,6 +1621,36 @@ export default function ChatView({ threadId }: ChatViewProps) {
     },
     [activeProject, persistProjectScripts],
   );
+  const deleteProjectScript = useCallback(
+    async (scriptId: string) => {
+      if (!activeProject) return;
+      const nextScripts = activeProject.scripts.filter((script) => script.id !== scriptId);
+
+      const deletedName = activeProject.scripts.find((s) => s.id === scriptId)?.name;
+
+      try {
+        await persistProjectScripts({
+          projectId: activeProject.id,
+          projectCwd: activeProject.cwd,
+          previousScripts: activeProject.scripts,
+          nextScripts,
+          keybinding: null,
+          keybindingCommand: commandForProjectScript(scriptId),
+        });
+        toastManager.add({
+          type: "success",
+          title: `Deleted action "${deletedName ?? "Unknown"}"`,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Could not delete action",
+          description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        });
+      }
+    },
+    [activeProject, persistProjectScripts],
+  );
 
   const handleRuntimeModeChange = useCallback(
     (mode: RuntimeMode) => {
@@ -3428,6 +3458,7 @@ export default function ChatView({ threadId }: ChatViewProps) {
           }}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
+          onDeleteProjectScript={deleteProjectScript}
           onToggleDiff={onToggleDiff}
         />
       </header>
@@ -4008,6 +4039,7 @@ interface ChatHeaderProps {
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
+  onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleDiff: () => void;
 }
 
@@ -4027,6 +4059,7 @@ const ChatHeader = memo(function ChatHeader({
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
+  onDeleteProjectScript,
   onToggleDiff,
 }: ChatHeaderProps) {
   return (
@@ -4059,6 +4092,7 @@ const ChatHeader = memo(function ChatHeader({
             onRunScript={onRunProjectScript}
             onAddScript={onAddProjectScript}
             onUpdateScript={onUpdateProjectScript}
+            onDeleteScript={onDeleteProjectScript}
           />
         )}
         {activeProjectName && (
