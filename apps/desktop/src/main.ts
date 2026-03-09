@@ -50,6 +50,8 @@ const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_DISPLAY_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
 const APP_USER_MODEL_ID = "com.t3tools.t3code";
+const USER_DATA_DIR_NAME = isDevelopment ? "t3code-dev" : "t3code";
+const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
 const LOG_DIR = Path.join(STATE_DIR, "logs");
@@ -591,6 +593,34 @@ function resolveResourcePath(fileName: string): string | null {
 
 function resolveIconPath(ext: "ico" | "icns" | "png"): string | null {
   return resolveResourcePath(`icon.${ext}`);
+}
+
+/**
+ * Resolve the Electron userData directory path.
+ *
+ * Electron derives the default userData path from `productName` in
+ * package.json, which currently produces directories with spaces and
+ * parentheses (e.g. `~/.config/T3 Code (Alpha)` on Linux). This is
+ * unfriendly for shell usage and violates Linux naming conventions.
+ *
+ * We override it to a clean lowercase name (`t3code`). If the legacy
+ * directory already exists we keep using it so existing users don't
+ * lose their Chromium profile data (localStorage, cookies, sessions).
+ */
+function resolveUserDataPath(): string {
+  const appDataBase =
+    process.platform === "win32"
+      ? process.env.APPDATA || Path.join(OS.homedir(), "AppData", "Roaming")
+      : process.platform === "darwin"
+        ? Path.join(OS.homedir(), "Library", "Application Support")
+        : process.env.XDG_CONFIG_HOME || Path.join(OS.homedir(), ".config");
+
+  const legacyPath = Path.join(appDataBase, LEGACY_USER_DATA_DIR_NAME);
+  if (FS.existsSync(legacyPath)) {
+    return legacyPath;
+  }
+
+  return Path.join(appDataBase, USER_DATA_DIR_NAME);
 }
 
 function configureAppIdentity(): void {
@@ -1186,6 +1216,11 @@ function createWindow(): BrowserWindow {
 
   return window;
 }
+
+// Override Electron's userData path before the `ready` event so that
+// Chromium session data uses a filesystem-friendly directory name.
+// Must be called synchronously at the top level — before `app.whenReady()`.
+app.setPath("userData", resolveUserDataPath());
 
 configureAppIdentity();
 
