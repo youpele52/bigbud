@@ -14,6 +14,7 @@ import {
 } from "@t3tools/shared/model";
 import { create } from "zustand";
 import { type ChatMessage, type Project, type Thread } from "./types";
+import { Debouncer } from "@tanstack/react-pacer";
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -86,18 +87,7 @@ function persistState(state: AppState): void {
     // Ignore quota/storage errors to avoid breaking chat UX.
   }
 }
-
-let persistTimer: ReturnType<typeof setTimeout> | null = null;
-
-function debouncedPersistState(state: AppState): void {
-  if (persistTimer !== null) {
-    clearTimeout(persistTimer);
-  }
-  persistTimer = setTimeout(() => {
-    persistTimer = null;
-    persistState(state);
-  }, 500);
-}
+const debouncedPersistState = new Debouncer(persistState, { wait: 500 });
 
 // ── Pure helpers ──────────────────────────────────────────────────────
 
@@ -413,16 +403,12 @@ export const useStore = create<AppStore>((set) => ({
 }));
 
 // Persist state changes with debouncing to avoid localStorage thrashing
-useStore.subscribe((state) => debouncedPersistState(state));
+useStore.subscribe((state) => debouncedPersistState.maybeExecute(state));
 
 // Flush pending writes synchronously before page unload to prevent data loss.
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", () => {
-    if (persistTimer !== null) {
-      clearTimeout(persistTimer);
-      persistTimer = null;
-      persistState(useStore.getState());
-    }
+    debouncedPersistState.flush();
   });
 }
 
