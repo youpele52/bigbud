@@ -153,9 +153,7 @@ function createGitWorktree(input: Parameters<GitCoreShape["createWorktree"]>[0])
   });
 }
 
-function fetchGitPullRequestBranch(
-  input: Parameters<GitCoreShape["fetchPullRequestBranch"]>[0],
-) {
+function fetchGitPullRequestBranch(input: Parameters<GitCoreShape["fetchPullRequestBranch"]>[0]) {
   return Effect.gen(function* () {
     const core = yield* GitCore;
     return yield* core.fetchPullRequestBranch(input);
@@ -441,7 +439,9 @@ it.layer(TestLayer)("git integration", (it) => {
           true,
         );
         expect(
-          result.branches.some((branch) => branch.name === "feature/local-only" && !branch.isRemote),
+          result.branches.some(
+            (branch) => branch.name === "feature/local-only" && !branch.isRemote,
+          ),
         ).toBe(true);
         expect(
           result.branches.some(
@@ -704,29 +704,27 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
-    it.effect(
-      "does not silently checkout a local branch when a remote ref no longer exists",
-      () =>
-        Effect.gen(function* () {
-          const remote = yield* makeTmpDir();
-          const source = yield* makeTmpDir();
-          yield* git(remote, ["init", "--bare"]);
+    it.effect("does not silently checkout a local branch when a remote ref no longer exists", () =>
+      Effect.gen(function* () {
+        const remote = yield* makeTmpDir();
+        const source = yield* makeTmpDir();
+        yield* git(remote, ["init", "--bare"]);
 
-          yield* initRepoWithCommit(source);
-          const defaultBranch = (yield* listGitBranches({ cwd: source })).branches.find(
-            (branch) => branch.current,
-          )!.name;
-          yield* git(source, ["remote", "add", "origin", remote]);
-          yield* git(source, ["push", "-u", "origin", defaultBranch]);
+        yield* initRepoWithCommit(source);
+        const defaultBranch = (yield* listGitBranches({ cwd: source })).branches.find(
+          (branch) => branch.current,
+        )!.name;
+        yield* git(source, ["remote", "add", "origin", remote]);
+        yield* git(source, ["push", "-u", "origin", defaultBranch]);
 
-          yield* createGitBranch({ cwd: source, branch: "feature" });
+        yield* createGitBranch({ cwd: source, branch: "feature" });
 
-          const checkoutResult = yield* Effect.result(
-            checkoutGitBranch({ cwd: source, branch: "origin/feature" }),
-          );
-          expect(checkoutResult._tag).toBe("Failure");
-          expect(yield* git(source, ["branch", "--show-current"])).toBe(defaultBranch);
-        }),
+        const checkoutResult = yield* Effect.result(
+          checkoutGitBranch({ cwd: source, branch: "origin/feature" }),
+        );
+        expect(checkoutResult._tag).toBe("Failure");
+        expect(yield* git(source, ["branch", "--show-current"])).toBe(defaultBranch);
+      }),
     );
 
     it.effect("checks out a remote tracking branch when remote name contains slashes", () =>
@@ -955,13 +953,7 @@ it.layer(TestLayer)("git integration", (it) => {
         });
 
         expect(renamed.branch).toBe("feature/new-name");
-        expect(renameArgs).toEqual([
-          "branch",
-          "-m",
-          "--",
-          "feature/old-name",
-          "feature/new-name",
-        ]);
+        expect(renameArgs).toEqual(["branch", "-m", "--", "feature/old-name", "feature/new-name"]);
       }),
     );
   });
@@ -1325,23 +1317,25 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
-    it.effect("reuses an existing remote when the target URL only differs by a trailing slash after .git", () =>
-      Effect.gen(function* () {
-        const tmp = yield* makeTmpDir();
-        yield* initRepoWithCommit(tmp);
-        const core = yield* GitCore;
+    it.effect(
+      "reuses an existing remote when the target URL only differs by a trailing slash after .git",
+      () =>
+        Effect.gen(function* () {
+          const tmp = yield* makeTmpDir();
+          yield* initRepoWithCommit(tmp);
+          const core = yield* GitCore;
 
-        yield* git(tmp, ["remote", "add", "origin", "git@github.com:pingdotgg/t3code.git"]);
+          yield* git(tmp, ["remote", "add", "origin", "git@github.com:pingdotgg/t3code.git"]);
 
-        const remoteName = yield* core.ensureRemote({
-          cwd: tmp,
-          preferredName: "origin",
-          url: "git@github.com:pingdotgg/t3code.git/",
-        });
+          const remoteName = yield* core.ensureRemote({
+            cwd: tmp,
+            preferredName: "origin",
+            url: "git@github.com:pingdotgg/t3code.git/",
+          });
 
-        expect(remoteName).toBe("origin");
-        expect((yield* git(tmp, ["remote"])).split("\n").filter(Boolean)).toEqual(["origin"]);
-      }),
+          expect(remoteName).toBe("origin");
+          expect((yield* git(tmp, ["remote"])).split("\n").filter(Boolean)).toEqual(["origin"]);
+        }),
     );
 
     it.effect("reports status details and dirty state", () =>

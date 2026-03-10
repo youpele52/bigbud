@@ -1,8 +1,7 @@
 import type { Thread } from "../types";
 import { findLatestProposedPlan, isLatestTurnSettled } from "../session-logic";
 
-export const THREAD_SELECTION_SAFE_SELECTOR =
-  "[data-thread-item], [data-thread-selection-safe]";
+export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 
 export interface ThreadStatusPill {
   label:
