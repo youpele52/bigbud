@@ -260,6 +260,7 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* initRepoWithCommit(tmp);
         const result = yield* listGitBranches({ cwd: tmp });
         expect(result.isRepo).toBe(true);
+        expect(result.hasOriginRemote).toBe(false);
         expect(result.branches.length).toBeGreaterThanOrEqual(1);
       }),
     );
@@ -273,6 +274,7 @@ it.layer(TestLayer)("git integration", (it) => {
         const tmp = yield* makeTmpDir();
         const result = yield* listGitBranches({ cwd: tmp });
         expect(result.isRepo).toBe(false);
+        expect(result.hasOriginRemote).toBe(false);
         expect(result.branches).toEqual([]);
       }),
     );
@@ -431,6 +433,7 @@ it.layer(TestLayer)("git integration", (it) => {
         const result = yield* listGitBranches({ cwd: tmp });
         const firstRemoteIndex = result.branches.findIndex((branch) => branch.isRemote);
 
+        expect(result.hasOriginRemote).toBe(true);
         expect(firstRemoteIndex).toBeGreaterThan(0);
         expect(result.branches.slice(0, firstRemoteIndex).every((branch) => !branch.isRemote)).toBe(
           true,
