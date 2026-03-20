@@ -16,7 +16,7 @@ import {
 import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ServerConfig } from "../../config.ts";
+import { deriveServerPaths, ServerConfig } from "../../config.ts";
 import { TextGenerationError } from "../../git/Errors.ts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
@@ -40,6 +40,9 @@ const asApprovalRequestId = (value: string): ApprovalRequestId =>
   ApprovalRequestId.makeUnsafe(value);
 const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
+
+const deriveServerPathsSync = (baseDir: string, devUrl: URL | undefined) =>
+  Effect.runSync(deriveServerPaths(baseDir, devUrl).pipe(Effect.provide(NodeServices.layer)));
 
 async function waitFor(
   predicate: () => boolean | Promise<boolean>,
@@ -67,6 +70,7 @@ describe("ProviderCommandReactor", () => {
   > | null = null;
   let scope: Scope.Closeable | null = null;
   const createdStateDirs = new Set<string>();
+  const createdBaseDirs = new Set<string>();
 
   afterEach(async () => {
     if (scope) {
@@ -81,16 +85,22 @@ describe("ProviderCommandReactor", () => {
       fs.rmSync(stateDir, { recursive: true, force: true });
     }
     createdStateDirs.clear();
+    for (const baseDir of createdBaseDirs) {
+      fs.rmSync(baseDir, { recursive: true, force: true });
+    }
+    createdBaseDirs.clear();
   });
 
   async function createHarness(input?: {
-    readonly stateDir?: string;
+    readonly baseDir?: string;
     readonly threadModel?: string;
   }) {
     const now = new Date().toISOString();
-    const stateDir = input?.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-"));
-    const threadModel = input?.threadModel ?? "gpt-5-codex";
+    const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-"));
+    createdBaseDirs.add(baseDir);
+    const { stateDir } = deriveServerPathsSync(baseDir, undefined);
     createdStateDirs.add(stateDir);
+    const threadModel = input?.threadModel ?? "gpt-5-codex";
     const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
     let nextSessionIndex = 1;
     const runtimeSessions: Array<ProviderSession> = [];
@@ -214,7 +224,7 @@ describe("ProviderCommandReactor", () => {
       Layer.provideMerge(
         Layer.succeed(TextGeneration, { generateBranchName } as unknown as TextGenerationShape),
       ),
-      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), stateDir)),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
     );
     const runtime = ManagedRuntime.make(layer);

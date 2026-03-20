@@ -243,7 +243,7 @@ const runAttachmentSideEffects = Effect.fn(function* (sideEffects: AttachmentSid
   const fileSystem = yield* Effect.service(FileSystem.FileSystem);
   const path = yield* Effect.service(Path.Path);
 
-  const attachmentsRootDir = path.join(serverConfig.stateDir, "attachments");
+  const attachmentsRootDir = serverConfig.attachmentsDir;
 
   yield* Effect.forEach(
     sideEffects.deletedThreadIds,

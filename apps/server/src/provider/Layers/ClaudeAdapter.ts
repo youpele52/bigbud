@@ -474,7 +474,7 @@ function buildUserMessageEffect(
   input: ProviderSendTurnInput,
   dependencies: {
     readonly fileSystem: FileSystem.FileSystem;
-    readonly stateDir: string;
+    readonly attachmentsDir: string;
   },
 ): Effect.Effect<SDKUserMessage, ProviderAdapterRequestError> {
   return Effect.gen(function* () {
@@ -499,7 +499,7 @@ function buildUserMessageEffect(
       }
 
       const attachmentPath = resolveAttachmentPath({
-        stateDir: dependencies.stateDir,
+        attachmentsDir: dependencies.attachmentsDir,
         attachment,
       });
       if (!attachmentPath) {
@@ -2765,7 +2765,7 @@ function makeClaudeAdapter(options?: ClaudeAdapterLiveOptions) {
 
         const message = yield* buildUserMessageEffect(input, {
           fileSystem,
-          stateDir: serverConfig.stateDir,
+          attachmentsDir: serverConfig.attachmentsDir,
         });
 
         yield* Queue.offer(context.promptQueue, {

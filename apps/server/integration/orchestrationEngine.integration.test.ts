@@ -27,6 +27,7 @@ import type {
   CheckpointDiffFinalizedReceipt,
   TurnProcessingQuiescedReceipt,
 } from "../src/orchestration/Services/RuntimeReceiptBus.ts";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 
 const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
@@ -51,8 +52,6 @@ class IntegrationWaitTimeoutError extends Schema.TaggedErrorClass<IntegrationWai
   },
 ) {}
 
-const sleep = (ms: number) => Effect.sleep(ms);
-
 function waitForSync<A>(
   read: () => A,
   predicate: (value: A) => boolean,
@@ -70,7 +69,7 @@ function waitForSync<A>(
       if (Date.now() >= deadline) {
         return yield* Effect.die(new IntegrationWaitTimeoutError({ description }));
       }
-      yield* sleep(10);
+      yield* Effect.sleep(10);
     }
   });
 }
@@ -91,7 +90,7 @@ function withHarness<A, E>(
     makeOrchestrationIntegrationHarness({ provider }),
     use,
     (harness) => harness.dispose,
-  );
+  ).pipe(Effect.provide(NodeServices.layer));
 }
 
 function withRealCodexHarness<A, E>(
@@ -101,7 +100,7 @@ function withRealCodexHarness<A, E>(
     makeOrchestrationIntegrationHarness({ provider: "codex", realCodex: true }),
     use,
     (harness) => harness.dispose,
-  );
+  ).pipe(Effect.provide(NodeServices.layer));
 }
 
 const seedProjectAndThread = (harness: OrchestrationIntegrationHarness) =>

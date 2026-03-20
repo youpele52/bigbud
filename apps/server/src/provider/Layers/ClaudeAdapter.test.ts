@@ -133,7 +133,7 @@ function makeHarness(config?: {
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: ClaudeAdapterLiveOptions["nativeEventLogger"];
   readonly cwd?: string;
-  readonly stateDir?: string;
+  readonly baseDir?: string;
 }) {
   const query = new FakeClaudeQuery();
   let createInput:
@@ -165,7 +165,7 @@ function makeHarness(config?: {
       Layer.provideMerge(
         ServerConfig.layerTest(
           config?.cwd ?? "/tmp/claude-adapter-test",
-          config?.stateDir ?? "/tmp",
+          config?.baseDir ?? "/tmp",
         ),
       ),
       Layer.provideMerge(NodeServices.layer),
@@ -515,15 +515,15 @@ describe("ClaudeAdapterLive", () => {
   });
 
   it.effect("embeds image attachments in Claude user messages", () => {
-    const stateDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
+    const baseDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
     const harness = makeHarness({
       cwd: "/tmp/project-claude-attachments",
-      stateDir,
+      baseDir,
     });
     return Effect.gen(function* () {
       yield* Effect.addFinalizer(() =>
         Effect.sync(() =>
-          rmSync(stateDir, {
+          rmSync(baseDir, {
             recursive: true,
             force: true,
           }),
@@ -531,6 +531,7 @@ describe("ClaudeAdapterLive", () => {
       );
 
       const adapter = yield* ClaudeAdapter;
+      const { attachmentsDir } = yield* ServerConfig;
 
       const attachment = {
         type: "image" as const,
@@ -539,7 +540,7 @@ describe("ClaudeAdapterLive", () => {
         mimeType: "image/png",
         sizeBytes: 4,
       };
-      const attachmentPath = path.join(stateDir, "attachments", attachmentRelativePath(attachment));
+      const attachmentPath = path.join(attachmentsDir, attachmentRelativePath(attachment));
       mkdirSync(path.dirname(attachmentPath), { recursive: true });
       writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
 
