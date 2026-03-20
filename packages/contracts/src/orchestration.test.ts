@@ -6,6 +6,7 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
   OrchestrationGetTurnDiffInput,
+  OrchestrationLatestTurn,
   OrchestrationProposedPlan,
   OrchestrationSession,
   ProjectCreateCommand,
@@ -22,6 +23,7 @@ const decodeThreadTurnStartCommand = Schema.decodeUnknownEffect(ThreadTurnStartC
 const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
 );
+const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
 const decodeThreadCreatedPayload = Schema.decodeUnknownEffect(ThreadCreatedPayload);
@@ -239,6 +241,27 @@ it.effect("decodes thread.turn-start-requested source proposed plan metadata whe
         planId: "plan-1",
       },
       createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.deepStrictEqual(parsed.sourceProposedPlan, {
+      threadId: "thread-1",
+      planId: "plan-1",
+    });
+  }),
+);
+
+it.effect("decodes latest turn source proposed plan metadata when present", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationLatestTurn({
+      turnId: "turn-2",
+      state: "running",
+      requestedAt: "2026-01-01T00:00:00.000Z",
+      startedAt: "2026-01-01T00:00:01.000Z",
+      completedAt: null,
+      assistantMessageId: null,
+      sourceProposedPlan: {
+        threadId: "thread-1",
+        planId: "plan-1",
+      },
     });
     assert.deepStrictEqual(parsed.sourceProposedPlan, {
       threadId: "thread-1",
