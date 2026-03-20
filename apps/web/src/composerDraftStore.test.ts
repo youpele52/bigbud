@@ -62,17 +62,23 @@ function makeTerminalContext(input: {
   };
 }
 
+function resetComposerDraftStore() {
+  useComposerDraftStore.setState({
+    draftsByThreadId: {},
+    draftThreadsByThreadId: {},
+    projectDraftThreadIdByProjectId: {},
+    stickyModel: null,
+    stickyModelOptions: {},
+  });
+}
+
 describe("composerDraftStore addImages", () => {
   const threadId = ThreadId.makeUnsafe("thread-dedupe");
   let originalRevokeObjectUrl: typeof URL.revokeObjectURL;
   let revokeSpy: ReturnType<typeof vi.fn<(url: string) => void>>;
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
     originalRevokeObjectUrl = URL.revokeObjectURL;
     revokeSpy = vi.fn();
     URL.revokeObjectURL = revokeSpy;
@@ -157,11 +163,7 @@ describe("composerDraftStore clearComposerContent", () => {
   let revokeSpy: ReturnType<typeof vi.fn<(url: string) => void>>;
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
     originalRevokeObjectUrl = URL.revokeObjectURL;
     revokeSpy = vi.fn();
     URL.revokeObjectURL = revokeSpy;
@@ -423,11 +425,7 @@ describe("composerDraftStore project draft thread mapping", () => {
   const otherThreadId = ThreadId.makeUnsafe("thread-b");
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
   });
 
   it("stores and reads project draft thread ids via actions", () => {
@@ -599,11 +597,7 @@ describe("composerDraftStore modelOptions", () => {
   const threadId = ThreadId.makeUnsafe("thread-model-options");
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
   });
 
   it("stores provider-scoped model options in the draft", () => {
@@ -642,17 +636,165 @@ describe("composerDraftStore modelOptions", () => {
 
     expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
   });
+
+  it("replaces only the targeted provider model options", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setModelOptions(threadId, {
+      codex: {
+        reasoningEffort: "xhigh",
+      },
+      claudeAgent: {
+        effort: "max",
+        fastMode: true,
+      },
+    });
+
+    store.setProviderModelOptions(
+      threadId,
+      "claudeAgent",
+      {
+        thinking: false,
+      },
+      { persistSticky: true },
+    );
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelOptions).toEqual({
+      codex: {
+        reasoningEffort: "xhigh",
+      },
+      claudeAgent: {
+        thinking: false,
+      },
+    });
+    expect(useComposerDraftStore.getState().stickyModelOptions).toEqual({
+      codex: {
+        reasoningEffort: "xhigh",
+      },
+      claudeAgent: {
+        thinking: false,
+      },
+    });
+  });
+
+  it("removes only the targeted provider entry when next options normalize empty", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setModelOptions(threadId, {
+      codex: {
+        reasoningEffort: "xhigh",
+      },
+      claudeAgent: {
+        effort: "max",
+      },
+    });
+
+    store.setProviderModelOptions(threadId, "claudeAgent", {
+      thinking: true,
+    });
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelOptions).toEqual({
+      codex: {
+        reasoningEffort: "xhigh",
+      },
+    });
+    expect(useComposerDraftStore.getState().stickyModelOptions).toEqual({});
+  });
+
+  it("removes model options entirely when the last provider entry normalizes empty", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setModelOptions(threadId, {
+      codex: {
+        fastMode: true,
+      },
+    });
+
+    store.setProviderModelOptions(threadId, "codex", {
+      reasoningEffort: "high",
+      fastMode: false,
+    });
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+  });
+
+  it("updates only the draft when sticky persistence is omitted", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setStickyModelOptions({
+      codex: {
+        fastMode: true,
+      },
+    });
+    store.setModelOptions(threadId, {
+      codex: {
+        fastMode: true,
+      },
+      claudeAgent: {
+        effort: "max",
+      },
+    });
+
+    store.setProviderModelOptions(threadId, "claudeAgent", {
+      thinking: false,
+    });
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelOptions).toEqual({
+      codex: {
+        fastMode: true,
+      },
+      claudeAgent: {
+        thinking: false,
+      },
+    });
+    expect(useComposerDraftStore.getState().stickyModelOptions).toEqual({
+      codex: {
+        fastMode: true,
+      },
+    });
+  });
+
+  it("updates only the draft when sticky persistence is disabled", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setStickyModelOptions({
+      claudeAgent: {
+        effort: "max",
+      },
+    });
+    store.setModelOptions(threadId, {
+      claudeAgent: {
+        effort: "max",
+      },
+    });
+
+    store.setProviderModelOptions(
+      threadId,
+      "claudeAgent",
+      {
+        thinking: false,
+      },
+      { persistSticky: false },
+    );
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelOptions).toEqual({
+      claudeAgent: {
+        thinking: false,
+      },
+    });
+    expect(useComposerDraftStore.getState().stickyModelOptions).toEqual({
+      claudeAgent: {
+        effort: "max",
+      },
+    });
+  });
 });
 
 describe("composerDraftStore setModel", () => {
   const threadId = ThreadId.makeUnsafe("thread-model");
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
   });
 
   it("keeps explicit DEFAULT_MODEL overrides instead of coercing to null", () => {
@@ -666,15 +808,51 @@ describe("composerDraftStore setModel", () => {
   });
 });
 
+describe("composerDraftStore sticky composer settings", () => {
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("stores sticky model and codex model options", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setStickyModel("gpt-5.3-codex");
+    store.setStickyModelOptions({
+      codex: {
+        reasoningEffort: "medium",
+        fastMode: true,
+      },
+    });
+
+    expect(useComposerDraftStore.getState()).toMatchObject({
+      stickyModel: "gpt-5.3-codex",
+      stickyModelOptions: {
+        codex: {
+          reasoningEffort: "medium",
+          fastMode: true,
+        },
+      },
+    });
+  });
+
+  it("normalizes empty sticky model options", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setStickyModelOptions({
+      codex: {
+        fastMode: false,
+      },
+    });
+
+    expect(useComposerDraftStore.getState().stickyModelOptions).toEqual({});
+  });
+});
+
 describe("composerDraftStore setProvider", () => {
   const threadId = ThreadId.makeUnsafe("thread-provider");
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
   });
 
   it("persists provider-only selection even when prompt/model are empty", () => {
@@ -699,11 +877,7 @@ describe("composerDraftStore runtime and interaction settings", () => {
   const threadId = ThreadId.makeUnsafe("thread-settings");
 
   beforeEach(() => {
-    useComposerDraftStore.setState({
-      draftsByThreadId: {},
-      draftThreadsByThreadId: {},
-      projectDraftThreadIdByProjectId: {},
-    });
+    resetComposerDraftStore();
   });
 
   it("stores runtime mode overrides in the composer draft", () => {
