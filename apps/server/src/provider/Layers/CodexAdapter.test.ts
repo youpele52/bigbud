@@ -839,6 +839,70 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       assert.equal(firstEvent.value.payload.taskId, "turn-child");
     }),
   );
+
+  it.effect("unwraps Codex token usage payloads for context window events", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-codex-thread-token-usage-updated"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-1"),
+        createdAt: new Date().toISOString(),
+        method: "thread/tokenUsage/updated",
+        payload: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: {
+              inputTokens: 11_833,
+              cachedInputTokens: 3456,
+              outputTokens: 6,
+              reasoningOutputTokens: 0,
+              totalTokens: 11_839,
+            },
+            last: {
+              inputTokens: 120,
+              cachedInputTokens: 0,
+              outputTokens: 6,
+              reasoningOutputTokens: 0,
+              totalTokens: 126,
+            },
+            modelContextWindow: 258_400,
+          },
+        },
+      } satisfies ProviderEvent);
+
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+      assert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") {
+        return;
+      }
+      assert.equal(firstEvent.value.type, "thread.token-usage.updated");
+      if (firstEvent.value.type !== "thread.token-usage.updated") {
+        return;
+      }
+
+      assert.deepEqual(firstEvent.value.payload.usage, {
+        usedTokens: 126,
+        totalProcessedTokens: 11_839,
+        maxTokens: 258_400,
+        inputTokens: 120,
+        cachedInputTokens: 0,
+        outputTokens: 6,
+        reasoningOutputTokens: 0,
+        lastUsedTokens: 126,
+        lastInputTokens: 120,
+        lastCachedInputTokens: 0,
+        lastOutputTokens: 6,
+        lastReasoningOutputTokens: 0,
+        compactsAutomatically: true,
+      });
+    }),
+  );
 });
 
 afterAll(() => {
