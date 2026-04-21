@@ -1,6 +1,6 @@
 {
   "name": "@bigbud/desktop",
-  "version": "0.0.15",
+  "version": "0.1.613",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
