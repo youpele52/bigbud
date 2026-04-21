@@ -403,7 +403,7 @@ const commandFlags = {
   logWebSocketEvents: logWebSocketEventsFlag,
 } as const;
 
-const rootCommand = Command.make("bigcode", commandFlags).pipe(
+const rootCommand = Command.make("bigbud", commandFlags).pipe(
   Command.withDescription(`Run the ${APP_SERVER_NAME}.`),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
