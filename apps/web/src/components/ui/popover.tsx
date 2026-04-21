@@ -79,7 +79,7 @@ function PopoverClose({ ...props }: PopoverPrimitive.Close.Props) {
 function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
   return (
     <PopoverPrimitive.Title
-      className={cn("font-semibold text-lg leading-none", className)}
+      className={cn("text-base leading-snug font-normal", className)}
       data-slot="popover-title"
       {...props}
     />
@@ -89,7 +89,7 @@ function PopoverTitle({ className, ...props }: PopoverPrimitive.Title.Props) {
 function PopoverDescription({ className, ...props }: PopoverPrimitive.Description.Props) {
   return (
     <PopoverPrimitive.Description
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-[13px] leading-5 font-normal", className)}
       data-slot="popover-description"
       {...props}
     />

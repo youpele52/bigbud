@@ -3,11 +3,11 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { expect } from "vitest";
 
-import { ServerConfig } from "../../config.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { sanitizeThreadTitle } from "../Utils.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
 const ClaudeTextGenerationTestLayer = ClaudeTextGenerationLive.pipe(
   Layer.provideMerge(ServerSettingsService.layerTest()),

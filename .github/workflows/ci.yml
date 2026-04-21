@@ -8,9 +8,8 @@ on:
 
 jobs:
   quality:
-    name: Format, Lint, Typecheck, Test, Browser Test, Build
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    name: Format, Lint, Typecheck, Test, Build
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -35,14 +34,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -58,26 +49,77 @@ jobs:
       - name: Test
         run: bun run test
 
-      - name: Install browser test runtime
-        run: |
-          cd apps/web
-          bunx playwright install --with-deps chromium
-
-      - name: Browser test
-        run: bun run --cwd apps/web test:browser
-
       - name: Build desktop pipeline
         run: bun run build:desktop
 
       - name: Verify preload bundle output
         run: |
-          test -f apps/desktop/dist-electron/preload.cjs
-          grep -nE "desktopBridge|getLocalEnvironmentBootstrap|PICK_FOLDER_CHANNEL|wsUrl" apps/desktop/dist-electron/preload.cjs
+          test -f apps/desktop/dist-electron/preload.js
+          grep -nE "desktopBridge|getWsUrl|PICK_FOLDER_CHANNEL|wsUrl" apps/desktop/dist-electron/preload.js
 
   release_smoke:
     name: Release Smoke
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Exercise release-only workflow steps
+        run: node scripts/release-smoke.ts
+
+      - name: Validate bootstrap installer scripts
+        run: node scripts/bootstrap-installer-smoke.ts
+
+  bootstrap_installer_smoke:
+    name: Bootstrap Installer Smoke
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate install.ps1 with mocked cmdlets
+        shell: pwsh
+        run: pwsh -File scripts/bootstrap-installer-smoke.ps1
+
+  desktop_release_build:
+    name: Desktop Release Build ${{ matrix.label }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runner: macos-14
+            platform: mac
+            target: dmg
+            arch: arm64
+          - label: macOS x64
+            runner: macos-15-intel
+            platform: mac
+            target: dmg
+            arch: x64
+          - label: Linux x64
+            runner: ubuntu-24.04
+            platform: linux
+            target: AppImage
+            arch: x64
+          - label: Windows x64
+            runner: windows-2022
+            platform: win
+            target: nsis
+            arch: x64
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -93,7 +135,108 @@ jobs:
           node-version-file: package.json
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        # The Linux quality job already validates install-time scripts. The
+        # release-style build matrix only needs dependencies on disk, and
+        # skipping lifecycle scripts avoids a Windows-only effect-language-
+        # service patch crash.
+        run: bun install --frozen-lockfile --ignore-scripts
 
-      - name: Exercise release-only workflow steps
-        run: node scripts/release-smoke.ts
+      - name: Build desktop artifact
+        shell: bash
+        run: |
+          bun run dist:desktop:artifact -- \
+            --platform "${{ matrix.platform }}" \
+            --target "${{ matrix.target }}" \
+            --arch "${{ matrix.arch }}" \
+            --build-version "0.0.0-ci.${{ github.run_number }}" \
+            --verbose
+
+      - name: Collect release-style artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-publish
+
+          shopt -s nullglob
+          for pattern in \
+            "release/*.dmg" \
+            "release/*.zip" \
+            "release/*.AppImage" \
+            "release/*.exe" \
+            "release/*.blockmap" \
+            "release/latest*.yml"; do
+            for file in $pattern; do
+              cp "$file" release-publish/
+            done
+          done
+
+          if [[ "${{ matrix.platform }}" == "mac" && "${{ matrix.arch }}" != "arm64" ]]; then
+            if [[ -f release-publish/latest-mac.yml ]]; then
+              mv release-publish/latest-mac.yml "release-publish/latest-mac-${{ matrix.arch }}.yml"
+            fi
+          fi
+
+      - name: Upload release-style artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-assets-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-publish/*
+          if-no-files-found: error
+
+  release_asset_assembly:
+    name: Release Asset Assembly
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [desktop_release_build, release_smoke]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-release-assets-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Stage bootstrap installers
+        run: |
+          cp apps/marketing/public/install.sh release-assets/install.sh
+          cp apps/marketing/public/install.ps1 release-assets/install.ps1
+
+      - name: Merge macOS updater manifests
+        run: |
+          node scripts/merge-mac-update-manifests.ts \
+            release-assets/latest-mac.yml \
+            release-assets/latest-mac-x64.yml
+          rm -f release-assets/latest-mac-x64.yml
+
+      - name: Verify assembled release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f release-assets/install.sh
+          test -f release-assets/install.ps1
+          test -f release-assets/latest-mac.yml
+
+          shopt -s nullglob
+          dmg_files=(release-assets/*.dmg)
+          appimage_files=(release-assets/*.AppImage)
+          exe_files=(release-assets/*.exe)
+
+          (( ${#dmg_files[@]} > 0 ))
+          (( ${#appimage_files[@]} > 0 ))
+          (( ${#exe_files[@]} > 0 ))
+
+      - name: Upload assembled release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-assembled
+          path: release-assets/*
+          if-no-files-found: error

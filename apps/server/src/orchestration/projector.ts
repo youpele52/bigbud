@@ -1,61 +1,40 @@
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@t3tools/contracts";
+import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contracts";
 import {
   OrchestrationCheckpointSummary,
   OrchestrationMessage,
   OrchestrationSession,
-  OrchestrationThread,
-} from "@t3tools/contracts";
-import { Effect, Schema } from "effect";
+} from "@bigbud/contracts";
+import { Effect } from "effect";
 
-import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
+import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
   MessageSentPayloadSchema,
-  ProjectCreatedPayload,
-  ProjectDeletedPayload,
-  ProjectMetaUpdatedPayload,
   ThreadActivityAppendedPayload,
-  ThreadArchivedPayload,
-  ThreadCreatedPayload,
-  ThreadDeletedPayload,
-  ThreadInteractionModeSetPayload,
-  ThreadMetaUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
-  ThreadRuntimeModeSetPayload,
-  ThreadUnarchivedPayload,
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
 } from "./Schemas.ts";
+import {
+  checkpointStatusToLatestTurnState,
+  decodeForEvent,
+  projectProjectCreated,
+  projectProjectDeleted,
+  projectProjectMetaUpdated,
+  updateThread,
+} from "./projectorHelpers.ts";
+import {
+  projectThreadArchived,
+  projectThreadCreated,
+  projectThreadDeleted,
+  projectThreadInteractionModeSet,
+  projectThreadMetaUpdated,
+  projectThreadRuntimeModeSet,
+  projectThreadUnarchived,
+} from "./projectorThreadLifecycle.ts";
 
-type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
-
-function checkpointStatusToLatestTurnState(status: "ready" | "missing" | "error") {
-  if (status === "error") return "error" as const;
-  if (status === "missing") return "interrupted" as const;
-  return "completed" as const;
-}
-
-function updateThread(
-  threads: ReadonlyArray<OrchestrationThread>,
-  threadId: ThreadId,
-  patch: ThreadPatch,
-): OrchestrationThread[] {
-  return threads.map((thread) => (thread.id === threadId ? { ...thread, ...patch } : thread));
-}
-
-function decodeForEvent<A>(
-  schema: Schema.Schema<A>,
-  value: unknown,
-  eventType: OrchestrationEvent["type"],
-  field: string,
-): Effect.Effect<A, OrchestrationProjectorDecodeError> {
-  return Effect.try({
-    try: () => Schema.decodeUnknownSync(schema as any)(value),
-    catch: (error) => toProjectorDecodeError(`${eventType}:${field}`)(error as Schema.SchemaError),
-  });
-}
 
 function retainThreadMessagesAfterRevert(
   messages: ReadonlyArray<OrchestrationMessage>,
@@ -121,26 +100,30 @@ function retainThreadMessagesAfterRevert(
 }
 
 function retainThreadActivitiesAfterRevert(
-  activities: ReadonlyArray<OrchestrationThread["activities"][number]>,
+  activities: ReadonlyArray<OrchestrationMessage["id"] extends string ? any : never>,
   retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["activities"][number]> {
+) {
   return activities.filter(
-    (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
+    (activity: { turnId: string | null }) =>
+      activity.turnId === null || retainedTurnIds.has(activity.turnId),
   );
 }
 
-function retainThreadProposedPlansAfterRevert(
-  proposedPlans: ReadonlyArray<OrchestrationThread["proposedPlans"][number]>,
-  retainedTurnIds: ReadonlySet<string>,
-): ReadonlyArray<OrchestrationThread["proposedPlans"][number]> {
+function retainThreadProposedPlansAfterRevert<
+  T extends { readonly turnId: string | null; readonly id: string },
+>(proposedPlans: ReadonlyArray<T>, retainedTurnIds: ReadonlySet<string>): T[] {
   return proposedPlans.filter(
     (proposedPlan) => proposedPlan.turnId === null || retainedTurnIds.has(proposedPlan.turnId),
-  );
+  ) as T[];
 }
 
 function compareThreadActivities(
-  left: OrchestrationThread["activities"][number],
-  right: OrchestrationThread["activities"][number],
+  left: { readonly sequence?: number | undefined; readonly createdAt: string; readonly id: string },
+  right: {
+    readonly sequence?: number | undefined;
+    readonly createdAt: string;
+    readonly id: string;
+  },
 ): number {
   if (left.sequence !== undefined && right.sequence !== undefined) {
     if (left.sequence !== right.sequence) {
@@ -176,186 +159,34 @@ export function projectEvent(
 
   switch (event.type) {
     case "project.created":
-      return decodeForEvent(ProjectCreatedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => {
-          const existing = nextBase.projects.find((entry) => entry.id === payload.projectId);
-          const nextProject = {
-            id: payload.projectId,
-            title: payload.title,
-            workspaceRoot: payload.workspaceRoot,
-            defaultModelSelection: payload.defaultModelSelection,
-            scripts: payload.scripts,
-            createdAt: payload.createdAt,
-            updatedAt: payload.updatedAt,
-            deletedAt: null,
-          };
-
-          return {
-            ...nextBase,
-            projects: existing
-              ? nextBase.projects.map((entry) =>
-                  entry.id === payload.projectId ? nextProject : entry,
-                )
-              : [...nextBase.projects, nextProject],
-          };
-        }),
-      );
+      return projectProjectCreated(nextBase, event);
 
     case "project.meta-updated":
-      return decodeForEvent(ProjectMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          projects: nextBase.projects.map((project) =>
-            project.id === payload.projectId
-              ? {
-                  ...project,
-                  ...(payload.title !== undefined ? { title: payload.title } : {}),
-                  ...(payload.workspaceRoot !== undefined
-                    ? { workspaceRoot: payload.workspaceRoot }
-                    : {}),
-                  ...(payload.defaultModelSelection !== undefined
-                    ? { defaultModelSelection: payload.defaultModelSelection }
-                    : {}),
-                  ...(payload.scripts !== undefined ? { scripts: payload.scripts } : {}),
-                  updatedAt: payload.updatedAt,
-                }
-              : project,
-          ),
-        })),
-      );
+      return projectProjectMetaUpdated(nextBase, event);
 
     case "project.deleted":
-      return decodeForEvent(ProjectDeletedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          projects: nextBase.projects.map((project) =>
-            project.id === payload.projectId
-              ? {
-                  ...project,
-                  deletedAt: payload.deletedAt,
-                  updatedAt: payload.deletedAt,
-                }
-              : project,
-          ),
-        })),
-      );
+      return projectProjectDeleted(nextBase, event);
 
     case "thread.created":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          ThreadCreatedPayload,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const thread: OrchestrationThread = yield* decodeForEvent(
-          OrchestrationThread,
-          {
-            id: payload.threadId,
-            projectId: payload.projectId,
-            title: payload.title,
-            modelSelection: payload.modelSelection,
-            runtimeMode: payload.runtimeMode,
-            interactionMode: payload.interactionMode,
-            branch: payload.branch,
-            worktreePath: payload.worktreePath,
-            latestTurn: null,
-            createdAt: payload.createdAt,
-            updatedAt: payload.updatedAt,
-            archivedAt: null,
-            deletedAt: null,
-            messages: [],
-            activities: [],
-            checkpoints: [],
-            session: null,
-          },
-          event.type,
-          "thread",
-        );
-        const existing = nextBase.threads.find((entry) => entry.id === thread.id);
-        return {
-          ...nextBase,
-          threads: existing
-            ? nextBase.threads.map((entry) => (entry.id === thread.id ? thread : entry))
-            : [...nextBase.threads, thread],
-        };
-      });
+      return projectThreadCreated(nextBase, event);
 
     case "thread.deleted":
-      return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            deletedAt: payload.deletedAt,
-            updatedAt: payload.deletedAt,
-          }),
-        })),
-      );
+      return projectThreadDeleted(nextBase, event);
 
     case "thread.archived":
-      return decodeForEvent(ThreadArchivedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            archivedAt: payload.archivedAt,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
+      return projectThreadArchived(nextBase, event);
 
     case "thread.unarchived":
-      return decodeForEvent(ThreadUnarchivedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            archivedAt: null,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
+      return projectThreadUnarchived(nextBase, event);
 
     case "thread.meta-updated":
-      return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            ...(payload.title !== undefined ? { title: payload.title } : {}),
-            ...(payload.modelSelection !== undefined
-              ? { modelSelection: payload.modelSelection }
-              : {}),
-            ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
-            ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
+      return projectThreadMetaUpdated(nextBase, event);
 
     case "thread.runtime-mode-set":
-      return decodeForEvent(ThreadRuntimeModeSetPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            runtimeMode: payload.runtimeMode,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
+      return projectThreadRuntimeModeSet(nextBase, event);
 
     case "thread.interaction-mode-set":
-      return decodeForEvent(
-        ThreadInteractionModeSetPayload,
-        event.payload,
-        event.type,
-        "payload",
-      ).pipe(
-        Effect.map((payload) => ({
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            interactionMode: payload.interactionMode,
-            updatedAt: payload.updatedAt,
-          }),
-        })),
-      );
+      return projectThreadInteractionModeSet(nextBase, event);
 
     case "thread.message-sent":
       return Effect.gen(function* () {
@@ -529,9 +360,6 @@ export function projectEvent(
 
         // Do not let a placeholder (status "missing") overwrite a checkpoint
         // that has already been captured with a real git ref (status "ready").
-        // ProviderRuntimeIngestion may fire multiple turn.diff.updated events
-        // per turn; without this guard later placeholders would clobber the
-        // real capture dispatched by CheckpointReactor.
         const existing = thread.checkpoints.find((entry) => entry.turnId === checkpoint.turnId);
         if (existing && existing.status !== "missing" && checkpoint.status === "missing") {
           return nextBase;

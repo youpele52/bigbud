@@ -186,12 +186,10 @@ function ComboboxPopup({
 
 function ComboboxItem({
   className,
-  contentClassName,
   children,
   hideIndicator = false,
   ...props
 }: ComboboxPrimitive.Item.Props & {
-  contentClassName?: string;
   hideIndicator?: boolean;
 }) {
   return (
@@ -206,14 +204,7 @@ function ComboboxItem({
       <ComboboxPrimitive.ItemIndicator className={cn("col-start-1", hideIndicator && "hidden")}>
         <CheckIcon />
       </ComboboxPrimitive.ItemIndicator>
-      <div
-        className={cn(
-          hideIndicator ? "col-start-1 col-span-full" : "col-start-2",
-          contentClassName,
-        )}
-      >
-        {children}
-      </div>
+      <div className={hideIndicator ? "col-start-1 col-span-full" : "col-start-2"}>{children}</div>
     </ComboboxPrimitive.Item>
   );
 }
@@ -273,25 +264,14 @@ function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
   return (
     <ScrollArea scrollbarGutter scrollFade>
       <ComboboxPrimitive.List
-        className={cn("not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1", className)}
+        className={cn(
+          "not-empty:scroll-py-1 not-empty:px-1 not-empty:py-1 in-data-has-overflow-y:pe-3",
+          className,
+        )}
         data-slot="combobox-list"
         {...props}
       />
     </ScrollArea>
-  );
-}
-
-/**
- * A variant of `ComboboxList` without `ScrollArea`, for use when
- * an external virtualizer (e.g. LegendList) owns the scroll container.
- */
-function ComboboxListVirtualized({ className, ...props }: ComboboxPrimitive.List.Props) {
-  return (
-    <ComboboxPrimitive.List
-      className={cn("not-empty:px-1 not-empty:py-1", className)}
-      data-slot="combobox-list"
-      {...props}
-    />
   );
 }
 
@@ -391,7 +371,6 @@ export {
   ComboboxEmpty,
   ComboboxValue,
   ComboboxList,
-  ComboboxListVirtualized,
   ComboboxClear,
   ComboboxStatus,
   ComboboxRow,

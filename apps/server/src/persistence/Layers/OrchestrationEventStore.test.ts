@@ -1,4 +1,4 @@
-import { CommandId, EventId, ProjectId } from "@t3tools/contracts";
+import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -21,18 +21,18 @@ layer("OrchestrationEventStore", (it) => {
 
       const appended = yield* eventStore.append({
         type: "project.created",
-        eventId: EventId.make("evt-store-roundtrip"),
+        eventId: EventId.makeUnsafe("evt-store-roundtrip"),
         aggregateKind: "project",
-        aggregateId: ProjectId.make("project-roundtrip"),
+        aggregateId: ProjectId.makeUnsafe("project-roundtrip"),
         occurredAt: now,
-        commandId: CommandId.make("cmd-store-roundtrip"),
+        commandId: CommandId.makeUnsafe("cmd-store-roundtrip"),
         causationEventId: null,
-        correlationId: CommandId.make("cmd-store-roundtrip"),
+        correlationId: CommandId.makeUnsafe("cmd-store-roundtrip"),
         metadata: {
           adapterKey: "codex",
         },
         payload: {
-          projectId: ProjectId.make("project-roundtrip"),
+          projectId: ProjectId.makeUnsafe("project-roundtrip"),
           title: "Roundtrip Project",
           workspaceRoot: "/tmp/project-roundtrip",
           defaultModelSelection: null,
@@ -87,13 +87,13 @@ layer("OrchestrationEventStore", (it) => {
           metadata_json
         )
         VALUES (
-          ${EventId.make("evt-store-invalid-json")},
+          ${EventId.makeUnsafe("evt-store-invalid-json")},
           ${"project"},
-          ${ProjectId.make("project-invalid-json")},
+          ${ProjectId.makeUnsafe("project-invalid-json")},
           ${0},
           ${"project.created"},
           ${now},
-          ${CommandId.make("cmd-store-invalid-json")},
+          ${CommandId.makeUnsafe("cmd-store-invalid-json")},
           ${null},
           ${null},
           ${"server"},

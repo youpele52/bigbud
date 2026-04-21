@@ -10,8 +10,8 @@ import {
   ProviderSessionRuntimeStatus,
   RuntimeMode,
   ThreadId,
-} from "@t3tools/contracts";
-import { Option, Schema, Context } from "effect";
+} from "@bigbud/contracts";
+import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { ProviderSessionRuntimeRepositoryError } from "../Errors.ts";
@@ -75,7 +75,7 @@ export interface ProviderSessionRuntimeRepositoryShape {
 /**
  * ProviderSessionRuntimeRepository - Service tag for provider runtime persistence.
  */
-export class ProviderSessionRuntimeRepository extends Context.Service<
+export class ProviderSessionRuntimeRepository extends ServiceMap.Service<
   ProviderSessionRuntimeRepository,
   ProviderSessionRuntimeRepositoryShape
 >()("t3/persistence/Services/ProviderSessionRuntime/ProviderSessionRuntimeRepository") {}

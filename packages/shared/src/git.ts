@@ -1,16 +1,25 @@
-import type {
-  GitBranch,
-  GitHostingProvider,
-  GitStatusLocalResult,
-  GitStatusRemoteResult,
-  GitStatusResult,
-  GitStatusStreamEvent,
-} from "@t3tools/contracts";
-import * as Effect from "effect/Effect";
-import * as Random from "effect/Random";
+import type { GitBranch } from "@bigbud/contracts";
 
-export const WORKTREE_BRANCH_PREFIX = "t3code";
+const WORKTREE_BRANCH_PREFIX = "bigbud";
 const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(`^${WORKTREE_BRANCH_PREFIX}\\/[0-9a-f]{8}$`);
+
+/**
+ * Returns true for auto-generated temporary worktree branch names of the form
+ * `bigbud/<8-hex-chars>`. These are created during new-worktree setup and
+ * later renamed once the AI generates a semantic name.
+ */
+export function isTemporaryWorktreeBranch(branch: string): boolean {
+  return TEMP_WORKTREE_BRANCH_PATTERN.test(branch.trim().toLowerCase());
+}
+
+/**
+ * Build a new temporary worktree branch name of the form `bigbud/<8-hex-chars>`.
+ * The 8-hex suffix shape must match `isTemporaryWorktreeBranch`.
+ */
+export function buildTemporaryWorktreeBranchName(): string {
+  const token = crypto.randomUUID().slice(0, 8).toLowerCase();
+  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
+}
 
 /**
  * Sanitize an arbitrary string into a valid, lowercase git branch fragment.
@@ -85,65 +94,6 @@ export function deriveLocalBranchNameFromRemoteRef(branchName: string): string {
   return branchName.slice(firstSeparatorIndex + 1);
 }
 
-export function buildTemporaryWorktreeBranchName(): string {
-  const token = Effect.runSync(Random.nextUUIDv4).replace(/-/g, "").slice(0, 8).toLowerCase();
-  return `${WORKTREE_BRANCH_PREFIX}/${token}`;
-}
-
-export function isTemporaryWorktreeBranch(branch: string): boolean {
-  return TEMP_WORKTREE_BRANCH_PATTERN.test(branch.trim().toLowerCase());
-}
-
-/**
- * Normalize a git remote URL into a stable comparison key.
- */
-export function normalizeGitRemoteUrl(value: string): string {
-  const normalized = value
-    .trim()
-    .replace(/\/+$/g, "")
-    .replace(/\.git$/i, "")
-    .toLowerCase();
-
-  if (/^(?:ssh|https?|git):\/\//i.test(normalized)) {
-    try {
-      const url = new URL(normalized);
-      const repositoryPath = url.pathname
-        .split("/")
-        .filter((segment) => segment.length > 0)
-        .join("/");
-      if (url.hostname && repositoryPath.includes("/")) {
-        return `${url.hostname}/${repositoryPath}`;
-      }
-    } catch {
-      return normalized;
-    }
-  }
-
-  const scpStyleHostAndPath = /^git@([^:/\s]+)[:/]([^/\s]+(?:\/[^/\s]+)+)$/i.exec(normalized);
-  if (scpStyleHostAndPath?.[1] && scpStyleHostAndPath[2]) {
-    return `${scpStyleHostAndPath[1]}/${scpStyleHostAndPath[2]}`;
-  }
-
-  return normalized;
-}
-
-/**
- * Best-effort parse of a GitHub `owner/repo` identifier from common remote URL shapes.
- */
-export function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | null): string | null {
-  const trimmed = url?.trim() ?? "";
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  const match =
-    /^(?:git@github\.com:|ssh:\/\/git@github\.com\/|https:\/\/github\.com\/|git:\/\/github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i.exec(
-      trimmed,
-    );
-  const repositoryNameWithOwner = match?.[1]?.trim() ?? "";
-  return repositoryNameWithOwner.length > 0 ? repositoryNameWithOwner : null;
-}
-
 function deriveLocalBranchNameCandidatesFromRemoteRef(
   branchName: string,
   remoteName?: string,
@@ -189,134 +139,4 @@ export function dedupeRemoteBranchesWithLocalMatches(
     );
     return !localBranchCandidates.some((candidate) => localBranchNames.has(candidate));
   });
-}
-
-function parseGitRemoteHost(remoteUrl: string): string | null {
-  const trimmed = remoteUrl.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-
-  if (trimmed.startsWith("git@")) {
-    const hostWithPath = trimmed.slice("git@".length);
-    const separatorIndex = hostWithPath.search(/[:/]/);
-    if (separatorIndex <= 0) {
-      return null;
-    }
-    return hostWithPath.slice(0, separatorIndex).toLowerCase();
-  }
-
-  try {
-    return new URL(trimmed).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function toBaseUrl(host: string): string {
-  return `https://${host}`;
-}
-
-function isGitHubHost(host: string): boolean {
-  return host === "github.com" || host.includes("github");
-}
-
-function isGitLabHost(host: string): boolean {
-  return host === "gitlab.com" || host.includes("gitlab");
-}
-
-export function detectGitHostingProviderFromRemoteUrl(
-  remoteUrl: string,
-): GitHostingProvider | null {
-  const host = parseGitRemoteHost(remoteUrl);
-  if (!host) {
-    return null;
-  }
-
-  if (isGitHubHost(host)) {
-    return {
-      kind: "github",
-      name: host === "github.com" ? "GitHub" : "GitHub Self-Hosted",
-      baseUrl: toBaseUrl(host),
-    };
-  }
-
-  if (isGitLabHost(host)) {
-    return {
-      kind: "gitlab",
-      name: host === "gitlab.com" ? "GitLab" : "GitLab Self-Hosted",
-      baseUrl: toBaseUrl(host),
-    };
-  }
-
-  return {
-    kind: "unknown",
-    name: host,
-    baseUrl: toBaseUrl(host),
-  };
-}
-
-const EMPTY_GIT_STATUS_REMOTE: GitStatusRemoteResult = {
-  hasUpstream: false,
-  aheadCount: 0,
-  behindCount: 0,
-  pr: null,
-};
-
-export function mergeGitStatusParts(
-  local: GitStatusLocalResult,
-  remote: GitStatusRemoteResult | null,
-): GitStatusResult {
-  return {
-    ...local,
-    ...(remote ?? EMPTY_GIT_STATUS_REMOTE),
-  };
-}
-
-function toRemoteStatusPart(status: GitStatusResult): GitStatusRemoteResult {
-  return {
-    hasUpstream: status.hasUpstream,
-    aheadCount: status.aheadCount,
-    behindCount: status.behindCount,
-    pr: status.pr,
-  };
-}
-
-function toLocalStatusPart(status: GitStatusResult): GitStatusLocalResult {
-  return {
-    isRepo: status.isRepo,
-    ...(status.hostingProvider ? { hostingProvider: status.hostingProvider } : {}),
-    hasOriginRemote: status.hasOriginRemote,
-    isDefaultBranch: status.isDefaultBranch,
-    branch: status.branch,
-    hasWorkingTreeChanges: status.hasWorkingTreeChanges,
-    workingTree: status.workingTree,
-  };
-}
-
-export function applyGitStatusStreamEvent(
-  current: GitStatusResult | null,
-  event: GitStatusStreamEvent,
-): GitStatusResult {
-  switch (event._tag) {
-    case "snapshot":
-      return mergeGitStatusParts(event.local, event.remote);
-    case "localUpdated":
-      return mergeGitStatusParts(event.local, current ? toRemoteStatusPart(current) : null);
-    case "remoteUpdated":
-      if (current === null) {
-        return mergeGitStatusParts(
-          {
-            isRepo: true,
-            hasOriginRemote: false,
-            isDefaultBranch: false,
-            branch: null,
-            hasWorkingTreeChanges: false,
-            workingTree: { files: [], insertions: 0, deletions: 0 },
-          },
-          event.remote,
-        );
-      }
-      return mergeGitStatusParts(toLocalStatusPart(current), event.remote);
-  }
 }

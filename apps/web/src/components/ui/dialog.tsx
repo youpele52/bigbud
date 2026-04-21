@@ -126,7 +126,7 @@ function DialogFooter({
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
-      className={cn("font-heading font-semibold text-xl leading-none", className)}
+      className={cn("font-heading text-lg leading-snug font-normal", className)}
       data-slot="dialog-title"
       {...props}
     />
@@ -136,7 +136,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
 function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
   return (
     <DialogPrimitive.Description
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-muted-foreground text-[13px] leading-5 font-normal", className)}
       data-slot="dialog-description"
       {...props}
     />

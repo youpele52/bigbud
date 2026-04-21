@@ -6,7 +6,7 @@
  *
  * @module GitCore
  */
-import { Context } from "effect";
+import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 import type {
   GitCheckoutInput,
@@ -22,9 +22,9 @@ import type {
   GitRemoveWorktreeInput,
   GitStatusInput,
   GitStatusResult,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 
-import type { GitCommandError } from "@t3tools/contracts";
+import type { GitCommandError } from "@bigbud/contracts";
 
 export interface ExecuteGitInput {
   readonly operation: string;
@@ -159,7 +159,9 @@ export interface GitCoreShape {
   readonly statusDetails: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
   /**
-   * Read detailed working tree / branch status without refreshing remote tracking refs.
+   * Like `statusDetails` but skips the upstream fetch refresh — reads only local state.
+   * Used by the broadcaster to publish low-latency local status without triggering
+   * a remote fetch on every call.
    */
   readonly statusDetailsLocal: (cwd: string) => Effect.Effect<GitStatusDetails, GitCommandError>;
 
@@ -310,4 +312,6 @@ export interface GitCoreShape {
 /**
  * GitCore - Service tag for low-level Git repository operations.
  */
-export class GitCore extends Context.Service<GitCore, GitCoreShape>()("t3/git/Services/GitCore") {}
+export class GitCore extends ServiceMap.Service<GitCore, GitCoreShape>()(
+  "t3/git/Services/GitCore",
+) {}

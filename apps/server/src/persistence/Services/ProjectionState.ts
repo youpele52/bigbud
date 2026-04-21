@@ -6,8 +6,8 @@
  *
  * @module ProjectionStateRepository
  */
-import { IsoDateTime, NonNegativeInt } from "@t3tools/contracts";
-import { Option, Schema, Context } from "effect";
+import { IsoDateTime, NonNegativeInt } from "@bigbud/contracts";
+import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -58,7 +58,7 @@ export interface ProjectionStateRepositoryShape {
 /**
  * ProjectionStateRepository - Service tag for projection cursor persistence.
  */
-export class ProjectionStateRepository extends Context.Service<
+export class ProjectionStateRepository extends ServiceMap.Service<
   ProjectionStateRepository,
   ProjectionStateRepositoryShape
 >()("t3/persistence/Services/ProjectionState/ProjectionStateRepository") {}

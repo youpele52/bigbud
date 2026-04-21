@@ -1,14 +1,24 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { RELEASES_URL } from "../lib/releases";
 ---
 
-<Layout title="Download — T3 Code" description="Download T3 Code for macOS, Windows, or Linux.">
-  <h1 class="heading">Download T3 Code</h1>
+<Layout title="Download — bigbud" description="Download bigbud for macOS, Windows, or Linux.">
+  <h1 class="heading">Download bigbud</h1>
   <p class="subheading">
     <span id="version-label">Loading latest release&hellip;</span>
     <a id="changelog-link" class="changelog-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none">View changelog<span aria-hidden="true"> &#8599;</span></a>
   </p>
+
+  <section class="install-commands" aria-label="Command line installers">
+    <div class="install-command-block">
+      <h2 class="install-command-title">macOS / Linux</h2>
+      <code class="install-command">curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh</code>
+    </div>
+    <div class="install-command-block">
+      <h2 class="install-command-title">Windows</h2>
+      <code class="install-command">powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"</code>
+    </div>
+  </section>
 
   <div class="platforms" id="platforms">
     <!-- macOS -->
@@ -18,11 +28,11 @@ import { RELEASES_URL } from "../lib/releases";
         <h2 class="platform-name">macOS</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="arm64.dmg" href={RELEASES_URL}>
+        <a class="download-card" data-asset="arm64.dmg" href="#">
           <span class="card-arch">Apple Silicon (arm64)</span>
           <span class="card-format">.dmg</span>
         </a>
-        <a class="download-card" data-asset="x64.dmg" href={RELEASES_URL}>
+        <a class="download-card" data-asset="x64.dmg" href="#">
           <span class="card-arch">Intel (x64)</span>
           <span class="card-format">.dmg</span>
         </a>
@@ -36,7 +46,7 @@ import { RELEASES_URL } from "../lib/releases";
         <h2 class="platform-name">Windows</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="x64.exe" href={RELEASES_URL}>
+        <a class="download-card" data-asset="x64.exe" href="#">
           <span class="card-arch">Windows 10, 11</span>
           <span class="card-format">.exe</span>
         </a>
@@ -50,7 +60,7 @@ import { RELEASES_URL } from "../lib/releases";
         <h2 class="platform-name">Linux</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="x86_64.AppImage" href={RELEASES_URL}>
+        <a class="download-card" data-asset="AppImage" href="#">
           <span class="card-arch">x86_64</span>
           <span class="card-format">AppImage</span>
         </a>
@@ -60,7 +70,7 @@ import { RELEASES_URL } from "../lib/releases";
 
   <p class="releases-link">
     Looking for older versions? Check the
-    <a href="https://github.com/pingdotgg/t3code/releases" target="_blank" rel="noopener noreferrer">
+    <a href="https://github.com/youpele52/bigbud/releases" target="_blank" rel="noopener noreferrer">
       GitHub releases page<span aria-hidden="true"> &#8599;</span>
     </a>
   </p>
@@ -90,7 +100,10 @@ import { RELEASES_URL } from "../lib/releases";
         const suffix = card.dataset.asset;
         if (!suffix) return;
 
-        const match = (release.assets ?? []).find((a) => a.name.endsWith(`-${suffix}`));
+        const match =
+          suffix === "AppImage"
+            ? (release.assets ?? []).find((a) => a.name.endsWith(".AppImage"))
+            : (release.assets ?? []).find((a) => a.name.endsWith(`-${suffix}`));
         if (match) {
           card.href = match.browser_download_url;
         } else {
@@ -151,6 +164,39 @@ import { RELEASES_URL } from "../lib/releases";
   .changelog-link:hover {
     color: var(--fg);
     text-decoration-color: var(--fg);
+  }
+
+  .install-commands {
+    width: 100%;
+    max-width: 920px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fade-in 1s ease-out 0.15s forwards;
+  }
+
+  .install-command-block {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .install-command-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .install-command {
+    display: block;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--fg-dim);
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   /* ── Platforms ── */
@@ -262,6 +308,12 @@ import { RELEASES_URL } from "../lib/releases";
     }
 
     .platforms {
+      padding: 0 0.25rem;
+    }
+
+    .install-commands {
+      grid-template-columns: 1fr;
+      margin-bottom: 1.5rem;
       padding: 0 0.25rem;
     }
 

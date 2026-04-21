@@ -2,9 +2,11 @@
 
 ## Read This First
 
-We are not actively accepting contributions right now.
+We are not actively accepting code contributions (PRs) right now.
 
-You can still open an issue or PR, but please do so knowing there is a high chance we close it, defer it forever, or never look at it.
+**We do accept feature requests.** If you have an idea for a feature, open an issue and describe what you'd like to see. We read feature requests even if we don't respond to every one.
+
+You can still open a PR, but please do so knowing there is a high chance we close it, defer it forever, or never look at it.
 
 If that sounds annoying, that is because it is. This project is still early and we are trying to keep scope, quality, and direction under control.
 

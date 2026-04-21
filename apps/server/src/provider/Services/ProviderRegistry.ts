@@ -6,9 +6,9 @@
  *
  * @module ProviderRegistry
  */
-import type { ProviderKind, ServerProvider } from "@t3tools/contracts";
-import { Context } from "effect";
-import type { Effect, Stream } from "effect";
+import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
+import { ServiceMap } from "effect";
+import type { Effect, Option, Stream } from "effect";
 
 export interface ProviderRegistryShape {
   /**
@@ -25,8 +25,15 @@ export interface ProviderRegistryShape {
    * Stream of provider snapshot updates.
    */
   readonly streamChanges: Stream.Stream<ReadonlyArray<ServerProvider>>;
+
+  /**
+   * Await the first provider that reaches `status: "ready"` after startup.
+   * Resolves with `Some(provider)` when the first ready provider is latched,
+   * or `None` if no provider becomes ready within the timeout.
+   */
+  readonly awaitFirstReadyProvider: Effect.Effect<Option.Option<ServerProvider>>;
 }
 
-export class ProviderRegistry extends Context.Service<ProviderRegistry, ProviderRegistryShape>()(
+export class ProviderRegistry extends ServiceMap.Service<ProviderRegistry, ProviderRegistryShape>()(
   "t3/provider/Services/ProviderRegistry",
 ) {}

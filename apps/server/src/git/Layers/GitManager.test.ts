@@ -11,9 +11,9 @@ import type {
   GitPreparePullRequestThreadInput,
   ModelSelection,
   ThreadId,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 
-import { GitCommandError, GitHubCliError, TextGenerationError } from "@t3tools/contracts";
+import { GitCommandError, GitHubCliError, TextGenerationError } from "@bigbud/contracts";
 import { type GitManagerShape } from "../Services/GitManager.ts";
 import {
   type GitHubCliShape,
@@ -24,8 +24,8 @@ import { type TextGenerationShape, TextGeneration } from "../Services/TextGenera
 import { GitCoreLive } from "./GitCore.ts";
 import { GitCore } from "../Services/GitCore.ts";
 import { makeGitManager } from "./GitManager.ts";
-import { ServerConfig } from "../../config.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerInput,
@@ -183,24 +183,6 @@ function makeTempDir(
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     return yield* fileSystem.makeTempDirectoryScoped({ prefix });
-  });
-}
-
-function removePath(
-  targetPath: string,
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.remove(targetPath, { recursive: true, force: true });
-  });
-}
-
-function makeDirectory(
-  dirPath: string,
-): Effect.Effect<void, PlatformError.PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    yield* fileSystem.makeDirectory(dirPath, { recursive: true });
   });
 }
 
@@ -712,144 +694,6 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("status trims PR metadata returned by gh before publishing it", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      yield* runGit(repoDir, ["checkout", "-b", "feature/status-trimmed-pr"]);
-      const remoteDir = yield* createBareRemote();
-      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      yield* runGit(repoDir, ["push", "-u", "origin", "feature/status-trimmed-pr"]);
-
-      const { manager } = yield* makeManager({
-        ghScenario: {
-          prListSequence: [
-            JSON.stringify([
-              {
-                number: 14,
-                title: "  Existing PR title  \n",
-                url: " https://github.com/pingdotgg/codething-mvp/pull/14 ",
-                baseRefName: " main ",
-                headRefName: "\tfeature/status-trimmed-pr\t",
-              },
-            ]),
-          ],
-        },
-      });
-
-      const status = yield* manager.status({ cwd: repoDir });
-
-      expect(status.pr).toEqual({
-        number: 14,
-        title: "Existing PR title",
-        url: "https://github.com/pingdotgg/codething-mvp/pull/14",
-        baseBranch: "main",
-        headBranch: "feature/status-trimmed-pr",
-        state: "open",
-      });
-    }),
-  );
-
-  it.effect("status ignores invalid gh pr list entries and keeps valid ones", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      yield* runGit(repoDir, ["checkout", "-b", "feature/status-valid-pr-entry"]);
-      const remoteDir = yield* createBareRemote();
-      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      yield* runGit(repoDir, ["push", "-u", "origin", "feature/status-valid-pr-entry"]);
-
-      const { manager } = yield* makeManager({
-        ghScenario: {
-          prListSequence: [
-            JSON.stringify([
-              {
-                number: 0,
-                title: "invalid",
-                url: "https://github.com/pingdotgg/codething-mvp/pull/0",
-                baseRefName: "main",
-                headRefName: "feature/invalid",
-              },
-              {
-                number: 15,
-                title: "  Valid PR title  ",
-                url: " https://github.com/pingdotgg/codething-mvp/pull/15 ",
-                baseRefName: " main ",
-                headRefName: "\tfeature/status-valid-pr-entry\t",
-                headRepository: {
-                  nameWithOwner: "   ",
-                },
-                headRepositoryOwner: {
-                  login: "   ",
-                },
-              },
-            ]),
-          ],
-        },
-      });
-
-      const status = yield* manager.status({ cwd: repoDir });
-
-      expect(status.pr).toEqual({
-        number: 15,
-        title: "Valid PR title",
-        url: "https://github.com/pingdotgg/codething-mvp/pull/15",
-        baseBranch: "main",
-        headBranch: "feature/status-valid-pr-entry",
-        state: "open",
-      });
-    }),
-  );
-
-  it.effect("status preserves lowercase merged and closed PR states from gh json", () =>
-    Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
-      yield* initRepo(repoDir);
-      yield* runGit(repoDir, ["checkout", "-b", "feature/status-lowercase-state"]);
-      const remoteDir = yield* createBareRemote();
-      yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
-      yield* runGit(repoDir, ["push", "-u", "origin", "feature/status-lowercase-state"]);
-
-      const { manager } = yield* makeManager({
-        ghScenario: {
-          prListSequence: [
-            JSON.stringify([
-              {
-                number: 16,
-                title: "Closed PR",
-                url: "https://github.com/pingdotgg/codething-mvp/pull/16",
-                baseRefName: "main",
-                headRefName: "feature/status-lowercase-state",
-                state: "closed",
-                updatedAt: "2026-01-01T00:00:00.000Z",
-              },
-              {
-                number: 17,
-                title: "Merged PR",
-                url: "https://github.com/pingdotgg/codething-mvp/pull/17",
-                baseRefName: "main",
-                headRefName: "feature/status-lowercase-state",
-                state: "merged",
-                updatedAt: "2026-01-02T00:00:00.000Z",
-              },
-            ]),
-          ],
-        },
-      });
-
-      const status = yield* manager.status({ cwd: repoDir });
-
-      expect(status.pr).toEqual({
-        number: 17,
-        title: "Merged PR",
-        url: "https://github.com/pingdotgg/codething-mvp/pull/17",
-        baseBranch: "main",
-        headBranch: "feature/status-lowercase-state",
-        state: "merged",
-      });
-    }),
-  );
-
   it.effect("status returns an explicit non-repo result for non-git directories", () =>
     Effect.gen(function* () {
       const cwd = yield* makeTempDir("t3code-git-manager-non-repo-");
@@ -876,13 +720,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
-  it.effect("status returns an explicit non-repo result for deleted directories", () =>
+  it.effect("status returns an explicit non-repo result for missing directories", () =>
     Effect.gen(function* () {
-      const rootDir = yield* makeTempDir("t3code-git-manager-missing-dir-");
-      const cwd = path.join(rootDir, "deleted-repo");
-      yield* makeDirectory(cwd);
-      yield* removePath(cwd);
+      const parentDir = yield* makeTempDir("t3code-git-manager-missing-dir-");
       const { manager } = yield* makeManager();
+
+      const cwd = path.join(parentDir, "missing");
 
       const status = yield* manager.status({ cwd });
 
@@ -953,7 +796,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1661,
                   title: "Fork PR from main",
-                  url: "https://github.com/pingdotgg/t3code/pull/1661",
+                  url: "https://github.com/youpele52/bigbud/pull/1661",
                   baseRefName: "main",
                   headRefName: "main",
                   state: "OPEN",
@@ -1039,7 +882,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           "pr list --head jasonLaster:statemachine --state all --limit 20 --json number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
         );
       }),
-    20_000,
+    12_000,
   );
 
   it.effect(
@@ -1079,7 +922,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1618,
                   title: "Correct PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1618",
+                  url: "https://github.com/youpele52/bigbud/pull/1618",
                   baseRefName: "main",
                   headRefName: "effect-atom",
                   state: "OPEN",
@@ -1090,7 +933,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                   state: "OPEN",
@@ -1103,7 +946,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                   state: "OPEN",
@@ -1114,7 +957,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                   state: "OPEN",
@@ -1130,7 +973,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         expect(status.pr).toEqual({
           number: 1618,
           title: "Correct PR",
-          url: "https://github.com/pingdotgg/t3code/pull/1618",
+          url: "https://github.com/youpele52/bigbud/pull/1618",
           baseBranch: "main",
           headBranch: "effect-atom",
           state: "open",
@@ -1147,7 +990,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           ),
         ).toBe(false);
       }),
-    20_000,
+    12_000,
   );
 
   it.effect("status returns merged PR state when latest PR was merged", () =>
@@ -1821,7 +1664,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1618,
                   title: "Correct PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1618",
+                  url: "https://github.com/youpele52/bigbud/pull/1618",
                   baseRefName: "main",
                   headRefName: "effect-atom",
                 },
@@ -1830,7 +1673,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                 },
@@ -1841,7 +1684,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                 },
@@ -1850,7 +1693,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1518,
                   title: "Wrong PR",
-                  url: "https://github.com/pingdotgg/t3code/pull/1518",
+                  url: "https://github.com/youpele52/bigbud/pull/1518",
                   baseRefName: "main",
                   headRefName: "upstream/effect-atom",
                 },
@@ -1870,7 +1713,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           false,
         );
       }),
-    20_000,
+    12_000,
   );
 
   it.effect(
@@ -2071,7 +1914,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 {
                   number: 1661,
                   title: "Fork PR with same branch name",
-                  url: "https://github.com/pingdotgg/t3code/pull/1661",
+                  url: "https://github.com/youpele52/bigbud/pull/1661",
                   baseRefName: "main",
                   headRefName: "feature/no-fork-match",
                   state: "OPEN",
@@ -2575,7 +2418,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           pullRequest: {
             number: 642,
             title: "fix: use commit as the default git action without origin",
-            url: "https://github.com/pingdotgg/t3code/pull/642",
+            url: "https://github.com/youpele52/bigbud/pull/642",
             baseRefName: "main",
             headRefName: "fix/git-action-default-without-origin",
             state: "open",
@@ -2583,7 +2426,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
             headRepositoryOwnerLogin: "binbandit",
           },
           repositoryCloneUrls: {
-            "binbandit/t3code": {
+            "binbandit/bigbud": {
               url: forkDir,
               sshUrl: forkDir,
             },

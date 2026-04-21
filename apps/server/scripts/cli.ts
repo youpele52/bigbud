@@ -14,21 +14,8 @@ import { resolveCatalogDependencies } from "../../../scripts/lib/resolve-catalog
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import serverPackageJson from "../package.json" with { type: "json" };
 
-interface PackageJson {
-  name: string;
-  repository: {
-    type: string;
-    url: string;
-    directory: string;
-  };
-  bin: Record<string, string>;
-  type: string;
-  version: string;
-  engines: Record<string, string>;
-  files: string[];
-  dependencies: Record<string, string>;
-  overrides: Record<string, string>;
-}
+// Keep the Node-run build CLI independent from the contracts source barrel.
+const APP_SERVER_NAME = "bigbud server";
 
 class CliError extends Data.TaggedError("CliError")<{
   readonly message: string;
@@ -147,13 +134,13 @@ const buildCmd = Command.make(
 
       yield* Effect.log("[cli] Running tsdown...");
       yield* runCommand(
-        ChildProcess.make(process.execPath, ["--run", "build:bundle"], {
+        ChildProcess.make({
           cwd: serverDir,
           stdout: config.verbose ? "inherit" : "ignore",
           stderr: "inherit",
-          // Windows needs shell mode to resolve `.cmd` shims on PATH.
+          // Windows needs shell mode to resolve .cmd shims (e.g. bun.cmd).
           shell: process.platform === "win32",
-        }),
+        })`bun tsdown`,
       );
 
       const webDist = path.join(repoRoot, "apps/web/dist");
@@ -203,10 +190,12 @@ const publishCmd = Command.make(
       }
 
       yield* Effect.acquireUseRelease(
-        // Acquire: backup package.json, resolve catalog dependencies, and strip devDependencies/scripts
+        // Acquire: backup package.json, resolve catalog: deps, strip devDependencies/scripts
         Effect.gen(function* () {
+          // Resolve catalog dependencies before any file mutations. If this throws,
+          // acquire fails and no release hook runs, so filesystem must still be untouched.
           const version = Option.getOrElse(config.appVersion, () => serverPackageJson.version);
-          const pkg: PackageJson = {
+          const pkg = {
             name: serverPackageJson.name,
             repository: serverPackageJson.repository,
             bin: serverPackageJson.bin,
@@ -214,22 +203,19 @@ const publishCmd = Command.make(
             version,
             engines: serverPackageJson.engines,
             files: serverPackageJson.files,
-            dependencies: resolveCatalogDependencies(
-              serverPackageJson.dependencies,
-              rootPackageJson.workspaces.catalog,
-              "apps/server",
-            ),
-            overrides: resolveCatalogDependencies(
-              rootPackageJson.overrides,
-              rootPackageJson.workspaces.catalog,
-              "apps/server",
-            ),
+            dependencies: serverPackageJson.dependencies as Record<string, unknown>,
           };
+
+          pkg.dependencies = resolveCatalogDependencies(
+            pkg.dependencies,
+            rootPackageJson.workspaces.catalog,
+            "apps/server dependencies",
+          );
 
           const original = yield* fs.readFileString(packageJsonPath);
           yield* fs.writeFileString(backupPath, original);
           yield* fs.writeFileString(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`);
-          yield* Effect.log("[cli] Prepared package.json for publish");
+          yield* Effect.log("[cli] Resolved package.json for publish");
 
           const iconBackups = yield* applyPublishIconOverrides(repoRoot, serverDir);
           return { iconBackups };
@@ -272,7 +258,7 @@ const publishCmd = Command.make(
 // ---------------------------------------------------------------------------
 
 const cli = Command.make("cli").pipe(
-  Command.withDescription("T3 server build & publish CLI."),
+  Command.withDescription(`${APP_SERVER_NAME} build & publish CLI.`),
   Command.withSubcommands([buildCmd, publishCmd]),
 );
 

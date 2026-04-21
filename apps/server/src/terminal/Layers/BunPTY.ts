@@ -1,16 +1,13 @@
 import { Effect, Layer } from "effect";
-import { PtyAdapter } from "../Services/PTY.ts";
-import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY.ts";
+import { PtyAdapter, PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 
 class BunPtyProcess implements PtyProcess {
   private readonly dataListeners = new Set<(data: string) => void>();
   private readonly exitListeners = new Set<(event: PtyExitEvent) => void>();
   private readonly decoder = new TextDecoder();
-  private readonly process: Bun.Subprocess;
   private didExit = false;
 
-  constructor(process: Bun.Subprocess) {
-    this.process = process;
+  constructor(private readonly process: Bun.Subprocess) {
     void this.process.exited
       .then((exitCode) => {
         this.emitExit({
@@ -94,7 +91,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     if (process.platform === "win32") {
       return yield* Effect.die(
-        "Bun PTY terminal support is unavailable on Windows. Please use Node.js (e.g. by running `npx t3`) instead.",
+        "Bun PTY terminal support is unavailable on Windows. Please use Node.js (e.g. by running `npx bigcode`) instead.",
       );
     }
     return {

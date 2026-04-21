@@ -1,6 +1,6 @@
 {
-  "name": "@t3tools/contracts",
-  "version": "0.0.20",
+  "name": "@bigbud/contracts",
+  "version": "0.0.15",
   "private": true,
   "files": [
     "dist"
@@ -10,16 +10,21 @@
   "module": "./dist/index.mjs",
   "types": "./src/index.ts",
   "exports": {
-    "./settings": {
-      "types": "./src/settings.ts",
-      "import": "./src/settings.ts",
-      "require": "./src/settings.ts"
-    },
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./settings": {
+      "types": "./src/core/settings.ts",
+      "import": "./src/core/settings.ts",
+      "require": "./src/core/settings.ts"
+    },
+    "./constants/*": "./src/constants/*",
+    "./core/*": "./src/core/*",
+    "./orchestration/*": "./src/orchestration/*",
+    "./workspace/*": "./src/workspace/*",
+    "./server/*": "./src/server/*"
   },
   "scripts": {
     "dev": "tsdown src/index.ts --format esm,cjs --dts --watch --clean",

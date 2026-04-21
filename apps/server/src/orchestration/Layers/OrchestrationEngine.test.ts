@@ -7,7 +7,7 @@ import {
   ThreadId,
   TurnId,
   type OrchestrationEvent,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import { Effect, Layer, ManagedRuntime, Metric, Option, Queue, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +19,6 @@ import {
   OrchestrationEventStore,
   type OrchestrationEventStoreShape,
 } from "../../persistence/Services/OrchestrationEventStore.ts";
-import { RepositoryIdentityResolverLive } from "../../project/Layers/RepositoryIdentityResolver.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -29,13 +28,13 @@ import {
   type OrchestrationProjectionPipelineShape,
 } from "../Services/ProjectionPipeline.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
-import { ServerConfig } from "../../config.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
-const asProjectId = (value: string): ProjectId => ProjectId.make(value);
-const asMessageId = (value: string): MessageId => MessageId.make(value);
-const asTurnId = (value: string): TurnId => TurnId.make(value);
-const asCheckpointRef = (value: string): CheckpointRef => CheckpointRef.make(value);
+const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
+const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
+const asTurnId = (value: string): TurnId => TurnId.makeUnsafe(value);
+const asCheckpointRef = (value: string): CheckpointRef => CheckpointRef.makeUnsafe(value);
 
 async function createOrchestrationSystem() {
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
@@ -46,7 +45,6 @@ async function createOrchestrationSystem() {
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-    Layer.provide(RepositoryIdentityResolverLive),
     Layer.provide(SqlitePersistenceMemory),
     Layer.provideMerge(ServerConfigLayer),
     Layer.provideMerge(NodeServices.layer),
@@ -115,7 +113,7 @@ describe("OrchestrationEngine", () => {
       ],
       threads: [
         {
-          id: ThreadId.make("thread-bootstrap"),
+          id: ThreadId.makeUnsafe("thread-bootstrap"),
           projectId: asProjectId("project-bootstrap"),
           title: "Bootstrap Thread",
           modelSelection: {
@@ -144,20 +142,10 @@ describe("OrchestrationEngine", () => {
       Layer.provide(
         Layer.succeed(ProjectionSnapshotQuery, {
           getSnapshot: () => Effect.succeed(projectionSnapshot),
-          getShellSnapshot: () =>
-            Effect.succeed({
-              snapshotSequence: projectionSnapshot.snapshotSequence,
-              projects: [],
-              threads: [],
-              updatedAt: projectionSnapshot.updatedAt,
-            }),
           getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
-          getProjectShellById: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
-          getThreadShellById: () => Effect.succeed(Option.none()),
-          getThreadDetailById: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(
@@ -193,7 +181,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-1-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-1-create"),
         projectId: asProjectId("project-1"),
         title: "Project 1",
         workspaceRoot: "/tmp/project-1",
@@ -207,8 +195,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-1-create"),
-        threadId: ThreadId.make("thread-1"),
+        commandId: CommandId.makeUnsafe("cmd-thread-1-create"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
         projectId: asProjectId("project-1"),
         title: "Thread",
         modelSelection: {
@@ -225,8 +213,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.turn.start",
-        commandId: CommandId.make("cmd-turn-start-1"),
-        threadId: ThreadId.make("thread-1"),
+        commandId: CommandId.makeUnsafe("cmd-turn-start-1"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
         message: {
           messageId: asMessageId("msg-1"),
           role: "user",
@@ -253,7 +241,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-archive-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-archive-create"),
         projectId: asProjectId("project-archive"),
         title: "Project Archive",
         workspaceRoot: "/tmp/project-archive",
@@ -267,8 +255,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-archive-create"),
-        threadId: ThreadId.make("thread-archive"),
+        commandId: CommandId.makeUnsafe("cmd-thread-archive-create"),
+        threadId: ThreadId.makeUnsafe("thread-archive"),
         projectId: asProjectId("project-archive"),
         title: "Archive me",
         modelSelection: {
@@ -286,8 +274,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.archive",
-        commandId: CommandId.make("cmd-thread-archive"),
-        threadId: ThreadId.make("thread-archive"),
+        commandId: CommandId.makeUnsafe("cmd-thread-archive"),
+        threadId: ThreadId.makeUnsafe("thread-archive"),
       }),
     );
     expect(
@@ -299,8 +287,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.unarchive",
-        commandId: CommandId.make("cmd-thread-unarchive"),
-        threadId: ThreadId.make("thread-archive"),
+        commandId: CommandId.makeUnsafe("cmd-thread-unarchive"),
+        threadId: ThreadId.makeUnsafe("thread-archive"),
       }),
     );
     expect(
@@ -320,7 +308,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-replay-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-replay-create"),
         projectId: asProjectId("project-replay"),
         title: "Replay Project",
         workspaceRoot: "/tmp/project-replay",
@@ -334,8 +322,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-replay-create"),
-        threadId: ThreadId.make("thread-replay"),
+        commandId: CommandId.makeUnsafe("cmd-thread-replay-create"),
+        threadId: ThreadId.makeUnsafe("thread-replay"),
         projectId: asProjectId("project-replay"),
         title: "replay",
         modelSelection: {
@@ -352,8 +340,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.delete",
-        commandId: CommandId.make("cmd-thread-replay-delete"),
-        threadId: ThreadId.make("thread-replay"),
+        commandId: CommandId.makeUnsafe("cmd-thread-replay-delete"),
+        threadId: ThreadId.makeUnsafe("thread-replay"),
       }),
     );
 
@@ -378,7 +366,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-stream-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-stream-create"),
         projectId: asProjectId("project-stream"),
         title: "Stream Project",
         workspaceRoot: "/tmp/project-stream",
@@ -402,8 +390,8 @@ describe("OrchestrationEngine", () => {
         yield* Effect.sleep("10 millis");
         yield* engine.dispatch({
           type: "thread.create",
-          commandId: CommandId.make("cmd-stream-thread-create"),
-          threadId: ThreadId.make("thread-stream"),
+          commandId: CommandId.makeUnsafe("cmd-stream-thread-create"),
+          threadId: ThreadId.makeUnsafe("thread-stream"),
           projectId: asProjectId("project-stream"),
           title: "domain-stream",
           modelSelection: {
@@ -418,8 +406,8 @@ describe("OrchestrationEngine", () => {
         });
         yield* engine.dispatch({
           type: "thread.meta.update",
-          commandId: CommandId.make("cmd-stream-thread-update"),
-          threadId: ThreadId.make("thread-stream"),
+          commandId: CommandId.makeUnsafe("cmd-stream-thread-update"),
+          threadId: ThreadId.makeUnsafe("thread-stream"),
           title: "domain-stream-updated",
         });
         eventTypes.push((yield* Queue.take(eventQueue)).type);
@@ -439,7 +427,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-ack-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-ack-create"),
         projectId: asProjectId("project-ack"),
         title: "Ack Project",
         workspaceRoot: "/tmp/project-ack",
@@ -454,8 +442,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-ack-create"),
-        threadId: ThreadId.make("thread-ack"),
+        commandId: CommandId.makeUnsafe("cmd-thread-ack-create"),
+        threadId: ThreadId.makeUnsafe("thread-ack"),
         projectId: asProjectId("project-ack"),
         title: "Ack Thread",
         modelSelection: {
@@ -482,6 +470,98 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
+  it("deletes a project's active threads before deleting the project", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+
+    await system.run(
+      engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-cascade-create"),
+        projectId: asProjectId("project-cascade"),
+        title: "Cascade Project",
+        workspaceRoot: "/tmp/project-cascade",
+        defaultModelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        createdAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-thread-cascade-1-create"),
+        threadId: ThreadId.makeUnsafe("thread-cascade-1"),
+        projectId: asProjectId("project-cascade"),
+        title: "Cascade Thread 1",
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }),
+    );
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-thread-cascade-2-create"),
+        threadId: ThreadId.makeUnsafe("thread-cascade-2"),
+        projectId: asProjectId("project-cascade"),
+        title: "Cascade Thread 2",
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt,
+      }),
+    );
+
+    await system.run(
+      engine.dispatch({
+        type: "project.delete",
+        commandId: CommandId.makeUnsafe("cmd-project-cascade-delete"),
+        projectId: asProjectId("project-cascade"),
+      }),
+    );
+
+    const events = await system.run(
+      Stream.runCollect(engine.readEvents(0)).pipe(
+        Effect.map((chunk): OrchestrationEvent[] => Array.from(chunk)),
+      ),
+    );
+    expect(events.map((event) => event.type)).toEqual([
+      "project.created",
+      "thread.created",
+      "thread.created",
+      "thread.deleted",
+      "thread.deleted",
+      "project.deleted",
+    ]);
+
+    const readModel = await system.run(engine.getReadModel());
+    expect(
+      readModel.projects.find((project) => project.id === asProjectId("project-cascade"))
+        ?.deletedAt,
+    ).not.toBeNull();
+    expect(
+      readModel.threads
+        .filter((thread) => thread.projectId === asProjectId("project-cascade"))
+        .every((thread) => thread.deletedAt !== null),
+    ).toBe(true);
+
+    await system.dispose();
+  });
+
   it("records failed command dispatches as metric failures", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;
@@ -491,8 +571,8 @@ describe("OrchestrationEngine", () => {
       system.run(
         engine.dispatch({
           type: "thread.create",
-          commandId: CommandId.make("cmd-thread-missing-project"),
-          threadId: ThreadId.make("thread-missing-project"),
+          commandId: CommandId.makeUnsafe("cmd-thread-missing-project"),
+          threadId: ThreadId.makeUnsafe("thread-missing-project"),
           projectId: asProjectId("project-missing"),
           title: "Missing Project Thread",
           modelSelection: {
@@ -528,7 +608,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-turn-diff-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-turn-diff-create"),
         projectId: asProjectId("project-turn-diff"),
         title: "Turn Diff Project",
         workspaceRoot: "/tmp/project-turn-diff",
@@ -542,8 +622,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-turn-diff-create"),
-        threadId: ThreadId.make("thread-turn-diff"),
+        commandId: CommandId.makeUnsafe("cmd-thread-turn-diff-create"),
+        threadId: ThreadId.makeUnsafe("thread-turn-diff"),
         projectId: asProjectId("project-turn-diff"),
         title: "Turn diff thread",
         modelSelection: {
@@ -560,8 +640,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.turn.diff.complete",
-        commandId: CommandId.make("cmd-turn-diff-complete"),
-        threadId: ThreadId.make("thread-turn-diff"),
+        commandId: CommandId.makeUnsafe("cmd-turn-diff-complete"),
+        threadId: ThreadId.makeUnsafe("thread-turn-diff"),
         turnId: asTurnId("turn-1"),
         completedAt: createdAt,
         checkpointRef: asCheckpointRef("refs/t3/checkpoints/thread-turn-diff/turn/1"),
@@ -600,7 +680,7 @@ describe("OrchestrationEngine", () => {
 
     const flakyStore: OrchestrationEventStoreShape = {
       append(event) {
-        if (shouldFailFirstAppend && event.commandId === CommandId.make("cmd-flaky-1")) {
+        if (shouldFailFirstAppend && event.commandId === CommandId.makeUnsafe("cmd-flaky-1")) {
           shouldFailFirstAppend = false;
           return Effect.fail(
             new PersistenceSqlError({
@@ -635,7 +715,6 @@ describe("OrchestrationEngine", () => {
         Layer.provide(OrchestrationProjectionPipelineLive),
         Layer.provide(Layer.succeed(OrchestrationEventStore, flakyStore)),
         Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-        Layer.provide(RepositoryIdentityResolverLive),
         Layer.provide(SqlitePersistenceMemory),
         Layer.provideMerge(ServerConfigLayer),
         Layer.provideMerge(NodeServices.layer),
@@ -647,7 +726,7 @@ describe("OrchestrationEngine", () => {
     await runtime.runPromise(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-flaky-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-flaky-create"),
         projectId: asProjectId("project-flaky"),
         title: "Flaky Project",
         workspaceRoot: "/tmp/project-flaky",
@@ -663,8 +742,8 @@ describe("OrchestrationEngine", () => {
       runtime.runPromise(
         engine.dispatch({
           type: "thread.create",
-          commandId: CommandId.make("cmd-flaky-1"),
-          threadId: ThreadId.make("thread-flaky-fail"),
+          commandId: CommandId.makeUnsafe("cmd-flaky-1"),
+          threadId: ThreadId.makeUnsafe("thread-flaky-fail"),
           projectId: asProjectId("project-flaky"),
           title: "flaky-fail",
           modelSelection: {
@@ -683,8 +762,8 @@ describe("OrchestrationEngine", () => {
     const result = await runtime.runPromise(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-flaky-2"),
-        threadId: ThreadId.make("thread-flaky-ok"),
+        commandId: CommandId.makeUnsafe("cmd-flaky-2"),
+        threadId: ThreadId.makeUnsafe("thread-flaky-ok"),
         projectId: asProjectId("project-flaky"),
         title: "flaky-ok",
         modelSelection: {
@@ -711,7 +790,7 @@ describe("OrchestrationEngine", () => {
       projectEvent: (event) => {
         if (
           shouldFailRequestedProjection &&
-          event.commandId === CommandId.make("cmd-turn-start-atomic") &&
+          event.commandId === CommandId.makeUnsafe("cmd-turn-start-atomic") &&
           event.type === "thread.turn-start-requested"
         ) {
           shouldFailRequestedProjection = false;
@@ -732,7 +811,6 @@ describe("OrchestrationEngine", () => {
         Layer.provide(Layer.succeed(OrchestrationProjectionPipeline, flakyProjectionPipeline)),
         Layer.provide(OrchestrationEventStoreLive),
         Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-        Layer.provide(RepositoryIdentityResolverLive),
         Layer.provide(SqlitePersistenceMemory),
       ),
     );
@@ -742,7 +820,7 @@ describe("OrchestrationEngine", () => {
     await runtime.runPromise(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-atomic-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-atomic-create"),
         projectId: asProjectId("project-atomic"),
         title: "Atomic Project",
         workspaceRoot: "/tmp/project-atomic",
@@ -756,8 +834,8 @@ describe("OrchestrationEngine", () => {
     await runtime.runPromise(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-atomic-create"),
-        threadId: ThreadId.make("thread-atomic"),
+        commandId: CommandId.makeUnsafe("cmd-thread-atomic-create"),
+        threadId: ThreadId.makeUnsafe("thread-atomic"),
         projectId: asProjectId("project-atomic"),
         title: "atomic",
         modelSelection: {
@@ -774,8 +852,8 @@ describe("OrchestrationEngine", () => {
 
     const turnStartCommand = {
       type: "thread.turn.start" as const,
-      commandId: CommandId.make("cmd-turn-start-atomic"),
-      threadId: ThreadId.make("thread-atomic"),
+      commandId: CommandId.makeUnsafe("cmd-turn-start-atomic"),
+      threadId: ThreadId.makeUnsafe("thread-atomic"),
       message: {
         messageId: asMessageId("msg-atomic-1"),
         role: "user" as const,
@@ -855,7 +933,7 @@ describe("OrchestrationEngine", () => {
       projectEvent: (event) => {
         if (
           shouldFailProjection &&
-          event.commandId === CommandId.make("cmd-thread-meta-sync-fail")
+          event.commandId === CommandId.makeUnsafe("cmd-thread-meta-sync-fail")
         ) {
           shouldFailProjection = false;
           return Effect.fail(
@@ -875,7 +953,6 @@ describe("OrchestrationEngine", () => {
         Layer.provide(Layer.succeed(OrchestrationProjectionPipeline, flakyProjectionPipeline)),
         Layer.provide(Layer.succeed(OrchestrationEventStore, nonTransactionalStore)),
         Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-        Layer.provide(RepositoryIdentityResolverLive),
         Layer.provide(SqlitePersistenceMemory),
       ),
     );
@@ -885,7 +962,7 @@ describe("OrchestrationEngine", () => {
     await runtime.runPromise(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-sync-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-sync-create"),
         projectId: asProjectId("project-sync"),
         title: "Sync Project",
         workspaceRoot: "/tmp/project-sync",
@@ -899,8 +976,8 @@ describe("OrchestrationEngine", () => {
     await runtime.runPromise(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-sync-create"),
-        threadId: ThreadId.make("thread-sync"),
+        commandId: CommandId.makeUnsafe("cmd-thread-sync-create"),
+        threadId: ThreadId.makeUnsafe("thread-sync"),
         projectId: asProjectId("project-sync"),
         title: "sync-before",
         modelSelection: {
@@ -919,8 +996,8 @@ describe("OrchestrationEngine", () => {
       runtime.runPromise(
         engine.dispatch({
           type: "thread.meta.update",
-          commandId: CommandId.make("cmd-thread-meta-sync-fail"),
-          threadId: ThreadId.make("thread-sync"),
+          commandId: CommandId.makeUnsafe("cmd-thread-meta-sync-fail"),
+          threadId: ThreadId.makeUnsafe("thread-sync"),
           title: "sync-after-failed-projection",
         }),
       ),
@@ -944,8 +1021,8 @@ describe("OrchestrationEngine", () => {
       system.run(
         engine.dispatch({
           type: "thread.turn.start",
-          commandId: CommandId.make("cmd-invariant-missing-thread"),
-          threadId: ThreadId.make("thread-missing"),
+          commandId: CommandId.makeUnsafe("cmd-invariant-missing-thread"),
+          threadId: ThreadId.makeUnsafe("thread-missing"),
           message: {
             messageId: asMessageId("msg-missing"),
             role: "user",
@@ -970,7 +1047,7 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "project.create",
-        commandId: CommandId.make("cmd-project-duplicate-create"),
+        commandId: CommandId.makeUnsafe("cmd-project-duplicate-create"),
         projectId: asProjectId("project-duplicate"),
         title: "Duplicate Project",
         workspaceRoot: "/tmp/project-duplicate",
@@ -985,8 +1062,8 @@ describe("OrchestrationEngine", () => {
     await system.run(
       engine.dispatch({
         type: "thread.create",
-        commandId: CommandId.make("cmd-thread-duplicate-1"),
-        threadId: ThreadId.make("thread-duplicate"),
+        commandId: CommandId.makeUnsafe("cmd-thread-duplicate-1"),
+        threadId: ThreadId.makeUnsafe("thread-duplicate"),
         projectId: asProjectId("project-duplicate"),
         title: "duplicate",
         modelSelection: {
@@ -1005,8 +1082,8 @@ describe("OrchestrationEngine", () => {
       system.run(
         engine.dispatch({
           type: "thread.create",
-          commandId: CommandId.make("cmd-thread-duplicate-2"),
-          threadId: ThreadId.make("thread-duplicate"),
+          commandId: CommandId.makeUnsafe("cmd-thread-duplicate-2"),
+          threadId: ThreadId.makeUnsafe("thread-duplicate"),
           projectId: asProjectId("project-duplicate"),
           title: "duplicate",
           modelSelection: {

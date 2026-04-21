@@ -3,13 +3,12 @@ import { randomUUID } from "node:crypto";
 import { Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { CodexModelSelection } from "@t3tools/contracts";
-import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
+import { CodexModelSelection } from "@bigbud/contracts";
+import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/shared/git";
 
-import { resolveAttachmentPath } from "../../attachmentStore.ts";
-import { ServerConfig } from "../../config.ts";
-import { expandHomePath } from "../../pathExpansion.ts";
-import { TextGenerationError } from "@t3tools/contracts";
+import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { TextGenerationError } from "@bigbud/contracts";
 import {
   type BranchNameGenerationInput,
   type ThreadTitleGenerationResult,
@@ -29,7 +28,9 @@ import {
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { getCodexModelCapabilities } from "../../provider/Layers/CodexProvider.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { normalizeCodexModelOptionsWithCapabilities } from "@bigbud/shared/model";
 
 const CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT = "low";
 const CODEX_TIMEOUT_MS = 180_000;
@@ -154,6 +155,10 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     ).pipe(Effect.catch(() => Effect.undefined));
 
     const runCodexCommand = Effect.fn("runCodexJson.runCodexCommand")(function* () {
+      const normalizedOptions = normalizeCodexModelOptionsWithCapabilities(
+        getCodexModelCapabilities(modelSelection.model),
+        modelSelection.options,
+      );
       const reasoningEffort =
         modelSelection.options?.reasoningEffort ?? CODEX_GIT_TEXT_GENERATION_REASONING_EFFORT;
       const command = ChildProcess.make(
@@ -161,14 +166,13 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         [
           "exec",
           "--ephemeral",
-          "--skip-git-repo-check",
           "-s",
           "read-only",
           "--model",
           modelSelection.model,
           "--config",
           `model_reasoning_effort="${reasoningEffort}"`,
-          ...(modelSelection.options?.fastMode ? ["--config", `service_tier="fast"`] : []),
+          ...(normalizedOptions?.fastMode ? ["--config", `service_tier="fast"`] : []),
           "--output-schema",
           schemaPath,
           "--output-last-message",
@@ -179,9 +183,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         {
           env: {
             ...process.env,
-            ...(codexSettings?.homePath
-              ? { CODEX_HOME: expandHomePath(codexSettings.homePath) }
-              : {}),
+            ...(codexSettings?.homePath ? { CODEX_HOME: codexSettings.homePath } : {}),
           },
           cwd,
           shell: process.platform === "win32",

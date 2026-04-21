@@ -11,7 +11,7 @@ import type {
   ServerProviderModel,
   ServerProviderState,
   ServerSettingsError,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import { Cause, Effect, Equal, Exit, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
@@ -26,7 +26,8 @@ import {
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import { CursorProvider } from "../Services/CursorProvider.ts";
 import { AcpSessionRuntime } from "../acp/AcpSessionRuntime.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { buildCursorAcpSpawnInput } from "../acp/CursorAcpSupport.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
 const PROVIDER = "cursor" as const;
 const EMPTY_CAPABILITIES: ModelCapabilities = {
@@ -63,7 +64,7 @@ function buildInitialCursorProviderSnapshot(cursorSettings: CursorSettings): Ser
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in T3 Code settings.",
+        message: "Cursor is disabled in bigbud settings.",
       },
     });
   }
@@ -323,20 +324,19 @@ export function buildCursorDiscoveredModelsFromConfigOptions(
 const makeCursorAcpProbeRuntime = (cursorSettings: CursorSettings) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const probeCwd = nodeOs.homedir();
     const acpContext = yield* Layer.build(
       AcpSessionRuntime.layer({
-        spawn: {
-          command: cursorSettings.binaryPath,
-          args: [
-            ...(cursorSettings.apiEndpoint ? (["-e", cursorSettings.apiEndpoint] as const) : []),
-            "acp",
-          ],
-          cwd: process.cwd(),
-        },
-        cwd: process.cwd(),
-        clientInfo: { name: "t3-code-provider-probe", version: "0.0.0" },
+        spawn: buildCursorAcpSpawnInput(cursorSettings, probeCwd),
+        cwd: probeCwd,
+        clientInfo: { name: "bigcode-provider-probe", version: "0.0.0" },
         authMethodId: "cursor_login",
         clientCapabilities: CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
+        protocolLogging: {
+          logIncoming: true,
+          logOutgoing: true,
+          logger: (event) => Effect.sync(() => console.error("[ACP PROTO]", JSON.stringify(event))),
+        },
       }).pipe(Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner))),
     );
     return yield* Effect.service(AcpSessionRuntime).pipe(Effect.provide(acpContext));
@@ -778,22 +778,6 @@ export function getCursorParameterizedModelPickerUnsupportedMessage(input: {
 /**
  * Parse the output of `agent about` to extract version and authentication
  * status in a single probe.
- *
- * Example output (logged in):
- * ```
- * About Cursor CLI
- *
- * CLI Version         2026.03.20-44cb435
- * User Email          user@example.com
- * ```
- *
- * Example output (logged out):
- * ```
- * About Cursor CLI
- *
- * CLI Version         2026.03.20-44cb435
- * User Email          Not logged in
- * ```
  */
 export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult {
   const jsonPayload = parseCursorAboutJsonPayload(result.stdout);
@@ -864,7 +848,6 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
   const combined = `${result.stdout}\n${result.stderr}`;
   const lowerOutput = combined.toLowerCase();
 
-  // If the command itself isn't recognised, we're on an old CLI version.
   if (
     lowerOutput.includes("unknown command") ||
     lowerOutput.includes("unrecognized command") ||
@@ -882,9 +865,7 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
   const version = extractAboutField(plain, "CLI Version") ?? null;
   const userEmail = extractAboutField(plain, "User Email");
 
-  // Determine auth from the User Email field.
   if (userEmail === undefined) {
-    // Field missing entirely — can't determine auth.
     if (result.code === 0) {
       return { version, status: "ready", auth: { status: "unknown" } };
     }
@@ -910,7 +891,6 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
     };
   }
 
-  // Any non-empty email value means authenticated.
   return { version, status: "ready", auth: { status: "authenticated" } };
 }
 
@@ -970,12 +950,11 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Cursor is disabled in T3 Code settings.",
+          message: "Cursor is disabled in bigbud settings.",
         },
       });
     }
 
-    // Single `agent about` probe: returns version + auth status in one call.
     const aboutProbe = yield* runCursorAboutCommand.pipe(
       Effect.timeoutOption(ABOUT_TIMEOUT_MS),
       Effect.result,
@@ -1049,9 +1028,11 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         ),
       );
       if (Exit.isFailure(discoveryExit)) {
+        const prettyCause = Cause.pretty(discoveryExit.cause);
         yield* Effect.logWarning("Cursor ACP model discovery failed", {
-          cause: Cause.pretty(discoveryExit.cause),
+          cause: prettyCause,
         });
+        console.error("[CURSOR PROBE FAILED]", prettyCause);
         discoveryWarning = "Cursor ACP model discovery failed. Check server logs for details.";
       } else if (Option.isNone(discoveryExit.value)) {
         discoveryWarning = `Cursor ACP model discovery timed out after ${CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`;

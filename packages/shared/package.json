@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/shared",
+  "name": "@bigbud/shared",
   "version": "0.0.0-alpha.1",
   "private": true,
   "type": "module",
@@ -36,10 +36,6 @@
       "types": "./src/schemaJson.ts",
       "import": "./src/schemaJson.ts"
     },
-    "./toolActivity": {
-      "types": "./src/toolActivity.ts",
-      "import": "./src/toolActivity.ts"
-    },
     "./Struct": {
       "types": "./src/Struct.ts",
       "import": "./src/Struct.ts"
@@ -56,21 +52,17 @@
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
     },
-    "./searchRanking": {
-      "types": "./src/searchRanking.ts",
-      "import": "./src/searchRanking.ts"
+    "./history": {
+      "types": "./src/history.ts",
+      "import": "./src/history.ts"
     },
-    "./qrCode": {
-      "types": "./src/qrCode.ts",
-      "import": "./src/qrCode.ts"
+    "./approvals": {
+      "types": "./src/approvals.ts",
+      "import": "./src/approvals.ts"
     },
-    "./cliArgs": {
-      "types": "./src/cliArgs.ts",
-      "import": "./src/cliArgs.ts"
-    },
-    "./path": {
-      "types": "./src/path.ts",
-      "import": "./src/path.ts"
+    "./toolActivity": {
+      "types": "./src/toolActivity.ts",
+      "import": "./src/toolActivity.ts"
     }
   },
   "scripts": {
@@ -79,7 +71,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@t3tools/contracts": "workspace:*",
+    "@bigbud/contracts": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

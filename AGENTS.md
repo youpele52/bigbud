@@ -3,13 +3,7 @@
 ## Task Completion Requirements
 
 - All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
-- NEVER run `bun test`. Always use `bun run test` (runs Vitest).
-
-## Project Snapshot
-
-T3 Code is a minimal web GUI for using coding agents like Codex and Claude.
-
-This repository is a VERY EARLY WIP. Proposing sweeping changes that improve long-term maintainability is encouraged.
+- **NEVER run `bun test`.** Always use `bun run test` (runs Vitest via Turbo). `bun test` invokes Bun's native test runner and bypasses Vitest entirely.
 
 ## Core Priorities
 
@@ -21,33 +15,122 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 
 ## Maintainability
 
-Long term maintainability is a core priority. If you add new functionality, first check if there is shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+Long term maintainability is a core priority. Before adding new functionality, check for shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
+
+**File length limit:** Non-`.md` source files must not exceed **500 lines**. If a file approaches or exceeds this limit, split it by concern using dot-notation (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, etc.) rather than adding more code inline.
 
 ## Package Roles
 
-- `apps/server`: Node.js WebSocket server. Wraps Codex app-server (JSON-RPC over stdio), serves the React web app, and manages provider sessions.
-- `apps/web`: React/Vite UI. Owns session UX, conversation/event rendering, and client-side state. Connects to the server via WebSocket.
-- `packages/contracts`: Shared effect/Schema schemas and TypeScript contracts for provider events, WebSocket protocol, and model/session types. Keep this package schema-only — no runtime logic.
-- `packages/shared`: Shared runtime utilities consumed by both server and web. Uses explicit subpath exports (e.g. `@t3tools/shared/git`) — no barrel index.
+- `apps/server`: Named `"t3"` in package.json (not `@bigbud/server`). Node.js/Bun WebSocket server. Starts provider sub-processes, serves the React web app, manages provider sessions. Use `--filter=t3` in turbo commands.
+- `apps/web`: `@bigbud/web`. React/Vite UI. Owns session UX, conversation/event rendering, and client-side state. Connects to the server via WebSocket at `/ws?token=<value>`.
+- `apps/desktop`: `@bigbud/desktop`. Electron desktop shell. Embeds the web app and provides native capabilities.
+- `apps/marketing`: `@bigbud/marketing`. Astro-based marketing website.
+- `packages/contracts`: `@bigbud/contracts`. Schema-only — no runtime logic. Has both a barrel `src/index.ts` (legacy) and subpath exports. Prefer direct subpath imports for new code: `import { ... } from "@bigbud/contracts/orchestration/..."`. TypeScript resolves directly to source (`"types": "./src/index.ts"`), no build needed for ESM consumers.
+- `packages/shared`: `@bigbud/shared`. Runtime utilities. **No barrel index** — always use subpath exports: `@bigbud/shared/git`, `@bigbud/shared/String`, `@bigbud/shared/Net`, etc.
 
-## Codex App Server (Important)
+## Developer Commands
 
-T3 Code is currently Codex-first. The server starts `codex app-server` (JSON-RPC over stdio) per provider session, then streams structured events to the browser through WebSocket push messages.
+```sh
+bun dev              # full-stack dev (contracts build → server + web in parallel)
+bun dev:server       # server only
+bun dev:web          # web only
+bun fmt              # format (oxfmt)
+bun fmt:check        # CI format check (read-only)
+bun lint             # lint (oxlint)
+bun typecheck        # tsc --noEmit across all packages (via turbo)
+bun run test         # all tests via Vitest (via turbo) — NEVER use bun test
+bun build:contracts  # build @bigbud/contracts (required before server/web if not using bun dev)
+bun clean            # remove node_modules, dist, .turbo everywhere
+```
 
-How we use it in this codebase:
+**Focused test runs:**
 
-- Session startup/resume and turn lifecycle are brokered in `apps/server/src/codexAppServerManager.ts`.
-- Provider dispatch and thread event logging are coordinated in `apps/server/src/providerManager.ts`.
-- WebSocket server routes NativeApi methods in `apps/server/src/wsServer.ts`.
-- Web app consumes orchestration domain events via WebSocket push on channel `orchestration.domainEvent` (provider runtime activity is projected into orchestration events server-side).
+```sh
+bun run --cwd apps/server vitest run                            # all server tests
+bun run --cwd apps/server vitest run src/path/to/file.test.ts  # single file
+bun run --cwd apps/web test:browser                             # Playwright (needs: bun run --cwd apps/web test:browser:install first)
+```
 
-Docs:
+## Toolchain Quirks
 
-- Codex App Server docs: https://developers.openai.com/codex/sdk/#app-server
+**Formatter and linter are Oxc-based, not Biome/ESLint:**
+
+- Formatter: `oxfmt` (config: `.oxfmtrc.json`)
+- Linter: `oxlint` (config: `.oxlintrc.json`), plugins: `eslint`, `oxc`, `react`, `unicorn`, `typescript`
+
+**Effect import-from-barrel is a TypeScript ERROR:** `@effect/language-service` is patched into both server and web tsconfigs with `importFromBarrel: "error"`. Importing from a re-export/barrel file will fail `bun typecheck`. Always import directly from source.
+
+**`Effect.fn` naming pattern:** Prefer `Effect.fn("name")(function* (...) { ... })` over `() => Effect.gen(...)` for named top-level functions. `@effect/language-service` will flag the latter as a refactor opportunity (`TS41`).
+
+**Route tree is auto-generated:** `apps/web/src/routeTree.gen.ts` is generated by `@tanstack/router-plugin` at Vite dev/build time. Never edit manually.
+
+**SQLite migrations:** Adding a migration requires: (1) create file in `apps/server/src/persistence/Migrations/`, (2) import it in `Migrations.ts`, (3) add to `migrationEntries`. No separate migration script — runs automatically on server startup.
+
+**`bun dev` depends on `@bigbud/contracts#build`** per `turbo.json`. If contracts fail to build, the entire dev command fails. Run `bun build:contracts` to debug contracts in isolation.
+
+**Server tests are intentionally sequential:** `apps/server/vitest.config.ts` sets `fileParallelism: false` and `testTimeout: 60_000`. Server tests exercise SQLite, git, and orchestration runtimes — parallelism causes flakes.
+
+**Path alias:** `~/*` → `apps/web/src/*` (in both tsconfig and Vite config).
+
+**`@bigbud/web` is a devDependency of `apps/server`:** In dev, the server proxies to the Vite dev server. In production, it embeds `dist/client/`.
+
+## Providers
+
+Four providers are fully implemented:
+
+- **Codex** (`CodexAdapter.ts`) — JSON-RPC over stdio via `codex app-server`, one process per session
+- **Claude** (`ClaudeAdapter.ts`) — via `@anthropic-ai/claude-agent-sdk`
+- **Copilot** (`CopilotAdapter.ts`) — via `@github/copilot-sdk`
+- **OpenCode** (`OpencodeAdapter.ts`) — via `@opencode-ai/sdk`; uses a **shared** `OpencodeServerManager` singleton (one process shared across sessions, unlike Codex which is per-session)
+
+Key server files:
+
+- Session/turn lifecycle (Codex): `apps/server/src/codex/codexAppServerManager.ts`
+- Provider dispatch: `apps/server/src/provider/Layers/ProviderService.ts`
+- WebSocket RPC routing: `apps/server/src/ws/ws.ts`
+- Web app consumes orchestration domain events on channel `orchestration.domainEvent`
+
+## Conventions
+
+- Effect service implementations are named `*Live` (e.g. `GitManagerLive`); services without suffix (e.g. `GitManager`). Both live in `Layers/` subdirectories.
+- Complex server modules are split by concern with dot-notation: `FooAdapter.ts`, `FooAdapter.session.ts`, `FooAdapter.stream.ts`, `FooAdapter.stream.mapEvent.ts`, etc.
+- New packages must use explicit subpath exports only — no barrel index.
+
+## UI Conventions
+
+**Font sizes:** All shadcn/ui components must use `text-sm` (14px) as the default font size. This matches the app's base font size of 14px set in `apps/web/src/index.css`.
+
+- Buttons: `text-sm` (default in `apps/web/src/components/ui/button.tsx`)
+- Inputs, selects, menus: `text-sm`
+- Secondary/muted text: `text-xs` (12px) for labels, captions, and helper text
+- Never use `text-base` (16px) in UI components — it will appear too large
+
+## Keybindings
+
+Default keybindings (defined in `apps/server/src/keybindings/keybindings.ts`):
+
+| Shortcut                      | Action                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| `mod+shift+g`                 | Toggle diff bar (when terminal is not focused)                         |
+| `mod+shift+g`                 | Split terminal (when terminal is focused)                              |
+| `mod+j`                       | Toggle terminal                                                        |
+| `mod+b`                       | Toggle sidebar                                                         |
+| `mod+k`                       | Toggle command palette                                                 |
+| `mod+n`                       | New chat (when terminal not focused) / new terminal tab (when focused) |
+| `mod+shift+n`                 | New local chat                                                         |
+| `mod+o`                       | Open in favorite editor                                                |
+| `mod+shift+[` / `mod+shift+]` | Navigate previous/next thread                                          |
+
+`mod` resolves to `Cmd` on macOS and `Ctrl` on Windows/Linux.
 
 ## Reference Repos
 
 - Open-source Codex repo: https://github.com/openai/codex
-- Codex-Monitor (Tauri, feature-complete, strong reference implementation): https://github.com/Dimillian/CodexMonitor
+- Codex-Monitor (Tauri, feature-complete reference): https://github.com/Dimillian/CodexMonitor
+- Codex App Server docs: https://developers.openai.com/codex/sdk/#app-server
 
-Use these as implementation references when designing protocol handling, UX flows, and operational safeguards.
+## Upstream Sync (t3code fork)
+
+bigbud is a purposeful fork of https://github.com/pingdotgg/t3code that has **intentionally diverged** — it has its own conventions, patterns, and features not present upstream. Changes from t3code cannot be copied directly; they must be read, understood, and adapted.
+
+For any task involving upstream t3code changes, use [`@fork-upstream-adapter`](.opencode/agents/fork-upstream-adapter.md) — it enforces the read → understand → adapt → verify workflow and prevents direct copy-paste transplants.

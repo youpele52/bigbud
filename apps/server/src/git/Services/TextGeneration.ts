@@ -6,14 +6,14 @@
  *
  * @module TextGeneration
  */
-import { Context } from "effect";
+import { ServiceMap } from "effect";
 import type { Effect } from "effect";
-import type { ChatAttachment, ModelSelection } from "@t3tools/contracts";
+import type { ChatAttachment, ModelSelection, ProviderKind } from "@bigbud/contracts";
 
-import type { TextGenerationError } from "@t3tools/contracts";
+import type { TextGenerationError } from "@bigbud/contracts";
 
 /** Providers that support git text generation (commit messages, PR content, branch names). */
-export type TextGenerationProvider = "codex" | "claudeAgent" | "cursor" | "opencode";
+export type TextGenerationProvider = ProviderKind;
 
 export interface CommitMessageGenerationInput {
   cwd: string;
@@ -118,6 +118,6 @@ export interface TextGenerationShape {
 /**
  * TextGeneration - Service tag for commit and PR text generation.
  */
-export class TextGeneration extends Context.Service<TextGeneration, TextGenerationShape>()(
+export class TextGeneration extends ServiceMap.Service<TextGeneration, TextGenerationShape>()(
   "t3/git/Services/TextGeneration",
 ) {}
