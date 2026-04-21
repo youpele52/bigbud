@@ -9,7 +9,7 @@ import { Cause, Schema } from "effect";
 import { ProviderAdapterRequestError, ProviderServiceError } from "../../provider/Errors.ts";
 
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
-export const WORKTREE_BRANCH_PREFIX = "bigcode";
+export const WORKTREE_BRANCH_PREFIX = "bigbud";
 export const TEMP_WORKTREE_BRANCH_PATTERN = new RegExp(`^${WORKTREE_BRANCH_PREFIX}\\/[0-9a-f]{8}$`);
 export const DEFAULT_THREAD_TITLE = "New thread";
 export const HANDLED_TURN_START_KEY_MAX = 10_000;

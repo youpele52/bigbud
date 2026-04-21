@@ -271,7 +271,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
             childProcessSpawner,
             cwd,
             ...(resumeSessionId ? { resumeSessionId } : {}),
-            clientInfo: { name: "bigcode", version: "0.0.0" },
+            clientInfo: { name: "bigbud", version: "0.0.0" },
             ...acpNativeLoggers,
           }).pipe(
             Effect.provideService(Scope.Scope, sessionScope),
