@@ -1,90 +1,68 @@
 import { Effect, Layer } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
-import { ServerConfig } from "./config.ts";
+import { ServerConfig } from "./startup/config";
 import {
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
-  serverEnvironmentRouteLayer,
   staticAndDevRouteLayer,
-  browserApiCorsLayer,
-} from "./http.ts";
-import { fixPath } from "./os-jank.ts";
-import { websocketRpcRouteLayer } from "./ws.ts";
-import { OpenLive } from "./open.ts";
-import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite.ts";
-import { ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
-import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService.ts";
-import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger.ts";
-import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory.ts";
-import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime.ts";
-import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter.ts";
-import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter.ts";
-import { makeCursorAdapterLive } from "./provider/Layers/CursorAdapter.ts";
-import { makeOpenCodeAdapterLive } from "./provider/Layers/OpenCodeAdapter.ts";
-import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry.ts";
-import { makeProviderServiceLive } from "./provider/Layers/ProviderService.ts";
-import { ProviderSessionReaperLive } from "./provider/Layers/ProviderSessionReaper.ts";
-import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery.ts";
-import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore.ts";
-import { GitCoreLive } from "./git/Layers/GitCore.ts";
-import { GitHubCliLive } from "./git/Layers/GitHubCli.ts";
-import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster.ts";
-import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration.ts";
-import { TerminalManagerLive } from "./terminal/Layers/Manager.ts";
-import { GitManagerLive } from "./git/Layers/GitManager.ts";
-import { KeybindingsLive } from "./keybindings.ts";
-import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./serverRuntimeStartup.ts";
-import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor.ts";
-import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus.ts";
-import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion.ts";
-import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor.ts";
-import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor.ts";
-import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletionReactor.ts";
-import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
-import { ServerSettingsLive } from "./serverSettings.ts";
-import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver.ts";
-import { RepositoryIdentityResolverLive } from "./project/Layers/RepositoryIdentityResolver.ts";
-import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
-import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
-import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
-import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner.ts";
-import { ObservabilityLive } from "./observability/Layers/Observability.ts";
-import { ServerEnvironmentLive } from "./environment/Layers/ServerEnvironment.ts";
-import {
-  authBearerBootstrapRouteLayer,
-  authBootstrapRouteLayer,
-  authClientsRevokeOthersRouteLayer,
-  authClientsRevokeRouteLayer,
-  authClientsRouteLayer,
-  authPairingLinksRevokeRouteLayer,
-  authPairingLinksRouteLayer,
-  authPairingCredentialRouteLayer,
-  authSessionRouteLayer,
-  authWebSocketTokenRouteLayer,
-} from "./auth/http.ts";
-import { ServerSecretStoreLive } from "./auth/Layers/ServerSecretStore.ts";
-import { ServerAuthLive } from "./auth/Layers/ServerAuth.ts";
-import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
-import {
-  clearPersistedServerRuntimeState,
-  makePersistedServerRuntimeState,
-  persistServerRuntimeState,
-} from "./serverRuntimeState.ts";
-import {
-  orchestrationDispatchRouteLayer,
-  orchestrationSnapshotRouteLayer,
-} from "./orchestration/http.ts";
-import { NetService } from "@t3tools/shared/Net";
+} from "./ws/http";
+import { fixPath } from "./utils/os-jank";
+import { websocketRpcRouteLayer } from "./ws/ws";
+import { OpenLive } from "./utils/open";
+import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
+import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
+import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
+import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
+import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
+import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
+import { makeCodexAdapterLive } from "./provider/Layers/CodexAdapter";
+import { makeClaudeAdapterLive } from "./provider/Layers/ClaudeAdapter";
+import { makeCopilotAdapterLive } from "./provider/Layers/CopilotAdapter";
+import { makeCursorAdapterLive } from "./provider/Layers/CursorAdapter";
+import { makeOpencodeAdapterLive } from "./provider/Layers/OpencodeAdapter";
+import { makePiAdapterLive } from "./provider/Layers/PiAdapter";
+import { OpencodeServerManagerLive } from "./provider/Layers/OpencodeServerManager";
+import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
+import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
+import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
+import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
+import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
+import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/OrchestrationCommandReceipts";
+import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
+import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
+import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
+import { GitCoreLive } from "./git/Layers/GitCore";
+import { GitHubCliLive } from "./git/Layers/GitHubCli";
+import { RoutingTextGenerationLive } from "./git/Layers/RoutingTextGeneration";
+import { TerminalManagerLive } from "./terminal/Layers/Manager";
+import { GitManagerLive } from "./git/Layers/GitManager";
+import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
+import { KeybindingsLive } from "./keybindings/keybindings";
+import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
+import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
+import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus";
+import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
+import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
+import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
+import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
+import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
+import { ServerSettingsLive } from "./ws/serverSettings";
+import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
+import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries";
+import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem";
+import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
+import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
+import { ObservabilityLive } from "./observability/Layers/Observability";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
-      const BunPTY = yield* Effect.promise(() => import("./terminal/Layers/BunPTY.ts"));
+      const BunPTY = yield* Effect.promise(() => import("./terminal/Layers/BunPTY"));
       return BunPTY.layer;
     } else {
-      const NodePTY = yield* Effect.promise(() => import("./terminal/Layers/NodePTY.ts"));
+      const NodePTY = yield* Effect.promise(() => import("./terminal/Layers/NodePTY"));
       return NodePTY.layer;
     }
   }),
@@ -131,17 +109,32 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
-  Layer.provideMerge(ThreadDeletionReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
+);
+
+const OrchestrationEventInfrastructureLayerLive = Layer.mergeAll(
+  OrchestrationEventStoreLive,
+  OrchestrationCommandReceiptRepositoryLive,
+);
+
+const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipelineLive.pipe(
+  Layer.provide(OrchestrationEventStoreLive),
+);
+
+const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
+  OrchestrationProjectionSnapshotQueryLive,
+  OrchestrationEventInfrastructureLayerLive,
+  OrchestrationProjectionPipelineLayerLive,
+);
+
+const OrchestrationLayerLive = Layer.mergeAll(
+  OrchestrationInfrastructureLayerLive,
+  OrchestrationEngineLive.pipe(Layer.provide(OrchestrationInfrastructureLayerLive)),
 );
 
 const CheckpointingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointDiffQueryLive),
   Layer.provideMerge(CheckpointStoreLive),
-);
-
-const ProviderSessionDirectoryLayerLive = ProviderSessionDirectoryLive.pipe(
-  Layer.provide(ProviderSessionRuntimeRepositoryLive),
 );
 
 const ProviderLayerLive = Layer.unwrap(
@@ -153,98 +146,87 @@ const ProviderLayerLive = Layer.unwrap(
     const canonicalEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
       stream: "canonical",
     });
+    const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
+      Layer.provide(ProviderSessionRuntimeRepositoryLive),
+    );
     const codexAdapterLayer = makeCodexAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
     const claudeAdapterLayer = makeClaudeAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
-    const openCodeAdapterLayer = makeOpenCodeAdapterLive(
+    const copilotAdapterLayer = makeCopilotAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
     const cursorAdapterLayer = makeCursorAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
+    const opencodeAdapterLayer = makeOpencodeAdapterLive(
+      nativeEventLogger ? { nativeEventLogger } : undefined,
+    );
+    const piAdapterLayer = makePiAdapterLive(nativeEventLogger ? { nativeEventLogger } : undefined);
     const adapterRegistryLayer = ProviderAdapterRegistryLive.pipe(
       Layer.provide(codexAdapterLayer),
       Layer.provide(claudeAdapterLayer),
-      Layer.provide(openCodeAdapterLayer),
+      Layer.provide(copilotAdapterLayer),
       Layer.provide(cursorAdapterLayer),
-      Layer.provideMerge(ProviderSessionDirectoryLayerLive),
+      Layer.provide(opencodeAdapterLayer),
+      Layer.provide(piAdapterLayer),
+      Layer.provideMerge(providerSessionDirectoryLayer),
     );
     return makeProviderServiceLive(
       canonicalEventLogger ? { canonicalEventLogger } : undefined,
-    ).pipe(
-      Layer.provide(adapterRegistryLayer),
-      Layer.provideMerge(ProviderSessionDirectoryLayerLive),
-    );
+    ).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
   }),
 );
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
-const GitManagerLayerLive = GitManagerLive.pipe(
-  Layer.provideMerge(ProjectSetupScriptRunnerLive),
-  Layer.provideMerge(GitCoreLive),
-  Layer.provideMerge(GitHubCliLive),
-  Layer.provideMerge(RoutingTextGenerationLive),
-);
-
 const GitLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(GitManagerLayerLive),
-  Layer.provideMerge(GitStatusBroadcasterLive.pipe(Layer.provide(GitManagerLayerLive))),
+  Layer.provideMerge(
+    GitManagerLive.pipe(
+      Layer.provideMerge(ProjectSetupScriptRunnerLive),
+      Layer.provideMerge(GitCoreLive),
+      Layer.provideMerge(GitHubCliLive),
+      Layer.provideMerge(RoutingTextGenerationLive),
+    ),
+  ),
+  Layer.provideMerge(GitStatusBroadcasterLive.pipe(Layer.provideMerge(GitCoreLive))),
   Layer.provideMerge(GitCoreLive),
 );
 
 const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(PtyAdapterLive));
 
-const WorkspaceEntriesLayerLive = WorkspaceEntriesLive.pipe(
-  Layer.provide(WorkspacePathsLive),
-  Layer.provideMerge(GitCoreLive),
-);
-
-const WorkspaceFileSystemLayerLive = WorkspaceFileSystemLive.pipe(
-  Layer.provide(WorkspacePathsLive),
-  Layer.provide(WorkspaceEntriesLayerLive),
-);
-
 const WorkspaceLayerLive = Layer.mergeAll(
   WorkspacePathsLive,
-  WorkspaceEntriesLayerLive,
-  WorkspaceFileSystemLayerLive,
-);
-
-const AuthLayerLive = ServerAuthLive.pipe(
-  Layer.provideMerge(PersistenceLayerLive),
-  Layer.provide(ServerSecretStoreLive),
-);
-
-const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
-  Layer.provideMerge(ProviderLayerLive),
-  Layer.provideMerge(OrchestrationLayerLive),
+  WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive)),
+  WorkspaceFileSystemLive.pipe(
+    Layer.provide(WorkspacePathsLive),
+    Layer.provide(WorkspaceEntriesLive.pipe(Layer.provide(WorkspacePathsLive))),
+  ),
 );
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
-  Layer.provideMerge(ProviderRuntimeLayerLive),
+  Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
   Layer.provideMerge(ProviderRegistryLive),
+  Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
-  Layer.provideMerge(RepositoryIdentityResolverLive),
-  Layer.provideMerge(ServerEnvironmentLive),
-  Layer.provideMerge(AuthLayerLive),
+  // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process
+  Layer.provideMerge(OpencodeServerManagerLive),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
-  Layer.provide(NetService.layer),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
@@ -252,25 +234,12 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
 );
 
 export const makeRoutesLayer = Layer.mergeAll(
-  authBearerBootstrapRouteLayer,
-  authBootstrapRouteLayer,
-  authClientsRevokeOthersRouteLayer,
-  authClientsRevokeRouteLayer,
-  authClientsRouteLayer,
-  authPairingLinksRevokeRouteLayer,
-  authPairingLinksRouteLayer,
-  authPairingCredentialRouteLayer,
-  authSessionRouteLayer,
-  authWebSocketTokenRouteLayer,
   attachmentsRouteLayer,
-  orchestrationDispatchRouteLayer,
-  orchestrationSnapshotRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
-  serverEnvironmentRouteLayer,
   staticAndDevRouteLayer,
   websocketRpcRouteLayer,
-).pipe(Layer.provide(browserApiCorsLayer));
+);
 
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
@@ -285,34 +254,12 @@ export const makeServerLayer = Layer.unwrap(
         yield* startup.markHttpListening;
       }),
     );
-    const runtimeStateLayer = Layer.effectDiscard(
-      Effect.acquireRelease(
-        Effect.gen(function* () {
-          const server = yield* HttpServer.HttpServer;
-          const address = server.address;
-          if (typeof address === "string" || !("port" in address)) {
-            return;
-          }
-
-          const state = makePersistedServerRuntimeState({
-            config,
-            port: address.port,
-          });
-          yield* persistServerRuntimeState({
-            path: config.serverRuntimeStatePath,
-            state,
-          });
-        }),
-        () => clearPersistedServerRuntimeState(config.serverRuntimeStatePath),
-      ),
-    );
 
     const serverApplicationLayer = Layer.mergeAll(
       HttpRouter.serve(makeRoutesLayer, {
         disableLogger: !config.logWebSocketEvents,
       }),
       httpListeningLayer,
-      runtimeStateLayer,
     );
 
     return serverApplicationLayer.pipe(

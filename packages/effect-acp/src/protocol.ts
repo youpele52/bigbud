@@ -375,11 +375,14 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
               parser.decode(data) as ReadonlyArray<
                 RpcMessage.FromClientEncoded | RpcMessage.FromServerEncoded
               >,
-            catch: (cause) =>
-              new AcpError.AcpProtocolParseError({
+            catch: (cause) => {
+              const raw = typeof data === "string" ? data : new TextDecoder().decode(data);
+              console.error("[ACP DEBUG] Parse failed for:", raw.substring(0, 500));
+              return new AcpError.AcpProtocolParseError({
                 detail: "Failed to decode ACP wire message",
                 cause,
-              }),
+              });
+            },
           }),
         ),
         Effect.tap((messages) =>
@@ -433,18 +436,18 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
 
   yield* Stream.fromQueue(outgoing).pipe(Stream.run(options.stdio.stdout()), Effect.forkScoped);
 
-  const clientProtocol = RpcClient.Protocol.of({
-    run: (_clientId, f) =>
+  const clientProtocol: RpcClient.Protocol["Service"] = {
+    run: (f) =>
       Stream.fromQueue(clientQueue).pipe(
         Stream.runForEach((message) => f(message)),
         Effect.forever,
       ),
-    send: (_clientId, request) => offerOutgoing(request).pipe(Effect.mapError(toRpcClientError)),
+    send: (request) => offerOutgoing(request).pipe(Effect.mapError(toRpcClientError)),
     supportsAck: true,
     supportsTransferables: false,
-  });
+  };
 
-  const serverProtocol = RpcServer.Protocol.of({
+  const serverProtocol: RpcServer.Protocol["Service"] = {
     run: (f) =>
       Stream.fromQueue(serverQueue).pipe(
         Stream.runForEach((message) => f(0, message)),
@@ -458,7 +461,7 @@ export const makeAcpPatchedProtocol = Effect.fn("makeAcpPatchedProtocol")(functi
     supportsAck: true,
     supportsTransferables: false,
     supportsSpanPropagation: true,
-  });
+  };
 
   const sendNotification = Effect.fn("sendNotification")(function* (
     method: string,

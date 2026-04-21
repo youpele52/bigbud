@@ -1,15 +1,14 @@
 {
-  "name": "@t3tools/desktop",
-  "version": "0.0.20",
+  "name": "@bigbud/desktop",
+  "version": "0.0.15",
   "private": true,
-  "type": "module",
-  "main": "dist-electron/main.cjs",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "bun run --parallel dev:bundle dev:electron",
     "dev:bundle": "tsdown --watch",
-    "dev:electron": "node scripts/dev-electron.mjs",
+    "dev:electron": "bun run scripts/dev-electron.mjs",
     "build": "tsdown",
-    "start": "node scripts/start-electron.mjs",
+    "start": "bun run scripts/start-electron.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "smoke-test": "node scripts/smoke-test.mjs"
@@ -20,13 +19,12 @@
     "electron-updater": "^6.6.2"
   },
   "devDependencies": {
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
+    "@bigbud/contracts": "workspace:*",
+    "@bigbud/shared": "workspace:*",
     "@types/node": "catalog:",
-    "effect-acp": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "productName": "T3 Code (Alpha)"
+  "productName": "bigbud (Alpha)"
 }

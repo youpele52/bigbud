@@ -10,9 +10,9 @@ import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
-import { GitCommandError } from "@t3tools/contracts";
-import { ServerConfig } from "../../config.ts";
-import { ThreadId } from "@t3tools/contracts";
+import { GitCommandError } from "@bigbud/contracts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ThreadId } from "@bigbud/contracts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-checkpoint-store-test-",
@@ -93,7 +93,7 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
         const tmp = yield* makeTmpDir();
         yield* initRepoWithCommit(tmp);
         const checkpointStore = yield* CheckpointStore;
-        const threadId = ThreadId.make("thread-checkpoint-store");
+        const threadId = ThreadId.makeUnsafe("thread-checkpoint-store");
         const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
         const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
 

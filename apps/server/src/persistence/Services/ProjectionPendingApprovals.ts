@@ -13,8 +13,8 @@ import {
   ProjectionPendingApprovalStatus,
   ThreadId,
   TurnId,
-} from "@t3tools/contracts";
-import { Option, Schema, Context } from "effect";
+} from "@bigbud/contracts";
+import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -85,7 +85,7 @@ export interface ProjectionPendingApprovalRepositoryShape {
 /**
  * ProjectionPendingApprovalRepository - Service tag for pending approval persistence.
  */
-export class ProjectionPendingApprovalRepository extends Context.Service<
+export class ProjectionPendingApprovalRepository extends ServiceMap.Service<
   ProjectionPendingApprovalRepository,
   ProjectionPendingApprovalRepositoryShape
 >()("t3/persistence/Services/ProjectionPendingApprovals/ProjectionPendingApprovalRepository") {}

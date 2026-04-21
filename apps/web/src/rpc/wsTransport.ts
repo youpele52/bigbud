@@ -1,26 +1,13 @@
-import {
-  Cause,
-  Duration,
-  Effect,
-  Exit,
-  Layer,
-  ManagedRuntime,
-  Option,
-  Scope,
-  Stream,
-} from "effect";
+import { Cause, Duration, Effect, Exit, ManagedRuntime, Option, Scope, Stream } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
 
-import { ClientTracingLive } from "../observability/clientTracing";
 import { clearAllTrackedRpcRequests } from "./requestLatencyState";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
   type WsProtocolLifecycleHandlers,
   type WsRpcProtocolClient,
-  type WsRpcProtocolSocketUrlProvider,
 } from "./protocol";
-import { isTransportConnectionErrorMessage } from "./transportError";
 
 interface SubscribeOptions {
   readonly retryDelay?: Duration.Input;
@@ -48,19 +35,16 @@ function formatErrorMessage(error: unknown): string {
 }
 
 export class WsTransport {
-  private readonly url: WsRpcProtocolSocketUrlProvider;
   private readonly lifecycleHandlers: WsProtocolLifecycleHandlers | undefined;
+  private readonly url: string | undefined;
   private disposed = false;
   private hasReportedTransportDisconnect = false;
   private reconnectChain: Promise<void> = Promise.resolve();
   private session: TransportSession;
 
-  constructor(
-    url: WsRpcProtocolSocketUrlProvider,
-    lifecycleHandlers?: WsProtocolLifecycleHandlers,
-  ) {
-    this.url = url;
+  constructor(url?: string, lifecycleHandlers?: WsProtocolLifecycleHandlers) {
     this.lifecycleHandlers = lifecycleHandlers;
+    this.url = url;
     this.session = this.createSession();
   }
 
@@ -151,25 +135,17 @@ export class WsTransport {
             return;
           }
 
-          if (session !== this.session) {
-            continue;
-          }
-
-          const formattedError = formatErrorMessage(error);
-          if (!isTransportConnectionErrorMessage(formattedError)) {
-            console.warn("WebSocket RPC subscription failed", {
-              error: formattedError,
-            });
-            return;
-          }
-
           if (!this.hasReportedTransportDisconnect) {
             console.warn("WebSocket RPC subscription disconnected", {
-              error: formattedError,
+              error: formatErrorMessage(error),
             });
           }
           this.hasReportedTransportDisconnect = true;
           await sleep(retryDelayMs);
+        }
+
+        if (session !== this.session) {
+          continue;
         }
       }
     })();
@@ -215,9 +191,7 @@ export class WsTransport {
   }
 
   private createSession(): TransportSession {
-    const runtime = ManagedRuntime.make(
-      Layer.mergeAll(createWsRpcProtocolLayer(this.url, this.lifecycleHandlers), ClientTracingLive),
-    );
+    const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(this.url, this.lifecycleHandlers));
     const clientScope = runtime.runSync(Scope.make());
     return {
       runtime,

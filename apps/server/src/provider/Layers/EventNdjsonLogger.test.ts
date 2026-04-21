@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 
@@ -42,11 +42,11 @@ describe("EventNdjsonLogger", () => {
 
         yield* logger.write(
           { threadId: "provider-thread-1", id: "evt-1" },
-          ThreadId.make("thread-1"),
+          ThreadId.makeUnsafe("thread-1"),
         );
         yield* logger.write(
           { type: "turn.completed", threadId: "provider-thread-2", id: "evt-2" },
-          ThreadId.make("thread-2"),
+          ThreadId.makeUnsafe("thread-2"),
         );
         yield* logger.close();
 
@@ -178,7 +178,7 @@ describe("EventNdjsonLogger", () => {
               id: `evt-${index}`,
               payload: "x".repeat(40),
             },
-            ThreadId.make("thread-rotate"),
+            ThreadId.makeUnsafe("thread-rotate"),
           );
         }
         yield* logger.close();

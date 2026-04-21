@@ -14,12 +14,10 @@ import { randomUUID } from "node:crypto";
 import { Effect, Layer, FileSystem, Path } from "effect";
 
 import { CheckpointInvariantError } from "../Errors.ts";
-import { GitCommandError } from "@t3tools/contracts";
+import { GitCommandError } from "@bigbud/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
-import { CheckpointRef } from "@t3tools/contracts";
-
-const CHECKPOINT_DIFF_MAX_OUTPUT_BYTES = 10_000_000;
+import { CheckpointRef } from "@bigbud/contracts";
 
 const makeCheckpointStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -100,10 +98,10 @@ const makeCheckpointStore = Effect.gen(function* () {
         const commitEnv: NodeJS.ProcessEnv = {
           ...process.env,
           GIT_INDEX_FILE: tempIndexPath,
-          GIT_AUTHOR_NAME: "T3 Code",
-          GIT_AUTHOR_EMAIL: "t3code@users.noreply.github.com",
-          GIT_COMMITTER_NAME: "T3 Code",
-          GIT_COMMITTER_EMAIL: "t3code@users.noreply.github.com",
+          GIT_AUTHOR_NAME: "bigbud",
+          GIT_AUTHOR_EMAIL: "bigcode@users.noreply.github.com",
+          GIT_COMMITTER_NAME: "bigbud",
+          GIT_COMMITTER_EMAIL: "bigcode@users.noreply.github.com",
         };
 
         const headExists = yield* hasHeadCommit(input.cwd);
@@ -247,7 +245,6 @@ const makeCheckpointStore = Effect.gen(function* () {
         operation,
         cwd: input.cwd,
         args: ["diff", "--patch", "--minimal", "--no-color", fromCommitOid, toCommitOid],
-        maxOutputBytes: CHECKPOINT_DIFF_MAX_OUTPUT_BYTES,
       });
 
       return result.stdout;

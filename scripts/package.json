@@ -1,5 +1,5 @@
 {
-  "name": "@t3tools/scripts",
+  "name": "@bigbud/scripts",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,9 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.77",
+    "@bigbud/contracts": "workspace:*",
+    "@bigbud/shared": "workspace:*",
     "@effect/platform-node": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

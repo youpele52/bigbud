@@ -1,6 +1,9 @@
+import { AlertTriangle, CloudOff, LoaderCircle, RotateCw } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { APP_DISPLAY_NAME, APP_SERVER_NAME } from "../config/branding";
 import { type SlowRpcAckRequest, useSlowRpcAckRequests } from "../rpc/requestLatencyState";
+import { useServerConfig } from "../rpc/serverState";
 import {
   getWsConnectionStatus,
   getWsConnectionUiState,
@@ -10,11 +13,16 @@ import {
   useWsConnectionStatus,
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
+import { getWsRpcClient } from "../rpc/wsRpcClient";
+import {
+  shouldAutoReconnect,
+  shouldRestartStalledReconnect,
+  type WsAutoReconnectTrigger,
+} from "./WebSocketConnectionSurface.logic";
+import { Button } from "./ui/button";
 import { toastManager } from "./ui/toast";
-import { getPrimaryEnvironmentConnection } from "../environments/runtime";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
-type WsAutoReconnectTrigger = "focus" | "online";
 
 const connectionTimeFormatter = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
@@ -54,7 +62,7 @@ function describeExhaustedToast(): string {
 }
 
 function buildReconnectTitle(_status: WsConnectionStatus): string {
-  return "Disconnected from T3 Server";
+  return `Disconnected from ${APP_SERVER_NAME}`;
 }
 
 function describeRecoveredToast(
@@ -82,37 +90,150 @@ function describeSlowRpcAckToast(requests: ReadonlyArray<SlowRpcAckRequest>): Re
   return `${count} request${count === 1 ? "" : "s"} waiting longer than ${thresholdSeconds}s.`;
 }
 
-export function shouldAutoReconnect(
+function buildBlockingCopy(
+  uiState: WsConnectionUiState,
   status: WsConnectionStatus,
-  trigger: WsAutoReconnectTrigger,
-): boolean {
-  const uiState = getWsConnectionUiState(status);
-
-  if (trigger === "online") {
-    return (
-      uiState === "offline" ||
-      uiState === "reconnecting" ||
-      uiState === "error" ||
-      status.reconnectPhase === "exhausted"
-    );
+): {
+  readonly description: string;
+  readonly eyebrow: string;
+  readonly title: string;
+} {
+  if (uiState === "connecting") {
+    return {
+      description: `Opening the WebSocket connection to the ${APP_DISPLAY_NAME} server and waiting for the initial config snapshot.`,
+      eyebrow: "Starting Session",
+      title: `Connecting to ${APP_DISPLAY_NAME}`,
+    };
   }
 
-  return (
-    status.online &&
-    status.hasConnected &&
-    (uiState === "reconnecting" || status.reconnectPhase === "exhausted")
-  );
+  if (uiState === "offline") {
+    return {
+      description: `Your browser is offline, so the web client cannot reach the ${APP_SERVER_NAME}. Reconnect to the network and the app will retry automatically.`,
+      eyebrow: "Offline",
+      title: "WebSocket connection unavailable",
+    };
+  }
+
+  if (status.lastError?.trim()) {
+    return {
+      description: `${status.lastError} Verify that the ${APP_SERVER_NAME} is running and reachable, then reload the app if needed.`,
+      eyebrow: "Connection Error",
+      title: `Cannot reach the ${APP_SERVER_NAME}`,
+    };
+  }
+
+  return {
+    description: `The web client could not complete its initial WebSocket connection to the ${APP_SERVER_NAME}. It will keep retrying in the background.`,
+    eyebrow: "Connection Error",
+    title: `Cannot reach the ${APP_SERVER_NAME}`,
+  };
 }
 
-export function shouldRestartStalledReconnect(
-  status: WsConnectionStatus,
-  expectedNextRetryAt: string,
-): boolean {
+function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectionUiState): string {
+  const details = [
+    `state: ${uiState}`,
+    `online: ${status.online ? "yes" : "no"}`,
+    `attempts: ${status.attemptCount}`,
+  ];
+
+  if (status.socketUrl) {
+    details.push(`socket: ${status.socketUrl}`);
+  }
+  if (status.connectedAt) {
+    details.push(`connectedAt: ${status.connectedAt}`);
+  }
+  if (status.disconnectedAt) {
+    details.push(`disconnectedAt: ${status.disconnectedAt}`);
+  }
+  if (status.lastErrorAt) {
+    details.push(`lastErrorAt: ${status.lastErrorAt}`);
+  }
+  if (status.lastError) {
+    details.push(`lastError: ${status.lastError}`);
+  }
+  if (status.closeCode !== null) {
+    details.push(`closeCode: ${status.closeCode}`);
+  }
+  if (status.closeReason) {
+    details.push(`closeReason: ${status.closeReason}`);
+  }
+
+  return details.join("\n");
+}
+
+function WebSocketBlockingState({
+  status,
+  uiState,
+}: {
+  readonly status: WsConnectionStatus;
+  readonly uiState: WsConnectionUiState;
+}) {
+  const copy = buildBlockingCopy(uiState, status);
+  const disconnectedAt = formatConnectionMoment(status.disconnectedAt ?? status.lastErrorAt);
+  const Icon =
+    uiState === "connecting" ? LoaderCircle : uiState === "offline" ? CloudOff : AlertTriangle;
+
   return (
-    status.reconnectPhase === "waiting" &&
-    status.nextRetryAt === expectedNextRetryAt &&
-    status.online &&
-    status.hasConnected
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
+      <div className="pointer-events-none absolute inset-0 opacity-90">
+        <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(48rem_18rem_at_top,color-mix(in_srgb,var(--color-amber-500)_16%,transparent),transparent)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--background)_92%,var(--color-black))_0%,var(--background)_56%)]" />
+      </div>
+
+      <section className="relative w-full max-w-xl rounded-[1.75rem] border border-border/80 bg-card/92 p-6 shadow-2xl shadow-black/20 backdrop-blur-md sm:p-8">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+              {copy.eyebrow}
+            </p>
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-background/80 p-3 text-foreground shadow-sm">
+            <Icon className={uiState === "connecting" ? "size-5 animate-spin" : "size-5"} />
+          </div>
+        </div>
+
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{copy.description}</p>
+
+        <div className="mt-5 grid gap-3 rounded-2xl border border-border/70 bg-background/60 p-4 text-sm sm:grid-cols-2">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+              Connection
+            </p>
+            <p className="mt-1 font-medium text-foreground">
+              {uiState === "connecting"
+                ? "Opening WebSocket"
+                : uiState === "offline"
+                  ? "Waiting for network"
+                  : "Retrying server connection"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+              Latest Event
+            </p>
+            <p className="mt-1 font-medium text-foreground">{disconnectedAt ?? "Pending"}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => window.location.reload()}>
+            <RotateCw />
+            Reload app
+          </Button>
+        </div>
+
+        <details className="group mt-5 overflow-hidden rounded-lg border border-border/70 bg-background/55">
+          <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">
+            <span className="group-open:hidden">Show connection details</span>
+            <span className="hidden group-open:inline">Hide connection details</span>
+          </summary>
+          <pre className="max-h-56 overflow-auto border-t border-border/70 bg-background/80 px-3 py-2 text-xs text-foreground/85">
+            {buildConnectionDetails(status, uiState)}
+          </pre>
+        </details>
+      </section>
+    </div>
   );
 }
 
@@ -131,7 +252,7 @@ export function WebSocketConnectionCoordinator() {
       toastResetTimerRef.current = null;
     }
     lastForcedReconnectAtRef.current = Date.now();
-    void getPrimaryEnvironmentConnection()
+    void getWsRpcClient()
       .reconnect()
       .catch((error) => {
         if (!showFailureToast) {
@@ -149,12 +270,15 @@ export function WebSocketConnectionCoordinator() {
         });
       });
   });
+
   const syncBrowserOnlineStatus = useEffectEvent(() => {
     setBrowserOnlineStatus(navigator.onLine !== false);
   });
+
   const triggerManualReconnect = useEffectEvent(() => {
     runReconnect(true);
   });
+
   const triggerAutoReconnect = useEffectEvent((trigger: WsAutoReconnectTrigger) => {
     const currentStatus =
       trigger === "online" ? setBrowserOnlineStatus(true) : getWsConnectionStatus();
@@ -227,13 +351,7 @@ export function WebSocketConnectionCoordinator() {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [
-    status.hasConnected,
-    status.nextRetryAt,
-    status.online,
-    status.reconnectAttemptCount,
-    status.reconnectPhase,
-  ]);
+  }, [status.hasConnected, status.nextRetryAt, status.online, status.reconnectPhase]);
 
   useEffect(() => {
     const uiState = getWsConnectionUiState(status);
@@ -270,7 +388,7 @@ export function WebSocketConnectionCoordinator() {
               },
               description: describeExhaustedToast(),
               timeout: 0,
-              title: "Disconnected from T3 Server",
+              title: `Disconnected from ${APP_SERVER_NAME}`,
               type: "error" as const,
               data: {
                 hideCopyButton: true,
@@ -310,7 +428,7 @@ export function WebSocketConnectionCoordinator() {
     ) {
       const successToast = {
         description: describeRecoveredToast(previousDisconnectedAt, status.connectedAt),
-        title: "Reconnected to T3 Server",
+        title: `Reconnected to ${APP_SERVER_NAME}`,
         type: "success" as const,
         timeout: 0,
         data: {
@@ -385,6 +503,40 @@ export function SlowRpcAckToastCoordinator() {
   return null;
 }
 
+/**
+ * How long to wait for the initial server config before showing the blocking
+ * "Connecting…" screen. 60s gives enough room for slow server startups without
+ * covering the app UI with this interstitial during normal launches.
+ */
+const BLOCKING_STATE_DELAY_MS = 60_000;
+
 export function WebSocketConnectionSurface({ children }: { readonly children: ReactNode }) {
+  const serverConfig = useServerConfig();
+  const status = useWsConnectionStatus();
+  const [delayElapsed, setDelayElapsed] = useState(false);
+
+  useEffect(() => {
+    // Reset and restart the timer any time config goes away (e.g. reconnect).
+    setDelayElapsed(false);
+
+    if (serverConfig !== null) return;
+
+    const id = window.setTimeout(() => setDelayElapsed(true), BLOCKING_STATE_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [serverConfig]);
+
+  if (serverConfig === null && delayElapsed) {
+    const uiState = getWsConnectionUiState(status);
+    return (
+      <WebSocketBlockingState
+        status={status}
+        uiState={uiState === "connected" ? "connecting" : uiState}
+      />
+    );
+  }
+
+  // While waiting for the initial config (before the delay elapses), render
+  // children immediately so the sidebar bootstrap spinner and thread verbs
+  // are already visible rather than a blank screen or this overlay.
   return children;
 }

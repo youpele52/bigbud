@@ -1,38 +1,36 @@
 import type {
   ClaudeSettings,
-  ClaudeModelSelection,
   ModelCapabilities,
   ServerProvider,
   ServerProviderModel,
-  ServerProviderAuth,
   ServerProviderSlashCommand,
-  ServerProviderState,
-} from "@t3tools/contracts";
-import { Cache, Duration, Effect, Equal, Layer, Option, Result, Schema, Stream } from "effect";
+} from "@bigbud/contracts";
+import { Cache, Duration, Effect, Equal, Layer, Option, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { decodeJsonResult } from "@t3tools/shared/schemaJson";
 import {
   query as claudeQuery,
   type SlashCommand as ClaudeSlashCommand,
-  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import {
   buildServerProvider,
   DEFAULT_TIMEOUT_MS,
   detailFromResult,
-  extractAuthBoolean,
   isCommandMissingCause,
   parseGenericCliVersion,
   providerModelsFromSettings,
   spawnAndCollect,
-  type CommandResult,
-} from "../providerSnapshot.ts";
-import { compareCliVersions } from "../cliVersion.ts";
-import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
-import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
-import { ServerSettingsError } from "@t3tools/contracts";
+} from "../providerSnapshot";
+import { makeManagedServerProvider } from "../makeManagedServerProvider";
+import { ClaudeProvider } from "../Services/ClaudeProvider";
+import { ServerSettingsService } from "../../ws/serverSettings";
+import { ServerSettingsError } from "@bigbud/contracts";
+import {
+  claudeAuthMetadata,
+  extractClaudeAuthMethodFromOutput,
+  extractSubscriptionTypeFromOutput,
+  parseClaudeAuthStatusFromOutput,
+} from "./ClaudeProviderAuth";
 
 const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
@@ -43,30 +41,7 @@ const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
 };
 
 const PROVIDER = "claudeAgent" as const;
-const MINIMUM_CLAUDE_OPUS_4_7_VERSION = "2.1.111";
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
-  {
-    slug: "claude-opus-4-7",
-    name: "Claude Opus 4.7",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High" },
-        { value: "xhigh", label: "Extra High", isDefault: true },
-        { value: "max", label: "Max" },
-        { value: "ultrathink", label: "Ultrathink" },
-      ],
-      supportsFastMode: false,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [
-        { value: "200k", label: "200k", isDefault: true },
-        { value: "1m", label: "1M" },
-      ],
-      promptInjectedEffortLevels: ["ultrathink"],
-    } satisfies ModelCapabilities,
-  },
   {
     slug: "claude-opus-4-6",
     name: "Claude Opus 4.6",
@@ -86,23 +61,6 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
         { value: "1m", label: "1M" },
       ],
       promptInjectedEffortLevels: ["ultrathink"],
-    } satisfies ModelCapabilities,
-  },
-  {
-    slug: "claude-opus-4-5",
-    name: "Claude Opus 4.5",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "max", label: "Max" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
     } satisfies ModelCapabilities,
   },
   {
@@ -126,6 +84,27 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     } satisfies ModelCapabilities,
   },
   {
+    slug: "claude-opus-4-5",
+    name: "Claude Opus 4.5",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+        { value: "max", label: "Max" },
+        { value: "ultrathink", label: "Ultrathink" },
+      ],
+      supportsFastMode: true,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [
+        { value: "200k", label: "200k", isDefault: true },
+        { value: "1m", label: "1M" },
+      ],
+      promptInjectedEffortLevels: ["ultrathink"],
+    } satisfies ModelCapabilities,
+  },
+  {
     slug: "claude-haiku-4-5",
     name: "Claude Haiku 4.5",
     isCustom: false,
@@ -139,24 +118,6 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   },
 ];
 
-function supportsClaudeOpus47(version: string | null | undefined): boolean {
-  return version ? compareCliVersions(version, MINIMUM_CLAUDE_OPUS_4_7_VERSION) >= 0 : false;
-}
-
-function getBuiltInClaudeModelsForVersion(
-  version: string | null | undefined,
-): ReadonlyArray<ServerProviderModel> {
-  if (supportsClaudeOpus47(version)) {
-    return BUILT_IN_MODELS;
-  }
-  return BUILT_IN_MODELS.filter((model) => model.slug !== "claude-opus-4-7");
-}
-
-function formatClaudeOpus47UpgradeMessage(version: string | null): string {
-  const versionLabel = version ? `v${version}` : "the installed version";
-  return `Claude Code ${versionLabel} is too old for Claude Opus 4.7. Upgrade to v${MINIMUM_CLAUDE_OPUS_4_7_VERSION} or newer to access it.`;
-}
-
 export function getClaudeModelCapabilities(model: string | null | undefined): ModelCapabilities {
   const slug = model?.trim();
   return (
@@ -165,257 +126,50 @@ export function getClaudeModelCapabilities(model: string | null | undefined): Mo
   );
 }
 
-export function resolveClaudeApiModelId(modelSelection: ClaudeModelSelection): string {
-  switch (modelSelection.options?.contextWindow) {
-    case "1m":
-      return `${modelSelection.model}[1m]`;
-    default:
-      return modelSelection.model;
-  }
-}
-export function parseClaudeAuthStatusFromOutput(result: CommandResult): {
-  readonly status: Exclude<ServerProviderState, "disabled">;
-  readonly auth: Pick<ServerProviderAuth, "status">;
-  readonly message?: string;
-} {
-  const lowerOutput = `${result.stdout}\n${result.stderr}`.toLowerCase();
-
-  if (
-    lowerOutput.includes("unknown command") ||
-    lowerOutput.includes("unrecognized command") ||
-    lowerOutput.includes("unexpected argument")
-  ) {
-    return {
-      status: "warning",
-      auth: { status: "unknown" },
-      message:
-        "Claude Agent authentication status command is unavailable in this version of Claude.",
-    };
-  }
-
-  if (
-    lowerOutput.includes("not logged in") ||
-    lowerOutput.includes("login required") ||
-    lowerOutput.includes("authentication required") ||
-    lowerOutput.includes("run `claude login`") ||
-    lowerOutput.includes("run claude login")
-  ) {
-    return {
-      status: "error",
-      auth: { status: "unauthenticated" },
-      message: "Claude is not authenticated. Run `claude auth login` and try again.",
-    };
-  }
-
-  const parsedAuth = (() => {
-    const trimmed = result.stdout.trim();
-    if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-    try {
-      return {
-        attemptedJsonParse: true as const,
-        auth: extractAuthBoolean(JSON.parse(trimmed)),
-      };
-    } catch {
-      return { attemptedJsonParse: false as const, auth: undefined as boolean | undefined };
-    }
-  })();
-
-  if (parsedAuth.auth === true) {
-    return { status: "ready", auth: { status: "authenticated" } };
-  }
-  if (parsedAuth.auth === false) {
-    return {
-      status: "error",
-      auth: { status: "unauthenticated" },
-      message: "Claude is not authenticated. Run `claude auth login` and try again.",
-    };
-  }
-  if (parsedAuth.attemptedJsonParse) {
-    return {
-      status: "warning",
-      auth: { status: "unknown" },
-      message:
-        "Could not verify Claude authentication status from JSON output (missing auth marker).",
-    };
-  }
-  if (result.code === 0) {
-    return { status: "ready", auth: { status: "authenticated" } };
-  }
-
-  const detail = detailFromResult(result);
-  return {
-    status: "warning",
-    auth: { status: "unknown" },
-    message: detail
-      ? `Could not verify Claude authentication status. ${detail}`
-      : "Could not verify Claude authentication status.",
-  };
-}
-
-// ── Subscription type detection ─────────────────────────────────────
-//
-// The SDK probe returns typed `AccountInfo.subscriptionType` directly.
-// This walker is a best-effort fallback for the `claude auth status`
-// JSON output whose shape is not guaranteed.
-
-/** Keys that directly hold a subscription/plan identifier. */
-const SUBSCRIPTION_TYPE_KEYS = [
-  "subscriptionType",
-  "subscription_type",
-  "plan",
-  "tier",
-  "planType",
-  "plan_type",
-] as const;
-
-/** Keys whose value may be a nested object containing subscription info. */
-const SUBSCRIPTION_CONTAINER_KEYS = ["account", "subscription", "user", "billing"] as const;
-const AUTH_METHOD_KEYS = ["authMethod", "auth_method"] as const;
-const AUTH_METHOD_CONTAINER_KEYS = ["auth", "account", "session"] as const;
-
-/** Lift an unknown value into `Option<string>` if it is a non-empty string. */
-const asNonEmptyString = (v: unknown): Option.Option<string> =>
-  typeof v === "string" && v.length > 0 ? Option.some(v) : Option.none();
-
-/** Lift an unknown value into `Option<Record>` if it is a plain object. */
-const asRecord = (v: unknown): Option.Option<Record<string, unknown>> =>
-  typeof v === "object" && v !== null && !globalThis.Array.isArray(v)
-    ? Option.some(v as Record<string, unknown>)
-    : Option.none();
-
-/**
- * Walk an unknown parsed JSON value looking for a subscription/plan
- * identifier, returning the first match as an `Option`.
- */
-function findSubscriptionType(value: unknown): Option.Option<string> {
-  if (globalThis.Array.isArray(value)) {
-    return Option.firstSomeOf(value.map(findSubscriptionType));
-  }
-
-  return asRecord(value).pipe(
-    Option.flatMap((record) => {
-      const direct = Option.firstSomeOf(
-        SUBSCRIPTION_TYPE_KEYS.map((key) => asNonEmptyString(record[key])),
-      );
-      if (Option.isSome(direct)) return direct;
-
-      return Option.firstSomeOf(
-        SUBSCRIPTION_CONTAINER_KEYS.map((key) =>
-          asRecord(record[key]).pipe(Option.flatMap(findSubscriptionType)),
-        ),
-      );
-    }),
-  );
-}
-
-function findAuthMethod(value: unknown): Option.Option<string> {
-  if (globalThis.Array.isArray(value)) {
-    return Option.firstSomeOf(value.map(findAuthMethod));
-  }
-
-  return asRecord(value).pipe(
-    Option.flatMap((record) => {
-      const direct = Option.firstSomeOf(
-        AUTH_METHOD_KEYS.map((key) => asNonEmptyString(record[key])),
-      );
-      if (Option.isSome(direct)) return direct;
-
-      return Option.firstSomeOf(
-        AUTH_METHOD_CONTAINER_KEYS.map((key) =>
-          asRecord(record[key]).pipe(Option.flatMap(findAuthMethod)),
-        ),
-      );
-    }),
-  );
-}
-
-/**
- * Try to extract a subscription type from the `claude auth status` JSON
- * output. This is a zero-cost operation on data we already have.
- */
-const decodeUnknownJson = decodeJsonResult(Schema.Unknown);
-
-function extractSubscriptionTypeFromOutput(result: CommandResult): string | undefined {
-  const parsed = decodeUnknownJson(result.stdout.trim());
-  if (Result.isFailure(parsed)) return undefined;
-  return Option.getOrUndefined(findSubscriptionType(parsed.success));
-}
-
-function extractClaudeAuthMethodFromOutput(result: CommandResult): string | undefined {
-  const parsed = decodeUnknownJson(result.stdout.trim());
-  if (Result.isFailure(parsed)) return undefined;
-  return Option.getOrUndefined(findAuthMethod(parsed.success));
-}
-
-function toTitleCaseWords(value: string): string {
-  return value
-    .split(/[\s_-]+/g)
-    .filter(Boolean)
-    .map((part) => part[0]!.toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function claudeSubscriptionLabel(subscriptionType: string | undefined): string | undefined {
-  const normalized = subscriptionType?.toLowerCase().replace(/[\s_-]+/g, "");
-  if (!normalized) return undefined;
-
-  switch (normalized) {
-    case "max":
-    case "maxplan":
-    case "max5":
-    case "max20":
-      return "Max";
-    case "enterprise":
-      return "Enterprise";
-    case "team":
-      return "Team";
-    case "pro":
-      return "Pro";
-    case "free":
-      return "Free";
-    default:
-      return toTitleCaseWords(subscriptionType!);
-  }
-}
-
-function normalizeClaudeAuthMethod(authMethod: string | undefined): string | undefined {
-  const normalized = authMethod?.toLowerCase().replace(/[\s_-]+/g, "");
-  if (!normalized) return undefined;
-  if (normalized === "apikey") return "apiKey";
-  return undefined;
-}
-
-function claudeAuthMetadata(input: {
-  readonly subscriptionType: string | undefined;
-  readonly authMethod: string | undefined;
-}): { readonly type: string; readonly label: string } | undefined {
-  if (normalizeClaudeAuthMethod(input.authMethod) === "apiKey") {
-    return {
-      type: "apiKey",
-      label: "Claude API Key",
-    };
-  }
-
-  if (input.subscriptionType) {
-    const subscriptionLabel = claudeSubscriptionLabel(input.subscriptionType);
-    return {
-      type: input.subscriptionType,
-      label: `Claude ${subscriptionLabel ?? toTitleCaseWords(input.subscriptionType)} Subscription`,
-    };
-  }
-
-  return undefined;
-}
-
-// ── SDK capability probe ────────────────────────────────────────────
+// Re-export for external consumers that imported these from this module.
+export { parseClaudeAuthStatusFromOutput } from "./ClaudeProviderAuth";
 
 const CAPABILITIES_PROBE_TIMEOUT_MS = 8_000;
 
-function nonEmptyProbeString(value: string): string | undefined {
-  const candidate = value.trim();
-  return candidate ? candidate : undefined;
+function nonEmptyProbeString(value: string | undefined | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function dedupeSlashCommands(
+  commands: ReadonlyArray<ServerProviderSlashCommand>,
+): ReadonlyArray<ServerProviderSlashCommand> {
+  const commandsByName = new Map<string, ServerProviderSlashCommand>();
+
+  for (const command of commands) {
+    const name = nonEmptyProbeString(command.name);
+    if (!name) {
+      continue;
+    }
+
+    const key = name.toLowerCase();
+    const existing = commandsByName.get(key);
+    if (!existing) {
+      commandsByName.set(key, { ...command, name });
+      continue;
+    }
+
+    commandsByName.set(key, {
+      ...existing,
+      ...(existing.description
+        ? {}
+        : command.description
+          ? { description: command.description }
+          : {}),
+      ...(existing.input?.hint
+        ? {}
+        : command.input?.hint
+          ? { input: { hint: command.input.hint } }
+          : {}),
+    });
+  }
+
+  return [...commandsByName.values()];
 }
 
 function parseClaudeInitializationCommands(
@@ -442,105 +196,32 @@ function parseClaudeInitializationCommands(
   );
 }
 
-function dedupeSlashCommands(
-  commands: ReadonlyArray<ServerProviderSlashCommand>,
-): ReadonlyArray<ServerProviderSlashCommand> {
-  const commandsByName = new Map<string, ServerProviderSlashCommand>();
-
-  for (const command of commands) {
-    const name = nonEmptyProbeString(command.name);
-    if (!name) {
-      continue;
-    }
-
-    const key = name.toLowerCase();
-    const existing = commandsByName.get(key);
-    if (!existing) {
-      commandsByName.set(key, {
-        ...command,
-        name,
-      });
-      continue;
-    }
-
-    commandsByName.set(key, {
-      ...existing,
-      ...(existing.description
-        ? {}
-        : command.description
-          ? { description: command.description }
-          : {}),
-      ...(existing.input?.hint
-        ? {}
-        : command.input?.hint
-          ? { input: { hint: command.input.hint } }
-          : {}),
-    });
-  }
-
-  return [...commandsByName.values()];
-}
-
-function waitForAbortSignal(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    signal.addEventListener("abort", () => resolve(), { once: true });
-  });
-}
-
-/**
- * Probe account information by spawning a lightweight Claude Agent SDK
- * session and reading the initialization result.
- *
- * We pass a never-yielding AsyncIterable as the prompt so that no user
- * message is ever written to the subprocess stdin. This means the Claude
- * Code subprocess completes its local initialization IPC (returning
- * account info and slash commands) but never starts an API request to
- * Anthropic. We read the init data and then abort the subprocess.
- *
- * This is used as a fallback when `claude auth status` does not include
- * subscription type information.
- */
-const probeClaudeCapabilities = (binaryPath: string) => {
-  const abort = new AbortController();
-  return Effect.tryPromise(async () => {
-    const q = claudeQuery({
-      // Never yield — we only need initialization data, not a conversation.
-      // This prevents any prompt from reaching the Anthropic API.
-      // oxlint-disable-next-line require-yield
-      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
-        await waitForAbortSignal(abort.signal);
-      })(),
+const probeClaudeCapabilities = (binaryPath: string) =>
+  Effect.tryPromise(async () => {
+    const abortController = new AbortController();
+    const queryRuntime = claudeQuery({
+      prompt: "",
       options: {
-        persistSession: false,
         pathToClaudeCodeExecutable: binaryPath,
-        abortController: abort,
+        abortController,
+        maxTurns: 0,
         settingSources: ["user", "project", "local"],
         allowedTools: [],
         stderr: () => {},
       },
     });
-    const init = await q.initializationResult();
-    return {
-      subscriptionType: init.account?.subscriptionType,
-      slashCommands: parseClaudeInitializationCommands(init.commands),
-    };
-  }).pipe(
-    Effect.ensuring(
-      Effect.sync(() => {
-        if (!abort.signal.aborted) abort.abort();
-      }),
-    ),
-    Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS),
-    Effect.result,
-    Effect.map((result) => {
-      if (Result.isFailure(result)) return undefined;
-      return Option.isSome(result.success) ? result.success.value : undefined;
-    }),
-  );
-};
+
+    try {
+      const init = await queryRuntime.initializationResult();
+      return {
+        subscriptionType: init.account?.subscriptionType,
+        slashCommands: parseClaudeInitializationCommands(init.commands),
+      };
+    } finally {
+      abortController.abort();
+      queryRuntime.close();
+    }
+  }).pipe(Effect.timeout(CAPABILITIES_PROBE_TIMEOUT_MS));
 
 const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (args: ReadonlyArray<string>) {
   const claudeSettings = yield* Effect.service(ServerSettingsService).pipe(
@@ -568,7 +249,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     Effect.map((settings) => settings.providers.claudeAgent),
   );
   const checkedAt = new Date().toISOString();
-  const allModels = providerModelsFromSettings(
+  const models = providerModelsFromSettings(
     BUILT_IN_MODELS,
     PROVIDER,
     claudeSettings.customModels,
@@ -580,13 +261,13 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       provider: PROVIDER,
       enabled: false,
       checkedAt,
-      models: allModels,
+      models,
       probe: {
         installed: false,
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Claude is disabled in T3 Code settings.",
+        message: "Claude is disabled in bigbud settings.",
       },
     });
   }
@@ -602,7 +283,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       provider: PROVIDER,
       enabled: claudeSettings.enabled,
       checkedAt,
-      models: allModels,
+      models,
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -620,7 +301,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       provider: PROVIDER,
       enabled: claudeSettings.enabled,
       checkedAt,
-      models: allModels,
+      models,
       probe: {
         installed: true,
         version: null,
@@ -640,7 +321,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       provider: PROVIDER,
       enabled: claudeSettings.enabled,
       checkedAt,
-      models: allModels,
+      models,
       probe: {
         installed: true,
         version: parsedVersion,
@@ -652,16 +333,6 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       },
     });
   }
-
-  const models = providerModelsFromSettings(
-    getBuiltInClaudeModelsForVersion(parsedVersion),
-    PROVIDER,
-    claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
-  );
-  const opus47UpgradeMessage = supportsClaudeOpus47(parsedVersion)
-    ? undefined
-    : formatClaudeOpus47UpgradeMessage(parsedVersion);
 
   const slashCommands =
     (resolveSlashCommands
@@ -678,25 +349,21 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     Effect.result,
   );
 
-  // Determine subscription type from multiple sources (cheapest first):
-  // 1. `claude auth status` JSON output (may or may not contain it)
-  // 2. Cached SDK probe (spawns a Claude process on miss, reads
-  //    `initializationResult()` for account metadata, then aborts
-  //    immediately — no API tokens are consumed)
-
   let subscriptionType: string | undefined;
   let authMethod: string | undefined;
 
-  if (Result.isSuccess(authProbe) && Option.isSome(authProbe.success)) {
+  if (resolveSubscriptionType) {
+    subscriptionType = yield* resolveSubscriptionType(claudeSettings.binaryPath).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+  }
+
+  if (!subscriptionType && Result.isSuccess(authProbe) && Option.isSome(authProbe.success)) {
     subscriptionType = extractSubscriptionTypeFromOutput(authProbe.success.value);
     authMethod = extractClaudeAuthMethodFromOutput(authProbe.success.value);
+  } else if (Result.isSuccess(authProbe) && Option.isSome(authProbe.success)) {
+    authMethod = extractClaudeAuthMethodFromOutput(authProbe.success.value);
   }
-
-  if (!subscriptionType && resolveSubscriptionType) {
-    subscriptionType = yield* resolveSubscriptionType(claudeSettings.binaryPath);
-  }
-
-  // ── Handle auth results (same logic as before, adjusted models) ──
 
   if (Result.isFailure(authProbe)) {
     const error = authProbe.failure;
@@ -752,75 +419,32 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         ...parsed.auth,
         ...(authMetadata ? authMetadata : {}),
       },
-      ...(parsed.message
-        ? { message: parsed.message }
-        : opus47UpgradeMessage
-          ? { message: opus47UpgradeMessage }
-          : {}),
+      ...(parsed.message ? { message: parsed.message } : {}),
     },
   });
 });
-
-const makePendingClaudeProvider = (claudeSettings: ClaudeSettings): ServerProvider => {
-  const checkedAt = new Date().toISOString();
-  const models = providerModelsFromSettings(
-    BUILT_IN_MODELS,
-    PROVIDER,
-    claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
-  );
-
-  if (!claudeSettings.enabled) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: false,
-      checkedAt,
-      models,
-      probe: {
-        installed: false,
-        version: null,
-        status: "warning",
-        auth: { status: "unknown" },
-        message: "Claude is disabled in T3 Code settings.",
-      },
-    });
-  }
-
-  return buildServerProvider({
-    provider: PROVIDER,
-    enabled: true,
-    checkedAt,
-    models,
-    probe: {
-      installed: false,
-      version: null,
-      status: "warning",
-      auth: { status: "unknown" },
-      message: "Claude provider status has not been checked in this session yet.",
-    },
-  });
-};
 
 export const ClaudeProviderLive = Layer.effect(
   ClaudeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-
-    const subscriptionProbeCache = yield* Cache.make({
+    const capabilitiesProbeCache = yield* Cache.make({
       capacity: 1,
       timeToLive: Duration.minutes(5),
-      lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath),
+      lookup: (binaryPath: string) => probeClaudeCapabilities(binaryPath).pipe(Effect.option),
     });
 
     const checkProvider = checkClaudeProviderStatus(
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
-          Effect.map((probe) => probe?.subscriptionType),
+        Cache.get(capabilitiesProbeCache, binaryPath).pipe(
+          Effect.map((result) =>
+            Option.isSome(result) ? result.value.subscriptionType : undefined,
+          ),
         ),
       (binaryPath) =>
-        Cache.get(subscriptionProbeCache, binaryPath).pipe(
-          Effect.map((probe) => probe?.slashCommands),
+        Cache.get(capabilitiesProbeCache, binaryPath).pipe(
+          Effect.map((result) => (Option.isSome(result) ? result.value.slashCommands : undefined)),
         ),
     ).pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
@@ -836,7 +460,6 @@ export const ClaudeProviderLive = Layer.effect(
         Stream.map((settings) => settings.providers.claudeAgent),
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
-      initialSnapshot: makePendingClaudeProvider,
       checkProvider,
     });
   }),

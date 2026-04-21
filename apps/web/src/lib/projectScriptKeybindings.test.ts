@@ -1,7 +1,7 @@
-import { MAX_KEYBINDING_VALUE_LENGTH, type KeybindingCommand } from "@t3tools/contracts";
+import { MAX_KEYBINDING_VALUE_LENGTH, type KeybindingCommand } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { commandForProjectScript } from "../projectScripts";
+import { commandForProjectScript } from "../logic/project-scripts";
 import {
   decodeProjectScriptKeybindingRule,
   keybindingValueForCommand,

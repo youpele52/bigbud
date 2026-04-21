@@ -19,11 +19,11 @@ import type {
   ThreadId,
   ProviderTurnStartResult,
   TurnId,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import type { Effect } from "effect";
 import type { Stream } from "effect";
 
-export type ProviderSessionModelSwitchMode = "in-session" | "unsupported";
+export type ProviderSessionModelSwitchMode = "in-session" | "restart-session" | "unsupported";
 
 export interface ProviderAdapterCapabilities {
   /**

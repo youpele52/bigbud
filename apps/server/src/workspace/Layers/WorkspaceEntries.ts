@@ -1,26 +1,29 @@
-import * as OS from "node:os";
 import fsPromises from "node:fs/promises";
 import type { Dirent } from "node:fs";
 
 import { Cache, Duration, Effect, Exit, Layer, Option, Path } from "effect";
 
-import { type FilesystemBrowseInput, type ProjectEntry } from "@t3tools/contracts";
-import { isExplicitRelativePath, isWindowsAbsolutePath } from "@t3tools/shared/path";
-import {
-  insertRankedSearchResult,
-  normalizeSearchQuery,
-  scoreQueryMatch,
-  type RankedSearchResult,
-} from "@t3tools/shared/searchRanking";
+import { type ProjectEntry } from "@bigbud/contracts";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import {
   WorkspaceEntries,
-  WorkspaceEntriesBrowseError,
   WorkspaceEntriesError,
   type WorkspaceEntriesShape,
 } from "../Services/WorkspaceEntries.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
+import {
+  type SearchableWorkspaceEntry,
+  type RankedWorkspaceEntry,
+  toPosixPath,
+  parentPathOf,
+  toSearchableWorkspaceEntry,
+  normalizeQuery,
+  isPathInIgnoredDirectory,
+  directoryAncestorsOf,
+  scoreEntry,
+  insertRankedEntry,
+} from "./WorkspaceEntriesSearch.ts";
 
 const WORKSPACE_CACHE_TTL_MS = 15_000;
 const WORKSPACE_CACHE_MAX_KEYS = 4;
@@ -44,133 +47,8 @@ interface WorkspaceIndex {
   truncated: boolean;
 }
 
-interface SearchableWorkspaceEntry extends ProjectEntry {
-  normalizedPath: string;
-  normalizedName: string;
-}
-
-type RankedWorkspaceEntry = RankedSearchResult<SearchableWorkspaceEntry>;
-
-function toPosixPath(input: string): string {
-  return input.replaceAll("\\", "/");
-}
-
-function expandHomePath(input: string, path: Path.Path): string {
-  if (input === "~") {
-    return OS.homedir();
-  }
-  if (input.startsWith("~/") || input.startsWith("~\\")) {
-    return path.join(OS.homedir(), input.slice(2));
-  }
-  return input;
-}
-
-function parentPathOf(input: string): string | undefined {
-  const separatorIndex = input.lastIndexOf("/");
-  if (separatorIndex === -1) {
-    return undefined;
-  }
-  return input.slice(0, separatorIndex);
-}
-
-function basenameOf(input: string): string {
-  const separatorIndex = input.lastIndexOf("/");
-  if (separatorIndex === -1) {
-    return input;
-  }
-  return input.slice(separatorIndex + 1);
-}
-
-function toSearchableWorkspaceEntry(entry: ProjectEntry): SearchableWorkspaceEntry {
-  const normalizedPath = entry.path.toLowerCase();
-  return {
-    ...entry,
-    normalizedPath,
-    normalizedName: basenameOf(normalizedPath),
-  };
-}
-
-function scoreEntry(entry: SearchableWorkspaceEntry, query: string): number | null {
-  if (!query) {
-    return entry.kind === "directory" ? 0 : 1;
-  }
-
-  const { normalizedPath, normalizedName } = entry;
-
-  const scores = [
-    scoreQueryMatch({
-      value: normalizedName,
-      query,
-      exactBase: 0,
-      prefixBase: 2,
-      includesBase: 5,
-      fuzzyBase: 100,
-    }),
-    scoreQueryMatch({
-      value: normalizedPath,
-      query,
-      exactBase: 1,
-      prefixBase: 3,
-      boundaryBase: 4,
-      includesBase: 6,
-      fuzzyBase: 200,
-      boundaryMarkers: ["/"],
-    }),
-  ].filter((score): score is number => score !== null);
-
-  if (scores.length === 0) {
-    return null;
-  }
-
-  return Math.min(...scores);
-}
-
-function isPathInIgnoredDirectory(relativePath: string): boolean {
-  const firstSegment = relativePath.split("/")[0];
-  if (!firstSegment) return false;
-  return IGNORED_DIRECTORY_NAMES.has(firstSegment);
-}
-
-function directoryAncestorsOf(relativePath: string): string[] {
-  const segments = relativePath.split("/").filter((segment) => segment.length > 0);
-  if (segments.length <= 1) return [];
-
-  const directories: string[] = [];
-  for (let index = 1; index < segments.length; index += 1) {
-    directories.push(segments.slice(0, index).join("/"));
-  }
-  return directories;
-}
-
-const resolveBrowseTarget = (
-  input: FilesystemBrowseInput,
-  pathService: Path.Path,
-): Effect.Effect<string, WorkspaceEntriesBrowseError> =>
-  Effect.gen(function* () {
-    if (process.platform !== "win32" && isWindowsAbsolutePath(input.partialPath)) {
-      return yield* new WorkspaceEntriesBrowseError({
-        cwd: input.cwd,
-        partialPath: input.partialPath,
-        operation: "workspaceEntries.resolveBrowseTarget",
-        detail: "Windows-style paths are only supported on Windows.",
-      });
-    }
-
-    if (!isExplicitRelativePath(input.partialPath)) {
-      return pathService.resolve(expandHomePath(input.partialPath, pathService));
-    }
-
-    if (!input.cwd) {
-      return yield* new WorkspaceEntriesBrowseError({
-        cwd: input.cwd,
-        partialPath: input.partialPath,
-        operation: "workspaceEntries.resolveBrowseTarget",
-        detail: "Relative filesystem browse paths require a current project.",
-      });
-    }
-
-    return pathService.resolve(expandHomePath(input.cwd, pathService), input.partialPath);
-  });
+const processErrorDetail = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
 
 export const makeWorkspaceEntries = Effect.gen(function* () {
   const path = yield* Path.Path;
@@ -215,13 +93,15 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
 
       const listedPaths = [...listedFiles.paths]
         .map((entry) => toPosixPath(entry))
-        .filter((entry) => entry.length > 0 && !isPathInIgnoredDirectory(entry));
+        .filter(
+          (entry) => entry.length > 0 && !isPathInIgnoredDirectory(entry, IGNORED_DIRECTORY_NAMES),
+        );
       const filePaths = yield* filterGitIgnoredPaths(cwd, listedPaths);
 
       const directorySet = new Set<string>();
       for (const filePath of filePaths) {
         for (const directoryPath of directoryAncestorsOf(filePath)) {
-          if (!isPathInIgnoredDirectory(directoryPath)) {
+          if (!isPathInIgnoredDirectory(directoryPath, IGNORED_DIRECTORY_NAMES)) {
             directorySet.add(directoryPath);
           }
         }
@@ -229,23 +109,27 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
 
       const directoryEntries = [...directorySet]
         .toSorted((left, right) => left.localeCompare(right))
-        .map(
-          (directoryPath): ProjectEntry => ({
+        // oxlint-disable-next-line no-map-spread -- copy-on-write required; parentPath is optional
+        .map((directoryPath): ProjectEntry => {
+          const parentPath = parentPathOf(directoryPath);
+          return {
             path: directoryPath,
             kind: "directory",
-            parentPath: parentPathOf(directoryPath),
-          }),
-        )
+            ...(parentPath !== undefined ? { parentPath } : {}),
+          };
+        })
         .map(toSearchableWorkspaceEntry);
       const fileEntries = [...new Set(filePaths)]
         .toSorted((left, right) => left.localeCompare(right))
-        .map(
-          (filePath): ProjectEntry => ({
+        // oxlint-disable-next-line no-map-spread -- copy-on-write required; parentPath is optional
+        .map((filePath): ProjectEntry => {
+          const parentPath = parentPathOf(filePath);
+          return {
             path: filePath,
             kind: "file",
-            parentPath: parentPathOf(filePath),
-          }),
-        )
+            ...(parentPath !== undefined ? { parentPath } : {}),
+          };
+        })
         .map(toSearchableWorkspaceEntry);
 
       const entries = [...directoryEntries, ...fileEntries];
@@ -274,7 +158,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
         new WorkspaceEntriesError({
           cwd,
           operation: "workspaceEntries.readDirectoryEntries",
-          detail: cause instanceof Error ? cause.message : String(cause),
+          detail: processErrorDetail(cause),
           cause,
         }),
     }).pipe(
@@ -324,7 +208,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
           const relativePath = toPosixPath(
             relativeDir ? path.join(relativeDir, dirent.name) : dirent.name,
           );
-          if (isPathInIgnoredDirectory(relativePath)) {
+          if (isPathInIgnoredDirectory(relativePath, IGNORED_DIRECTORY_NAMES)) {
             continue;
           }
           candidates.push({ dirent, relativePath });
@@ -345,10 +229,11 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
             continue;
           }
 
+          const parentPath = parentPathOf(candidate.relativePath);
           const entry = toSearchableWorkspaceEntry({
             path: candidate.relativePath,
             kind: candidate.dirent.isDirectory() ? "directory" : "file",
-            parentPath: parentPathOf(candidate.relativePath),
+            ...(parentPath !== undefined ? { parentPath } : {}),
           });
           entries.push(entry);
 
@@ -385,14 +270,12 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     return yield* buildWorkspaceIndexFromFilesystem(cwd);
   });
 
-  const workspaceIndexCache = yield* Cache.makeWith<string, WorkspaceIndex, WorkspaceEntriesError>(
-    buildWorkspaceIndex,
-    {
-      capacity: WORKSPACE_CACHE_MAX_KEYS,
-      timeToLive: (exit) =>
-        Exit.isSuccess(exit) ? Duration.millis(WORKSPACE_CACHE_TTL_MS) : Duration.zero,
-    },
-  );
+  const workspaceIndexCache = yield* Cache.makeWith<string, WorkspaceIndex, WorkspaceEntriesError>({
+    capacity: WORKSPACE_CACHE_MAX_KEYS,
+    lookup: buildWorkspaceIndex,
+    timeToLive: (exit) =>
+      Exit.isSuccess(exit) ? Duration.millis(WORKSPACE_CACHE_TTL_MS) : Duration.zero,
+  });
 
   const normalizeWorkspaceRoot = Effect.fn("WorkspaceEntries.normalizeWorkspaceRoot")(function* (
     cwd: string,
@@ -422,74 +305,28 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     },
   );
 
-  const browse: WorkspaceEntriesShape["browse"] = Effect.fn("WorkspaceEntries.browse")(
-    function* (input) {
-      const resolvedInputPath = yield* resolveBrowseTarget(input, path);
-      const endsWithSeparator = /[\\/]$/.test(input.partialPath) || input.partialPath === "~";
-      const parentPath = endsWithSeparator ? resolvedInputPath : path.dirname(resolvedInputPath);
-      const prefix = endsWithSeparator ? "" : path.basename(resolvedInputPath);
-
-      const dirents = yield* Effect.tryPromise({
-        try: () => fsPromises.readdir(parentPath, { withFileTypes: true }),
-        catch: (cause) =>
-          new WorkspaceEntriesBrowseError({
-            cwd: input.cwd,
-            partialPath: input.partialPath,
-            operation: "workspaceEntries.browse.readDirectory",
-            detail: `Unable to browse '${parentPath}': ${cause instanceof Error ? cause.message : String(cause)}`,
-            cause,
-          }),
-      });
-
-      const showHidden = endsWithSeparator || prefix.startsWith(".");
-      const lowerPrefix = prefix.toLowerCase();
-
-      return {
-        parentPath,
-        entries: dirents
-          .filter(
-            (dirent) =>
-              dirent.isDirectory() &&
-              dirent.name.toLowerCase().startsWith(lowerPrefix) &&
-              (showHidden || !dirent.name.startsWith(".")),
-          )
-          .map((dirent) => ({
-            name: dirent.name,
-            fullPath: path.join(parentPath, dirent.name),
-          }))
-          .toSorted((left, right) => left.name.localeCompare(right.name)),
-      };
-    },
-  );
-
   const search: WorkspaceEntriesShape["search"] = Effect.fn("WorkspaceEntries.search")(
     function* (input) {
       const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
       return yield* Cache.get(workspaceIndexCache, normalizedCwd).pipe(
         Effect.map((index) => {
-          const normalizedQuery = normalizeSearchQuery(input.query, {
-            trimLeadingPattern: /^[@./]+/,
-          });
+          const normalizedQueryStr = normalizeQuery(input.query);
           const limit = Math.max(0, Math.floor(input.limit));
           const rankedEntries: RankedWorkspaceEntry[] = [];
           let matchedEntryCount = 0;
 
           for (const entry of index.entries) {
-            const score = scoreEntry(entry, normalizedQuery);
+            const score = scoreEntry(entry, normalizedQueryStr);
             if (score === null) {
               continue;
             }
 
             matchedEntryCount += 1;
-            insertRankedSearchResult(
-              rankedEntries,
-              { item: entry, score, tieBreaker: entry.path },
-              limit,
-            );
+            insertRankedEntry(rankedEntries, { entry, score }, limit);
           }
 
           return {
-            entries: rankedEntries.map((candidate) => candidate.item),
+            entries: rankedEntries.map((candidate) => candidate.entry),
             truncated: index.truncated || matchedEntryCount > limit,
           };
         }),
@@ -498,7 +335,6 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   );
 
   return {
-    browse,
     invalidate,
     search,
   } satisfies WorkspaceEntriesShape;

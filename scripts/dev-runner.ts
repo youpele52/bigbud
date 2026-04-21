@@ -1,23 +1,21 @@
 #!/usr/bin/env node
 
-import * as NodeOS from "node:os";
+import { homedir } from "node:os";
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { NetService } from "@t3tools/shared/Net";
+import { NetService } from "@bigbud/shared/Net";
 import { Config, Data, Effect, Hash, Layer, Logger, Option, Path, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
-const BASE_SERVER_PORT = 13773;
+const BASE_SERVER_PORT = 3773;
 const BASE_WEB_PORT = 5733;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
-const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
-const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
 
 export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.join(NodeOS.homedir(), ".t3"),
+  path.join(homedir(), ".bigbud"),
 );
 
 const MODE_ARGS = {
@@ -25,14 +23,14 @@ const MODE_ARGS = {
     "run",
     "dev",
     "--ui=tui",
-    "--filter=@t3tools/contracts",
-    "--filter=@t3tools/web",
-    "--filter=t3",
+    "--filter=@bigbud/contracts",
+    "--filter=@bigbud/web",
+    "--filter=bigbud",
     "--parallel",
   ],
-  "dev:server": ["run", "dev", "--filter=t3"],
-  "dev:web": ["run", "dev", "--filter=@t3tools/web"],
-  "dev:desktop": ["run", "dev", "--filter=@t3tools/desktop", "--filter=@t3tools/web", "--parallel"],
+  "dev:server": ["run", "dev", "--filter=bigbud"],
+  "dev:web": ["run", "dev", "--filter=@bigbud/web"],
+  "dev:desktop": ["run", "dev", "--filter=@bigbud/desktop", "--filter=@bigbud/web", "--parallel"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
@@ -122,6 +120,7 @@ interface CreateDevRunnerEnvInput {
   readonly serverOffset: number;
   readonly webOffset: number;
   readonly t3Home: string | undefined;
+  readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
   readonly logWebSocketEvents: boolean | undefined;
@@ -136,6 +135,7 @@ export function createDevRunnerEnv({
   serverOffset,
   webOffset,
   t3Home,
+  authToken,
   noBrowser,
   autoBootstrapProjectFromCwd,
   logWebSocketEvents,
@@ -152,59 +152,83 @@ export function createDevRunnerEnv({
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
       PORT: String(webPort),
-      VITE_DEV_SERVER_URL:
-        devUrl?.toString() ??
-        `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
+      ELECTRON_RENDERER_PORT: String(webPort),
+      VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
+      BIGBUD_HOME: resolvedBaseDir,
       T3CODE_HOME: resolvedBaseDir,
     };
 
     if (!isDesktopMode) {
+      output.BIGBUD_PORT = String(serverPort);
       output.T3CODE_PORT = String(serverPort);
-      output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
       output.VITE_WS_URL = `ws://localhost:${serverPort}`;
     } else {
-      output.T3CODE_PORT = String(serverPort);
-      output.VITE_HTTP_URL = `http://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
-      output.VITE_WS_URL = `ws://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
+      delete output.BIGBUD_PORT;
+      delete output.T3CODE_PORT;
+      delete output.VITE_WS_URL;
+      delete output.BIGBUD_AUTH_TOKEN;
+      delete output.T3CODE_AUTH_TOKEN;
+      delete output.BIGBUD_MODE;
       delete output.T3CODE_MODE;
+      delete output.BIGBUD_NO_BROWSER;
       delete output.T3CODE_NO_BROWSER;
+      delete output.BIGBUD_HOST;
       delete output.T3CODE_HOST;
     }
 
     if (!isDesktopMode && host !== undefined) {
+      output.BIGBUD_HOST = host;
       output.T3CODE_HOST = host;
     }
 
+    if (!isDesktopMode && authToken !== undefined) {
+      output.BIGBUD_AUTH_TOKEN = authToken;
+      output.T3CODE_AUTH_TOKEN = authToken;
+    } else if (!isDesktopMode) {
+      delete output.BIGBUD_AUTH_TOKEN;
+      delete output.T3CODE_AUTH_TOKEN;
+    }
+
     if (!isDesktopMode && noBrowser !== undefined) {
+      output.BIGBUD_NO_BROWSER = noBrowser ? "1" : "0";
       output.T3CODE_NO_BROWSER = noBrowser ? "1" : "0";
     } else if (!isDesktopMode) {
+      delete output.BIGBUD_NO_BROWSER;
       delete output.T3CODE_NO_BROWSER;
     }
 
     if (autoBootstrapProjectFromCwd !== undefined) {
+      output.BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
       output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD = autoBootstrapProjectFromCwd ? "1" : "0";
     } else {
+      delete output.BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
       delete output.T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD;
     }
 
     if (logWebSocketEvents !== undefined) {
+      output.BIGBUD_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
       output.T3CODE_LOG_WS_EVENTS = logWebSocketEvents ? "1" : "0";
     } else {
+      delete output.BIGBUD_LOG_WS_EVENTS;
       delete output.T3CODE_LOG_WS_EVENTS;
     }
 
     if (mode === "dev") {
+      output.BIGBUD_MODE = "web";
       output.T3CODE_MODE = "web";
+      delete output.BIGBUD_DESKTOP_WS_URL;
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
     if (mode === "dev:server" || mode === "dev:web") {
+      output.BIGBUD_MODE = "web";
       output.T3CODE_MODE = "web";
+      delete output.BIGBUD_DESKTOP_WS_URL;
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
     if (isDesktopMode) {
-      output.HOST = DESKTOP_DEV_LOOPBACK_HOST;
+      delete output.BIGBUD_DESKTOP_WS_URL;
       delete output.T3CODE_DESKTOP_WS_URL;
     }
 
@@ -222,28 +246,10 @@ function portPairForOffset(offset: number): {
   };
 }
 
-export function checkPortAvailabilityOnHosts<R>(
-  port: number,
-  hosts: ReadonlyArray<string>,
-  canListenOnHost: (port: number, host: string) => Effect.Effect<boolean, never, R>,
-): Effect.Effect<boolean, never, R> {
-  return Effect.gen(function* () {
-    for (const host of hosts) {
-      if (!(yield* canListenOnHost(port, host))) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}
-
 const defaultCheckPortAvailability: PortAvailabilityCheck<NetService> = (port) =>
   Effect.gen(function* () {
     const net = yield* NetService;
-    return yield* checkPortAvailabilityOnHosts(port, DEV_PORT_PROBE_HOSTS, (candidatePort, host) =>
-      net.canListenOnHost(candidatePort, host),
-    );
+    return yield* net.isPortAvailableOnLoopback(port);
   });
 
 interface FindFirstAvailableOffsetInput<R = NetService> {
@@ -365,6 +371,7 @@ export function resolveModePortOffsets<R = NetService>({
 interface DevRunnerCliInput {
   readonly mode: DevMode;
   readonly t3Home: string | undefined;
+  readonly authToken: string | undefined;
   readonly noBrowser: boolean | undefined;
   readonly autoBootstrapProjectFromCwd: boolean | undefined;
   readonly logWebSocketEvents: boolean | undefined;
@@ -374,6 +381,35 @@ interface DevRunnerCliInput {
   readonly dryRun: boolean;
   readonly turboArgs: ReadonlyArray<string>;
 }
+
+const readOptionalBooleanEnv = (name: string): boolean | undefined => {
+  const value = process.env[name];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "1" || value.toLowerCase() === "true") {
+    return true;
+  }
+  if (value === "0" || value.toLowerCase() === "false") {
+    return false;
+  }
+  return undefined;
+};
+
+const resolveOptionalBooleanOverride = (
+  explicitValue: boolean | undefined,
+  envValue: boolean | undefined,
+): boolean | undefined => {
+  if (explicitValue === true) {
+    return true;
+  }
+
+  if (explicitValue === false) {
+    return envValue;
+  }
+
+  return envValue;
+};
 
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
@@ -396,6 +432,12 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         }),
     });
 
+    const envOverrides = {
+      noBrowser: readOptionalBooleanEnv("T3CODE_NO_BROWSER"),
+      autoBootstrapProjectFromCwd: readOptionalBooleanEnv("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
+      logWebSocketEvents: readOptionalBooleanEnv("T3CODE_LOG_WS_EVENTS"),
+    };
+
     const { serverOffset, webOffset } = yield* resolveModePortOffsets({
       mode: input.mode,
       startOffset: offset,
@@ -409,9 +451,16 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       serverOffset,
       webOffset,
       t3Home: input.t3Home,
-      noBrowser: input.noBrowser,
-      autoBootstrapProjectFromCwd: input.autoBootstrapProjectFromCwd,
-      logWebSocketEvents: input.logWebSocketEvents,
+      authToken: input.authToken,
+      noBrowser: resolveOptionalBooleanOverride(input.noBrowser, envOverrides.noBrowser),
+      autoBootstrapProjectFromCwd: resolveOptionalBooleanOverride(
+        input.autoBootstrapProjectFromCwd,
+        envOverrides.autoBootstrapProjectFromCwd,
+      ),
+      logWebSocketEvents: resolveOptionalBooleanOverride(
+        input.logWebSocketEvents,
+        envOverrides.logWebSocketEvents,
+      ),
       host: input.host,
       port: input.port,
       devUrl: input.devUrl,
@@ -472,8 +521,13 @@ const devRunnerCli = Command.make("dev-runner", {
     Argument.withDescription("Development mode to run."),
   ),
   t3Home: Flag.string("home-dir").pipe(
-    Flag.withDescription("Base directory for all T3 Code data (equivalent to T3CODE_HOME)."),
+    Flag.withDescription("Base directory for all bigbud data (equivalent to T3CODE_HOME)."),
     Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOME")),
+  ),
+  authToken: Flag.string("auth-token").pipe(
+    Flag.withDescription("Auth token (forwards to T3CODE_AUTH_TOKEN)."),
+    Flag.withAlias("token"),
+    Flag.withFallbackConfig(optionalStringConfig("T3CODE_AUTH_TOKEN")),
   ),
   noBrowser: Flag.boolean("no-browser").pipe(
     Flag.withDescription("Browser auto-open toggle (equivalent to T3CODE_NO_BROWSER)."),
@@ -523,10 +577,11 @@ const cliRuntimeLayer = Layer.mergeAll(
   NetService.layer,
 );
 
+const runtimeProgram = Command.run(devRunnerCli, { version: "0.0.0" }).pipe(
+  Effect.scoped,
+  Effect.provide(cliRuntimeLayer),
+);
+
 if (import.meta.main) {
-  Command.run(devRunnerCli, { version: "0.0.0" }).pipe(
-    Effect.scoped,
-    Effect.provide(cliRuntimeLayer),
-    NodeRuntime.runMain,
-  );
+  NodeRuntime.runMain(runtimeProgram);
 }

@@ -6,7 +6,7 @@
  * session-scoped calls via `ProviderSessionDirectory`, and exposes one unified
  * provider event stream to callers.
  *
- * Uses Effect `Context.Service` for dependency injection and returns typed
+ * Uses Effect `ServiceMap.Service` for dependency injection and returns typed
  * domain errors for validation, session, codex, and checkpoint workflows.
  *
  * @module ProviderService
@@ -23,8 +23,8 @@ import type {
   ProviderStopSessionInput,
   ThreadId,
   ProviderTurnStartResult,
-} from "@t3tools/contracts";
-import { Context } from "effect";
+} from "@bigbud/contracts";
+import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { ProviderServiceError } from "../Errors.ts";
@@ -38,6 +38,14 @@ export interface ProviderServiceShape {
    * Start a provider session.
    */
   readonly startSession: (
+    threadId: ThreadId,
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<ProviderSession, ProviderServiceError>;
+
+  /**
+   * Start a provider session without automatically reusing persisted resume state.
+   */
+  readonly startSessionFresh: (
     threadId: ThreadId,
     input: ProviderSessionStartInput,
   ) => Effect.Effect<ProviderSession, ProviderServiceError>;
@@ -110,6 +118,6 @@ export interface ProviderServiceShape {
 /**
  * ProviderService - Service tag for provider orchestration.
  */
-export class ProviderService extends Context.Service<ProviderService, ProviderServiceShape>()(
+export class ProviderService extends ServiceMap.Service<ProviderService, ProviderServiceShape>()(
   "t3/provider/Services/ProviderService",
 ) {}

@@ -3,11 +3,11 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Result } from "effect";
 import { expect } from "vitest";
 
-import { ServerConfig } from "../../config.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
-import { TextGenerationError } from "@t3tools/contracts";
+import { TextGenerationError } from "@bigbud/contracts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
-import { ServerSettingsService } from "../../serverSettings.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
 const DEFAULT_TEST_MODEL_SELECTION = {
   provider: "codex" as const,

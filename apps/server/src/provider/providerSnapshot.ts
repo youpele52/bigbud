@@ -2,15 +2,15 @@ import type {
   ModelCapabilities,
   ServerProvider,
   ServerProviderAuth,
+  ServerProviderModel,
   ServerProviderSkill,
   ServerProviderSlashCommand,
-  ServerProviderModel,
   ServerProviderState,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { normalizeModelSlug } from "@t3tools/shared/model";
-import { isWindowsCommandNotFound } from "../processRunner.ts";
+import { normalizeModelSlug } from "@bigbud/shared/model";
+import { isWindowsCommandNotFound } from "../utils/processRunner";
 
 export const DEFAULT_TIMEOUT_MS = 4_000;
 
@@ -34,7 +34,8 @@ export function nonEmptyTrimmed(value: string | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-export function isCommandMissingCause(error: Error): boolean {
+export function isCommandMissingCause(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
   const lower = error.message.toLowerCase();
   return lower.includes("enoent") || lower.includes("notfound");
 }

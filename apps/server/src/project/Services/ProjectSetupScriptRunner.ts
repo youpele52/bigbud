@@ -1,4 +1,4 @@
-import { Context } from "effect";
+import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 export interface ProjectSetupScriptRunnerResultNoScript {
@@ -31,7 +31,7 @@ export interface ProjectSetupScriptRunnerShape {
   ) => Effect.Effect<ProjectSetupScriptRunnerResult, Error>;
 }
 
-export class ProjectSetupScriptRunner extends Context.Service<
+export class ProjectSetupScriptRunner extends ServiceMap.Service<
   ProjectSetupScriptRunner,
   ProjectSetupScriptRunnerShape
 >()("t3/project/ProjectSetupScriptRunner") {}

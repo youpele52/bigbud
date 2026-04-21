@@ -1,4 +1,4 @@
-import type { TurnDiffFileChange } from "../types";
+import type { TurnDiffFileChange } from "../models/types";
 
 export interface TurnDiffStat {
   additions: number;

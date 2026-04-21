@@ -1,4 +1,4 @@
-import { projectScriptRuntimeEnv, setupProjectScript } from "@t3tools/shared/projectScripts";
+import { projectScriptRuntimeEnv, setupProjectScript } from "@bigbud/shared/projectScripts";
 import { Effect, Layer } from "effect";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
@@ -26,6 +26,11 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
 
       if (!project) {
         return yield* Effect.fail(new Error("Project was not found for setup script execution."));
+      }
+      if (!project.workspaceRoot) {
+        return {
+          status: "no-script",
+        } as const;
       }
 
       const script = setupProjectScript(project.scripts);

@@ -14,14 +14,14 @@ import {
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
+  GitStatusInput,
   GitStatusLocalResult,
   GitStatusRemoteResult,
-  GitStatusInput,
   GitStatusResult,
-} from "@t3tools/contracts";
-import { Context } from "effect";
+} from "@bigbud/contracts";
+import { ServiceMap } from "effect";
 import type { Effect } from "effect";
-import type { GitManagerServiceError } from "@t3tools/contracts";
+import type { GitManagerServiceError } from "@bigbud/contracts";
 
 export interface GitActionProgressReporter {
   readonly publish: (event: GitActionProgressEvent) => Effect.Effect<void, never>;
@@ -44,33 +44,33 @@ export interface GitManagerShape {
   ) => Effect.Effect<GitStatusResult, GitManagerServiceError>;
 
   /**
-   * Read local repository status without remote hosting enrichment.
+   * Read only the local portion of Git status (no upstream fetch).
    */
   readonly localStatus: (
     input: GitStatusInput,
   ) => Effect.Effect<GitStatusLocalResult, GitManagerServiceError>;
 
   /**
-   * Read remote tracking / PR status for a repository.
+   * Read only the remote portion of Git status (ahead/behind + PR).
    */
   readonly remoteStatus: (
     input: GitStatusInput,
-  ) => Effect.Effect<GitStatusRemoteResult | null, GitManagerServiceError>;
+  ) => Effect.Effect<GitStatusRemoteResult, GitManagerServiceError>;
 
   /**
-   * Clear any cached local status snapshot for a repository.
+   * Invalidate the local status cache for the given cwd.
    */
-  readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;
+  readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void>;
 
   /**
-   * Clear any cached remote status snapshot for a repository.
+   * Invalidate the remote status cache for the given cwd.
    */
-  readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void, never>;
+  readonly invalidateRemoteStatus: (cwd: string) => Effect.Effect<void>;
 
   /**
-   * Clear any cached status snapshot for a repository so the next read is fresh.
+   * Invalidate both local and remote status caches for the given cwd.
    */
-  readonly invalidateStatus: (cwd: string) => Effect.Effect<void, never>;
+  readonly invalidateStatus: (cwd: string) => Effect.Effect<void>;
 
   /**
    * Resolve a pull request by URL/number against the current repository.
@@ -99,6 +99,6 @@ export interface GitManagerShape {
 /**
  * GitManager - Service tag for stacked Git workflow orchestration.
  */
-export class GitManager extends Context.Service<GitManager, GitManagerShape>()(
+export class GitManager extends ServiceMap.Service<GitManager, GitManagerShape>()(
   "t3/git/Services/GitManager",
 ) {}

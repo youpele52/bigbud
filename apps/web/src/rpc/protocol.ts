@@ -1,8 +1,10 @@
-import { WsRpcGroup } from "@t3tools/contracts";
+import { WsRpcGroup } from "@bigbud/contracts";
 import { Duration, Effect, Layer, Schedule } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as Socket from "effect/unstable/socket/Socket";
 
+import { APP_SERVER_NAME } from "../config/branding";
+import { resolveServerUrl } from "../lib/utils";
 import {
   acknowledgeRpcRequest,
   clearAllTrackedRpcRequests,
@@ -17,6 +19,12 @@ import {
   WS_RECONNECT_MAX_RETRIES,
 } from "./wsConnectionState";
 
+export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);
+
+type RpcClientFactory = typeof makeWsRpcProtocolClient;
+export type WsRpcProtocolClient =
+  RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
+
 export interface WsProtocolLifecycleHandlers {
   readonly onAttempt?: (socketUrl: string) => void;
   readonly onOpen?: () => void;
@@ -24,33 +32,14 @@ export interface WsProtocolLifecycleHandlers {
   readonly onClose?: (details: { readonly code: number; readonly reason: string }) => void;
 }
 
-export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);
-type RpcClientFactory = typeof makeWsRpcProtocolClient;
-export type WsRpcProtocolClient =
-  RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
-export type WsRpcProtocolSocketUrlProvider = string | (() => Promise<string>);
-
-function formatSocketErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function resolveWsRpcSocketUrl(rawUrl: string): string {
-  const resolved = new URL(rawUrl);
-  if (resolved.protocol !== "ws:" && resolved.protocol !== "wss:") {
-    throw new Error(`Unsupported websocket transport URL protocol: ${resolved.protocol}`);
-  }
-
-  resolved.pathname = "/ws";
-  return resolved.toString();
-}
-
 function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
   return {
-    onAttempt: recordWsConnectionAttempt,
-    onOpen: recordWsConnectionOpened,
+    onAttempt: (socketUrl) => {
+      recordWsConnectionAttempt(socketUrl);
+    },
+    onOpen: () => {
+      recordWsConnectionOpened();
+    },
     onError: (message) => {
       clearAllTrackedRpcRequests();
       recordWsConnectionErrored(message);
@@ -87,24 +76,13 @@ function composeLifecycleHandlers(
   };
 }
 
-export function createWsRpcProtocolLayer(
-  url: WsRpcProtocolSocketUrlProvider,
-  handlers?: WsProtocolLifecycleHandlers,
-) {
+export function createWsRpcProtocolLayer(url?: string, handlers?: WsProtocolLifecycleHandlers) {
   const lifecycle = composeLifecycleHandlers(handlers);
-  const resolvedUrl =
-    typeof url === "function"
-      ? Effect.promise(() => url()).pipe(
-          Effect.map((rawUrl) => resolveWsRpcSocketUrl(rawUrl)),
-          Effect.tapError((error) =>
-            Effect.sync(() => {
-              lifecycle.onError(formatSocketErrorMessage(error));
-            }),
-          ),
-          Effect.orDie,
-        )
-      : resolveWsRpcSocketUrl(url);
-
+  const resolvedUrl = resolveServerUrl({
+    url,
+    protocol: window.location.protocol === "https:" ? "wss" : "ws",
+    pathname: "/ws",
+  });
   const trackingWebSocketConstructorLayer = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) => {
@@ -121,7 +99,7 @@ export function createWsRpcProtocolLayer(
       socket.addEventListener(
         "error",
         () => {
-          lifecycle.onError("Unable to connect to the T3 server WebSocket.");
+          lifecycle.onError(`Unable to connect to the ${APP_SERVER_NAME} WebSocket.`);
         },
         { once: true },
       );
@@ -154,8 +132,8 @@ export function createWsRpcProtocolLayer(
       }),
       (protocol) => ({
         ...protocol,
-        run: (clientId, writeResponse) =>
-          protocol.run(clientId, (response) => {
+        run: (writeResponse) =>
+          protocol.run((response) => {
             if (response._tag === "Chunk" || response._tag === "Exit") {
               acknowledgeRpcRequest(response.requestId);
             } else if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
@@ -163,11 +141,11 @@ export function createWsRpcProtocolLayer(
             }
             return writeResponse(response);
           }),
-        send: (clientId, request, transferables) => {
+        send: (request, transferables) => {
           if (request._tag === "Request") {
             trackRpcRequestSent(request.id, request.tag);
           }
-          return protocol.send(clientId, request, transferables);
+          return protocol.send(request, transferables);
         },
       }),
     ),

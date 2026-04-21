@@ -2,14 +2,13 @@ import {
   type GitActionProgressEvent,
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
-  type GitStatusResult,
+  type GitStatusInput,
   type GitStatusStreamEvent,
-  type LocalApi,
+  type NativeApi,
   ORCHESTRATION_WS_METHODS,
   type ServerSettingsPatch,
   WS_METHODS,
-} from "@t3tools/contracts";
-import { applyGitStatusStreamEvent } from "@t3tools/shared/git";
+} from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 
 import { type WsRpcProtocolClient } from "./protocol";
@@ -39,15 +38,6 @@ type RpcStreamMethod<TTag extends RpcTag> =
     ? (listener: (event: TEvent) => void, options?: StreamSubscriptionOptions) => () => void
     : never;
 
-type RpcInputStreamMethod<TTag extends RpcTag> =
-  RpcMethod<TTag> extends (input: any, options?: any) => Stream.Stream<infer TEvent, any, any>
-    ? (
-        input: RpcInput<TTag>,
-        listener: (event: TEvent) => void,
-        options?: StreamSubscriptionOptions,
-      ) => () => void
-    : never;
-
 interface GitRunStackedActionOptions {
   readonly onProgress?: (event: GitActionProgressEvent) => void;
 }
@@ -68,22 +58,18 @@ export interface WsRpcClient {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
-  readonly filesystem: {
-    readonly browse: RpcUnaryMethod<typeof WS_METHODS.filesystemBrowse>;
-  };
   readonly shell: {
     readonly openInEditor: (input: {
-      readonly cwd: Parameters<LocalApi["shell"]["openInEditor"]>[0];
-      readonly editor: Parameters<LocalApi["shell"]["openInEditor"]>[1];
-    }) => ReturnType<LocalApi["shell"]["openInEditor"]>;
+      readonly cwd: Parameters<NativeApi["shell"]["openInEditor"]>[0];
+      readonly editor: Parameters<NativeApi["shell"]["openInEditor"]>[1];
+    }) => ReturnType<NativeApi["shell"]["openInEditor"]>;
   };
   readonly git: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.gitPull>;
     readonly refreshStatus: RpcUnaryMethod<typeof WS_METHODS.gitRefreshStatus>;
     readonly onStatus: (
-      input: RpcInput<typeof WS_METHODS.subscribeGitStatus>,
-      listener: (status: GitStatusResult) => void,
-      options?: StreamSubscriptionOptions,
+      input: GitStatusInput,
+      listener: (event: GitStatusStreamEvent) => void,
     ) => () => void;
     readonly runStackedAction: (
       input: GitRunStackedActionInput,
@@ -110,18 +96,33 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
-    readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
   };
   readonly orchestration: {
+    readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
-    readonly subscribeShell: RpcStreamMethod<typeof ORCHESTRATION_WS_METHODS.subscribeShell>;
-    readonly subscribeThread: RpcInputStreamMethod<typeof ORCHESTRATION_WS_METHODS.subscribeThread>;
+    readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
+    readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
   };
 }
 
-export function createWsRpcClient(transport: WsTransport): WsRpcClient {
+let sharedWsRpcClient: WsRpcClient | null = null;
+
+export function getWsRpcClient(): WsRpcClient {
+  if (sharedWsRpcClient) {
+    return sharedWsRpcClient;
+  }
+  sharedWsRpcClient = createWsRpcClient();
+  return sharedWsRpcClient;
+}
+
+export async function __resetWsRpcClientForTests() {
+  await sharedWsRpcClient?.dispose();
+  sharedWsRpcClient = null;
+}
+
+export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
   return {
     dispose: () => transport.dispose(),
     reconnect: async () => {
@@ -148,9 +149,6 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
     },
-    filesystem: {
-      browse: (input) => transport.request((client) => client[WS_METHODS.filesystemBrowse](input)),
-    },
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
@@ -159,17 +157,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
       pull: (input) => transport.request((client) => client[WS_METHODS.gitPull](input)),
       refreshStatus: (input) =>
         transport.request((client) => client[WS_METHODS.gitRefreshStatus](input)),
-      onStatus: (input, listener, options) => {
-        let current: GitStatusResult | null = null;
-        return transport.subscribe(
-          (client) => client[WS_METHODS.subscribeGitStatus](input),
-          (event: GitStatusStreamEvent) => {
-            current = applyGitStatusStreamEvent(current, event);
-            listener(current);
-          },
-          options,
-        );
-      },
+      onStatus: (input, listener) =>
+        transport.subscribe((client) => client[WS_METHODS.subscribeGitStatus](input), listener),
       runStackedAction: async (input, options) => {
         let result: GitRunStackedActionResult | null = null;
 
@@ -225,29 +214,23 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
           listener,
           options,
         ),
-      subscribeAuthAccess: (listener, options) =>
-        transport.subscribe(
-          (client) => client[WS_METHODS.subscribeAuthAccess]({}),
-          listener,
-          options,
-        ),
     },
     orchestration: {
+      getSnapshot: () =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
       dispatchCommand: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getTurnDiff](input)),
       getFullThreadDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
-      subscribeShell: (listener, options) =>
+      replayEvents: (input) =>
+        transport
+          .request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input))
+          .then((events) => [...events]),
+      onDomainEvent: (listener, options) =>
         transport.subscribe(
-          (client) => client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
-          listener,
-          options,
-        ),
-      subscribeThread: (input, listener, options) =>
-        transport.subscribe(
-          (client) => client[ORCHESTRATION_WS_METHODS.subscribeThread](input),
+          (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
           listener,
           options,
         ),

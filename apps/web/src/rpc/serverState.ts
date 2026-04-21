@@ -3,13 +3,16 @@ import {
   DEFAULT_SERVER_SETTINGS,
   type EditorId,
   type ServerConfig,
+  type ServerDiscoveryCatalog,
+  type ServerDiscoveredAgent,
+  type ServerDiscoveredSkill,
   type ServerConfigStreamEvent,
   type ServerConfigUpdatedPayload,
   type ServerLifecycleWelcomePayload,
   type ServerProvider,
   type ServerProviderUpdatedPayload,
   type ServerSettings,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import { Atom } from "effect/unstable/reactivity";
 import { useCallback, useRef } from "react";
 
@@ -37,6 +40,7 @@ function toServerConfigUpdatedPayload(config: ServerConfig): ServerConfigUpdated
   return {
     issues: config.issues,
     providers: config.providers,
+    discovery: config.discovery,
     settings: config.settings,
   };
 }
@@ -44,6 +48,12 @@ function toServerConfigUpdatedPayload(config: ServerConfig): ServerConfigUpdated
 const EMPTY_AVAILABLE_EDITORS: ReadonlyArray<EditorId> = [];
 const EMPTY_KEYBINDINGS: ServerConfig["keybindings"] = [];
 const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
+const EMPTY_SERVER_DISCOVERY_AGENTS: ReadonlyArray<ServerDiscoveredAgent> = [];
+const EMPTY_SERVER_DISCOVERY_SKILLS: ReadonlyArray<ServerDiscoveredSkill> = [];
+const EMPTY_SERVER_DISCOVERY: ServerDiscoveryCatalog = {
+  agents: EMPTY_SERVER_DISCOVERY_AGENTS,
+  skills: EMPTY_SERVER_DISCOVERY_SKILLS,
+};
 
 const selectAvailableEditors = (config: ServerConfig | null): ReadonlyArray<EditorId> =>
   config?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
@@ -53,6 +63,12 @@ const selectKeybindingsConfigPath = (config: ServerConfig | null) =>
 const selectObservability = (config: ServerConfig | null) => config?.observability ?? null;
 const selectProviders = (config: ServerConfig | null) =>
   config?.providers ?? EMPTY_SERVER_PROVIDERS;
+const selectDiscovery = (config: ServerConfig | null) =>
+  config?.discovery ?? EMPTY_SERVER_DISCOVERY;
+const selectDiscoveredAgents = (config: ServerConfig | null) =>
+  config?.discovery.agents ?? EMPTY_SERVER_DISCOVERY_AGENTS;
+const selectDiscoveredSkills = (config: ServerConfig | null) =>
+  config?.discovery.skills ?? EMPTY_SERVER_DISCOVERY_SKILLS;
 const selectSettings = (config: ServerConfig | null): ServerSettings =>
   config?.settings ?? DEFAULT_SERVER_SETTINGS;
 
@@ -107,6 +123,10 @@ export function applyServerConfigEvent(event: ServerConfigStreamEvent): void {
       applyProvidersUpdated(event.payload);
       return;
     }
+    case "discoveryUpdated": {
+      applyDiscoveryUpdated(event.payload.discovery);
+      return;
+    }
     case "settingsUpdated": {
       applySettingsUpdated(event.payload.settings);
       return;
@@ -142,6 +162,20 @@ export function applySettingsUpdated(settings: ServerSettings): void {
   } satisfies ServerConfig;
   resolveServerConfig(nextConfig);
   emitServerConfigUpdated(toServerConfigUpdatedPayload(nextConfig), "settingsUpdated");
+}
+
+export function applyDiscoveryUpdated(discovery: ServerDiscoveryCatalog): void {
+  const latestServerConfig = getServerConfig();
+  if (!latestServerConfig) {
+    return;
+  }
+
+  const nextConfig = {
+    ...latestServerConfig,
+    discovery,
+  } satisfies ServerConfig;
+  resolveServerConfig(nextConfig);
+  emitServerConfigUpdated(toServerConfigUpdatedPayload(nextConfig), "discoveryUpdated");
 }
 
 export function emitWelcome(payload: ServerLifecycleWelcomePayload): void {
@@ -270,6 +304,18 @@ export function useServerProviders(): ReadonlyArray<ServerProvider> {
   return useAtomValue(serverConfigAtom, selectProviders);
 }
 
+export function useServerDiscovery(): ServerDiscoveryCatalog {
+  return useAtomValue(serverConfigAtom, selectDiscovery);
+}
+
+export function useServerDiscoveredAgents(): ReadonlyArray<ServerDiscoveredAgent> {
+  return useAtomValue(serverConfigAtom, selectDiscoveredAgents);
+}
+
+export function useServerDiscoveredSkills(): ReadonlyArray<ServerDiscoveredSkill> {
+  return useAtomValue(serverConfigAtom, selectDiscoveredSkills);
+}
+
 export function useServerKeybindings(): ServerConfig["keybindings"] {
   return useAtomValue(serverConfigAtom, selectKeybindings);
 }
@@ -284,6 +330,11 @@ export function useServerKeybindingsConfigPath(): string | null {
 
 export function useServerObservability(): ServerConfig["observability"] | null {
   return useAtomValue(serverConfigAtom, selectObservability);
+}
+
+export function useDefaultChatCwd(): string | null {
+  const welcome = useAtomValue(welcomeAtom);
+  return welcome?.defaultChatCwd ?? null;
 }
 
 export function useServerWelcomeSubscription(

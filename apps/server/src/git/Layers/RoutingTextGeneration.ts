@@ -4,12 +4,16 @@
  * request input.
  *
  * When `modelSelection.provider` is `"claudeAgent"` the request is forwarded to
- * the Claude layer; for any other value (including the default `undefined`) it
- * falls through to the Codex layer.
+ * the Claude layer. Copilot is not implemented for git text generation yet, so
+ * it currently falls back to Codex alongside the default `undefined` route.
  *
  * @module RoutingTextGeneration
  */
-import { Effect, Layer, Context } from "effect";
+import { Effect, Layer, ServiceMap } from "effect";
+import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  type ModelSelection,
+} from "@bigbud/contracts";
 
 import {
   TextGeneration,
@@ -18,28 +22,54 @@ import {
 } from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
-import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
-import { OpenCodeTextGenerationLive } from "./OpenCodeTextGeneration.ts";
+import {
+  generateCopilotThreadTitleNative,
+  generateOpencodeThreadTitleNative,
+  generatePiThreadTitleNative,
+} from "./ProviderNativeThreadTitleGeneration.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { OpencodeServerManager } from "../../provider/Services/OpencodeServerManager.ts";
 
 // ---------------------------------------------------------------------------
 // Internal service tags so both concrete layers can coexist.
 // ---------------------------------------------------------------------------
 
-class CodexTextGen extends Context.Service<CodexTextGen, TextGenerationShape>()(
+class CodexTextGen extends ServiceMap.Service<CodexTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/CodexTextGen",
 ) {}
 
-class ClaudeTextGen extends Context.Service<ClaudeTextGen, TextGenerationShape>()(
+class ClaudeTextGen extends ServiceMap.Service<ClaudeTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/ClaudeTextGen",
 ) {}
 
-class CursorTextGen extends Context.Service<CursorTextGen, TextGenerationShape>()(
-  "t3/git/Layers/RoutingTextGeneration/CursorTextGen",
-) {}
+export function normalizeTextGenerationModelSelection(
+  modelSelection: ModelSelection,
+): ModelSelection {
+  switch (modelSelection.provider) {
+    case "claudeAgent":
+    case "codex":
+      return modelSelection;
+    case "pi":
+    case "opencode":
+      return {
+        provider: "claudeAgent",
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
+      };
+    case "copilot":
+    case "cursor":
+    default:
+      return {
+        provider: "codex",
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+      };
+  }
+}
 
-class OpenCodeTextGen extends Context.Service<OpenCodeTextGen, TextGenerationShape>()(
-  "t3/git/Layers/RoutingTextGeneration/OpenCodeTextGen",
-) {}
+export function normalizeGitTextGenerationModelSelection(
+  modelSelection: ModelSelection,
+): ModelSelection {
+  return normalizeTextGenerationModelSelection(modelSelection);
+}
 
 // ---------------------------------------------------------------------------
 // Routing implementation
@@ -48,24 +78,88 @@ class OpenCodeTextGen extends Context.Service<OpenCodeTextGen, TextGenerationSha
 const makeRoutingTextGeneration = Effect.gen(function* () {
   const codex = yield* CodexTextGen;
   const claude = yield* ClaudeTextGen;
-  const cursor = yield* CursorTextGen;
-  const openCode = yield* OpenCodeTextGen;
+  const serverSettingsService = yield* ServerSettingsService;
+  const opencodeServerManager = yield* OpencodeServerManager;
 
   const route = (provider?: TextGenerationProvider): TextGenerationShape =>
-    provider === "claudeAgent"
-      ? claude
-      : provider === "opencode"
-        ? openCode
-        : provider === "cursor"
-          ? cursor
-          : codex;
+    provider === "claudeAgent" ? claude : codex;
 
   return {
-    generateCommitMessage: (input) =>
-      route(input.modelSelection.provider).generateCommitMessage(input),
-    generatePrContent: (input) => route(input.modelSelection.provider).generatePrContent(input),
-    generateBranchName: (input) => route(input.modelSelection.provider).generateBranchName(input),
-    generateThreadTitle: (input) => route(input.modelSelection.provider).generateThreadTitle(input),
+    generateCommitMessage: (input) => {
+      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
+      return route(modelSelection.provider).generateCommitMessage({
+        ...input,
+        modelSelection,
+      });
+    },
+    generatePrContent: (input) => {
+      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
+      return route(modelSelection.provider).generatePrContent({
+        ...input,
+        modelSelection,
+      });
+    },
+    generateBranchName: (input) => {
+      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
+      return route(modelSelection.provider).generateBranchName({
+        ...input,
+        modelSelection,
+      });
+    },
+    generateThreadTitle: (input) => {
+      switch (input.modelSelection.provider) {
+        case "codex":
+        case "claudeAgent":
+          return route(input.modelSelection.provider).generateThreadTitle(input);
+        case "pi":
+          return generatePiThreadTitleNative(
+            {
+              serverSettingsService,
+              opencodeServerManager,
+            },
+            {
+              cwd: input.cwd,
+              message: input.message,
+              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+              modelSelection: input.modelSelection,
+            },
+          );
+        case "copilot":
+          return generateCopilotThreadTitleNative(
+            {
+              serverSettingsService,
+              opencodeServerManager,
+            },
+            {
+              cwd: input.cwd,
+              message: input.message,
+              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+              modelSelection: input.modelSelection,
+            },
+          );
+        case "cursor":
+          return route("codex").generateThreadTitle({
+            ...input,
+            modelSelection: {
+              provider: "codex",
+              model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+            },
+          });
+        case "opencode":
+          return generateOpencodeThreadTitleNative(
+            {
+              serverSettingsService,
+              opencodeServerManager,
+            },
+            {
+              cwd: input.cwd,
+              message: input.message,
+              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+              modelSelection: input.modelSelection,
+            },
+          );
+      }
+    },
   } satisfies TextGenerationShape;
 });
 
@@ -85,28 +179,7 @@ const InternalClaudeLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(ClaudeTextGenerationLive));
 
-const InternalCursorLayer = Layer.effect(
-  CursorTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
-).pipe(Layer.provide(CursorTextGenerationLive));
-
-const InternalOpenCodeLayer = Layer.effect(
-  OpenCodeTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
-).pipe(Layer.provide(OpenCodeTextGenerationLive));
-
 export const RoutingTextGenerationLive = Layer.effect(
   TextGeneration,
   makeRoutingTextGeneration,
-).pipe(
-  Layer.provide(InternalCodexLayer),
-  Layer.provide(InternalClaudeLayer),
-  Layer.provide(InternalCursorLayer),
-  Layer.provide(InternalOpenCodeLayer),
-);
+).pipe(Layer.provide(InternalCodexLayer), Layer.provide(InternalClaudeLayer));

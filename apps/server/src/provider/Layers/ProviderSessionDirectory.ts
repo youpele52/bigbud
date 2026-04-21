@@ -1,13 +1,11 @@
-import { ProviderKind, type ThreadId } from "@t3tools/contracts";
-import { Effect, Layer, Option, Schema } from "effect";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { Effect, Layer, Option } from "effect";
 
-import type { ProviderSessionRuntime } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { ProviderSessionDirectoryPersistenceError, ProviderValidationError } from "../Errors.ts";
 import {
   ProviderSessionDirectory,
   type ProviderRuntimeBinding,
-  type ProviderRuntimeBindingWithMetadata,
   type ProviderSessionDirectoryShape,
 } from "../Services/ProviderSessionDirectory.ts";
 
@@ -24,15 +22,20 @@ function decodeProviderKind(
   providerName: string,
   operation: string,
 ): Effect.Effect<ProviderKind, ProviderSessionDirectoryPersistenceError> {
-  return Schema.decodeUnknownEffect(ProviderKind)(providerName).pipe(
-    Effect.mapError(
-      (cause) =>
-        new ProviderSessionDirectoryPersistenceError({
-          operation,
-          detail: `Unknown persisted provider '${providerName}'.`,
-          cause,
-        }),
-    ),
+  if (
+    providerName === "codex" ||
+    providerName === "claudeAgent" ||
+    providerName === "copilot" ||
+    providerName === "opencode" ||
+    providerName === "pi"
+  ) {
+    return Effect.succeed(providerName);
+  }
+  return Effect.fail(
+    new ProviderSessionDirectoryPersistenceError({
+      operation,
+      detail: `Unknown persisted provider '${providerName}'.`,
+    }),
   );
 }
 
@@ -53,27 +56,6 @@ function mergeRuntimePayload(
   return next;
 }
 
-function toRuntimeBinding(
-  runtime: ProviderSessionRuntime,
-  operation: string,
-): Effect.Effect<ProviderRuntimeBindingWithMetadata, ProviderSessionDirectoryPersistenceError> {
-  return decodeProviderKind(runtime.providerName, operation).pipe(
-    Effect.map(
-      (provider) =>
-        ({
-          threadId: runtime.threadId,
-          provider,
-          adapterKey: runtime.adapterKey,
-          runtimeMode: runtime.runtimeMode,
-          status: runtime.status,
-          resumeCursor: runtime.resumeCursor,
-          runtimePayload: runtime.runtimePayload,
-          lastSeenAt: runtime.lastSeenAt,
-        }) satisfies ProviderRuntimeBindingWithMetadata,
-    ),
-  );
-}
-
 const makeProviderSessionDirectory = Effect.gen(function* () {
   const repository = yield* ProviderSessionRuntimeRepository;
 
@@ -84,8 +66,18 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
         Option.match(runtime, {
           onNone: () => Effect.succeed(Option.none<ProviderRuntimeBinding>()),
           onSome: (value) =>
-            toRuntimeBinding(value, "ProviderSessionDirectory.getBinding").pipe(
-              Effect.map((binding) => Option.some(binding)),
+            decodeProviderKind(value.providerName, "ProviderSessionDirectory.getBinding").pipe(
+              Effect.map((provider) =>
+                Option.some({
+                  threadId: value.threadId,
+                  provider,
+                  adapterKey: value.adapterKey,
+                  runtimeMode: value.runtimeMode,
+                  status: value.status,
+                  resumeCursor: value.resumeCursor,
+                  runtimePayload: value.runtimePayload,
+                }),
+              ),
             ),
         }),
       ),
@@ -146,30 +138,25 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
       ),
     );
 
+  const remove: ProviderSessionDirectoryShape["remove"] = (threadId) =>
+    repository
+      .deleteByThreadId({ threadId })
+      .pipe(
+        Effect.mapError(toPersistenceError("ProviderSessionDirectory.remove:deleteByThreadId")),
+      );
+
   const listThreadIds: ProviderSessionDirectoryShape["listThreadIds"] = () =>
     repository.list().pipe(
       Effect.mapError(toPersistenceError("ProviderSessionDirectory.listThreadIds:list")),
       Effect.map((rows) => rows.map((row) => row.threadId)),
     );
 
-  const listBindings: ProviderSessionDirectoryShape["listBindings"] = () =>
-    repository.list().pipe(
-      Effect.mapError(toPersistenceError("ProviderSessionDirectory.listBindings:list")),
-      Effect.flatMap((rows) =>
-        Effect.forEach(
-          rows,
-          (row) => toRuntimeBinding(row, "ProviderSessionDirectory.listBindings"),
-          { concurrency: "unbounded" },
-        ),
-      ),
-    );
-
   return {
     upsert,
     getProvider,
     getBinding,
+    remove,
     listThreadIds,
-    listBindings,
   } satisfies ProviderSessionDirectoryShape;
 });
 

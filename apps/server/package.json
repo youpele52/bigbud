@@ -1,13 +1,14 @@
 {
-  "name": "t3",
-  "version": "0.0.20",
+  "name": "bigcode",
+  "version": "0.0.15",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pingdotgg/t3code",
+    "url": "https://github.com/youpele52/bigbud",
     "directory": "apps/server"
   },
   "bin": {
+    "bigcode": "./dist/bin.mjs",
     "t3": "./dist/bin.mjs"
   },
   "files": [
@@ -15,36 +16,35 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/bin.ts",
+    "dev": "bun run src/bin.ts",
     "build": "node scripts/cli.ts build",
-    "build:bundle": "tsdown",
     "start": "node dist/bin.mjs",
     "prepare": "effect-language-service patch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:process-reaper": "vitest run src/server.test.ts src/provider/Layers/ClaudeAdapter.test.ts src/provider/Layers/ProviderSessionDirectory.test.ts src/provider/Layers/ProviderSessionReaper.test.ts src/provider/Layers/CodexAdapter.test.ts"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.111",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.77",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
-    "@opencode-ai/sdk": "^1.3.15",
+    "@github/copilot-sdk": "0.2.1",
+    "@mariozechner/pi-coding-agent": "^0.67.6",
+    "@opencode-ai/sdk": "^1.3.13",
     "@pierre/diffs": "^1.1.0-beta.16",
     "effect": "catalog:",
+    "effect-acp": "workspace:*",
     "node-pty": "^1.1.0",
     "open": "^10.1.0"
   },
   "devDependencies": {
+    "@bigbud/contracts": "workspace:*",
+    "@bigbud/shared": "workspace:*",
+    "@bigbud/web": "workspace:*",
     "@effect/language-service": "catalog:",
     "@effect/vitest": "catalog:",
-    "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
-    "@t3tools/web": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "effect-acp": "workspace:*",
-    "effect-codex-app-server": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

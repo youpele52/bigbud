@@ -1,6 +1,6 @@
 import { Cause, Exit, Result, Schema } from "effect";
-import { PositiveInt, TrimmedNonEmptyString } from "@t3tools/contracts";
-import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
+import { PositiveInt, TrimmedNonEmptyString } from "@bigbud/contracts";
+import { formatSchemaError } from "@bigbud/shared/schemaJson";
 
 export interface NormalizedGitHubPullRequestRecord {
   readonly number: number;
@@ -41,6 +41,8 @@ const GitHubPullRequestSchema = Schema.Struct({
   ),
 });
 
+type RawPullRequest = Schema.Schema.Type<typeof GitHubPullRequestSchema>;
+
 function trimOptionalString(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 ? trimmed : null;
@@ -63,9 +65,7 @@ function normalizeGitHubPullRequestState(input: {
   return "open";
 }
 
-function normalizeGitHubPullRequestRecord(
-  raw: Schema.Schema.Type<typeof GitHubPullRequestSchema>,
-): NormalizedGitHubPullRequestRecord {
+function normalizeGitHubPullRequestRecord(raw: RawPullRequest): NormalizedGitHubPullRequestRecord {
   const headRepositoryNameWithOwner = trimOptionalString(raw.headRepository?.nameWithOwner);
   const headRepositoryOwnerLogin =
     trimOptionalString(raw.headRepositoryOwner?.login) ??
@@ -90,9 +90,11 @@ function normalizeGitHubPullRequestRecord(
   };
 }
 
-const decodeGitHubPullRequestList = decodeJsonResult(Schema.Array(Schema.Unknown));
-const decodeGitHubPullRequest = decodeJsonResult(GitHubPullRequestSchema);
-const decodeGitHubPullRequestEntry = Schema.decodeUnknownExit(GitHubPullRequestSchema);
+const decodePullRequestListFromJson = Schema.decodeExit(
+  Schema.fromJsonString(Schema.Array(Schema.Unknown)),
+);
+const decodePullRequestEntry = Schema.decodeUnknownExit(GitHubPullRequestSchema);
+const decodePullRequestFromJson = Schema.decodeExit(Schema.fromJsonString(GitHubPullRequestSchema));
 
 export const formatGitHubJsonDecodeError = formatSchemaError;
 
@@ -102,27 +104,27 @@ export function decodeGitHubPullRequestListJson(
   ReadonlyArray<NormalizedGitHubPullRequestRecord>,
   Cause.Cause<Schema.SchemaError>
 > {
-  const result = decodeGitHubPullRequestList(raw);
-  if (Result.isSuccess(result)) {
-    const pullRequests: NormalizedGitHubPullRequestRecord[] = [];
-    for (const entry of result.success) {
-      const decodedEntry = decodeGitHubPullRequestEntry(entry);
-      if (Exit.isFailure(decodedEntry)) {
-        continue;
-      }
-      pullRequests.push(normalizeGitHubPullRequestRecord(decodedEntry.value));
-    }
-    return Result.succeed(pullRequests);
+  const listResult = decodePullRequestListFromJson(raw);
+  if (Exit.isFailure(listResult)) {
+    return Result.fail(listResult.cause);
   }
-  return Result.fail(result.failure);
+  const pullRequests: NormalizedGitHubPullRequestRecord[] = [];
+  for (const entry of listResult.value) {
+    const decoded = decodePullRequestEntry(entry);
+    if (Exit.isFailure(decoded)) {
+      continue;
+    }
+    pullRequests.push(normalizeGitHubPullRequestRecord(decoded.value));
+  }
+  return Result.succeed(pullRequests);
 }
 
 export function decodeGitHubPullRequestJson(
   raw: string,
 ): Result.Result<NormalizedGitHubPullRequestRecord, Cause.Cause<Schema.SchemaError>> {
-  const result = decodeGitHubPullRequest(raw);
-  if (Result.isSuccess(result)) {
-    return Result.succeed(normalizeGitHubPullRequestRecord(result.success));
+  const result = decodePullRequestFromJson(raw);
+  if (Exit.isFailure(result)) {
+    return Result.fail(result.cause);
   }
-  return Result.fail(result.failure);
+  return Result.succeed(normalizeGitHubPullRequestRecord(result.value));
 }

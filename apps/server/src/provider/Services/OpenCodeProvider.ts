@@ -1,9 +1,9 @@
-import { Context } from "effect";
+import { ServiceMap } from "effect";
 
-import type { ServerProviderShape } from "./ServerProvider.ts";
+import type { ServerProviderShape } from "./ServerProvider";
 
-export interface OpenCodeProviderShape extends ServerProviderShape {}
+export interface OpencodeProviderShape extends ServerProviderShape {}
 
-export class OpenCodeProvider extends Context.Service<OpenCodeProvider, OpenCodeProviderShape>()(
-  "t3/provider/Services/OpenCodeProvider",
+export class OpencodeProvider extends ServiceMap.Service<OpencodeProvider, OpencodeProviderShape>()(
+  "t3/provider/Services/OpencodeProvider",
 ) {}

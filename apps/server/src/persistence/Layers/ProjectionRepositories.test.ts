@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -24,7 +24,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       const sql = yield* SqlClient.SqlClient;
 
       yield* projects.upsert({
-        projectId: ProjectId.make("project-null-options"),
+        projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Null options project",
         workspaceRoot: "/tmp/project-null-options",
         defaultModelSelection: {
@@ -58,7 +58,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       );
 
       const persisted = yield* projects.getById({
-        projectId: ProjectId.make("project-null-options"),
+        projectId: ProjectId.makeUnsafe("project-null-options"),
       });
       assert.deepStrictEqual(Option.getOrNull(persisted)?.defaultModelSelection, {
         provider: "codex",
@@ -73,8 +73,8 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       const sql = yield* SqlClient.SqlClient;
 
       yield* threads.upsert({
-        threadId: ThreadId.make("thread-null-options"),
-        projectId: ProjectId.make("project-null-options"),
+        threadId: ThreadId.makeUnsafe("thread-null-options"),
+        projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Null options thread",
         modelSelection: {
           provider: "claudeAgent",
@@ -88,10 +88,6 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
-        latestUserMessageAt: null,
-        pendingApprovalCount: 0,
-        pendingUserInputCount: 0,
-        hasActionableProposedPlan: 0,
         deletedAt: null,
       });
 
@@ -116,7 +112,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       );
 
       const persisted = yield* threads.getById({
-        threadId: ThreadId.make("thread-null-options"),
+        threadId: ThreadId.makeUnsafe("thread-null-options"),
       });
       assert.deepStrictEqual(Option.getOrNull(persisted)?.modelSelection, {
         provider: "claudeAgent",

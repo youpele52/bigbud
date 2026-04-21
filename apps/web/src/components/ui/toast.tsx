@@ -1,9 +1,9 @@
 "use client";
 
 import { Toast } from "@base-ui/react/toast";
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useEffect, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
-import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@bigbud/contracts";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -12,34 +12,21 @@ import {
   InfoIcon,
   LoaderCircleIcon,
   TriangleAlertIcon,
+  type LucideIcon,
+  XIcon,
 } from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
-import { useComposerDraftStore } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { resolveThreadRouteTarget } from "~/threadRoutes";
-import {
-  buildVisibleToastLayout,
-  shouldHideCollapsedToastContent,
-  shouldRenderThreadScopedToast,
-} from "./toast.logic";
+import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 
 export type ThreadToastData = {
-  threadRef?: ScopedThreadRef | null;
   threadId?: ThreadId | null;
   tooltipStyle?: boolean;
   dismissAfterVisibleMs?: number;
+  hideOnActiveThread?: boolean;
   hideCopyButton?: boolean;
-  actionLayout?: "inline" | "stacked-end";
-  actionVariant?:
-    | "default"
-    | "destructive"
-    | "destructive-outline"
-    | "ghost"
-    | "link"
-    | "outline"
-    | "secondary";
 };
 
 const toastManager = Toast.createToastManager<ThreadToastData>();
@@ -86,27 +73,24 @@ interface ToastProviderProps extends Toast.Provider.Props {
   position?: ToastPosition;
 }
 
-function useActiveThreadRefFromRoute(): ScopedThreadRef | null {
-  const routeTarget = useParams({
-    strict: false,
-    select: (params) => resolveThreadRouteTarget(params),
-  });
-  const activeDraftSession = useComposerDraftStore((store) =>
-    routeTarget?.kind === "draft" ? store.getDraftSession(routeTarget.draftId) : null,
-  );
+function shouldRenderForActiveThread(
+  data: ThreadToastData | undefined,
+  activeThreadId: ThreadId | null,
+): boolean {
+  const toastThreadId = data?.threadId;
+  if (!toastThreadId) return true;
+  if (data?.hideOnActiveThread) {
+    return toastThreadId !== activeThreadId;
+  }
+  return toastThreadId === activeThreadId;
+}
 
-  return useMemo(() => {
-    if (routeTarget?.kind === "server") {
-      return routeTarget.threadRef;
-    }
-    if (routeTarget?.kind === "draft" && activeDraftSession) {
-      return {
-        environmentId: activeDraftSession.environmentId,
-        threadId: activeDraftSession.threadId,
-      };
-    }
-    return null;
-  }, [activeDraftSession, routeTarget]);
+function useActiveThreadIdFromRoute(): ThreadId | null {
+  return useParams({
+    strict: false,
+    select: (params) =>
+      typeof params.threadId === "string" ? ThreadId.makeUnsafe(params.threadId) : null,
+  });
 }
 
 function ThreadToastVisibleAutoDismiss({
@@ -196,12 +180,60 @@ function ToastProvider({ children, position = "top-right", ...props }: ToastProv
   );
 }
 
+function ToastCloseButton({ className }: { className?: string }) {
+  return (
+    <Toast.Close
+      aria-label="Close notification"
+      className={cn(
+        "shrink-0 rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        className,
+      )}
+    >
+      <XIcon className="size-3.5" />
+    </Toast.Close>
+  );
+}
+
+function ToastTitleAndDescription({
+  Icon,
+  description,
+  hideCopyButton,
+}: {
+  Icon: LucideIcon | null;
+  description: unknown;
+  hideCopyButton: boolean | undefined;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 gap-2">
+      {Icon && (
+        <div
+          className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 mt-0.5"
+          data-slot="toast-icon"
+        >
+          <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
+        <Toast.Description
+          className="min-w-0 select-text wrap-break-word text-muted-foreground"
+          data-slot="toast-description"
+        />
+        {typeof description === "string" && !hideCopyButton ? (
+          <CopyErrorButton text={description} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function Toasts({ position = "top-right" }: { position: ToastPosition }) {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadRef = useActiveThreadRefFromRoute();
+  const activeThreadId = useActiveThreadIdFromRoute();
   const isTop = position.startsWith("top");
   const visibleToasts = toasts.filter((toast) =>
-    shouldRenderThreadScopedToast(toast.data, activeThreadRef),
+    shouldRenderForActiveThread(toast.data, activeThreadId),
   );
   const visibleToastLayout = buildVisibleToastLayout(visibleToasts);
 
@@ -218,7 +250,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
     <Toast.Portal data-slot="toast-portal">
       <Toast.Viewport
         className={cn(
-          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
+          "fixed z-50 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
           // Vertical positioning
           "data-[position*=top]:top-[calc(var(--toast-inset)+var(--toast-header-offset))]",
           "data-[position*=bottom]:bottom-(--toast-inset)",
@@ -241,9 +273,11 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
             visibleIndex,
             visibleToastLayout.items.length,
           );
-          const stackedActionLayout =
-            toast.actionProps !== undefined && toast.data?.actionLayout === "stacked-end";
-          const actionVariant = toast.data?.actionVariant ?? "default";
+          const actionProps = toast.actionProps;
+          const showErrorCopyButton =
+            toast.type === "error" &&
+            typeof toast.description === "string" &&
+            !toast.data?.hideCopyButton;
 
           return (
             <Toast.Root
@@ -316,51 +350,26 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
               />
               <Toast.Content
                 className={cn(
-                  "pointer-events-auto overflow-hidden px-3.5 text-sm transition-opacity duration-250 data-expanded:opacity-100",
-                  stackedActionLayout
-                    ? "flex flex-col gap-2 py-2.5"
-                    : "flex items-center justify-between gap-1.5 py-3",
+                  "pointer-events-auto overflow-hidden px-3.5 py-3 text-sm transition-opacity duration-250 data-expanded:opacity-100 relative flex flex-col gap-3",
                   hideCollapsedContent &&
                     "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}
               >
-                <div className="flex min-w-0 flex-1 gap-2">
-                  {Icon && (
-                    <div
-                      className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
-                      data-slot="toast-icon"
+                <ToastCloseButton className="absolute top-3 right-3" />
+                <ToastTitleAndDescription
+                  Icon={Icon}
+                  description={showErrorCopyButton ? toast.description : null}
+                  hideCopyButton={!showErrorCopyButton}
+                />
+                {actionProps && (
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <Toast.Action
+                      className={cn(buttonVariants({ size: "xs" }), "shrink-0")}
+                      data-slot="toast-action"
                     >
-                      <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
-                    </div>
-                  )}
-
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <div className="flex items-center justify-between gap-1">
-                      <Toast.Title
-                        className="min-w-0 wrap-break-word font-medium"
-                        data-slot="toast-title"
-                      />
-                      {toast.type === "error" &&
-                        typeof toast.description === "string" &&
-                        !toast.data?.hideCopyButton && <CopyErrorButton text={toast.description} />}
-                    </div>
-                    <Toast.Description
-                      className="min-w-0 select-text wrap-break-word text-muted-foreground"
-                      data-slot="toast-description"
-                    />
+                      {actionProps.children}
+                    </Toast.Action>
                   </div>
-                </div>
-                {toast.actionProps && (
-                  <Toast.Action
-                    className={cn(
-                      buttonVariants({ size: "xs", variant: actionVariant }),
-                      "shrink-0",
-                      stackedActionLayout && "self-end",
-                    )}
-                    data-slot="toast-action"
-                  >
-                    {toast.actionProps.children}
-                  </Toast.Action>
                 )}
               </Toast.Content>
             </Toast.Root>
@@ -382,20 +391,22 @@ function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
 
 function AnchoredToasts() {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadRef = useActiveThreadRefFromRoute();
+  const activeThreadId = useActiveThreadIdFromRoute();
 
   return (
     <Toast.Portal data-slot="toast-portal-anchored">
       <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
         {toasts
-          .filter((toast) => shouldRenderThreadScopedToast(toast.data, activeThreadRef))
+          .filter((toast) => shouldRenderForActiveThread(toast.data, activeThreadId))
           .map((toast) => {
             const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
             const tooltipStyle = toast.data?.tooltipStyle ?? false;
             const positionerProps = toast.positionerProps;
-            const stackedActionLayout =
-              toast.actionProps !== undefined && toast.data?.actionLayout === "stacked-end";
-            const actionVariant = toast.data?.actionVariant ?? "default";
+            const actionProps = toast.actionProps;
+            const showErrorCopyButton =
+              toast.type === "error" &&
+              typeof toast.description === "string" &&
+              !toast.data?.hideCopyButton;
 
             if (!positionerProps?.anchor) {
               return null;
@@ -403,7 +414,7 @@ function AnchoredToasts() {
 
             return (
               <Toast.Positioner
-                className="z-100 max-w-[min(--spacing(64),var(--available-width))]"
+                className="z-50 max-w-[min(--spacing(64),var(--available-width))]"
                 data-slot="toast-positioner"
                 key={toast.id}
                 sideOffset={positionerProps.sideOffset ?? 4}
@@ -426,51 +437,24 @@ function AnchoredToasts() {
                   ) : (
                     <Toast.Content
                       className={cn(
-                        "pointer-events-auto overflow-hidden px-3.5 text-sm",
-                        stackedActionLayout
-                          ? "flex flex-col gap-2 py-2.5"
-                          : "flex items-center justify-between gap-1.5 py-3",
+                        "pointer-events-auto overflow-hidden px-3.5 py-3 text-sm relative flex flex-col gap-3",
                       )}
                     >
-                      <div className="flex min-w-0 flex-1 gap-2">
-                        {Icon && (
-                          <div
-                            className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
-                            data-slot="toast-icon"
+                      <ToastCloseButton className="absolute top-3 right-3" />
+                      <ToastTitleAndDescription
+                        Icon={Icon}
+                        description={showErrorCopyButton ? toast.description : null}
+                        hideCopyButton={!showErrorCopyButton}
+                      />
+                      {actionProps && (
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <Toast.Action
+                            className={cn(buttonVariants({ size: "xs" }), "shrink-0")}
+                            data-slot="toast-action"
                           >
-                            <Icon className="in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
-                          </div>
-                        )}
-
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <div className="flex items-center gap-1">
-                            <Toast.Title
-                              className="min-w-0 wrap-break-word font-medium"
-                              data-slot="toast-title"
-                            />
-                            {toast.type === "error" &&
-                              typeof toast.description === "string" &&
-                              !toast.data?.hideCopyButton && (
-                                <CopyErrorButton text={toast.description} />
-                              )}
-                          </div>
-                          <Toast.Description
-                            className="min-w-0 select-text wrap-break-word text-muted-foreground"
-                            data-slot="toast-description"
-                          />
+                            {actionProps.children}
+                          </Toast.Action>
                         </div>
-                      </div>
-                      {toast.actionProps && (
-                        <Toast.Action
-                          className={cn(
-                            buttonVariants({ size: "xs", variant: actionVariant }),
-                            "shrink-0",
-                            stackedActionLayout && "self-end",
-                          )}
-                          data-slot="toast-action"
-                        >
-                          {toast.actionProps.children}
-                        </Toast.Action>
                       )}
                     </Toast.Content>
                   )}

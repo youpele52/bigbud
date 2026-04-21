@@ -1,10 +1,27 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": [
-    "HOST",
     "PORT",
     "VITE_WS_URL",
     "VITE_DEV_SERVER_URL",
+    "ELECTRON_RENDERER_PORT",
+    "BIGBUD_LOG_WS_EVENTS",
+    "BIGBUD_MODE",
+    "BIGBUD_PORT",
+    "BIGBUD_NO_BROWSER",
+    "BIGBUD_HOME",
+    "BIGBUD_AUTH_TOKEN",
+    "BIGBUD_DESKTOP_WS_URL",
+    "BIGBUD_TRACE_MIN_LEVEL",
+    "BIGBUD_TRACE_TIMING_ENABLED",
+    "BIGBUD_TRACE_FILE",
+    "BIGBUD_TRACE_MAX_BYTES",
+    "BIGBUD_TRACE_MAX_FILES",
+    "BIGBUD_TRACE_BATCH_WINDOW_MS",
+    "BIGBUD_OTLP_TRACES_URL",
+    "BIGBUD_OTLP_METRICS_URL",
+    "BIGBUD_OTLP_EXPORT_INTERVAL_MS",
+    "BIGBUD_OTLP_SERVICE_NAME",
     "T3CODE_LOG_WS_EVENTS",
     "T3CODE_MODE",
     "T3CODE_PORT",
@@ -23,14 +40,13 @@
     "T3CODE_OTLP_EXPORT_INTERVAL_MS",
     "T3CODE_OTLP_SERVICE_NAME"
   ],
-  "globalPassThroughEnv": ["PATHEXT"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "dist-electron/**"]
     },
     "dev": {
-      "dependsOn": ["@t3tools/contracts#build"],
+      "dependsOn": ["@bigbud/contracts#build"],
       "cache": false,
       "persistent": true
     },

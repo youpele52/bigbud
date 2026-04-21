@@ -1,46 +1,21 @@
 # Release Checklist
 
-This document covers the unified release workflow for stable and nightly desktop releases.
+This document covers how to run desktop releases from one tag, first without signing, then with signing.
 
 ## What the workflow does
 
-- Workflow: `.github/workflows/release.yml`
-- Triggers:
-  - push tag matching `v*.*.*` for stable releases
-  - scheduled nightly at `09:00 UTC`
-  - manual `workflow_dispatch` for either channel
+- Trigger: push tag matching `v*.*.*`.
 - Runs quality gates first: lint, typecheck, test.
-- Builds four artifacts in parallel for both channels:
+- Builds four artifacts in parallel:
   - macOS `arm64` DMG
   - macOS `x64` DMG
   - Linux `x64` AppImage
   - Windows `x64` NSIS installer
 - Publishes one GitHub Release with all produced files.
-  - Stable tags with a suffix after `X.Y.Z` (for example `1.2.3-alpha.1`) are published as GitHub prereleases.
-  - Only plain stable `X.Y.Z` releases are marked as the repository's latest release.
-  - Nightly runs are always GitHub prereleases and never marked latest.
-  - Automatically generated release notes are pinned to the previous tag in the same channel, so stable compares to the previous stable tag and nightly compares to the previous nightly tag.
-- Includes Electron auto-update metadata (for example `latest*.yml`, `nightly*.yml`, and `*.blockmap`) in release assets.
-- Publishes the CLI package (`apps/server`, npm package `t3`) with OIDC trusted publishing from the same workflow file:
-  - stable releases publish npm dist-tag `latest`
-  - nightly releases publish npm dist-tag `nightly`
+  - Versions with a suffix after `X.Y.Z` (for example `1.2.3-alpha.1`) are published as GitHub prereleases.
+  - Only plain `X.Y.Z` releases are marked as the repository's latest release.
+- Includes Electron auto-update metadata (for example `latest*.yml` and `*.blockmap`) in release assets.
 - Signing is optional and auto-detected per platform from secrets.
-
-## Nightly builds
-
-- Workflow: `.github/workflows/release.yml`
-- Triggers:
-  - scheduled every day at `09:00 UTC`
-  - manual `workflow_dispatch` with `channel=nightly`
-- Runs the same desktop quality gates and artifact matrix as the tagged release flow.
-- Publishes a GitHub prerelease only:
-  - tag format: `nightly-vX.Y.Z-nightly.YYYYMMDD.<run_number>`
-  - release name includes the short commit SHA
-  - `make_latest` is always `false`
-- Uses the next stable patch version as the nightly base. For example, `0.0.17` produces nightlies on `0.0.18-nightly.*`.
-- Publishes Electron auto-update metadata to the dedicated `nightly` updater channel, so desktop users can opt into that track independently from stable.
-- Publishes the CLI package (`apps/server`, npm package `t3`) to the `nightly` npm dist-tag using the same nightly version.
-- Does not commit version bumps back to `main`.
 
 ## Desktop auto-update notes
 
@@ -58,31 +33,41 @@ This document covers the unified release workflow for stable and nightly desktop
   - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
-  - channel metadata: `latest*.yml` for stable releases, `nightly*.yml` for nightly releases
+  - `latest*.yml` metadata
   - `*.blockmap` files (used for differential downloads)
 - macOS metadata note:
-  - `electron-updater` reads `latest-mac.yml` on stable and `nightly-mac.yml` on nightly, for both Intel and Apple Silicon.
-  - The workflow merges the per-arch mac manifests into one channel-specific mac manifest before publishing the GitHub Release.
+  - `electron-updater` reads `latest-mac.yml` for both Intel and Apple Silicon.
+  - The workflow merges the per-arch mac manifests into one `latest-mac.yml` before publishing the GitHub Release.
 
-## 0) npm OIDC trusted publishing setup (CLI)
+## Desktop bootstrap installers
 
-The workflow publishes the CLI with `npm publish` from `apps/server` after bumping
-the package version to the release tag version.
+- Keep GitHub Releases as the source of truth for desktop binaries.
+- User-facing install commands:
+  - macOS/Linux: `curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh`
+  - Windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"`
+- Installer behavior:
+  - prefer GitHub `releases/latest` when a stable release exists
+  - fall back to the general `releases` feed when only prereleases exist
+  - select the right asset by OS/arch:
+    - macOS `arm64` or `x64` DMG
+    - Linux `x64` AppImage
+    - Windows `x64` NSIS installer
+- The bootstrap script sources live in `apps/marketing/public/` and are fetched directly from the repository by the user-facing install commands.
+- For the current public repo setup, no GitHub auth token is required for the bootstrap installers.
+- The bootstrap script itself resolves the correct GitHub Release asset. If no desktop release exists yet, the script fails with a GitHub Releases error.
 
-Checklist:
+## CI vs release builds
 
-1. Confirm npm org/user owns package `t3` (or rename package first if needed).
-2. In npm package settings, configure Trusted Publisher:
-   - Provider: GitHub Actions
-   - Repository: this repo
-   - Workflow file: `.github/workflows/release.yml`
-   - Environment (if used): match your npm trusted publishing config
-3. Ensure npm account and org policies allow trusted publishing for the package.
-4. Create release tag `vX.Y.Z` and push; workflow will:
-   - set `apps/server/package.json` version to `X.Y.Z`
-   - build web + server
-   - run `npm publish --access public --tag latest`
-5. Nightly runs from the same workflow file publish with `npm publish --access public --tag nightly`.
+- Pushes to `main` run `.github/workflows/ci.yml`.
+- The `quality` job runs format check, lint, typecheck, tests, browser tests, and the desktop pipeline build.
+- After `quality` passes, `desktop_release_build` builds unsigned desktop release-style artifacts on:
+  - macOS `arm64`
+  - macOS `x64`
+  - Linux `x64`
+  - Windows `x64`
+- `release_asset_assembly` then merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
+- Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release.
+- Public curl-installable assets are only published by `.github/workflows/release.yml` on version tags like `v1.2.3`.
 
 ## 1) Dry-run release without signing
 

@@ -4,12 +4,12 @@ import {
   type OrchestrationCommand,
   OrchestrationDispatchCommandError,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 
-import { createAttachmentId, resolveAttachmentPath } from "../attachmentStore.ts";
-import { ServerConfig } from "../config.ts";
-import { parseBase64DataUrl } from "../imageMime.ts";
-import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
+import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore";
+import { ServerConfig } from "../startup/config";
+import { parseBase64DataUrl } from "../attachments/imageMime";
+import { WorkspacePaths } from "../workspace/Services/WorkspacePaths";
 
 export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
   Effect.gen(function* () {
@@ -28,38 +28,23 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
         ),
       );
 
-    const normalizeProjectWorkspaceRootForCreate = (
-      workspaceRoot: string,
-      createIfMissing: boolean | undefined,
-    ) =>
-      workspacePaths
-        .normalizeWorkspaceRoot(workspaceRoot, {
-          createIfMissing: createIfMissing === true,
-        })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new OrchestrationDispatchCommandError({
-                message: cause.message,
-              }),
-          ),
-        );
-
     if (command.type === "project.create") {
       return {
         ...command,
-        workspaceRoot: yield* normalizeProjectWorkspaceRootForCreate(
-          command.workspaceRoot,
-          command.createWorkspaceRootIfMissing,
-        ),
-        createWorkspaceRootIfMissing: command.createWorkspaceRootIfMissing === true,
+        workspaceRoot:
+          command.workspaceRoot === null
+            ? null
+            : yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
       } satisfies OrchestrationCommand;
     }
 
     if (command.type === "project.meta.update" && command.workspaceRoot !== undefined) {
       return {
         ...command,
-        workspaceRoot: yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
+        workspaceRoot:
+          command.workspaceRoot === null
+            ? null
+            : yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
       } satisfies OrchestrationCommand;
     }
 
