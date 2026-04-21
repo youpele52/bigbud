@@ -14,7 +14,7 @@
     },
     "apps/desktop": {
       "name": "@bigbud/desktop",
-      "version": "0.0.15",
+      "version": "0.1.613",
       "dependencies": {
         "effect": "catalog:",
         "electron": "40.6.0",
@@ -41,10 +41,10 @@
       },
     },
     "apps/server": {
-      "name": "bigcode",
-      "version": "0.0.15",
+      "name": "t3",
+      "version": "0.1.613",
       "bin": {
-        "bigcode": "./dist/bin.mjs",
+        "bigbud": "./dist/bin.mjs",
         "t3": "./dist/bin.mjs",
       },
       "dependencies": {
@@ -76,7 +76,7 @@
     },
     "apps/web": {
       "name": "@bigbud/web",
-      "version": "0.0.15",
+      "version": "0.1.613",
       "dependencies": {
         "@base-ui/react": "^1.2.0",
         "@bigbud/contracts": "workspace:*",
@@ -128,7 +128,7 @@
     },
     "packages/contracts": {
       "name": "@bigbud/contracts",
-      "version": "0.0.15",
+      "version": "0.1.613",
       "dependencies": {
         "effect": "catalog:",
       },
@@ -1162,8 +1162,6 @@
 
     "basic-ftp": ["basic-ftp@5.3.0", "", {}, "sha512-5K9eNNn7ywHPsYnFwjKgYH8Hf8B5emh7JKcPaVjjrMJFQQwGpwowEnZNEtHs7DfR7hCZsmaK3VA4HUK0YarT+w=="],
 
-    "bigcode": ["bigcode@workspace:apps/server"],
-
     "bignumber.js": ["bignumber.js@9.3.1", "", {}, "sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ=="],
 
     "binary-extensions": ["binary-extensions@2.3.0", "", {}, "sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw=="],
@@ -2169,6 +2167,8 @@
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 
     "svgo": ["svgo@4.0.1", "", { "dependencies": { "commander": "^11.1.0", "css-select": "^5.1.0", "css-tree": "^3.0.1", "css-what": "^6.1.0", "csso": "^5.0.5", "picocolors": "^1.1.1", "sax": "^1.5.0" }, "bin": "./bin/svgo.js" }, "sha512-XDpWUOPC6FEibaLzjfe0ucaV0YrOjYotGJO1WpF0Zd+n6ZGEQUsSugaoLq9QkEZtAfQIxT42UChcssDVPP3+/w=="],
+
+    "t3": ["t3@workspace:apps/server"],
 
     "tabbable": ["tabbable@6.4.0", "", {}, "sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg=="],
 
