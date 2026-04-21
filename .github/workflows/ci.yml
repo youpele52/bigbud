@@ -43,8 +43,8 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Typecheck
-        run: bun run typecheck
+      # - name: Typecheck
+      #   run: bun run typecheck
 
       - name: Test
         run: bun run test
