@@ -76,7 +76,7 @@ const BASE_DIR =
   process.env.T3CODE_HOME?.trim() ||
   Path.join(OS.homedir(), ".bigbud");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
-const DESKTOP_SCHEME = "t3";
+const DESKTOP_SCHEME = "bigbud";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Alpha)";

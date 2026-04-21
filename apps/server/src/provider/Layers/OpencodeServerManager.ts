@@ -1,4 +1,4 @@
-import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk";
+import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { Effect, Layer } from "effect";
 
 import {
@@ -14,17 +14,19 @@ import {
  * Concurrent `acquire()` calls while the server is starting will all wait for
  * the same start promise.
  */
-function makeOpencodeServerManager(): { acquire: () => Promise<OpencodeServerHandle> } {
+function makeOpencodeServerManager(): {
+  acquire: (directory?: string) => Promise<OpencodeServerHandle>;
+} {
   let refCount = 0;
   let startPromise: Promise<{ url: string; close: () => void }> | null = null;
   let serverHandle: { url: string; close: () => void } | null = null;
 
-  const acquire = async (): Promise<OpencodeServerHandle> => {
+  const acquire = async (directory?: string): Promise<OpencodeServerHandle> => {
     // If a server is already running, reuse it
     if (serverHandle !== null) {
       refCount++;
       const url = serverHandle.url;
-      const client = createOpencodeClient({ baseUrl: url });
+      const client = createOpencodeClient({ baseUrl: url, ...(directory ? { directory } : {}) });
       return makeHandle(client, url);
     }
 
@@ -49,7 +51,10 @@ function makeOpencodeServerManager(): { acquire: () => Promise<OpencodeServerHan
     startPromise = null;
     refCount++;
 
-    const client = createOpencodeClient({ baseUrl: handle.url });
+    const client = createOpencodeClient({
+      baseUrl: handle.url,
+      ...(directory ? { directory } : {}),
+    });
     return makeHandle(client, handle.url);
   };
 

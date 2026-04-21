@@ -29,7 +29,7 @@ import {
   UnifiedSettings,
 } from "@bigbud/contracts/settings";
 import { ensureNativeApi } from "../rpc/nativeApi";
-import { useLocalStorage } from "./useLocalStorage";
+import { useLocalStorage, getLocalStorageItem } from "./useLocalStorage";
 import { normalizeCustomModelSlugs } from "../models/provider";
 import { Predicate, Schema, Struct } from "effect";
 import { DeepMutable } from "effect/Types";
@@ -70,6 +70,18 @@ function splitPatch(patch: Partial<UnifiedSettings>): {
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────
+
+/**
+ * Non-hook accessor for the current merged client settings snapshot.
+ * Used by non-React code paths that need the latest settings without subscribing.
+ */
+export function getClientSettings(): ClientSettings {
+  return (
+    getLocalStorageItem(CLIENT_SETTINGS_STORAGE_KEY, ClientSettingsSchema, {
+      legacyKeys: CLIENT_SETTINGS_LEGACY_KEYS,
+    }) ?? DEFAULT_CLIENT_SETTINGS
+  );
+}
 
 /**
  * Read merged settings. Selector narrows the subscription so components

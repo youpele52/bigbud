@@ -115,6 +115,8 @@ export interface DesktopNotificationInput {
 
 export interface DesktopBridge {
   getWsUrl: () => string | null;
+  /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
+  getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;

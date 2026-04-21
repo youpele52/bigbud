@@ -10,10 +10,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import {
   query as claudeQuery,
   type SlashCommand as ClaudeSlashCommand,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import {
   buildServerProvider,
+  AUTH_PROBE_TIMEOUT_MS,
   DEFAULT_TIMEOUT_MS,
   detailFromResult,
   isCommandMissingCause,
@@ -196,15 +198,41 @@ function parseClaudeInitializationCommands(
   );
 }
 
+function waitForAbortSignal(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
+/**
+ * Probe account information by spawning a lightweight Claude Agent SDK
+ * session and reading the initialization result.
+ *
+ * We pass a never-yielding AsyncIterable as the prompt so that no user
+ * message is ever written to the subprocess stdin. This means the Claude
+ * Code subprocess completes its local initialization IPC (returning
+ * account info and slash commands) but never starts an API request to
+ * Anthropic. We read the init data and then abort the subprocess.
+ *
+ * This is used as a fallback when `claude auth status` does not include
+ * subscription type information.
+ */
 const probeClaudeCapabilities = (binaryPath: string) =>
   Effect.tryPromise(async () => {
     const abortController = new AbortController();
     const queryRuntime = claudeQuery({
-      prompt: "",
+      // Never yield — we only need initialization data, not a conversation.
+      // This prevents any prompt from reaching the Anthropic API.
+      // oxlint-disable-next-line require-yield
+      prompt: (async function* (): AsyncGenerator<SDKUserMessage> {
+        await waitForAbortSignal(abortController.signal);
+      })(),
       options: {
         pathToClaudeCodeExecutable: binaryPath,
         abortController,
-        maxTurns: 0,
         settingSources: ["user", "project", "local"],
         allowedTools: [],
         stderr: () => {},
@@ -345,7 +373,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   // ── Auth check + subscription detection ────────────────────────────
 
   const authProbe = yield* runClaudeCommand(["auth", "status"]).pipe(
-    Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
+    Effect.timeoutOption(AUTH_PROBE_TIMEOUT_MS),
     Effect.result,
   );
 

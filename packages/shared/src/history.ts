@@ -77,6 +77,18 @@ export function hasImageAttachments(
   return attachments?.some((attachment) => attachment.type === "image") ?? false;
 }
 
+/** Returns true when there are any non-image file attachments. */
+export function hasFileAttachments(
+  attachments: ReadonlyArray<ChatAttachment> | undefined,
+): boolean {
+  return attachments?.some((attachment) => attachment.type === "file") ?? false;
+}
+
+/** Returns true when there are any attachments (images or files). */
+export function hasAnyAttachments(attachments: ReadonlyArray<ChatAttachment> | undefined): boolean {
+  return (attachments?.length ?? 0) > 0;
+}
+
 export function buildBootstrapInput(
   previousMessages: ReadonlyArray<BootstrapMessage>,
   latestPrompt: string,

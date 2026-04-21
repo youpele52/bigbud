@@ -6,6 +6,7 @@ import {
 } from "../common/ExpandedImagePreview";
 import { Button } from "../../ui/button";
 import { type TurnDiffSummary } from "../../../models/types";
+import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/types/app.types";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
@@ -14,11 +15,12 @@ import {
   type AssistantMessageRow,
   AssistantMessageBody,
 } from "./MessagesTimeline.assistantMessage";
-import { Undo2Icon } from "lucide-react";
+import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
+import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 
 interface RenderRowContentProps {
   row: MessagesTimelineRow;
@@ -41,9 +43,6 @@ interface RenderRowContentProps {
   isWorking: boolean;
   onTimelineImageLoad: () => void;
 }
-
-type TimelineEntry = ReturnType<typeof deriveDisplayedUserMessageState>;
-type TimelineMessage = Extract<TimelineEntry, { kind: "message" }> | any;
 
 export function MessagesTimelineRowContent(props: RenderRowContentProps) {
   const {
@@ -121,7 +120,17 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
       {row.kind === "message" &&
         row.message.role === "user" &&
         (() => {
-          const userImages = row.message.attachments ?? [];
+          const allAttachments = row.message.attachments ?? [];
+          const userImages = allAttachments.filter(
+            (a): a is ChatImageAttachment => a.type === "image",
+          );
+          const userFiles = allAttachments.filter(
+            (a): a is ChatFileAttachment => a.type === "file",
+          );
+          const userFilesWithSourcePath = userFiles.filter(
+            (file): file is ChatFileAttachment & { sourcePath: string } =>
+              typeof file.sourcePath === "string" && file.sourcePath.length > 0,
+          );
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
@@ -130,40 +139,93 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
               <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
                 {userImages.length > 0 && (
                   <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
-                    {userImages.map(
-                      (image: NonNullable<TimelineMessage["attachments"]>[number]) => (
-                        <div
-                          key={image.id}
-                          className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
-                        >
-                          {image.previewUrl ? (
-                            <button
-                              type="button"
-                              className="h-full w-full cursor-zoom-in"
-                              aria-label={`Preview ${image.name}`}
-                              onClick={() => {
-                                const preview = buildExpandedImagePreview(userImages, image.id);
-                                if (!preview) return;
-                                onImageExpand(preview);
-                              }}
-                            >
-                              <img
-                                src={image.previewUrl}
-                                alt={image.name}
-                                className="h-full max-h-[220px] w-full object-cover"
-                                onLoad={onTimelineImageLoad}
-                                onError={onTimelineImageLoad}
-                              />
-                            </button>
-                          ) : (
-                            <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-[11px] text-muted-foreground/70">
-                              {image.name}
-                            </div>
-                          )}
-                        </div>
-                      ),
-                    )}
+                    {userImages.map((image) => (
+                      <div
+                        key={image.id}
+                        className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
+                      >
+                        {image.previewUrl ? (
+                          <button
+                            type="button"
+                            className="h-full w-full cursor-zoom-in"
+                            aria-label={`Preview ${image.name}`}
+                            onClick={() => {
+                              const preview = buildExpandedImagePreview(userImages, image.id);
+                              if (!preview) return;
+                              onImageExpand(preview);
+                            }}
+                          >
+                            <img
+                              src={image.previewUrl}
+                              alt={image.name}
+                              className="h-full max-h-[220px] w-full object-cover"
+                              onLoad={onTimelineImageLoad}
+                              onError={onTimelineImageLoad}
+                            />
+                          </button>
+                        ) : (
+                          <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-[11px] text-muted-foreground/70">
+                            {image.name}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
+                )}
+                {userFiles.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {userFiles.map((file) => {
+                      const dotIndex = file.name.lastIndexOf(".");
+                      const baseName = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
+                      return (
+                        <div
+                          key={file.id}
+                          className="flex min-w-0 max-w-[180px] items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1"
+                        >
+                          <VscodeEntryIcon
+                            pathValue={file.name}
+                            kind="file"
+                            theme={resolvedTheme}
+                            className="shrink-0 opacity-60"
+                          />
+                          <span
+                            className="min-w-0 truncate text-[11px] text-muted-foreground/60"
+                            title={file.name}
+                          >
+                            {baseName}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {userFilesWithSourcePath.length > 0 && (
+                  <details className="mb-2 group/files">
+                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70">
+                      <ChevronDownIcon className="size-3 shrink-0 transition-transform duration-150 group-open/files:rotate-0 -rotate-90" />
+                      {userFilesWithSourcePath.length === 1
+                        ? "1 attached file"
+                        : `${userFilesWithSourcePath.length} attached files`}
+                    </summary>
+                    <div className="mt-1.5 space-y-1 pl-1">
+                      {userFilesWithSourcePath.map((file) => (
+                        <div key={`path-${file.id}`} className="flex min-w-0 items-start gap-1.5">
+                          <VscodeEntryIcon
+                            pathValue={file.name}
+                            kind="file"
+                            theme={resolvedTheme}
+                            className="mt-0.5 shrink-0 opacity-50"
+                          />
+                          <div
+                            className="min-w-0 break-all text-[11px] text-muted-foreground/45"
+                            title={file.sourcePath}
+                          >
+                            {file.sourcePath}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 )}
                 {(displayedUserMessage.visibleText.trim().length > 0 ||
                   terminalContexts.length > 0) && (

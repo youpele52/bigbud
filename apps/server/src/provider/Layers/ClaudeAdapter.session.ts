@@ -148,18 +148,49 @@ export const makeBuildUserMessageEffect = (
     }
 
     for (const attachment of input.attachments ?? []) {
-      if (attachment.type !== "image") {
+      if (attachment.type === "image") {
+        if (!SUPPORTED_CLAUDE_IMAGE_MIME_TYPES.has(attachment.mimeType)) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "turn/start",
+            detail: `Unsupported Claude image attachment type '${attachment.mimeType}'.`,
+          });
+        }
+
+        const attachmentPath = resolveAttachmentPath({
+          attachmentsDir: serverConfig.attachmentsDir,
+          attachment,
+        });
+        if (!attachmentPath) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "turn/start",
+            detail: `Invalid attachment id '${attachment.id}'.`,
+          });
+        }
+
+        const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "turn/start",
+                detail: toMessage(cause, "Failed to read attachment file."),
+                cause,
+              }),
+          ),
+        );
+
+        sdkContent.push(
+          buildClaudeImageContentBlock({
+            mimeType: attachment.mimeType,
+            bytes,
+          }),
+        );
         continue;
       }
 
-      if (!SUPPORTED_CLAUDE_IMAGE_MIME_TYPES.has(attachment.mimeType)) {
-        return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
-          method: "turn/start",
-          detail: `Unsupported Claude image attachment type '${attachment.mimeType}'.`,
-        });
-      }
-
+      // Non-image file — pass as a base64 document block
       const attachmentPath = resolveAttachmentPath({
         attachmentsDir: serverConfig.attachmentsDir,
         attachment,
@@ -168,28 +199,31 @@ export const makeBuildUserMessageEffect = (
         return yield* new ProviderAdapterRequestError({
           provider: PROVIDER,
           method: "turn/start",
-          detail: `Invalid attachment id '${attachment.id}'.`,
+          detail: `Invalid file attachment id '${attachment.id}'.`,
         });
       }
 
-      const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
+      const fileBytes = yield* fileSystem.readFile(attachmentPath).pipe(
         Effect.mapError(
           (cause) =>
             new ProviderAdapterRequestError({
               provider: PROVIDER,
               method: "turn/start",
-              detail: toMessage(cause, "Failed to read attachment file."),
+              detail: toMessage(cause, "Failed to read file attachment."),
               cause,
             }),
         ),
       );
 
-      sdkContent.push(
-        buildClaudeImageContentBlock({
-          mimeType: attachment.mimeType,
-          bytes,
-        }),
-      );
+      sdkContent.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: attachment.mimeType,
+          data: Buffer.from(fileBytes).toString("base64"),
+        },
+        title: attachment.name,
+      });
     }
 
     return buildUserMessage({ sdkContent });

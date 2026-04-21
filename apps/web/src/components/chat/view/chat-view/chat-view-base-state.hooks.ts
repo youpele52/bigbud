@@ -81,15 +81,17 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const composerDraft = useComposerThreadDraft(threadId);
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
+  const composerFiles = composerDraft.files;
   const composerTerminalContexts = composerDraft.terminalContexts;
   const composerSendState = useMemo(
     () =>
       deriveComposerSendState({
         prompt,
         imageCount: composerImages.length,
+        fileCount: composerFiles.length,
         terminalContexts: composerTerminalContexts,
       }),
-    [composerImages.length, composerTerminalContexts, prompt],
+    [composerFiles.length, composerImages.length, composerTerminalContexts, prompt],
   );
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
@@ -101,6 +103,9 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const addComposerDraftImage = useComposerDraftStore((store) => store.addImage);
   const addComposerDraftImages = useComposerDraftStore((store) => store.addImages);
   const removeComposerDraftImage = useComposerDraftStore((store) => store.removeImage);
+  const addComposerDraftFile = useComposerDraftStore((store) => store.addFile);
+  const addComposerDraftFiles = useComposerDraftStore((store) => store.addFiles);
+  const removeComposerDraftFile = useComposerDraftStore((store) => store.removeFile);
   const insertComposerDraftTerminalContext = useComposerDraftStore(
     (store) => store.insertTerminalContext,
   );
@@ -186,6 +191,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
   const composerImagesRef = useRef(composerImages);
+  const composerFilesRef = useRef(composerFiles);
   const composerSelectLockRef = useRef(false);
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
@@ -258,6 +264,24 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
       removeComposerDraftImage(threadId, imageId);
     },
     [removeComposerDraftImage, threadId],
+  );
+  const addComposerFile = useCallback(
+    (file: Parameters<typeof addComposerDraftFile>[1]) => {
+      addComposerDraftFile(threadId, file);
+    },
+    [addComposerDraftFile, threadId],
+  );
+  const addComposerFilesToDraft = useCallback(
+    (files: Parameters<typeof addComposerDraftFiles>[1]) => {
+      addComposerDraftFiles(threadId, files);
+    },
+    [addComposerDraftFiles, threadId],
+  );
+  const removeComposerFileFromDraft = useCallback(
+    (fileId: string) => {
+      removeComposerDraftFile(threadId, fileId);
+    },
+    [removeComposerDraftFile, threadId],
   );
   const removeComposerTerminalContextFromDraft = useCallback(
     (contextId: string) => {
@@ -343,6 +367,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     composerDraft,
     prompt,
     composerImages,
+    composerFiles,
     composerTerminalContexts,
     composerSendState,
     nonPersistedComposerImageIds,
@@ -353,6 +378,9 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     addComposerDraftImage,
     addComposerDraftImages,
     removeComposerDraftImage,
+    addComposerDraftFile,
+    addComposerDraftFiles,
+    removeComposerDraftFile,
     insertComposerDraftTerminalContext,
     addComposerDraftTerminalContexts,
     removeComposerDraftTerminalContext,
@@ -414,6 +442,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     composerEditorRef,
     composerFormRef,
     composerImagesRef,
+    composerFilesRef,
     composerSelectLockRef,
     composerMenuOpenRef,
     composerMenuItemsRef,
@@ -444,6 +473,9 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     addComposerImagesToDraft,
     addComposerTerminalContextsToDraft,
     removeComposerImageFromDraft,
+    addComposerFile,
+    addComposerFilesToDraft,
+    removeComposerFileFromDraft,
     removeComposerTerminalContextFromDraft,
     fallbackDraftProject,
     localDraftError,

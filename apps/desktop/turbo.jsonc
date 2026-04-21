@@ -7,16 +7,16 @@
       "outputs": ["dist-electron/**"],
     },
     "dev": {
-      "dependsOn": ["t3#build"],
+      "dependsOn": ["@bigbud/server#build"],
       "persistent": true,
     },
     "start": {
-      "dependsOn": ["build", "@bigbud/web#build", "t3#build"],
+      "dependsOn": ["build", "@bigbud/web#build", "@bigbud/server#build"],
       "cache": false,
       "persistent": true,
     },
     "smoke-test": {
-      "dependsOn": ["build", "@bigbud/web#build", "t3#build"],
+      "dependsOn": ["build", "@bigbud/web#build", "@bigbud/server#build"],
       "cache": false,
       "outputs": [],
     },

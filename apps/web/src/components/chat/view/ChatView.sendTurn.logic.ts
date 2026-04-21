@@ -29,9 +29,19 @@ import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { toastManager } from "../../ui/toast";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { newCommandId, newMessageId } from "~/lib/utils";
-import { type ComposerImageAttachment } from "../../../stores/composer";
+import {
+  type ComposerImageAttachment,
+  type ComposerFileAttachment,
+} from "../../../stores/composer";
 import type { TerminalContextDraft } from "../../../lib/terminalContext";
-import type { ChatMessage, Thread, Project, ProposedPlan } from "../../../models/types";
+import type {
+  ChatAttachment,
+  ChatMessage,
+  Thread,
+  Project,
+  ProposedPlan,
+} from "../../../models/types";
+import { isElectron } from "~/config/env/env.config";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -48,6 +58,8 @@ export interface UseOnSendInput {
   promptRef: React.MutableRefObject<string>;
   composerImages: ComposerImageAttachment[];
   composerImagesRef: React.MutableRefObject<ComposerImageAttachment[]>;
+  composerFiles: ComposerFileAttachment[];
+  composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
   composerTerminalContexts: TerminalContextDraft[];
   composerTerminalContextsRef: React.MutableRefObject<TerminalContextDraft[]>;
   selectedProvider: ProviderKind;
@@ -72,6 +84,7 @@ export interface UseOnSendInput {
   setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
   setStoreThreadError: (threadId: ThreadId, error: string | null) => void;
   addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
+  addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
   addComposerTerminalContextsToDraft: (contexts: TerminalContextDraft[]) => void;
   clearComposerDraftContent: (threadId: ThreadId) => void;
   bootstrapSourceThreadId: ThreadId | null;
@@ -117,6 +130,8 @@ export function useOnSend(input: UseOnSendInput) {
       promptRef: pRef,
       composerImages: images,
       composerImagesRef: imagesRef,
+      composerFiles: files,
+      composerFilesRef: filesRef,
       composerTerminalContexts: termContexts,
       composerTerminalContextsRef: termContextsRef,
       selectedProvider: provider,
@@ -170,6 +185,7 @@ export function useOnSend(input: UseOnSendInput) {
     } = deriveComposerSendState({
       prompt: promptForSend,
       imageCount: images.length,
+      fileCount: files.length,
       terminalContexts: termContexts,
     });
     if (planFollowUp && proposedPlan) {
@@ -189,7 +205,7 @@ export function useOnSend(input: UseOnSendInput) {
       return;
     }
     const standaloneSlashCommand =
-      images.length === 0 && sendableComposerTerminalContexts.length === 0
+      images.length === 0 && files.length === 0 && sendableComposerTerminalContexts.length === 0
         ? parseStandaloneComposerSlashCommand(trimmedPrompt)
         : null;
     if (standaloneSlashCommand) {
@@ -242,6 +258,7 @@ export function useOnSend(input: UseOnSendInput) {
     inputRef.current.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
 
     const composerImagesSnapshot = [...images];
+    const composerFilesSnapshot = [...files];
     const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
     const messageTextForSend = appendTerminalContextsToPrompt(
       promptForSend,
@@ -256,23 +273,58 @@ export function useOnSend(input: UseOnSendInput) {
       effort,
       text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
     });
-    const turnAttachmentsPromise = Promise.all(
-      composerImagesSnapshot.map(async (image) => ({
+    const turnAttachmentsPromise = Promise.all([
+      ...composerImagesSnapshot.map(async (image) => ({
         type: "image" as const,
         name: image.name,
         mimeType: image.mimeType,
         sizeBytes: image.sizeBytes,
         dataUrl: await readFileAsDataUrl(image.file),
       })),
-    );
-    const optimisticAttachments = composerImagesSnapshot.map((image) => ({
-      type: "image" as const,
-      id: image.id,
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes: image.sizeBytes,
-      previewUrl: image.previewUrl,
-    }));
+      ...composerFilesSnapshot.map(async (file) => {
+        if (isElectron && file.filePath) {
+          return {
+            type: "file" as const,
+            transport: "path" as const,
+            name: file.name,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+            filePath: file.filePath,
+          };
+        }
+        if (isElectron) {
+          throw new Error(`Missing filesystem path for attachment '${file.name}'.`);
+        }
+        // Web fallback: base64
+        const dataUrl = file.file ? await readFileAsDataUrl(file.file) : "";
+        return {
+          type: "file" as const,
+          transport: "base64" as const,
+          name: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          dataUrl,
+        };
+      }),
+    ]);
+    const optimisticAttachments: ChatAttachment[] = [
+      ...composerImagesSnapshot.map((image) => ({
+        type: "image" as const,
+        id: image.id,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+        previewUrl: image.previewUrl,
+      })),
+      ...composerFilesSnapshot.map((file) => ({
+        type: "file" as const,
+        id: file.id,
+        name: file.name,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        ...(file.filePath ? { sourcePath: file.filePath } : {}),
+      })),
+    ];
     inputRef.current.setOptimisticUserMessages((existing) => [
       ...existing,
       {
@@ -379,6 +431,7 @@ export function useOnSend(input: UseOnSendInput) {
         !turnStartSucceeded &&
         pRef.current.length === 0 &&
         imagesRef.current.length === 0 &&
+        filesRef.current.length === 0 &&
         termContextsRef.current.length === 0
       ) {
         inputRef.current.setOptimisticUserMessages((existing) => {
@@ -397,6 +450,7 @@ export function useOnSend(input: UseOnSendInput) {
         inputRef.current.addComposerImagesToDraft(
           composerImagesSnapshot.map(cloneComposerImageForRetry),
         );
+        inputRef.current.addComposerFilesToDraft(composerFilesSnapshot);
         inputRef.current.addComposerTerminalContextsToDraft(composerTerminalContextsSnapshot);
         inputRef.current.setComposerTrigger(
           detectComposerTrigger(promptForSend, promptForSend.length),

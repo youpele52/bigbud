@@ -1,5 +1,5 @@
 import { ServiceMap } from "effect";
-import type { OpencodeClient } from "@opencode-ai/sdk";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 
 export interface OpencodeServerHandle {
   /** The connected client ready to use. */
@@ -14,9 +14,10 @@ export interface OpencodeServerManagerShape {
   /**
    * Acquire a handle to the shared OpenCode server.
    * Starts the server the first time; subsequent calls reuse the same process.
+   * Pass `directory` to bake a working directory into the created client (v2).
    * Call `handle.release()` when you no longer need it.
    */
-  acquire(): Promise<OpencodeServerHandle>;
+  acquire(directory?: string): Promise<OpencodeServerHandle>;
 }
 
 export class OpencodeServerManager extends ServiceMap.Service<
