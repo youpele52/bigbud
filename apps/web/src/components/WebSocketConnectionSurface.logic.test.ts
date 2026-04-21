@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { WsConnectionStatus } from "../rpc/wsConnectionState";
-import { shouldAutoReconnect, shouldRestartStalledReconnect } from "./WebSocketConnectionSurface";
+import {
+  shouldAutoReconnect,
+  shouldRestartStalledReconnect,
+} from "./WebSocketConnectionSurface.logic";
 
 function makeStatus(overrides: Partial<WsConnectionStatus> = {}): WsConnectionStatus {
   return {
@@ -25,27 +28,29 @@ function makeStatus(overrides: Partial<WsConnectionStatus> = {}): WsConnectionSt
 }
 
 describe("WebSocketConnectionSurface.logic", () => {
-  it("forces reconnect on online when the app was offline", () => {
+  it("retries on browser online after an initial connection failure", () => {
     expect(
       shouldAutoReconnect(
         makeStatus({
-          disconnectedAt: "2026-04-03T20:00:00.000Z",
-          online: false,
+          hasConnected: false,
+          online: true,
           phase: "disconnected",
+          reconnectAttemptCount: 1,
+          reconnectPhase: "waiting",
         }),
         "online",
       ),
     ).toBe(true);
   });
 
-  it("forces reconnect on focus only for previously connected disconnected states", () => {
+  it("retries on focus only after a live connection has been established", () => {
     expect(
       shouldAutoReconnect(
         makeStatus({
           hasConnected: true,
           online: true,
           phase: "disconnected",
-          reconnectAttemptCount: 3,
+          reconnectAttemptCount: 2,
           reconnectPhase: "waiting",
         }),
         "focus",
@@ -64,21 +69,6 @@ describe("WebSocketConnectionSurface.logic", () => {
         "focus",
       ),
     ).toBe(false);
-  });
-
-  it("forces reconnect on focus for exhausted reconnect loops", () => {
-    expect(
-      shouldAutoReconnect(
-        makeStatus({
-          hasConnected: true,
-          online: true,
-          phase: "disconnected",
-          reconnectAttemptCount: 8,
-          reconnectPhase: "exhausted",
-        }),
-        "focus",
-      ),
-    ).toBe(true);
   });
 
   it("restarts a stalled reconnect window after the scheduled retry time passes", () => {

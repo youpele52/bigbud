@@ -1,67 +1,28 @@
-import { type ServerLifecycleWelcomePayload } from "@t3tools/contracts";
-import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime";
+import { QueryClient } from "@tanstack/react-query";
 import {
   Outlet,
   createRootRouteWithContext,
   type ErrorComponentProps,
-  useLocation,
-  useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useRef } from "react";
-import { QueryClient, useQueryClient } from "@tanstack/react-query";
 
-import { APP_DISPLAY_NAME } from "../branding";
-import { AppSidebarLayout } from "../components/AppSidebarLayout";
-import { CommandPalette } from "../components/CommandPalette";
+import { APP_DISPLAY_NAME } from "../config/branding";
+import { CommandPalette } from "../components/layout/CommandPalette";
+import { AppSidebarLayout } from "../components/layout/AppSidebarLayout";
+import { Button } from "../components/ui/button";
+import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
 import {
   SlowRpcAckToastCoordinator,
   WebSocketConnectionCoordinator,
   WebSocketConnectionSurface,
 } from "../components/WebSocketConnectionSurface";
-import { Button } from "../components/ui/button";
-import { AnchoredToastProvider, ToastProvider, toastManager } from "../components/ui/toast";
-import { resolveAndPersistPreferredEditor } from "../editorPreferences";
-import { readLocalApi } from "../localApi";
-import { useSettings } from "../hooks/useSettings";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  derivePhysicalProjectKeyFromPath,
-} from "../logicalProject";
-import {
-  getServerConfigUpdatedNotification,
-  ServerConfigUpdatedNotification,
-  startServerStateSync,
-  useServerConfig,
-  useServerConfigUpdatedSubscription,
-  useServerWelcomeSubscription,
-} from "../rpc/serverState";
-import { useStore } from "../store";
-import { useUiStateStore } from "../uiStateStore";
-import { syncBrowserChromeTheme } from "../hooks/useTheme";
-import {
-  ensureEnvironmentConnectionBootstrapped,
-  getPrimaryEnvironmentConnection,
-  startEnvironmentConnectionService,
-} from "../environments/runtime";
-import { configureClientTracing } from "../observability/clientTracing";
-import {
-  ensurePrimaryEnvironmentReady,
-  resolveInitialServerAuthGateState,
-  updatePrimaryEnvironmentDescriptor,
-} from "../environments/primary";
+import { readNativeApi } from "../rpc/nativeApi";
+import { PendingApprovalNavigation } from "../notifications/pendingApprovalNavigation";
+import { TaskCompletionNotifications } from "../notifications/taskCompletion";
+import { EventRouter, ServerStateBootstrap } from "./__root.logic";
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
 }>()({
-  beforeLoad: async () => {
-    const [, authGateState] = await Promise.all([
-      ensurePrimaryEnvironmentReady(),
-      resolveInitialServerAuthGateState(),
-    ]);
-    return {
-      authGateState,
-    };
-  },
   component: RootRouteView,
   errorComponent: RootRouteErrorView,
   head: () => ({
@@ -70,34 +31,27 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootRouteView() {
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const { authGateState } = Route.useRouteContext();
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      syncBrowserChromeTheme();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [pathname]);
-
-  if (pathname === "/pair") {
-    return <Outlet />;
+  if (!readNativeApi()) {
+    return (
+      <div className="flex h-screen flex-col bg-background text-foreground">
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-sm text-muted-foreground">
+            Connecting to {APP_DISPLAY_NAME} server...
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  if (authGateState.status !== "authenticated") {
-    return <Outlet />;
-  }
   return (
     <ToastProvider>
       <AnchoredToastProvider>
-        <AuthenticatedTracingBootstrap />
         <ServerStateBootstrap />
-        <EnvironmentConnectionManagerBootstrap />
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
+        <PendingApprovalNavigation />
+        <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
           <CommandPalette>
             <AppSidebarLayout>
@@ -179,169 +133,4 @@ function errorDetails(error: unknown): string {
   } catch {
     return "No additional error details are available.";
   }
-}
-
-function ServerStateBootstrap() {
-  useEffect(() => startServerStateSync(getPrimaryEnvironmentConnection().client.server), []);
-
-  return null;
-}
-
-function AuthenticatedTracingBootstrap() {
-  useEffect(() => {
-    void configureClientTracing();
-  }, []);
-
-  return null;
-}
-
-function EnvironmentConnectionManagerBootstrap() {
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    return startEnvironmentConnectionService(queryClient);
-  }, [queryClient]);
-
-  return null;
-}
-
-function EventRouter() {
-  const setActiveEnvironmentId = useStore((store) => store.setActiveEnvironmentId);
-  const navigate = useNavigate();
-  const pathname = useLocation({ select: (loc) => loc.pathname });
-  const projectGroupingSettings = useSettings((settings) => ({
-    sidebarProjectGroupingMode: settings.sidebarProjectGroupingMode,
-    sidebarProjectGroupingOverrides: settings.sidebarProjectGroupingOverrides,
-  }));
-  const readPathname = useEffectEvent(() => pathname);
-  const handledBootstrapThreadIdRef = useRef<string | null>(null);
-  const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
-  const disposedRef = useRef(false);
-  const serverConfig = useServerConfig();
-
-  const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
-    if (!payload) return;
-
-    updatePrimaryEnvironmentDescriptor(payload.environment);
-    setActiveEnvironmentId(payload.environment.environmentId);
-    void (async () => {
-      await ensureEnvironmentConnectionBootstrapped(payload.environment.environmentId);
-      if (disposedRef.current) {
-        return;
-      }
-
-      if (!payload.bootstrapProjectId || !payload.bootstrapThreadId) {
-        return;
-      }
-      const bootstrapEnvironmentState =
-        useStore.getState().environmentStateById[payload.environment.environmentId];
-      const bootstrapProject =
-        bootstrapEnvironmentState?.projectById[payload.bootstrapProjectId] ?? null;
-      const bootstrapProjectKey =
-        (bootstrapProject
-          ? deriveLogicalProjectKeyFromSettings(bootstrapProject, projectGroupingSettings)
-          : null) ??
-        (serverConfig?.cwd
-          ? derivePhysicalProjectKeyFromPath(payload.environment.environmentId, serverConfig.cwd)
-          : null) ??
-        scopedProjectKey(
-          scopeProjectRef(payload.environment.environmentId, payload.bootstrapProjectId),
-        );
-      useUiStateStore.getState().setProjectExpanded(bootstrapProjectKey, true);
-
-      if (readPathname() !== "/") {
-        return;
-      }
-      if (handledBootstrapThreadIdRef.current === payload.bootstrapThreadId) {
-        return;
-      }
-      await navigate({
-        to: "/$environmentId/$threadId",
-        params: {
-          environmentId: payload.environment.environmentId,
-          threadId: payload.bootstrapThreadId,
-        },
-        replace: true,
-      });
-      handledBootstrapThreadIdRef.current = payload.bootstrapThreadId;
-    })().catch(() => undefined);
-  });
-
-  const handleServerConfigUpdated = useEffectEvent(
-    (notification: ServerConfigUpdatedNotification | null) => {
-      if (!notification) return;
-
-      const { id, payload, source } = notification;
-      if (id <= seenServerConfigUpdateIdRef.current) {
-        return;
-      }
-      seenServerConfigUpdateIdRef.current = id;
-      if (source !== "keybindingsUpdated") {
-        return;
-      }
-
-      const issue = payload.issues.find((entry) => entry.kind.startsWith("keybindings."));
-      if (!issue) {
-        toastManager.add({
-          type: "success",
-          title: "Keybindings updated",
-          description: "Keybindings configuration reloaded successfully.",
-        });
-        return;
-      }
-
-      toastManager.add({
-        type: "warning",
-        title: "Invalid keybindings configuration",
-        description: issue.message,
-        actionProps: {
-          children: "Open keybindings.json",
-          onClick: () => {
-            const api = readLocalApi();
-            if (!api) {
-              return;
-            }
-
-            void Promise.resolve(serverConfig ?? api.server.getConfig())
-              .then((config) => {
-                const editor = resolveAndPersistPreferredEditor(config.availableEditors);
-                if (!editor) {
-                  throw new Error("No available editors found.");
-                }
-                return api.shell.openInEditor(config.keybindingsConfigPath, editor);
-              })
-              .catch((error) => {
-                toastManager.add({
-                  type: "error",
-                  title: "Unable to open keybindings file",
-                  description:
-                    error instanceof Error ? error.message : "Unknown error opening file.",
-                });
-              });
-          },
-        },
-      });
-    },
-  );
-
-  useEffect(() => {
-    if (!serverConfig) {
-      return;
-    }
-
-    updatePrimaryEnvironmentDescriptor(serverConfig.environment);
-    setActiveEnvironmentId(serverConfig.environment.environmentId);
-  }, [serverConfig, setActiveEnvironmentId]);
-
-  useEffect(() => {
-    disposedRef.current = false;
-    return () => {
-      disposedRef.current = true;
-    };
-  }, []);
-
-  useServerWelcomeSubscription(handleWelcome);
-  useServerConfigUpdatedSubscription(handleServerConfigUpdated);
-
-  return null;
 }

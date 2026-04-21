@@ -1,10 +1,10 @@
 import { Encoding } from "effect";
-import { CheckpointRef, ProjectId, type ThreadId } from "@t3tools/contracts";
+import { CheckpointRef, ProjectId, type ThreadId } from "@bigbud/contracts";
 
 export const CHECKPOINT_REFS_PREFIX = "refs/t3/checkpoints";
 
 export function checkpointRefForThreadTurn(threadId: ThreadId, turnCount: number): CheckpointRef {
-  return CheckpointRef.make(
+  return CheckpointRef.makeUnsafe(
     `${CHECKPOINT_REFS_PREFIX}/${Encoding.encodeBase64Url(threadId)}/turn/${turnCount}`,
   );
 }
@@ -16,7 +16,7 @@ export function resolveThreadWorkspaceCwd(input: {
   };
   readonly projects: ReadonlyArray<{
     readonly id: ProjectId;
-    readonly workspaceRoot: string;
+    readonly workspaceRoot: string | null;
   }>;
 }): string | undefined {
   const worktreeCwd = input.thread.worktreePath ?? undefined;
@@ -24,5 +24,8 @@ export function resolveThreadWorkspaceCwd(input: {
     return worktreeCwd;
   }
 
-  return input.projects.find((project) => project.id === input.thread.projectId)?.workspaceRoot;
+  return (
+    input.projects.find((project) => project.id === input.thread.projectId)?.workspaceRoot ??
+    undefined
+  );
 }

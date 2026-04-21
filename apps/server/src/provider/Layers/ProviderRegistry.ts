@@ -1,294 +1,232 @@
 /**
  * ProviderRegistryLive - Aggregates provider-specific snapshot services.
  *
+ * Provider probes are kicked off asynchronously after construction so a
+ * missing CLI binary (ENOENT) never blocks server startup.  The registry
+ * starts with an empty list and hydrates via the individual providers'
+ * `streamChanges` streams, publishing each delta through `changesPubSub`.
+ *
  * @module ProviderRegistryLive
  */
-import type { ProviderKind, ServerProvider } from "@t3tools/contracts";
-import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
+import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
+import { Deferred, Effect, Equal, Layer, Option, PubSub, Ref, Stream } from "effect";
 
-import { ServerConfig } from "../../config.ts";
-import { ClaudeProviderLive } from "./ClaudeProvider.ts";
-import { CodexProviderLive } from "./CodexProvider.ts";
-import { CursorProviderLive } from "./CursorProvider.ts";
-import { OpenCodeProviderLive } from "./OpenCodeProvider.ts";
-import { ClaudeProvider } from "../Services/ClaudeProvider.ts";
-import { CodexProvider } from "../Services/CodexProvider.ts";
-import { CursorProvider } from "../Services/CursorProvider.ts";
-import { OpenCodeProvider } from "../Services/OpenCodeProvider.ts";
-import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry.ts";
-import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
-import {
-  hydrateCachedProvider,
-  PROVIDER_CACHE_IDS,
-  orderProviderSnapshots,
-  readProviderStatusCache,
-  resolveProviderStatusCachePath,
-  writeProviderStatusCache,
-} from "../providerStatusCache.ts";
-
-type ProviderSnapshotSource = {
-  readonly provider: ProviderKind;
-  readonly getSnapshot: Effect.Effect<ServerProvider>;
-  readonly refresh: Effect.Effect<ServerProvider>;
-  readonly streamChanges: Stream.Stream<ServerProvider>;
-};
+import { ClaudeProviderLive } from "./ClaudeProvider";
+import { CopilotProviderLive } from "./CopilotProvider";
+import { CodexProviderLive } from "./CodexProvider";
+import { CursorProviderLive } from "./CursorProvider";
+import { OpencodeProviderLive } from "./OpencodeProvider";
+import { PiProviderLive } from "./PiProvider";
+import type { ClaudeProviderShape } from "../Services/ClaudeProvider";
+import { ClaudeProvider } from "../Services/ClaudeProvider";
+import type { CopilotProviderShape } from "../Services/CopilotProvider";
+import { CopilotProvider } from "../Services/CopilotProvider";
+import type { CodexProviderShape } from "../Services/CodexProvider";
+import { CodexProvider } from "../Services/CodexProvider";
+import type { CursorProviderShape } from "../Services/CursorProvider";
+import { CursorProvider } from "../Services/CursorProvider";
+import type { OpencodeProviderShape } from "../Services/OpencodeProvider";
+import { OpencodeProvider } from "../Services/OpencodeProvider";
+import type { PiProviderShape } from "../Services/PiProvider";
+import { PiProvider } from "../Services/PiProvider";
+import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 
 const loadProviders = (
-  providerSources: ReadonlyArray<ProviderSnapshotSource>,
-): Effect.Effect<ReadonlyArray<ServerProvider>> =>
-  Effect.forEach(providerSources, (providerSource) => providerSource.getSnapshot, {
-    concurrency: "unbounded",
-  });
-
-const hasModelCapabilities = (model: ServerProvider["models"][number]): boolean =>
-  (model.capabilities?.reasoningEffortLevels.length ?? 0) > 0 ||
-  model.capabilities?.supportsFastMode === true ||
-  model.capabilities?.supportsThinkingToggle === true ||
-  (model.capabilities?.contextWindowOptions.length ?? 0) > 0 ||
-  (model.capabilities?.promptInjectedEffortLevels.length ?? 0) > 0;
-
-const mergeProviderModels = (
-  previousModels: ReadonlyArray<ServerProvider["models"][number]>,
-  nextModels: ReadonlyArray<ServerProvider["models"][number]>,
-): ReadonlyArray<ServerProvider["models"][number]> => {
-  if (nextModels.length === 0 && previousModels.length > 0) {
-    return previousModels;
-  }
-
-  const previousBySlug = new Map(previousModels.map((model) => [model.slug, model] as const));
-  const mergedModels = nextModels.map((model) => {
-    const previousModel = previousBySlug.get(model.slug);
-    if (!previousModel || hasModelCapabilities(model) || !hasModelCapabilities(previousModel)) {
-      return model;
-    }
-    return {
-      ...model,
-      capabilities: previousModel.capabilities,
-    };
-  });
-  const nextSlugs = new Set(nextModels.map((model) => model.slug));
-  return [...mergedModels, ...previousModels.filter((model) => !nextSlugs.has(model.slug))];
-};
-
-export const mergeProviderSnapshot = (
-  previousProvider: ServerProvider | undefined,
-  nextProvider: ServerProvider,
-): ServerProvider =>
-  !previousProvider
-    ? nextProvider
-    : {
-        ...nextProvider,
-        models: mergeProviderModels(previousProvider.models, nextProvider.models),
-      };
+  codexProvider: CodexProviderShape,
+  claudeProvider: ClaudeProviderShape,
+  copilotProvider: CopilotProviderShape,
+  cursorProvider: CursorProviderShape,
+  opencodeProvider: OpencodeProviderShape,
+  piProvider: PiProviderShape,
+): Effect.Effect<
+  readonly [
+    ServerProvider,
+    ServerProvider,
+    ServerProvider,
+    ServerProvider,
+    ServerProvider,
+    ServerProvider,
+  ]
+> =>
+  Effect.all(
+    [
+      codexProvider.getSnapshot,
+      claudeProvider.getSnapshot,
+      copilotProvider.getSnapshot,
+      cursorProvider.getSnapshot,
+      opencodeProvider.getSnapshot,
+      piProvider.getSnapshot,
+    ],
+    {
+      concurrency: "unbounded",
+    },
+  );
 
 export const haveProvidersChanged = (
   previousProviders: ReadonlyArray<ServerProvider>,
   nextProviders: ReadonlyArray<ServerProvider>,
 ): boolean => !Equal.equals(previousProviders, nextProviders);
 
-const ProviderRegistryLiveBase = Layer.effect(
+/** Returns the first provider with status "ready", or None. */
+const findFirstReadyProvider = (
+  providers: ReadonlyArray<ServerProvider>,
+): Option.Option<ServerProvider> => {
+  const found = providers.find((p) => p.enabled && p.status === "ready");
+  return found ? Option.some(found) : Option.none();
+};
+
+const makeProviderRegistryLayer = Layer.effect(
   ProviderRegistry,
   Effect.gen(function* () {
     const codexProvider = yield* CodexProvider;
     const claudeProvider = yield* ClaudeProvider;
-    const openCodeProvider = yield* OpenCodeProvider;
-    const config = yield* ServerConfig;
-    const fileSystem = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-
+    const copilotProvider = yield* CopilotProvider;
     const cursorProvider = yield* CursorProvider;
-
-    const providerSources = [
-      {
-        provider: "codex",
-        getSnapshot: codexProvider.getSnapshot,
-        refresh: codexProvider.refresh,
-        streamChanges: codexProvider.streamChanges,
-      },
-      {
-        provider: "claudeAgent",
-        getSnapshot: claudeProvider.getSnapshot,
-        refresh: claudeProvider.refresh,
-        streamChanges: claudeProvider.streamChanges,
-      },
-      {
-        provider: "opencode",
-        getSnapshot: openCodeProvider.getSnapshot,
-        refresh: openCodeProvider.refresh,
-        streamChanges: openCodeProvider.streamChanges,
-      },
-      {
-        provider: "cursor",
-        getSnapshot: cursorProvider.getSnapshot,
-        refresh: cursorProvider.refresh,
-        streamChanges: cursorProvider.streamChanges,
-      },
-    ] satisfies ReadonlyArray<ProviderSnapshotSource>;
-    const activeProviders = PROVIDER_CACHE_IDS;
+    const opencodeProvider = yield* OpencodeProvider;
+    const piProvider = yield* PiProvider;
     const changesPubSub = yield* Effect.acquireRelease(
       PubSub.unbounded<ReadonlyArray<ServerProvider>>(),
       PubSub.shutdown,
     );
-    const fallbackProviders = yield* loadProviders(providerSources);
-    const cachePathByProvider = new Map(
-      activeProviders.map(
-        (provider) =>
-          [
-            provider,
-            resolveProviderStatusCachePath({
-              cacheDir: config.providerStatusCacheDir,
-              provider,
-            }),
-          ] as const,
-      ),
-    );
-    const fallbackByProvider = new Map(
-      fallbackProviders.map((provider) => [provider.provider, provider] as const),
-    );
 
-    const cachedProviders = yield* Effect.forEach(
-      activeProviders,
-      (provider) => {
-        const filePath = cachePathByProvider.get(provider)!;
-        const fallbackProvider = fallbackByProvider.get(provider)!;
-        return readProviderStatusCache(filePath).pipe(
-          Effect.provideService(FileSystem.FileSystem, fileSystem),
-          Effect.map((cachedProvider) =>
-            cachedProvider === undefined
-              ? undefined
-              : hydrateCachedProvider({
-                  cachedProvider,
-                  fallbackProvider,
-                }),
-          ),
-        );
-      },
-      { concurrency: "unbounded" },
-    ).pipe(
-      Effect.map((providers) =>
-        orderProviderSnapshots(
-          providers.filter((provider): provider is ServerProvider => provider !== undefined),
-        ),
-      ),
-    );
-    const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(cachedProviders);
+    // Start empty — probes are kicked off asynchronously below.
+    const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>([]);
 
-    const persistProvider = (provider: ServerProvider) =>
-      writeProviderStatusCache({
-        filePath: cachePathByProvider.get(provider.provider)!,
-        provider,
-      }).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.provideService(Path.Path, path),
-        Effect.tapError(Effect.logError),
-        Effect.ignore,
+    // Latches the first provider that becomes ready.  Subsequent ready
+    // providers do not override the latched value.
+    const firstReadyDeferred = yield* Deferred.make<ServerProvider>();
+
+    const syncProviders = Effect.fn("syncProviders")(function* (options?: {
+      readonly publish?: boolean;
+    }) {
+      const previousProviders = yield* Ref.get(providersRef);
+      const providers = yield* loadProviders(
+        codexProvider,
+        claudeProvider,
+        copilotProvider,
+        cursorProvider,
+        opencodeProvider,
+        piProvider,
       );
+      yield* Ref.set(providersRef, providers);
 
-    const upsertProviders = Effect.fn("upsertProviders")(function* (
-      nextProviders: ReadonlyArray<ServerProvider>,
-      options?: {
-        readonly publish?: boolean;
-      },
-    ) {
-      const [previousProviders, providers] = yield* Ref.modify(
-        providersRef,
-        (previousProviders) => {
-          const mergedProviders = new Map(
-            previousProviders.map((provider) => [provider.provider, provider] as const),
-          );
+      // Latch the first ready provider (idempotent after first success).
+      const maybeReady = findFirstReadyProvider(providers);
+      if (Option.isSome(maybeReady)) {
+        yield* Deferred.succeed(firstReadyDeferred, maybeReady.value).pipe(Effect.ignore);
+      }
 
-          for (const provider of nextProviders) {
-            mergedProviders.set(
-              provider.provider,
-              mergeProviderSnapshot(mergedProviders.get(provider.provider), provider),
-            );
-          }
-
-          const providers = orderProviderSnapshots([...mergedProviders.values()]);
-          return [[previousProviders, providers] as const, providers];
-        },
-      );
-
-      if (haveProvidersChanged(previousProviders, providers)) {
-        yield* Effect.forEach(nextProviders, persistProvider, {
-          concurrency: "unbounded",
-          discard: true,
-        });
-        if (options?.publish !== false) {
-          yield* PubSub.publish(changesPubSub, providers);
-        }
+      if (options?.publish !== false && haveProvidersChanged(previousProviders, providers)) {
+        yield* PubSub.publish(changesPubSub, providers);
       }
 
       return providers;
     });
 
-    const syncProvider = Effect.fn("syncProvider")(function* (
-      provider: ServerProvider,
-      options?: {
-        readonly publish?: boolean;
-      },
-    ) {
-      return yield* upsertProviders([provider], options);
-    });
+    // Kick off an initial probe for each provider asynchronously — a failure
+    // in any individual probe is contained inside `makeManagedServerProvider`
+    // and will surface as a degraded snapshot, never as a startup failure.
+    yield* syncProviders({ publish: true }).pipe(
+      Effect.ignoreCause({ log: true }),
+      Effect.forkScoped,
+    );
+
+    yield* Stream.runForEach(codexProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
+    yield* Stream.runForEach(claudeProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
+    yield* Stream.runForEach(copilotProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
+    yield* Stream.runForEach(cursorProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
+    yield* Stream.runForEach(opencodeProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
+    yield* Stream.runForEach(piProvider.streamChanges, () => syncProviders()).pipe(
+      Effect.forkScoped,
+    );
 
     const refresh = Effect.fn("refresh")(function* (provider?: ProviderKind) {
-      if (provider) {
-        const providerSource = providerSources.find((candidate) => candidate.provider === provider);
-        if (!providerSource) {
-          return yield* Ref.get(providersRef);
-        }
-        return yield* providerSource.refresh.pipe(
-          Effect.flatMap((nextProvider) => syncProvider(nextProvider)),
-        );
+      switch (provider) {
+        case "codex":
+          yield* codexProvider.refresh;
+          break;
+        case "claudeAgent":
+          yield* claudeProvider.refresh;
+          break;
+        case "copilot":
+          yield* copilotProvider.refresh;
+          break;
+        case "cursor":
+          yield* cursorProvider.refresh;
+          break;
+        case "opencode":
+          yield* opencodeProvider.refresh;
+          break;
+        case "pi":
+          yield* piProvider.refresh;
+          break;
+        default:
+          yield* Effect.all(
+            [
+              codexProvider.refresh,
+              claudeProvider.refresh,
+              copilotProvider.refresh,
+              cursorProvider.refresh,
+              opencodeProvider.refresh,
+              piProvider.refresh,
+            ],
+            {
+              concurrency: "unbounded",
+            },
+          );
+          break;
       }
-
-      return yield* Effect.forEach(
-        providerSources,
-        (providerSource) => providerSource.refresh.pipe(Effect.flatMap(syncProvider)),
-        {
-          concurrency: "unbounded",
-          discard: true,
-        },
-      ).pipe(Effect.andThen(Ref.get(providersRef)));
+      return yield* syncProviders();
     });
 
-    yield* Effect.forEach(
-      providerSources,
-      (providerSource) =>
-        Stream.runForEach(providerSource.streamChanges, (provider) => syncProvider(provider)).pipe(
-          Effect.forkScoped,
-        ),
-      {
-        concurrency: "unbounded",
-        discard: true,
-      },
-    );
-    yield* loadProviders(providerSources).pipe(
-      Effect.flatMap((providers) => upsertProviders(providers, { publish: false })),
-    );
-
     return {
-      getProviders: Ref.get(providersRef),
+      getProviders: Ref.get(providersRef).pipe(
+        Effect.tapError(Effect.logError),
+        Effect.orElseSucceed(() => []),
+      ),
       refresh: (provider?: ProviderKind) =>
         refresh(provider).pipe(
           Effect.tapError(Effect.logError),
-          Effect.orElseSucceed(() => [] as ReadonlyArray<ServerProvider>),
+          Effect.orElseSucceed(() => []),
         ),
       get streamChanges() {
         return Stream.fromPubSub(changesPubSub);
       },
+      awaitFirstReadyProvider: Deferred.await(firstReadyDeferred).pipe(
+        Effect.timeoutOption(10_000),
+      ),
     } satisfies ProviderRegistryShape;
   }),
 );
 
-export const ProviderRegistryLive = Layer.unwrap(
-  Effect.sync(() =>
-    ProviderRegistryLiveBase.pipe(
-      Layer.provideMerge(CursorProviderLive),
-      Layer.provideMerge(CodexProviderLive),
-      Layer.provideMerge(ClaudeProviderLive),
-      Layer.provideMerge(OpenCodeProviderLive),
-      Layer.provideMerge(OpenCodeRuntimeLive),
-    ),
-  ),
+export const ProviderRegistryLive = makeProviderRegistryLayer.pipe(
+  Layer.provideMerge(CodexProviderLive),
+  Layer.provideMerge(ClaudeProviderLive),
+  Layer.provideMerge(CopilotProviderLive),
+  Layer.provideMerge(CursorProviderLive),
+  Layer.provideMerge(OpencodeProviderLive),
+  Layer.provideMerge(PiProviderLive),
 );
+
+export function makeProviderRegistryLive(options?: {
+  readonly piProviderLayer?: Layer.Layer<PiProvider>;
+}) {
+  return makeProviderRegistryLayer.pipe(
+    Layer.provideMerge(CodexProviderLive),
+    Layer.provideMerge(ClaudeProviderLive),
+    Layer.provideMerge(CopilotProviderLive),
+    Layer.provideMerge(CursorProviderLive),
+    Layer.provideMerge(OpencodeProviderLive),
+    Layer.provideMerge(options?.piProviderLayer ?? PiProviderLive),
+  );
+}

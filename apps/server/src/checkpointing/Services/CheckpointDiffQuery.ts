@@ -11,8 +11,8 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
-} from "@t3tools/contracts";
-import { Context } from "effect";
+} from "@bigbud/contracts";
+import { ServiceMap } from "effect";
 import type { Effect } from "effect";
 
 import type { CheckpointServiceError } from "../Errors.ts";
@@ -43,7 +43,7 @@ export interface CheckpointDiffQueryShape {
 /**
  * CheckpointDiffQuery - Service tag for checkpoint diff queries.
  */
-export class CheckpointDiffQuery extends Context.Service<
+export class CheckpointDiffQuery extends ServiceMap.Service<
   CheckpointDiffQuery,
   CheckpointDiffQueryShape
 >()("t3/checkpointing/Services/CheckpointDiffQuery") {}

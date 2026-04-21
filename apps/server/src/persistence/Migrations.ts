@@ -32,12 +32,9 @@ import Migration0016 from "./Migrations/016_CanonicalizeModelSelections.ts";
 import Migration0017 from "./Migrations/017_ProjectionThreadsArchivedAt.ts";
 import Migration0018 from "./Migrations/018_ProjectionThreadsArchivedAtIndex.ts";
 import Migration0019 from "./Migrations/019_ProjectionSnapshotLookupIndexes.ts";
-import Migration0020 from "./Migrations/020_AuthAccessManagement.ts";
-import Migration0021 from "./Migrations/021_AuthSessionClientMetadata.ts";
-import Migration0022 from "./Migrations/022_AuthSessionLastConnectedAt.ts";
-import Migration0023 from "./Migrations/023_ProjectionThreadShellSummary.ts";
-import Migration0024 from "./Migrations/024_BackfillProjectionThreadShellSummary.ts";
-import Migration0025 from "./Migrations/025_CleanupInvalidProjectionPendingApprovals.ts";
+import Migration0020 from "./Migrations/020_ProjectionThreadsParentThread.ts";
+import Migration0021 from "./Migrations/021_BackfillProjectionThreadShellSummary.ts";
+import Migration0022 from "./Migrations/022_ProjectionProjectsNullableWorkspaceRoot.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -69,12 +66,9 @@ export const migrationEntries = [
   [17, "ProjectionThreadsArchivedAt", Migration0017],
   [18, "ProjectionThreadsArchivedAtIndex", Migration0018],
   [19, "ProjectionSnapshotLookupIndexes", Migration0019],
-  [20, "AuthAccessManagement", Migration0020],
-  [21, "AuthSessionClientMetadata", Migration0021],
-  [22, "AuthSessionLastConnectedAt", Migration0022],
-  [23, "ProjectionThreadShellSummary", Migration0023],
-  [24, "BackfillProjectionThreadShellSummary", Migration0024],
-  [25, "CleanupInvalidProjectionPendingApprovals", Migration0025],
+  [20, "ProjectionThreadsParentThread", Migration0020],
+  [21, "BackfillProjectionThreadShellSummary", Migration0021],
+  [22, "ProjectionProjectsNullableWorkspaceRoot", Migration0022],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

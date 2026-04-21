@@ -1,13 +1,12 @@
 import {
   DEFAULT_SERVER_SETTINGS,
-  EnvironmentId,
   ProjectId,
   ThreadId,
   type ServerConfig,
   type ServerConfigStreamEvent,
   type ServerLifecycleStreamEvent,
   type ServerProvider,
-} from "@t3tools/contracts";
+} from "@bigbud/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -53,32 +52,16 @@ const defaultProviders: ReadonlyArray<ServerProvider> = [
   },
 ];
 
-const baseEnvironment = {
-  environmentId: EnvironmentId.make("environment-local"),
-  label: "Local environment",
-  platform: {
-    os: "darwin" as const,
-    arch: "arm64" as const,
-  },
-  serverVersion: "0.0.0-test",
-  capabilities: {
-    repositoryIdentity: true,
-  },
-};
-
 const baseServerConfig: ServerConfig = {
-  environment: baseEnvironment,
-  auth: {
-    policy: "loopback-browser",
-    bootstrapMethods: ["one-time-token"],
-    sessionMethods: ["browser-session-cookie", "bearer-session-token"],
-    sessionCookieName: "t3_session",
-  },
   cwd: "/tmp/workspace",
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
   keybindings: [],
   issues: [],
   providers: defaultProviders,
+  discovery: {
+    agents: [],
+    skills: [],
+  },
   availableEditors: ["cursor"],
   observability: {
     logsDirectoryPath: "/tmp/workspace/.config/logs",
@@ -156,6 +139,7 @@ describe("serverState", () => {
       {
         issues: [],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "snapshot",
@@ -167,6 +151,7 @@ describe("serverState", () => {
       {
         issues: [],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "snapshot",
@@ -216,30 +201,27 @@ describe("serverState", () => {
       sequence: 1,
       type: "welcome",
       payload: {
-        environment: baseEnvironment,
         cwd: "/tmp/workspace",
         projectName: "t3-code",
-        bootstrapProjectId: ProjectId.make("project-1"),
-        bootstrapThreadId: ThreadId.make("thread-1"),
+        bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
+        bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
       },
     });
 
     expect(listener).toHaveBeenCalledWith({
-      environment: baseEnvironment,
       cwd: "/tmp/workspace",
       projectName: "t3-code",
-      bootstrapProjectId: ProjectId.make("project-1"),
-      bootstrapThreadId: ThreadId.make("thread-1"),
+      bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
+      bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
     });
 
     const lateListener = vi.fn();
     const unsubscribeLate = onWelcome(lateListener);
     expect(lateListener).toHaveBeenCalledWith({
-      environment: baseEnvironment,
       cwd: "/tmp/workspace",
       projectName: "t3-code",
-      bootstrapProjectId: ProjectId.make("project-1"),
-      bootstrapThreadId: ThreadId.make("thread-1"),
+      bootstrapProjectId: ProjectId.makeUnsafe("project-1"),
+      bootstrapThreadId: ThreadId.makeUnsafe("thread-1"),
     });
 
     unsubscribeLate();
@@ -311,6 +293,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: defaultProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "keybindingsUpdated",
@@ -320,6 +303,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: nextProviders,
+        discovery: { agents: [], skills: [] },
         settings: DEFAULT_SERVER_SETTINGS,
       },
       "providerStatuses",
@@ -328,6 +312,7 @@ describe("serverState", () => {
       {
         issues: [{ kind: "keybindings.malformed-config", message: "bad json" }],
         providers: nextProviders,
+        discovery: { agents: [], skills: [] },
         settings: {
           ...DEFAULT_SERVER_SETTINGS,
           enableAssistantStreaming: true,

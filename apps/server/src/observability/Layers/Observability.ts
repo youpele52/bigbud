@@ -1,8 +1,8 @@
 import { Effect, Layer, References, Tracer } from "effect";
 import { OtlpMetrics, OtlpSerialization, OtlpTracer } from "effect/unstable/observability";
 
-import { ServerConfig } from "../../config.ts";
-import { ServerLoggerLive } from "../../serverLogger.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ServerLoggerLive } from "../../startup/serverLogger.ts";
 import { makeLocalFileTracer } from "../LocalFileTracer.ts";
 import { BrowserTraceCollector } from "../Services/BrowserTraceCollector.ts";
 import { makeTraceSink } from "../TraceSink.ts";

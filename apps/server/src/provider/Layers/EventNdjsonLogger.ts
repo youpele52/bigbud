@@ -8,11 +8,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { ThreadId } from "@t3tools/contracts";
-import { RotatingFileSink } from "@t3tools/shared/logging";
+import type { ThreadId } from "@bigbud/contracts";
+import { RotatingFileSink } from "@bigbud/shared/logging";
 import { Effect, Exit, Logger, Scope, SynchronizedRef } from "effect";
 
-import { toSafeThreadAttachmentSegment } from "../../attachmentStore.ts";
+import { toSafeThreadAttachmentSegment } from "../../attachments/attachmentStore.ts";
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 10;

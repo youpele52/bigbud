@@ -5,7 +5,7 @@
  * `OrchestrationEventStore` persistence. It does not own provider process
  * management or transport concerns (e.g. websocket request parsing).
  *
- * Uses Effect `Context.Service` for dependency injection. Command dispatch,
+ * Uses Effect `ServiceMap.Service` for dependency injection. Command dispatch,
  * replay, and unknown-input decoding all return typed domain errors.
  *
  * @module OrchestrationEngineService
@@ -14,8 +14,8 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
-} from "@t3tools/contracts";
-import { Context } from "effect";
+} from "@bigbud/contracts";
+import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
@@ -74,7 +74,7 @@ export interface OrchestrationEngineShape {
  * })
  * ```
  */
-export class OrchestrationEngineService extends Context.Service<
+export class OrchestrationEngineService extends ServiceMap.Service<
   OrchestrationEngineService,
   OrchestrationEngineShape
 >()("t3/orchestration/Services/OrchestrationEngine/OrchestrationEngineService") {}
