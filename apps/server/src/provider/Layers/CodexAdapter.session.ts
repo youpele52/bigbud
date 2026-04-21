@@ -176,6 +176,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           }),
       ),
     );
+    if (attachment.type === "file") {
+      return {
+        type: "file" as const,
+        url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
+      };
+    }
     return {
       type: "image" as const,
       url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,

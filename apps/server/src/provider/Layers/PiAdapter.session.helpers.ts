@@ -4,6 +4,7 @@ import { type ChatAttachment } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { isTextReadable } from "../../attachments/fileMime.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ActivePiSession, PiEmitEvents, PiSyntheticEventFn } from "./PiAdapter.types.ts";
 import { PROVIDER } from "./PiAdapter.types.ts";
@@ -115,11 +116,7 @@ export const makeResolveImages = (attachmentsDir: string) =>
 
     for (const attachment of attachments) {
       if (attachment.type !== "image") {
-        return yield* new ProviderAdapterValidationError({
-          provider: PROVIDER,
-          operation: "sendTurn",
-          issue: "Pi currently supports image attachments only.",
-        });
+        continue;
       }
 
       const attachmentPath = resolveAttachmentPath({
@@ -153,6 +150,47 @@ export const makeResolveImages = (attachmentsDir: string) =>
     }
 
     return images;
+  });
+
+/**
+ * Reads text-based file attachments from the attachmentsDir and returns a
+ * string block to append to the Pi prompt so the model can see the file contents.
+ *
+ * Binary files (PDF, Office docs, video, audio, archives) are skipped — Pi has
+ * no document API and cannot interpret binary data.
+ */
+export const makeAppendTextFileAttachments = (attachmentsDir: string) =>
+  Effect.fn("appendTextFileAttachments")(function* (
+    attachments: ReadonlyArray<ChatAttachment>,
+    prompt: string,
+  ) {
+    const textBlocks: string[] = [];
+
+    for (const attachment of attachments) {
+      if (attachment.type !== "file") continue;
+      if (!isTextReadable(attachment.mimeType)) continue;
+
+      const attachmentPath = resolveAttachmentPath({ attachmentsDir, attachment });
+      if (!attachmentPath) continue;
+
+      const bytes = yield* Effect.tryPromise({
+        try: () => readFile(attachmentPath),
+        catch: (cause) =>
+          new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "prompt",
+            detail: `Failed to read file attachment '${attachment.name}' for Pi.`,
+            cause,
+          }),
+      });
+
+      const content = bytes.toString("utf8");
+      textBlocks.push(`<file name="${attachment.name}">\n${content}\n</file>`);
+    }
+
+    if (textBlocks.length === 0) return prompt;
+    const block = `<attached_file_contents>\n${textBlocks.join("\n")}\n</attached_file_contents>`;
+    return prompt.length > 0 ? `${prompt}\n\n${block}` : block;
   });
 
 export function makeStopSessionRecord(deps: {

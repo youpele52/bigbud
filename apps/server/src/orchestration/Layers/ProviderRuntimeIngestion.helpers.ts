@@ -210,6 +210,10 @@ export function runtimeEventToActivities(
     }
 
     case "runtime.error": {
+      const detail =
+        event.payload.detail && typeof event.payload.detail === "object"
+          ? JSON.stringify(event.payload.detail)
+          : undefined;
       return [
         {
           id: event.eventId,
@@ -219,6 +223,7 @@ export function runtimeEventToActivities(
           summary: "Runtime error",
           payload: {
             message: truncateDetail(event.payload.message),
+            ...(detail ? { detail: truncateDetail(detail, 400) } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

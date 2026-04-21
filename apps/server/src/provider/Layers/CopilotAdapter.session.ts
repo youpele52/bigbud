@@ -28,6 +28,7 @@ import {
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { readFile } from "node:fs/promises";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -247,25 +248,38 @@ export const makeSendTurn =
   (input) =>
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
-      const attachments: MessageOptions["attachments"] = (input.attachments ?? []).map(
-        (attachment) => {
-          const path = resolveAttachmentPath({
-            attachmentsDir: deps.serverConfig.attachmentsDir,
-            attachment,
-          });
-          if (!path) {
-            throw new ProviderAdapterRequestError({
-              provider: PROVIDER,
-              method: "session.send",
-              detail: `Invalid attachment id '${attachment.id}'.`,
+      const attachments: MessageOptions["attachments"] = yield* Effect.forEach(
+        input.attachments ?? [],
+        (attachment) =>
+          Effect.gen(function* () {
+            const filePath = resolveAttachmentPath({
+              attachmentsDir: deps.serverConfig.attachmentsDir,
+              attachment,
             });
-          }
-          return {
-            type: "file" as const,
-            path,
-            displayName: attachment.name,
-          };
-        },
+            if (!filePath) {
+              return yield* new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "session.send",
+                detail: `Invalid attachment id '${attachment.id}'.`,
+              });
+            }
+            const bytes = yield* Effect.tryPromise({
+              try: () => readFile(filePath),
+              catch: (cause) =>
+                new ProviderAdapterRequestError({
+                  provider: PROVIDER,
+                  method: "session.send",
+                  detail: `Failed to read attachment '${attachment.name}'.`,
+                  cause,
+                }),
+            });
+            return {
+              type: "blob" as const,
+              data: bytes.toString("base64"),
+              mimeType: attachment.mimeType,
+              displayName: attachment.name,
+            };
+          }),
       );
 
       const copilotModelSelection =

@@ -116,6 +116,7 @@ function getWindowForTest(): Window & typeof globalThis & { desktopBridge?: unkn
 function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
   return {
     getWsUrl: () => null,
+    getFilePath: () => "",
     pickFolder: async () => null,
     confirm: async () => true,
     setTheme: async () => undefined,

@@ -1,7 +1,13 @@
 import { type Terminal } from "@xterm/xterm";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import type { ResolvedKeybindingsConfig } from "@bigbud/contracts";
 import {
+  isDiffToggleShortcut,
   isTerminalClearShortcut,
+  isTerminalCloseShortcut,
+  isTerminalNewShortcut,
+  isTerminalSplitShortcut,
+  isTerminalToggleShortcut,
   terminalDeleteShortcutData,
   terminalNavigationShortcutData,
 } from "../../models/keybindings";
@@ -12,10 +18,12 @@ export interface UseTerminalKeybindingsProps {
   terminalRef: React.MutableRefObject<Terminal | null>;
   threadId: string;
   terminalId: string;
+  keybindings: ResolvedKeybindingsConfig;
 }
 
 /**
  * Hook that attaches keyboard event handlers to the terminal for:
+ * - Global app shortcuts (bypass xterm so they reach the app layer)
  * - Navigation shortcuts (cursor movement)
  * - Delete shortcuts (backspace, word delete)
  * - Clear terminal shortcut (Ctrl+L)
@@ -24,7 +32,14 @@ export function useTerminalKeybindings({
   terminalRef,
   threadId,
   terminalId,
+  keybindings,
 }: UseTerminalKeybindingsProps): void {
+  const keybindingsRef = useRef(keybindings);
+
+  useEffect(() => {
+    keybindingsRef.current = keybindings;
+  }, [keybindings]);
+
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
@@ -43,6 +58,19 @@ export function useTerminalKeybindings({
     };
 
     terminal.attachCustomKeyEventHandler((event) => {
+      // Let global app shortcuts pass through xterm so the app layer handles them.
+      const currentKeybindings = keybindingsRef.current;
+      const options = { context: { terminalFocus: true, terminalOpen: true } };
+      if (
+        isTerminalToggleShortcut(event, currentKeybindings, options) ||
+        isTerminalSplitShortcut(event, currentKeybindings, options) ||
+        isTerminalNewShortcut(event, currentKeybindings, options) ||
+        isTerminalCloseShortcut(event, currentKeybindings, options) ||
+        isDiffToggleShortcut(event, currentKeybindings, options)
+      ) {
+        return false;
+      }
+
       const navigationData = terminalNavigationShortcutData(event);
       if (navigationData !== null) {
         event.preventDefault();

@@ -8,6 +8,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   EventId,
   type ModelSelection,
+  type OrchestrationMessage,
   type OrchestrationSession,
   ThreadId,
   type TurnId,
@@ -44,6 +45,31 @@ import {
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+
+/**
+ * Appends an `<attached_files>` XML block to the provider input text so the agent
+ * immediately knows which files are attached and can act on them.
+ *
+ * For desktop (path transport): shows filename + original sourcePath.
+ * For web (base64 transport): shows filename only (sourcePath is the internal copy).
+ *
+ * Example output:
+ *   <attached_files>
+ *   - report.pdf (/Users/alice/Desktop/report.pdf)
+ *   </attached_files>
+ */
+function appendFileAttachmentsToProviderInput(
+  text: string,
+  attachments: NonNullable<OrchestrationMessage["attachments"]>,
+): string {
+  const fileAttachments = attachments.filter((a) => a.type === "file");
+  if (fileAttachments.length === 0) return text;
+  const lines = fileAttachments.map((f) =>
+    f.type === "file" && f.sourcePath ? `- ${f.name} (${f.sourcePath})` : `- ${f.name}`,
+  );
+  const block = `<attached_files>\n${lines.join("\n")}\n</attached_files>`;
+  return text.length > 0 ? `${text}\n\n${block}` : block;
+}
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -237,7 +263,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,
-      providerInputText: expandedProviderInput,
+      providerInputText: appendFileAttachmentsToProviderInput(
+        expandedProviderInput,
+        message.attachments ?? [],
+      ),
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }

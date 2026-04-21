@@ -230,7 +230,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           assert.strictEqual(status.status, "ready");
           assert.strictEqual(status.auth.status, "authenticated");
           assert.strictEqual(status.auth.type, "pro");
-          assert.strictEqual(status.auth.label, "ChatGPT Pro Subscription");
+          assert.strictEqual(status.auth.label, "ChatGPT Pro 20x Subscription");
           assert.deepStrictEqual(
             status.models.some((model) => model.slug === "gpt-5.3-codex-spark"),
             true,
