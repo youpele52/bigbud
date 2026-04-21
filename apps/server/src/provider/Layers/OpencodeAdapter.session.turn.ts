@@ -5,22 +5,49 @@
  * @module OpencodeAdapter.session.turn
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { TurnId, type ProviderTurnStartResult } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { isTextReadable } from "../../attachments/fileMime.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { OpencodeAdapterShape } from "../Services/OpencodeAdapter.ts";
-import { toMessage, withOpencodeDirectory } from "./OpencodeAdapter.stream.ts";
+import { toMessage } from "./OpencodeAdapter.stream.ts";
 import {
   approvalDecisionToOpencodeResponse,
   isOpencodeModelSelection,
   resolveProviderIDForModel,
 } from "./OpencodeAdapter.session.helpers.ts";
+import { openCodeQuestionId } from "./OpencodeAdapter.stream.mapEvent.ts";
 import { PROVIDER } from "./OpencodeAdapter.types.ts";
+
 import type { TurnMethodDeps } from "./OpencodeAdapter.session.ts";
+
+// ── Answer mapping helper ─────────────────────────────────────────────
+
+/**
+ * Map a flat `Record<questionId, answer>` (keyed by `openCodeQuestionId`)
+ * to the v2 `Array<QuestionAnswer>` format (one `string[]` per question).
+ */
+function toOpencodeQuestionAnswers(
+  questions: ReadonlyArray<{ header: string }>,
+  answers: Record<string, unknown>,
+): Array<Array<string>> {
+  return questions.map((q, index) => {
+    const key = openCodeQuestionId(index, q.header);
+    const value = answers[key];
+    if (Array.isArray(value)) {
+      return value.map(String);
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      return [value.trim()];
+    }
+    return [];
+  });
+}
 
 // ── Turn method factories ─────────────────────────────────────────────
 
@@ -40,7 +67,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         record.providerID =
           selectionProviderID ??
           (yield* Effect.tryPromise({
-            try: () => resolveProviderIDForModel(record.client, record.cwd, record.model!),
+            try: () => resolveProviderIDForModel(record.client, record.model!),
             catch: () => undefined as never,
           }).pipe(Effect.orElseSucceed(() => undefined)));
       }
@@ -62,38 +89,67 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         ),
       ]);
 
-      // Use promptAsync for non-blocking send with SSE streaming
-      const fileParts = (input.attachments ?? []).map((attachment) => {
-        const path = resolveAttachmentPath({
-          attachmentsDir: deps.serverConfig.attachmentsDir,
-          attachment,
-        });
-        if (!path) {
-          throw new ProviderAdapterRequestError({
+      // Use promptAsync for non-blocking send with SSE streaming.
+      //
+      // Attachment handling: some OpenCode providers/models reject certain MIME
+      // types (e.g. `text/csv`) as SDK file parts. For text-readable files we
+      // embed the contents inline in the prompt (matching Pi's approach); for
+      // binary files (PDF, Office docs, video, audio, archives) we send them
+      // as SDK `file` parts.
+      const fileParts: Array<{
+        type: "file";
+        mime: string;
+        filename: string;
+        url: string;
+      }> = [];
+      const inlineTextBlocks: Array<string> = [];
+      for (const attachment of input.attachments ?? []) {
+        // Prefer sourcePath (original user file) over the internal attachmentsDir copy
+        const sourcePath =
+          attachment.type === "file" && attachment.sourcePath
+            ? attachment.sourcePath
+            : resolveAttachmentPath({
+                attachmentsDir: deps.serverConfig.attachmentsDir,
+                attachment,
+              });
+        if (!sourcePath) {
+          return yield* new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "session.promptAsync",
             detail: `Invalid attachment id '${attachment.id}'.`,
           });
         }
-        return {
+
+        if (attachment.type === "file" && isTextReadable(attachment.mimeType)) {
+          const bytes = yield* Effect.tryPromise({
+            try: () => readFile(sourcePath),
+            catch: (cause) =>
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "session.promptAsync",
+                detail: `Failed to read file attachment '${attachment.name}' for OpenCode.`,
+                cause,
+              }),
+          });
+          const content = bytes.toString("utf8");
+          inlineTextBlocks.push(`<file name="${attachment.name}">\n${content}\n</file>`);
+          continue;
+        }
+
+        fileParts.push({
           type: "file" as const,
           mime: attachment.mimeType,
           filename: attachment.name,
-          url: pathToFileURL(path).href,
-        };
-      });
+          url: pathToFileURL(sourcePath).href,
+        });
+      }
 
-      const promptBody = {
-        parts: [{ type: "text" as const, text: input.input ?? "" }, ...fileParts],
-        ...(record.model
-          ? {
-              model: {
-                providerID: record.providerID ?? "",
-                modelID: record.model,
-              },
-            }
-          : {}),
-      };
+      const baseText = input.input ?? "";
+      const promptText =
+        inlineTextBlocks.length > 0
+          ? `${baseText}${baseText.length > 0 ? "\n\n" : ""}<attached_file_contents>\n${inlineTextBlocks.join("\n")}\n</attached_file_contents>`
+          : baseText;
+
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
         return yield* new ProviderAdapterValidationError({
@@ -105,12 +161,18 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
 
       const promptResp = yield* Effect.tryPromise({
         try: () =>
-          record.client.session.promptAsync(
-            withOpencodeDirectory(record.cwd, {
-              path: { id: record.opencodeSessionId },
-              body: promptBody,
-            }),
-          ),
+          record.client.session.promptAsync({
+            sessionID: record.opencodeSessionId,
+            parts: [{ type: "text" as const, text: promptText }, ...fileParts],
+            ...(record.model
+              ? {
+                  model: {
+                    providerID: record.providerID ?? "",
+                    modelID: record.model,
+                  },
+                }
+              : {}),
+          }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
@@ -141,11 +203,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       const record = yield* requireSession(threadId);
       yield* Effect.tryPromise({
         try: () =>
-          record.client.session.abort(
-            withOpencodeDirectory(record.cwd, {
-              path: { id: record.opencodeSessionId },
-            }),
-          ),
+          record.client.session.abort({
+            sessionID: record.opencodeSessionId,
+          }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
@@ -181,17 +241,10 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       // Respond via the OpenCode SDK permission API
       yield* Effect.tryPromise({
         try: () =>
-          record.client.postSessionIdPermissionsPermissionId(
-            withOpencodeDirectory(record.cwd, {
-              path: {
-                id: record.opencodeSessionId,
-                permissionID: pending.permissionId,
-              },
-              body: {
-                response: approvalDecisionToOpencodeResponse(decision),
-              },
-            }),
-          ),
+          record.client.permission.reply({
+            requestID: pending.requestId,
+            reply: approvalDecisionToOpencodeResponse(decision),
+          }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
@@ -256,38 +309,21 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       );
       yield* emitFn([resolvedEvent]);
 
-      const answerValue =
-        typeof answers[requestId] === "string"
-          ? answers[requestId]
-          : (Object.values(answers).find((value): value is string => typeof value === "string") ??
-            "");
-      const answerText =
-        typeof answerValue === "string" && answerValue.trim().length > 0 ? answerValue.trim() : "";
+      // Map answers back to the v2 QuestionAnswer format: Array<Array<string>> (one per question).
+      const questionAnswers = toOpencodeQuestionAnswers(pending.questions, answers);
 
-      // Append the user's answer text into the OpenCode TUI prompt box, then submit it.
+      // Reply via the OpenCode SDK question API.
       yield* Effect.tryPromise({
         try: () =>
-          record.client.tui.appendPrompt(
-            withOpencodeDirectory(record.cwd, {
-              body: { text: answerText },
-            }),
-          ),
-        catch: (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session.userInput.respond",
-            detail: toMessage(cause, "Failed to append OpenCode user-input answer to prompt."),
-            cause,
+          record.client.question.reply({
+            requestID: requestId,
+            answers: questionAnswers,
           }),
-      });
-
-      yield* Effect.tryPromise({
-        try: () => record.client.tui.submitPrompt(withOpencodeDirectory(record.cwd, {})),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "session.userInput.respond",
-            detail: toMessage(cause, "Failed to submit OpenCode user-input answer."),
+            detail: toMessage(cause, "Failed to reply to OpenCode question request."),
             cause,
           }),
       });

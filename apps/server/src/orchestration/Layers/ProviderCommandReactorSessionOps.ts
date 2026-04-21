@@ -18,7 +18,7 @@ import {
   type ProviderSession,
   PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
 } from "@bigbud/contracts";
-import { buildBootstrapInput, hasImageAttachments } from "@bigbud/shared/history";
+import { buildBootstrapInput, hasAnyAttachments } from "@bigbud/shared/history";
 import { Cause, Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -64,7 +64,7 @@ function shouldRebuildProviderContextFromTranscript(input: {
   readonly attachments: ReadonlyArray<ChatAttachment>;
 }): boolean {
   if (input.bootstrapThread) {
-    return input.bootstrapThread.messages.length > 0 && !hasImageAttachments(input.attachments);
+    return input.bootstrapThread.messages.length > 0 && !hasAnyAttachments(input.attachments);
   }
   if (input.activeSession) {
     return false;
@@ -72,7 +72,7 @@ function shouldRebuildProviderContextFromTranscript(input: {
   if (input.thread.messages.length <= 1) {
     return false;
   }
-  if (hasImageAttachments(input.attachments)) {
+  if (hasAnyAttachments(input.attachments)) {
     return false;
   }
   return true;

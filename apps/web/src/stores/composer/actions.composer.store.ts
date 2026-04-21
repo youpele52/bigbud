@@ -16,6 +16,7 @@ import {
 import { verifyPersistedAttachments } from "./persistence.store";
 import {
   type ComposerDraftStoreState,
+  type ComposerFileAttachment,
   type ComposerImageAttachment,
   type ComposerThreadDraftState,
   type PersistedComposerImageAttachment,
@@ -275,6 +276,58 @@ export function createComposerContentActions(
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
+    addFile: (threadId: ThreadId, file: ComposerFileAttachment) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      get().addFiles(threadId, [file]);
+    },
+    addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => {
+      if (threadId.length === 0 || files.length === 0) {
+        return;
+      }
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
+        const existingIds = new Set(existing.files.map((f) => f.id));
+        const existingPaths = new Set(existing.files.map((f) => f.filePath).filter(Boolean));
+        const deduped: ComposerFileAttachment[] = [];
+        for (const file of files) {
+          if (existingIds.has(file.id)) continue;
+          if (file.filePath && existingPaths.has(file.filePath)) continue;
+          deduped.push(file);
+          existingIds.add(file.id);
+          if (file.filePath) existingPaths.add(file.filePath);
+        }
+        if (deduped.length === 0) return state;
+        return {
+          draftsByThreadId: {
+            ...state.draftsByThreadId,
+            [threadId]: { ...existing, files: [...existing.files, ...deduped] },
+          },
+        };
+      });
+    },
+    removeFile: (threadId: ThreadId, fileId: string) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      set((state) => {
+        const current = state.draftsByThreadId[threadId];
+        if (!current) return state;
+        const nextDraft: ComposerThreadDraftState = {
+          ...current,
+          files: current.files.filter((f) => f.id !== fileId),
+          persistedFileAttachments: current.persistedFileAttachments.filter((f) => f.id !== fileId),
+        };
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        if (shouldRemoveDraft(nextDraft)) {
+          delete nextDraftsByThreadId[threadId];
+        } else {
+          nextDraftsByThreadId[threadId] = nextDraft;
+        }
+        return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
     clearPersistedAttachments: (threadId: ThreadId) => {
       if (threadId.length === 0) {
         return;
@@ -346,8 +399,10 @@ export function createComposerContentActions(
           ...current,
           prompt: "",
           images: [],
+          files: [],
           nonPersistedImageIds: [],
           persistedAttachments: [],
+          persistedFileAttachments: [],
           terminalContexts: [],
         };
         const nextDraftsByThreadId = { ...state.draftsByThreadId };

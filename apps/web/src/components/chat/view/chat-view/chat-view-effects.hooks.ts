@@ -28,6 +28,8 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     collapseExpandedComposerCursor,
     composerImages,
     composerImagesRef,
+    composerFiles,
+    composerFilesRef,
     composerTerminalContexts,
     composerTerminalContextsRef,
     detectComposerTrigger,
@@ -159,6 +161,10 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
   useEffect(() => {
     composerImagesRef.current = composerImages;
   }, [composerImages, composerImagesRef]);
+
+  useEffect(() => {
+    composerFilesRef.current = composerFiles;
+  }, [composerFiles, composerFilesRef]);
 
   useEffect(() => {
     composerTerminalContextsRef.current = composerTerminalContexts;

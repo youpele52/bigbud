@@ -39,6 +39,9 @@ export const INLINE_TERMINAL_CONTEXT_PLACEHOLDER = "\uFFFC";
 const TRAILING_TERMINAL_CONTEXT_BLOCK_PATTERN =
   /\n*<terminal_context>\n([\s\S]*?)\n<\/terminal_context>\s*$/;
 
+const TRAILING_ATTACHED_FILES_BLOCK_PATTERN =
+  /\n*<attached_files>\n[\s\S]*?\n<\/attached_files>\s*$/;
+
 export function normalizeTerminalContextText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
 }
@@ -236,8 +239,12 @@ export function extractTrailingTerminalContexts(prompt: string): ExtractedTermin
 
 export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMessageState {
   const extractedContexts = extractTrailingTerminalContexts(prompt);
+  const visibleText = extractedContexts.promptText.replace(
+    TRAILING_ATTACHED_FILES_BLOCK_PATTERN,
+    "",
+  );
   return {
-    visibleText: extractedContexts.promptText,
+    visibleText,
     copyText: prompt,
     contextCount: extractedContexts.contextCount,
     previewTitle: extractedContexts.previewTitle,

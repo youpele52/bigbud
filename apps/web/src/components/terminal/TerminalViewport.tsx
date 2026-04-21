@@ -1,6 +1,6 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { type ThreadId } from "@bigbud/contracts";
+import { type ResolvedKeybindingsConfig, type ThreadId } from "@bigbud/contracts";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -35,6 +35,7 @@ export interface TerminalViewportProps {
   autoFocus: boolean;
   resizeEpoch: number;
   drawerHeight: number;
+  keybindings: ResolvedKeybindingsConfig;
 }
 
 export function TerminalViewport({
@@ -50,6 +51,7 @@ export function TerminalViewport({
   autoFocus,
   resizeEpoch,
   drawerHeight,
+  keybindings,
 }: TerminalViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -87,6 +89,7 @@ export function TerminalViewport({
     terminalRef,
     threadId,
     terminalId,
+    keybindings,
   });
 
   useEffect(() => {

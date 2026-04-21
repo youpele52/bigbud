@@ -4,7 +4,7 @@
  *
  * @module OpencodeAdapter.stream.primitives
  */
-import { type Event as OpencodeEvent } from "@opencode-ai/sdk";
+import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Effect, Queue, Random } from "effect";
 
 import { EventId, TurnId, type ProviderRuntimeEvent } from "@bigbud/contracts";

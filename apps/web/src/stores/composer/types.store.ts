@@ -13,7 +13,7 @@ import {
 } from "@bigbud/contracts";
 import * as Schema from "effect/Schema";
 import { type TerminalContextDraft } from "../../lib/terminalContext";
-import { type ChatImageAttachment } from "../../models/types";
+import { type ChatImageAttachment, type ChatFileAttachment } from "../../models/types";
 
 export {
   COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
@@ -37,6 +37,22 @@ export interface ComposerImageAttachment extends Omit<ChatImageAttachment, "prev
   file: File;
 }
 
+/** In-memory representation of a non-image file attachment. Holds only the path — no bytes. */
+export interface ComposerFileAttachment extends ChatFileAttachment {
+  /** Absolute filesystem path — available on desktop (Electron). On web, this is empty string. */
+  filePath: string;
+  /** The original File object — used on web fallback (base64 transport). Null on desktop. */
+  file: File | null;
+}
+
+export const PersistedComposerFileAttachment = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  mimeType: Schema.String,
+  sizeBytes: Schema.Number,
+  filePath: Schema.String,
+});
+
 export const PersistedTerminalContextDraft = Schema.Struct({
   id: Schema.String,
   threadId: ThreadId,
@@ -48,9 +64,12 @@ export const PersistedTerminalContextDraft = Schema.Struct({
 });
 export type PersistedTerminalContextDraft = typeof PersistedTerminalContextDraft.Type;
 
+export type PersistedComposerFileAttachment = typeof PersistedComposerFileAttachment.Type;
+
 export const PersistedComposerThreadDraftState = Schema.Struct({
   prompt: Schema.String,
   attachments: Schema.Array(PersistedComposerImageAttachment),
+  fileAttachments: Schema.optionalKey(Schema.Array(PersistedComposerFileAttachment)),
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   modelSelectionByProvider: Schema.optionalKey(
     Schema.Record(ProviderKind, Schema.optionalKey(ModelSelection)),
@@ -132,8 +151,10 @@ export const PersistedComposerDraftStoreStorage = Schema.Struct({
 export interface ComposerThreadDraftState {
   prompt: string;
   images: ComposerImageAttachment[];
+  files: ComposerFileAttachment[];
   nonPersistedImageIds: string[];
   persistedAttachments: PersistedComposerImageAttachment[];
+  persistedFileAttachments: PersistedComposerFileAttachment[];
   terminalContexts: TerminalContextDraft[];
   modelSelectionByProvider: Partial<Record<ProviderKind, ModelSelection>>;
   activeProvider: ProviderKind | null;
@@ -219,6 +240,9 @@ export interface ComposerDraftStoreState {
   addImage: (threadId: ThreadId, image: ComposerImageAttachment) => void;
   addImages: (threadId: ThreadId, images: ComposerImageAttachment[]) => void;
   removeImage: (threadId: ThreadId, imageId: string) => void;
+  addFile: (threadId: ThreadId, file: ComposerFileAttachment) => void;
+  addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => void;
+  removeFile: (threadId: ThreadId, fileId: string) => void;
   insertTerminalContext: (
     threadId: ThreadId,
     prompt: string,
@@ -250,8 +274,10 @@ export interface EffectiveComposerModelState {
 export const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   prompt: "",
   images: Object.freeze([]) as unknown as ComposerImageAttachment[],
+  files: Object.freeze([]) as unknown as ComposerFileAttachment[],
   nonPersistedImageIds: Object.freeze([]) as unknown as string[],
   persistedAttachments: Object.freeze([]) as unknown as PersistedComposerImageAttachment[],
+  persistedFileAttachments: Object.freeze([]) as unknown as PersistedComposerFileAttachment[],
   terminalContexts: Object.freeze([]) as unknown as TerminalContextDraft[],
   modelSelectionByProvider: Object.freeze({}) as Partial<Record<ProviderKind, ModelSelection>>,
   activeProvider: null,

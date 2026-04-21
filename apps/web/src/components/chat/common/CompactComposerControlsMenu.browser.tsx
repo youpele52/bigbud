@@ -20,8 +20,10 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   draftsByThreadId[threadId] = {
     prompt: props?.prompt ?? "",
     images: [],
+    files: [],
     nonPersistedImageIds: [],
     persistedAttachments: [],
+    persistedFileAttachments: [],
     terminalContexts: [],
     modelSelectionByProvider: {
       [provider]: {

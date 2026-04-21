@@ -321,6 +321,7 @@ export function ChatViewContent({
           splitShortcutLabel={composer.splitTerminalShortcutLabel ?? undefined}
           newShortcutLabel={composer.newTerminalShortcutLabel ?? undefined}
           closeShortcutLabel={composer.closeTerminalShortcutLabel ?? undefined}
+          keybindings={composer.keybindings}
           onAddTerminalContext={runtime.addTerminalContextToDraft}
         />
       ))}

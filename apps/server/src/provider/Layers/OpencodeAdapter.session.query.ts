@@ -9,7 +9,7 @@ import { Effect } from "effect";
 
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { OpencodeAdapterShape } from "../Services/OpencodeAdapter.ts";
-import { buildThreadSnapshot, toMessage, withOpencodeDirectory } from "./OpencodeAdapter.stream.ts";
+import { buildThreadSnapshot, toMessage } from "./OpencodeAdapter.stream.ts";
 import { PROVIDER } from "./OpencodeAdapter.types.ts";
 import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
 import type { QueryMethodDeps } from "./OpencodeAdapter.session.ts";
@@ -34,11 +34,9 @@ export function makeStopSessionRecord(
 
         // Delete the session from OpenCode
         try {
-          await record.client.session.delete(
-            withOpencodeDirectory(record.cwd, {
-              path: { id: record.opencodeSessionId },
-            }),
-          );
+          await record.client.session.delete({
+            sessionID: record.opencodeSessionId,
+          });
         } catch {
           // Best effort — session might already be gone
         }

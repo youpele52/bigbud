@@ -5,6 +5,7 @@ export type CodexPlanType =
   | "go"
   | "plus"
   | "pro"
+  | "prolite"
   | "team"
   | "business"
   | "enterprise"
@@ -86,7 +87,9 @@ export function codexAuthSubLabel(account: CodexAccountSnapshot | undefined): st
     case "plus":
       return "ChatGPT Plus Subscription";
     case "pro":
-      return "ChatGPT Pro Subscription";
+      return "ChatGPT Pro 20x Subscription";
+    case "prolite":
+      return "ChatGPT Pro 5x Subscription";
     case "team":
       return "ChatGPT Team Subscription";
     case "business":

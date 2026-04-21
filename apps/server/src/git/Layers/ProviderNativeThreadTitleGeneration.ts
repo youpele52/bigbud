@@ -3,7 +3,6 @@ import {
   type CopilotClientOptions,
   type PermissionRequestResult,
 } from "@github/copilot-sdk";
-import { createOpencodeClient } from "@opencode-ai/sdk";
 import {
   TextGenerationError,
   type CopilotModelSelection,
@@ -21,7 +20,6 @@ import { buildThreadTitlePrompt } from "../Prompts.ts";
 import { limitSection, sanitizeThreadTitle } from "../Utils.ts";
 import { makeNodeWrapperCliPath } from "../../provider/Layers/CopilotAdapter.types.ts";
 import { resolveProviderIDForModel } from "../../provider/Layers/OpencodeAdapter.session.helpers.ts";
-import { withOpencodeDirectory } from "../../provider/Layers/OpencodeAdapter.stream.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/OpencodeServerManager.ts";
 
 const COPILOT_TIMEOUT_MS = 60_000;
@@ -198,7 +196,7 @@ export const generateOpencodeThreadTitleNative = (
 ) =>
   Effect.gen(function* () {
     const serverHandle = yield* Effect.tryPromise({
-      try: () => deps.opencodeServerManager.acquire(),
+      try: () => deps.opencodeServerManager.acquire(input.cwd),
       catch: (cause) =>
         new TextGenerationError({
           operation: "generateThreadTitle",
@@ -210,7 +208,7 @@ export const generateOpencodeThreadTitleNative = (
         }),
     });
 
-    const client = createOpencodeClient({ baseUrl: serverHandle.url });
+    const client = serverHandle.client;
     const { prompt } = buildThreadTitlePrompt({
       message: input.message,
       attachments: input.attachments,
@@ -219,11 +217,9 @@ export const generateOpencodeThreadTitleNative = (
     try {
       const sessionResp = yield* Effect.tryPromise({
         try: () =>
-          client.session.create(
-            withOpencodeDirectory(input.cwd, {
-              body: { title: "Thread title generation" },
-            }),
-          ),
+          client.session.create({
+            title: "Thread title generation",
+          }),
         catch: (cause) =>
           new TextGenerationError({
             operation: "generateThreadTitle",
@@ -246,7 +242,7 @@ export const generateOpencodeThreadTitleNative = (
       const providerID =
         input.modelSelection.subProviderID ??
         (yield* Effect.tryPromise({
-          try: () => resolveProviderIDForModel(client, input.cwd, input.modelSelection.model),
+          try: () => resolveProviderIDForModel(client, input.modelSelection.model),
           catch: () => undefined as never,
         }).pipe(Effect.orElseSucceed(() => undefined)));
 
@@ -259,32 +255,28 @@ export const generateOpencodeThreadTitleNative = (
 
       const promptResp = yield* Effect.tryPromise({
         try: () =>
-          client.session.prompt(
-            withOpencodeDirectory(input.cwd, {
-              path: { id: sessionID },
-              body: {
-                parts: [{ type: "text", text: prompt }],
-                format: {
-                  type: "json_schema",
-                  schema: {
-                    type: "object",
-                    properties: {
-                      title: { type: "string" },
-                    },
-                    required: ["title"],
-                  },
+          client.session.prompt({
+            sessionID,
+            parts: [{ type: "text", text: prompt }],
+            format: {
+              type: "json_schema",
+              schema: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
                 },
-                model: {
-                  providerID,
-                  modelID: input.modelSelection.model,
-                },
-                tools: {},
-                noReply: false,
-                system:
-                  "You generate concise thread titles. Return only structured output with a title field.",
+                required: ["title"],
               },
-            }),
-          ),
+            },
+            model: {
+              providerID,
+              modelID: input.modelSelection.model,
+            },
+            tools: {},
+            noReply: false,
+            system:
+              "You generate concise thread titles. Return only structured output with a title field.",
+          }),
         catch: (cause) =>
           new TextGenerationError({
             operation: "generateThreadTitle",

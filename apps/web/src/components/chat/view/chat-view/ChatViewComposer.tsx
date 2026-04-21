@@ -3,6 +3,7 @@ import { cn } from "~/lib/utils";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
+import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
 import { ComposerPendingApprovalActions } from "../../composer/ComposerPendingApprovalActions";
 import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingApprovalPanel";
@@ -94,12 +95,19 @@ export function ChatViewComposer({
             ) : null}
 
             {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (
-              <ComposerImagePreviews
-                composerImages={base.composerImages}
-                nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
-                onRemoveImage={base.removeComposerImageFromDraft}
-                onExpandImage={base.setExpandedImage}
-              />
+              <>
+                <ComposerImagePreviews
+                  composerImages={base.composerImages}
+                  nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
+                  onRemoveImage={base.removeComposerImageFromDraft}
+                  onExpandImage={base.setExpandedImage}
+                />
+                <ComposerFilePreviews
+                  composerFiles={base.composerFiles}
+                  resolvedTheme={base.resolvedTheme}
+                  onRemoveFile={base.removeComposerFileFromDraft}
+                />
+              </>
             ) : null}
 
             <ComposerPromptEditor

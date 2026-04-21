@@ -9,7 +9,7 @@ import type {
   TurnId,
   ProviderSession,
 } from "@bigbud/contracts";
-import type { OpencodeClient } from "@opencode-ai/sdk";
+import type { OpencodeClient, QuestionInfo } from "@opencode-ai/sdk/v2";
 import type { EventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
 export const PROVIDER = "opencode" as const;
@@ -24,15 +24,15 @@ export interface PendingPermissionRequest {
     | "dynamic_tool_call"
     | "unknown";
   readonly turnId: TurnId | undefined;
-  readonly permissionId: string;
+  readonly requestId: string;
   responding: boolean;
 }
 
-/** Tracks an in-flight tui.prompt.append question awaiting a user answer. */
+/** Tracks an in-flight question.asked request awaiting a user answer. */
 export interface PendingUserInputRequest {
   readonly turnId: TurnId | undefined;
-  /** The raw question text emitted by OpenCode. */
-  readonly questionText: string;
+  /** The structured questions from OpenCode. */
+  readonly questions: ReadonlyArray<QuestionInfo>;
 }
 
 export interface MutableTurnSnapshot {

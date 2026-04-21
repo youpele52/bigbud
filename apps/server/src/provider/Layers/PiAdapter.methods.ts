@@ -29,6 +29,7 @@ import { createPiRpcProcess } from "./PiRpcProcess.ts";
 import {
   applyModelSelection,
   buildResumeCursor,
+  makeAppendTextFileAttachments,
   makeResolveImages,
   makeStopSessionRecord,
   refreshSessionState,
@@ -52,6 +53,7 @@ export function makePiAdapterMethods(deps: {
   readonly sessions: Map<ThreadId, ActivePiSession>;
 }) {
   const resolveImages = makeResolveImages(deps.attachmentsDir);
+  const appendTextFileAttachments = makeAppendTextFileAttachments(deps.attachmentsDir);
   const stopSessionRecord = makeStopSessionRecord({
     emit: deps.emit,
     makeSyntheticEvent: deps.makeSyntheticEvent,
@@ -230,6 +232,10 @@ export function makePiAdapterMethods(deps: {
     session.turns.push({ id: turnId, items: [] });
 
     const images = yield* resolveImages(input.attachments ?? []);
+    const messageText = yield* appendTextFileAttachments(
+      input.attachments ?? [],
+      input.input ?? "",
+    );
     const startedEvent = yield* deps.makeSyntheticEvent(
       input.threadId,
       "turn.started",
@@ -252,7 +258,7 @@ export function makePiAdapterMethods(deps: {
       try: () =>
         session.process.request({
           type: "prompt",
-          message: input.input ?? "",
+          message: messageText,
           ...(images.length > 0 ? { images } : {}),
           ...(isStreaming ? { streamingBehavior: "followUp" as const } : {}),
         }),

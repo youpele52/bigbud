@@ -10,13 +10,13 @@
  *
  * @module OpencodeAdapter.stream
  */
-import { type Event as OpencodeEvent } from "@opencode-ai/sdk";
+import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Effect, ServiceMap } from "effect";
 
 import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 
 import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
-import { withOpencodeDirectory, toMessage } from "./OpencodeAdapter.stream.utils.ts";
+import { toMessage } from "./OpencodeAdapter.stream.utils.ts";
 import { logNativeEvent, type SyntheticEventFn } from "./OpencodeAdapter.stream.primitives.ts";
 import { makeMapEvent } from "./OpencodeAdapter.stream.mapEvent.ts";
 import type { EventNdjsonLogger } from "./EventNdjsonLogger.ts";
@@ -77,22 +77,17 @@ export function startEventStream(
 
   void (async () => {
     try {
-      const { stream } = await session.client.event.subscribe(
-        withOpencodeDirectory(session.cwd, {
-          signal: abortController.signal,
-        }),
-      );
+      const { stream } = await session.client.event.subscribe(undefined, {
+        signal: abortController.signal,
+      });
       for await (const event of stream) {
         if (abortController.signal.aborted) break;
 
         // Filter events to only those for this session.
-        // The sessionID can live in different places depending on
-        // event type, so we check several known locations.
-        const props = event.properties as Record<string, unknown>;
-        const eventSessionId =
-          (props.sessionID as string | undefined) ??
-          ((props.info as Record<string, unknown> | undefined)?.sessionID as string | undefined) ??
-          ((props.session as Record<string, unknown> | undefined)?.id as string | undefined);
+        // In v2, sessionID is always on event.properties.sessionID.
+        const eventSessionId = (event.properties as Record<string, unknown>).sessionID as
+          | string
+          | undefined;
 
         if (eventSessionId && eventSessionId !== session.opencodeSessionId) {
           continue;

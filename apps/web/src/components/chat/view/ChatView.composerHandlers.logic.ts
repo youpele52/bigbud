@@ -1,6 +1,7 @@
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   type ApprovalRequestId,
   type ThreadId,
   type UserInputQuestion,
@@ -21,10 +22,14 @@ import {
 } from "../../../logic/user-input";
 import { toastManager } from "../../ui/toast";
 import { randomUUID } from "~/lib/utils";
-import { type ComposerImageAttachment } from "../../../stores/composer";
+import {
+  type ComposerImageAttachment,
+  type ComposerFileAttachment,
+} from "../../../stores/composer";
 import type { ComposerPromptEditorHandle } from "../composer/ComposerPromptEditor";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
+const FILE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_FILE_BYTES / (1024 * 1024))}MB`;
 
 export interface UsePendingUserInputStateResult {
   pendingUserInputAnswersByRequestId: Record<string, Record<string, PendingUserInputDraftAnswer>>;
@@ -113,6 +118,101 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
       addComposerImage,
       addComposerImagesToDraft,
       setThreadError,
+    ],
+  );
+}
+
+export interface UseAddComposerFilesInput {
+  activeThreadId: ThreadId | null;
+  composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
+  composerImagesLength: number;
+  pendingUserInputsLength: number;
+  addComposerFile: (file: ComposerFileAttachment) => void;
+  addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
+  setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
+  isElectron: boolean;
+}
+
+/** Returns an `addComposerFiles` handler bound to the current draft state. */
+export function useAddComposerFiles(input: UseAddComposerFilesInput) {
+  const {
+    activeThreadId,
+    composerFilesRef,
+    composerImagesLength,
+    pendingUserInputsLength,
+    addComposerFile,
+    addComposerFilesToDraft,
+    setThreadError,
+    isElectron,
+  } = input;
+
+  return useCallback(
+    (files: File[]) => {
+      if (!activeThreadId || files.length === 0) return;
+
+      if (pendingUserInputsLength > 0) {
+        toastManager.add({
+          type: "error",
+          title: "Attach files after answering plan questions.",
+        });
+        return;
+      }
+
+      const nextFiles: ComposerFileAttachment[] = [];
+      let nextCount = composerFilesRef.current.length + composerImagesLength;
+      let error: string | null = null;
+
+      for (const file of files) {
+        if (file.size > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
+          if (!isElectron) {
+            toastManager.add({
+              type: "error",
+              title: `Files over ${FILE_SIZE_LIMIT_LABEL} require the desktop app`,
+            });
+          } else {
+            error = `'${file.name}' exceeds the ${FILE_SIZE_LIMIT_LABEL} attachment limit.`;
+          }
+          continue;
+        }
+        if (nextCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
+          error = `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} files per message.`;
+          break;
+        }
+
+        const filePath = isElectron ? (window.desktopBridge?.getFilePath(file) ?? "") : "";
+        if (isElectron && filePath.length === 0) {
+          error = `Failed to access the full path for '${file.name}'. Try re-attaching the file.`;
+          continue;
+        }
+
+        nextFiles.push({
+          type: "file",
+          id: randomUUID(),
+          name: file.name || "file",
+          mimeType: file.type || "application/octet-stream",
+          sizeBytes: file.size,
+          filePath,
+          file: isElectron ? null : file,
+        });
+        nextCount += 1;
+      }
+
+      if (nextFiles.length === 1 && nextFiles[0]) {
+        addComposerFile(nextFiles[0]);
+      } else if (nextFiles.length > 1) {
+        addComposerFilesToDraft(nextFiles);
+      }
+      setThreadError(activeThreadId, error);
+    },
+    [
+      activeThreadId,
+      composerFilesRef,
+      composerImagesLength,
+      pendingUserInputsLength,
+      addComposerFile,
+      addComposerFilesToDraft,
+      setThreadError,
+      isElectron,
     ],
   );
 }

@@ -35,7 +35,6 @@ import {
   makeSyntheticEventFn,
   startEventStream,
   toMessage,
-  withOpencodeDirectory,
 } from "./OpencodeAdapter.stream.ts";
 import {
   isOpencodeModelSelection,
@@ -208,7 +207,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
 
       // Acquire a handle from the shared OpenCode server manager
       const serverHandle = yield* Effect.tryPromise({
-        try: () => serverManager.acquire(),
+        try: () => serverManager.acquire(input.cwd),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
@@ -231,7 +230,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         providerID =
           selectionProviderID ??
           (yield* Effect.tryPromise({
-            try: () => resolveProviderIDForModel(client, input.cwd, modelID!),
+            try: () => resolveProviderIDForModel(client, modelID!),
             catch: () => undefined as never,
           }).pipe(Effect.orElseSucceed(() => undefined)));
       }
@@ -239,11 +238,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
       // Create an OpenCode session
       const sessionResp = yield* Effect.tryPromise({
         try: () =>
-          client.session.create(
-            withOpencodeDirectory(input.cwd, {
-              body: input.cwd ? { title: `bigbud session in ${input.cwd}` } : {},
-            }),
-          ),
+          client.session.create(input.cwd ? { title: `bigbud session in ${input.cwd}` } : {}),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,

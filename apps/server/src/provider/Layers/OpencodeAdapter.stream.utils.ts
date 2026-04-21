@@ -46,49 +46,36 @@ export function toProviderItemId(value: string | undefined): ProviderItemId | un
 }
 
 /**
- * Map OpenCode permission metadata to our request type taxonomy.
+ * Map OpenCode v2 PermissionRequest to our request type taxonomy.
+ * v2 uses a `permission` string field (the tool name) and `patterns` array.
  */
 export function requestTypeFromPermission(permission: {
-  metadata?: Record<string, unknown>;
+  permission: string;
+  patterns: Array<string>;
 }):
   | "command_execution_approval"
   | "file_change_approval"
   | "file_read_approval"
   | "dynamic_tool_call"
   | "unknown" {
-  const meta = permission.metadata;
-  if (!meta) return "unknown";
-  const tool = typeof meta.tool === "string" ? meta.tool : undefined;
-  if (tool?.includes("bash") || tool?.includes("shell") || tool?.includes("exec")) {
+  const tool = permission.permission;
+  if (tool.includes("bash") || tool.includes("shell") || tool.includes("exec")) {
     return "command_execution_approval";
   }
-  if (tool?.includes("write") || tool?.includes("edit") || tool?.includes("patch")) {
+  if (tool.includes("write") || tool.includes("edit") || tool.includes("patch")) {
     return "file_change_approval";
   }
-  if (tool?.includes("read") || tool?.includes("glob") || tool?.includes("grep")) {
+  if (tool.includes("read") || tool.includes("glob") || tool.includes("grep")) {
     return "file_read_approval";
   }
   return "dynamic_tool_call";
 }
 
 export function requestDetailFromPermission(permission: {
-  metadata?: Record<string, unknown>;
+  permission: string;
+  patterns: Array<string>;
 }): string | undefined {
-  const meta = permission.metadata;
-  if (!meta) return undefined;
-  return (
-    normalizeString(meta.description) ??
-    normalizeString(meta.command) ??
-    normalizeString(meta.tool) ??
-    normalizeString(meta.path)
-  );
-}
-
-export function withOpencodeDirectory<T extends object>(
-  cwd: string | undefined,
-  input: T,
-): T | (T & { query: { directory: string } }) {
-  return cwd ? { ...input, query: { directory: cwd } } : input;
+  return normalizeString(permission.patterns[0]) ?? normalizeString(permission.permission);
 }
 
 export function buildThreadSnapshot(

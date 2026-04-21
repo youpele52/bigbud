@@ -1,5 +1,5 @@
 {
-  "name": "t3",
+  "name": "@bigbud/server",
   "version": "0.1.613",
   "license": "MIT",
   "repository": {
@@ -8,8 +8,7 @@
     "directory": "apps/server"
   },
   "bin": {
-    "bigbud": "./dist/bin.mjs",
-    "t3": "./dist/bin.mjs"
+    "bigbud": "./dist/bin.mjs"
   },
   "files": [
     "dist"
