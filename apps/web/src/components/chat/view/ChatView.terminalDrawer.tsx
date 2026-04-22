@@ -1,5 +1,5 @@
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
-import type { ThreadId } from "@bigbud/contracts";
+import type { ResolvedKeybindingsConfig, ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { useProjectById, useThreadById } from "../../../stores/main";
@@ -19,6 +19,7 @@ interface PersistentThreadTerminalDrawerProps {
   splitShortcutLabel: string | undefined;
   newShortcutLabel: string | undefined;
   closeShortcutLabel: string | undefined;
+  keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
 }
 
@@ -35,6 +36,7 @@ export function PersistentThreadTerminalDrawer({
   splitShortcutLabel,
   newShortcutLabel,
   closeShortcutLabel,
+  keybindings,
   onAddTerminalContext,
 }: PersistentThreadTerminalDrawerProps) {
   const serverThread = useThreadById(threadId);
@@ -176,6 +178,7 @@ export function PersistentThreadTerminalDrawer({
         splitShortcutLabel={visible ? splitShortcutLabel : undefined}
         newShortcutLabel={visible ? newShortcutLabel : undefined}
         closeShortcutLabel={visible ? closeShortcutLabel : undefined}
+        keybindings={keybindings}
         onActiveTerminalChange={activateTerminal}
         onCloseTerminal={closeTerminal}
         onHeightChange={setTerminalHeight}
