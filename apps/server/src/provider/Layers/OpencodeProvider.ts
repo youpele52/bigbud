@@ -1,6 +1,6 @@
 import type { ModelCapabilities, OpencodeSettings, ServerProviderModel } from "@bigbud/contracts";
 import { Cache, Duration, Effect, Equal, Layer, Result, Stream } from "effect";
-import type { OpencodeClient } from "@opencode-ai/sdk";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 
 import {
   buildServerProvider,

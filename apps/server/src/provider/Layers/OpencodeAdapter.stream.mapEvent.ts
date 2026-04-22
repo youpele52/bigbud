@@ -5,7 +5,6 @@
  * @module OpencodeAdapter.stream.mapEvent
  */
 import { randomUUID } from "node:crypto";
-
 import {
   EventId,
   TurnId,
@@ -13,7 +12,7 @@ import {
   type ThreadTokenUsageSnapshot,
   type UserInputQuestion,
 } from "@bigbud/contracts";
-import { type Event as OpencodeEvent } from "@opencode-ai/sdk";
+import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 import { Effect } from "effect";
 
 import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
@@ -27,6 +26,17 @@ import {
 } from "./OpencodeAdapter.stream.utils.ts";
 
 export { FULL_ACCESS_AUTO_APPROVE_AFTER_MS };
+
+/**
+ * Stable key for correlating a question answer back to its question by index.
+ * Mirrors the t3code `openCodeQuestionId` helper.
+ */
+export function openCodeQuestionId(index: number, header: string): string {
+  return `${index}-${header
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")}`;
+}
 
 /**
  * Shared logic for handling an OpenCode "session idle" transition, emitted
@@ -404,11 +414,15 @@ export function makeMapEvent(
           return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId, createdAt);
         }
 
-        case "permission.updated": {
+        case "permission.asked": {
           const permission = event.properties as {
             id: string;
             sessionID: string;
-            metadata?: Record<string, unknown>;
+            permission: string;
+            patterns: Array<string>;
+            always: Array<string>;
+            metadata: Record<string, unknown>;
+            tool?: { messageID: string; callID: string };
           };
 
           if (!session.pendingPermissions.has(permission.id)) {
@@ -416,7 +430,7 @@ export function makeMapEvent(
             session.pendingPermissions.set(permission.id, {
               requestType: reqType,
               turnId,
-              permissionId: permission.id,
+              requestId: permission.id,
               responding: false,
             });
 
@@ -447,6 +461,62 @@ export function makeMapEvent(
           return [];
         }
 
+        case "question.asked": {
+          const questionReq = event.properties as {
+            id: string;
+            sessionID: string;
+            questions: Array<{
+              question: string;
+              header: string;
+              options: Array<{ label: string; description: string }>;
+              multiple?: boolean;
+              custom?: boolean;
+            }>;
+            tool?: { messageID: string; callID: string };
+          };
+
+          if (!session.pendingUserInputs.has(questionReq.id)) {
+            session.pendingUserInputs.set(questionReq.id, {
+              turnId,
+              questions: questionReq.questions,
+            });
+
+            const userInputQuestions: UserInputQuestion[] = questionReq.questions.map(
+              (q, index) => ({
+                id: openCodeQuestionId(index, q.header),
+                header: q.header,
+                question: q.question,
+                options: q.options,
+                ...(q.multiple !== undefined ? { multiple: q.multiple } : {}),
+                ...(q.custom !== undefined ? { custom: q.custom } : {}),
+              }),
+            );
+
+            return [
+              {
+                ...eventBase({
+                  eventId: stamp.eventId,
+                  createdAt,
+                  threadId: session.threadId,
+                  ...(turnId ? { turnId } : {}),
+                  requestId: questionReq.id,
+                  raw,
+                }),
+                type: "user-input.requested",
+                payload: { questions: userInputQuestions },
+              },
+            ];
+          }
+          return [];
+        }
+
+        case "question.replied":
+        case "question.rejected": {
+          const qProps = event.properties as { sessionID: string; requestID: string };
+          session.pendingUserInputs.delete(qProps.requestID);
+          return [];
+        }
+
         case "session.error": {
           const errProps = event.properties as {
             sessionID?: string;
@@ -471,68 +541,6 @@ export function makeMapEvent(
                 class: "provider_error",
                 detail: errProps.error,
               },
-            },
-          ];
-        }
-
-        case "tui.prompt.append": {
-          const tuiProps = event.properties as { text?: string };
-          const questionText = normalizeString(tuiProps.text);
-
-          if (!questionText) {
-            return [];
-          }
-
-          const requestId = randomUUID();
-          session.pendingUserInputs.set(requestId, {
-            turnId,
-            questionText,
-          });
-
-          const question: UserInputQuestion = {
-            id: requestId,
-            header: "OpenCode",
-            question: questionText,
-            options: [],
-          };
-
-          // HACK: Emit a content.delta so the question is visible as a normal
-          // assistant message in the conversation stream.  OpenCode's
-          // tui.prompt.append events carry free-text questions with no
-          // predefined options, so the pending-input panel alone may not be
-          // sufficient for the user to notice the prompt.  Rendering the
-          // question inline (markdown-formatted) ensures it is always visible.
-          const textEventId = yield* nextEventId;
-          const markdownQuestion = `**${question.header}:** ${questionText}`;
-          const contentDelta: ProviderRuntimeEvent = {
-            ...eventBase({
-              eventId: textEventId,
-              createdAt,
-              threadId: session.threadId,
-              ...(turnId ? { turnId } : {}),
-              itemId: `opencode-prompt-${requestId}`,
-              raw,
-            }),
-            type: "content.delta",
-            payload: {
-              streamKind: "assistant_text",
-              delta: markdownQuestion,
-            },
-          };
-
-          return [
-            contentDelta,
-            {
-              ...eventBase({
-                eventId: stamp.eventId,
-                createdAt,
-                threadId: session.threadId,
-                ...(turnId ? { turnId } : {}),
-                requestId,
-                raw,
-              }),
-              type: "user-input.requested",
-              payload: { questions: [question] },
             },
           ];
         }

@@ -7,7 +7,6 @@
 import type { ProviderApprovalDecision, ProviderSendTurnInput } from "@bigbud/contracts";
 
 import type { ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
-import { withOpencodeDirectory } from "./OpencodeAdapter.stream.ts";
 
 // ── Model selection type guard ────────────────────────────────────────
 
@@ -48,11 +47,10 @@ export function approvalDecisionToOpencodeResponse(
 
 export async function resolveProviderIDForModel(
   client: ActiveOpencodeSession["client"],
-  cwd: string | undefined,
   modelID: string,
 ): Promise<string | undefined> {
   try {
-    const providersResp = await client.config.providers(withOpencodeDirectory(cwd, {}));
+    const providersResp = await client.config.providers();
     if (providersResp.data) {
       for (const p of providersResp.data.providers) {
         if (p.models && modelID) {
