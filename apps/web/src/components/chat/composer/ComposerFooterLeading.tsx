@@ -160,11 +160,14 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
               className="shrink-0 whitespace-nowrap px-2 text-xs text-muted-foreground/70 hover:text-foreground/80 sm:px-3"
               size="sm"
               type="button"
-              onClick={() =>
-                onRuntimeModeChange(
-                  runtimeMode === "approval-required" ? "auto-accept-edits" : "full-access",
-                )
-              }
+              onClick={() => {
+                const next: Record<typeof runtimeMode, typeof runtimeMode> = {
+                  "full-access": "approval-required",
+                  "approval-required": "auto-accept-edits",
+                  "auto-accept-edits": "full-access",
+                };
+                onRuntimeModeChange(next[runtimeMode]);
+              }}
               title={runtimeModeOption.title}
             >
               <RuntimeModeIcon />
