@@ -2,6 +2,7 @@ import { PaperclipIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 import { Button } from "../../../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../../../ui/tooltip";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
@@ -210,18 +211,24 @@ export function ChatViewComposer({
                   tabIndex={-1}
                   onChange={interactions.onFileInputChange}
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  title="Attach files"
-                  className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
-                  onClick={interactions.onAttachFiles}
-                  disabled={base.isConnecting || thread.isComposerApprovalState}
-                >
-                  <PaperclipIcon className="size-4" />
-                  <span className="sr-only">Attach files</span>
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
+                        onClick={interactions.onAttachFiles}
+                        disabled={base.isConnecting || thread.isComposerApprovalState}
+                      >
+                        <PaperclipIcon className="size-4" />
+                        <span className="sr-only">Attach files</span>
+                      </Button>
+                    }
+                  />
+                  <TooltipPopup>Attach files</TooltipPopup>
+                </Tooltip>
                 <ComposerPrimaryActions
                   compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                   pendingAction={interactions.pendingAction}
