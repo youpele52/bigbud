@@ -1,5 +1,5 @@
 import type { MessageId, ModelSelection, ProviderKind, TurnId } from "@bigbud/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
 import { useComposerDraftStore } from "~/stores/composer";
@@ -514,6 +514,26 @@ export function useChatViewInteractions({
     [addComposerImages, addComposerFiles, base, runtime],
   );
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const onAttachFiles = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const onFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const allFiles = Array.from(event.target.files ?? []);
+      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
+      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
+      if (imageFiles.length > 0) addComposerImages(imageFiles);
+      if (nonImageFiles.length > 0) addComposerFiles(nonImageFiles);
+      // Reset input so the same file can be selected again
+      event.target.value = "";
+      runtime.focusComposer();
+    },
+    [addComposerImages, addComposerFiles, runtime],
+  );
+
   const composerCommandHandlers = useComposerCommandHandlers({
     composerMenuOpenRef: base.composerMenuOpenRef,
     composerMenuItemsRef: base.composerMenuItemsRef,
@@ -630,6 +650,9 @@ export function useChatViewInteractions({
     onComposerDragOver,
     onComposerDragLeave,
     onComposerDrop,
+    onAttachFiles,
+    fileInputRef,
+    onFileInputChange,
     isComposerMenuLoading,
     pendingAction,
     closeExpandedImage,

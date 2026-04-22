@@ -1,5 +1,7 @@
+import { PaperclipIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 
+import { Button } from "../../../ui/button";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
@@ -200,6 +202,26 @@ export function ChatViewComposer({
                 {thread.isPreparingWorktree ? (
                   <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
                 ) : null}
+                <input
+                  ref={interactions.fileInputRef}
+                  type="file"
+                  multiple
+                  className="sr-only"
+                  tabIndex={-1}
+                  onChange={interactions.onFileInputChange}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  title="Attach files"
+                  className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
+                  onClick={interactions.onAttachFiles}
+                  disabled={base.isConnecting || thread.isComposerApprovalState}
+                >
+                  <PaperclipIcon className="size-4" />
+                  <span className="sr-only">Attach files</span>
+                </Button>
                 <ComposerPrimaryActions
                   compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                   pendingAction={interactions.pendingAction}
