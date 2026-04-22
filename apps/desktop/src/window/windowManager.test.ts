@@ -56,7 +56,7 @@ vi.mock("electron", () => {
 function createWindowUnderTest() {
   createWindow({
     appDisplayName: "bigbud",
-    desktopScheme: "t3",
+    desktopScheme: "bigbud",
     isDevelopment: false,
     desktopDir: "/desktop",
     resolveIconPath: () => null,
