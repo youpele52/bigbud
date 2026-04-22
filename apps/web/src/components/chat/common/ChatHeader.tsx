@@ -115,9 +115,7 @@ export const ChatHeader = memo(function ChatHeader({
             </span>
           </span>
         </h2>
-        {activeProjectName && !isGitRepo && (
-          <span className="shrink-0 text-[10px] text-warning-foreground">No Git</span>
-        )}
+
       </div>
       <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
         {activeProjectScripts && activeProjectScripts.length > 0 && openInCwd && (
