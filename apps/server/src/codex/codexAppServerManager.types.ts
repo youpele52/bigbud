@@ -87,7 +87,9 @@ export interface JsonRpcNotification {
 export interface CodexAppServerSendTurnInput {
   readonly threadId: ThreadId;
   readonly input?: string;
-  readonly attachments?: ReadonlyArray<{ type: "image"; url: string }>;
+  readonly attachments?: ReadonlyArray<
+    { type: "image"; url: string } | { type: "file"; url: string }
+  >;
   readonly model?: string;
   readonly serviceTier?: string | null;
   readonly effort?: string;

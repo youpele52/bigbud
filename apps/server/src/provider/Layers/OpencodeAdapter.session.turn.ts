@@ -5,12 +5,14 @@
  * @module OpencodeAdapter.session.turn
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { TurnId, type ProviderTurnStartResult } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import { isTextReadable } from "../../attachments/fileMime.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { OpencodeAdapterShape } from "../Services/OpencodeAdapter.ts";
 import { toMessage } from "./OpencodeAdapter.stream.ts";
@@ -87,26 +89,66 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         ),
       ]);
 
-      // Use promptAsync for non-blocking send with SSE streaming
-      const fileParts = (input.attachments ?? []).map((attachment) => {
-        const path = resolveAttachmentPath({
-          attachmentsDir: deps.serverConfig.attachmentsDir,
-          attachment,
-        });
-        if (!path) {
-          throw new ProviderAdapterRequestError({
+      // Use promptAsync for non-blocking send with SSE streaming.
+      //
+      // Attachment handling: some OpenCode providers/models reject certain MIME
+      // types (e.g. `text/csv`) as SDK file parts. For text-readable files we
+      // embed the contents inline in the prompt (matching Pi's approach); for
+      // binary files (PDF, Office docs, video, audio, archives) we send them
+      // as SDK `file` parts.
+      const fileParts: Array<{
+        type: "file";
+        mime: string;
+        filename: string;
+        url: string;
+      }> = [];
+      const inlineTextBlocks: Array<string> = [];
+      for (const attachment of input.attachments ?? []) {
+        // Prefer sourcePath (original user file) over the internal attachmentsDir copy
+        const sourcePath =
+          attachment.type === "file" && attachment.sourcePath
+            ? attachment.sourcePath
+            : resolveAttachmentPath({
+                attachmentsDir: deps.serverConfig.attachmentsDir,
+                attachment,
+              });
+        if (!sourcePath) {
+          return yield* new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "session.promptAsync",
             detail: `Invalid attachment id '${attachment.id}'.`,
           });
         }
-        return {
+
+        if (attachment.type === "file" && isTextReadable(attachment.mimeType)) {
+          const bytes = yield* Effect.tryPromise({
+            try: () => readFile(sourcePath),
+            catch: (cause) =>
+              new ProviderAdapterRequestError({
+                provider: PROVIDER,
+                method: "session.promptAsync",
+                detail: `Failed to read file attachment '${attachment.name}' for OpenCode.`,
+                cause,
+              }),
+          });
+          const content = bytes.toString("utf8");
+          inlineTextBlocks.push(`<file name="${attachment.name}">\n${content}\n</file>`);
+          continue;
+        }
+
+        fileParts.push({
           type: "file" as const,
           mime: attachment.mimeType,
           filename: attachment.name,
-          url: pathToFileURL(path).href,
-        };
-      });
+          url: pathToFileURL(sourcePath).href,
+        });
+      }
+
+      const baseText = input.input ?? "";
+      const promptText =
+        inlineTextBlocks.length > 0
+          ? `${baseText}${baseText.length > 0 ? "\n\n" : ""}<attached_file_contents>\n${inlineTextBlocks.join("\n")}\n</attached_file_contents>`
+          : baseText;
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
@@ -121,7 +163,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         try: () =>
           record.client.session.promptAsync({
             sessionID: record.opencodeSessionId,
-            parts: [{ type: "text" as const, text: input.input ?? "" }, ...fileParts],
+            parts: [{ type: "text" as const, text: promptText }, ...fileParts],
             ...(record.model
               ? {
                   model: {

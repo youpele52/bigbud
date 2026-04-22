@@ -18,14 +18,21 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
   mkdirSync(attachmentsDir, { recursive: true });
 
   const promptInputs: Array<{
-    path: { id: string };
-    query?: { directory: string };
-    body: {
-      parts: Array<
-        | { type: "text"; text: string }
-        | { type: "file"; mime: string; filename?: string; url: string }
-      >;
-    };
+    sessionID: string;
+    parts: Array<
+      | { type: "text"; text: string }
+      | {
+          type: "file";
+          mime: string;
+          filename?: string;
+          url: string;
+          source?: {
+            type: "file";
+            path: string;
+            text: { value: string; start: number; end: number };
+          };
+        }
+    >;
   }> = [];
   const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
 
@@ -109,20 +116,136 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     assert.equal(promptInputs.length, 1);
     const promptInput = promptInputs[0];
     assert.isDefined(promptInput);
-    assert.deepEqual(promptInput.path, { id: "opencode-session-1" });
-    assert.deepEqual(promptInput.query, { directory: "/tmp/opencode-project" });
-    assert.deepEqual(promptInput.body.parts, [
-      {
-        type: "text",
-        text: "Can you see this image?",
-      },
-      {
-        type: "file",
-        mime: "image/png",
-        filename: "diagram.png",
-        url: pathToFileURL(attachmentPath).href,
-      },
-    ]);
+    assert.deepEqual(promptInput, {
+      sessionID: "opencode-session-1",
+      parts: [
+        {
+          type: "text",
+          text: "Can you see this image?",
+        },
+        {
+          type: "file",
+          mime: "image/png",
+          filename: "diagram.png",
+          url: pathToFileURL(attachmentPath).href,
+        },
+      ],
+    });
     assert.equal(events.length, 1);
+  });
+});
+
+it.effect("embeds text files inline and sends binary files as file parts to OpenCode", () => {
+  const baseDir = mkdtempSync(path.join(os.tmpdir(), "opencode-mixed-attachments-"));
+  const csvPath = path.join(baseDir, "market_headers.csv");
+  const pdfPath = path.join(baseDir, "Science Communication Overview.pdf");
+  const csvContent = "col_a,col_b\n1,2\n";
+  writeFileSync(csvPath, csvContent);
+  writeFileSync(pdfPath, Uint8Array.from([1, 2, 3, 4]));
+
+  const promptInputs: Array<{
+    sessionID: string;
+    parts: Array<
+      | { type: "text"; text: string }
+      | {
+          type: "file";
+          mime: string;
+          filename?: string;
+          url: string;
+        }
+    >;
+  }> = [];
+  const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+
+  return Effect.gen(function* () {
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => rmSync(baseDir, { recursive: true, force: true })),
+    );
+
+    const record = {
+      client: {
+        session: {
+          promptAsync: async (input: (typeof promptInputs)[number]) => {
+            promptInputs.push(input);
+            return promptAsync();
+          },
+        },
+      },
+      releaseServer: () => undefined,
+      opencodeSessionId: "opencode-session-1",
+      threadId: THREAD_ID,
+      createdAt: new Date().toISOString(),
+      runtimeMode: "full-access" as const,
+      pendingPermissions: new Map(),
+      pendingUserInputs: new Map(),
+      turns: [],
+      sseAbortController: null,
+      cwd: "/tmp/opencode-project",
+      model: undefined,
+      providerID: undefined,
+      updatedAt: new Date().toISOString(),
+      lastError: undefined,
+      activeTurnId: undefined,
+      lastUsage: undefined,
+      wasRetrying: false,
+    };
+
+    const { sendTurn } = makeTurnMethods({
+      requireSession: () => Effect.succeed(record as never),
+      syntheticEventFn: (threadId, type, payload, extra) =>
+        Effect.succeed({
+          eventId: "event-1",
+          provider: "opencode",
+          threadId,
+          createdAt: new Date().toISOString(),
+          type,
+          payload,
+          ...(extra?.turnId ? { turnId: extra.turnId } : {}),
+          ...(extra?.itemId ? { itemId: extra.itemId } : {}),
+          ...(extra?.requestId ? { requestId: extra.requestId } : {}),
+        } as never),
+      emitFn: () => Effect.void,
+      serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
+    });
+
+    yield* sendTurn({
+      threadId: THREAD_ID,
+      input: "summarise these",
+      attachments: [
+        {
+          type: "file",
+          id: "thread-opencode-file-1-12345678-1234-1234-1234-123456789abc",
+          name: "market_headers.csv",
+          mimeType: "text/csv",
+          sizeBytes: csvContent.length,
+          sourcePath: csvPath,
+        },
+        {
+          type: "file",
+          id: "thread-opencode-file-2-12345678-1234-1234-1234-123456789abc",
+          name: "Science Communication Overview.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 4,
+          sourcePath: pdfPath,
+        },
+      ],
+    });
+
+    assert.equal(promptInputs.length, 1);
+    assert.deepEqual(promptInputs[0], {
+      sessionID: "opencode-session-1",
+      parts: [
+        {
+          type: "text",
+          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent}\n</file>\n</attached_file_contents>`,
+        },
+        {
+          type: "file",
+          mime: "application/pdf",
+          filename: "Science Communication Overview.pdf",
+          url: pathToFileURL(pdfPath).href,
+        },
+      ],
+    });
   });
 });

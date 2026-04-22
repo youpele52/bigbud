@@ -520,11 +520,29 @@ export function makeMapEvent(
         case "session.error": {
           const errProps = event.properties as {
             sessionID?: string;
-            error?: { type?: string; message?: string };
+            error?: {
+              name?: string;
+              data?: {
+                message?: string;
+                responseBody?: string;
+                statusCode?: number;
+              };
+            };
           };
           const errorMessage =
-            errProps.error?.message ?? errProps.error?.type ?? "Unknown OpenCode error";
+            errProps.error?.data?.message ?? errProps.error?.name ?? "Unknown OpenCode error";
           session.lastError = errorMessage;
+
+          const detail = {
+            ...(errProps.error?.name ? { name: errProps.error.name } : {}),
+            ...(errProps.error?.data?.message ? { message: errProps.error.data.message } : {}),
+            ...(errProps.error?.data?.responseBody
+              ? { responseBody: errProps.error.data.responseBody }
+              : {}),
+            ...(typeof errProps.error?.data?.statusCode === "number"
+              ? { statusCode: errProps.error.data.statusCode }
+              : {}),
+          };
 
           return [
             {
@@ -539,7 +557,7 @@ export function makeMapEvent(
               payload: {
                 message: errorMessage,
                 class: "provider_error",
-                detail: errProps.error,
+                ...(Object.keys(detail).length > 0 ? { detail } : {}),
               },
             },
           ];
