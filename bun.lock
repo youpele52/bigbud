@@ -41,11 +41,10 @@
       },
     },
     "apps/server": {
-      "name": "t3",
+      "name": "@bigbud/server",
       "version": "0.1.613",
       "bin": {
         "bigbud": "./dist/bin.mjs",
-        "t3": "./dist/bin.mjs",
       },
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.77",
@@ -367,6 +366,8 @@
     "@bigbud/marketing": ["@bigbud/marketing@workspace:apps/marketing"],
 
     "@bigbud/scripts": ["@bigbud/scripts@workspace:scripts"],
+
+    "@bigbud/server": ["@bigbud/server@workspace:apps/server"],
 
     "@bigbud/shared": ["@bigbud/shared@workspace:packages/shared"],
 
@@ -2185,8 +2186,6 @@
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 
     "svgo": ["svgo@4.0.1", "", { "dependencies": { "commander": "^11.1.0", "css-select": "^5.1.0", "css-tree": "^3.0.1", "css-what": "^6.1.0", "csso": "^5.0.5", "picocolors": "^1.1.1", "sax": "^1.5.0" }, "bin": "./bin/svgo.js" }, "sha512-XDpWUOPC6FEibaLzjfe0ucaV0YrOjYotGJO1WpF0Zd+n6ZGEQUsSugaoLq9QkEZtAfQIxT42UChcssDVPP3+/w=="],
-
-    "t3": ["t3@workspace:apps/server"],
 
     "tabbable": ["tabbable@6.4.0", "", {}, "sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg=="],
 
