@@ -2,7 +2,7 @@ import { Debouncer } from "@tanstack/react-pacer";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { create } from "zustand";
 
-const PERSISTED_STATE_KEY = "bigbud:ui-state:v1";
+export const PERSISTED_STATE_KEY = "bigbud:ui-state:v1";
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:ui-state:v1",
   "t3code:renderer-state:v8",
@@ -17,7 +17,8 @@ const LEGACY_PERSISTED_STATE_KEYS = [
   "codething:renderer-state:v1",
 ] as const;
 
-interface PersistedUiState {
+export interface PersistedUiState {
+  collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
@@ -52,8 +53,14 @@ const initialState: UiState = {
   threadChangedFilesExpandedById: {},
 };
 
+const persistedCollapsedProjectCwds = new Set<string>();
 const persistedExpandedProjectCwds = new Set<string>();
 const persistedProjectOrderCwds: string[] = [];
+// Pre-fix persisted shape only listed expanded cwds, so anything not listed
+// was treated as collapsed. Track whether the loaded blob carried the new
+// `collapsedProjectCwds` field so we can preserve that legacy semantic for
+// one session after upgrade, until persistState rewrites in the new shape.
+let persistedProjectStateUsesLegacyShape = false;
 const currentProjectCwdById = new Map<ProjectId, string | null>();
 let legacyKeysCleanedUp = false;
 
@@ -115,9 +122,16 @@ function sanitizePersistedThreadChangedFilesExpanded(
   return nextState;
 }
 
-function hydratePersistedProjectState(parsed: PersistedUiState): void {
+export function hydratePersistedProjectState(parsed: PersistedUiState): void {
+  persistedCollapsedProjectCwds.clear();
   persistedExpandedProjectCwds.clear();
   persistedProjectOrderCwds.length = 0;
+  persistedProjectStateUsesLegacyShape = !Array.isArray(parsed.collapsedProjectCwds);
+  for (const cwd of parsed.collapsedProjectCwds ?? []) {
+    if (typeof cwd === "string" && cwd.length > 0) {
+      persistedCollapsedProjectCwds.add(cwd);
+    }
+  }
   for (const cwd of parsed.expandedProjectCwds ?? []) {
     if (typeof cwd === "string" && cwd.length > 0) {
       persistedExpandedProjectCwds.add(cwd);
@@ -130,11 +144,20 @@ function hydratePersistedProjectState(parsed: PersistedUiState): void {
   }
 }
 
-function persistState(state: UiState): void {
+export function persistState(state: UiState): void {
   if (typeof window === "undefined") {
     return;
   }
   try {
+    // Persist collapsed cwds explicitly so an empty/missing field unambiguously
+    // means "first install" rather than "user collapsed everything"; without
+    // this, the syncProjects fallback would re-expand all rows on next launch.
+    const collapsedProjectCwds = Object.entries(state.projectExpandedById)
+      .filter(([, expanded]) => !expanded)
+      .flatMap(([projectId]) => {
+        const cwd = currentProjectCwdById.get(projectId as ProjectId);
+        return cwd ? [cwd] : [];
+      });
     const expandedProjectCwds = Object.entries(state.projectExpandedById)
       .filter(([, expanded]) => expanded)
       .flatMap(([projectId]) => {
@@ -156,6 +179,7 @@ function persistState(state: UiState): void {
     window.localStorage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
+        collapsedProjectCwds,
         expandedProjectCwds,
         projectOrderCwds,
         threadChangedFilesExpandedById,
@@ -238,9 +262,18 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
     const expanded =
       previousExpandedById[project.id] ??
       (previousProjectIdForCwd ? previousExpandedById[previousProjectIdForCwd] : undefined) ??
-      (project.cwd && persistedExpandedProjectCwds.size > 0
-        ? persistedExpandedProjectCwds.has(project.cwd)
-        : true);
+      (() => {
+        if (project.cwd && persistedExpandedProjectCwds.has(project.cwd)) {
+          return true;
+        }
+        if (project.cwd && persistedCollapsedProjectCwds.has(project.cwd)) {
+          return false;
+        }
+        if (persistedProjectStateUsesLegacyShape && persistedExpandedProjectCwds.size > 0) {
+          return false;
+        }
+        return true;
+      })();
     nextExpandedById[project.id] = expanded;
     return {
       id: project.id,
@@ -252,6 +285,7 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
   const nextProjectOrder =
     state.projectOrder.length > 0
       ? (() => {
+          const currentProjectIds = new Set(mappedProjects.map((project) => project.id));
           const nextProjectIdByCwd = new Map(
             mappedProjects.flatMap((project) =>
               project.cwd ? ([[project.cwd, project.id]] as const) : [],
@@ -262,7 +296,7 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
 
           for (const projectId of state.projectOrder) {
             const matchedProjectId =
-              (projectId in nextExpandedById ? projectId : undefined) ??
+              (currentProjectIds.has(projectId) ? projectId : undefined) ??
               (() => {
                 const previousCwd = previousProjectCwdById.get(projectId);
                 return previousCwd ? nextProjectIdByCwd.get(previousCwd) : undefined;
