@@ -5,9 +5,11 @@ import {
   COMPOSER_DRAFT_STORAGE_KEY,
   COMPOSER_DRAFT_STORAGE_VERSION,
   type ComposerDraftStoreState,
+  type ComposerFileAttachment,
   type ComposerImageAttachment,
   type ComposerThreadDraftState,
   type PersistedComposerDraftStoreState,
+  type PersistedComposerFileAttachment,
   type PersistedComposerImageAttachment,
   type PersistedComposerThreadDraftState,
   PersistedComposerDraftStoreStorage,
@@ -112,6 +114,9 @@ export function partializeComposerDraftStoreState(
     const persistedDraft: DeepMutable<PersistedComposerThreadDraftState> = {
       prompt: draft.prompt,
       attachments: draft.persistedAttachments,
+      ...(draft.persistedFileAttachments.length > 0
+        ? { fileAttachments: draft.persistedFileAttachments }
+        : {}),
       ...(draft.terminalContexts.length > 0
         ? {
             terminalContexts: draft.terminalContexts.map((context) => ({
@@ -209,12 +214,17 @@ export function toHydratedThreadDraft(
   // The persisted draft is already in v3 shape (migration handles older formats)
   const modelSelectionByProvider = persistedDraft.modelSelectionByProvider ?? {};
   const activeProvider = normalizeProviderKind(persistedDraft.activeProvider) ?? null;
+  const persistedFileAttachments: PersistedComposerFileAttachment[] = persistedDraft.fileAttachments
+    ? [...persistedDraft.fileAttachments]
+    : [];
 
   return {
     prompt: persistedDraft.prompt,
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
+    files: hydrateFilesFromPersisted(persistedFileAttachments),
     nonPersistedImageIds: [],
     persistedAttachments: [...persistedDraft.attachments],
+    persistedFileAttachments,
     terminalContexts:
       persistedDraft.terminalContexts?.map((context) => ({
         ...context,
@@ -226,4 +236,19 @@ export function toHydratedThreadDraft(
     interactionMode: persistedDraft.interactionMode ?? null,
     bootstrapSourceThreadId: persistedDraft.bootstrapSourceThreadId ?? null,
   };
+}
+
+/** Hydrate persisted file attachments back into ComposerFileAttachment objects. */
+export function hydrateFilesFromPersisted(
+  attachments: ReadonlyArray<PersistedComposerFileAttachment>,
+): ComposerFileAttachment[] {
+  return attachments.map((attachment) => ({
+    type: "file" as const,
+    id: attachment.id,
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    sizeBytes: attachment.sizeBytes,
+    filePath: attachment.filePath,
+    file: null,
+  }));
 }

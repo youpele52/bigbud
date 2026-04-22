@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge } from "@bigbud/contracts";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);
     return typeof result === "string" ? result : null;
   },
+  getFilePath: (file: File) => webUtils.getPathForFile(file),
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),

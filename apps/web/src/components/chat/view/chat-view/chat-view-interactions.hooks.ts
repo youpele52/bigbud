@@ -6,9 +6,11 @@ import { useComposerDraftStore } from "~/stores/composer";
 import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
 import { stripDiffSearchParams } from "~/utils/diff";
+import { isElectron } from "~/config/env/env.config";
 
 import {
   useAddComposerImages,
+  useAddComposerFiles,
   useApplyPromptReplacement,
   usePendingUserInputHandlers,
 } from "../ChatView.composerHandlers.logic";
@@ -386,6 +388,8 @@ export function useChatViewInteractions({
     promptRef: base.promptRef,
     composerImages: base.composerImages,
     composerImagesRef: base.composerImagesRef,
+    composerFiles: base.composerFiles,
+    composerFilesRef: base.composerFilesRef,
     composerTerminalContexts: base.composerTerminalContexts,
     composerTerminalContextsRef: base.composerTerminalContextsRef,
     selectedProvider: composer.selectedProvider,
@@ -410,6 +414,7 @@ export function useChatViewInteractions({
     setThreadError: runtime.setThreadError,
     setStoreThreadError: base.setStoreThreadError,
     addComposerImagesToDraft: base.addComposerImagesToDraft,
+    addComposerFilesToDraft: base.addComposerFilesToDraft,
     addComposerTerminalContextsToDraft: base.addComposerTerminalContextsToDraft,
     clearComposerDraftContent: base.clearComposerDraftContent,
     beginLocalDispatch: thread.beginLocalDispatch,
@@ -432,16 +437,31 @@ export function useChatViewInteractions({
     setThreadError: runtime.setThreadError,
   });
 
+  const addComposerFiles = useAddComposerFiles({
+    activeThreadId: base.activeThreadId,
+    composerFilesRef: base.composerFilesRef,
+    composerImagesLength: base.composerImages.length,
+    pendingUserInputsLength: thread.pendingUserInputs.length,
+    addComposerFile: base.addComposerFile,
+    addComposerFilesToDraft: base.addComposerFilesToDraft,
+    setThreadError: runtime.setThreadError,
+    isElectron,
+  });
   const onComposerPaste = useCallback(
     (event: React.ClipboardEvent<HTMLElement>) => {
-      const imageFiles = Array.from(event.clipboardData.files).filter((file) =>
-        file.type.startsWith("image/"),
-      );
-      if (imageFiles.length === 0) return;
-      event.preventDefault();
-      addComposerImages(imageFiles);
+      const allFiles = Array.from(event.clipboardData.files);
+      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
+      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
+      if (imageFiles.length > 0) {
+        event.preventDefault();
+        addComposerImages(imageFiles);
+      }
+      if (nonImageFiles.length > 0) {
+        event.preventDefault();
+        addComposerFiles(nonImageFiles);
+      }
     },
-    [addComposerImages],
+    [addComposerImages, addComposerFiles],
   );
 
   const onComposerDragEnter = useCallback(
@@ -484,10 +504,14 @@ export function useChatViewInteractions({
       event.preventDefault();
       base.dragDepthRef.current = 0;
       base.setIsDragOverComposer(false);
-      addComposerImages(Array.from(event.dataTransfer.files));
+      const allFiles = Array.from(event.dataTransfer.files);
+      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
+      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
+      if (imageFiles.length > 0) addComposerImages(imageFiles);
+      if (nonImageFiles.length > 0) addComposerFiles(nonImageFiles);
       runtime.focusComposer();
     },
-    [addComposerImages, base, runtime],
+    [addComposerImages, addComposerFiles, base, runtime],
   );
 
   const composerCommandHandlers = useComposerCommandHandlers({
