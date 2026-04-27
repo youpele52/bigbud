@@ -236,6 +236,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     if (signed) {
       macConfig.entitlements = "entitlements.mac.plist";
       macConfig.entitlementsInherit = "entitlements.mac.plist";
+    } else {
+      // Explicitly disable code signing for unsigned builds. Otherwise
+      // electron-builder falls back to ad-hoc signing, which fails at
+      // preAutoEntitlements because there is no ElectronTeamID.
+      macConfig.identity = null;
     }
     buildConfig.mac = macConfig;
   }
