@@ -231,8 +231,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       category: "public.app-category.developer-tools",
       // Entitlements grant microphone access (audio-input) and the standard
       // Electron-required sandbox capabilities for signed/notarized builds.
-      entitlements: "apps/desktop/resources/entitlements.mac.plist",
-      entitlementsInherit: "apps/desktop/resources/entitlements.mac.plist",
+      entitlements: "entitlements.mac.plist",
+      entitlementsInherit: "entitlements.mac.plist",
     };
   }
 
