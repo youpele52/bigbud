@@ -139,6 +139,10 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       corsEnabled: true,
+      // Required for navigator.mediaDevices.getUserMedia to work on the custom
+      // protocol origin in production builds (otherwise Chrome treats the origin
+      // as non-streaming and rejects media device requests).
+      stream: true,
     },
   },
 ]);

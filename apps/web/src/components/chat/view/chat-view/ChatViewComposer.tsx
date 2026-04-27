@@ -1,4 +1,5 @@
 import { PaperclipIcon } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 import { Button } from "../../../ui/button";
@@ -8,11 +9,14 @@ import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
+import { ComposerListeningBar } from "../../composer/ComposerListeningBar";
+import { ComposerMicButton, type ComposerMicButtonHandle } from "../../composer/ComposerMicButton";
 import { ComposerPendingApprovalActions } from "../../composer/ComposerPendingApprovalActions";
 import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingApprovalPanel";
 import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
+import { useSttStore } from "../../../../stores/stt/stt.store";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -35,6 +39,35 @@ export function ChatViewComposer({
   runtime,
   interactions,
 }: ChatViewComposerProps) {
+  const { keyVerified } = useSttStore();
+  const promptHasText = base.prompt.trim().length > 0;
+  const isDefaultComposerState =
+    !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
+  const micReplacesSend = keyVerified === true && !promptHasText && isDefaultComposerState;
+
+  // Track whether the mic is actively recording so we can show the listening
+  // bar and hide the send button.
+  const [isRecording, setIsRecording] = useState(false);
+  const micRef = useRef<ComposerMicButtonHandle>(null);
+
+  /**
+   * Injects transcript text into the composer the same way setPromptFromTraits
+   * does in chat-view-interactions: update the store, sync promptRef, advance
+   * the cursor to end, and schedule a focus on the editor. This ensures the
+   * Lexical editor picks up the change on both web and Electron.
+   */
+  const onMicTranscript = useCallback(
+    (text: string) => {
+      if (text === base.promptRef.current) return;
+      base.promptRef.current = text;
+      base.setPrompt(text);
+      base.setComposerCursor(base.collapseExpandedComposerCursor(text, text.length));
+      base.setComposerTrigger(base.detectComposerTrigger(text, text.length));
+      runtime.scheduleComposerFocus();
+    },
+    [base, runtime],
+  );
+
   return (
     <form
       ref={base.composerFormRef}
@@ -197,58 +230,81 @@ export function ChatViewComposer({
                 }
                 className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
               >
-                {thread.activeContextWindow ? (
-                  <ContextWindowMeter usage={thread.activeContextWindow} />
-                ) : null}
-                {thread.isPreparingWorktree ? (
-                  <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
-                ) : null}
-                <input
-                  ref={interactions.fileInputRef}
-                  type="file"
-                  multiple
-                  className="sr-only"
-                  tabIndex={-1}
-                  onChange={interactions.onFileInputChange}
-                />
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        type="button"
-                        className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
-                        onClick={interactions.onAttachFiles}
-                        disabled={base.isConnecting || thread.isComposerApprovalState}
-                      >
-                        <PaperclipIcon className="size-4" />
-                        <span className="sr-only">Attach files</span>
-                      </Button>
-                    }
+                {isRecording ? (
+                  // Listening bar replaces mic + send while STT is active.
+                  <ComposerListeningBar onStop={() => micRef.current?.stopRecording()} />
+                ) : (
+                  <>
+                    {thread.activeContextWindow ? (
+                      <ContextWindowMeter usage={thread.activeContextWindow} />
+                    ) : null}
+                    {thread.isPreparingWorktree ? (
+                      <span className="text-muted-foreground/70 text-xs">
+                        Preparing worktree...
+                      </span>
+                    ) : null}
+                    <input
+                      ref={interactions.fileInputRef}
+                      type="file"
+                      multiple
+                      className="sr-only"
+                      tabIndex={-1}
+                      onChange={interactions.onFileInputChange}
+                    />
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
+                            onClick={interactions.onAttachFiles}
+                            disabled={base.isConnecting || thread.isComposerApprovalState}
+                          >
+                            <PaperclipIcon className="size-4" />
+                            <span className="sr-only">Attach files</span>
+                          </Button>
+                        }
+                      />
+                      <TooltipPopup>Attach files</TooltipPopup>
+                    </Tooltip>
+                  </>
+                )}
+                {/* Always mounted outside the ternary so micRef is never null
+                    while recording. Positioned here so it sits directly left of
+                    the send button in normal (non-recording) flow. */}
+                <span aria-hidden={isRecording} className={isRecording ? "hidden" : ""}>
+                  <ComposerMicButton
+                    ref={micRef}
+                    prompt={base.prompt}
+                    onTranscript={onMicTranscript}
+                    onRecordingChange={setIsRecording}
+                    disabled={base.isConnecting || thread.isComposerApprovalState}
                   />
-                  <TooltipPopup>Attach files</TooltipPopup>
-                </Tooltip>
-                <ComposerPrimaryActions
-                  compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
-                  pendingAction={interactions.pendingAction}
-                  isRunning={thread.phase === "running"}
-                  showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
-                  promptHasText={base.prompt.trim().length > 0}
-                  isSendBusy={thread.isSendBusy}
-                  isConnecting={base.isConnecting}
-                  isPreparingWorktree={thread.isPreparingWorktree}
-                  hasSendableContent={base.composerSendState.hasSendableContent}
-                  onPreviousPendingQuestion={
-                    interactions.pendingUserInputHandlers.onPreviousActivePendingUserInputQuestion
-                  }
-                  onInterrupt={() => {
-                    void runtime.turnActions.onInterrupt();
-                  }}
-                  onImplementPlanInNewThread={() => {
-                    void interactions.planHandlers.onImplementPlanInNewThread();
-                  }}
-                />
+                </span>
+                {!isRecording && !micReplacesSend && (
+                  <ComposerPrimaryActions
+                    compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
+                    pendingAction={interactions.pendingAction}
+                    isRunning={thread.phase === "running"}
+                    showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
+                    promptHasText={promptHasText}
+                    isSendBusy={thread.isSendBusy}
+                    isConnecting={base.isConnecting}
+                    isPreparingWorktree={thread.isPreparingWorktree}
+                    hasSendableContent={base.composerSendState.hasSendableContent}
+                    onPreviousPendingQuestion={
+                      interactions.pendingUserInputHandlers.onPreviousActivePendingUserInputQuestion
+                    }
+                    onInterrupt={() => {
+                      void runtime.turnActions.onInterrupt();
+                    }}
+                    onImplementPlanInNewThread={() => {
+                      void interactions.planHandlers.onImplementPlanInNewThread();
+                    }}
+                  />
+                )}
               </div>
             </div>
           )}

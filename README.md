@@ -75,6 +75,31 @@ bigbud supports multiple AI coding agents. Configure at least one in **Settings 
 
 Provider status is checked in real-time and displayed in Settings. Each provider can be toggled on or off independently.
 
+## Speech to Text
+
+Voice dictation powered by OpenAI's Realtime Transcription API. Add an API key in **Settings → Speech to Text** to enable it.
+
+### Bring Your Own Key
+
+The feature uses your own OpenAI API key — you must have one configured to use voice input. This keeps costs separate and avoids bigbud needing access to your OpenAI account.
+
+### How It Works
+
+- **Audio capture:** Uses the Web Audio API with an `AudioWorkletNode` to capture microphone input as PCM16 at 24 kHz
+- **Streaming:** Audio streams directly from your browser to OpenAI via WebSocket — it never touches the bigbud server
+- **Turn detection:** Manual control — press and hold to record, release to send. Partial transcription appears in real-time as you speak
+- **Models:** Choose between `gpt-4o-mini-transcribe` ($0.003/min) or `gpt-4o-transcribe` ($0.006/min)
+
+### Usage
+
+1. Go to **Settings → Speech to Text**
+2. Enter your OpenAI API key (starts with `sk-`)
+3. Click **Save & Verify** to validate the key
+4. Select your preferred model
+5. In the composer, hold the microphone button and speak
+
+> **macOS:** The first time you use voice input, macOS will prompt you to grant microphone access. If you previously denied it, go to **System Settings → Privacy & Security → Microphone** and re-enable it for the app.
+
 <p align="center">
   <img src="docs/images/screenshot-settings.png" alt="bigbud Provider Settings" width="100%" />
 </p>
