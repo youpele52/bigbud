@@ -44,7 +44,7 @@ export interface NativeThreadTitleGenerationDeps {
 }
 
 const denyAllPermissions = (): PermissionRequestResult => ({
-  kind: "denied-by-permission-request-hook",
+  kind: "reject",
 });
 
 function extractOpencodeStructuredTitle(value: unknown): string | null {
