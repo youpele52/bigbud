@@ -63,6 +63,10 @@
     "./toolActivity": {
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
+    },
+    "./platform": {
+      "types": "./src/platform.ts",
+      "import": "./src/platform.ts"
     }
   },
   "scripts": {
