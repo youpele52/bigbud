@@ -11,9 +11,11 @@ describe("resolveDesktopRuntimeInfo", () => {
     });
 
     expect(runtimeInfo).toEqual({
+      platform: "darwin",
       hostArch: "arm64",
       appArch: "x64",
       runningUnderArm64Translation: true,
+      isCodeSigned: false,
     });
     expect(isArm64HostRunningIntelBuild(runtimeInfo)).toBe(true);
   });
@@ -26,9 +28,11 @@ describe("resolveDesktopRuntimeInfo", () => {
     });
 
     expect(runtimeInfo).toEqual({
+      platform: "darwin",
       hostArch: "arm64",
       appArch: "arm64",
       runningUnderArm64Translation: false,
+      isCodeSigned: false,
     });
     expect(isArm64HostRunningIntelBuild(runtimeInfo)).toBe(false);
   });
@@ -41,9 +45,11 @@ describe("resolveDesktopRuntimeInfo", () => {
     });
 
     expect(runtimeInfo).toEqual({
+      platform: "linux",
       hostArch: "x64",
       appArch: "x64",
       runningUnderArm64Translation: false,
+      isCodeSigned: false,
     });
   });
 });
