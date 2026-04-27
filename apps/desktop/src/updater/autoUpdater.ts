@@ -197,8 +197,23 @@ export async function installDownloadedUpdate(): Promise<{
     } else {
       autoUpdater.quitAndInstall();
     }
-    // The process should quit from here. Return accepted=true, completed=false because the
-    // actual install completion is verified by the process exiting (or an updater error event).
+    // The process should quit from here. Reset the in-flight flag immediately
+    // so a silent failure (e.g. unsigned macOS build) doesn't block retries.
+    updateInstallInFlight = false;
+    // Safety: if the app hasn't quit after 5s, the platform updater likely
+    // failed silently. Reset state so the user can retry.
+    const installTimeout = setTimeout(() => {
+      if (_updateState?.status === "installing" && _setIsQuitting) {
+        _setIsQuitting(false);
+        setUpdateState(
+          reduceDesktopUpdateStateOnInstallFailure(
+            _updateState,
+            "The update could not be installed automatically. Please download the latest version manually.",
+          ),
+        );
+      }
+    }, 5_000);
+    installTimeout.unref();
     return { accepted: true, completed: false };
   } catch (error: unknown) {
     const message = formatErrorMessage(error);
