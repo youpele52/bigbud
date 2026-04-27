@@ -388,7 +388,7 @@ export const stopSessionRecord = (
       record.stopped = true;
       record.unsubscribe();
       for (const pending of record.pendingApprovals.values()) {
-        pending.resolve({ kind: "denied-interactively-by-user" });
+        pending.resolve({ kind: "reject" });
       }
       for (const pending of record.pendingUserInputs.values()) {
         pending.resolve({ answer: "", wasFreeform: true });
