@@ -223,6 +223,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const requestType = requestTypeFromPermissionRequest(request);
         const requestDetail = requestDetailFromPermissionRequest(request);
         pendingApprovals.set(requestId, {
+          request,
           requestType,
           turnId: currentTurnId,
           resolve,
@@ -262,7 +263,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
             }
 
             pendingApprovals.delete(requestId);
-            pending.resolve({ kind: "approved" });
+            pending.resolve({ kind: "approve-once" });
 
             const event = yield* makeSyntheticEvent(
               input.threadId,
@@ -351,7 +352,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       }
 
       record.pendingApprovals.delete(requestId);
-      pending.resolve(approvalDecisionToPermissionResult(decision));
+      pending.resolve(approvalDecisionToPermissionResult(decision, pending.request));
       const event = yield* makeSyntheticEvent(
         threadId,
         "request.resolved",
