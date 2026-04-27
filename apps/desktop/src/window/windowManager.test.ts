@@ -18,6 +18,10 @@ type MenuTemplateEntry = {
 vi.mock("electron", () => {
   class MockBrowserWindow {
     webContents = {
+      session: {
+        setPermissionRequestHandler: vi.fn(),
+        setPermissionCheckHandler: vi.fn(),
+      },
       on: vi.fn((event: string, handler: (...args: any[]) => void) => {
         if (event === "context-menu") {
           this.contextMenuHandler = handler;
