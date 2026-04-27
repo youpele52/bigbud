@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { APP_VERSION } from "../../config/branding";
 import {
   canCheckForUpdate,
@@ -14,6 +15,7 @@ import {
   setDesktopUpdateStateQueryData,
   useDesktopUpdateState,
 } from "../../lib/desktopUpdateReactQuery";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
 import { Button } from "../ui/button";
@@ -28,6 +30,13 @@ function AboutVersionTitle() {
       <code className="text-[11px] font-medium text-muted-foreground">{APP_VERSION}</code>
     </span>
   );
+}
+
+function getManualInstallCommand(platform: string): string {
+  if (platform === "win32") {
+    return `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"`;
+  }
+  return `curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh`;
 }
 
 function AboutVersionSection() {
@@ -148,6 +157,56 @@ function AboutVersionSection() {
   );
 }
 
+function ManualInstallRow() {
+  const updateStateQuery = useDesktopUpdateState();
+  const updateState = updateStateQuery.data ?? null;
+  const { copyToClipboard, isCopied } = useCopyToClipboard({
+    onCopy: () => {
+      toastManager.add({
+        type: "success",
+        title: "Copied",
+        description: "Install command copied to clipboard.",
+      });
+    },
+  });
+
+  if (!updateState || updateState.isCodeSigned || updateState.platform === "linux") {
+    return null;
+  }
+
+  const command = getManualInstallCommand(updateState.platform);
+
+  return (
+    <SettingsRow
+      title="Manual Install"
+      description="This unsigned build cannot auto-install updates. Run the command below in your terminal to install the latest version."
+      status={
+        <span className="block break-all font-mono text-[11px] text-foreground">{command}</span>
+      }
+      control={
+        <Button
+          size="xs"
+          variant="outline"
+          onClick={() => copyToClipboard(command)}
+          aria-label={isCopied ? "Copied" : "Copy install command"}
+        >
+          {isCopied ? (
+            <>
+              <CheckIcon className="size-3.5" />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <CopyIcon className="size-3.5" />
+              <span>Copy</span>
+            </>
+          )}
+        </Button>
+      }
+    />
+  );
+}
+
 export function AboutSettingsSection() {
   const observability = useServerObservability();
   const availableEditors = useServerAvailableEditors();
@@ -202,6 +261,7 @@ export function AboutSettingsSection() {
           description="Current version of the application."
         />
       )}
+      {isElectron && <ManualInstallRow />}
       <SettingsRow
         title="Diagnostics"
         description={diagnosticsDescription}

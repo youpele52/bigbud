@@ -1,4 +1,4 @@
-import { DownloadIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { isElectron } from "../../config/env";
@@ -13,6 +13,7 @@ import {
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
+  isUnsignedBuildBlocked,
   resolveDesktopUpdateButtonAction,
   shouldShowArm64IntelBuildWarning,
   shouldShowDesktopUpdateButton,
@@ -35,6 +36,7 @@ export function SidebarUpdatePill() {
   const showArm64Warning = isElectron && shouldShowArm64IntelBuildWarning(state);
   const arm64Description =
     state && showArm64Warning ? getArm64IntelBuildWarningDescription(state) : null;
+  const unsignedBlocked = isElectron && state !== null && isUnsignedBuildBlocked(state);
 
   const handleAction = useCallback(() => {
     const bridge = window.desktopBridge;
@@ -131,6 +133,7 @@ export function SidebarUpdatePill() {
                     <>
                       <RotateCwIcon className="size-3.5" />
                       <span>Restart to update</span>
+                      {unsignedBlocked && <InfoIcon className="size-3.5 text-primary/70" />}
                     </>
                   ) : state?.status === "downloading" ? (
                     <>

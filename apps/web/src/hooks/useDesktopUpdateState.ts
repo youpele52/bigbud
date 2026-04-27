@@ -6,6 +6,7 @@ import {
   getDesktopUpdateActionError,
   getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
+  isUnsignedBuildBlocked,
   resolveDesktopUpdateButtonAction,
   shouldToastDesktopUpdateActionResult,
 } from "../components/layout/desktopUpdate.logic";
@@ -77,11 +78,20 @@ export function useDesktopUpdateState(): UseDesktopUpdateStateResult {
         .downloadUpdate()
         .then((result) => {
           if (result.completed) {
-            toastManager.add({
-              type: "success",
-              title: "Update downloaded",
-              description: "Restart the app from the update button to install it.",
-            });
+            if (desktopUpdateState && isUnsignedBuildBlocked(result.state)) {
+              toastManager.add({
+                type: "info",
+                title: "Update downloaded",
+                description:
+                  "This unsigned build cannot auto-install. Go to Settings → About to install manually.",
+              });
+            } else {
+              toastManager.add({
+                type: "success",
+                title: "Update downloaded",
+                description: "Restart the app from the update button to install it.",
+              });
+            }
           }
           if (!shouldToastDesktopUpdateActionResult(result)) return;
           const actionError = getDesktopUpdateActionError(result);

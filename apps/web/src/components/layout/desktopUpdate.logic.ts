@@ -30,6 +30,14 @@ export function resolveDesktopUpdateButtonAction(
   return "none";
 }
 
+/** Unsigned builds cannot auto-install on macOS/Windows — manual install is required. */
+export function isUnsignedBuildBlocked(state: DesktopUpdateState | null): boolean {
+  if (!state) return false;
+  if (state.isCodeSigned) return false;
+  if (state.platform === "linux") return false;
+  return state.status === "downloaded" || state.status === "installing";
+}
+
 export function shouldShowDesktopUpdateButton(state: DesktopUpdateState | null): boolean {
   if (!state) {
     return false;
@@ -80,9 +88,15 @@ export function getDesktopUpdateButtonTooltip(state: DesktopUpdateState): string
     return `Downloading update${progress}`;
   }
   if (state.status === "downloaded") {
+    if (isUnsignedBuildBlocked(state)) {
+      return `Update ${state.downloadedVersion ?? "ready"} downloaded. This unsigned build cannot auto-install. Go to Settings → About for manual install instructions.`;
+    }
     return `Update ${state.downloadedVersion ?? state.availableVersion ?? "ready"} downloaded. Click to restart and install.`;
   }
   if (state.status === "installing") {
+    if (isUnsignedBuildBlocked(state)) {
+      return "This unsigned build cannot auto-install updates. Go to Settings → About for manual install instructions.";
+    }
     return "Installing update and restarting…";
   }
   if (state.status === "error") {
