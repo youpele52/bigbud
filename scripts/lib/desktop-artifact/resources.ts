@@ -225,7 +225,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   }
 
   if (platform === "mac") {
-    buildConfig.mac = {
+    const macConfig: Record<string, unknown> = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
@@ -234,6 +234,19 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       entitlements: "apps/desktop/resources/entitlements.mac.plist",
       entitlementsInherit: "apps/desktop/resources/entitlements.mac.plist",
     };
+    // Only pass entitlements for signed builds. Ad-hoc codesign (used when
+    // signing secrets are missing) fails on non-Mach-O files inside the
+    // bundle (e.g. .wasm in node_modules) when entitlements are specified.
+    if (signed) {
+      macConfig.entitlements = "entitlements.mac.plist";
+      macConfig.entitlementsInherit = "entitlements.mac.plist";
+    } else {
+      // Explicitly disable code signing for unsigned builds. Otherwise
+      // electron-builder falls back to ad-hoc signing, which fails at
+      // preAutoEntitlements because there is no ElectronTeamID.
+      macConfig.identity = null;
+    }
+    buildConfig.mac = macConfig;
   }
 
   if (platform === "linux") {

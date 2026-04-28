@@ -15,9 +15,11 @@ import {
 } from "./updateMachine";
 
 const runtimeInfo = {
+  platform: "darwin",
   hostArch: "x64",
   appArch: "x64",
   runningUnderArm64Translation: false,
+  isCodeSigned: true,
 } as const;
 
 describe("updateMachine", () => {
