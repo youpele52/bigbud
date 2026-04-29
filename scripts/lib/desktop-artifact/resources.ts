@@ -229,6 +229,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      // Entitlements grant microphone access (audio-input) and the standard
+      // Electron-required sandbox capabilities for signed/notarized builds.
+      entitlements: "apps/desktop/resources/entitlements.mac.plist",
+      entitlementsInherit: "apps/desktop/resources/entitlements.mac.plist",
     };
     // Only pass entitlements for signed builds. Ad-hoc codesign (used when
     // signing secrets are missing) fails on non-Mach-O files inside the

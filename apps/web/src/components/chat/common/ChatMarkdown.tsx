@@ -137,21 +137,31 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleCopy = useCallback(() => {
+    const onSuccess = (): void => {
+      if (copiedTimerRef.current != null) {
+        clearTimeout(copiedTimerRef.current);
+      }
+      setCopied(true);
+      copiedTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copiedTimerRef.current = null;
+      }, 1200);
+    };
+
+    if (typeof window !== "undefined" && window.desktopBridge?.copyToClipboard) {
+      void window.desktopBridge
+        .copyToClipboard(code)
+        .then(onSuccess)
+        .catch(() => undefined);
+      return;
+    }
+
     if (typeof navigator === "undefined" || navigator.clipboard == null) {
       return;
     }
     void navigator.clipboard
       .writeText(code)
-      .then(() => {
-        if (copiedTimerRef.current != null) {
-          clearTimeout(copiedTimerRef.current);
-        }
-        setCopied(true);
-        copiedTimerRef.current = setTimeout(() => {
-          setCopied(false);
-          copiedTimerRef.current = null;
-        }, 1200);
-      })
+      .then(onSuccess)
       .catch(() => undefined);
   }, [code]);
 

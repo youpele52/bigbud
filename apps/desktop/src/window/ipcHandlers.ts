@@ -1,4 +1,13 @@
-import { BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, shell } from "electron";
+import {
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  Notification,
+  shell,
+} from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type {
   ContextMenuItem,
@@ -80,6 +89,7 @@ export interface IpcHandlerDeps {
   readonly GET_WS_URL_CHANNEL: string;
   readonly NOTIFICATIONS_IS_SUPPORTED_CHANNEL: string;
   readonly NOTIFICATIONS_SHOW_CHANNEL: string;
+  readonly COPY_TO_CLIPBOARD_CHANNEL: string;
   readonly UPDATE_GET_STATE_CHANNEL: string;
   readonly UPDATE_DOWNLOAD_CHANNEL: string;
   readonly UPDATE_INSTALL_CHANNEL: string;
@@ -111,6 +121,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     GET_WS_URL_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
+    COPY_TO_CLIPBOARD_CHANNEL,
     UPDATE_GET_STATE_CHANNEL,
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,
@@ -297,5 +308,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
       deps.resolveIconPath,
       deps.getMainWindow,
     );
+  });
+
+  ipcMain.removeHandler(COPY_TO_CLIPBOARD_CHANNEL);
+  ipcMain.handle(COPY_TO_CLIPBOARD_CHANNEL, async (_event, text: unknown) => {
+    if (typeof text !== "string") return;
+    clipboard.writeText(text);
   });
 }

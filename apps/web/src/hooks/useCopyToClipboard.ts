@@ -20,37 +20,52 @@ export function useCopyToClipboard<TContext = void>({
   timeoutRef.current = timeout;
 
   const copyToClipboard = React.useCallback((value: string, ctx: TContext): void => {
+    if (!value) return;
+
+    const onSuccess = (): void => {
+      if (timeoutIdRef.current) {
+        clearTimeout(timeoutIdRef.current);
+      }
+      setIsCopied(true);
+
+      onCopyRef.current?.(ctx);
+
+      if (timeoutRef.current !== 0) {
+        timeoutIdRef.current = setTimeout(() => {
+          setIsCopied(false);
+          timeoutIdRef.current = null;
+        }, timeoutRef.current);
+      }
+    };
+
+    const onFailure = (error: Error): void => {
+      if (onErrorRef.current) {
+        onErrorRef.current(error, ctx);
+      } else {
+        console.error(error);
+      }
+    };
+
+    if (typeof window !== "undefined" && window.desktopBridge?.copyToClipboard) {
+      window.desktopBridge
+        .copyToClipboard(value)
+        .then(onSuccess)
+        .catch((error: unknown) =>
+          onFailure(error instanceof Error ? error : new Error(String(error))),
+        );
+      return;
+    }
+
     if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
       onErrorRef.current?.(new Error("Clipboard API unavailable."), ctx);
       return;
     }
 
-    if (!value) return;
-
-    navigator.clipboard.writeText(value).then(
-      () => {
-        if (timeoutIdRef.current) {
-          clearTimeout(timeoutIdRef.current);
-        }
-        setIsCopied(true);
-
-        onCopyRef.current?.(ctx);
-
-        if (timeoutRef.current !== 0) {
-          timeoutIdRef.current = setTimeout(() => {
-            setIsCopied(false);
-            timeoutIdRef.current = null;
-          }, timeoutRef.current);
-        }
-      },
-      (error) => {
-        if (onErrorRef.current) {
-          onErrorRef.current(error, ctx);
-        } else {
-          console.error(error);
-        }
-      },
-    );
+    navigator.clipboard
+      .writeText(value)
+      .then(onSuccess, (error: unknown) =>
+        onFailure(error instanceof Error ? error : new Error(String(error))),
+      );
   }, []);
 
   // Cleanup timeout on unmount

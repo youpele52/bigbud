@@ -44,6 +44,7 @@ export interface PendingApprovalRequest {
     | "command_execution_approval"
     | "file_change_approval"
     | "file_read_approval"
+    | "browser_approval"
     | "dynamic_tool_call"
     | "unknown";
   readonly turnId: TurnId | undefined;
@@ -246,7 +247,18 @@ export function requestTypeFromPermissionRequest(request: PermissionRequest) {
       return "file_change_approval" as const;
     case "read":
       return "file_read_approval" as const;
-    case "mcp":
+    case "mcp": {
+      const props = request as unknown as Record<string, unknown>;
+      const toolName = String(props.toolName ?? "").toLowerCase();
+      if (
+        toolName.includes("browser") ||
+        toolName.includes("navigate") ||
+        toolName.includes("screenshot")
+      ) {
+        return "browser_approval" as const;
+      }
+      return "dynamic_tool_call" as const;
+    }
     case "custom-tool":
     case "url":
     case "memory":

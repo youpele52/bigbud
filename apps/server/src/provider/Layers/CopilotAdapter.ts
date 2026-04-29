@@ -216,6 +216,15 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       : {}),
     ...(input.cwd ? { workingDirectory: input.cwd } : {}),
     streaming: true,
+    systemMessage: {
+      mode: "append",
+      content:
+        "You have access to a Chromium browser in this environment. " +
+        "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
+        "Prefer codebase inspection first when the task is local-only. " +
+        "Summarize what was verified, including URL and important observations. " +
+        "Avoid unnecessary browser use when terminal or file tools are sufficient.",
+    },
     onPermissionRequest: (request) => {
       return new Promise<PermissionRequestResult>((resolve) => {
         const requestId = randomUUID();

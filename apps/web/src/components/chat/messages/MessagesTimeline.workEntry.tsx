@@ -91,6 +91,11 @@ export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
   if (workEntry.itemType === "web_search") return GlobeIcon;
   if (workEntry.itemType === "image_view") return EyeIcon;
 
+  const isBrowserTool =
+    workEntry.toolTitle && /browser|navigate|screenshot|web_search/i.test(workEntry.toolTitle);
+
+  if (isBrowserTool) return GlobeIcon;
+
   switch (workEntry.itemType) {
     case "mcp_tool_call":
       return WrenchIcon;

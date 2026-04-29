@@ -323,6 +323,14 @@ export function isDiffToggleShortcut(
   return matchesCommandShortcut(event, keybindings, "diff.toggle", options);
 }
 
+export function isBrowserToggleShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  return matchesCommandShortcut(event, keybindings, "browser.toggle", options);
+}
+
 export function isChatNewShortcut(
   event: ShortcutEventLike,
   keybindings: ResolvedKeybindingsConfig,
