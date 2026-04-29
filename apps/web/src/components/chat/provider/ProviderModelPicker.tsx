@@ -138,7 +138,10 @@ function ModelList({
     if (!query.trim()) return options;
     const q = query.trim().toLowerCase();
     return options.filter(
-      (o) => o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q),
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        o.slug.toLowerCase().includes(q) ||
+        o.group?.toLowerCase().includes(q),
     );
   }, [options, query]);
 

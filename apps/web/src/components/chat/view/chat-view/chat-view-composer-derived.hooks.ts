@@ -191,7 +191,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
       AVAILABLE_PROVIDER_OPTIONS.filter(
         (option) => lockedProvider === null || option.value === lockedProvider,
       ).flatMap((option) =>
-        modelOptionsByProvider[option.value].map(({ slug, name, subProviderID }) => ({
+        modelOptionsByProvider[option.value].map(({ slug, name, subProviderID, group }) => ({
           provider: option.value,
           providerLabel: option.label,
           slug,
@@ -200,6 +200,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
           searchSlug: slug.toLowerCase(),
           searchName: name.toLowerCase(),
           searchProvider: option.label.toLowerCase(),
+          searchGroup: group?.toLowerCase() ?? "",
         })),
       ),
     [lockedProvider, modelOptionsByProvider],
@@ -384,10 +385,13 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     const query = base.composerTrigger?.query.trim().toLowerCase() ?? "";
 
     return searchableModelOptions
-      .filter(({ searchSlug, searchName, searchProvider }) => {
+      .filter(({ searchSlug, searchName, searchProvider, searchGroup }) => {
         if (!query) return true;
         return (
-          searchSlug.includes(query) || searchName.includes(query) || searchProvider.includes(query)
+          searchSlug.includes(query) ||
+          searchName.includes(query) ||
+          searchProvider.includes(query) ||
+          searchGroup.includes(query)
         );
       })
       .map(({ provider, providerLabel, slug, name, subProviderID }) => {
