@@ -468,6 +468,10 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     () => shortcutLabelForCommand(keybindings, "diff.toggle", nonTerminalShortcutLabelOptions),
     [keybindings, nonTerminalShortcutLabelOptions],
   );
+  const browserPanelShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "browser.toggle", nonTerminalShortcutLabelOptions),
+    [keybindings, nonTerminalShortcutLabelOptions],
+  );
   const sidebarToggleShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "sidebar.toggle"),
     [keybindings],
@@ -518,6 +522,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     newTerminalShortcutLabel,
     closeTerminalShortcutLabel,
     diffPanelShortcutLabel,
+    browserPanelShortcutLabel,
     sidebarToggleShortcutLabel,
     searchToggleShortcutLabel,
   };
