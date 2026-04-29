@@ -33,6 +33,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
           };
         }
     >;
+    system?: string;
   }> = [];
   const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
 
@@ -130,6 +131,8 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
           url: pathToFileURL(attachmentPath).href,
         },
       ],
+      system:
+        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
     });
     assert.equal(events.length, 1);
   });
@@ -154,6 +157,7 @@ it.effect("embeds text files inline and sends binary files as file parts to Open
           url: string;
         }
     >;
+    system?: string;
   }> = [];
   const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
 
@@ -246,6 +250,8 @@ it.effect("embeds text files inline and sends binary files as file parts to Open
           url: pathToFileURL(pdfPath).href,
         },
       ],
+      system:
+        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
     });
   });
 });

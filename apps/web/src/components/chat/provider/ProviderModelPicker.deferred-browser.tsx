@@ -162,8 +162,35 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
         slug: "claude-sonnet-4-6",
         name: "Claude Sonnet 4.6",
         isCustom: false,
+        group: "Anthropic",
         capabilities: {
           reasoningEffortLevels: [effort("low"), effort("medium", true), effort("high")],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+      {
+        slug: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        isCustom: false,
+        group: "Google",
+        capabilities: {
+          reasoningEffortLevels: [effort("low"), effort("medium", true), effort("high")],
+          supportsFastMode: false,
+          supportsThinkingToggle: false,
+          contextWindowOptions: [],
+          promptInjectedEffortLevels: [],
+        },
+      },
+      {
+        slug: "gpt-4o",
+        name: "GPT-4o",
+        isCustom: false,
+        group: "OpenAI",
+        capabilities: {
+          reasoningEffortLevels: [],
           supportsFastMode: false,
           supportsThinkingToggle: false,
           contextWindowOptions: [],
@@ -478,6 +505,50 @@ describe("ProviderModelPicker", () => {
       }
       expect(button.className).toContain("border-input");
       expect(button.className).toContain("bg-popover");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("filters models by sub-provider group name", async () => {
+    const mounted = await mountPicker({
+      provider: "opencode",
+      model: "claude-sonnet-4-6",
+      lockedProvider: "opencode",
+    });
+
+    try {
+      await page.getByRole("button").click();
+      const input = page.getByPlaceholder("Search models");
+      await input.fill("Anthropic");
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(text).toContain("Claude Sonnet 4.6");
+        expect(text).not.toContain("Gemini 2.5 Pro");
+        expect(text).not.toContain("GPT-4o");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows no results when group search does not match", async () => {
+    const mounted = await mountPicker({
+      provider: "opencode",
+      model: "claude-sonnet-4-6",
+      lockedProvider: "opencode",
+    });
+
+    try {
+      await page.getByRole("button").click();
+      const input = page.getByPlaceholder("Search models");
+      await input.fill("Nonexistent");
+
+      await vi.waitFor(() => {
+        const text = document.body.textContent ?? "";
+        expect(text).toContain("No models match");
+      });
     } finally {
       await mounted.cleanup();
     }

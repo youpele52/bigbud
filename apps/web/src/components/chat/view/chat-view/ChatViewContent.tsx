@@ -18,6 +18,7 @@ import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
+import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -46,6 +47,8 @@ export function ChatViewContent({
 }: ChatViewContentProps) {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const lastApprovalRequestIdRef = useRef<string | null>(null);
+  const browserOpen = useBrowserPanelStore((state) => state.open);
+  const toggleBrowser = useBrowserPanelStore((state) => state.toggle);
 
   useEffect(() => {
     const requestId = thread.activePendingApproval?.requestId ?? null;
@@ -115,8 +118,10 @@ export function ChatViewContent({
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           searchToggleShortcutLabel={composer.searchToggleShortcutLabel}
+          browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
           gitCwd={composer.gitCwd}
           diffOpen={base.diffOpen}
+          browserOpen={browserOpen}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
@@ -125,6 +130,7 @@ export function ChatViewContent({
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
           onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
           onToggleDiff={runtime.onToggleDiff}
+          onToggleBrowser={toggleBrowser}
           onToggleSearch={runtime.onToggleSearch}
         />
       </header>
