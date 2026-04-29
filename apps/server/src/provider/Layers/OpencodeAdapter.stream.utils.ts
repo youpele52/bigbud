@@ -56,6 +56,7 @@ export function requestTypeFromPermission(permission: {
   | "command_execution_approval"
   | "file_change_approval"
   | "file_read_approval"
+  | "browser_approval"
   | "dynamic_tool_call"
   | "unknown" {
   const tool = permission.permission;
@@ -67,6 +68,9 @@ export function requestTypeFromPermission(permission: {
   }
   if (tool.includes("read") || tool.includes("glob") || tool.includes("grep")) {
     return "file_read_approval";
+  }
+  if (tool.includes("browser") || tool.includes("mcp_browser") || tool.includes("web_search")) {
+    return "browser_approval";
   }
   return "dynamic_tool_call";
 }

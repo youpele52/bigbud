@@ -33,6 +33,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "terminal.new",
   "terminal.close",
   "diff.toggle",
+  "browser.toggle",
   "commandPalette.toggle",
   "sidebar.toggle",
   "search.toggle",

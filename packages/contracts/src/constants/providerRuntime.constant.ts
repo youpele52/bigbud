@@ -151,6 +151,7 @@ export const CANONICAL_REQUEST_TYPES = [
   "file_change_approval",
   "apply_patch_approval",
   "exec_command_approval",
+  "browser_approval",
   "tool_user_input",
   "dynamic_tool_call",
   "auth_tokens_refresh",

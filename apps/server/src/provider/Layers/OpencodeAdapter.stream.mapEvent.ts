@@ -517,6 +517,33 @@ export function makeMapEvent(
           return [];
         }
 
+        case "mcp.browser.open.failed": {
+          const browserProps = event.properties as {
+            mcpName: string;
+            url: string;
+          };
+          const errorMessage = `Browser open failed for ${browserProps.mcpName}: ${browserProps.url}`;
+          session.lastError = errorMessage;
+
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt,
+                threadId: session.threadId,
+                ...(turnId ? { turnId } : {}),
+                raw,
+              }),
+              type: "runtime.error",
+              payload: {
+                message: errorMessage,
+                class: "browser_error",
+                detail: { mcpName: browserProps.mcpName, url: browserProps.url },
+              },
+            },
+          ];
+        }
+
         case "session.error": {
           const errProps = event.properties as {
             sessionID?: string;

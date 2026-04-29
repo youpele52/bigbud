@@ -17,6 +17,7 @@
   "rules": {
     "react-in-jsx-scope": "off",
     "eslint/no-shadow": "off",
-    "eslint/no-await-in-loop": "off"
+    "eslint/no-await-in-loop": "off",
+    "react/iframe-missing-sandbox": "off"
   }
 }

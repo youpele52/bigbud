@@ -140,6 +140,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       isSupported: async () => false,
       show: async () => false,
     },
+    copyToClipboard: async () => undefined,
     ...overrides,
   };
 }

@@ -140,6 +140,7 @@ export interface DesktopBridge {
     isSupported: () => Promise<boolean>;
     show: (input: DesktopNotificationInput) => Promise<boolean>;
   };
+  copyToClipboard: (text: string) => Promise<void>;
 }
 
 export interface NativeApi {
