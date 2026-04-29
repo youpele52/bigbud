@@ -84,7 +84,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
         value={inputUrl}
         onChange={(e) => setInputUrl(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32"
+        className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-3 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32"
         placeholder="Enter a URL"
       />
       <Button
