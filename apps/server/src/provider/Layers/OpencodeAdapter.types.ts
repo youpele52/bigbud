@@ -21,6 +21,7 @@ export interface PendingPermissionRequest {
     | "command_execution_approval"
     | "file_change_approval"
     | "file_read_approval"
+    | "browser_approval"
     | "dynamic_tool_call"
     | "unknown";
   readonly turnId: TurnId | undefined;

@@ -15,6 +15,7 @@ const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
+const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getWsUrl: () => {
@@ -57,4 +58,5 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     isSupported: () => ipcRenderer.invoke(NOTIFICATIONS_IS_SUPPORTED_CHANNEL) as Promise<boolean>,
     show: (input) => ipcRenderer.invoke(NOTIFICATIONS_SHOW_CHANNEL, input) as Promise<boolean>,
   },
+  copyToClipboard: (text: string) => ipcRenderer.invoke(COPY_TO_CLIPBOARD_CHANNEL, text),
 } satisfies DesktopBridge);

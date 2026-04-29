@@ -55,6 +55,7 @@ import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem"
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
+import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -222,6 +223,8 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProjectFaviconResolverLive),
   // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process
   Layer.provideMerge(OpencodeServerManagerLive),
+  // Browser automation for agent-driven web tasks
+  Layer.provideMerge(BrowserManagerLive),
 
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),

@@ -9,6 +9,7 @@ type SearchbarProps = {
   readonly children: React.ReactNode;
   readonly onBack?: () => void;
   readonly onClear?: () => void;
+  readonly onClick?: () => void;
   readonly canClear?: boolean;
   readonly className?: string;
   readonly contentClassName?: string;
@@ -25,6 +26,7 @@ export function Searchbar({
   children,
   onBack,
   onClear,
+  onClick,
   canClear = false,
   className,
   contentClassName,
@@ -45,6 +47,7 @@ export function Searchbar({
         className,
       )}
       data-slot="searchbar"
+      onClick={onClick}
     >
       {onBack ? (
         <button
