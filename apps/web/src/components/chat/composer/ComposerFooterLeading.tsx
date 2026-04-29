@@ -110,6 +110,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           lockedProvider={lockedProvider}
           providers={providerStatuses}
           modelOptionsByProvider={modelOptionsByProvider}
+          enableRecentlyUsed
           {...(composerProviderState.modelPickerIconClassName
             ? { activeProviderIconClassName: composerProviderState.modelPickerIconClassName }
             : {})}

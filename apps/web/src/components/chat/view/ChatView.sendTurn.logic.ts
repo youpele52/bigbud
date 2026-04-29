@@ -42,6 +42,7 @@ import type {
   ProposedPlan,
 } from "../../../models/types";
 import { isElectron } from "~/config/env/env.config";
+import { recordModelUsage } from "../../../models/recentlyUsedModels";
 
 const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -425,6 +426,11 @@ export function useOnSend(input: UseOnSendInput) {
         inputRef.current.clearBootstrapSourceThreadId(threadIdForSend);
       }
       turnStartSucceeded = true;
+      recordModelUsage(
+        modelSel.provider,
+        modelSel.model,
+        "subProviderID" in modelSel ? modelSel.subProviderID : undefined,
+      );
     })().catch(async (err: unknown) => {
       const { revokeUserMessagePreviewUrls } = await import("./ChatView.logic");
       if (
