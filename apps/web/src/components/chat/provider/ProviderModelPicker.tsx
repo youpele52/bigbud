@@ -92,6 +92,24 @@ function modelOptionValue(option: ModelOption): string {
   return option.subProviderID ? `${option.slug}::${option.subProviderID}` : option.slug;
 }
 
+function providerSupportsSubProviderID(provider: ProviderKind): boolean {
+  return provider === "opencode" || provider === "pi";
+}
+
+export function visibleModelOptionsForPicker(
+  provider: ProviderKind,
+  options: ReadonlyArray<ModelOption>,
+  recentOptions: ReadonlyArray<ModelOption> | undefined,
+  query: string,
+): ReadonlyArray<ModelOption> {
+  if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
+    return options;
+  }
+
+  const recentValues = new Set(recentOptions.map(modelOptionValue));
+  return options.filter((option) => !recentValues.has(modelOptionValue(option)));
+}
+
 type GroupedSection =
   | { kind: "named"; group: string; models: ModelOption[] }
   | { kind: "ungrouped"; models: ModelOption[] };
@@ -133,20 +151,29 @@ function ModelList({
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasSearchQuery = query.trim().length > 0;
+
+  const visibleOptions = useMemo(
+    () => visibleModelOptionsForPicker(provider, options, recentOptions, query),
+    [options, provider, query, recentOptions],
+  );
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return options;
+    if (!hasSearchQuery) return visibleOptions;
     const q = query.trim().toLowerCase();
-    return options.filter(
+    return visibleOptions.filter(
       (o) =>
         o.name.toLowerCase().includes(q) ||
         o.slug.toLowerCase().includes(q) ||
         o.group?.toLowerCase().includes(q),
     );
-  }, [options, query]);
+  }, [hasSearchQuery, query, visibleOptions]);
 
+  const showRecentOptions = Boolean(recentOptions && recentOptions.length > 0 && !hasSearchQuery);
   const grouped = useMemo(() => groupModelOptions(filtered), [filtered]);
+  const hasVisibleModels = grouped.length > 0;
   const hasNamedGroups = grouped.some((g) => g.kind === "named");
+  const showEmptyState = !hasVisibleModels && !showRecentOptions;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -183,7 +210,7 @@ function ModelList({
 
       {/* Model list — grouped or flat */}
       <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
-        {recentOptions && recentOptions.length > 0 && !query.trim() && (
+        {showRecentOptions && recentOptions && (
           <MenuGroup>
             <MenuGroupLabel>Recently used</MenuGroupLabel>
             {recentOptions.map((modelOption) => (
@@ -196,7 +223,7 @@ function ModelList({
             ))}
           </MenuGroup>
         )}
-        {grouped.length === 0 ? (
+        {showEmptyState ? (
           <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
             No models match &ldquo;{query}&rdquo;
           </div>
@@ -215,16 +242,18 @@ function ModelList({
             </MenuGroup>
           ))
         ) : (
-          <MenuGroup>
-            {filtered.map((modelOption) => (
-              <MenuRadioItem
-                key={`${provider}:${modelOptionValue(modelOption)}`}
-                value={modelOptionValue(modelOption)}
-              >
-                {modelOption.name}
-              </MenuRadioItem>
-            ))}
-          </MenuGroup>
+          hasVisibleModels && (
+            <MenuGroup>
+              {filtered.map((modelOption) => (
+                <MenuRadioItem
+                  key={`${provider}:${modelOptionValue(modelOption)}`}
+                  value={modelOptionValue(modelOption)}
+                >
+                  {modelOption.name}
+                </MenuRadioItem>
+              ))}
+            </MenuGroup>
+          )
         )}
       </MenuRadioGroup>
     </div>
@@ -262,16 +291,24 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         .filter((u) => u.provider === opt.value)
         .toSorted((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
         .slice(0, MAX_RECENT_MODELS_PER_PROVIDER);
+      const supportsSubProvider = providerSupportsSubProviderID(opt.value);
       const matched = recent
         .map((u) =>
-          providerOptions.find(
-            (o) =>
-              o.slug === u.model &&
-              (o.subProviderID ?? undefined) === (u.subProviderID ?? undefined),
-          ),
+          providerOptions.find((o) => {
+            if (o.slug !== u.model) return false;
+            // For providers without sub-providers, match by slug only.
+            // This prevents duplicates when the server sends models with
+            // a subProviderID that the user-facing selection ignores.
+            if (!supportsSubProvider) return true;
+            return (o.subProviderID ?? undefined) === (u.subProviderID ?? undefined);
+          }),
         )
         .filter((o): o is ModelOption => o !== undefined);
-      if (matched.length > 0) result[opt.value] = matched;
+      const uniqueMatched = matched.filter(
+        (o, i, arr) =>
+          arr.findIndex((other) => modelOptionValue(other) === modelOptionValue(o)) === i,
+      );
+      if (uniqueMatched.length > 0) result[opt.value] = uniqueMatched;
     }
     return result;
   }, [allRecentUsages, props.enableRecentlyUsed, props.modelOptionsByProvider]);

@@ -350,7 +350,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
     <>
       {!isRepo ? (
         <Button
-          variant="outline"
+          variant="toolbar"
           size="xs"
           disabled={initMutation.isPending}
           onClick={() => initMutation.mutate()}
@@ -368,7 +368,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
                     aria-disabled="true"
                     className="cursor-not-allowed rounded-e-none border-e-0 opacity-64 before:rounded-e-none"
                     size="xs"
-                    variant="outline"
+                    variant="toolbar"
                   />
                 }
               >
@@ -383,7 +383,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             </Popover>
           ) : (
             <Button
-              variant="outline"
+              variant="toolbar"
               size="xs"
               disabled={isGitActionRunning || quickAction.disabled}
               onClick={runQuickAction}
@@ -401,7 +401,7 @@ export default function GitActionsControl({ gitCwd, activeThreadId }: GitActions
             }}
           >
             <MenuTrigger
-              render={<Button aria-label="Git action options" size="icon-xs" variant="outline" />}
+              render={<Button aria-label="Git action options" size="icon-xs" variant="toolbar" />}
               disabled={isGitActionRunning}
             >
               <ChevronDownIcon aria-hidden="true" className="size-4" />

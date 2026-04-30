@@ -168,7 +168,7 @@ export const ChatHeader = memo(function ChatHeader({
                 pressed={false}
                 onPressedChange={onToggleSearch}
                 aria-label="Search"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
               >
                 <SearchIcon className="size-3" />
@@ -193,7 +193,7 @@ export const ChatHeader = memo(function ChatHeader({
                   rawToggleSidebar();
                 }}
                 aria-label="Toggle sidebar"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
               >
                 {sidebarOpen ? (
@@ -222,7 +222,7 @@ export const ChatHeader = memo(function ChatHeader({
                   onToggleBrowser();
                 }}
                 aria-label="Toggle browser panel"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
               >
                 <GlobeIcon className="size-3" />
@@ -243,7 +243,7 @@ export const ChatHeader = memo(function ChatHeader({
                 pressed={terminalOpen}
                 onPressedChange={onToggleTerminal}
                 aria-label="Toggle terminal drawer"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
                 disabled={!terminalAvailable}
               >
@@ -267,7 +267,7 @@ export const ChatHeader = memo(function ChatHeader({
                 pressed={diffOpen}
                 onPressedChange={onToggleDiff}
                 aria-label="Toggle diff panel"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
                 disabled={!isGitRepo}
               >
