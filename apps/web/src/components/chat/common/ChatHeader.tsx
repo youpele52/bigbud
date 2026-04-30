@@ -122,15 +122,15 @@ export const ChatHeader = memo(function ChatHeader({
                 >
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground"
                   />
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary [animation-delay:200ms]"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:200ms]"
                   />
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary [animation-delay:400ms]"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:400ms]"
                   />
                 </span>
               )}

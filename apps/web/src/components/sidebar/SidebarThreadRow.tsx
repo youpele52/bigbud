@@ -317,7 +317,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 title="Agent is working"
                 className="inline-flex shrink-0 items-center justify-center"
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info-foreground" />
               </span>
             )}
             {props.renamingThreadId === thread.id ? (
