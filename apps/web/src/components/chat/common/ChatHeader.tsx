@@ -12,7 +12,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftIcon,
   SearchIcon,
-  TerminalSquareIcon,
+  TerminalIcon,
 } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
@@ -247,7 +247,7 @@ export const ChatHeader = memo(function ChatHeader({
                 size="xs"
                 disabled={!terminalAvailable}
               >
-                <TerminalSquareIcon className="size-3" />
+                <TerminalIcon className="size-3" />
               </Toggle>
             }
           />
