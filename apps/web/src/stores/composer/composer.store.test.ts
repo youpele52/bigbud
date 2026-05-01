@@ -13,6 +13,7 @@ import {
   useComposerDraftStore,
 } from "./composer.store";
 import { COMPOSER_DRAFT_STORAGE_KEY, type ComposerImageAttachment } from "./types.store";
+import { normalizeCurrentPersistedComposerDraftStoreState } from "./migration.store";
 import { removeLocalStorageItem, setLocalStorageItem } from "../../hooks/useLocalStorage";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
@@ -712,6 +713,66 @@ describe("composerDraftStore modelSelection", () => {
         fastMode: true,
       }),
     );
+  });
+
+  it("normalizes upstream-style option arrays in current persisted selections", () => {
+    const state = normalizeCurrentPersistedComposerDraftStoreState({
+      draftsByThreadId: {
+        [threadId]: {
+          prompt: "",
+          attachments: [],
+          modelSelectionByProvider: {
+            codex: {
+              provider: "codex",
+              model: "gpt-5.4",
+              options: [
+                { id: "reasoningEffort", value: "high" },
+                { id: "fastMode", value: true },
+              ],
+            },
+            cursor: {
+              provider: "cursor",
+              model: "auto",
+              options: [
+                { id: "reasoning", value: "medium" },
+                { id: "contextWindow", value: "large" },
+                { id: "thinking", value: true },
+              ],
+            },
+          },
+          activeProvider: "cursor",
+        },
+      },
+      draftThreadsByThreadId: {},
+      projectDraftThreadIdByProjectId: {},
+      stickyModelSelectionByProvider: {
+        claudeAgent: {
+          provider: "claudeAgent",
+          model: "claude-opus-4-6",
+          options: [
+            { id: "effort", value: "max" },
+            { id: "thinking", value: false },
+          ],
+        },
+      },
+      stickyActiveProvider: "claudeAgent",
+    });
+
+    const draft = state.draftsByThreadId[threadId];
+    expect(draft).toBeDefined();
+    expect(draft?.modelSelectionByProvider?.codex).toEqual(
+      modelSelection("codex", "gpt-5.4", { reasoningEffort: "high", fastMode: true }),
+    );
+    expect(draft?.modelSelectionByProvider?.cursor).toEqual({
+      provider: "cursor",
+      model: "auto",
+      options: { reasoning: "medium", contextWindow: "large", thinking: true },
+    });
+    expect(draft?.activeProvider).toBe("cursor");
+    expect(state.stickyModelSelectionByProvider?.claudeAgent).toEqual(
+      modelSelection("claudeAgent", "claude-opus-4-6", { effort: "max", thinking: false }),
+    );
+    expect(state.stickyActiveProvider).toBe("claudeAgent");
   });
 
   it("keeps default-only model selections on the draft", () => {

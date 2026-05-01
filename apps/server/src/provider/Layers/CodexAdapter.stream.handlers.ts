@@ -23,6 +23,7 @@ import {
   handleThreadRealtimeError,
   handleThreadRealtimeItemAdded,
   handleThreadRealtimeStarted,
+  handleThreadRealtimeTranscript,
   handleThreadStarted,
   handleThreadStateChanged,
   handleThreadTokenUsageUpdated,
@@ -131,7 +132,8 @@ export function mapToRuntimeEvents(
   if (event.method === "item/completed") return handleItemCompleted(event, canonicalThreadId);
   if (
     event.method === "item/reasoning/summaryPartAdded" ||
-    event.method === "item/commandExecution/terminalInteraction"
+    event.method === "item/commandExecution/terminalInteraction" ||
+    event.method === "item/fileChange/patchUpdated"
   ) {
     const updated = mapItemLifecycle(event, canonicalThreadId, "item.updated");
     return updated ? [updated] : [];
@@ -187,6 +189,13 @@ export function mapToRuntimeEvents(
   }
   if (event.method === "thread/realtime/itemAdded") {
     return handleThreadRealtimeItemAdded(event, canonicalThreadId);
+  }
+  if (
+    event.method === "thread/realtime/transcript/delta" ||
+    event.method === "thread/realtime/transcript/done" ||
+    event.method === "thread/realtime/transcriptUpdated"
+  ) {
+    return handleThreadRealtimeTranscript(event, canonicalThreadId);
   }
   if (event.method === "thread/realtime/outputAudio/delta") {
     return handleThreadRealtimeAudioDelta(event, canonicalThreadId);

@@ -982,6 +982,44 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       });
     }),
   );
+
+  it.effect("maps refreshed Codex protocol notification names", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      const eventsFiber = yield* Stream.take(adapter.streamEvents, 2).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-codex-patch-updated"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        turnId: asTurnId("turn-1"),
+        itemId: asItemId("item-1"),
+        createdAt: new Date().toISOString(),
+        method: "item/fileChange/patchUpdated",
+        payload: { item: { type: "fileChange", id: "item-1", path: "README.md" } },
+      } satisfies ProviderEvent);
+      lifecycleManager.emit("event", {
+        id: asEventId("evt-codex-realtime-transcript"),
+        kind: "notification",
+        provider: "codex",
+        threadId: asThreadId("thread-1"),
+        createdAt: new Date().toISOString(),
+        method: "thread/realtime/transcript/delta",
+        payload: { delta: "hello" },
+      } satisfies ProviderEvent);
+
+      const events = Array.from(yield* Fiber.join(eventsFiber));
+      assert.equal(events[0]?.type, "item.updated");
+      assert.equal(events[1]?.type, "thread.realtime.item-added");
+      if (events[1]?.type === "thread.realtime.item-added") {
+        assert.deepEqual(events[1].payload.item, { delta: "hello" });
+      }
+    }),
+  );
 });
 
 afterAll(() => {

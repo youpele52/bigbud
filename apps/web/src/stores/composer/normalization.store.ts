@@ -129,20 +129,30 @@ export function normalizeProviderKind(value: unknown): ProviderKind | null {
     : null;
 }
 
+function normalizeProviderOptionsCandidate(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) {
+    const options: Record<string, unknown> = {};
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object") continue;
+      const { id, value: optionValue } = entry as Record<string, unknown>;
+      if (typeof id !== "string" || id.length === 0) continue;
+      if (typeof optionValue === "string" || typeof optionValue === "boolean") {
+        options[id] = optionValue;
+      }
+    }
+    return Object.keys(options).length > 0 ? options : null;
+  }
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
 export function normalizeProviderModelOptions(
   value: unknown,
   provider?: ProviderKind | null,
   legacy?: LegacyCodexFields,
 ): ProviderModelOptions | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
-  const codexCandidate =
-    candidate?.codex && typeof candidate.codex === "object"
-      ? (candidate.codex as Record<string, unknown>)
-      : null;
-  const claudeCandidate =
-    candidate?.claudeAgent && typeof candidate.claudeAgent === "object"
-      ? (candidate.claudeAgent as Record<string, unknown>)
-      : null;
+  const codexCandidate = normalizeProviderOptionsCandidate(candidate?.codex);
+  const claudeCandidate = normalizeProviderOptionsCandidate(candidate?.claudeAgent);
 
   const codexReasoningEffort: CodexReasoningEffort | undefined =
     codexCandidate?.reasoningEffort === "low" ||
@@ -211,10 +221,7 @@ export function normalizeProviderModelOptions(
         }
       : undefined;
 
-  const copilotCandidate =
-    candidate?.copilot && typeof candidate.copilot === "object"
-      ? (candidate.copilot as Record<string, unknown>)
-      : null;
+  const copilotCandidate = normalizeProviderOptionsCandidate(candidate?.copilot);
   const copilotReasoningEffort: CodexReasoningEffort | undefined =
     copilotCandidate?.reasoningEffort === "low" ||
     copilotCandidate?.reasoningEffort === "medium" ||
@@ -225,10 +232,7 @@ export function normalizeProviderModelOptions(
   const copilot =
     copilotReasoningEffort !== undefined ? { reasoningEffort: copilotReasoningEffort } : undefined;
 
-  const opencodeCandidate =
-    candidate?.opencode && typeof candidate.opencode === "object"
-      ? (candidate.opencode as Record<string, unknown>)
-      : null;
+  const opencodeCandidate = normalizeProviderOptionsCandidate(candidate?.opencode);
   const opencodeReasoningEffort: CodexReasoningEffort | undefined =
     opencodeCandidate?.reasoningEffort === "low" ||
     opencodeCandidate?.reasoningEffort === "medium" ||
@@ -241,10 +245,7 @@ export function normalizeProviderModelOptions(
       ? { reasoningEffort: opencodeReasoningEffort }
       : undefined;
 
-  const piCandidate =
-    candidate?.pi && typeof candidate.pi === "object"
-      ? (candidate.pi as Record<string, unknown>)
-      : null;
+  const piCandidate = normalizeProviderOptionsCandidate(candidate?.pi);
   const piThinkingLevel: PiThinkingLevel | undefined =
     typeof piCandidate?.thinkingLevel === "string" &&
     PI_THINKING_LEVEL_OPTIONS.includes(piCandidate.thinkingLevel as PiThinkingLevel)
@@ -252,7 +253,44 @@ export function normalizeProviderModelOptions(
       : undefined;
   const pi = piThinkingLevel !== undefined ? { thinkingLevel: piThinkingLevel } : undefined;
 
-  if (!codex && !claude && !copilot && !opencode && !pi) {
+  const cursorCandidate = normalizeProviderOptionsCandidate(candidate?.cursor);
+  const cursorReasoning: CodexReasoningEffort | undefined =
+    cursorCandidate?.reasoning === "low" ||
+    cursorCandidate?.reasoning === "medium" ||
+    cursorCandidate?.reasoning === "high" ||
+    cursorCandidate?.reasoning === "xhigh"
+      ? cursorCandidate.reasoning
+      : undefined;
+  const cursorContextWindow =
+    typeof cursorCandidate?.contextWindow === "string" && cursorCandidate.contextWindow.length > 0
+      ? cursorCandidate.contextWindow
+      : undefined;
+  const cursorFastMode =
+    cursorCandidate?.fastMode === true
+      ? true
+      : cursorCandidate?.fastMode === false
+        ? false
+        : undefined;
+  const cursorThinking =
+    cursorCandidate?.thinking === true
+      ? true
+      : cursorCandidate?.thinking === false
+        ? false
+        : undefined;
+  const cursor =
+    cursorReasoning !== undefined ||
+    cursorContextWindow !== undefined ||
+    cursorFastMode !== undefined ||
+    cursorThinking !== undefined
+      ? {
+          ...(cursorReasoning !== undefined ? { reasoning: cursorReasoning } : {}),
+          ...(cursorContextWindow !== undefined ? { contextWindow: cursorContextWindow } : {}),
+          ...(cursorFastMode !== undefined ? { fastMode: cursorFastMode } : {}),
+          ...(cursorThinking !== undefined ? { thinking: cursorThinking } : {}),
+        }
+      : undefined;
+
+  if (!codex && !claude && !copilot && !opencode && !pi && !cursor) {
     return null;
   }
   return {
@@ -261,6 +299,7 @@ export function normalizeProviderModelOptions(
     ...(copilot ? { copilot } : {}),
     ...(opencode ? { opencode } : {}),
     ...(pi ? { pi } : {}),
+    ...(cursor ? { cursor } : {}),
   };
 }
 
@@ -300,7 +339,9 @@ export function normalizeModelSelection(
           ? modelOptions?.opencode
           : provider === "pi"
             ? modelOptions?.pi
-            : modelOptions?.copilot;
+            : provider === "cursor"
+              ? modelOptions?.cursor
+              : modelOptions?.copilot;
   const baseSelection = createModelSelection(provider, model, options);
   const rawSubProviderID = candidate?.subProviderID;
   return (provider === "opencode" || provider === "pi") &&

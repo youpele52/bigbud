@@ -1,6 +1,8 @@
 import type { ThreadId } from "@bigbud/contracts";
 import {
   type ModelSelection,
+  PROVIDER_KINDS,
+  type ProviderKind,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
 } from "@bigbud/contracts";
@@ -26,6 +28,24 @@ import { DeepMutable } from "effect/Types";
 
 function isRuntimeMode(value: unknown): value is import("@bigbud/contracts").RuntimeMode {
   return value === "approval-required" || value === "auto-accept-edits" || value === "full-access";
+}
+
+export function normalizeModelSelectionByProvider(
+  value: unknown,
+): Partial<Record<ProviderKind, ModelSelection>> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const selections: Partial<Record<ProviderKind, ModelSelection>> = {};
+  for (const provider of PROVIDER_KINDS) {
+    const selection = normalizeModelSelection(candidate[provider], { provider });
+    if (selection?.provider === provider) {
+      selections[provider] = selection;
+    }
+  }
+  return selections;
 }
 
 // ── Persisted-value normalizers ───────────────────────────────────────
@@ -264,9 +284,9 @@ export function normalizePersistedDraftsByThreadId(
       typeof draftCandidate.modelSelectionByProvider === "object"
     ) {
       // v3 format
-      modelSelectionByProvider = draftCandidate.modelSelectionByProvider as Partial<
-        Record<import("@bigbud/contracts").ProviderKind, ModelSelection>
-      >;
+      modelSelectionByProvider = normalizeModelSelectionByProvider(
+        draftCandidate.modelSelectionByProvider,
+      );
       activeProvider = normalizeProviderKind(draftCandidate.activeProvider);
     } else {
       // v2 or legacy format: migrate

@@ -13,6 +13,7 @@ import {
   normalizeProviderModelOptions,
 } from "./normalization.store";
 import {
+  normalizeModelSelectionByProvider,
   normalizePersistedDraftsByThreadId,
   normalizePersistedDraftThreads,
 } from "./normalizers.store";
@@ -85,10 +86,9 @@ export function normalizeCurrentPersistedComposerDraftStoreState(
     normalizedPersistedState.stickyModelSelectionByProvider &&
     typeof normalizedPersistedState.stickyModelSelectionByProvider === "object"
   ) {
-    stickyModelSelectionByProvider =
-      normalizedPersistedState.stickyModelSelectionByProvider as Partial<
-        Record<ProviderKind, ModelSelection>
-      >;
+    stickyModelSelectionByProvider = normalizeModelSelectionByProvider(
+      normalizedPersistedState.stickyModelSelectionByProvider,
+    );
     stickyActiveProvider = normalizeProviderKind(normalizedPersistedState.stickyActiveProvider);
   } else {
     // Legacy migration path
