@@ -82,14 +82,16 @@
 :root {
   color-scheme: light;
   --radius: 0.625rem;
+  --brand-primary-light: color-mix(in srgb, var(--color-white) 94%, var(--color-neutral-200));
+  --brand-primary-dark: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
   --background: var(--color-white);
   --foreground: var(--color-neutral-900);
   --card: var(--color-white);
   --card-foreground: var(--foreground);
   --popover: var(--color-white);
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.488 0.217 264);
-  --primary-foreground: var(--color-white);
+  --primary: var(--brand-primary-dark);
+  --primary-foreground: var(--brand-primary-light);
   --secondary: --alpha(var(--color-black) / 4%);
   --secondary-foreground: var(--foreground);
   --muted: --alpha(var(--color-black) / 4%);
@@ -99,7 +101,7 @@
   --destructive: var(--color-red-500);
   --border: --alpha(var(--color-black) / 8%);
   --input: --alpha(var(--color-black) / 10%);
-  --ring: oklch(0.488 0.217 264);
+  --ring: var(--brand-primary-dark);
   --destructive-foreground: var(--color-red-700);
   --info: var(--color-blue-500);
   --info-foreground: var(--color-blue-700);
@@ -116,8 +118,8 @@
     --card-foreground: var(--color-neutral-100);
     --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
     --popover-foreground: var(--color-neutral-100);
-    --primary: oklch(0.588 0.217 264);
-    --primary-foreground: var(--color-white);
+    --primary: var(--brand-primary-light);
+    --primary-foreground: var(--brand-primary-dark);
     --secondary: --alpha(var(--color-white) / 4%);
     --secondary-foreground: var(--color-neutral-100);
     --muted: --alpha(var(--color-white) / 4%);
@@ -127,7 +129,7 @@
     --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
     --border: --alpha(var(--color-white) / 6%);
     --input: --alpha(var(--color-white) / 8%);
-    --ring: oklch(0.588 0.217 264);
+    --ring: var(--brand-primary-light);
     --destructive-foreground: var(--color-red-400);
     --info: var(--color-blue-500);
     --info-foreground: var(--color-blue-400);

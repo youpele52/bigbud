@@ -111,6 +111,8 @@ export function toCanonicalItemType(raw: unknown): CanonicalItemType {
   if (type.includes("dynamic tool")) return "dynamic_tool_call";
   if (type.includes("collab")) return "collab_agent_tool_call";
   if (type.includes("web search")) return "web_search";
+  if (type.includes("browser") || type.includes("navigate") || type.includes("screenshot"))
+    return "mcp_tool_call";
   if (type.includes("image")) return "image_view";
   if (type.includes("review entered")) return "review_entered";
   if (type.includes("review exited")) return "review_exited";

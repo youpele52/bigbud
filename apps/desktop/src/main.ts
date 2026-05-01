@@ -66,6 +66,7 @@ const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
+const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -139,6 +140,10 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       corsEnabled: true,
+      // Required for navigator.mediaDevices.getUserMedia to work on the custom
+      // protocol origin in production builds (otherwise Chrome treats the origin
+      // as non-streaming and rejects media device requests).
+      stream: true,
     },
   },
 ]);
@@ -327,6 +332,7 @@ async function bootstrap(): Promise<void> {
     GET_WS_URL_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
+    COPY_TO_CLIPBOARD_CHANNEL,
     UPDATE_GET_STATE_CHANNEL,
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,

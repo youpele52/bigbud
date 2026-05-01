@@ -39,10 +39,12 @@ export const DEFAULT_BINARY_PATH = "copilot";
 export const USER_INPUT_QUESTION_ID = "answer";
 
 export interface PendingApprovalRequest {
+  readonly request: PermissionRequest;
   readonly requestType:
     | "command_execution_approval"
     | "file_change_approval"
     | "file_read_approval"
+    | "browser_approval"
     | "dynamic_tool_call"
     | "unknown";
   readonly turnId: TurnId | undefined;
@@ -245,9 +247,22 @@ export function requestTypeFromPermissionRequest(request: PermissionRequest) {
       return "file_change_approval" as const;
     case "read":
       return "file_read_approval" as const;
-    case "mcp":
+    case "mcp": {
+      const props = request as unknown as Record<string, unknown>;
+      const toolName = String(props.toolName ?? "").toLowerCase();
+      if (
+        toolName.includes("browser") ||
+        toolName.includes("navigate") ||
+        toolName.includes("screenshot")
+      ) {
+        return "browser_approval" as const;
+      }
+      return "dynamic_tool_call" as const;
+    }
     case "custom-tool":
     case "url":
+    case "memory":
+    case "hook":
       return "dynamic_tool_call" as const;
     default:
       return "unknown" as const;
@@ -255,19 +270,139 @@ export function requestTypeFromPermissionRequest(request: PermissionRequest) {
 }
 
 export function requestDetailFromPermissionRequest(request: PermissionRequest): string | undefined {
+  const props = request as unknown as Record<string, unknown>;
+
   switch (request.kind) {
     case "shell":
-      return normalizeString(request.fullCommandText);
+      return normalizeString(props.fullCommandText as string | undefined);
     case "write":
-      return normalizeString(request.fileName) ?? normalizeString(request.intention);
+      return (
+        normalizeString(props.fileName as string | undefined) ??
+        normalizeString(props.intention as string | undefined)
+      );
     case "read":
-      return normalizeString(request.path) ?? normalizeString(request.intention);
+      return (
+        normalizeString(props.path as string | undefined) ??
+        normalizeString(props.intention as string | undefined)
+      );
     case "mcp":
-      return normalizeString(request.toolTitle) ?? normalizeString(request.toolName);
+      return (
+        normalizeString(props.toolTitle as string | undefined) ??
+        normalizeString(props.toolName as string | undefined)
+      );
     case "url":
-      return normalizeString(request.url);
+      return normalizeString(props.url as string | undefined);
     case "custom-tool":
-      return normalizeString(request.toolName) ?? normalizeString(request.toolDescription);
+      return (
+        normalizeString(props.toolName as string | undefined) ??
+        normalizeString(props.toolDescription as string | undefined)
+      );
+    case "memory":
+      return (
+        normalizeString(props.subject as string | undefined) ??
+        normalizeString(props.fact as string | undefined)
+      );
+    case "hook":
+      return (
+        normalizeString(props.hookMessage as string | undefined) ??
+        normalizeString(props.toolName as string | undefined)
+      );
+    default:
+      return undefined;
+  }
+}
+
+function getCopilotSessionApproval(
+  request: PermissionRequest,
+):
+  | Exclude<
+      PermissionRequestResult,
+      | { kind: "no-result" }
+      | { kind: "approve-once" }
+      | { kind: "reject" }
+      | { kind: "user-not-available" }
+    >
+  | undefined {
+  const props = request as unknown as Record<string, unknown>;
+
+  switch (request.kind) {
+    case "shell": {
+      if (props.canOfferSessionApproval !== true || !Array.isArray(props.commands)) {
+        return undefined;
+      }
+
+      const commandIdentifiers = props.commands.flatMap((command) => {
+        if (typeof command !== "object" || command === null || !("identifier" in command)) {
+          return [];
+        }
+        return typeof command.identifier === "string" && command.identifier.length > 0
+          ? [command.identifier]
+          : [];
+      });
+      if (commandIdentifiers.length === 0) {
+        return undefined;
+      }
+
+      return {
+        kind: "approve-for-session",
+        approval: {
+          kind: "commands",
+          commandIdentifiers,
+        },
+      };
+    }
+    case "write":
+      return props.canOfferSessionApproval === true
+        ? {
+            kind: "approve-for-session",
+            approval: {
+              kind: "write",
+            },
+          }
+        : undefined;
+    case "read":
+      return {
+        kind: "approve-for-session",
+        approval: {
+          kind: "read",
+        },
+      };
+    case "mcp": {
+      const serverName = normalizeString(props.serverName);
+      if (!serverName) {
+        return undefined;
+      }
+
+      return {
+        kind: "approve-for-session",
+        approval: {
+          kind: "mcp",
+          serverName,
+          toolName: normalizeString(props.toolName) ?? null,
+        },
+      };
+    }
+    case "custom-tool": {
+      const toolName = normalizeString(props.toolName);
+      if (!toolName) {
+        return undefined;
+      }
+
+      return {
+        kind: "approve-for-session",
+        approval: {
+          kind: "custom-tool",
+          toolName,
+        },
+      };
+    }
+    case "memory":
+      return {
+        kind: "approve-for-session",
+        approval: {
+          kind: "memory",
+        },
+      };
     default:
       return undefined;
   }
@@ -275,15 +410,17 @@ export function requestDetailFromPermissionRequest(request: PermissionRequest): 
 
 export function approvalDecisionToPermissionResult(
   decision: import("@bigbud/contracts").ProviderApprovalDecision,
+  request: PermissionRequest,
 ): PermissionRequestResult {
   switch (decision) {
     case "accept":
+      return { kind: "approve-once" };
     case "acceptForSession":
-      return { kind: "approved" };
+      return getCopilotSessionApproval(request) ?? { kind: "approve-once" };
     case "decline":
     case "cancel":
     default:
-      return { kind: "denied-interactively-by-user" };
+      return { kind: "reject" };
   }
 }
 

@@ -32,6 +32,8 @@ import {
 } from "../../Icons";
 import { cn } from "~/lib/utils";
 import { getProviderSnapshot } from "../../../models/provider";
+import { useRecentlyUsedModels } from "../../../hooks/useRecentlyUsedModels";
+import { MAX_RECENT_MODELS_PER_PROVIDER } from "../../../models/recentlyUsedModels";
 
 function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
   value: ProviderKind;
@@ -90,6 +92,24 @@ function modelOptionValue(option: ModelOption): string {
   return option.subProviderID ? `${option.slug}::${option.subProviderID}` : option.slug;
 }
 
+function providerSupportsSubProviderID(provider: ProviderKind): boolean {
+  return provider === "opencode" || provider === "pi";
+}
+
+export function visibleModelOptionsForPicker(
+  provider: ProviderKind,
+  options: ReadonlyArray<ModelOption>,
+  recentOptions: ReadonlyArray<ModelOption> | undefined,
+  query: string,
+): ReadonlyArray<ModelOption> {
+  if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
+    return options;
+  }
+
+  const recentValues = new Set(recentOptions.map(modelOptionValue));
+  return options.filter((option) => !recentValues.has(modelOptionValue(option)));
+}
+
 type GroupedSection =
   | { kind: "named"; group: string; models: ModelOption[] }
   | { kind: "ungrouped"; models: ModelOption[] };
@@ -118,28 +138,42 @@ function ModelList({
   provider,
   selectedValue,
   options,
+  recentOptions,
   onSelect,
   onBack,
 }: {
   provider: ProviderKind;
   selectedValue: string;
   options: ReadonlyArray<ModelOption>;
+  recentOptions?: ReadonlyArray<ModelOption> | undefined;
   onSelect: (value: string) => void;
   onBack?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasSearchQuery = query.trim().length > 0;
+
+  const visibleOptions = useMemo(
+    () => visibleModelOptionsForPicker(provider, options, recentOptions, query),
+    [options, provider, query, recentOptions],
+  );
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return options;
+    if (!hasSearchQuery) return visibleOptions;
     const q = query.trim().toLowerCase();
-    return options.filter(
-      (o) => o.name.toLowerCase().includes(q) || o.slug.toLowerCase().includes(q),
+    return visibleOptions.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        o.slug.toLowerCase().includes(q) ||
+        o.group?.toLowerCase().includes(q),
     );
-  }, [options, query]);
+  }, [hasSearchQuery, query, visibleOptions]);
 
+  const showRecentOptions = Boolean(recentOptions && recentOptions.length > 0 && !hasSearchQuery);
   const grouped = useMemo(() => groupModelOptions(filtered), [filtered]);
+  const hasVisibleModels = grouped.length > 0;
   const hasNamedGroups = grouped.some((g) => g.kind === "named");
+  const showEmptyState = !hasVisibleModels && !showRecentOptions;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -154,6 +188,9 @@ function ModelList({
         canClear={query.length > 0}
         onClear={() => {
           setQuery("");
+          inputRef.current?.focus();
+        }}
+        onClick={() => {
           inputRef.current?.focus();
         }}
         {...(onBack ? { onBack } : {})}
@@ -173,7 +210,20 @@ function ModelList({
 
       {/* Model list — grouped or flat */}
       <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
-        {grouped.length === 0 ? (
+        {showRecentOptions && recentOptions && (
+          <MenuGroup>
+            <MenuGroupLabel>Recently used</MenuGroupLabel>
+            {recentOptions.map((modelOption) => (
+              <MenuRadioItem
+                key={`recent:${provider}:${modelOptionValue(modelOption)}`}
+                value={modelOptionValue(modelOption)}
+              >
+                {modelOption.name}
+              </MenuRadioItem>
+            ))}
+          </MenuGroup>
+        )}
+        {showEmptyState ? (
           <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
             No models match &ldquo;{query}&rdquo;
           </div>
@@ -192,16 +242,18 @@ function ModelList({
             </MenuGroup>
           ))
         ) : (
-          <MenuGroup>
-            {filtered.map((modelOption) => (
-              <MenuRadioItem
-                key={`${provider}:${modelOptionValue(modelOption)}`}
-                value={modelOptionValue(modelOption)}
-              >
-                {modelOption.name}
-              </MenuRadioItem>
-            ))}
-          </MenuGroup>
+          hasVisibleModels && (
+            <MenuGroup>
+              {filtered.map((modelOption) => (
+                <MenuRadioItem
+                  key={`${provider}:${modelOptionValue(modelOption)}`}
+                  value={modelOptionValue(modelOption)}
+                >
+                  {modelOption.name}
+                </MenuRadioItem>
+              ))}
+            </MenuGroup>
+          )
         )}
       </MenuRadioGroup>
     </div>
@@ -217,6 +269,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   activeProviderIconClassName?: string;
   compact?: boolean;
   disabled?: boolean;
+  enableRecentlyUsed?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   onProviderModelChange: (
@@ -227,6 +280,38 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   /** Called when the user clicks the back-arrow to unlock the provider and return to provider selection. */
   onProviderUnlock?: () => void;
 }) {
+  const allRecentUsages = useRecentlyUsedModels();
+  const recentOptionsByProvider = useMemo(() => {
+    if (!props.enableRecentlyUsed || allRecentUsages.length === 0) return {};
+    const result: Partial<Record<ProviderKind, ModelOption[]>> = {};
+    for (const opt of AVAILABLE_PROVIDER_OPTIONS) {
+      const providerOptions = props.modelOptionsByProvider[opt.value];
+      if (!providerOptions || providerOptions.length === 0) continue;
+      const recent = allRecentUsages
+        .filter((u) => u.provider === opt.value)
+        .toSorted((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
+        .slice(0, MAX_RECENT_MODELS_PER_PROVIDER);
+      const supportsSubProvider = providerSupportsSubProviderID(opt.value);
+      const matched = recent
+        .map((u) =>
+          providerOptions.find((o) => {
+            if (o.slug !== u.model) return false;
+            // For providers without sub-providers, match by slug only.
+            // This prevents duplicates when the server sends models with
+            // a subProviderID that the user-facing selection ignores.
+            if (!supportsSubProvider) return true;
+            return (o.subProviderID ?? undefined) === (u.subProviderID ?? undefined);
+          }),
+        )
+        .filter((o): o is ModelOption => o !== undefined);
+      const uniqueMatched = matched.filter(
+        (o, i, arr) =>
+          arr.findIndex((other) => modelOptionValue(other) === modelOptionValue(o)) === i,
+      );
+      if (uniqueMatched.length > 0) result[opt.value] = uniqueMatched;
+    }
+    return result;
+  }, [allRecentUsages, props.enableRecentlyUsed, props.modelOptionsByProvider]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [view, setView] = useState<"provider" | "model">(
     props.lockedProvider !== null ? "model" : "provider",
@@ -322,6 +407,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 provider={props.lockedProvider}
                 selectedValue={selectedProviderValue}
                 options={props.modelOptionsByProvider[props.lockedProvider]}
+                recentOptions={recentOptionsByProvider[props.lockedProvider]}
                 onSelect={(value) => handleModelChange(props.lockedProvider!, value)}
                 {...(props.onProviderUnlock
                   ? {
@@ -387,6 +473,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                           provider={option.value}
                           selectedValue={props.provider === option.value ? props.model : ""}
                           options={props.modelOptionsByProvider[option.value]}
+                          recentOptions={recentOptionsByProvider[option.value]}
                           onSelect={(value) => {
                             handleModelChange(option.value, value);
                           }}

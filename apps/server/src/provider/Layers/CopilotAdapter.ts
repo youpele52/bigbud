@@ -216,6 +216,15 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       : {}),
     ...(input.cwd ? { workingDirectory: input.cwd } : {}),
     streaming: true,
+    systemMessage: {
+      mode: "append",
+      content:
+        "You have access to a Chromium browser in this environment. " +
+        "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
+        "Prefer codebase inspection first when the task is local-only. " +
+        "Summarize what was verified, including URL and important observations. " +
+        "Avoid unnecessary browser use when terminal or file tools are sufficient.",
+    },
     onPermissionRequest: (request) => {
       return new Promise<PermissionRequestResult>((resolve) => {
         const requestId = randomUUID();
@@ -223,6 +232,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const requestType = requestTypeFromPermissionRequest(request);
         const requestDetail = requestDetailFromPermissionRequest(request);
         pendingApprovals.set(requestId, {
+          request,
           requestType,
           turnId: currentTurnId,
           resolve,
@@ -262,7 +272,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
             }
 
             pendingApprovals.delete(requestId);
-            pending.resolve({ kind: "approved" });
+            pending.resolve({ kind: "approve-once" });
 
             const event = yield* makeSyntheticEvent(
               input.threadId,
@@ -351,7 +361,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       }
 
       record.pendingApprovals.delete(requestId);
-      pending.resolve(approvalDecisionToPermissionResult(decision));
+      pending.resolve(approvalDecisionToPermissionResult(decision, pending.request));
       const event = yield* makeSyntheticEvent(
         threadId,
         "request.resolved",

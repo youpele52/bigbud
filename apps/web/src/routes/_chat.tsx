@@ -1,5 +1,5 @@
 import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import {
@@ -18,6 +18,8 @@ import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
+import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import BrowserPanel from "~/components/browser/BrowserPanel";
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
@@ -35,8 +37,14 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       : false,
   );
   const appSettings = useSettings();
-  const { toggleSidebar } = useSidebar();
+  const { open: sidebarOpen, toggleSidebar, setOpen: setSidebarOpen } = useSidebar();
+  const {
+    open: browserOpen,
+    toggle: toggleBrowser,
+    setOpen: setBrowserOpen,
+  } = useBrowserPanelStore();
   const commandPaletteOpen = useCommandPaletteStore((state) => state.open);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -60,6 +68,9 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "sidebar.toggle") {
         event.preventDefault();
         event.stopPropagation();
+        if (!sidebarOpen) {
+          setBrowserOpen(false);
+        }
         toggleSidebar();
         return;
       }
@@ -102,6 +113,24 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         onToggleSearch();
         return;
       }
+
+      if (command === "browser.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!browserOpen) {
+          setSidebarOpen(false);
+        }
+        toggleBrowser();
+        return;
+      }
+
+      if (command === "settings.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        setBrowserOpen(false);
+        void navigate({ to: "/settings" });
+        return;
+      }
     };
 
     window.addEventListener("keydown", onWindowKeyDown, { capture: true });
@@ -119,7 +148,13 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     terminalOpen,
     appSettings.defaultThreadEnvMode,
     commandPaletteOpen,
+    sidebarOpen,
+    browserOpen,
     toggleSidebar,
+    toggleBrowser,
+    setSidebarOpen,
+    setBrowserOpen,
+    navigate,
     onToggleSearch,
   ]);
 
@@ -135,6 +170,7 @@ function ChatRouteLayout() {
       <ChatRouteGlobalShortcuts onToggleSearch={toggleSearchOpen} />
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
+      <BrowserPanel activeThreadId={routeThreadId ?? null} />
     </>
   );
 }

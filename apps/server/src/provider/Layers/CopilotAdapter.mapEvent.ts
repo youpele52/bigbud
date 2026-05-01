@@ -179,7 +179,9 @@ export const mapEvent = (
             },
           },
         ];
-      case "tool.execution_start":
+      case "tool.execution_start": {
+        const toolName = event.data.toolName ?? "";
+        const isBrowserTool = /browser|navigate|screenshot|web_search|websearch/i.test(toolName);
         return [
           {
             ...eventBase({
@@ -192,13 +194,15 @@ export const mapEvent = (
             }),
             type: "item.started",
             payload: {
-              itemType: event.data.mcpToolName ? "mcp_tool_call" : "dynamic_tool_call",
+              itemType:
+                event.data.mcpToolName || isBrowserTool ? "mcp_tool_call" : "dynamic_tool_call",
               status: "inProgress",
               title: event.data.toolName,
               ...(event.data.arguments ? { data: event.data.arguments } : {}),
             },
           },
         ];
+      }
       case "tool.execution_complete":
         return [
           {

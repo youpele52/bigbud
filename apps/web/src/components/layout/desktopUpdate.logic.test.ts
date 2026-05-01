@@ -8,6 +8,7 @@ import {
   getDesktopUpdateButtonTooltip,
   getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
+  isUnsignedBuildBlocked,
   resolveDesktopUpdateButtonAction,
   shouldShowArm64IntelBuildWarning,
   shouldShowDesktopUpdateButton,
@@ -18,9 +19,11 @@ const baseState: DesktopUpdateState = {
   enabled: true,
   status: "idle",
   currentVersion: "1.0.0",
+  platform: "darwin",
   hostArch: "x64",
   appArch: "x64",
   runningUnderArm64Translation: false,
+  isCodeSigned: true,
   availableVersion: null,
   downloadedVersion: null,
   downloadPercent: null,
@@ -287,6 +290,80 @@ describe("getDesktopUpdateButtonTooltip", () => {
     expect(getDesktopUpdateButtonTooltip({ ...baseState, status: "up-to-date" })).toBe(
       "Up to date",
     );
+  });
+
+  it("warns about unsigned build when downloaded on unsigned macOS", () => {
+    const tooltip = getDesktopUpdateButtonTooltip({
+      ...baseState,
+      isCodeSigned: false,
+      status: "downloaded",
+      downloadedVersion: "1.1.0",
+    });
+    expect(tooltip).toContain("cannot auto-install");
+    expect(tooltip).toContain("Settings → About");
+  });
+
+  it("warns about unsigned build when installing on unsigned macOS", () => {
+    const tooltip = getDesktopUpdateButtonTooltip({
+      ...baseState,
+      isCodeSigned: false,
+      status: "installing",
+      downloadedVersion: "1.1.0",
+    });
+    expect(tooltip).toContain("cannot auto-install");
+    expect(tooltip).toContain("Settings → About");
+  });
+
+  it("shows normal copy for signed downloaded builds", () => {
+    const tooltip = getDesktopUpdateButtonTooltip({
+      ...baseState,
+      isCodeSigned: true,
+      status: "downloaded",
+      downloadedVersion: "1.1.0",
+    });
+    expect(tooltip).toContain("Click to restart and install");
+  });
+});
+
+describe("isUnsignedBuildBlocked", () => {
+  it("returns false for signed builds", () => {
+    expect(isUnsignedBuildBlocked({ ...baseState, status: "downloaded" })).toBe(false);
+  });
+
+  it("returns false for linux builds", () => {
+    expect(
+      isUnsignedBuildBlocked({
+        ...baseState,
+        platform: "linux",
+        isCodeSigned: false,
+        status: "downloaded",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true for unsigned macOS downloaded builds", () => {
+    expect(
+      isUnsignedBuildBlocked({
+        ...baseState,
+        isCodeSigned: false,
+        status: "downloaded",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for unsigned Windows downloaded builds", () => {
+    expect(
+      isUnsignedBuildBlocked({
+        ...baseState,
+        platform: "win32",
+        isCodeSigned: false,
+        status: "downloaded",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for null state", () => {
+    expect(isUnsignedBuildBlocked(null)).toBe(false);
   });
 });
 

@@ -276,6 +276,13 @@ export function classifyToolItemType(toolName: string): CanonicalItemType {
   if (normalized.includes("websearch") || normalized.includes("web search")) {
     return "web_search";
   }
+  if (
+    normalized.includes("browser") ||
+    normalized.includes("navigate") ||
+    normalized.includes("screenshot")
+  ) {
+    return "mcp_tool_call";
+  }
   if (normalized.includes("image")) {
     return "image_view";
   }

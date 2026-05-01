@@ -52,8 +52,38 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
     },
   });
+
+  // Grant microphone permission requests from the renderer so that
+  // navigator.mediaDevices.getUserMedia works inside Electron's sandboxed
+  // process. Without this handler Electron denies all media permission
+  // requests by default.
+  window.webContents.session.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      if (
+        permission === "media" &&
+        (details as { mediaTypes?: string[] }).mediaTypes?.includes("audio")
+      ) {
+        callback(true);
+        return;
+      }
+      // Deny everything else by default.
+      callback(false);
+    },
+  );
+
+  // Also set a permission check handler so Permissions API queries
+  // (navigator.permissions.query) return the correct state for microphone.
+  window.webContents.session.setPermissionCheckHandler(
+    (_webContents, permission, _origin, details) => {
+      if (permission === "media" && (details as { mediaType?: string }).mediaType === "audio") {
+        return true;
+      }
+      return false;
+    },
+  );
 
   window.webContents.on("context-menu", (event, params) => {
     event.preventDefault();
