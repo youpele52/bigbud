@@ -1,5 +1,11 @@
 import { memo, useCallback } from "react";
-import { ArrowLeftIcon, ArrowRightIcon, RotateCwIcon, XIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  MousePointer2Icon,
+  RotateCwIcon,
+  XIcon,
+} from "lucide-react";
 import { cn } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { Button } from "../ui/button";
@@ -14,6 +20,8 @@ export interface BrowserToolbarProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onReload: () => void;
+  onAnnotate: () => void;
+  annotationDisabled?: boolean;
 }
 
 export const BrowserToolbar = memo(function BrowserToolbar({
@@ -26,6 +34,8 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   onGoBack,
   onGoForward,
   onReload,
+  onAnnotate,
+  annotationDisabled = false,
 }: BrowserToolbarProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -76,6 +86,21 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           title="Reload"
         >
           <RotateCwIcon className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="shrink-0 px-1.5"
+          onClick={onAnnotate}
+          disabled={annotationDisabled}
+          aria-label="Annotate browser page"
+          title={
+            annotationDisabled
+              ? "Annotation is available in the desktop browser view"
+              : "Annotate browser page"
+          }
+        >
+          <MousePointer2Icon className="size-4" />
         </Button>
       </div>
 

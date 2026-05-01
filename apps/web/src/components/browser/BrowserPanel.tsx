@@ -1,9 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { ThreadId } from "@bigbud/contracts";
 import * as Schema from "effect/Schema";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { useComposerDraftStore } from "~/stores/composer";
+import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
+import { buildBrowserAnnotationPrompt, dataUrlToFile } from "./BrowserPanel.annotation";
 import { BrowserViewport, type BrowserViewportRef } from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
@@ -16,10 +20,16 @@ const getBrowserPanelDefaultWidth = () =>
 
 interface BrowserPanelProps {
   className?: string;
+  activeThreadId?: ThreadId | null;
 }
 
-export const BrowserPanel = memo(function BrowserPanel({ className }: BrowserPanelProps) {
+export const BrowserPanel = memo(function BrowserPanel({
+  className,
+  activeThreadId,
+}: BrowserPanelProps) {
   const { open, url, setOpen, setUrl } = useBrowserPanelStore();
+  const setComposerPrompt = useComposerDraftStore((state) => state.setPrompt);
+  const addComposerImage = useComposerDraftStore((state) => state.addImage);
   const [inputUrl, setInputUrl] = useState(url || "https://example.com");
   const [activeUrl, setActiveUrl] = useState(url || "https://example.com");
   const [panelWidth, setPanelWidth] = useState(() => {
@@ -72,6 +82,50 @@ export const BrowserPanel = memo(function BrowserPanel({ className }: BrowserPan
     },
     [],
   );
+
+  const handleAnnotate = useCallback(async () => {
+    if (!activeThreadId) {
+      toastManager.add({ type: "error", title: "Open a thread before annotating." });
+      return;
+    }
+    try {
+      const annotation = await viewportRef.current?.startAnnotation();
+      if (!annotation) return;
+      const file = dataUrlToFile(
+        annotation.screenshot.dataUrl,
+        "browser-annotation.png",
+        annotation.screenshot.mime,
+      );
+      if (!file) {
+        toastManager.add({ type: "error", title: "Could not capture browser screenshot." });
+        return;
+      }
+      const prompt = buildBrowserAnnotationPrompt(annotation);
+      const previewUrl = URL.createObjectURL(file);
+      setComposerPrompt(activeThreadId, prompt);
+      addComposerImage(activeThreadId, {
+        type: "image",
+        id: randomUUID(),
+        name: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        previewUrl,
+        file,
+      });
+      toastManager.add({
+        type: "success",
+        title: "Annotation added to composer",
+        data: { threadId: activeThreadId, dismissAfterVisibleMs: 3000 },
+      });
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Browser annotation failed",
+        description: error instanceof Error ? error.message : String(error),
+        data: { threadId: activeThreadId },
+      });
+    }
+  }, [activeThreadId, addComposerImage, setComposerPrompt]);
 
   const onPanelResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -169,6 +223,8 @@ export const BrowserPanel = memo(function BrowserPanel({ className }: BrowserPan
           onGoBack={() => viewportRef.current?.goBack()}
           onGoForward={() => viewportRef.current?.goForward()}
           onReload={() => viewportRef.current?.reload()}
+          onAnnotate={handleAnnotate}
+          annotationDisabled={!isElectron}
         />
         {loadError && (
           <div className="shrink-0 border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
