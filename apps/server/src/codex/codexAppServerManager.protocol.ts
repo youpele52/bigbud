@@ -184,6 +184,14 @@ export function shouldSuppressChildConversationNotification(method: string): boo
   );
 }
 
+export function readNotificationThreadId(method: string, params: unknown): string | undefined {
+  const payload = readObject(params);
+  if (method === "thread/started") {
+    return readString(readObject(payload, "thread"), "id");
+  }
+  return readString(payload, "threadId");
+}
+
 // ---------------------------------------------------------------------------
 // Thread snapshot parsing
 // ---------------------------------------------------------------------------

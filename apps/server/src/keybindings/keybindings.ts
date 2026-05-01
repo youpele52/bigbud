@@ -55,6 +55,7 @@ export { parseKeybindingShortcut } from "./keybindings.parser";
 export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+j", command: "terminal.toggle" },
   { key: "mod+b", command: "sidebar.toggle" },
+  { key: "mod+,", command: "settings.toggle" },
   { key: "mod+f", command: "search.toggle" },
   { key: "mod+shift+g", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },

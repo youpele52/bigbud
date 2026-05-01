@@ -33,14 +33,16 @@ import type { TurnMethodDeps } from "./OpencodeAdapter.session.ts";
  * to the v2 `Array<QuestionAnswer>` format (one `string[]` per question).
  */
 function toOpencodeQuestionAnswers(
-  questions: ReadonlyArray<{ header: string }>,
+  questions: ReadonlyArray<{ header: string; question?: string }>,
   answers: Record<string, unknown>,
 ): Array<Array<string>> {
   return questions.map((q, index) => {
-    const key = openCodeQuestionId(index, q.header);
-    const value = answers[key];
+    const value =
+      answers[openCodeQuestionId(index, q.header)] ??
+      answers[q.header] ??
+      (q.question ? answers[q.question] : undefined);
     if (Array.isArray(value)) {
-      return value.map(String);
+      return value.filter((entry): entry is string => typeof entry === "string");
     }
     if (typeof value === "string" && value.trim().length > 0) {
       return [value.trim()];

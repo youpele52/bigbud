@@ -114,6 +114,10 @@ export interface SidebarState {
   projects: ReturnType<typeof useStore<Project[]>>;
   bootstrapComplete: boolean;
   chatsProject: Project | null;
+  areChatsExpanded: boolean;
+  setAreChatsExpanded: (expanded: boolean) => void;
+  showAllChats: boolean;
+  setShowAllChats: (showAll: boolean) => void;
   renderedChats: SidebarRenderedThreadEntry[];
   renderedProjects: RenderedProjectEntry[];
   isManualProjectSorting: boolean;

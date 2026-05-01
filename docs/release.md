@@ -26,10 +26,12 @@ This document covers how to run desktop releases from one tag, first without sig
   - The desktop UI shows a rocket update button when an update is available; click once to download, click again after download to restart/install.
 - Provider: GitHub Releases (`provider: github`) configured at build time.
 - Repository slug source:
-  - `T3CODE_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
+  - `BIGBUD_DESKTOP_UPDATE_REPOSITORY` (format `owner/repo`), if set.
+  - legacy alias: `T3CODE_DESKTOP_UPDATE_REPOSITORY`
   - otherwise `GITHUB_REPOSITORY` from GitHub Actions.
 - Temporary private-repo auth workaround:
-  - set `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
+  - set `BIGBUD_DESKTOP_UPDATE_GITHUB_TOKEN` (or `GH_TOKEN`) in the desktop app runtime environment.
+  - legacy alias: `T3CODE_DESKTOP_UPDATE_GITHUB_TOKEN`
   - the app forwards it as an `Authorization: Bearer <token>` request header for updater HTTP calls.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
@@ -59,7 +61,9 @@ This document covers how to run desktop releases from one tag, first without sig
 ## CI vs release builds
 
 - Pushes to `main` run `.github/workflows/ci.yml`.
-- The `quality` job runs format check, lint, typecheck, tests, browser tests, and the desktop pipeline build.
+- The `quality` job currently runs format check, lint, tests, and the desktop pipeline build.
+- Browser tests are not part of CI.
+- The typecheck step is currently present in workflow comments but not enabled.
 - After `quality` passes, `desktop_release_build` builds unsigned desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
@@ -80,6 +84,11 @@ Use this first to validate the release pipeline.
 3. Wait for `.github/workflows/release.yml` to finish.
 4. Verify the GitHub Release contains all platform artifacts.
 5. Download each artifact and sanity-check installation on each OS.
+
+## Env var naming
+
+- Prefer `BIGBUD_DESKTOP_UPDATE_*` names in new scripts, docs, and runtime configuration.
+- `T3CODE_DESKTOP_UPDATE_*` names remain supported as compatibility aliases where noted in code.
 
 ## 2) Apple signing + notarization setup (macOS)
 

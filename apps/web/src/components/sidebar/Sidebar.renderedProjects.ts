@@ -24,6 +24,7 @@ const THREAD_PREVIEW_LIMIT = 6;
 
 export interface SidebarRenderedProjectsInput {
   sortedProjects: SidebarProjectSnapshot[];
+  visibleChatThreadIds: readonly ThreadId[];
   routeThreadId: ThreadId | null;
   navigateToThread: (threadId: ThreadId) => void;
   platform: string;
@@ -43,6 +44,7 @@ export interface SidebarRenderedProjectsOutput {
 /** Encapsulates rendered-projects derivation, expand/collapse state, jump hints, and keyboard nav. */
 export function useSidebarRenderedProjects({
   sortedProjects,
+  visibleChatThreadIds,
   routeThreadId,
   navigateToThread,
   platform,
@@ -143,8 +145,8 @@ export function useSidebarRenderedProjects({
   );
 
   const visibleSidebarThreadIds = useMemo(
-    () => getVisibleSidebarThreadIds(renderedProjects),
-    [renderedProjects],
+    () => [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
+    [renderedProjects, visibleChatThreadIds],
   );
 
   const threadJumpCommandById = useMemo(() => {

@@ -38,13 +38,24 @@ describe("TerminalOpenInput", () => {
     ).toBe(true);
   });
 
+  it("accepts compact terminal dimensions", () => {
+    expect(
+      decodes(TerminalOpenInput, {
+        threadId: "thread-1",
+        cwd: "/tmp/project",
+        cols: 1,
+        rows: 1,
+      }),
+    ).toBe(true);
+  });
+
   it("rejects invalid bounds", () => {
     expect(
       decodes(TerminalOpenInput, {
         threadId: "thread-1",
         cwd: "/tmp/project",
-        cols: 10,
-        rows: 2,
+        cols: 1001,
+        rows: 501,
       }),
     ).toBe(false);
   });

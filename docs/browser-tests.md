@@ -12,6 +12,8 @@ The GitHub Actions `CI` workflow does not:
 
 Browser tests remain available for local development only.
 
+This document only describes browser-test policy. Other CI steps may change independently.
+
 ## Overview
 
 Browser tests use [Vitest Browser Mode](https://vitest.dev/guide/browser/) with Playwright (Chromium) and `vitest-browser-react`. They are still useful for interactive UI checks that require a real DOM, user events, focus behavior, layout, or animation timing.
@@ -28,7 +30,7 @@ This means:
 
 1. Pull requests are not blocked on browser test execution.
 2. Pushes to `main` do not run browser tests before the rest of the pipeline.
-3. Desktop release builds no longer wait on browser test steps in the `quality` job.
+3. Release and desktop validation workflows do not depend on browser test execution.
 
 If browser coverage is needed for a change, run it manually before merging.
 

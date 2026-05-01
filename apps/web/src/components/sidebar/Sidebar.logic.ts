@@ -166,6 +166,20 @@ export function getVisibleSidebarThreadIds<TThreadId>(
   );
 }
 
+export function getVisibleRecentThreadIds<TThreadId>(input: {
+  renderedChatThreadIds: readonly TThreadId[];
+  isExpanded: boolean;
+  showAll: boolean;
+  initialVisibleCount: number;
+}): TThreadId[] {
+  if (!input.isExpanded) {
+    return [];
+  }
+  return input.showAll
+    ? [...input.renderedChatThreadIds]
+    : input.renderedChatThreadIds.slice(0, input.initialVisibleCount);
+}
+
 export function resolveAdjacentThreadId<T>(input: {
   threadIds: readonly T[];
   currentThreadId: T | null;

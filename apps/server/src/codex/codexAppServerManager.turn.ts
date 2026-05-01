@@ -23,7 +23,12 @@ import {
   type CodexSessionContext,
   type CodexThreadSnapshot,
 } from "./codexAppServerManager.types";
-import { readResumeThreadId, toCodexUserInputAnswers } from "./codexAppServerManager.utils";
+import {
+  mapCodexRuntimeMode,
+  mapCodexTurnSandboxPolicy,
+  readResumeThreadId,
+  toCodexUserInputAnswers,
+} from "./codexAppServerManager.utils";
 
 export interface TurnOps {
   readonly sendRequest: <T>(
@@ -90,10 +95,18 @@ export async function sendTurn(
         developer_instructions: string;
       };
     };
+    approvalPolicy?: "untrusted" | "on-request" | "never";
+    sandboxPolicy?:
+      | { readonly type: "readOnly" }
+      | { readonly type: "workspaceWrite" }
+      | { readonly type: "dangerFullAccess" };
   } = {
     threadId: providerThreadId,
     input: turnInput,
   };
+  const runtimeConfig = mapCodexRuntimeMode(context.session.runtimeMode);
+  turnStartParams.approvalPolicy = runtimeConfig.approvalPolicy;
+  turnStartParams.sandboxPolicy = mapCodexTurnSandboxPolicy(context.session.runtimeMode);
   const normalizedModel = resolveCodexModelForAccount(
     normalizeCodexModelSlug(input.model ?? context.session.model),
     context.account,

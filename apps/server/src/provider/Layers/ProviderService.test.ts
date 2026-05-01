@@ -668,6 +668,34 @@ routing.layer("ProviderServiceLive routing", (it) => {
     }),
   );
 
+  it.effect("stops stale active sessions for the same thread when switching providers", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const threadId = asThreadId("thread-provider-switch");
+
+      yield* provider.startSession(threadId, {
+        provider: "claudeAgent",
+        threadId,
+        cwd: "/tmp/project-switch",
+        runtimeMode: "full-access",
+      });
+
+      routing.claude.stopSession.mockClear();
+
+      yield* provider.startSession(threadId, {
+        provider: "codex",
+        threadId,
+        cwd: "/tmp/project-switch",
+        runtimeMode: "full-access",
+      });
+
+      assert.equal(routing.claude.stopSession.mock.calls.length, 1);
+      assert.equal(routing.claude.stopSession.mock.calls[0]?.[0], threadId);
+      assert.equal(yield* routing.claude.adapter.hasSession(threadId), false);
+      assert.equal(yield* routing.codex.adapter.hasSession(threadId), true);
+    }),
+  );
+
   it.effect("recovers stale sessions for sendTurn using persisted cwd", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;

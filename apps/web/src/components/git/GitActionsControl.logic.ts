@@ -7,7 +7,20 @@ import { isTemporaryWorktreeBranch } from "@bigbud/shared/git";
 
 export type GitActionIconName = "commit" | "push" | "pr";
 
-export type GitDialogAction = "commit" | "push" | "create_pr";
+const GIT_DIALOG_ACTIONS = {
+  commit: "commit",
+  push: "push",
+  createPr: "create_pr",
+} as const;
+
+export type GitDialogAction = (typeof GIT_DIALOG_ACTIONS)[keyof typeof GIT_DIALOG_ACTIONS];
+
+const DEFAULT_BRANCH_CONFIRMABLE_ACTIONS = {
+  push: GIT_DIALOG_ACTIONS.push,
+  createPr: GIT_DIALOG_ACTIONS.createPr,
+  commitPush: "commit_push",
+  commitPushPr: "commit_push_pr",
+} as const;
 
 export interface GitActionMenuItem {
   id: "commit" | "push" | "pr";
@@ -33,10 +46,7 @@ export interface DefaultBranchActionDialogCopy {
 }
 
 export type DefaultBranchConfirmableAction =
-  | "push"
-  | "create_pr"
-  | "commit_push"
-  | "commit_push_pr";
+  (typeof DEFAULT_BRANCH_CONFIRMABLE_ACTIONS)[keyof typeof DEFAULT_BRANCH_CONFIRMABLE_ACTIONS];
 
 export function buildGitActionProgressStages(input: {
   action: GitStackedAction;
@@ -54,23 +64,24 @@ export function buildGitActionProgressStages(input: {
     "Creating GitHub pull request...",
   ];
 
-  if (input.action === "push") {
+  if (input.action === GIT_DIALOG_ACTIONS.push) {
     return [pushStage];
   }
-  if (input.action === "create_pr") {
+  if (input.action === GIT_DIALOG_ACTIONS.createPr) {
     return input.shouldPushBeforePr ? [pushStage, ...prStages] : prStages;
   }
 
-  const shouldIncludeCommitStages = input.action === "commit" || input.hasWorkingTreeChanges;
+  const shouldIncludeCommitStages =
+    input.action === GIT_DIALOG_ACTIONS.commit || input.hasWorkingTreeChanges;
   const commitStages = !shouldIncludeCommitStages
     ? []
     : input.hasCustomCommitMessage
       ? ["Committing..."]
       : ["Generating commit message...", "Committing..."];
-  if (input.action === "commit") {
+  if (input.action === GIT_DIALOG_ACTIONS.commit) {
     return [...branchStages, ...commitStages];
   }
-  if (input.action === "commit_push") {
+  if (input.action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush) {
     return [...branchStages, ...commitStages, pushStage];
   }
   return [...branchStages, ...commitStages, pushStage, ...prStages];
@@ -113,7 +124,7 @@ export function buildMenuItems(
       disabled: !canCommit,
       icon: "commit",
       kind: "open_dialog",
-      dialogAction: "commit",
+      dialogAction: GIT_DIALOG_ACTIONS.commit,
     },
     {
       id: "push",
@@ -121,7 +132,7 @@ export function buildMenuItems(
       disabled: !canPush,
       icon: "push",
       kind: "open_dialog",
-      dialogAction: "push",
+      dialogAction: GIT_DIALOG_ACTIONS.push,
     },
     hasOpenPr
       ? {
@@ -137,7 +148,7 @@ export function buildMenuItems(
           disabled: !canCreatePr,
           icon: "pr",
           kind: "open_dialog",
-          dialogAction: "create_pr",
+          dialogAction: GIT_DIALOG_ACTIONS.createPr,
         },
   ];
 }
@@ -179,16 +190,26 @@ export function resolveQuickAction(
 
   if (hasChanges) {
     if (!gitStatus.hasUpstream && !hasOriginRemote) {
-      return { label: "Commit", disabled: false, kind: "run_action", action: "commit" };
+      return {
+        label: "Commit",
+        disabled: false,
+        kind: "run_action",
+        action: GIT_DIALOG_ACTIONS.commit,
+      };
     }
     if (hasOpenPr || isDefaultBranch) {
-      return { label: "Commit & push", disabled: false, kind: "run_action", action: "commit_push" };
+      return {
+        label: "Commit & Push",
+        disabled: false,
+        kind: "run_action",
+        action: DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush,
+      };
     }
     return {
-      label: "Commit, push & PR",
+      label: "Commit, Push & PR",
       disabled: false,
       kind: "run_action",
-      action: "commit_push_pr",
+      action: DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPushPr,
     };
   }
 
@@ -220,14 +241,16 @@ export function resolveQuickAction(
         label: "Push",
         disabled: false,
         kind: "run_action",
-        action: isDefaultBranch ? "commit_push" : "push",
+        action: isDefaultBranch
+          ? DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush
+          : GIT_DIALOG_ACTIONS.push,
       };
     }
     return {
-      label: "Push & create PR",
+      label: "Push & Create PR",
       disabled: false,
       kind: "run_action",
-      action: "create_pr",
+      action: GIT_DIALOG_ACTIONS.createPr,
     };
   }
 
@@ -254,14 +277,16 @@ export function resolveQuickAction(
         label: "Push",
         disabled: false,
         kind: "run_action",
-        action: isDefaultBranch ? "commit_push" : "push",
+        action: isDefaultBranch
+          ? DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush
+          : GIT_DIALOG_ACTIONS.push,
       };
     }
     return {
       label: "Push & create PR",
       disabled: false,
       kind: "run_action",
-      action: "create_pr",
+      action: GIT_DIALOG_ACTIONS.createPr,
     };
   }
 
@@ -283,10 +308,10 @@ export function requiresDefaultBranchConfirmation(
 ): boolean {
   if (!isDefaultBranch) return false;
   return (
-    action === "push" ||
-    action === "create_pr" ||
-    action === "commit_push" ||
-    action === "commit_push_pr"
+    action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.push ||
+    action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.createPr ||
+    action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush ||
+    action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPushPr
   );
 }
 
@@ -298,7 +323,10 @@ export function resolveDefaultBranchActionDialogCopy(input: {
   const branchLabel = input.branchName;
   const suffix = ` on "${branchLabel}". You can continue on this branch or create a feature branch and run the same action there.`;
 
-  if (input.action === "push" || input.action === "commit_push") {
+  if (
+    input.action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.push ||
+    input.action === DEFAULT_BRANCH_CONFIRMABLE_ACTIONS.commitPush
+  ) {
     if (input.includesCommit) {
       return {
         title: "Commit & push to default branch?",
