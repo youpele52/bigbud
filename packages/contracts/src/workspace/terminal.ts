@@ -5,11 +5,11 @@ import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 export { DEFAULT_TERMINAL_ID };
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
-const TerminalColsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(20)).check(
-  Schema.isLessThanOrEqualTo(400),
+const TerminalColsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
+  Schema.isLessThanOrEqualTo(1000),
 );
-const TerminalRowsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(5)).check(
-  Schema.isLessThanOrEqualTo(200),
+const TerminalRowsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
+  Schema.isLessThanOrEqualTo(500),
 );
 const TerminalIdSchema = TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(128));
 const TerminalEnvKeySchema = Schema.String.check(

@@ -18,7 +18,8 @@ function SettingsContentLayout() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if (event.key === "Escape") {
+      const mod = event.metaKey || event.ctrlKey;
+      if (event.key === "Escape" || (mod && event.key === ",")) {
         event.preventDefault();
         window.history.back();
       }

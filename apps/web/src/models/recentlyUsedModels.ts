@@ -16,9 +16,26 @@ export type RecentModelUsage = typeof RecentModelUsage.Type;
 
 const RecentModelsList = Schema.Array(RecentModelUsage);
 
+function sanitizeEntry(entry: RecentModelUsage): RecentModelUsage {
+  // Strip subProviderID for providers that don't support it.
+  // This fixes legacy localStorage data that may have stored it.
+  if (entry.provider !== "opencode" && entry.provider !== "pi") {
+    const { subProviderID: _discarded, ...rest } = entry;
+    return rest;
+  }
+  return entry;
+}
+
 function readAll(): RecentModelUsage[] {
   const result = getLocalStorageItem(STORAGE_KEY, RecentModelsList);
-  return result ? [...result] : [];
+  if (!result) return [];
+  const sanitized = result.map(sanitizeEntry);
+  // If any entries were stripped, persist the cleaned version.
+  const needsWrite = sanitized.some((entry, i) => entry !== result[i]);
+  if (needsWrite) {
+    writeAll(sanitized);
+  }
+  return sanitized;
 }
 
 function writeAll(list: RecentModelUsage[]): void {
@@ -39,7 +56,7 @@ function matchesEntry(
   return (
     entry.provider === provider &&
     entry.model === model &&
-    (entry.subProviderID ?? undefined) === subProviderID
+    (entry.subProviderID ?? undefined) === (subProviderID ?? undefined)
   );
 }
 
@@ -48,12 +65,16 @@ export function recordModelUsage(
   model: string,
   subProviderID?: string,
 ): void {
+  const supportsSubProvider = provider === "opencode" || provider === "pi";
+  const normalizedSubProviderID = supportsSubProvider ? (subProviderID ?? undefined) : undefined;
   const existing = readAll();
-  const filtered = existing.filter((entry) => !matchesEntry(entry, provider, model, subProviderID));
+  const filtered = existing.filter(
+    (entry) => !matchesEntry(entry, provider, model, normalizedSubProviderID),
+  );
   const updated: RecentModelUsage = {
     provider,
     model,
-    ...(subProviderID !== undefined ? { subProviderID } : {}),
+    ...(normalizedSubProviderID !== undefined ? { subProviderID: normalizedSubProviderID } : {}),
     lastUsedAt: new Date().toISOString(),
   };
   const merged = [updated, ...filtered];

@@ -6,14 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import {
-  DiffIcon,
-  GlobeIcon,
-  PanelLeftCloseIcon,
-  PanelLeftIcon,
-  SearchIcon,
-  TerminalSquareIcon,
-} from "lucide-react";
+import { DiffIcon, GlobeIcon, PanelLeftCloseIcon, PanelLeftIcon, TerminalIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -42,7 +35,6 @@ interface ChatHeaderProps {
   terminalToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
   sidebarToggleShortcutLabel: string | null;
-  searchToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
@@ -54,7 +46,6 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
   onToggleBrowser: () => void;
-  onToggleSearch: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -72,7 +63,6 @@ export const ChatHeader = memo(function ChatHeader({
   terminalToggleShortcutLabel,
   diffToggleShortcutLabel,
   sidebarToggleShortcutLabel,
-  searchToggleShortcutLabel,
   browserToggleShortcutLabel,
   gitCwd,
   diffOpen,
@@ -84,7 +74,6 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleDiff,
   onToggleBrowser,
-  onToggleSearch,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const {
@@ -122,15 +111,15 @@ export const ChatHeader = memo(function ChatHeader({
                 >
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground"
                   />
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary [animation-delay:200ms]"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:200ms]"
                   />
                   <span
                     aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-primary [animation-delay:400ms]"
+                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:400ms]"
                   />
                 </span>
               )}
@@ -165,26 +154,6 @@ export const ChatHeader = memo(function ChatHeader({
             render={
               <Toggle
                 className="shrink-0"
-                pressed={false}
-                onPressedChange={onToggleSearch}
-                aria-label="Search"
-                variant="outline"
-                size="xs"
-              >
-                <SearchIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            Search
-            {searchToggleShortcutLabel && <> ({searchToggleShortcutLabel})</>}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
                 pressed={sidebarOpen}
                 onPressedChange={() => {
                   if (!sidebarOpen) {
@@ -193,7 +162,7 @@ export const ChatHeader = memo(function ChatHeader({
                   rawToggleSidebar();
                 }}
                 aria-label="Toggle sidebar"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
               >
                 {sidebarOpen ? (
@@ -222,7 +191,7 @@ export const ChatHeader = memo(function ChatHeader({
                   onToggleBrowser();
                 }}
                 aria-label="Toggle browser panel"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
               >
                 <GlobeIcon className="size-3" />
@@ -243,11 +212,11 @@ export const ChatHeader = memo(function ChatHeader({
                 pressed={terminalOpen}
                 onPressedChange={onToggleTerminal}
                 aria-label="Toggle terminal drawer"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
                 disabled={!terminalAvailable}
               >
-                <TerminalSquareIcon className="size-3" />
+                <TerminalIcon className="size-3" />
               </Toggle>
             }
           />
@@ -267,7 +236,7 @@ export const ChatHeader = memo(function ChatHeader({
                 pressed={diffOpen}
                 onPressedChange={onToggleDiff}
                 aria-label="Toggle diff panel"
-                variant="outline"
+                variant="toolbar"
                 size="xs"
                 disabled={!isGitRepo}
               >

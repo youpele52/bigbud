@@ -1,4 +1,5 @@
 import type { ModelCapabilities, OpencodeSettings, ServerProviderModel } from "@bigbud/contracts";
+import { ChildProcess } from "effect/unstable/process";
 import { Cache, Duration, Effect, Equal, Layer, Result, Stream } from "effect";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 
@@ -7,6 +8,7 @@ import {
   providerModelsFromSettings,
   type ProviderProbeResult,
 } from "../providerSnapshot";
+import { spawnAndCollect } from "../providerSnapshot";
 import { makeManagedServerProvider } from "../makeManagedServerProvider";
 import { OpencodeProvider } from "../Services/OpencodeProvider";
 import { OpencodeServerManager } from "../Services/OpencodeServerManager";
@@ -14,6 +16,7 @@ import { ServerSettingsService } from "../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../Errors";
 
 const PROVIDER = "opencode" as const;
+const MINIMUM_OPENCODE_VERSION = "1.14.19";
 const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
   supportsFastMode: false,
@@ -80,9 +83,10 @@ function mapOpencodeModel(
   providerName: string,
 ): ServerProviderModel {
   const supportsReasoning = model.capabilities?.reasoning === true;
+  const modelName = model.name.trim();
   return {
     slug: model.id,
-    name: model.name,
+    name: modelName.length > 0 ? modelName : model.id,
     isCustom: false,
     group: providerName,
     subProviderID: model.providerID,
@@ -98,6 +102,42 @@ function mapOpencodeModel(
     },
   };
 }
+
+function parseVersion(version: string): readonly [number, number, number] | null {
+  const match = version.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function isVersionAtLeast(version: string, minimum: string): boolean {
+  const parsed = parseVersion(version);
+  const parsedMinimum = parseVersion(minimum);
+  if (!parsed || !parsedMinimum) return true;
+  for (let index = 0; index < parsed.length; index += 1) {
+    const value = parsed[index]!;
+    const minimumValue = parsedMinimum[index]!;
+    if (value > minimumValue) return true;
+    if (value < minimumValue) return false;
+  }
+  return true;
+}
+
+const getOpencodeVersion = Effect.fn("getOpencodeVersion")(function* (binaryPath: string) {
+  const result = yield* spawnAndCollect(
+    binaryPath,
+    ChildProcess.make(binaryPath, ["--version"], {
+      shell: process.platform === "win32",
+    }),
+  );
+  if (result.code !== 0) {
+    return yield* Effect.fail(
+      new Error(
+        result.stderr.trim() || result.stdout.trim() || `OpenCode exited with code ${result.code}`,
+      ),
+    );
+  }
+  return result.stdout.trim() || result.stderr.trim();
+});
 
 /**
  * Acquire a handle from the shared OpenCode server manager, run `f`, then
@@ -203,6 +243,49 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
     });
   }
 
+  const versionResult = yield* getOpencodeVersion(opencodeSettings.binaryPath).pipe(Effect.result);
+
+  if (Result.isFailure(versionResult)) {
+    const message =
+      versionResult.failure instanceof Error
+        ? versionResult.failure.message
+        : String(versionResult.failure);
+    const missing =
+      message.toLowerCase().includes("enoent") || message.toLowerCase().includes("not found");
+    return buildServerProvider({
+      provider: PROVIDER,
+      enabled: opencodeSettings.enabled,
+      checkedAt,
+      models: builtInModels,
+      probe: {
+        installed: !missing,
+        version: null,
+        status: "error",
+        auth: { status: "unknown" },
+        message: missing
+          ? "OpenCode binary is not installed or not on PATH."
+          : `Failed to execute OpenCode version check: ${message}`,
+      },
+    });
+  }
+
+  const opencodeVersion = versionResult.success;
+  if (!isVersionAtLeast(opencodeVersion, MINIMUM_OPENCODE_VERSION)) {
+    return buildServerProvider({
+      provider: PROVIDER,
+      enabled: opencodeSettings.enabled,
+      checkedAt,
+      models: builtInModels,
+      probe: {
+        installed: true,
+        version: opencodeVersion,
+        status: "error",
+        auth: { status: "unknown" },
+        message: `OpenCode ${MINIMUM_OPENCODE_VERSION} or newer is required. Found ${opencodeVersion}.`,
+      },
+    });
+  }
+
   const statusResult = yield* withOpencodeServer(async (client) => {
     // Fetch provider config to enumerate available models.
     const providersResp = await client.config.providers();
@@ -273,7 +356,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
       models: builtInModels,
       probe: {
         installed: !missing,
-        version: null,
+        version: opencodeVersion,
         status: "error",
         auth: { status: "unknown" },
         message: missing

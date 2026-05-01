@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createThreadJumpHintVisibilityController,
   getVisibleSidebarThreadIds,
+  getVisibleRecentThreadIds,
   resolveAdjacentThreadId,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
@@ -359,6 +360,64 @@ describe("getVisibleSidebarThreadIds", () => {
         },
       ]),
     ).toEqual([ThreadId.makeUnsafe("thread-12"), ThreadId.makeUnsafe("thread-11")]);
+  });
+
+  it("can prepend visible recent chats before project threads", () => {
+    const recentThreadIds = [ThreadId.makeUnsafe("chat-2"), ThreadId.makeUnsafe("chat-1")];
+    expect([
+      ...recentThreadIds,
+      ...getVisibleSidebarThreadIds([
+        {
+          shouldShowThreadPanel: true,
+          renderedThreadIds: [ThreadId.makeUnsafe("thread-12")],
+        },
+      ]),
+    ]).toEqual([
+      ThreadId.makeUnsafe("chat-2"),
+      ThreadId.makeUnsafe("chat-1"),
+      ThreadId.makeUnsafe("thread-12"),
+    ]);
+  });
+});
+
+describe("getVisibleRecentThreadIds", () => {
+  const threads = [
+    ThreadId.makeUnsafe("chat-1"),
+    ThreadId.makeUnsafe("chat-2"),
+    ThreadId.makeUnsafe("chat-3"),
+  ];
+
+  it("returns no recent threads when recents is collapsed", () => {
+    expect(
+      getVisibleRecentThreadIds({
+        renderedChatThreadIds: threads,
+        isExpanded: false,
+        showAll: true,
+        initialVisibleCount: 2,
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns only previewed recent threads before see more is opened", () => {
+    expect(
+      getVisibleRecentThreadIds({
+        renderedChatThreadIds: threads,
+        isExpanded: true,
+        showAll: false,
+        initialVisibleCount: 2,
+      }),
+    ).toEqual([ThreadId.makeUnsafe("chat-1"), ThreadId.makeUnsafe("chat-2")]);
+  });
+
+  it("returns all recent threads after see more is opened", () => {
+    expect(
+      getVisibleRecentThreadIds({
+        renderedChatThreadIds: threads,
+        isExpanded: true,
+        showAll: true,
+        initialVisibleCount: 2,
+      }),
+    ).toEqual(threads);
   });
 });
 
