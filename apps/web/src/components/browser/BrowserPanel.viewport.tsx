@@ -15,6 +15,11 @@ export interface BrowserViewportRef {
   startAnnotation(): Promise<BrowserAnnotationResult | null>;
 }
 
+export interface BrowserPageMetadata {
+  title: string;
+  faviconUrl: string | null;
+}
+
 export interface BrowserViewportProps {
   url: string;
   onUrlChange?: ((url: string) => void) | undefined;
@@ -24,6 +29,7 @@ export interface BrowserViewportProps {
   onLoadFail?:
     | ((info: { errorCode: number; errorDescription: string; validatedURL: string }) => void)
     | undefined;
+  onPageMetadataChange?: ((metadata: BrowserPageMetadata) => void) | undefined;
   onContextMenu?:
     | ((event: {
         x: number;
@@ -50,6 +56,8 @@ type ElectronWebview = HTMLElement & {
 };
 
 type NavigateEvent = Event & { url: string };
+type PageTitleEvent = Event & { title?: string };
+type PageFaviconEvent = Event & { favicons?: string[] };
 type ContextMenuEvent = Event & {
   params: {
     x: number;
@@ -167,9 +175,18 @@ function isWebviewReady(webview: ElectronWebview): boolean {
   }
 }
 
+function normalizeBrowserUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).toString();
+  } catch {
+    return null;
+  }
+}
+
 const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function WebViewViewport(
-    { url, onUrlChange, onNavigationStateChange, onLoadFail, onContextMenu },
+    { url, onUrlChange, onNavigationStateChange, onLoadFail, onPageMetadataChange, onContextMenu },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -178,12 +195,15 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
     const onUrlChangeRef = useRef(onUrlChange);
     const onNavigationStateChangeRef = useRef(onNavigationStateChange);
     const onLoadFailRef = useRef(onLoadFail);
+    const onPageMetadataChangeRef = useRef(onPageMetadataChange);
     const onContextMenuRef = useRef(onContextMenu);
     const urlRef = useRef(url);
+    const pageMetadataRef = useRef<BrowserPageMetadata>({ title: "", faviconUrl: null });
 
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
     onLoadFailRef.current = onLoadFail;
+    onPageMetadataChangeRef.current = onPageMetadataChange;
     onContextMenuRef.current = onContextMenu;
     urlRef.current = url;
 
@@ -286,15 +306,66 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
         }
       };
 
+      const updatePageMetadata = (metadata: Partial<BrowserPageMetadata>) => {
+        const next = {
+          title: metadata.title ?? pageMetadataRef.current.title,
+          faviconUrl:
+            metadata.faviconUrl === undefined
+              ? pageMetadataRef.current.faviconUrl
+              : normalizeBrowserUrl(metadata.faviconUrl),
+        };
+        pageMetadataRef.current = next;
+        try {
+          onPageMetadataChangeRef.current?.(next);
+        } catch {
+          // Ignore transient callback errors during navigation.
+        }
+      };
+
+      const readPageMetadata = () => {
+        const w = webviewRef.current;
+        if (!w || !isWebviewReady(w)) return;
+        try {
+          updatePageMetadata({ title: w.getTitle() || "" });
+        } catch {
+          // Guest frame may not be ready yet; ignore transient state reads.
+        }
+        void w
+          .executeJavaScript<BrowserPageMetadata | null>(
+            `(() => {
+              const icon = document.querySelector('link[rel~="icon"], link[rel="shortcut icon"], link[rel~="apple-touch-icon"]');
+              const href = icon instanceof HTMLLinkElement && icon.href ? icon.href : null;
+              return { title: document.title || "", faviconUrl: href };
+            })()`,
+            false,
+          )
+          .then((metadata) => {
+            if (!metadata) return;
+            updatePageMetadata(metadata);
+          })
+          .catch(() => {
+            // Cross-origin and transient navigation states can reject script execution.
+          });
+      };
+
       const handleNavigate = (e: NavigateEvent) => {
         updateNavState();
         if (e.url) {
           try {
             onUrlChangeRef.current?.(e.url);
+            updatePageMetadata({ title: "", faviconUrl: null });
           } catch {
             // Ignore transient callback errors during navigation.
           }
         }
+      };
+
+      const handlePageTitle = (e: PageTitleEvent) => {
+        updatePageMetadata({ title: e.title || "" });
+      };
+
+      const handlePageFavicon = (e: PageFaviconEvent) => {
+        updatePageMetadata({ faviconUrl: e.favicons?.[0] ?? null });
       };
 
       const handleFailLoad = (e: FailLoadEvent) => {
@@ -331,6 +402,9 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
       webview.addEventListener("did-navigate", handleNavigate as EventListener);
       webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
       webview.addEventListener("dom-ready", updateNavState);
+      webview.addEventListener("dom-ready", readPageMetadata);
+      webview.addEventListener("page-title-updated", handlePageTitle as EventListener);
+      webview.addEventListener("page-favicon-updated", handlePageFavicon as EventListener);
       webview.addEventListener("did-fail-load", handleFailLoad as EventListener);
       webview.addEventListener("context-menu", handleContextMenu as EventListener);
 
@@ -338,6 +412,9 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
         webview.removeEventListener("did-navigate", handleNavigate as EventListener);
         webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
         webview.removeEventListener("dom-ready", updateNavState);
+        webview.removeEventListener("dom-ready", readPageMetadata);
+        webview.removeEventListener("page-title-updated", handlePageTitle as EventListener);
+        webview.removeEventListener("page-favicon-updated", handlePageFavicon as EventListener);
         webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);
         webview.removeEventListener("context-menu", handleContextMenu as EventListener);
         readyRef.current = false;
@@ -368,7 +445,7 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
 );
 
 const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(function IFrameViewport(
-  { url, onUrlChange, onLoadFail },
+  { url, onUrlChange, onLoadFail, onPageMetadataChange },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -402,8 +479,9 @@ const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(func
     if (currentSrc !== url) {
       iframe.setAttribute("src", url);
       setErrorUrl(null);
+      onPageMetadataChange?.({ title: "", faviconUrl: null });
     }
-  }, [url]);
+  }, [onPageMetadataChange, url]);
 
   const handleLoad = () => {
     // Cross-origin restrictions prevent us from inspecting iframe contents,

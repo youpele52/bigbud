@@ -8,9 +8,14 @@ import { useComposerDraftStore } from "~/stores/composer";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { buildBrowserAnnotationPrompt, dataUrlToFile } from "./BrowserPanel.annotation";
-import { BrowserViewport, type BrowserViewportRef } from "./BrowserPanel.viewport";
+import {
+  BrowserViewport,
+  type BrowserPageMetadata,
+  type BrowserViewportRef,
+} from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
+import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
 
 const BROWSER_PANEL_WIDTH_STORAGE_KEY = "browser_panel_width";
 const BROWSER_PANEL_MIN_WIDTH = 320;
@@ -46,6 +51,11 @@ export const BrowserPanel = memo(function BrowserPanel({
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pageMetadata, setPageMetadata] = useState<BrowserPageMetadata>({
+    title: "",
+    faviconUrl: null,
+  });
+  const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
     x: number;
@@ -61,13 +71,29 @@ export const BrowserPanel = memo(function BrowserPanel({
     setInputUrl(nextUrl);
     setActiveUrl(nextUrl);
     setUrl(nextUrl);
+    setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
   }, [inputUrl, setUrl]);
+
+  const handleSelectHistoryUrl = useCallback(
+    (nextUrl: string) => {
+      setInputUrl(nextUrl);
+      setActiveUrl(nextUrl);
+      setUrl(nextUrl);
+      setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
+    },
+    [setUrl],
+  );
+
+  const handleCancelEmptyUrlEdit = useCallback(() => {
+    setInputUrl(activeUrl);
+  }, [activeUrl]);
 
   const handleUrlChange = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
       setActiveUrl(nextUrl);
       setUrl(nextUrl);
+      setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
     [setUrl],
   );
@@ -217,6 +243,8 @@ export const BrowserPanel = memo(function BrowserPanel({
           inputUrl={inputUrl}
           setInputUrl={setInputUrl}
           onNavigate={handleNavigate}
+          onSelectHistoryUrl={handleSelectHistoryUrl}
+          onCancelEmptyUrlEdit={handleCancelEmptyUrlEdit}
           onClose={handleClose}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
@@ -224,6 +252,8 @@ export const BrowserPanel = memo(function BrowserPanel({
           onGoForward={() => viewportRef.current?.goForward()}
           onReload={() => viewportRef.current?.reload()}
           onAnnotate={handleAnnotate}
+          pageMetadata={pageMetadata}
+          historyUrls={browserHistory}
           annotationDisabled={!isElectron}
         />
         {loadError && (
@@ -244,6 +274,7 @@ export const BrowserPanel = memo(function BrowserPanel({
               }
             }}
             onLoadFail={handleLoadFail}
+            onPageMetadataChange={setPageMetadata}
             onContextMenu={
               isElectron
                 ? ({ x, y }) => {
