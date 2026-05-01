@@ -16,6 +16,7 @@ import { resolveNewChatOptions, useHandleNewThread } from "../../hooks/useHandle
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import {
+  getVisibleRecentThreadIds,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
   sortThreadsForSidebar,
@@ -30,6 +31,7 @@ import { toastManager } from "../ui/toast";
 import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
+import { RECENT_CHAT_INITIAL_VISIBLE_COUNT } from "./Sidebar.chatsSection";
 import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
@@ -265,24 +267,40 @@ export function useSidebarState(): SidebarState {
   cancelProjectRenameRef.current = projectActions.cancelProjectRename;
   cancelThreadRenameRef.current = threadActions.cancelRename;
 
+  const [areChatsExpanded, setAreChatsExpanded] = useState(true);
+  const [showAllChats, setShowAllChats] = useState(false);
+
+  const renderedChats = useMemo(() => {
+    const orderedChats = sortThreadsForSidebar(
+      visibleChatThreads,
+      appSettings.sidebarChatsSortOrder,
+    );
+    const orderedThreadIds = orderedChats.map((entry) => entry.id);
+    return orderedChats.map((thread) => ({
+      threadId: thread.id,
+      orderedThreadIds,
+    }));
+  }, [appSettings.sidebarChatsSortOrder, visibleChatThreads]);
+
+  const visibleChatThreadIdsForJumpHints = useMemo(
+    () =>
+      getVisibleRecentThreadIds({
+        renderedChatThreadIds: renderedChats.map((entry) => entry.threadId),
+        isExpanded: areChatsExpanded,
+        showAll: showAllChats,
+        initialVisibleCount: RECENT_CHAT_INITIAL_VISIBLE_COUNT,
+      }),
+    [areChatsExpanded, renderedChats, showAllChats],
+  );
+
   // ── Rendered projects + jump hints + keyboard nav sub-hook ────────────────
   const renderedProjectsState = useSidebarRenderedProjects({
     sortedProjects,
+    visibleChatThreadIds: visibleChatThreadIdsForJumpHints,
     routeThreadId,
     navigateToThread: threadActions.navigateToThread,
     platform,
   });
-
-  const renderedChats = useMemo(
-    () =>
-      sortThreadsForSidebar(visibleChatThreads, appSettings.sidebarChatsSortOrder).map(
-        (thread) => ({
-          threadId: thread.id,
-          orderedThreadIds: visibleChatThreads.map((entry) => entry.id),
-        }),
-      ),
-    [appSettings.sidebarChatsSortOrder, visibleChatThreads],
-  );
 
   // ── Global mousedown handler to clear thread selection ────────────────────
   useEffect(() => {
@@ -381,6 +399,10 @@ export function useSidebarState(): SidebarState {
     projects,
     bootstrapComplete,
     chatsProject,
+    areChatsExpanded,
+    setAreChatsExpanded,
+    showAllChats,
+    setShowAllChats,
     renderedChats,
     renderedProjects: renderedProjectsState.renderedProjects,
     isManualProjectSorting,

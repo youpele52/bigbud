@@ -35,6 +35,22 @@ export function mapCodexRuntimeMode(runtimeMode: RuntimeMode): {
   }
 }
 
+export function mapCodexTurnSandboxPolicy(
+  runtimeMode: RuntimeMode,
+):
+  | { readonly type: "readOnly" }
+  | { readonly type: "workspaceWrite" }
+  | { readonly type: "dangerFullAccess" } {
+  switch (runtimeMode) {
+    case "approval-required":
+      return { type: "readOnly" };
+    case "auto-accept-edits":
+      return { type: "workspaceWrite" };
+    case "full-access":
+      return { type: "dangerFullAccess" };
+  }
+}
+
 /**
  * On Windows with `shell: true`, `child.kill()` only terminates the `cmd.exe`
  * wrapper, leaving the actual command running. Use `taskkill /T` to kill the

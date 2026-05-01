@@ -348,7 +348,7 @@ describe("when: working tree has local changes", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push_pr",
-      label: "Commit, push & PR",
+      label: "Commit, Push & PR",
     });
   });
 
@@ -385,7 +385,7 @@ describe("when: working tree has local changes", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push",
-      label: "Commit & push",
+      label: "Commit & Push",
     });
   });
 
@@ -430,7 +430,7 @@ describe("when: on default branch without open PR", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push",
-      label: "Commit & push",
+      label: "Commit & Push",
       disabled: false,
     });
   });
@@ -459,7 +459,7 @@ describe("when: working tree has local changes and branch is behind upstream", (
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "commit_push_pr",
-      label: "Commit, push & PR",
+      label: "Commit, Push & PR",
     });
   });
 
@@ -637,7 +637,7 @@ describe("when: branch has no upstream configured", () => {
     assert.deepInclude(quick, {
       kind: "run_action",
       action: "create_pr",
-      label: "Push & create PR",
+      label: "Push & Create PR",
       disabled: false,
     });
   });

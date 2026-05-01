@@ -18,25 +18,31 @@ import {
   VSCodium,
   Zed,
 } from "../../Icons";
-import { isMacPlatform, isWindowsPlatform } from "~/lib/utils";
+import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 
+const MONOCHROME_EDITOR_ICON_CLASS_NAME = "text-neutral-500";
+
+type OpenInOption = {
+  label: string;
+  Icon: Icon;
+  value: EditorId;
+  iconClassName?: string;
+};
+
 const resolveOptions = (platform: string, availableEditors: ReadonlyArray<EditorId>) => {
-  const baseOptions: ReadonlyArray<{ label: string; Icon: Icon; value: EditorId }> = [
+  const baseOptions: ReadonlyArray<OpenInOption> = [
     {
       label: "Cursor",
       Icon: CursorIcon,
       value: "cursor",
+      iconClassName: MONOCHROME_EDITOR_ICON_CLASS_NAME,
     },
     {
       label: "Trae",
       Icon: TraeIcon,
       value: "trae",
-    },
-    {
-      label: "Kiro",
-      Icon: KiroIcon,
-      value: "kiro",
+      iconClassName: MONOCHROME_EDITOR_ICON_CLASS_NAME,
     },
     {
       label: "VS Code",
@@ -57,6 +63,12 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
       label: "Zed",
       Icon: Zed,
       value: "zed",
+      iconClassName: MONOCHROME_EDITOR_ICON_CLASS_NAME,
+    },
+    {
+      label: "Kiro",
+      Icon: KiroIcon,
+      value: "kiro",
     },
     {
       label: "Antigravity",
@@ -132,25 +144,30 @@ export const OpenInPicker = memo(function OpenInPicker({
     <Group aria-label="Subscription actions">
       <Button
         size="xs"
-        variant="outline"
+        variant="toolbar"
         disabled={!preferredEditor || !openInCwd}
         onClick={() => openInEditor(preferredEditor)}
       >
-        {primaryOption?.Icon && <primaryOption.Icon aria-hidden="true" className="size-3.5" />}
+        {primaryOption?.Icon && (
+          <primaryOption.Icon
+            aria-hidden="true"
+            className={cn("size-3.5", primaryOption.iconClassName)}
+          />
+        )}
         <span className="sr-only @3xl/header-actions:not-sr-only @3xl/header-actions:ml-0.5">
           Open
         </span>
       </Button>
       <GroupSeparator className="hidden @3xl/header-actions:block" />
       <Menu>
-        <MenuTrigger render={<Button aria-label="Copy options" size="icon-xs" variant="outline" />}>
+        <MenuTrigger render={<Button aria-label="Copy options" size="icon-xs" variant="toolbar" />}>
           <ChevronDownIcon aria-hidden="true" className="size-4" />
         </MenuTrigger>
         <MenuPopup align="end">
           {options.length === 0 && <MenuItem disabled>No installed editors found</MenuItem>}
-          {options.map(({ label, Icon, value }) => (
+          {options.map(({ label, Icon, value, iconClassName }) => (
             <MenuItem key={value} onClick={() => openInEditor(value)}>
-              <Icon aria-hidden="true" className="text-muted-foreground" />
+              <Icon aria-hidden="true" className={cn(iconClassName ?? "text-muted-foreground")} />
               {label}
               {value === preferredEditor && openFavoriteEditorShortcutLabel && (
                 <MenuShortcut>{openFavoriteEditorShortcutLabel}</MenuShortcut>

@@ -28,7 +28,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@github/copilot-sdk": "0.3.0",
-    "@mariozechner/pi-coding-agent": "^0.70.2",
+    "@mariozechner/pi-coding-agent": "^0.71.1",
     "@opencode-ai/sdk": "^1.14.28",
     "@pierre/diffs": "^1.1.0-beta.16",
     "effect": "catalog:",

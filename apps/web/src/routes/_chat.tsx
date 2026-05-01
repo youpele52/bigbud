@@ -1,5 +1,5 @@
 import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
-import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import {
@@ -44,6 +44,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     setOpen: setBrowserOpen,
   } = useBrowserPanelStore();
   const commandPaletteOpen = useCommandPaletteStore((state) => state.open);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -122,6 +123,14 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         toggleBrowser();
         return;
       }
+
+      if (command === "settings.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        setBrowserOpen(false);
+        void navigate({ to: "/settings" });
+        return;
+      }
     };
 
     window.addEventListener("keydown", onWindowKeyDown, { capture: true });
@@ -145,6 +154,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     toggleBrowser,
     setSidebarOpen,
     setBrowserOpen,
+    navigate,
     onToggleSearch,
   ]);
 
@@ -160,7 +170,7 @@ function ChatRouteLayout() {
       <ChatRouteGlobalShortcuts onToggleSearch={toggleSearchOpen} />
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
-      <BrowserPanel />
+      <BrowserPanel activeThreadId={routeThreadId ?? null} />
     </>
   );
 }

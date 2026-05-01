@@ -21,7 +21,7 @@ Long term maintainability is a core priority. Before adding new functionality, c
 
 ## Package Roles
 
-- `apps/server`: Named `"t3"` in package.json (not `@bigbud/server`). Node.js/Bun WebSocket server. Starts provider sub-processes, serves the React web app, manages provider sessions. Use `--filter=t3` in turbo commands.
+- `apps/server`: `@bigbud/server`. Node.js/Bun WebSocket server. Starts provider sub-processes, serves the React web app, manages provider sessions. Use `--filter=@bigbud/server` in turbo commands.
 - `apps/web`: `@bigbud/web`. React/Vite UI. Owns session UX, conversation/event rendering, and client-side state. Connects to the server via WebSocket at `/ws?token=<value>`.
 - `apps/desktop`: `@bigbud/desktop`. Electron desktop shell. Embeds the web app and provides native capabilities.
 - `apps/marketing`: `@bigbud/marketing`. Astro-based marketing website.
@@ -74,6 +74,8 @@ bun run --cwd apps/web test:browser                             # Playwright (ne
 
 **`@bigbud/web` is a devDependency of `apps/server`:** In dev, the server proxies to the Vite dev server. In production, it embeds `dist/client/`.
 
+**Env var naming:** Prefer `BIGBUD_*` env vars in new docs, examples, and runtime configuration. Legacy `T3CODE_*` names remain compatibility aliases only where the code still dual-reads them.
+
 ## Providers
 
 Four providers are fully implemented:
@@ -111,15 +113,19 @@ Default keybindings (defined in `apps/server/src/keybindings/keybindings.ts`):
 
 | Shortcut                      | Action                                                                 |
 | ----------------------------- | ---------------------------------------------------------------------- |
-| `mod+shift+g`                 | Toggle diff bar (when terminal is not focused)                         |
-| `mod+shift+g`                 | Split terminal (when terminal is focused)                              |
 | `mod+j`                       | Toggle terminal                                                        |
 | `mod+b`                       | Toggle sidebar                                                         |
+| `mod+,`                       | Toggle settings                                                        |
+| `mod+f`                       | Toggle search                                                          |
+| `mod+shift+g`                 | Toggle diff bar (when terminal is not focused)                         |
+| `mod+shift+g`                 | Split terminal (when terminal is focused)                              |
+| `mod+shift+b`                 | Toggle browser panel (when terminal is not focused)                    |
 | `mod+k`                       | Toggle command palette                                                 |
 | `mod+n`                       | New chat (when terminal not focused) / new terminal tab (when focused) |
 | `mod+shift+n`                 | New local chat                                                         |
 | `mod+o`                       | Open in favorite editor                                                |
 | `mod+shift+[` / `mod+shift+]` | Navigate previous/next thread                                          |
+| `mod+1` ... `mod+9`           | Jump to the first 9 visible thread slots in the sidebar                |
 
 `mod` resolves to `Cmd` on macOS and `Ctrl` on Windows/Linux.
 
