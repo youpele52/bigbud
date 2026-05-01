@@ -9,6 +9,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "../ui/sidebar";
 import { SettingsIcon } from "lucide-react";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
@@ -19,7 +20,11 @@ import { useSidebarState } from "./Sidebar.state";
 
 export default function Sidebar() {
   const navigate = useNavigate();
+  const { isMobile, setOpenMobile } = useSidebar();
   const s = useSidebarState();
+  const closeMobileSidebar = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   return (
     <>
@@ -32,6 +37,7 @@ export default function Sidebar() {
           <SidebarChatsSection
             renderedChats={s.renderedChats}
             onNewChat={() => {
+              closeMobileSidebar();
               void s.handleNewChat();
             }}
             newThreadShortcutLabel={s.newThreadShortcutLabel}
@@ -61,6 +67,7 @@ export default function Sidebar() {
             }}
             shouldShowProjectPathEntry={s.shouldShowProjectPathEntry}
             handleStartAddProject={s.handleStartAddProject}
+            onCloseMobileSidebar={closeMobileSidebar}
             isElectron={isElectron}
             newCwd={s.newCwd}
             isPickingFolder={s.isPickingFolder}

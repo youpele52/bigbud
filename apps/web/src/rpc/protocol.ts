@@ -26,6 +26,7 @@ export type WsRpcProtocolClient =
   RpcClientFactory extends Effect.Effect<infer Client, any, any> ? Client : never;
 
 export interface WsProtocolLifecycleHandlers {
+  readonly isActive?: () => boolean;
   readonly onAttempt?: (socketUrl: string) => void;
   readonly onOpen?: () => void;
   readonly onError?: (message: string) => void;
@@ -34,6 +35,7 @@ export interface WsProtocolLifecycleHandlers {
 
 function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
   return {
+    isActive: () => true,
     onAttempt: (socketUrl) => {
       recordWsConnectionAttempt(socketUrl);
     },
@@ -55,21 +57,27 @@ function composeLifecycleHandlers(
   handlers?: WsProtocolLifecycleHandlers,
 ): Required<WsProtocolLifecycleHandlers> {
   const defaults = defaultLifecycleHandlers();
+  const isActive = handlers?.isActive ?? (() => true);
 
   return {
+    isActive,
     onAttempt: (socketUrl) => {
+      if (!isActive()) return;
       defaults.onAttempt(socketUrl);
       handlers?.onAttempt?.(socketUrl);
     },
     onOpen: () => {
+      if (!isActive()) return;
       defaults.onOpen();
       handlers?.onOpen?.();
     },
     onError: (message) => {
+      if (!isActive()) return;
       defaults.onError(message);
       handlers?.onError?.(message);
     },
     onClose: (details) => {
+      if (!isActive()) return;
       defaults.onClose(details);
       handlers?.onClose?.(details);
     },

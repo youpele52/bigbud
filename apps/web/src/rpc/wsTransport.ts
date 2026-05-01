@@ -40,6 +40,8 @@ export class WsTransport {
   private disposed = false;
   private hasReportedTransportDisconnect = false;
   private reconnectChain: Promise<void> = Promise.resolve();
+  private nextSessionId = 0;
+  private activeSessionId = 0;
   private session: TransportSession;
 
   constructor(url?: string, lifecycleHandlers?: WsProtocolLifecycleHandlers) {
@@ -191,7 +193,15 @@ export class WsTransport {
   }
 
   private createSession(): TransportSession {
-    const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(this.url, this.lifecycleHandlers));
+    const sessionId = this.nextSessionId + 1;
+    this.nextSessionId = sessionId;
+    this.activeSessionId = sessionId;
+    const runtime = ManagedRuntime.make(
+      createWsRpcProtocolLayer(this.url, {
+        ...this.lifecycleHandlers,
+        isActive: () => !this.disposed && this.activeSessionId === sessionId,
+      }),
+    );
     const clientScope = runtime.runSync(Scope.make());
     return {
       runtime,

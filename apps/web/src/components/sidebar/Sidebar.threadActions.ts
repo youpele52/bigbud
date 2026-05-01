@@ -5,6 +5,7 @@ import { useUiStateStore } from "../../stores/ui";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useSettings } from "../../hooks/useSettings";
+import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
@@ -80,6 +81,10 @@ export function useSidebarThreadActions({
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
   const { archiveThread, deleteThread } = useThreadActions();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const closeMobileSidebar = useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
 
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
@@ -287,9 +292,16 @@ export function useSidebarThreadActions({
         clearSelection();
       }
       setSelectionAnchor(threadId);
+      closeMobileSidebar();
       navigateToThreadRoute(threadId);
     },
-    [clearSelection, navigateToThreadRoute, selectedThreadIds.size, setSelectionAnchor],
+    [
+      clearSelection,
+      closeMobileSidebar,
+      navigateToThreadRoute,
+      selectedThreadIds.size,
+      setSelectionAnchor,
+    ],
   );
 
   const handleThreadClick = useCallback(
@@ -314,10 +326,12 @@ export function useSidebarThreadActions({
         clearSelection();
       }
       setSelectionAnchor(threadId);
+      closeMobileSidebar();
       navigateToThreadRoute(threadId);
     },
     [
       clearSelection,
+      closeMobileSidebar,
       navigateToThreadRoute,
       rangeSelectTo,
       selectedThreadIds.size,

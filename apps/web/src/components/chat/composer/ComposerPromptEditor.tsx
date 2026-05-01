@@ -330,7 +330,7 @@ function ComposerPromptEditorInner({
           contentEditable={
             <ContentEditable
               className={cn(
-                "block max-h-[200px] min-h-17.5 w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-[13px] leading-relaxed text-foreground focus:outline-none",
+                "block max-h-[200px] min-h-17.5 w-full touch-pan-y overflow-y-auto whitespace-pre-wrap break-words bg-transparent text-sm leading-relaxed text-foreground focus:outline-none sm:text-[13px]",
                 className,
               )}
               data-testid="composer-editor"
@@ -341,7 +341,7 @@ function ComposerPromptEditorInner({
           }
           placeholder={
             terminalContexts.length > 0 ? null : (
-              <div className="pointer-events-none absolute inset-0 text-[13px] leading-relaxed text-muted-foreground/35">
+              <div className="pointer-events-none absolute inset-0 text-sm leading-relaxed text-muted-foreground/35 sm:text-[13px]">
                 {placeholder}
               </div>
             )
