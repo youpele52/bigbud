@@ -1,11 +1,23 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { isElectron } from "~/config/env";
+import {
+  browserAnnotationPickerScript,
+  type BrowserAnnotationResult,
+  type BrowserAnnotationSelection,
+  type BrowserAnnotationTheme,
+} from "./BrowserPanel.annotation";
 
 export interface BrowserViewportRef {
   goBack(): void;
   goForward(): void;
   reload(): void;
   openDevTools(): void;
+  startAnnotation(): Promise<BrowserAnnotationResult | null>;
+}
+
+export interface BrowserPageMetadata {
+  title: string;
+  faviconUrl: string | null;
 }
 
 export interface BrowserViewportProps {
@@ -17,6 +29,7 @@ export interface BrowserViewportProps {
   onLoadFail?:
     | ((info: { errorCode: number; errorDescription: string; validatedURL: string }) => void)
     | undefined;
+  onPageMetadataChange?: ((metadata: BrowserPageMetadata) => void) | undefined;
   onContextMenu?:
     | ((event: {
         x: number;
@@ -38,9 +51,13 @@ type ElectronWebview = HTMLElement & {
   getURL(): string;
   getTitle(): string;
   getWebContentsId(): number;
+  executeJavaScript<T = unknown>(code: string, userGesture?: boolean): Promise<T>;
+  capturePage(): Promise<{ toDataURL(): string }>;
 };
 
 type NavigateEvent = Event & { url: string };
+type PageTitleEvent = Event & { title?: string };
+type PageFaviconEvent = Event & { favicons?: string[] };
 type ContextMenuEvent = Event & {
   params: {
     x: number;
@@ -55,6 +72,85 @@ type FailLoadEvent = Event & {
   validatedURL: string;
   isMainFrame: boolean;
 };
+
+/** Probe a CSS value by rendering a hidden element with that value as a specific
+ *  CSS property, then reading back the computed colour. This correctly resolves
+ *  var() chains for both `color` and `background-color` tokens. */
+function probeColor(cssValue: string, property: "color" | "backgroundColor"): string {
+  if (typeof document === "undefined") return cssValue;
+  const probe = document.createElement("span");
+  probe.style.position = "absolute";
+  probe.style.pointerEvents = "none";
+  probe.style.visibility = "hidden";
+  if (property === "color") {
+    probe.style.color = cssValue;
+  } else {
+    probe.style.backgroundColor = cssValue;
+  }
+  document.body.appendChild(probe);
+  const resolved =
+    property === "color" ? getComputedStyle(probe).color : getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  // Reject transparent fallbacks — they mean the value didn't resolve.
+  if (!resolved || resolved === "rgba(0, 0, 0, 0)" || resolved === "transparent") return cssValue;
+  return resolved;
+}
+
+/** Read a concrete (non-transparent) computed style from a DOM element, or
+ *  return undefined if the element is absent or the value is transparent. */
+function readElementColor(
+  element: Element | null,
+  property: "backgroundColor" | "borderColor" | "color",
+): string | undefined {
+  if (!element) return undefined;
+  const value = getComputedStyle(element)[property];
+  return value && value !== "rgba(0, 0, 0, 0)" && value !== "transparent" ? value : undefined;
+}
+
+function readAnnotationTheme(): BrowserAnnotationTheme {
+  const styles = getComputedStyle(document.documentElement);
+
+  // Try to read concrete colours from live composer DOM elements.
+  const composerForm = document.querySelector('[data-chat-composer-form="true"]');
+  // The composer surface is the bg-card div inside the form.
+  const composerSurface = composerForm?.querySelector(".bg-card") ?? composerForm ?? null;
+  // The composer editor element carries the text foreground colour.
+  const composerEditor = composerForm?.querySelector('[data-testid="composer-editor"]') ?? null;
+  // The primary send button — select by type=submit since Tailwind class names can vary.
+  const composerSendButton =
+    composerForm?.querySelector<HTMLButtonElement>("button[type=submit]") ??
+    composerForm?.querySelector<HTMLButtonElement>("button.bg-primary\\/90") ??
+    null;
+
+  // Fallback: resolve via probe elements using the CSS variable values.
+  const rawCard = styles.getPropertyValue("--card").trim() || "var(--color-white)";
+  const rawFg = styles.getPropertyValue("--foreground").trim() || "var(--color-neutral-900)";
+  const rawBorder = styles.getPropertyValue("--border").trim() || "rgba(0,0,0,0.08)";
+  const rawInput = styles.getPropertyValue("--input").trim() || "rgba(0,0,0,0.1)";
+  const rawMuted = styles.getPropertyValue("--muted-foreground").trim() || "#737373";
+  const rawPrimary = styles.getPropertyValue("--primary").trim() || "var(--brand-primary-dark)";
+  const rawPrimaryFg =
+    styles.getPropertyValue("--primary-foreground").trim() || "var(--brand-primary-light)";
+  const rawInfo = styles.getPropertyValue("--info-foreground").trim() || "#1d4ed8";
+  const rawRing = styles.getPropertyValue("--ring").trim() || "var(--foreground)";
+
+  return {
+    card:
+      readElementColor(composerSurface, "backgroundColor") ??
+      probeColor(rawCard, "backgroundColor"),
+    foreground: readElementColor(composerEditor, "color") ?? probeColor(rawFg, "color"),
+    border: readElementColor(composerSurface, "borderColor") ?? probeColor(rawBorder, "color"),
+    input: probeColor(rawInput, "backgroundColor"),
+    mutedForeground: probeColor(rawMuted, "color"),
+    primary:
+      readElementColor(composerSendButton, "backgroundColor") ??
+      probeColor(rawPrimary, "backgroundColor"),
+    primaryForeground:
+      readElementColor(composerSendButton, "color") ?? probeColor(rawPrimaryFg, "color"),
+    infoForeground: probeColor(rawInfo, "color"),
+    ring: probeColor(rawRing, "color"),
+  };
+}
 
 /** Detect whether the Electron `<webview>` tag is actually usable in the current
  *  renderer.  `webviewTag: true` must be present in the BrowserWindow
@@ -79,9 +175,18 @@ function isWebviewReady(webview: ElectronWebview): boolean {
   }
 }
 
+function normalizeBrowserUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).toString();
+  } catch {
+    return null;
+  }
+}
+
 const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function WebViewViewport(
-    { url, onUrlChange, onNavigationStateChange, onLoadFail, onContextMenu },
+    { url, onUrlChange, onNavigationStateChange, onLoadFail, onPageMetadataChange, onContextMenu },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -90,12 +195,15 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
     const onUrlChangeRef = useRef(onUrlChange);
     const onNavigationStateChangeRef = useRef(onNavigationStateChange);
     const onLoadFailRef = useRef(onLoadFail);
+    const onPageMetadataChangeRef = useRef(onPageMetadataChange);
     const onContextMenuRef = useRef(onContextMenu);
     const urlRef = useRef(url);
+    const pageMetadataRef = useRef<BrowserPageMetadata>({ title: "", faviconUrl: null });
 
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
     onLoadFailRef.current = onLoadFail;
+    onPageMetadataChangeRef.current = onPageMetadataChange;
     onContextMenuRef.current = onContextMenu;
     urlRef.current = url;
 
@@ -136,6 +244,30 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
           /* ignore transient errors */
         }
       },
+      startAnnotation: async () => {
+        const w = webviewRef.current;
+        if (!w || !readyRef.current) return null;
+        const theme = JSON.stringify(readAnnotationTheme());
+        const selection = await w.executeJavaScript<BrowserAnnotationSelection>(
+          `(${browserAnnotationPickerScript.toString()})(${theme})`,
+          true,
+        );
+        if (!selection || selection.cancelled) return null;
+        const screenshot = await w.capturePage();
+        return {
+          comment: selection.comment,
+          page: {
+            url: w.getURL(),
+            title: w.getTitle(),
+          },
+          element: selection.element,
+          viewport: selection.viewport,
+          screenshot: {
+            mime: "image/png",
+            dataUrl: screenshot.toDataURL(),
+          },
+        };
+      },
     }));
 
     useEffect(() => {
@@ -174,15 +306,66 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
         }
       };
 
+      const updatePageMetadata = (metadata: Partial<BrowserPageMetadata>) => {
+        const next = {
+          title: metadata.title ?? pageMetadataRef.current.title,
+          faviconUrl:
+            metadata.faviconUrl === undefined
+              ? pageMetadataRef.current.faviconUrl
+              : normalizeBrowserUrl(metadata.faviconUrl),
+        };
+        pageMetadataRef.current = next;
+        try {
+          onPageMetadataChangeRef.current?.(next);
+        } catch {
+          // Ignore transient callback errors during navigation.
+        }
+      };
+
+      const readPageMetadata = () => {
+        const w = webviewRef.current;
+        if (!w || !isWebviewReady(w)) return;
+        try {
+          updatePageMetadata({ title: w.getTitle() || "" });
+        } catch {
+          // Guest frame may not be ready yet; ignore transient state reads.
+        }
+        void w
+          .executeJavaScript<BrowserPageMetadata | null>(
+            `(() => {
+              const icon = document.querySelector('link[rel~="icon"], link[rel="shortcut icon"], link[rel~="apple-touch-icon"]');
+              const href = icon instanceof HTMLLinkElement && icon.href ? icon.href : null;
+              return { title: document.title || "", faviconUrl: href };
+            })()`,
+            false,
+          )
+          .then((metadata) => {
+            if (!metadata) return;
+            updatePageMetadata(metadata);
+          })
+          .catch(() => {
+            // Cross-origin and transient navigation states can reject script execution.
+          });
+      };
+
       const handleNavigate = (e: NavigateEvent) => {
         updateNavState();
         if (e.url) {
           try {
             onUrlChangeRef.current?.(e.url);
+            updatePageMetadata({ title: "", faviconUrl: null });
           } catch {
             // Ignore transient callback errors during navigation.
           }
         }
+      };
+
+      const handlePageTitle = (e: PageTitleEvent) => {
+        updatePageMetadata({ title: e.title || "" });
+      };
+
+      const handlePageFavicon = (e: PageFaviconEvent) => {
+        updatePageMetadata({ faviconUrl: e.favicons?.[0] ?? null });
       };
 
       const handleFailLoad = (e: FailLoadEvent) => {
@@ -219,6 +402,9 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
       webview.addEventListener("did-navigate", handleNavigate as EventListener);
       webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
       webview.addEventListener("dom-ready", updateNavState);
+      webview.addEventListener("dom-ready", readPageMetadata);
+      webview.addEventListener("page-title-updated", handlePageTitle as EventListener);
+      webview.addEventListener("page-favicon-updated", handlePageFavicon as EventListener);
       webview.addEventListener("did-fail-load", handleFailLoad as EventListener);
       webview.addEventListener("context-menu", handleContextMenu as EventListener);
 
@@ -226,6 +412,9 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
         webview.removeEventListener("did-navigate", handleNavigate as EventListener);
         webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
         webview.removeEventListener("dom-ready", updateNavState);
+        webview.removeEventListener("dom-ready", readPageMetadata);
+        webview.removeEventListener("page-title-updated", handlePageTitle as EventListener);
+        webview.removeEventListener("page-favicon-updated", handlePageFavicon as EventListener);
         webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);
         webview.removeEventListener("context-menu", handleContextMenu as EventListener);
         readyRef.current = false;
@@ -256,7 +445,7 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
 );
 
 const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(function IFrameViewport(
-  { url, onUrlChange, onLoadFail },
+  { url, onUrlChange, onLoadFail, onPageMetadataChange },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -280,6 +469,7 @@ const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(func
       }
     },
     openDevTools: () => undefined,
+    startAnnotation: async () => null,
   }));
 
   useEffect(() => {
@@ -289,8 +479,9 @@ const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(func
     if (currentSrc !== url) {
       iframe.setAttribute("src", url);
       setErrorUrl(null);
+      onPageMetadataChange?.({ title: "", faviconUrl: null });
     }
-  }, [url]);
+  }, [onPageMetadataChange, url]);
 
   const handleLoad = () => {
     // Cross-origin restrictions prevent us from inspecting iframe contents,

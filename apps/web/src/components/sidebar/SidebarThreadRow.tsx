@@ -317,13 +317,13 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 title="Agent is working"
                 className="inline-flex shrink-0 items-center justify-center"
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info-foreground" />
               </span>
             )}
             {props.renamingThreadId === thread.id ? (
               <input
                 ref={props.onRenamingInputMount}
-                className="min-w-0 flex-1 truncate text-xs bg-transparent outline-none border border-ring rounded px-0.5"
+                className="min-w-0 flex-1 truncate rounded border border-ring bg-transparent px-0.5 text-sm outline-none sm:text-xs"
                 value={props.renamingTitle}
                 onChange={(event) => props.setRenamingTitle(event.target.value)}
                 onKeyDown={(event) => {
@@ -346,7 +346,14 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 onClick={(event) => event.stopPropagation()}
               />
             ) : (
-              <span className="min-w-0 flex-1 truncate text-xs">{thread.title}</span>
+              <Tooltip>
+                <TooltipTrigger
+                  render={<span className="min-w-0 flex-1 truncate text-xs" title={thread.title} />}
+                >
+                  {thread.title}
+                </TooltipTrigger>
+                <TooltipPopup side="top">{thread.title}</TooltipPopup>
+              </Tooltip>
             )}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -395,7 +402,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                     className={`pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 transition-opacity duration-150 ${
                       swipeReveal.isRevealed
                         ? "opacity-0"
-                        : "opacity-0 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100"
+                        : "opacity-100 md:opacity-0 md:group-hover/menu-sub-item:pointer-events-auto md:group-hover/menu-sub-item:opacity-100 md:group-focus-within/menu-sub-item:pointer-events-auto md:group-focus-within/menu-sub-item:opacity-100"
                     }`}
                   >
                     <button
@@ -427,7 +434,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                           className={`pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 transition-opacity duration-150 ${
                             swipeReveal.isRevealed
                               ? "opacity-0"
-                              : "opacity-0 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100"
+                              : "opacity-100 md:opacity-0 md:group-hover/menu-sub-item:pointer-events-auto md:group-hover/menu-sub-item:opacity-100 md:group-focus-within/menu-sub-item:pointer-events-auto md:group-focus-within/menu-sub-item:opacity-100"
                           }`}
                         >
                           <button

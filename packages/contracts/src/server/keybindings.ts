@@ -36,6 +36,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "browser.toggle",
   "commandPalette.toggle",
   "sidebar.toggle",
+  "settings.toggle",
   "search.toggle",
   "chat.new",
   "chat.newLocal",

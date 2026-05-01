@@ -122,6 +122,19 @@ export function handleThreadRealtimeItemAdded(
   ];
 }
 
+export function handleThreadRealtimeTranscript(
+  event: ProviderEvent,
+  canonicalThreadId: ThreadId,
+): ReadonlyArray<ProviderRuntimeEvent> {
+  return [
+    {
+      type: "thread.realtime.item-added",
+      ...runtimeEventBase(event, canonicalThreadId),
+      payload: { item: event.payload ?? {} },
+    },
+  ];
+}
+
 export function handleThreadRealtimeAudioDelta(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,

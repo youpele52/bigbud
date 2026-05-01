@@ -39,6 +39,7 @@ import { useSwipeRevealAction } from "./useSwipeRevealAction";
 type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusPill>>;
 
 const INITIAL_VISIBLE_THREAD_COUNT = 5;
+const SIDEBAR_PROJECT_ICON_SIZE = "size-4";
 
 export interface RenderedProjectData {
   hasHiddenThreads: boolean;
@@ -344,19 +345,25 @@ export function SidebarRenderedProjectItem({
                       }`}
                     />
                   </span>
-                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
+                  <ChevronRightIcon
+                    className={`absolute inset-0 m-auto ${SIDEBAR_PROJECT_ICON_SIZE} text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100`}
+                  />
                 </span>
               ) : (
                 <ChevronRightIcon
-                  className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  className={`-ml-0.5 ${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
                     project.expanded ? "rotate-90" : ""
                   }`}
                 />
               )}
               {project.expanded ? (
-                <FolderOpenIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                <FolderOpenIcon
+                  className={`${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                />
               ) : (
-                <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                <FolderIcon
+                  className={`${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                />
               )}
               {renamingProjectId === project.id ? (
                 <input

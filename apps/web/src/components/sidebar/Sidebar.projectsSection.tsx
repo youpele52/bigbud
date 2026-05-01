@@ -32,6 +32,7 @@ interface SidebarProjectsSectionProps {
   onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   shouldShowProjectPathEntry: boolean;
   handleStartAddProject: () => void;
+  onCloseMobileSidebar: () => void;
   // New project flow
   isElectron: boolean;
   newCwd: string;
@@ -66,6 +67,7 @@ export function SidebarProjectsSection({
   onThreadSortOrderChange,
   shouldShowProjectPathEntry,
   handleStartAddProject,
+  onCloseMobileSidebar,
   isElectron,
   newCwd,
   isPickingFolder,
@@ -131,7 +133,10 @@ export function SidebarProjectsSection({
                     aria-label={shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
                     aria-pressed={shouldShowProjectPathEntry}
                     className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={handleStartAddProject}
+                    onClick={() => {
+                      onCloseMobileSidebar();
+                      handleStartAddProject();
+                    }}
                   />
                 }
               >

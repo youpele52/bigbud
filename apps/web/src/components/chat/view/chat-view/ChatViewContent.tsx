@@ -117,7 +117,6 @@ export function ChatViewContent({
           terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
-          searchToggleShortcutLabel={composer.searchToggleShortcutLabel}
           browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
           gitCwd={composer.gitCwd}
           diffOpen={base.diffOpen}
@@ -131,7 +130,6 @@ export function ChatViewContent({
           onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
           onToggleDiff={runtime.onToggleDiff}
           onToggleBrowser={toggleBrowser}
-          onToggleSearch={runtime.onToggleSearch}
         />
       </header>
 

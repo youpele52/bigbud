@@ -512,6 +512,8 @@ describe("sendTurn", () => {
         model: "gpt-5.3-codex",
         serviceTier: "fast",
         effort: "high",
+        approvalPolicy: "never",
+        sandboxPolicy: { type: "dangerFullAccess" },
       },
       undefined,
     );
@@ -547,6 +549,8 @@ describe("sendTurn", () => {
           },
         ],
         model: "gpt-5.3-codex",
+        approvalPolicy: "never",
+        sandboxPolicy: { type: "dangerFullAccess" },
       },
       undefined,
     );
@@ -574,6 +578,8 @@ describe("sendTurn", () => {
           },
         ],
         model: "gpt-5.3-codex",
+        approvalPolicy: "never",
+        sandboxPolicy: { type: "dangerFullAccess" },
         collaborationMode: {
           mode: "plan",
           settings: {
@@ -609,6 +615,8 @@ describe("sendTurn", () => {
           },
         ],
         model: "gpt-5.3-codex",
+        approvalPolicy: "never",
+        sandboxPolicy: { type: "dangerFullAccess" },
         collaborationMode: {
           mode: "default",
           settings: {
@@ -645,6 +653,8 @@ describe("sendTurn", () => {
           },
         ],
         model: "gpt-5.2-codex",
+        approvalPolicy: "never",
+        sandboxPolicy: { type: "dangerFullAccess" },
         collaborationMode: {
           mode: "plan",
           settings: {
@@ -1029,6 +1039,44 @@ describe("collab child conversation routing", () => {
         itemId: "call_child_1",
       }),
     );
+  });
+
+  it("suppresses child lifecycle notifications even when the thread id is only top-level", () => {
+    const { manager, context, emitEvent, updateSession } = createCollabNotificationHarness();
+
+    (
+      manager as unknown as {
+        handleServerNotification: (context: unknown, notification: Record<string, unknown>) => void;
+      }
+    ).handleServerNotification(context, {
+      method: "item/completed",
+      params: {
+        item: {
+          type: "collabAgentToolCall",
+          id: "call_collab_1",
+          receiverThreadIds: ["child_provider_1"],
+        },
+        threadId: "provider_parent",
+        turnId: "turn_parent",
+      },
+    });
+    emitEvent.mockClear();
+    updateSession.mockClear();
+
+    (
+      manager as unknown as {
+        handleServerNotification: (context: unknown, notification: Record<string, unknown>) => void;
+      }
+    ).handleServerNotification(context, {
+      method: "turn/started",
+      params: {
+        threadId: "child_provider_1",
+        turn: { id: "turn_child_1" },
+      },
+    });
+
+    expect(emitEvent).not.toHaveBeenCalled();
+    expect(updateSession).not.toHaveBeenCalled();
   });
 });
 

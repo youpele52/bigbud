@@ -20,6 +20,7 @@ import {
   isServerRequest,
   readBoolean,
   readChildParentTurnId,
+  readNotificationThreadId,
   readObject,
   readRouteFields,
   readString,
@@ -165,7 +166,10 @@ export function handleServerNotification(
 ): void {
   const rawRoute = readRouteFields(notification.params);
   rememberCollabReceiverTurns(context, notification.params, rawRoute.turnId);
-  const childParentTurnId = readChildParentTurnId(context, notification.params);
+  const providerThreadId = readNotificationThreadId(notification.method, notification.params);
+  const childParentTurnId =
+    readChildParentTurnId(context, notification.params) ??
+    (providerThreadId ? context.collabReceiverTurns.get(providerThreadId) : undefined);
   const isChildConversation = childParentTurnId !== undefined;
   if (isChildConversation && shouldSuppressChildConversationNotification(notification.method)) {
     return;
