@@ -36,6 +36,10 @@ export default function Sidebar() {
         <>
           <SidebarChatsSection
             renderedChats={s.renderedChats}
+            isExpanded={s.areChatsExpanded}
+            onExpandedChange={s.setAreChatsExpanded}
+            showAll={s.showAllChats}
+            onShowAllChange={s.setShowAllChats}
             onNewChat={() => {
               closeMobileSidebar();
               void s.handleNewChat();
