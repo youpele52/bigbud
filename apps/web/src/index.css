@@ -152,6 +152,9 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 html,
@@ -182,6 +185,15 @@ code,
 textarea,
 input {
   font-family: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
 }
 
 /* Window drag region (frameless titlebar) */

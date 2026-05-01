@@ -116,6 +116,7 @@ The feature uses your own OpenAI API key — you must have one configured to use
 ## Documentation
 
 - [AGENTS.md](./AGENTS.md) — Development guide
+- [docs/CHANGELOG.md](./docs/CHANGELOG.md) — Recent project changes and grouped release history
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — Contribution guidelines
 - [docs/release.md](./docs/release.md) — Release workflow & signing
 - [docs/observability.md](./docs/observability.md) — Observability setup

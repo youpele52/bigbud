@@ -13,7 +13,7 @@ The file must be a JSON array of rules:
 ]
 ```
 
-See the full schema for more details: [`packages/contracts/src/server/keybindings.ts`](packages/contracts/src/server/keybindings.ts)
+See the full schema for more details: [`packages/contracts/src/server/keybindings.ts`](../packages/contracts/src/server/keybindings.ts)
 
 ## Defaults
 
@@ -21,12 +21,14 @@ See the full schema for more details: [`packages/contracts/src/server/keybinding
 [
   { "key": "mod+j", "command": "terminal.toggle" },
   { "key": "mod+b", "command": "sidebar.toggle" },
-  { "key": "mod+d", "command": "terminal.split", "when": "terminalFocus" },
+  { "key": "mod+,", "command": "settings.toggle" },
+  { "key": "mod+f", "command": "search.toggle" },
   { "key": "mod+n", "command": "terminal.new", "when": "terminalFocus" },
   { "key": "mod+w", "command": "terminal.close", "when": "terminalFocus" },
   { "key": "mod+shift+g", "command": "diff.toggle", "when": "!terminalFocus" },
+  { "key": "mod+shift+g", "command": "terminal.split", "when": "terminalFocus" },
+  { "key": "mod+shift+b", "command": "browser.toggle", "when": "!terminalFocus" },
   { "key": "mod+k", "command": "commandPalette.toggle", "when": "!terminalFocus" },
-  { "key": "mod+n", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+n", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+o", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+n", "command": "chat.newLocal", "when": "!terminalFocus" },
@@ -45,7 +47,7 @@ See the full schema for more details: [`packages/contracts/src/server/keybinding
 ]
 ```
 
-For most up to date defaults, see [`DEFAULT_KEYBINDINGS` in `apps/server/src/keybindings.ts`](apps/server/src/keybindings.ts)
+For the most up to date defaults, see [`DEFAULT_KEYBINDINGS` in `apps/server/src/keybindings/keybindings.ts`](../apps/server/src/keybindings/keybindings.ts)
 
 ## Configuration
 
@@ -66,11 +68,17 @@ Invalid rules are ignored. Invalid config files are ignored. Warnings are logged
 - `terminal.new`: create new terminal (in focused terminal context by default)
 - `terminal.close`: close/kill the focused terminal (in focused terminal context by default)
 - `diff.toggle`: open/close the diff panel
+- `browser.toggle`: open/close the browser panel
 - `commandPalette.toggle`: open or close the global command palette
 - `sidebar.toggle`: open/close the sidebar
+- `settings.toggle`: open/close settings
+- `search.toggle`: open/close search
 - `chat.new`: create a new chat thread preserving the active thread's branch/worktree state
 - `chat.newLocal`: create a new chat thread for the active project in a new environment (local/worktree determined by app settings (default `local`))
 - `editor.openFavorite`: open current project/worktree in the last-used editor
+- `thread.previous`: navigate to the previous thread
+- `thread.next`: navigate to the next thread
+- `thread.jump.{1-9}`: jump to one of the first visible thread slots in the sidebar
 - `script.{id}.run`: run a project script by id (for example `script.test.run`)
 
 ### Key Syntax

@@ -75,11 +75,12 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
   ) {
     const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
 
-    // Parse questions from the SDK's AskUserQuestion input.
+    // Parse questions from the SDK's AskUserQuestion input. Claude SDK >= 2.1.121
+    // looks up returned answers by full question text, so the UI draft key must match.
     const rawQuestions = Array.isArray(toolInput.questions) ? toolInput.questions : [];
     const questions: Array<UserInputQuestion> = rawQuestions.map(
       (q: Record<string, unknown>, idx: number) => ({
-        id: typeof q.header === "string" ? q.header : `q-${idx}`,
+        id: typeof q.question === "string" && q.question.length > 0 ? q.question : `q-${idx}`,
         header: typeof q.header === "string" ? q.header : `Question ${idx + 1}`,
         question: typeof q.question === "string" ? q.question : "",
         options: Array.isArray(q.options)

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { ThreadId } from "@bigbud/contracts";
+import { ApprovalRequestId, ThreadId } from "@bigbud/contracts";
 import { assert, it, vi } from "@effect/vitest";
 import { Effect } from "effect";
 
@@ -253,5 +253,66 @@ it.effect("embeds text files inline and sends binary files as file parts to Open
       system:
         "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
     });
+  });
+});
+
+it.effect("maps OpenCode user-input answers from stable, header, and question keys", () => {
+  const replies: Array<{ requestID: string; answers: Array<Array<string>> }> = [];
+
+  const record = {
+    client: {
+      question: {
+        reply: async (input: { requestID: string; answers: Array<Array<string>> }) => {
+          replies.push(input);
+          return { data: {}, error: undefined };
+        },
+      },
+    },
+    pendingUserInputs: new Map([
+      [
+        "req-opencode-question",
+        {
+          turnId: undefined,
+          questions: [
+            { header: "Scope" },
+            { header: "Mode", question: "Which mode?" },
+            { header: "Targets" },
+          ],
+        },
+      ],
+    ]),
+  };
+
+  const emitted: Array<unknown> = [];
+  const { respondToUserInput } = makeTurnMethods({
+    requireSession: () => Effect.succeed(record as never),
+    syntheticEventFn: (threadId, type, payload, extra) =>
+      Effect.succeed({
+        threadId,
+        type,
+        payload,
+        ...(extra?.requestId ? { requestId: extra.requestId } : {}),
+      } as never),
+    emitFn: (runtimeEvents) =>
+      Effect.sync(() => {
+        emitted.push(...runtimeEvents);
+      }),
+    serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
+  });
+
+  return Effect.gen(function* () {
+    yield* respondToUserInput(THREAD_ID, ApprovalRequestId.makeUnsafe("req-opencode-question"), {
+      "0-scope": "All providers",
+      "Which mode?": "Fast",
+      Targets: ["server", 42, "web"],
+    });
+
+    assert.deepEqual(replies, [
+      {
+        requestID: "req-opencode-question",
+        answers: [["All providers"], ["Fast"], ["server", "web"]],
+      },
+    ]);
+    assert.equal(emitted.length, 1);
   });
 });

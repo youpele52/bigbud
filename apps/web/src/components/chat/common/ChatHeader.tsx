@@ -6,14 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import {
-  DiffIcon,
-  GlobeIcon,
-  PanelLeftCloseIcon,
-  PanelLeftIcon,
-  SearchIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { DiffIcon, GlobeIcon, PanelLeftCloseIcon, PanelLeftIcon, TerminalIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -42,7 +35,6 @@ interface ChatHeaderProps {
   terminalToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
   sidebarToggleShortcutLabel: string | null;
-  searchToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
@@ -54,7 +46,6 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
   onToggleBrowser: () => void;
-  onToggleSearch: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -72,7 +63,6 @@ export const ChatHeader = memo(function ChatHeader({
   terminalToggleShortcutLabel,
   diffToggleShortcutLabel,
   sidebarToggleShortcutLabel,
-  searchToggleShortcutLabel,
   browserToggleShortcutLabel,
   gitCwd,
   diffOpen,
@@ -84,7 +74,6 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleDiff,
   onToggleBrowser,
-  onToggleSearch,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const {
@@ -160,26 +149,6 @@ export const ChatHeader = memo(function ChatHeader({
         {activeProjectName && gitCwd && (
           <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />
         )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={false}
-                onPressedChange={onToggleSearch}
-                aria-label="Search"
-                variant="toolbar"
-                size="xs"
-              >
-                <SearchIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            Search
-            {searchToggleShortcutLabel && <> ({searchToggleShortcutLabel})</>}
-          </TooltipPopup>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={
