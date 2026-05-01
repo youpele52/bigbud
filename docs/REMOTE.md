@@ -6,18 +6,20 @@ Use this when you want to open bigbud from another device (phone, tablet, anothe
 
 The bigbud CLI accepts the following configuration options, available either as CLI flags or environment variables:
 
-| CLI flag                | Env var               | Notes                                                                                |
-| ----------------------- | --------------------- | ------------------------------------------------------------------------------------ |
-| `--mode <web\|desktop>` | `T3CODE_MODE`         | Runtime mode.                                                                        |
-| `--port <number>`       | `T3CODE_PORT`         | HTTP/WebSocket port.                                                                 |
-| `--host <address>`      | `T3CODE_HOST`         | Bind interface/address.                                                              |
-| `--base-dir <path>`     | `T3CODE_HOME`         | Base directory.                                                                      |
-| `--dev-url <url>`       | `VITE_DEV_SERVER_URL` | Dev web URL redirect/proxy target.                                                   |
-| `--no-browser`          | `T3CODE_NO_BROWSER`   | Disable auto-open browser.                                                           |
-| `--auth-token <token>`  | `T3CODE_AUTH_TOKEN`   | WebSocket auth token. Use this for standard CLI and remote-server flows.             |
-| `--bootstrap-fd <fd>`   | `T3CODE_BOOTSTRAP_FD` | Read a one-shot bootstrap envelope from an inherited file descriptor during startup. |
+| CLI flag                | Preferred env var     | Legacy alias          | Notes                                                                                |
+| ----------------------- | --------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `--mode <web\|desktop>` | `BIGBUD_MODE`         | `T3CODE_MODE`         | Runtime mode.                                                                        |
+| `--port <number>`       | `BIGBUD_PORT`         | `T3CODE_PORT`         | HTTP/WebSocket port.                                                                 |
+| `--host <address>`      | `BIGBUD_HOST`         | `T3CODE_HOST`         | Bind interface/address.                                                              |
+| `--base-dir <path>`     | `BIGBUD_HOME`         | `T3CODE_HOME`         | Base directory.                                                                      |
+| `--dev-url <url>`       | `VITE_DEV_SERVER_URL` | none                  | Dev web URL redirect/proxy target.                                                   |
+| `--no-browser`          | `BIGBUD_NO_BROWSER`   | `T3CODE_NO_BROWSER`   | Disable auto-open browser.                                                           |
+| `--auth-token <token>`  | `BIGBUD_AUTH_TOKEN`   | `T3CODE_AUTH_TOKEN`   | WebSocket auth token. Use this for standard CLI and remote-server flows.             |
+| `--bootstrap-fd <fd>`   | `BIGBUD_BOOTSTRAP_FD` | `T3CODE_BOOTSTRAP_FD` | Read a one-shot bootstrap envelope from an inherited file descriptor during startup. |
 
 > TIP: Use the `--help` flag to see all available options and their descriptions.
+
+The CLI still supports the legacy `T3CODE_*` environment variables during the compatibility migration, but new docs and examples should prefer `BIGBUD_*`.
 
 ## Security First
 
