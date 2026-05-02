@@ -55,6 +55,7 @@ export const BrowserPanel = memo(function BrowserPanel({
     title: "",
     faviconUrl: null,
   });
+  const [annotationActive, setAnnotationActive] = useState(false);
   const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
   const [contextMenu, setContextMenu] = useState<{
     open: boolean;
@@ -99,8 +100,24 @@ export const BrowserPanel = memo(function BrowserPanel({
   );
 
   const handleClose = useCallback(() => {
+    if (annotationActive) {
+      void viewportRef.current?.cancelAnnotation();
+      setAnnotationActive(false);
+    }
     setOpen(false);
-  }, [setOpen]);
+  }, [annotationActive, setOpen]);
+
+  const handleOpenInExternalBrowser = useCallback(() => {
+    const externalUrl = activeUrl.trim();
+    if (!externalUrl) return;
+
+    if (window.desktopBridge) {
+      void window.desktopBridge.openExternal(externalUrl);
+      return;
+    }
+
+    window.open(externalUrl, "_blank", "noopener,noreferrer");
+  }, [activeUrl]);
 
   const handleLoadFail = useCallback(
     (info: { errorCode: number; errorDescription: string; validatedURL: string }) => {
@@ -110,12 +127,21 @@ export const BrowserPanel = memo(function BrowserPanel({
   );
 
   const handleAnnotate = useCallback(async () => {
+    if (annotationActive) {
+      await viewportRef.current?.cancelAnnotation();
+      setAnnotationActive(false);
+      return;
+    }
+
     if (!activeThreadId) {
       toastManager.add({ type: "error", title: "Open a thread before annotating." });
       return;
     }
+
+    setAnnotationActive(true);
     try {
       const annotation = await viewportRef.current?.startAnnotation();
+      setAnnotationActive(false);
       if (!annotation) return;
       const file = dataUrlToFile(
         annotation.screenshot.dataUrl,
@@ -144,6 +170,7 @@ export const BrowserPanel = memo(function BrowserPanel({
         data: { threadId: activeThreadId, dismissAfterVisibleMs: 3000 },
       });
     } catch (error) {
+      setAnnotationActive(false);
       toastManager.add({
         type: "error",
         title: "Browser annotation failed",
@@ -151,7 +178,14 @@ export const BrowserPanel = memo(function BrowserPanel({
         data: { threadId: activeThreadId },
       });
     }
-  }, [activeThreadId, addComposerImage, setComposerPrompt]);
+  }, [activeThreadId, addComposerImage, annotationActive, setComposerPrompt]);
+
+  useEffect(() => {
+    if (!open && annotationActive) {
+      void viewportRef.current?.cancelAnnotation();
+      setAnnotationActive(false);
+    }
+  }, [annotationActive, open]);
 
   const onPanelResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -174,6 +208,13 @@ export const BrowserPanel = memo(function BrowserPanel({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [panelWidth]);
+
+  useEffect(() => {
+    const nextUrl = url.trim();
+    if (!nextUrl) return;
+    setInputUrl(nextUrl);
+    setActiveUrl((currentUrl) => (currentUrl === nextUrl ? currentUrl : nextUrl));
+  }, [url]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -251,7 +292,9 @@ export const BrowserPanel = memo(function BrowserPanel({
           onGoBack={() => viewportRef.current?.goBack()}
           onGoForward={() => viewportRef.current?.goForward()}
           onReload={() => viewportRef.current?.reload()}
+          onOpenInExternalBrowser={handleOpenInExternalBrowser}
           onAnnotate={handleAnnotate}
+          annotationActive={annotationActive}
           pageMetadata={pageMetadata}
           historyUrls={browserHistory}
           annotationDisabled={!isElectron}
