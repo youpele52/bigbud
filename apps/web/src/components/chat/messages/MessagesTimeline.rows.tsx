@@ -10,6 +10,7 @@ import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/ty
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
+import { MessagesTimelineBrowserAnnotations } from "./MessagesTimeline.browserAnnotations";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
@@ -133,6 +134,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           );
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
+          const browserAnnotations = displayedUserMessage.browserAnnotations;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           return (
             <div className="group flex flex-col items-end gap-1">
@@ -227,6 +229,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
                     </div>
                   </details>
                 )}
+                <MessagesTimelineBrowserAnnotations annotations={browserAnnotations} />
                 {(displayedUserMessage.visibleText.trim().length > 0 ||
                   terminalContexts.length > 0) && (
                   <UserMessageBody

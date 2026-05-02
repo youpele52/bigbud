@@ -242,6 +242,79 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("Work log");
   });
 
+  it("renders sent browser annotations as a compact expandable attachment", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const annotation = [
+      "Browser annotation",
+      "",
+      "User instruction:",
+      "Fix this button",
+      "",
+      "Page:",
+      "Title: Dashboard",
+      "URL: https://example.com/dashboard",
+      "Viewport: width=1280 height=720 devicePixelRatio=2",
+      "",
+      "Selected element:",
+      "Selector: #save",
+      "Tag: button",
+      "Role: button",
+      "Text: Save",
+      "Aria label: Save changes",
+      "Rect: x=10 y=20 width=100 height=32",
+      "",
+      "Use the attached screenshot and selected element metadata to make the appropriate code change.",
+    ].join("\n");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-annotation-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-annotation-1"),
+              role: "user",
+              text: `Please inspect\n\n${annotation}\n\n---\n\n${annotation}`,
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("2 annotations");
+    expect(markup).toContain("Please inspect");
+    expect(markup).toContain("Fix this button");
+    expect(markup).toContain("border-border/80 bg-background");
+    expect(markup).toContain("text-info");
+    expect(markup).not.toContain("bg-info/10");
+    expect(markup.indexOf("Please inspect")).toBeGreaterThan(markup.indexOf("Browser annotation"));
+    expect(markup).not.toContain("<span>Please inspect\n\nBrowser annotation");
+  });
+
   it("renders per-turn changed-files expansion state from props", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const assistantMessageId = MessageId.makeUnsafe("message-diff-1");
