@@ -103,6 +103,7 @@ export function partializeComposerDraftStoreState(
     if (
       draft.prompt.length === 0 &&
       draft.persistedAttachments.length === 0 &&
+      draft.annotations.length === 0 &&
       draft.terminalContexts.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
@@ -117,6 +118,7 @@ export function partializeComposerDraftStoreState(
       ...(draft.persistedFileAttachments.length > 0
         ? { fileAttachments: draft.persistedFileAttachments }
         : {}),
+      ...(draft.annotations.length > 0 ? { annotations: draft.annotations } : {}),
       ...(draft.terminalContexts.length > 0
         ? {
             terminalContexts: draft.terminalContexts.map((context) => ({
@@ -222,6 +224,7 @@ export function toHydratedThreadDraft(
     prompt: persistedDraft.prompt,
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
     files: hydrateFilesFromPersisted(persistedFileAttachments),
+    annotations: persistedDraft.annotations ? [...persistedDraft.annotations] : [],
     nonPersistedImageIds: [],
     persistedAttachments: [...persistedDraft.attachments],
     persistedFileAttachments,

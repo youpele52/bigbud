@@ -37,6 +37,42 @@ export interface ComposerImageAttachment extends Omit<ChatImageAttachment, "prev
   file: File;
 }
 
+export const ComposerAnnotationElement = Schema.Struct({
+  selector: Schema.String,
+  tag: Schema.String,
+  role: Schema.String,
+  text: Schema.String,
+  ariaLabel: Schema.NullOr(Schema.String),
+  id: Schema.NullOr(Schema.String),
+  className: Schema.String,
+  rect: Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+  }),
+});
+
+export const ComposerAnnotationViewport = Schema.Struct({
+  width: Schema.Number,
+  height: Schema.Number,
+  devicePixelRatio: Schema.Number,
+});
+
+export const ComposerAnnotationAttachment = Schema.Struct({
+  id: Schema.String,
+  imageId: Schema.String,
+  comment: Schema.String,
+  page: Schema.Struct({
+    url: Schema.String,
+    title: Schema.String,
+  }),
+  element: ComposerAnnotationElement,
+  viewport: ComposerAnnotationViewport,
+  createdAt: Schema.String,
+});
+export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.Type;
+
 /** In-memory representation of a non-image file attachment. Holds only the path — no bytes. */
 export interface ComposerFileAttachment extends ChatFileAttachment {
   /** Absolute filesystem path — available on desktop (Electron). On web, this is empty string. */
@@ -70,6 +106,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   prompt: Schema.String,
   attachments: Schema.Array(PersistedComposerImageAttachment),
   fileAttachments: Schema.optionalKey(Schema.Array(PersistedComposerFileAttachment)),
+  annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationAttachment)),
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   modelSelectionByProvider: Schema.optionalKey(
     Schema.Record(ProviderKind, Schema.optionalKey(ModelSelection)),
@@ -152,6 +189,7 @@ export interface ComposerThreadDraftState {
   prompt: string;
   images: ComposerImageAttachment[];
   files: ComposerFileAttachment[];
+  annotations: ComposerAnnotationAttachment[];
   nonPersistedImageIds: string[];
   persistedAttachments: PersistedComposerImageAttachment[];
   persistedFileAttachments: PersistedComposerFileAttachment[];
@@ -243,6 +281,9 @@ export interface ComposerDraftStoreState {
   addFile: (threadId: ThreadId, file: ComposerFileAttachment) => void;
   addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => void;
   removeFile: (threadId: ThreadId, fileId: string) => void;
+  addAnnotation: (threadId: ThreadId, annotation: ComposerAnnotationAttachment) => void;
+  addAnnotations: (threadId: ThreadId, annotations: ComposerAnnotationAttachment[]) => void;
+  removeAnnotation: (threadId: ThreadId, annotationId: string) => void;
   insertTerminalContext: (
     threadId: ThreadId,
     prompt: string,
@@ -275,6 +316,7 @@ export const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   prompt: "",
   images: Object.freeze([]) as unknown as ComposerImageAttachment[],
   files: Object.freeze([]) as unknown as ComposerFileAttachment[],
+  annotations: Object.freeze([]) as unknown as ComposerAnnotationAttachment[],
   nonPersistedImageIds: Object.freeze([]) as unknown as string[],
   persistedAttachments: Object.freeze([]) as unknown as PersistedComposerImageAttachment[],
   persistedFileAttachments: Object.freeze([]) as unknown as PersistedComposerFileAttachment[],

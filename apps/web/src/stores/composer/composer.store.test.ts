@@ -12,7 +12,11 @@ import {
   clearPromotedDraftThreads,
   useComposerDraftStore,
 } from "./composer.store";
-import { COMPOSER_DRAFT_STORAGE_KEY, type ComposerImageAttachment } from "./types.store";
+import {
+  COMPOSER_DRAFT_STORAGE_KEY,
+  type ComposerAnnotationAttachment,
+  type ComposerImageAttachment,
+} from "./types.store";
 import { normalizeCurrentPersistedComposerDraftStoreState } from "./migration.store";
 import { removeLocalStorageItem, setLocalStorageItem } from "../../hooks/useLocalStorage";
 import {
@@ -66,6 +70,31 @@ function makeTerminalContext(input: {
     lineEnd: input.lineEnd ?? 5,
     text: input.text ?? "git status\nOn branch main",
     createdAt: "2026-03-13T12:00:00.000Z",
+  };
+}
+
+function makeAnnotation(input: {
+  id: string;
+  imageId: string;
+  comment?: string;
+}): ComposerAnnotationAttachment {
+  return {
+    id: input.id,
+    imageId: input.imageId,
+    comment: input.comment ?? "Fix this",
+    page: { title: "Dashboard", url: "https://example.com/dashboard" },
+    element: {
+      selector: "#save",
+      tag: "button",
+      role: "button",
+      text: "Save",
+      ariaLabel: null,
+      id: "save",
+      className: "primary",
+      rect: { x: 1, y: 2, width: 3, height: 4 },
+    },
+    viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+    createdAt: "2026-05-02T00:00:00.000Z",
   };
 }
 
@@ -223,6 +252,52 @@ describe("composerDraftStore clearComposerContent", () => {
     const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
     expect(draft).toBeUndefined();
     expect(revokeSpy).not.toHaveBeenCalledWith("blob:optimistic");
+  });
+});
+
+describe("composerDraftStore annotations", () => {
+  const threadId = ThreadId.makeUnsafe("thread-annotation");
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("stores annotations independently from prompt text", () => {
+    useComposerDraftStore
+      .getState()
+      .addAnnotation(threadId, makeAnnotation({ id: "annotation-1", imageId: "image-1" }));
+
+    const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
+    expect(draft?.prompt).toBe("");
+    expect(draft?.annotations.map((annotation) => annotation.id)).toEqual(["annotation-1"]);
+  });
+
+  it("removes annotations when their screenshot image is removed", () => {
+    const image = makeImage({ id: "image-1", previewUrl: "blob:image-1" });
+    useComposerDraftStore.getState().addImage(threadId, image);
+    useComposerDraftStore
+      .getState()
+      .addAnnotation(threadId, makeAnnotation({ id: "annotation-1", imageId: image.id }));
+
+    useComposerDraftStore.getState().removeImage(threadId, image.id);
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+  });
+
+  it("persists annotations with draft metadata", () => {
+    const annotation = makeAnnotation({ id: "annotation-1", imageId: "image-1" });
+    useComposerDraftStore.getState().addAnnotation(threadId, annotation);
+
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+      };
+    };
+    const persistedState = persistApi.getOptions().partialize(useComposerDraftStore.getState()) as {
+      draftsByThreadId?: Record<string, { annotations?: ComposerAnnotationAttachment[] }>;
+    };
+
+    expect(persistedState.draftsByThreadId?.[threadId]?.annotations).toEqual([annotation]);
   });
 });
 

@@ -262,6 +262,7 @@ export function createComposerContentActions(
         const nextDraft: ComposerThreadDraftState = {
           ...current,
           images: current.images.filter((image) => image.id !== imageId),
+          annotations: current.annotations.filter((annotation) => annotation.imageId !== imageId),
           nonPersistedImageIds: current.nonPersistedImageIds.filter((id) => id !== imageId),
           persistedAttachments: current.persistedAttachments.filter(
             (attachment) => attachment.id !== imageId,
@@ -400,6 +401,7 @@ export function createComposerContentActions(
           prompt: "",
           images: [],
           files: [],
+          annotations: [],
           nonPersistedImageIds: [],
           persistedAttachments: [],
           persistedFileAttachments: [],

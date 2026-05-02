@@ -23,6 +23,7 @@ import { resolveDiffThemeName, type DiffThemeName } from "../../../lib/diffRende
 import { fnv1a32 } from "../../../lib/diffRendering";
 import { LRUCache } from "../../../lib/lruCache";
 import { useTheme } from "../../../hooks/useTheme";
+import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../../utils/markdown";
 import { readNativeApi } from "../../../rpc/nativeApi";
 
@@ -267,6 +268,8 @@ function RenderedHighlightedCode({ html }: { html: string }) {
 
 function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
+  const setBrowserOpen = useBrowserPanelStore((state) => state.setOpen);
+  const setBrowserUrl = useBrowserPanelStore((state) => state.setUrl);
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownUrlTransform = useCallback((href: string) => {
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
@@ -274,9 +277,23 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
   const markdownComponents = useMemo<Components>(
     () => ({
       a({ node: _node, href, ...props }) {
+        if (!href) {
+          return <a {...props} />;
+        }
         const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
         if (!targetPath) {
-          return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
+          return (
+            <a
+              {...props}
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setBrowserUrl(href);
+                setBrowserOpen(true);
+              }}
+            />
+          );
         }
 
         return (
@@ -318,7 +335,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false }: ChatMarkdownProps) {
         );
       },
     }),
-    [cwd, diffThemeName, isStreaming],
+    [cwd, diffThemeName, isStreaming, setBrowserOpen, setBrowserUrl],
   );
 
   return (

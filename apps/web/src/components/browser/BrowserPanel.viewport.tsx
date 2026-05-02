@@ -1,6 +1,9 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { isElectron } from "~/config/env";
 import {
+  browserAnnotationCancelScript,
+  browserAnnotationCleanupScript,
+  browserAnnotationPrepareCaptureScript,
   browserAnnotationPickerScript,
   type BrowserAnnotationResult,
   type BrowserAnnotationSelection,
@@ -13,6 +16,7 @@ export interface BrowserViewportRef {
   reload(): void;
   openDevTools(): void;
   startAnnotation(): Promise<BrowserAnnotationResult | null>;
+  cancelAnnotation(): Promise<void>;
 }
 
 export interface BrowserPageMetadata {
@@ -72,6 +76,65 @@ type FailLoadEvent = Event & {
   validatedURL: string;
   isMainFrame: boolean;
 };
+
+const browserSameTabPopupGuardScript = String.raw`(() => {
+  const navigateCurrentTab = (rawUrl) => {
+    if (typeof rawUrl !== "string" || rawUrl.length === 0) {
+      return false;
+    }
+
+    try {
+      const nextUrl = new URL(rawUrl, window.location.href).toString();
+      window.location.assign(nextUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      const targetValue = anchor.getAttribute("target");
+      if (targetValue !== "_blank") {
+        return;
+      }
+
+      if (!navigateCurrentTab(anchor.href)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    true,
+  );
+
+  const originalWindowOpen = window.open.bind(window);
+  window.open = function patchedWindowOpen(url, target, features) {
+    if (typeof target === "string" && target.length > 0 && target !== "_self" && target !== "_top") {
+      if (navigateCurrentTab(String(url ?? ""))) {
+        return window;
+      }
+    }
+
+    if (navigateCurrentTab(String(url ?? ""))) {
+      return window;
+    }
+
+    return originalWindowOpen(url, target, features);
+  };
+})();`;
 
 /** Probe a CSS value by rendering a hidden element with that value as a specific
  *  CSS property, then reading back the computed colour. This correctly resolves
@@ -199,6 +262,7 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
     const onContextMenuRef = useRef(onContextMenu);
     const urlRef = useRef(url);
     const pageMetadataRef = useRef<BrowserPageMetadata>({ title: "", faviconUrl: null });
+    const annotationActiveRef = useRef(false);
 
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
@@ -244,29 +308,50 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
           /* ignore transient errors */
         }
       },
+      cancelAnnotation: async () => {
+        const w = webviewRef.current;
+        if (!w || !annotationActiveRef.current) return;
+        annotationActiveRef.current = false;
+        await w.executeJavaScript(`(${browserAnnotationCancelScript.toString()})()`, false);
+      },
       startAnnotation: async () => {
         const w = webviewRef.current;
         if (!w || !readyRef.current) return null;
         const theme = JSON.stringify(readAnnotationTheme());
+        annotationActiveRef.current = true;
         const selection = await w.executeJavaScript<BrowserAnnotationSelection>(
           `(${browserAnnotationPickerScript.toString()})(${theme})`,
           true,
         );
+        annotationActiveRef.current = false;
         if (!selection || selection.cancelled) return null;
-        const screenshot = await w.capturePage();
-        return {
-          comment: selection.comment,
-          page: {
-            url: w.getURL(),
-            title: w.getTitle(),
-          },
-          element: selection.element,
-          viewport: selection.viewport,
-          screenshot: {
-            mime: "image/png",
-            dataUrl: screenshot.toDataURL(),
-          },
-        };
+
+        try {
+          await w.executeJavaScript(
+            `(${browserAnnotationPrepareCaptureScript.toString()})()`,
+            false,
+          );
+          const screenshot = await w.capturePage();
+          return {
+            comment: selection.comment,
+            page: {
+              url: w.getURL(),
+              title: w.getTitle(),
+            },
+            element: selection.element,
+            viewport: selection.viewport,
+            screenshot: {
+              mime: "image/png",
+              dataUrl: screenshot.toDataURL(),
+            },
+          };
+        } finally {
+          void w
+            .executeJavaScript(`(${browserAnnotationCleanupScript.toString()})()`, false)
+            .catch(() => {
+              // Ignore transient cleanup failures after capture.
+            });
+        }
       },
     }));
 
@@ -348,6 +433,14 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
           });
       };
 
+      const installSameTabPopupGuard = () => {
+        const w = webviewRef.current;
+        if (!w || !isWebviewReady(w)) return;
+        void w.executeJavaScript(browserSameTabPopupGuardScript, false).catch(() => {
+          // Ignore transient script-injection failures during navigation.
+        });
+      };
+
       const handleNavigate = (e: NavigateEvent) => {
         updateNavState();
         if (e.url) {
@@ -403,6 +496,7 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
       webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
       webview.addEventListener("dom-ready", updateNavState);
       webview.addEventListener("dom-ready", readPageMetadata);
+      webview.addEventListener("dom-ready", installSameTabPopupGuard);
       webview.addEventListener("page-title-updated", handlePageTitle as EventListener);
       webview.addEventListener("page-favicon-updated", handlePageFavicon as EventListener);
       webview.addEventListener("did-fail-load", handleFailLoad as EventListener);
@@ -413,10 +507,12 @@ const WebViewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
         webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
         webview.removeEventListener("dom-ready", updateNavState);
         webview.removeEventListener("dom-ready", readPageMetadata);
+        webview.removeEventListener("dom-ready", installSameTabPopupGuard);
         webview.removeEventListener("page-title-updated", handlePageTitle as EventListener);
         webview.removeEventListener("page-favicon-updated", handlePageFavicon as EventListener);
         webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);
         webview.removeEventListener("context-menu", handleContextMenu as EventListener);
+        annotationActiveRef.current = false;
         readyRef.current = false;
         try {
           webview.remove();
@@ -470,6 +566,7 @@ const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(func
     },
     openDevTools: () => undefined,
     startAnnotation: async () => null,
+    cancelAnnotation: async () => undefined,
   }));
 
   useEffect(() => {
@@ -515,7 +612,7 @@ const IFrameViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(func
         src={url}
         className="absolute inset-0 h-full w-full border-0"
         title="Browser"
-        sandbox="allow-scripts allow-popups allow-forms allow-same-origin allow-downloads"
+        sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
         onLoad={handleLoad}
         onError={handleError}
       />

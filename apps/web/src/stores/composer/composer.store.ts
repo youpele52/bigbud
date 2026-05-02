@@ -18,6 +18,7 @@ export {
   PersistedComposerThreadDraftState,
   PersistedDraftThreadState,
   PersistedTerminalContextDraft,
+  type ComposerAnnotationAttachment,
   type ComposerDraftStoreState,
   type ComposerFileAttachment,
   type ComposerImageAttachment,
