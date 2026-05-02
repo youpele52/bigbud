@@ -10,6 +10,7 @@ import { ensureInlineTerminalContextPlaceholders } from "../../lib/terminalConte
 import {
   type DraftThreadEnvMode,
   type LegacyPersistedComposerThreadDraftState,
+  type ComposerAnnotationAttachment,
   type PersistedComposerDraftStoreState,
   type PersistedComposerImageAttachment,
   type PersistedComposerThreadDraftState,
@@ -80,6 +81,97 @@ export function normalizePersistedAttachment(
     mimeType,
     sizeBytes,
     dataUrl,
+  };
+}
+
+function normalizeFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function normalizePersistedAnnotation(value: unknown): ComposerAnnotationAttachment | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const candidate = value as Record<string, unknown>;
+  const page = candidate.page;
+  const element = candidate.element;
+  const viewport = candidate.viewport;
+  if (!page || typeof page !== "object") return null;
+  if (!element || typeof element !== "object") return null;
+  if (!viewport || typeof viewport !== "object") return null;
+
+  const pageCandidate = page as Record<string, unknown>;
+  const elementCandidate = element as Record<string, unknown>;
+  const viewportCandidate = viewport as Record<string, unknown>;
+  const rect = elementCandidate.rect;
+  if (!rect || typeof rect !== "object") return null;
+  const rectCandidate = rect as Record<string, unknown>;
+  const id = candidate.id;
+  const imageId = candidate.imageId;
+  const comment = candidate.comment;
+  const createdAt = candidate.createdAt;
+  const url = pageCandidate.url;
+  const title = pageCandidate.title;
+  const selector = elementCandidate.selector;
+  const tag = elementCandidate.tag;
+  const role = elementCandidate.role;
+  const text = elementCandidate.text;
+  const className = elementCandidate.className;
+  const rectX = normalizeFiniteNumber(rectCandidate.x);
+  const rectY = normalizeFiniteNumber(rectCandidate.y);
+  const rectWidth = normalizeFiniteNumber(rectCandidate.width);
+  const rectHeight = normalizeFiniteNumber(rectCandidate.height);
+  const viewportWidth = normalizeFiniteNumber(viewportCandidate.width);
+  const viewportHeight = normalizeFiniteNumber(viewportCandidate.height);
+  const devicePixelRatio = normalizeFiniteNumber(viewportCandidate.devicePixelRatio);
+  if (
+    typeof id !== "string" ||
+    id.length === 0 ||
+    typeof imageId !== "string" ||
+    imageId.length === 0 ||
+    typeof comment !== "string" ||
+    typeof createdAt !== "string" ||
+    createdAt.length === 0 ||
+    typeof url !== "string" ||
+    typeof title !== "string" ||
+    typeof selector !== "string" ||
+    typeof tag !== "string" ||
+    typeof role !== "string" ||
+    typeof text !== "string" ||
+    typeof className !== "string" ||
+    rectX === null ||
+    rectY === null ||
+    rectWidth === null ||
+    rectHeight === null ||
+    viewportWidth === null ||
+    viewportHeight === null ||
+    devicePixelRatio === null
+  ) {
+    return null;
+  }
+  const ariaLabel = elementCandidate.ariaLabel;
+  const elementId = elementCandidate.id;
+  return {
+    id,
+    imageId,
+    comment,
+    page: { url, title },
+    element: {
+      selector,
+      tag,
+      role,
+      text,
+      ariaLabel: typeof ariaLabel === "string" ? ariaLabel : null,
+      id: typeof elementId === "string" ? elementId : null,
+      className,
+      rect: { x: rectX, y: rectY, width: rectWidth, height: rectHeight },
+    },
+    viewport: {
+      width: viewportWidth,
+      height: viewportHeight,
+      devicePixelRatio,
+    },
+    createdAt,
   };
 }
 
@@ -256,6 +348,12 @@ export function normalizePersistedDraftsByThreadId(
           return normalized ? [normalized] : [];
         })
       : [];
+    const annotations = Array.isArray(draftCandidate.annotations)
+      ? draftCandidate.annotations.flatMap((entry) => {
+          const normalized = normalizePersistedAnnotation(entry);
+          return normalized ? [normalized] : [];
+        })
+      : [];
     const runtimeMode = isRuntimeMode(draftCandidate.runtimeMode)
       ? draftCandidate.runtimeMode
       : null;
@@ -325,6 +423,7 @@ export function normalizePersistedDraftsByThreadId(
     if (
       promptCandidate.length === 0 &&
       attachments.length === 0 &&
+      annotations.length === 0 &&
       terminalContexts.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
@@ -336,6 +435,7 @@ export function normalizePersistedDraftsByThreadId(
     nextDraftsByThreadId[threadId as ThreadId] = {
       prompt,
       attachments,
+      ...(annotations.length > 0 ? { annotations } : {}),
       ...(terminalContexts.length > 0 ? { terminalContexts } : {}),
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),

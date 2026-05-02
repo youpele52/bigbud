@@ -1,5 +1,6 @@
 import { memo, useCallback, useState } from "react";
 import {
+  ArrowUpRightIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   GlobeIcon,
@@ -10,6 +11,7 @@ import {
 import { cn } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { Button } from "../ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { BrowserPageMetadata } from "./BrowserPanel.viewport";
 import { filterBrowserHistory, resolveBrowserHistorySelectionIndex } from "./BrowserPanel.history";
 
@@ -25,7 +27,9 @@ export interface BrowserToolbarProps {
   onGoBack: () => void;
   onGoForward: () => void;
   onReload: () => void;
+  onOpenInExternalBrowser: () => void;
   onAnnotate: () => void;
+  annotationActive?: boolean;
   pageMetadata: BrowserPageMetadata;
   historyUrls: string[];
   annotationDisabled?: boolean;
@@ -51,7 +55,9 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   onGoBack,
   onGoForward,
   onReload,
+  onOpenInExternalBrowser,
   onAnnotate,
+  annotationActive = false,
   pageMetadata,
   historyUrls,
   annotationDisabled = false,
@@ -94,6 +100,10 @@ export const BrowserToolbar = memo(function BrowserToolbar({
     [historyUrls, inputUrl, onNavigate, onSelectHistoryUrl, selectedHistoryIndex, urlFocused],
   );
 
+  const annotateTooltip = annotationDisabled
+    ? "Annotation is available in the desktop browser view"
+    : "Annotate browser page";
+
   return (
     <div
       className={cn(
@@ -102,53 +112,80 @@ export const BrowserToolbar = memo(function BrowserToolbar({
       )}
     >
       <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="xs"
-          className="shrink-0 px-1.5"
-          onClick={onGoBack}
-          disabled={!canGoBack}
-          aria-label="Go back"
-          title="Go back"
-        >
-          <ArrowLeftIcon className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="shrink-0 px-1.5"
-          onClick={onGoForward}
-          disabled={!canGoForward}
-          aria-label="Go forward"
-          title="Go forward"
-        >
-          <ArrowRightIcon className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="shrink-0 px-1.5"
-          onClick={onReload}
-          aria-label="Reload"
-          title="Reload"
-        >
-          <RotateCwIcon className="size-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="shrink-0 px-1.5"
-          onClick={onAnnotate}
-          disabled={annotationDisabled}
-          aria-label="Annotate browser page"
-          title={
-            annotationDisabled
-              ? "Annotation is available in the desktop browser view"
-              : "Annotate browser page"
-          }
-        >
-          <MousePointer2Icon className="size-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 px-1.5"
+                onClick={onGoBack}
+                disabled={!canGoBack}
+                aria-label="Go back"
+              >
+                <ArrowLeftIcon className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">Go back</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 px-1.5"
+                onClick={onGoForward}
+                disabled={!canGoForward}
+                aria-label="Go forward"
+              >
+                <ArrowRightIcon className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">Go forward</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 px-1.5"
+                onClick={onReload}
+                aria-label="Reload"
+              >
+                <RotateCwIcon className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">Reload</TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className={cn(
+                  "shrink-0 px-1.5",
+                  annotationActive &&
+                    "bg-secondary text-info-foreground hover:text-info-foreground",
+                )}
+                onClick={onAnnotate}
+                disabled={annotationDisabled}
+                aria-label="Annotate browser page"
+                data-pressed={annotationActive ? "true" : undefined}
+              >
+                <MousePointer2Icon className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {annotationActive ? "Exit annotation mode" : annotateTooltip}
+          </TooltipPopup>
+        </Tooltip>
       </div>
 
       <div className="relative min-w-0 flex-1">
@@ -169,13 +206,13 @@ export const BrowserToolbar = memo(function BrowserToolbar({
             setSelectedHistoryIndex(-1);
           }}
           className={cn(
-            "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-3 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32",
+            "h-8 w-full min-w-0 rounded-lg border border-input bg-background pl-3 pr-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32",
             !urlFocused && "text-transparent caret-transparent placeholder:text-transparent",
           )}
           placeholder="Enter a URL"
         />
         {!urlFocused && (
-          <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center gap-2 px-3 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground">
+          <div className="pointer-events-none absolute inset-0 flex min-w-0 items-center gap-2 pl-3 pr-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground">
             {pageMetadata.faviconUrl ? (
               <img
                 src={pageMetadata.faviconUrl}
@@ -189,6 +226,22 @@ export const BrowserToolbar = memo(function BrowserToolbar({
             <span className="min-w-0 truncate">{pageLabel}</span>
           </div>
         )}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 px-0"
+                onClick={onOpenInExternalBrowser}
+                aria-label="Open in default browser"
+              >
+                <ArrowUpRightIcon className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipPopup side="bottom">Open in default browser</TooltipPopup>
+        </Tooltip>
         {matchingHistoryUrls.length > 0 && (
           <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
             {matchingHistoryUrls.map((url, index) => (
