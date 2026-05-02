@@ -21,6 +21,7 @@ import {
   deriveComposerSendState,
   buildExpiredTerminalContextToastCopy,
   formatOutgoingPrompt,
+  appendBrowserAnnotationsToPrompt,
   readFileAsDataUrl,
   cloneComposerImageForRetry,
   draftTitleFromMessage,
@@ -32,6 +33,7 @@ import { newCommandId, newMessageId } from "~/lib/utils";
 import {
   type ComposerImageAttachment,
   type ComposerFileAttachment,
+  type ComposerAnnotationAttachment,
 } from "../../../stores/composer";
 import type { TerminalContextDraft } from "../../../lib/terminalContext";
 import type {
@@ -61,6 +63,8 @@ export interface UseOnSendInput {
   composerImagesRef: React.MutableRefObject<ComposerImageAttachment[]>;
   composerFiles: ComposerFileAttachment[];
   composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
+  composerAnnotations: ComposerAnnotationAttachment[];
+  composerAnnotationsRef: React.MutableRefObject<ComposerAnnotationAttachment[]>;
   composerTerminalContexts: TerminalContextDraft[];
   composerTerminalContextsRef: React.MutableRefObject<TerminalContextDraft[]>;
   selectedProvider: ProviderKind;
@@ -86,6 +90,7 @@ export interface UseOnSendInput {
   setStoreThreadError: (threadId: ThreadId, error: string | null) => void;
   addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
   addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
+  addComposerAnnotationsToDraft: (annotations: ComposerAnnotationAttachment[]) => void;
   addComposerTerminalContextsToDraft: (contexts: TerminalContextDraft[]) => void;
   clearComposerDraftContent: (threadId: ThreadId) => void;
   bootstrapSourceThreadId: ThreadId | null;
@@ -133,6 +138,8 @@ export function useOnSend(input: UseOnSendInput) {
       composerImagesRef: imagesRef,
       composerFiles: files,
       composerFilesRef: filesRef,
+      composerAnnotations: annotations,
+      composerAnnotationsRef: annotationsRef,
       composerTerminalContexts: termContexts,
       composerTerminalContextsRef: termContextsRef,
       selectedProvider: provider,
@@ -187,6 +194,7 @@ export function useOnSend(input: UseOnSendInput) {
       prompt: promptForSend,
       imageCount: images.length,
       fileCount: files.length,
+      annotationCount: annotations.length,
       terminalContexts: termContexts,
     });
     if (planFollowUp && proposedPlan) {
@@ -206,7 +214,10 @@ export function useOnSend(input: UseOnSendInput) {
       return;
     }
     const standaloneSlashCommand =
-      images.length === 0 && files.length === 0 && sendableComposerTerminalContexts.length === 0
+      images.length === 0 &&
+      files.length === 0 &&
+      annotations.length === 0 &&
+      sendableComposerTerminalContexts.length === 0
         ? parseStandaloneComposerSlashCommand(trimmedPrompt)
         : null;
     if (standaloneSlashCommand) {
@@ -260,10 +271,15 @@ export function useOnSend(input: UseOnSendInput) {
 
     const composerImagesSnapshot = [...images];
     const composerFilesSnapshot = [...files];
+    const composerAnnotationsSnapshot = [...annotations];
     const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
-    const messageTextForSend = appendTerminalContextsToPrompt(
+    const messageTextWithTerminalContexts = appendTerminalContextsToPrompt(
       promptForSend,
       composerTerminalContextsSnapshot,
+    );
+    const messageTextForSend = appendBrowserAnnotationsToPrompt(
+      messageTextWithTerminalContexts,
+      composerAnnotationsSnapshot,
     );
     const messageIdForSend = newMessageId();
     const messageCreatedAt = new Date().toISOString();
@@ -438,6 +454,7 @@ export function useOnSend(input: UseOnSendInput) {
         pRef.current.length === 0 &&
         imagesRef.current.length === 0 &&
         filesRef.current.length === 0 &&
+        annotationsRef.current.length === 0 &&
         termContextsRef.current.length === 0
       ) {
         inputRef.current.setOptimisticUserMessages((existing) => {
@@ -457,6 +474,7 @@ export function useOnSend(input: UseOnSendInput) {
           composerImagesSnapshot.map(cloneComposerImageForRetry),
         );
         inputRef.current.addComposerFilesToDraft(composerFilesSnapshot);
+        inputRef.current.addComposerAnnotationsToDraft(composerAnnotationsSnapshot);
         inputRef.current.addComposerTerminalContextsToDraft(composerTerminalContextsSnapshot);
         inputRef.current.setComposerTrigger(
           detectComposerTrigger(promptForSend, promptForSend.length),

@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand";
+import { createComposerAnnotationActions } from "./actions.annotation.store";
 import { createComposerContentActions } from "./actions.composer.store";
 import { createDraftThreadActions } from "./actions.draftThread.store";
 import { createModelActions } from "./actions.model.store";
@@ -24,5 +25,6 @@ export function createComposerDraftActions(
     ...createDraftThreadActions(set, get),
     ...createModelActions(set, get),
     ...createComposerContentActions(set, get, composerDebouncedStorageFlush),
+    ...createComposerAnnotationActions(set),
   };
 }

@@ -7,7 +7,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorag
 import { useComposerDraftStore } from "~/stores/composer";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
-import { buildBrowserAnnotationPrompt, dataUrlToFile } from "./BrowserPanel.annotation";
+import { dataUrlToFile } from "./BrowserPanel.annotation";
 import {
   BrowserViewport,
   type BrowserPageMetadata,
@@ -33,8 +33,8 @@ export const BrowserPanel = memo(function BrowserPanel({
   activeThreadId,
 }: BrowserPanelProps) {
   const { open, url, setOpen, setUrl } = useBrowserPanelStore();
-  const setComposerPrompt = useComposerDraftStore((state) => state.setPrompt);
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
+  const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const [inputUrl, setInputUrl] = useState(url || "https://example.com");
   const [activeUrl, setActiveUrl] = useState(url || "https://example.com");
   const [panelWidth, setPanelWidth] = useState(() => {
@@ -152,17 +152,25 @@ export const BrowserPanel = memo(function BrowserPanel({
         toastManager.add({ type: "error", title: "Could not capture browser screenshot." });
         return;
       }
-      const prompt = buildBrowserAnnotationPrompt(annotation);
       const previewUrl = URL.createObjectURL(file);
-      setComposerPrompt(activeThreadId, prompt);
+      const imageId = randomUUID();
       addComposerImage(activeThreadId, {
         type: "image",
-        id: randomUUID(),
+        id: imageId,
         name: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
         previewUrl,
         file,
+      });
+      addComposerAnnotation(activeThreadId, {
+        id: randomUUID(),
+        imageId,
+        comment: annotation.comment,
+        page: annotation.page,
+        element: annotation.element,
+        viewport: annotation.viewport,
+        createdAt: new Date().toISOString(),
       });
       toastManager.add({
         type: "success",
@@ -178,7 +186,7 @@ export const BrowserPanel = memo(function BrowserPanel({
         data: { threadId: activeThreadId },
       });
     }
-  }, [activeThreadId, addComposerImage, annotationActive, setComposerPrompt]);
+  }, [activeThreadId, addComposerAnnotation, addComposerImage, annotationActive]);
 
   useEffect(() => {
     if (!open && annotationActive) {

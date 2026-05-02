@@ -16,6 +16,7 @@ import {
 } from "../../../models/types";
 import { getProviderModelCapabilities } from "../../../models/provider";
 import { type ComposerImageAttachment, type DraftThreadState } from "../../../stores/composer";
+import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 import { Schema } from "effect";
 import { useStore } from "../../../stores/main";
 import {
@@ -181,6 +182,7 @@ export function deriveComposerSendState(options: {
   prompt: string;
   imageCount: number;
   fileCount?: number;
+  annotationCount?: number;
   terminalContexts: ReadonlyArray<TerminalContextDraft>;
 }): {
   trimmedPrompt: string;
@@ -200,8 +202,51 @@ export function deriveComposerSendState(options: {
       trimmedPrompt.length > 0 ||
       options.imageCount > 0 ||
       (options.fileCount ?? 0) > 0 ||
+      (options.annotationCount ?? 0) > 0 ||
       sendableTerminalContexts.length > 0,
   };
+}
+
+export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttachment): string {
+  const { element, page, viewport } = annotation;
+  const rect = element.rect;
+  const userInstruction = annotation.comment.trim() || "(no instruction provided)";
+
+  return [
+    "Browser annotation",
+    "",
+    "User instruction:",
+    userInstruction,
+    "",
+    "Page:",
+    `Title: ${page.title}`,
+    `URL: ${page.url}`,
+    `Viewport: width=${viewport.width} height=${viewport.height} devicePixelRatio=${viewport.devicePixelRatio}`,
+    "",
+    "Selected element:",
+    `Selector: ${element.selector}`,
+    `Tag: ${element.tag}`,
+    `Role: ${element.role}`,
+    `Text: ${element.text}`,
+    `Aria label: ${element.ariaLabel ?? ""}`,
+    `Rect: x=${rect.x} y=${rect.y} width=${rect.width} height=${rect.height}`,
+    "",
+    "Use the attached screenshot and selected element metadata to make the appropriate code change.",
+  ].join("\n");
+}
+
+export function appendBrowserAnnotationsToPrompt(
+  prompt: string,
+  annotations: ReadonlyArray<ComposerAnnotationAttachment>,
+): string {
+  if (annotations.length === 0) {
+    return prompt;
+  }
+  const annotationText = annotations
+    .map((annotation) => buildBrowserAnnotationPrompt(annotation))
+    .join("\n\n---\n\n");
+  const trimmedPrompt = prompt.trimEnd();
+  return trimmedPrompt.length > 0 ? `${trimmedPrompt}\n\n${annotationText}` : annotationText;
 }
 
 export function buildExpiredTerminalContextToastCopy(

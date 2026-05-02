@@ -5,6 +5,7 @@ import { cn } from "~/lib/utils";
 import { Button } from "../../../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../../ui/tooltip";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
+import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
 import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
@@ -137,6 +138,17 @@ export function ChatViewComposer({
                   nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
                   onRemoveImage={base.removeComposerImageFromDraft}
                   onExpandImage={base.setExpandedImage}
+                />
+                <ComposerAnnotationPreviews
+                  annotations={base.composerAnnotations}
+                  images={base.composerImages}
+                  onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
+                  onClearAnnotations={() => {
+                    for (const annotation of base.composerAnnotations) {
+                      base.removeComposerImageFromDraft(annotation.imageId);
+                      base.removeComposerAnnotationFromDraft(annotation.id);
+                    }
+                  }}
                 />
                 <ComposerFilePreviews
                   composerFiles={base.composerFiles}

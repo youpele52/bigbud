@@ -4,6 +4,23 @@ This document tracks notable project changes in a format that is useful for deve
 
 This first entry summarizes the major work completed between `2026-04-27` and `2026-05-01`.
 
+## 2026-05-02
+
+### Browser Annotations in Composer and Chat
+
+- Refactored browser annotations into first-class composer draft attachments instead of dumping their full metadata directly into the prompt editor as soon as they are created.
+- Preserved normal screenshot image attachments for annotations while storing the selected element metadata separately so the composer stays compact and easier to edit.
+- Appended the full annotation metadata back into the outgoing user message only at send time so providers still receive the complete page, viewport, and selected-element context.
+- Added annotation draft persistence and normalization so browser annotations survive reloads alongside the rest of the composer draft state.
+- Added a grouped annotation attachment pill in the composer, with structured annotation cards in its details view and an inline remove action that clears the linked annotation screenshots as well.
+- Updated sent user messages so annotation metadata is rendered as a compact attachment-style disclosure in chat instead of a raw block of visible prompt text.
+- Matched annotation pills in both composer and chat to the existing neutral document/file attachment styling while keeping the annotation icon blue for recognition.
+
+### Validation
+
+- Added focused tests for composer annotation attachment styling and removal, sent-message annotation rendering, annotation prompt formatting, persisted composer annotation state, and browser-annotation parsing behavior.
+- Revalidated the repo with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
+
 ## 2026-04-27 to 2026-05-01
 
 ### Browser Workspace and Navigation

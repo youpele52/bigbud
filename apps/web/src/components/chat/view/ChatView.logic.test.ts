@@ -1,9 +1,11 @@
 import { ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useStore } from "../../../stores/main";
+import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
+  appendBrowserAnnotationsToPrompt,
   buildExpiredTerminalContextToastCopy,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
@@ -58,6 +60,48 @@ describe("deriveComposerSendState", () => {
     expect(state.trimmedPrompt).toBe("yoo  waddup");
     expect(state.expiredTerminalContextCount).toBe(1);
     expect(state.hasSendableContent).toBe(true);
+  });
+
+  it("treats annotations as sendable content", () => {
+    const state = deriveComposerSendState({
+      prompt: "",
+      imageCount: 0,
+      fileCount: 0,
+      annotationCount: 1,
+      terminalContexts: [],
+    });
+
+    expect(state.hasSendableContent).toBe(true);
+  });
+});
+
+describe("appendBrowserAnnotationsToPrompt", () => {
+  it("appends full annotation metadata without requiring composer prompt text", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "Fix this button",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: "Save changes",
+        id: "save",
+        className: "primary",
+        rect: { x: 10, y: 20, width: 100, height: 32 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    };
+
+    expect(appendBrowserAnnotationsToPrompt("", [annotation])).toContain(
+      "User instruction:\nFix this button",
+    );
+    expect(appendBrowserAnnotationsToPrompt("Please inspect", [annotation])).toContain(
+      "Please inspect\n\nBrowser annotation",
+    );
   });
 });
 

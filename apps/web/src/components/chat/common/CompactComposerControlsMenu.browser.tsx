@@ -21,6 +21,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
     prompt: props?.prompt ?? "",
     images: [],
     files: [],
+    annotations: [],
     nonPersistedImageIds: [],
     persistedAttachments: [],
     persistedFileAttachments: [],
