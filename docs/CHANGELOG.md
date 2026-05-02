@@ -6,6 +6,16 @@ This first entry summarizes the major work completed between `2026-04-27` and `2
 
 ## 2026-05-02
 
+### Embedded Browser Link Handling and Annotation Controls
+
+- Routed chat-rendered links and shared in-app `openExternal` actions through the embedded browser panel instead of sending them straight to the system browser.
+- Added an explicit address-bar action for opening the current embedded page in the user's default external browser.
+- Synced the browser panel's local address/navigation state with store-driven URL changes so clicking links reliably navigates the embedded browser to the requested page.
+- Forced embedded-browser popup and new-tab attempts into the current tab where possible, while tightening the iframe fallback so it does not spawn separate popup windows.
+- Replaced browser toolbar native tooltips with the app's shared tooltip component so browser controls match the rest of the UI.
+- Improved browser annotation mode so it behaves like a real toggle, supports cancel via repeated click and `Escape`, and keeps its active-state styling in sync with the current annotation session.
+- Fixed browser annotation capture so screenshots exclude the floating annotation panel while preserving the selected-element highlight, keeping the image aligned with the captured element metadata.
+
 ### Browser Annotations in Composer and Chat
 
 - Refactored browser annotations into first-class composer draft attachments instead of dumping their full metadata directly into the prompt editor as soon as they are created.
@@ -18,6 +28,7 @@ This first entry summarizes the major work completed between `2026-04-27` and `2
 
 ### Validation
 
+- Added focused unit and browser-mode tests for embedded-browser link routing, browser toolbar actions, and annotation mode lifecycle and capture helper behavior.
 - Added focused tests for composer annotation attachment styling and removal, sent-message annotation rendering, annotation prompt formatting, persisted composer annotation state, and browser-annotation parsing behavior.
 - Revalidated the repo with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
 
