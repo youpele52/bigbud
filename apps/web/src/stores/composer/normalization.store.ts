@@ -31,6 +31,7 @@ export function createEmptyThreadDraft(): ComposerThreadDraftState {
     prompt: "",
     images: [],
     files: [],
+    annotations: [],
     nonPersistedImageIds: [],
     persistedAttachments: [],
     persistedFileAttachments: [],
@@ -111,6 +112,7 @@ export function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     draft.prompt.length === 0 &&
     draft.images.length === 0 &&
     draft.files.length === 0 &&
+    draft.annotations.length === 0 &&
     draft.persistedAttachments.length === 0 &&
     draft.terminalContexts.length === 0 &&
     Object.keys(draft.modelSelectionByProvider).length === 0 &&

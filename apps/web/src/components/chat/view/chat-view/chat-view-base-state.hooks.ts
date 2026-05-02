@@ -82,6 +82,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const prompt = composerDraft.prompt;
   const composerImages = composerDraft.images;
   const composerFiles = composerDraft.files;
+  const composerAnnotations = composerDraft.annotations;
   const composerTerminalContexts = composerDraft.terminalContexts;
   const composerSendState = useMemo(
     () =>
@@ -89,9 +90,16 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
         prompt,
         imageCount: composerImages.length,
         fileCount: composerFiles.length,
+        annotationCount: composerAnnotations.length,
         terminalContexts: composerTerminalContexts,
       }),
-    [composerFiles.length, composerImages.length, composerTerminalContexts, prompt],
+    [
+      composerAnnotations.length,
+      composerFiles.length,
+      composerImages.length,
+      composerTerminalContexts,
+      prompt,
+    ],
   );
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
@@ -106,6 +114,8 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const addComposerDraftFile = useComposerDraftStore((store) => store.addFile);
   const addComposerDraftFiles = useComposerDraftStore((store) => store.addFiles);
   const removeComposerDraftFile = useComposerDraftStore((store) => store.removeFile);
+  const addComposerDraftAnnotations = useComposerDraftStore((store) => store.addAnnotations);
+  const removeComposerDraftAnnotation = useComposerDraftStore((store) => store.removeAnnotation);
   const insertComposerDraftTerminalContext = useComposerDraftStore(
     (store) => store.insertTerminalContext,
   );
@@ -192,6 +202,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const composerFormRef = useRef<HTMLFormElement>(null);
   const composerImagesRef = useRef(composerImages);
   const composerFilesRef = useRef(composerFiles);
+  const composerAnnotationsRef = useRef(composerAnnotations);
   const composerSelectLockRef = useRef(false);
   const composerMenuOpenRef = useRef(false);
   const composerMenuItemsRef = useRef<ComposerCommandItem[]>([]);
@@ -276,6 +287,18 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
       addComposerDraftFiles(threadId, files);
     },
     [addComposerDraftFiles, threadId],
+  );
+  const addComposerAnnotationsToDraft = useCallback(
+    (annotations: typeof composerAnnotations) => {
+      addComposerDraftAnnotations(threadId, annotations);
+    },
+    [addComposerDraftAnnotations, threadId],
+  );
+  const removeComposerAnnotationFromDraft = useCallback(
+    (annotationId: string) => {
+      removeComposerDraftAnnotation(threadId, annotationId);
+    },
+    [removeComposerDraftAnnotation, threadId],
   );
   const removeComposerFileFromDraft = useCallback(
     (fileId: string) => {
@@ -368,6 +391,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     prompt,
     composerImages,
     composerFiles,
+    composerAnnotations,
     composerTerminalContexts,
     composerSendState,
     nonPersistedComposerImageIds,
@@ -381,6 +405,8 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     addComposerDraftFile,
     addComposerDraftFiles,
     removeComposerDraftFile,
+    addComposerDraftAnnotations,
+    removeComposerDraftAnnotation,
     insertComposerDraftTerminalContext,
     addComposerDraftTerminalContexts,
     removeComposerDraftTerminalContext,
@@ -443,6 +469,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     composerFormRef,
     composerImagesRef,
     composerFilesRef,
+    composerAnnotationsRef,
     composerSelectLockRef,
     composerMenuOpenRef,
     composerMenuItemsRef,
@@ -475,6 +502,8 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     removeComposerImageFromDraft,
     addComposerFile,
     addComposerFilesToDraft,
+    addComposerAnnotationsToDraft,
+    removeComposerAnnotationFromDraft,
     removeComposerFileFromDraft,
     removeComposerTerminalContextFromDraft,
     fallbackDraftProject,

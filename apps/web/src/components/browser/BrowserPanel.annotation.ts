@@ -101,6 +101,25 @@ export function dataUrlToFile(dataUrl: string, name: string, mimeType: string): 
   }
 }
 
+export function browserAnnotationCleanupScript(): void {
+  document.getElementById("__bigbud_annotation_root")?.remove();
+}
+
+export async function browserAnnotationPrepareCaptureScript(): Promise<void> {
+  document.getElementById("__bigbud_annotation_panel")?.remove();
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+export function browserAnnotationCancelScript(): void {
+  document.dispatchEvent(
+    new CustomEvent("bigbud:browser-annotation-cancel", {
+      bubbles: false,
+    }),
+  );
+}
+
 export function browserAnnotationPickerScript(
   theme: BrowserAnnotationTheme,
 ): Promise<BrowserAnnotationSelection> {
@@ -181,7 +200,7 @@ export function browserAnnotationPickerScript(
     };
   };
 
-  return new Promise((resolve) => {
+  return new Promise<BrowserAnnotationSelection>((resolve) => {
     document.getElementById("__bigbud_annotation_root")?.remove();
     const root = make("div", { style: STYLE.root });
     root.id = "__bigbud_annotation_root";
@@ -199,6 +218,7 @@ export function browserAnnotationPickerScript(
     const actions = make("div", { style: STYLE.actions });
     actions.append(cancel, submit);
     const panel = make("div", { style: STYLE.panel });
+    panel.id = "__bigbud_annotation_panel";
     panel.append(
       make("div", { text: "Annotate selection", style: STYLE.title }),
       target,
@@ -225,16 +245,25 @@ export function browserAnnotationPickerScript(
       box.style.width = `${rect.width}px`;
       box.style.height = `${rect.height}px`;
     };
-    const cleanup = () => {
+    const cleanup = (options?: { preserveOverlayForCapture?: boolean }) => {
       document.removeEventListener("mousemove", onMouseMove, true);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener("bigbud:browser-annotation-cancel", onCancelRequest, true);
+      if (options?.preserveOverlayForCapture) {
+        root.style.pointerEvents = "none";
+        panel.remove();
+        return;
+      }
       root.remove();
     };
-    const finish = (result: BrowserAnnotationSelection) => {
+    const finish = (
+      result: BrowserAnnotationSelection,
+      options?: { preserveOverlayForCapture?: boolean },
+    ) => {
       if (state.finished) return;
       state.finished = true;
-      cleanup();
+      cleanup(options);
       resolve(result);
     };
     const send = () => {
@@ -242,16 +271,19 @@ export function browserAnnotationPickerScript(
         finish({ cancelled: true });
         return;
       }
-      finish({
-        cancelled: false,
-        comment: textarea.value.trim(),
-        element: describeElement(state.selected),
-        viewport: {
-          width: window.innerWidth,
-          height: window.innerHeight,
-          devicePixelRatio: window.devicePixelRatio || 1,
+      finish(
+        {
+          cancelled: false,
+          comment: textarea.value.trim(),
+          element: describeElement(state.selected),
+          viewport: {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            devicePixelRatio: window.devicePixelRatio || 1,
+          },
         },
-      });
+        { preserveOverlayForCapture: true },
+      );
     };
     function onMouseMove(event: MouseEvent) {
       if (state.locked) return;
@@ -286,10 +318,14 @@ export function browserAnnotationPickerScript(
         send();
       }
     }
+    function onCancelRequest() {
+      finish({ cancelled: true });
+    }
     cancel.addEventListener("click", () => finish({ cancelled: true }));
     submit.addEventListener("click", send);
     document.addEventListener("mousemove", onMouseMove, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener("bigbud:browser-annotation-cancel", onCancelRequest, true);
   });
 }

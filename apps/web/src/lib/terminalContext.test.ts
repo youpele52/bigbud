@@ -122,6 +122,7 @@ describe("terminalContext", () => {
           body: "12 | git status\n13 | On branch main",
         },
       ],
+      browserAnnotations: [],
     });
   });
 
@@ -146,6 +147,37 @@ describe("terminalContext", () => {
         }),
       ]),
     ).toBeNull();
+  });
+
+  it("hides trailing browser annotation blocks from visible user message text", () => {
+    const annotation = [
+      "Browser annotation",
+      "",
+      "User instruction:",
+      "Fix this button",
+      "",
+      "Page:",
+      "Title: Dashboard",
+      "URL: https://example.com/dashboard",
+      "Viewport: width=1280 height=720 devicePixelRatio=2",
+      "",
+      "Selected element:",
+      "Selector: #save",
+      "Tag: button",
+      "Role: button",
+      "Text: Save",
+      "Aria label: Save changes",
+      "Rect: x=10 y=20 width=100 height=32",
+      "",
+      "Use the attached screenshot and selected element metadata to make the appropriate code change.",
+    ].join("\n");
+    const prompt = `Please inspect\n\n${annotation}\n\n---\n\n${annotation}`;
+
+    expect(deriveDisplayedUserMessageState(prompt)).toMatchObject({
+      visibleText: "Please inspect",
+      copyText: prompt,
+      browserAnnotations: [{ text: annotation }, { text: annotation }],
+    });
   });
 
   it("tracks inline terminal context placeholders in prompt text", () => {

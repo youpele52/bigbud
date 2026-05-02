@@ -1,5 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
+import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -52,15 +53,14 @@ export function createWsNativeApi(): NativeApi {
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openExternal: async (url) => {
-        if (window.desktopBridge) {
-          const opened = await window.desktopBridge.openExternal(url);
-          if (!opened) {
-            throw new Error("Unable to open link.");
-          }
-          return;
+        const nextUrl = url.trim();
+        if (!nextUrl) {
+          throw new Error("Unable to open link.");
         }
 
-        window.open(url, "_blank", "noopener,noreferrer");
+        const { setOpen, setUrl } = useBrowserPanelStore.getState();
+        setUrl(nextUrl);
+        setOpen(true);
       },
     },
     git: {
