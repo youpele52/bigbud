@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseDiffRouteSearch } from "./route-search.utils";
+import {
+  closeDiffRouteSearch,
+  openDiffRouteSearch,
+  parseDiffRouteSearch,
+} from "./route-search.utils";
 
 describe("parseDiffRouteSearch", () => {
   it("parses valid diff search values", () => {
@@ -68,6 +72,60 @@ describe("parseDiffRouteSearch", () => {
     });
 
     expect(parsed).toEqual({
+      diff: "1",
+    });
+  });
+});
+
+describe("diff route search helpers", () => {
+  it("closes diff search params without disturbing unrelated search state", () => {
+    expect(
+      closeDiffRouteSearch({
+        diff: "1",
+        diffTurnId: "turn-1",
+        diffFilePath: "src/app.ts",
+        tab: "activity",
+      }),
+    ).toEqual({
+      tab: "activity",
+      diff: undefined,
+      diffTurnId: undefined,
+      diffFilePath: undefined,
+    });
+  });
+
+  it("opens diff search params from any prior search state", () => {
+    expect(
+      openDiffRouteSearch(
+        {
+          tab: "activity",
+          diff: undefined,
+        },
+        {
+          turnId: "turn-1" as never,
+          filePath: "src/app.ts",
+        },
+      ),
+    ).toEqual({
+      tab: "activity",
+      diff: "1",
+      diffTurnId: "turn-1",
+      diffFilePath: "src/app.ts",
+    });
+  });
+
+  it("drops file targeting when no turn is selected", () => {
+    expect(
+      openDiffRouteSearch(
+        {
+          tab: "activity",
+        },
+        {
+          filePath: "src/app.ts",
+        },
+      ),
+    ).toEqual({
+      tab: "activity",
       diff: "1",
     });
   });
