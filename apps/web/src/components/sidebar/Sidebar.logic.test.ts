@@ -501,6 +501,20 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
+  it("shows compacting context when the running session is compacting", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          session: {
+            ...baseThread.session,
+            reason: "context.compacting",
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Compacting", pulse: true, dotClass: "bg-warning" });
+  });
+
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
     expect(
       resolveThreadStatusPill({

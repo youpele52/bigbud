@@ -9,7 +9,11 @@ import {
 } from "react";
 
 import { type ThreadId, type GitStatusResult } from "@bigbud/contracts";
-import { useIsThreadRunning, useSidebarThreadSummaryById } from "../../stores/main";
+import {
+  useIsThreadCompacting,
+  useIsThreadRunning,
+  useSidebarThreadSummaryById,
+} from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { selectThreadTerminalState } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -137,6 +141,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   // Global selector: true when session.status === "running" with an active turn.
   // Matches the same signal used by the chat view spinner.
   const isThreadRunning = useIsThreadRunning(props.threadId);
+  const isThreadCompacting = useIsThreadCompacting(props.threadId);
 
   const swipeReveal = useSwipeRevealAction<HTMLAnchorElement>({
     itemId: effectiveThreadId,
@@ -145,7 +150,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const isActive = props.routeThreadId === effectiveThreadId;
   const isSelected = props.selectedThreadIds.has(effectiveThreadId);
   const isHighlighted = isActive || isSelected;
-  const isAgentWorking = isThreadRunning;
+  const activityDotClassName = isThreadCompacting
+    ? "bg-warning"
+    : isThreadRunning
+      ? "bg-info-foreground"
+      : null;
   const threadStatus = thread
     ? resolveThreadStatusPill({
         thread: {
@@ -154,7 +163,8 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         },
       })
     : null;
-  const visibleThreadStatus = threadStatus?.label === "Working" ? null : threadStatus;
+  const visibleThreadStatus =
+    threadStatus?.label === "Working" || threadStatus?.label === "Compacting" ? null : threadStatus;
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive =
@@ -331,13 +341,13 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
               </Tooltip>
             )}
             {visibleThreadStatus && <ThreadStatusLabel status={visibleThreadStatus} />}
-            {isAgentWorking && (
+            {activityDotClassName && (
               <span
                 aria-hidden="true"
-                title="Agent is working"
+                title={isThreadCompacting ? "Compacting context" : "Agent is working"}
                 className="inline-flex shrink-0 items-center justify-center"
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-info-foreground" />
+                <span className={`h-1.5 w-1.5 rounded-full ${activityDotClassName}`} />
               </span>
             )}
             {props.renamingThreadId === thread.id ? (

@@ -5,6 +5,7 @@ import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.stor
 import { syncServerReadModel } from "./helpers.store";
 import {
   selectProjectById,
+  selectIsThreadCompacting,
   selectSidebarThreadSummaryById,
   selectIsThreadRunning,
   selectThreadById,
@@ -38,6 +39,7 @@ export {
   applyOrchestrationEvents,
   syncServerReadModel,
   selectProjectById,
+  selectIsThreadCompacting,
   selectSidebarThreadSummaryById,
   selectIsThreadRunning,
   selectThreadById,

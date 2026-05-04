@@ -165,6 +165,7 @@ export interface ThreadSession {
   activeTurnId?: TurnId | undefined;
   createdAt: string;
   updatedAt: string;
+  reason?: string | null;
   lastError?: string;
   orchestrationStatus: OrchestrationSessionStatus;
 }

@@ -72,7 +72,10 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           type: "session.state.changed",
           payload: {
             state: message.status === "compacting" ? "waiting" : "running",
-            reason: `status:${message.status ?? "active"}`,
+            reason:
+              message.status === "compacting"
+                ? "context.compacting"
+                : `status:${message.status ?? "active"}`,
             detail: message,
           },
         });

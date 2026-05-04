@@ -14,10 +14,11 @@ import ProjectScriptsControl, {
 import { Toggle } from "../../ui/toggle";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
-import { useIsThreadRunning } from "../../../stores/main";
+import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
+import { ThreadActivityDots, threadActivityLabel } from "./threadActivityIndicator";
 
 interface ChatHeaderProps {
   activeThreadId: ThreadId;
@@ -75,7 +76,9 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleBrowser,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
+  const isThreadCompacting = useIsThreadCompacting(activeThreadId);
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
+  const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -97,24 +100,13 @@ export const ChatHeader = memo(function ChatHeader({
           <span className="text-muted-foreground">
             {truncateThreadName(activeThreadTitle)}
             <span className="ml-3">
-              {isThreadRunning && (
+              {activityTone && (
                 <span
                   aria-hidden="true"
-                  title="Agent is working"
+                  title={threadActivityLabel(activityTone)}
                   className="inline-flex items-center gap-[3px] pr-1"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:200ms]"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:400ms]"
-                  />
+                  <ThreadActivityDots tone={activityTone} dotClassName="h-1 w-1" />
                 </span>
               )}
             </span>

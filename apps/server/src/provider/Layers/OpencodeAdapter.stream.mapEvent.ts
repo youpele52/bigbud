@@ -27,6 +27,10 @@ import {
 
 export { FULL_ACCESS_AUTO_APPROVE_AFTER_MS };
 
+function statusMessageLooksLikeCompaction(message: string | undefined): boolean {
+  return typeof message === "string" && /compact/i.test(message);
+}
+
 /**
  * Stable key for correlating a question answer back to its question by index.
  * Mirrors the t3code `openCodeQuestionId` helper.
@@ -336,6 +340,24 @@ export function makeMapEvent(
           if (status.type === "busy") {
             const existingTurnId = session.activeTurnId;
             if (existingTurnId) {
+              if (statusMessageLooksLikeCompaction(status.message)) {
+                session.wasRetrying = false;
+                const compactionEventId = yield* nextEventId;
+                return [
+                  {
+                    ...eventBase({
+                      eventId: compactionEventId,
+                      createdAt,
+                      threadId: session.threadId,
+                      ...(existingTurnId ? { turnId: existingTurnId } : {}),
+                      raw,
+                    }),
+                    type: "session.state.changed",
+                    payload: { state: "waiting", reason: "context.compacting", detail: status },
+                  },
+                ];
+              }
+
               // If we were in a waiting/retry state, transition back to running.
               if (session.wasRetrying) {
                 session.wasRetrying = false;

@@ -325,6 +325,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
         providerName: row.providerName,
         runtimeMode: row.runtimeMode,
         activeTurnId: row.activeTurnId,
+        reason: row.reason,
         lastError: row.lastError,
         updatedAt: row.updatedAt,
       });
