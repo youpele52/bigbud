@@ -1,26 +1,27 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 
-import * as GitLabCli from "./GitLabCli.ts";
-import * as GitLabSourceControlProvider from "./GitLabSourceControlProvider.ts";
+import * as BitbucketApi from "./BitbucketApi.ts";
+import * as BitbucketSourceControlProvider from "./BitbucketSourceControlProvider.ts";
 
-function makeProvider(gitlab: Partial<GitLabCli.GitLabCliShape>) {
-  return GitLabSourceControlProvider.make().pipe(
-    Effect.provide(Layer.mock(GitLabCli.GitLabCli)(gitlab)),
+function makeProvider(bitbucket: Partial<BitbucketApi.BitbucketApiShape>) {
+  return BitbucketSourceControlProvider.make().pipe(
+    Effect.provide(Layer.mock(BitbucketApi.BitbucketApi)(bitbucket)),
   );
 }
 
-it.effect("maps GitLab MR summaries into provider-neutral change requests", () =>
+it.effect("maps Bitbucket PR summaries into provider-neutral change requests", () =>
   Effect.gen(function* () {
     const provider = yield* makeProvider({
-      getMergeRequest: () =>
+      getPullRequest: () =>
         Effect.succeed({
           number: 42,
-          title: "Add GitLab provider",
-          url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+          title: "Add Bitbucket provider",
+          url: "https://bitbucket.org/pingdotgg/t3code/pull-requests/42",
           baseRefName: "main",
           headRefName: "feature/source-control",
           state: "open",
+          updatedAt: Option.none(),
           isCrossRepository: true,
           headRepositoryNameWithOwner: "fork/t3code",
           headRepositoryOwnerLogin: "fork",
@@ -33,10 +34,10 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
     });
 
     assert.deepStrictEqual(changeRequest, {
-      provider: "gitlab",
+      provider: "bitbucket",
       number: 42,
-      title: "Add GitLab provider",
-      url: "https://gitlab.com/pingdotgg/t3code/-/merge_requests/42",
+      title: "Add Bitbucket provider",
+      url: "https://bitbucket.org/pingdotgg/t3code/pull-requests/42",
       baseRefName: "main",
       headRefName: "feature/source-control",
       state: "open",
@@ -48,11 +49,11 @@ it.effect("maps GitLab MR summaries into provider-neutral change requests", () =
   }),
 );
 
-it.effect("lists GitLab MRs through provider-neutral input names", () =>
+it.effect("lists Bitbucket PRs through provider-neutral input names", () =>
   Effect.gen(function* () {
-    let listInput: Parameters<GitLabCli.GitLabCliShape["listMergeRequests"]>[0] | null = null;
+    let listInput: Parameters<BitbucketApi.BitbucketApiShape["listPullRequests"]>[0] | null = null;
     const provider = yield* makeProvider({
-      listMergeRequests: (input) => {
+      listPullRequests: (input) => {
         listInput = input;
         return Effect.succeed([]);
       },
@@ -74,11 +75,12 @@ it.effect("lists GitLab MRs through provider-neutral input names", () =>
   }),
 );
 
-it.effect("creates GitLab MRs through provider-neutral input names", () =>
+it.effect("creates Bitbucket PRs through provider-neutral input names", () =>
   Effect.gen(function* () {
-    let createInput: Parameters<GitLabCli.GitLabCliShape["createMergeRequest"]>[0] | null = null;
+    let createInput: Parameters<BitbucketApi.BitbucketApiShape["createPullRequest"]>[0] | null =
+      null;
     const provider = yield* makeProvider({
-      createMergeRequest: (input) => {
+      createPullRequest: (input) => {
         createInput = input;
         return Effect.void;
       },
@@ -88,7 +90,7 @@ it.effect("creates GitLab MRs through provider-neutral input names", () =>
       cwd: "/repo",
       baseRefName: "main",
       headSelector: "owner:feature/provider",
-      title: "Provider MR",
+      title: "Provider PR",
       bodyFile: "/tmp/body.md",
     });
 
@@ -100,8 +102,25 @@ it.effect("creates GitLab MRs through provider-neutral input names", () =>
         owner: "owner",
         refName: "feature/provider",
       },
-      title: "Provider MR",
+      title: "Provider PR",
       bodyFile: "/tmp/body.md",
     });
+  }),
+);
+
+it.effect("uses Bitbucket API repository detection for default branch lookup", () =>
+  Effect.gen(function* () {
+    let cwdInput: string | null = null;
+    const provider = yield* makeProvider({
+      getDefaultBranch: (input) => {
+        cwdInput = input.cwd;
+        return Effect.succeed("main");
+      },
+    });
+
+    const defaultBranch = yield* provider.getDefaultBranch({ cwd: "/repo" });
+
+    assert.strictEqual(defaultBranch, "main");
+    assert.strictEqual(cwdInput, "/repo");
   }),
 );

@@ -1,97 +1,93 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer } from "effect";
 import { SourceControlProviderError, type ChangeRequest } from "@t3tools/contracts";
 
-import * as GitLabCli from "./GitLabCli.ts";
+import * as AzureDevOpsCli from "./AzureDevOpsCli.ts";
 import * as SourceControlProvider from "./SourceControlProvider.ts";
 import * as SourceControlProviderDiscovery from "./SourceControlProviderDiscovery.ts";
 
 function providerError(
   operation: string,
-  cause: GitLabCli.GitLabCliError,
+  cause: AzureDevOpsCli.AzureDevOpsCliError,
 ): SourceControlProviderError {
   return new SourceControlProviderError({
-    provider: "gitlab",
+    provider: "azure-devops",
     operation,
     detail: cause.detail,
     cause,
   });
 }
 
-function toChangeRequest(summary: GitLabCli.GitLabMergeRequestSummary): ChangeRequest {
-  return {
-    provider: "gitlab",
-    number: summary.number,
-    title: summary.title,
-    url: summary.url,
-    baseRefName: summary.baseRefName,
-    headRefName: summary.headRefName,
-    state: summary.state ?? "open",
-    updatedAt: summary.updatedAt ?? Option.none(),
-    ...(summary.isCrossRepository !== undefined
-      ? { isCrossRepository: summary.isCrossRepository }
-      : {}),
-    ...(summary.headRepositoryNameWithOwner !== undefined
-      ? { headRepositoryNameWithOwner: summary.headRepositoryNameWithOwner }
-      : {}),
-    ...(summary.headRepositoryOwnerLogin !== undefined
-      ? { headRepositoryOwnerLogin: summary.headRepositoryOwnerLogin }
-      : {}),
-  };
-}
-
-function parseGitLabAuth(input: SourceControlProviderDiscovery.SourceControlAuthProbeInput) {
-  const output = SourceControlProviderDiscovery.combinedAuthOutput(input);
-  const account = SourceControlProviderDiscovery.matchFirst(output, [
-    /Logged in to .* as\s+([^\s(]+)/iu,
-    /Logged in to .* account\s+([^\s(]+)/iu,
-    /account:\s*([^\s(]+)/iu,
-  ]);
-  const host = SourceControlProviderDiscovery.parseCliHost(output);
+function parseAzureAuth(input: SourceControlProviderDiscovery.SourceControlAuthProbeInput) {
+  const account = input.stdout.trim().split(/\r?\n/)[0]?.trim();
 
   if (input.exitCode !== 0) {
     return SourceControlProviderDiscovery.providerAuth({
       status: "unauthenticated",
-      host,
       detail:
-        SourceControlProviderDiscovery.firstSafeAuthLine(output) ??
-        "Run `glab auth login` to authenticate GitLab CLI.",
+        SourceControlProviderDiscovery.firstSafeAuthLine(
+          SourceControlProviderDiscovery.combinedAuthOutput(input),
+        ) ?? "Run `az login` to authenticate Azure CLI.",
     });
   }
 
-  if (account) {
-    return SourceControlProviderDiscovery.providerAuth({ status: "authenticated", account, host });
+  if (account && account.length > 0) {
+    return SourceControlProviderDiscovery.providerAuth({
+      status: "authenticated",
+      account,
+      host: "dev.azure.com",
+    });
   }
 
   return SourceControlProviderDiscovery.providerAuth({
     status: "unknown",
-    host,
-    detail:
-      SourceControlProviderDiscovery.firstSafeAuthLine(output) ??
-      "GitLab CLI auth status could not be parsed.",
+    host: "dev.azure.com",
+    detail: "Azure CLI account status could not be parsed.",
   });
 }
 
 export const discovery = {
   type: "cli",
-  kind: "gitlab",
-  label: "GitLab",
-  executable: "glab",
+  kind: "azure-devops",
+  label: "Azure DevOps",
+  executable: "az",
   versionArgs: ["--version"],
-  authArgs: ["auth", "status"],
-  parseAuth: parseGitLabAuth,
+  authArgs: ["account", "show", "--query", "user.name", "-o", "tsv"],
+  parseAuth: parseAzureAuth,
   installHint:
-    "Install the GitLab command-line tool (`glab`) from https://gitlab.com/gitlab-org/cli or your package manager (for example `brew install glab`).",
+    "Install the Azure command-line tools (`az`), then enable Azure DevOps support with `az extension add --name azure-devops`.",
 } satisfies SourceControlProviderDiscovery.SourceControlCliDiscoverySpec;
 
-export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
-  const gitlab = yield* GitLabCli.GitLabCli;
+function toChangeRequest(summary: {
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  readonly baseRefName: string;
+  readonly headRefName: string;
+  readonly state: "open" | "closed" | "merged";
+  readonly updatedAt: ChangeRequest["updatedAt"];
+}): ChangeRequest {
+  return {
+    provider: "azure-devops",
+    number: summary.number,
+    title: summary.title,
+    url: summary.url,
+    baseRefName: summary.baseRefName,
+    headRefName: summary.headRefName,
+    state: summary.state,
+    updatedAt: summary.updatedAt,
+    isCrossRepository: false,
+  };
+}
+
+export const make = Effect.fn("makeAzureDevOpsSourceControlProvider")(function* () {
+  const azure = yield* AzureDevOpsCli.AzureDevOpsCli;
 
   return SourceControlProvider.SourceControlProvider.of({
-    kind: "gitlab",
+    kind: "azure-devops",
     listChangeRequests: (input) => {
       const source = SourceControlProvider.sourceControlRefFromInput(input);
-      return gitlab
-        .listMergeRequests({
+      return azure
+        .listPullRequests({
           cwd: input.cwd,
           headSelector: input.headSelector,
           ...(source ? { source } : {}),
@@ -104,14 +100,14 @@ export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
         );
     },
     getChangeRequest: (input) =>
-      gitlab.getMergeRequest(input).pipe(
+      azure.getPullRequest(input).pipe(
         Effect.map(toChangeRequest),
         Effect.mapError((error) => providerError("getChangeRequest", error)),
       ),
     createChangeRequest: (input) => {
       const source = SourceControlProvider.sourceControlRefFromInput(input);
-      return gitlab
-        .createMergeRequest({
+      return azure
+        .createPullRequest({
           cwd: input.cwd,
           baseBranch: input.baseRefName,
           headSelector: input.headSelector,
@@ -123,20 +119,24 @@ export const make = Effect.fn("makeGitLabSourceControlProvider")(function* () {
         .pipe(Effect.mapError((error) => providerError("createChangeRequest", error)));
     },
     getRepositoryCloneUrls: (input) =>
-      gitlab
+      azure
         .getRepositoryCloneUrls(input)
         .pipe(Effect.mapError((error) => providerError("getRepositoryCloneUrls", error))),
     createRepository: (input) =>
-      gitlab
+      azure
         .createRepository(input)
         .pipe(Effect.mapError((error) => providerError("createRepository", error))),
     getDefaultBranch: (input) =>
-      gitlab
-        .getDefaultBranch(input)
+      azure
+        .getDefaultBranch({ cwd: input.cwd })
         .pipe(Effect.mapError((error) => providerError("getDefaultBranch", error))),
     checkoutChangeRequest: (input) =>
-      gitlab
-        .checkoutMergeRequest(input)
+      azure
+        .checkoutPullRequest({
+          cwd: input.cwd,
+          reference: input.reference,
+          ...(input.context ? { remoteName: input.context.remoteName } : {}),
+        })
         .pipe(Effect.mapError((error) => providerError("checkoutChangeRequest", error))),
   });
 });
