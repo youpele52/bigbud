@@ -1,11 +1,13 @@
-import type { MessageId, ModelSelection, ProviderKind, TurnId } from "@bigbud/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { MessageId, TurnId } from "@bigbud/contracts";
+import { useCallback, useRef } from "react";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
-import { useComposerDraftStore } from "~/stores/composer";
-import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
-import { stripDiffSearchParams } from "~/utils/diff";
+import { openDiffRouteSearch } from "~/utils/diff";
+import {
+  closeBrowserPanel,
+  requestRightPanel,
+} from "../../../../stores/browser/browserPanel.coordinator";
 import { isElectron } from "~/config/env/env.config";
 
 import {
@@ -18,21 +20,18 @@ import { useComposerCommandHandlers } from "../ChatView.composerCommandHandlers.
 import { useChatKeybindings } from "../ChatView.keybindings.logic";
 import { usePlanHandlers } from "../ChatView.planHandlers.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
-import { waitForThreadToExist } from "../ChatView.logic";
-import { providerSupportsSubProviderID } from "../ChatView.modelSelection.logic";
 import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
 } from "../../provider/composerProviderRegistry";
-import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
-import { readNativeApi } from "~/rpc/nativeApi";
-import { toastManager } from "../../../ui/toast";
 import { resolveEffectiveEnvMode } from "~/components/git/BranchToolbar.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
+import { useChatViewExpandedImage } from "./chat-view-expanded-image.hooks";
+import { useChatViewProviderSwitch } from "./chat-view-provider-switch.hooks";
 
 interface ChatViewInteractionsInput {
   base: ChatViewBaseState;
@@ -42,26 +41,6 @@ interface ChatViewInteractionsInput {
   runtime: ChatViewRuntimeState;
 }
 
-interface PendingProviderSwitchConfirmation {
-  targetLabel: string;
-  nextModelSelection: ModelSelection;
-}
-
-function providerSwitchTargetLabel(provider: ProviderKind): string {
-  switch (provider) {
-    case "claudeAgent":
-      return "Claude";
-    case "copilot":
-      return "Copilot";
-    case "opencode":
-      return "OpenCode";
-    case "pi":
-      return "Pi";
-    default:
-      return "Codex";
-  }
-}
-
 export function useChatViewInteractions({
   base,
   composer,
@@ -69,53 +48,7 @@ export function useChatViewInteractions({
   timeline,
   runtime,
 }: ChatViewInteractionsInput) {
-  const [pendingProviderSwitchConfirmation, setPendingProviderSwitchConfirmation] =
-    useState<PendingProviderSwitchConfirmation | null>(null);
-
-  const closeExpandedImage = useCallback(() => {
-    base.setExpandedImage(null);
-  }, [base]);
-
-  const navigateExpandedImage = useCallback(
-    (direction: -1 | 1) => {
-      base.setExpandedImage((existing) => {
-        if (!existing || existing.images.length <= 1) {
-          return existing;
-        }
-        const nextIndex =
-          (existing.index + direction + existing.images.length) % existing.images.length;
-        return nextIndex === existing.index ? existing : { ...existing, index: nextIndex };
-      });
-    },
-    [base],
-  );
-
-  useEffect(() => {
-    if (!base.expandedImage) return;
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      const expandedImage = base.expandedImage;
-      if (!expandedImage) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        closeExpandedImage();
-        return;
-      }
-      if (expandedImage.images.length <= 1) return;
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        event.stopPropagation();
-        navigateExpandedImage(-1);
-        return;
-      }
-      if (event.key !== "ArrowRight") return;
-      event.preventDefault();
-      event.stopPropagation();
-      navigateExpandedImage(1);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [base.expandedImage, closeExpandedImage, navigateExpandedImage]);
+  const { closeExpandedImage, navigateExpandedImage } = useChatViewExpandedImage(base);
 
   const envMode: DraftThreadEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath: base.activeThread?.worktreePath ?? null,
@@ -123,170 +56,16 @@ export function useChatViewInteractions({
     draftThreadEnvMode: base.isLocalDraftThread ? base.draftThread?.envMode : undefined,
   });
 
-  const branchThreadForProviderChange = useCallback(
-    async (nextModelSelection: ModelSelection) => {
-      const api = readNativeApi();
-      if (!api || !base.activeProject || !base.activeThread || !base.isServerThread) {
-        runtime.scheduleComposerFocus();
-        return;
-      }
-
-      const nextThreadId = newThreadId();
-      const createdAt = new Date().toISOString();
-      const sourceThreadId = base.activeThread.id;
-      const sourceDraft = base.composerDraft;
-      const sourceDraftContexts = sourceDraft.terminalContexts.map((context) => ({
-        ...context,
-        threadId: nextThreadId,
-      }));
-
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "thread.create",
-          commandId: newCommandId(),
-          threadId: nextThreadId,
-          projectId: base.activeProject.id,
-          title: base.activeThread.title,
-          modelSelection: nextModelSelection,
-          runtimeMode: base.runtimeMode,
-          interactionMode: base.interactionMode,
-          branch: base.activeThread.branch,
-          worktreePath: base.activeThread.worktreePath,
-          parentThread: {
-            threadId: sourceThreadId,
-            title: base.activeThread.title,
-          },
-          seedMessages: base.activeThread.messages
-            .filter((message) => !message.streaming)
-            .map((message) =>
-              Object.assign(
-                {
-                  id: newMessageId(),
-                  role: message.role,
-                  text: message.text,
-                },
-                message.attachments
-                  ? {
-                      attachments: message.attachments.map((attachment) => ({
-                        type: attachment.type,
-                        id: attachment.id,
-                        name: attachment.name,
-                        mimeType: attachment.mimeType,
-                        sizeBytes: attachment.sizeBytes,
-                      })),
-                    }
-                  : {},
-                {
-                  turnId: null,
-                  streaming: false,
-                  createdAt: message.createdAt,
-                  updatedAt: message.completedAt ?? message.createdAt,
-                },
-              ),
-            ),
-          createdAt,
-        });
-      } catch (err) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to create branch",
-          description: err instanceof Error ? err.message : "Could not start a new branch thread.",
-        });
-        runtime.scheduleComposerFocus();
-        return;
-      }
-
-      base.setComposerDraftPrompt(nextThreadId, sourceDraft.prompt);
-      for (const selection of Object.values(sourceDraft.modelSelectionByProvider)) {
-        if (selection) {
-          base.setComposerDraftModelSelection(nextThreadId, selection);
-        }
-      }
-      base.setComposerDraftModelSelection(nextThreadId, nextModelSelection);
-      base.setComposerDraftRuntimeMode(nextThreadId, base.runtimeMode);
-      base.setComposerDraftInteractionMode(nextThreadId, base.interactionMode);
-      if (sourceDraft.images.length > 0) {
-        useComposerDraftStore.getState().addImages(
-          nextThreadId,
-          sourceDraft.images.map((image) => image),
-        );
-      }
-      if (sourceDraftContexts.length > 0) {
-        base.setComposerDraftTerminalContexts(nextThreadId, sourceDraftContexts);
-      }
-      base.setBootstrapSourceThreadId(nextThreadId, sourceThreadId);
-
-      const threadExists = await waitForThreadToExist(nextThreadId);
-      if (!threadExists) {
-        runtime.scheduleComposerFocus();
-        return;
-      }
-      await base.navigate({
-        to: "/$threadId",
-        params: { threadId: nextThreadId },
-      });
-      runtime.scheduleComposerFocus();
-    },
-    [base, runtime],
-  );
-
-  const onProviderModelSelect = useCallback(
-    async (provider: ProviderKind, model: string, subProviderID?: string) => {
-      if (!base.activeThread) return;
-      const resolvedProvider = resolveSelectableProvider(composer.providerStatuses, provider);
-      const resolvedModel = resolveAppModelSelection(
-        resolvedProvider,
-        base.settings,
-        composer.providerStatuses,
-        model,
-      );
-      const matchedServerModel = composer.modelOptionsByProvider[resolvedProvider]?.find(
-        (entry) =>
-          entry.slug === resolvedModel &&
-          (!providerSupportsSubProviderID(resolvedProvider) ||
-            entry.subProviderID === subProviderID),
-      );
-      const nextModelSelection: ModelSelection = {
-        provider: resolvedProvider,
-        model: resolvedModel,
-        ...(providerSupportsSubProviderID(resolvedProvider) && matchedServerModel?.subProviderID
-          ? { subProviderID: matchedServerModel.subProviderID }
-          : {}),
-      };
-      const boundProvider = composer.sessionProvider ?? composer.threadProvider;
-      const shouldBranchOnProviderChange =
-        composer.hasThreadStarted && boundProvider !== null && resolvedProvider !== boundProvider;
-
-      if (shouldBranchOnProviderChange) {
-        setPendingProviderSwitchConfirmation({
-          targetLabel: providerSwitchTargetLabel(resolvedProvider),
-          nextModelSelection,
-        });
-        return;
-      }
-
-      setPendingProviderSwitchConfirmation(null);
-      base.setComposerDraftModelSelection(base.activeThread.id, nextModelSelection);
-      base.setStickyComposerModelSelection(nextModelSelection);
-      runtime.scheduleComposerFocus();
-    },
-    [base, composer, runtime],
-  );
-
-  const onConfirmPendingProviderSwitch = useCallback(() => {
-    if (!pendingProviderSwitchConfirmation) {
-      return;
-    }
-
-    const nextModelSelection = pendingProviderSwitchConfirmation.nextModelSelection;
-    setPendingProviderSwitchConfirmation(null);
-    void branchThreadForProviderChange(nextModelSelection);
-  }, [branchThreadForProviderChange, pendingProviderSwitchConfirmation]);
-
-  const onDismissPendingProviderSwitch = useCallback(() => {
-    setPendingProviderSwitchConfirmation(null);
-    runtime.scheduleComposerFocus();
-  }, [runtime]);
+  const {
+    pendingProviderSwitchConfirmation,
+    onProviderModelSelect,
+    onConfirmPendingProviderSwitch,
+    onDismissPendingProviderSwitch,
+  } = useChatViewProviderSwitch({
+    base,
+    composer,
+    runtime,
+  });
 
   const setPromptFromTraits = useCallback(
     (nextPrompt: string) => {
@@ -603,15 +382,13 @@ export function useChatViewInteractions({
 
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {
+      requestRightPanel("diff");
+      closeBrowserPanel();
+
       void base.navigate({
         to: "/$threadId",
         params: { threadId: base.threadId },
-        search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
-          return filePath
-            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, diff: "1", diffTurnId: turnId };
-        },
+        search: (previous) => openDiffRouteSearch(previous, { turnId, filePath }),
       });
     },
     [base],

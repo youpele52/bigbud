@@ -48,7 +48,6 @@ export function ChatViewContent({
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const lastApprovalRequestIdRef = useRef<string | null>(null);
   const browserOpen = useBrowserPanelStore((state) => state.open);
-  const toggleBrowser = useBrowserPanelStore((state) => state.toggle);
 
   useEffect(() => {
     const requestId = thread.activePendingApproval?.requestId ?? null;
@@ -129,7 +128,7 @@ export function ChatViewContent({
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
           onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
           onToggleDiff={runtime.onToggleDiff}
-          onToggleBrowser={toggleBrowser}
+          onToggleBrowser={runtime.onToggleBrowser}
         />
       </header>
 

@@ -16,7 +16,6 @@ import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
 import { useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
-import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
 
@@ -76,12 +75,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleBrowser,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
-  const {
-    open: sidebarOpen,
-    toggleSidebar: rawToggleSidebar,
-    setOpen: setSidebarOpen,
-  } = useSidebar();
-  const setBrowserOpen = useBrowserPanelStore((state) => state.setOpen);
+  const { open: sidebarOpen, toggleSidebar } = useSidebar();
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -155,12 +149,7 @@ export const ChatHeader = memo(function ChatHeader({
               <Toggle
                 className="shrink-0"
                 pressed={sidebarOpen}
-                onPressedChange={() => {
-                  if (!sidebarOpen) {
-                    setBrowserOpen(false);
-                  }
-                  rawToggleSidebar();
-                }}
+                onPressedChange={toggleSidebar}
                 aria-label="Toggle sidebar"
                 variant="toolbar"
                 size="xs"
@@ -176,32 +165,6 @@ export const ChatHeader = memo(function ChatHeader({
           <TooltipPopup side="bottom">
             {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
             {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={browserOpen}
-                onPressedChange={() => {
-                  if (!browserOpen) {
-                    setSidebarOpen(false);
-                  }
-                  onToggleBrowser();
-                }}
-                aria-label="Toggle browser panel"
-                variant="toolbar"
-                size="xs"
-              >
-                <GlobeIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {browserToggleShortcutLabel
-              ? `Toggle browser panel (${browserToggleShortcutLabel})`
-              : "Toggle browser panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>
@@ -226,6 +189,27 @@ export const ChatHeader = memo(function ChatHeader({
               : terminalToggleShortcutLabel
                 ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
                 : "Toggle terminal drawer"}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={browserOpen}
+                onPressedChange={onToggleBrowser}
+                aria-label="Toggle browser panel"
+                variant="toolbar"
+                size="xs"
+              >
+                <GlobeIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {browserToggleShortcutLabel
+              ? `Toggle browser panel (${browserToggleShortcutLabel})`
+              : "Toggle browser panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>
