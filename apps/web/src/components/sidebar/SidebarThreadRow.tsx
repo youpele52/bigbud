@@ -1,4 +1,4 @@
-import { ArchiveIcon, GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
+import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import {
   useCallback,
   type Dispatch,
@@ -19,6 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
+import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 
 export type ThreadPr = GitStatusResult["pr"];
 
@@ -117,6 +118,7 @@ export interface SidebarThreadRowProps {
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
+  forkThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   pr: ThreadPr | null;
@@ -174,6 +176,24 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       void props.requestThreadDelete(effectiveThreadId);
     },
     [effectiveThreadId, props, swipeReveal],
+  );
+
+  const handleForkAction = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void props.forkThread(effectiveThreadId);
+    },
+    [effectiveThreadId, props],
+  );
+
+  const handleArchiveAction = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void props.attemptArchiveThread(effectiveThreadId);
+    },
+    [effectiveThreadId, props],
   );
 
   if (!thread) {
@@ -397,69 +417,16 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                   Confirm
                 </button>
               ) : !isThreadRunning ? (
-                props.appSettingsConfirmThreadArchive ? (
-                  <div
-                    className={`pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 transition-opacity duration-150 ${
-                      swipeReveal.isRevealed
-                        ? "opacity-0"
-                        : "opacity-100 md:opacity-0 md:group-hover/menu-sub-item:pointer-events-auto md:group-hover/menu-sub-item:opacity-100 md:group-focus-within/menu-sub-item:pointer-events-auto md:group-focus-within/menu-sub-item:opacity-100"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      data-thread-selection-safe
-                      data-testid={`thread-archive-${thread.id}`}
-                      aria-label={`Archive ${thread.title}`}
-                      className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        props.setConfirmingArchiveThreadId(thread.id);
-                        requestAnimationFrame(() => {
-                          props.confirmArchiveButtonRefs.current.get(thread.id)?.focus();
-                        });
-                      }}
-                    >
-                      <ArchiveIcon className="size-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <div
-                          className={`pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 transition-opacity duration-150 ${
-                            swipeReveal.isRevealed
-                              ? "opacity-0"
-                              : "opacity-100 md:opacity-0 md:group-hover/menu-sub-item:pointer-events-auto md:group-hover/menu-sub-item:opacity-100 md:group-focus-within/menu-sub-item:pointer-events-auto md:group-focus-within/menu-sub-item:opacity-100"
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            data-thread-selection-safe
-                            data-testid={`thread-archive-${thread.id}`}
-                            aria-label={`Archive ${thread.title}`}
-                            className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                            onPointerDown={(event) => {
-                              event.stopPropagation();
-                            }}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void props.attemptArchiveThread(thread.id);
-                            }}
-                          >
-                            <ArchiveIcon className="size-3.5" />
-                          </button>
-                        </div>
-                      }
-                    />
-                    <TooltipPopup side="top">Archive</TooltipPopup>
-                  </Tooltip>
-                )
+                <SidebarThreadRowActions
+                  threadId={thread.id}
+                  threadTitle={thread.title}
+                  appSettingsConfirmThreadArchive={props.appSettingsConfirmThreadArchive}
+                  confirmArchiveButtonRefs={props.confirmArchiveButtonRefs}
+                  swipeRevealIsRevealed={swipeReveal.isRevealed}
+                  handleForkAction={handleForkAction}
+                  handleArchiveAction={handleArchiveAction}
+                  setConfirmingArchiveThreadId={props.setConfirmingArchiveThreadId}
+                />
               ) : null}
               <span className={threadMetaClassName}>
                 {props.showThreadJumpHints && props.jumpLabel ? (
