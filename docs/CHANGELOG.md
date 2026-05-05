@@ -4,6 +4,42 @@ This document tracks notable project changes in a format that is useful for deve
 
 This first entry summarizes the major work completed between `2026-04-27` and `2026-05-01`.
 
+## 2026-05-05
+
+### Thread Forking
+
+- Added thread forking capability so users can branch conversations from any point in a thread's history.
+- Implemented seed message preparation that filters streaming messages, caps at 200 messages, and maps to the server's thread creation format.
+- Added fork action to thread row menu with UI integration in the sidebar.
+
+### Session Reasons
+
+- Added `reason` column to `projection_thread_sessions` table for storing session descriptions or context.
+- Updated projection pipeline, snapshot queries, and persistence layers to support session reasons.
+
+### Document Text Extraction
+
+- Added text extraction from PDF and DOCX files as first-class attachments.
+- PDF extraction uses the system's `pdftotext` binary (Poppler) for robust CID-keyed font handling.
+- DOCX extraction uses the `docx` library for parsing Word documents.
+- Normalizes extracted text (whitespace, line breaks) and truncates to 32,000 characters.
+
+### Browser Panel Coordination
+
+- Added browser/diff panel coordinator to ensure only one right panel is open at a time.
+- Closes diff panel when opening browser panel and vice versa.
+- Integrated panel state coordination with the browser panel store.
+
+### Provider Updates
+
+- Refined OpenCode provider session handling and event mapping for better answer flow compatibility.
+- Improved Pi adapter session helpers and method handling.
+
+### Validation
+
+- Added focused tests for OpenCode event mapping, document text extraction, browser panel coordination, thread fork seed preparation, and provider command reactor handlers.
+- Validated with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
+
 ## 2026-05-02
 
 ### Embedded Browser Link Handling and Annotation Controls
