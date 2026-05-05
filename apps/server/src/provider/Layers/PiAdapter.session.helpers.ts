@@ -4,7 +4,11 @@ import { type ChatAttachment } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
-import { isTextReadable } from "../../attachments/fileMime.ts";
+import {
+  appendAttachedFileContents,
+  appendUnextractableFileNotice,
+  extractPromptTextFromFile,
+} from "../../attachments/documentText.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ActivePiSession, PiEmitEvents, PiSyntheticEventFn } from "./PiAdapter.types.ts";
 import { PROVIDER } from "./PiAdapter.types.ts";
@@ -39,6 +43,21 @@ export const refreshSessionState = Effect.fn("refreshSessionState")(function* (
   session.updatedAt = new Date().toISOString();
   return state;
 });
+
+export function appendPiAttachmentInstructions(input: {
+  readonly prompt: string;
+  readonly hasFileAttachments: boolean;
+}): string {
+  if (!input.hasFileAttachments) return input.prompt;
+
+  const instruction =
+    "<attachment_handling_instructions>\n" +
+    "Use attached document content only when it appears in <attached_file_contents>. " +
+    "Do not call file-reading tools on attachment paths or try to inspect raw PDF/DOCX bytes. " +
+    "If a document appears in <unreadable_attached_files>, tell the user that text extraction failed and ask for OCR or a text-readable version if the document contents are required.\n" +
+    "</attachment_handling_instructions>";
+  return input.prompt.length > 0 ? `${input.prompt}\n\n${instruction}` : instruction;
+}
 
 export function buildResumeCursor(session: ActivePiSession) {
   return {
@@ -153,44 +172,52 @@ export const makeResolveImages = (attachmentsDir: string) =>
   });
 
 /**
- * Reads text-based file attachments from the attachmentsDir and returns a
+ * Reads text-extractable file attachments from the attachmentsDir and returns a
  * string block to append to the Pi prompt so the model can see the file contents.
- *
- * Binary files (PDF, Office docs, video, audio, archives) are skipped — Pi has
- * no document API and cannot interpret binary data.
+ * Files with no extractable text are skipped — Pi has no document API and cannot
+ * interpret opaque binary data.
  */
 export const makeAppendTextFileAttachments = (attachmentsDir: string) =>
   Effect.fn("appendTextFileAttachments")(function* (
     attachments: ReadonlyArray<ChatAttachment>,
     prompt: string,
   ) {
-    const textBlocks: string[] = [];
+    const textBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+    const unextractableFiles: Array<{ readonly fileName: string; readonly mimeType: string }> = [];
 
     for (const attachment of attachments) {
       if (attachment.type !== "file") continue;
-      if (!isTextReadable(attachment.mimeType)) continue;
 
       const attachmentPath = resolveAttachmentPath({ attachmentsDir, attachment });
       if (!attachmentPath) continue;
 
-      const bytes = yield* Effect.tryPromise({
-        try: () => readFile(attachmentPath),
+      const extractedText = yield* Effect.tryPromise({
+        try: () =>
+          extractPromptTextFromFile({
+            filePath: attachmentPath,
+            mimeType: attachment.mimeType,
+            fileName: attachment.name,
+          }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
             provider: PROVIDER,
             method: "prompt",
-            detail: `Failed to read file attachment '${attachment.name}' for Pi.`,
+            detail: `Failed to extract text from file attachment '${attachment.name}' for Pi.`,
             cause,
           }),
       });
+      if (extractedText === null) {
+        unextractableFiles.push({ fileName: attachment.name, mimeType: attachment.mimeType });
+        continue;
+      }
 
-      const content = bytes.toString("utf8");
-      textBlocks.push(`<file name="${attachment.name}">\n${content}\n</file>`);
+      textBlocks.push({ fileName: attachment.name, text: extractedText });
     }
 
-    if (textBlocks.length === 0) return prompt;
-    const block = `<attached_file_contents>\n${textBlocks.join("\n")}\n</attached_file_contents>`;
-    return prompt.length > 0 ? `${prompt}\n\n${block}` : block;
+    return appendUnextractableFileNotice(
+      appendAttachedFileContents(prompt, textBlocks),
+      unextractableFiles,
+    );
   });
 
 export function makeStopSessionRecord(deps: {

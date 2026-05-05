@@ -9,6 +9,7 @@
  * @module CopilotAdapter.session
  */
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import {
   type ProviderRuntimeEvent,
@@ -28,7 +29,10 @@ import {
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
-import { readFile } from "node:fs/promises";
+import {
+  appendAttachedFileContents,
+  extractPromptTextFromFile,
+} from "../../attachments/documentText.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -248,6 +252,7 @@ export const makeSendTurn =
   (input) =>
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
+      const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       const attachments: MessageOptions["attachments"] = yield* Effect.forEach(
         input.attachments ?? [],
         (attachment) =>
@@ -262,6 +267,26 @@ export const makeSendTurn =
                 method: "session.send",
                 detail: `Invalid attachment id '${attachment.id}'.`,
               });
+            }
+            if (attachment.type === "file") {
+              const extractedText = yield* Effect.tryPromise({
+                try: () =>
+                  extractPromptTextFromFile({
+                    filePath,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.name,
+                  }),
+                catch: (cause) =>
+                  new ProviderAdapterRequestError({
+                    provider: PROVIDER,
+                    method: "session.send",
+                    detail: `Failed to extract text from attachment '${attachment.name}'.`,
+                    cause,
+                  }),
+              });
+              if (extractedText !== null) {
+                extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+              }
             }
             const bytes = yield* Effect.tryPromise({
               try: () => readFile(filePath),
@@ -327,7 +352,7 @@ export const makeSendTurn =
       record.updatedAt = new Date().toISOString();
 
       const sendPayload: Parameters<typeof record.session.send>[0] = {
-        prompt: input.input ?? "",
+        prompt: appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
         ...(attachments.length > 0 ? { attachments } : {}),
         mode: "immediate",
       };

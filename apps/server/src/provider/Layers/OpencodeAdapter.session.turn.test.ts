@@ -4,7 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { ApprovalRequestId, ThreadId } from "@bigbud/contracts";
-import { assert, it, vi } from "@effect/vitest";
+import { it, vi } from "@effect/vitest";
+import { assert } from "chai";
 import { Effect } from "effect";
 
 import { attachmentRelativePath } from "../../attachments/attachmentStore.ts";
@@ -143,8 +144,26 @@ it.effect("embeds text files inline and sends binary files as file parts to Open
   const csvPath = path.join(baseDir, "market_headers.csv");
   const pdfPath = path.join(baseDir, "Science Communication Overview.pdf");
   const csvContent = "col_a,col_b\n1,2\n";
+  const pdfText = "Science communication overview";
   writeFileSync(csvPath, csvContent);
-  writeFileSync(pdfPath, Uint8Array.from([1, 2, 3, 4]));
+  writeFileSync(
+    pdfPath,
+    Buffer.from(
+      `%PDF-1.4
+1 0 obj
+<< /Length 48 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(${pdfText}) Tj
+ET
+endstream
+endobj
+%%EOF`,
+      "latin1",
+    ),
+  );
 
   const promptInputs: Array<{
     sessionID: string;
@@ -229,25 +248,22 @@ it.effect("embeds text files inline and sends binary files as file parts to Open
           id: "thread-opencode-file-2-12345678-1234-1234-1234-123456789abc",
           name: "Science Communication Overview.pdf",
           mimeType: "application/pdf",
-          sizeBytes: 4,
+          sizeBytes: 120,
           sourcePath: pdfPath,
         },
       ],
     });
 
     assert.equal(promptInputs.length, 1);
+    // Text-extractable files (CSV, PDF with text layer) must appear inline only —
+    // no native file part — so that models without document support (e.g. Nemotron)
+    // do not receive a raw file URL and reject the request.
     assert.deepEqual(promptInputs[0], {
       sessionID: "opencode-session-1",
       parts: [
         {
           type: "text",
-          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent}\n</file>\n</attached_file_contents>`,
-        },
-        {
-          type: "file",
-          mime: "application/pdf",
-          filename: "Science Communication Overview.pdf",
-          url: pathToFileURL(pdfPath).href,
+          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent.trim()}\n</file>\n<file name="Science Communication Overview.pdf">\n${pdfText}\n</file>\n</attached_file_contents>`,
         },
       ],
       system:
