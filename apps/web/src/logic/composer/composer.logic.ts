@@ -2,7 +2,7 @@ import { splitPromptIntoComposerSegments } from "./editor-mentions.logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "slash-model" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default" | "agents" | "skills";
+export type ComposerSlashCommand = "model" | "plan" | "default" | "agents" | "skills" | "compact";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -17,6 +17,7 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "default",
   "agents",
   "skills",
+  "compact",
 ];
 const isInlineTokenSegment = (
   segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
@@ -203,6 +204,9 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
     const commandMatch = /^\/(\S*)$/.exec(linePrefix);
     if (commandMatch) {
       const commandQuery = commandMatch[1] ?? "";
+      if (commandQuery.toLowerCase() === "compact") {
+        return null;
+      }
       if (commandQuery.toLowerCase() === "model") {
         return {
           kind: "slash-model",
@@ -248,6 +252,12 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 
     const providerSlashCommandMatch = /^\/([^\s]+)(?:\s+(.*))?$/.exec(linePrefix);
     if (providerSlashCommandMatch) {
+      if (
+        providerSlashCommandMatch[1]?.toLowerCase() === "compact" &&
+        (providerSlashCommandMatch[2] ?? "").trim().length === 0
+      ) {
+        return null;
+      }
       return {
         kind: "slash-command",
         query:

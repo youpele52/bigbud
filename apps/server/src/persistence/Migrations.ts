@@ -36,6 +36,7 @@ import Migration0020 from "./Migrations/020_ProjectionThreadsParentThread.ts";
 import Migration0021 from "./Migrations/021_BackfillProjectionThreadShellSummary.ts";
 import Migration0022 from "./Migrations/022_ProjectionProjectsNullableWorkspaceRoot.ts";
 import Migration0023 from "./Migrations/023_CleanupInvalidProjectionPendingApprovals.ts";
+import Migration0024 from "./Migrations/024_ProjectionThreadSessionReason.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -71,6 +72,7 @@ export const migrationEntries = [
   [21, "BackfillProjectionThreadShellSummary", Migration0021],
   [22, "ProjectionProjectsNullableWorkspaceRoot", Migration0022],
   [23, "CleanupInvalidProjectionPendingApprovals", Migration0023],
+  [24, "ProjectionThreadSessionReason", Migration0024],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

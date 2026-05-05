@@ -1,6 +1,7 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { useMemo } from "react";
 import {
+  selectIsThreadCompacting,
   selectIsThreadRunning,
   selectProjectById,
   selectSidebarThreadSummaryById,
@@ -30,5 +31,10 @@ export function useSidebarThreadSummaryById(
  * Subscribes only to the boolean result — no re-renders for unrelated thread changes. */
 export function useIsThreadRunning(threadId: ThreadId | null | undefined): boolean {
   const selector = useMemo(() => selectIsThreadRunning(threadId), [threadId]);
+  return useStore(selector);
+}
+
+export function useIsThreadCompacting(threadId: ThreadId | null | undefined): boolean {
+  const selector = useMemo(() => selectIsThreadCompacting(threadId), [threadId]);
   return useStore(selector);
 }

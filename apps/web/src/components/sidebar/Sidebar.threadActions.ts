@@ -39,6 +39,7 @@ export interface SidebarThreadActionsOutput {
   setConfirmingArchiveThreadId: React.Dispatch<React.SetStateAction<ThreadId | null>>;
   confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
+  forkThread: (threadId: ThreadId) => Promise<void>;
   pendingDeleteConfirmation: {
     title: string;
     description: string;
@@ -80,7 +81,7 @@ export function useSidebarThreadActions({
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
-  const { archiveThread, deleteThread } = useThreadActions();
+  const { archiveThread, deleteThread, forkThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -219,6 +220,21 @@ export function useSidebarThreadActions({
     [archiveThread],
   );
 
+  const handleForkThread = useCallback(
+    async (threadId: ThreadId) => {
+      try {
+        await forkThread(threadId, { navigateToFork: true });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to fork thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    },
+    [forkThread],
+  );
+
   const openPrLink = useCallback((event: MouseEvent<HTMLElement>, prUrl: string) => {
     event.preventDefault();
     event.stopPropagation();
@@ -351,6 +367,7 @@ export function useSidebarThreadActions({
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
+          { id: "fork", label: "Fork thread" },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
@@ -364,6 +381,11 @@ export function useSidebarThreadActions({
         setRenamingThreadId(threadId);
         setRenamingTitle(thread.title);
         renamingCommittedRef.current = false;
+        return;
+      }
+
+      if (clicked === "fork") {
+        await handleForkThread(threadId);
         return;
       }
 
@@ -394,6 +416,7 @@ export function useSidebarThreadActions({
       cancelProjectRename,
       copyPathToClipboard,
       copyThreadIdToClipboard,
+      handleForkThread,
       markThreadUnread,
       projectCwdById,
       requestThreadDelete,
@@ -467,6 +490,7 @@ export function useSidebarThreadActions({
     setConfirmingArchiveThreadId,
     confirmArchiveButtonRefs,
     attemptArchiveThread,
+    forkThread: handleForkThread,
     pendingDeleteConfirmation,
     dismissPendingDeleteConfirmation,
     confirmPendingDeleteThreads,
