@@ -106,6 +106,23 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects the /compact slash command while typing", () => {
+    const text = "/com";
+
+    expect(detectComposerTrigger(text, text.length)).toEqual({
+      kind: "slash-command",
+      query: "com",
+      rangeStart: 0,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("stops slash-command discovery when /compact is complete", () => {
+    const text = "/compact";
+
+    expect(detectComposerTrigger(text, text.length)).toBeNull();
+  });
+
   it("keeps the /agents discovery menu active after the command is completed", () => {
     const text = "/agents ";
 

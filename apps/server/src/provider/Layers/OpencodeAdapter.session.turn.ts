@@ -5,14 +5,16 @@
  * @module OpencodeAdapter.session.turn
  */
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { TurnId, type ProviderTurnStartResult } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
-import { isTextReadable } from "../../attachments/fileMime.ts";
+import {
+  appendAttachedFileContents,
+  extractPromptTextFromFile,
+} from "../../attachments/documentText.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { OpencodeAdapterShape } from "../Services/OpencodeAdapter.ts";
 import { toMessage } from "./OpencodeAdapter.stream.ts";
@@ -94,17 +96,16 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       // Use promptAsync for non-blocking send with SSE streaming.
       //
       // Attachment handling: some OpenCode providers/models reject certain MIME
-      // types (e.g. `text/csv`) as SDK file parts. For text-readable files we
+      // types (e.g. `text/csv`) as SDK file parts. For text-extractable files we
       // embed the contents inline in the prompt (matching Pi's approach); for
-      // binary files (PDF, Office docs, video, audio, archives) we send them
-      // as SDK `file` parts.
+      // binary files that cannot be extracted we send them as SDK `file` parts.
       const fileParts: Array<{
         type: "file";
         mime: string;
         filename: string;
         url: string;
       }> = [];
-      const inlineTextBlocks: Array<string> = [];
+      const inlineTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       for (const attachment of input.attachments ?? []) {
         // Prefer sourcePath (original user file) over the internal attachmentsDir copy
         const sourcePath =
@@ -122,20 +123,32 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
           });
         }
 
-        if (attachment.type === "file" && isTextReadable(attachment.mimeType)) {
-          const bytes = yield* Effect.tryPromise({
-            try: () => readFile(sourcePath),
+        if (attachment.type === "file") {
+          const extractedText = yield* Effect.tryPromise({
+            try: () =>
+              extractPromptTextFromFile({
+                filePath: sourcePath,
+                mimeType: attachment.mimeType,
+                fileName: attachment.name,
+              }),
             catch: (cause) =>
               new ProviderAdapterRequestError({
                 provider: PROVIDER,
                 method: "session.promptAsync",
-                detail: `Failed to read file attachment '${attachment.name}' for OpenCode.`,
+                detail: `Failed to extract text from file attachment '${attachment.name}' for OpenCode.`,
                 cause,
               }),
           });
-          const content = bytes.toString("utf8");
-          inlineTextBlocks.push(`<file name="${attachment.name}">\n${content}\n</file>`);
-          continue;
+          if (extractedText !== null) {
+            // Text was extracted — embed it inline. Do NOT also send a native file
+            // part: models without native document support (e.g. Nemotron, many
+            // OpenRouter models) will reject the PDF/DOCX URL and tell the user they
+            // can't read it, even though the text is already in the prompt.
+            inlineTextBlocks.push({ fileName: attachment.name, text: extractedText });
+            continue;
+          }
+          // Text extraction failed — fall through and send as a native file part so
+          // models with document support (e.g. Claude via OpenCode) can still use it.
         }
 
         fileParts.push({
@@ -147,10 +160,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       }
 
       const baseText = input.input ?? "";
-      const promptText =
-        inlineTextBlocks.length > 0
-          ? `${baseText}${baseText.length > 0 ? "\n\n" : ""}<attached_file_contents>\n${inlineTextBlocks.join("\n")}\n</attached_file_contents>`
-          : baseText;
+      const promptText = appendAttachedFileContents(baseText, inlineTextBlocks);
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;

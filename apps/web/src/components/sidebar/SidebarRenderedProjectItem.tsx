@@ -131,6 +131,7 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
+  forkThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   prByThreadId: Map<ThreadId, ThreadPr>;
@@ -198,6 +199,7 @@ export function SidebarRenderedProjectItem({
   commitRename,
   cancelRename,
   attemptArchiveThread,
+  forkThread,
   requestThreadDelete,
   openPrLink,
   prByThreadId,
@@ -502,6 +504,7 @@ export function SidebarRenderedProjectItem({
               commitRename={commitRename}
               cancelRename={cancelRename}
               attemptArchiveThread={attemptArchiveThread}
+              forkThread={forkThread}
               requestThreadDelete={requestThreadDelete}
               openPrLink={openPrLink}
               pr={prByThreadId.get(threadId) ?? null}

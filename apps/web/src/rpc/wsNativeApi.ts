@@ -1,6 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
-import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import { openBrowserPanel } from "~/stores/browser/browserPanel.coordinator";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -58,9 +58,7 @@ export function createWsNativeApi(): NativeApi {
           throw new Error("Unable to open link.");
         }
 
-        const { setOpen, setUrl } = useBrowserPanelStore.getState();
-        setUrl(nextUrl);
-        setOpen(true);
+        openBrowserPanel({ url: nextUrl });
       },
     },
     git: {
