@@ -44,7 +44,9 @@
     "@effect/language-service": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
+    "@types/chai": "^5.2.3",
     "@types/node": "catalog:",
+    "chai": "^6.2.2",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

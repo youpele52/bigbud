@@ -26,6 +26,7 @@ import {
 } from "../../../../logic/session";
 import { EMPTY_PENDING_USER_INPUT_ANSWERS } from "./shared";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
+import { isSessionCompacting } from "../../common/threadActivityIndicator";
 
 export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const {
@@ -201,6 +202,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const activePendingApproval = pendingApprovals[0] ?? null;
 
   const phase = derivePhase(activeThread?.session ?? null);
+  const isCompacting = isSessionCompacting(activeThread?.session);
 
   const {
     beginLocalDispatch,
@@ -273,6 +275,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     showPlanFollowUpPrompt,
     activePendingApproval,
     phase,
+    isCompacting,
     beginLocalDispatch,
     resetLocalDispatch,
     localDispatchStartedAt,

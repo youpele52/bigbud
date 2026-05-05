@@ -236,6 +236,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           provider_thread_id AS "providerThreadId",
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
+          reason,
           last_error AS "lastError",
           updated_at AS "updatedAt"
         FROM projection_thread_sessions

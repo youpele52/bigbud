@@ -5,6 +5,10 @@ import { cn, randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import { useComposerDraftStore } from "~/stores/composer";
+import {
+  getLeftSidebarGapWidth,
+  THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
+} from "../layout/chatLayout.shared";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { dataUrlToFile } from "./BrowserPanel.annotation";
@@ -19,7 +23,14 @@ import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.histo
 
 const BROWSER_PANEL_WIDTH_STORAGE_KEY = "browser_panel_width";
 const BROWSER_PANEL_MIN_WIDTH = 320;
-const getBrowserPanelMaxWidth = () => Math.floor(window.innerWidth * 0.8);
+const getBrowserPanelMaxWidth = () => {
+  const viewportMaxWidth = Math.floor(window.innerWidth * 0.8);
+  const sharedLayoutMaxWidth = Math.floor(
+    window.innerWidth - getLeftSidebarGapWidth() - THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
+  );
+
+  return Math.max(BROWSER_PANEL_MIN_WIDTH, Math.min(viewportMaxWidth, sharedLayoutMaxWidth));
+};
 const getBrowserPanelDefaultWidth = () =>
   Math.max(BROWSER_PANEL_MIN_WIDTH, Math.floor(window.innerWidth / 3));
 
@@ -210,12 +221,41 @@ export const BrowserPanel = memo(function BrowserPanel({
     const handleResize = () => {
       const max = getBrowserPanelMaxWidth();
       if (panelWidth > max) {
-        setPanelWidth(Math.max(BROWSER_PANEL_MIN_WIDTH, max));
+        const nextWidth = Math.max(BROWSER_PANEL_MIN_WIDTH, max);
+        pendingWidthRef.current = nextWidth;
+        setPanelWidth(nextWidth);
       }
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [panelWidth]);
+
+  useEffect(() => {
+    if (!open || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const leftSidebarGap = document.querySelector<HTMLElement>(
+      "[data-slot='sidebar'][data-side='left'] [data-slot='sidebar-gap']",
+    );
+    if (!leftSidebarGap) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      const max = getBrowserPanelMaxWidth();
+      setPanelWidth((currentWidth) => {
+        const nextWidth = Math.min(currentWidth, max);
+        pendingWidthRef.current = nextWidth;
+        return nextWidth;
+      });
+    });
+    observer.observe(leftSidebarGap);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [open]);
 
   useEffect(() => {
     const nextUrl = url.trim();
@@ -280,7 +320,11 @@ export const BrowserPanel = memo(function BrowserPanel({
 
   return (
     <>
-      <div className="hidden shrink-0 bg-transparent md:block" style={{ width: panelWidth }} />
+      <div
+        className="hidden shrink-0 bg-transparent md:block"
+        data-browser-panel-placeholder="true"
+        style={{ width: panelWidth }}
+      />
       <div
         className={cn(
           "fixed right-0 top-0 z-40 flex h-dvh flex-col border-l border-border bg-card text-foreground",

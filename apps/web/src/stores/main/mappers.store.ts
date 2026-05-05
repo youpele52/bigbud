@@ -117,6 +117,7 @@ export function mapSession(session: OrchestrationSession): Thread["session"] {
     activeTurnId: session.activeTurnId ?? undefined,
     createdAt: session.updatedAt,
     updatedAt: session.updatedAt,
+    ...(session.reason ? { reason: session.reason } : {}),
     ...(session.lastError ? { lastError: session.lastError } : {}),
   };
 }

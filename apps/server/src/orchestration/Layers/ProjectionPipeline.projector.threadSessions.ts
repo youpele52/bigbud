@@ -30,6 +30,7 @@ export function makeThreadSessionsProjector(
       providerName: event.payload.session.providerName,
       runtimeMode: event.payload.session.runtimeMode,
       activeTurnId: event.payload.session.activeTurnId,
+      reason: event.payload.session.reason ?? null,
       lastError: event.payload.session.lastError,
       updatedAt: event.payload.session.updatedAt,
     });

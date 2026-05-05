@@ -17,6 +17,7 @@ import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingAppr
 import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
+import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -253,6 +254,14 @@ export function ChatViewComposer({
                     {thread.isPreparingWorktree ? (
                       <span className="text-muted-foreground/70 text-xs">
                         Preparing worktree...
+                      </span>
+                    ) : null}
+                    {thread.isCompacting ? (
+                      <span className="inline-flex items-center gap-1.5 text-warning text-xs">
+                        <span>Compacting context</span>
+                        <span aria-hidden="true" className="inline-flex items-center gap-[3px]">
+                          <ThreadActivityDots tone="compacting" dotClassName="h-1 w-1" />
+                        </span>
                       </span>
                     ) : null}
                     <input

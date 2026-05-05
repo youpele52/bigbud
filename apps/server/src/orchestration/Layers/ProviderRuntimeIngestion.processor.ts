@@ -206,6 +206,12 @@ export function makeRuntimeEventProcessor(
             providerName: event.provider,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
+            reason:
+              event.type === "session.state.changed"
+                ? (event.payload.reason ?? thread.session?.reason ?? null)
+                : status === "ready"
+                  ? null
+                  : (thread.session?.reason ?? null),
             lastError,
             updatedAt: now,
           },

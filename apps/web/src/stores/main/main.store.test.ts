@@ -616,6 +616,7 @@ describe("incremental orchestration updates", () => {
             providerName: "codex",
             runtimeMode: "full-access",
             activeTurnId: TurnId.makeUnsafe("turn-1"),
+            reason: "context.compacting",
             lastError: null,
             updatedAt: "2026-02-27T00:00:02.000Z",
           },
@@ -639,6 +640,7 @@ describe("incremental orchestration updates", () => {
     ]);
 
     expect(next.threads[0]?.session?.status).toBe("running");
+    expect(next.threads[0]?.session?.reason).toBe("context.compacting");
     expect(next.threads[0]?.latestTurn?.state).toBe("completed");
     expect(next.threads[0]?.messages).toHaveLength(1);
   });
@@ -894,6 +896,7 @@ describe("incremental orchestration updates", () => {
           providerName: "codex",
           runtimeMode: "full-access",
           activeTurnId: TurnId.makeUnsafe("turn-3"),
+          reason: "context.compacting",
           lastError: null,
           updatedAt: "2026-02-27T00:00:04.000Z",
         },
@@ -904,6 +907,7 @@ describe("incremental orchestration updates", () => {
       turnId: TurnId.makeUnsafe("turn-3"),
       state: "running",
     });
+    expect(next.threads[0]?.session?.reason).toBe("context.compacting");
     expect(next.threads[0]?.latestTurn?.sourceProposedPlan).toBeUndefined();
   });
 });

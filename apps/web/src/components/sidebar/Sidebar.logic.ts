@@ -1,6 +1,7 @@
 import type { SidebarThreadSummary, Thread } from "../../models/types";
 import { cn } from "../../lib/utils";
 import { isLatestTurnSettled } from "../../logic/session";
+import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
@@ -27,6 +28,7 @@ export type ThreadTraversalDirection = "previous" | "next";
 export interface ThreadStatusPill {
   label:
     | "Working"
+    | "Compacting"
     | "Connecting"
     | "Completed"
     | "Pending Approval"
@@ -41,6 +43,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   "Pending Approval": 5,
   "Awaiting Input": 4,
   Working: 3,
+  Compacting: 3,
   Connecting: 3,
   "Plan Ready": 2,
   Completed: 1,
@@ -271,6 +274,15 @@ export function resolveThreadStatusPill(input: {
   }
 
   if (thread.session?.status === "running") {
+    if (isSessionCompacting(thread.session)) {
+      return {
+        label: "Compacting",
+        colorClass: "text-warning",
+        dotClass: "bg-warning",
+        pulse: true,
+      };
+    }
+
     return {
       label: "Working",
       colorClass: "text-primary",

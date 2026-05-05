@@ -18,7 +18,7 @@ import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
-import { useBrowserPanelStore } from "~/stores/browser/browser.store";
+import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.coordinator";
 import BrowserPanel from "~/components/browser/BrowserPanel";
 
 interface ChatRouteGlobalShortcutsProps {
@@ -37,12 +37,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       : false,
   );
   const appSettings = useSettings();
-  const { open: sidebarOpen, toggleSidebar, setOpen: setSidebarOpen } = useSidebar();
-  const {
-    open: browserOpen,
-    toggle: toggleBrowser,
-    setOpen: setBrowserOpen,
-  } = useBrowserPanelStore();
+  const { toggleSidebar } = useSidebar();
   const commandPaletteOpen = useCommandPaletteStore((state) => state.open);
   const navigate = useNavigate();
 
@@ -68,9 +63,6 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "sidebar.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        if (!sidebarOpen) {
-          setBrowserOpen(false);
-        }
         toggleSidebar();
         return;
       }
@@ -117,17 +109,14 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "browser.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        if (!browserOpen) {
-          setSidebarOpen(false);
-        }
-        toggleBrowser();
+        toggleBrowserPanel();
         return;
       }
 
       if (command === "settings.toggle") {
         event.preventDefault();
         event.stopPropagation();
-        setBrowserOpen(false);
+        closeBrowserPanel();
         void navigate({ to: "/settings" });
         return;
       }
@@ -148,12 +137,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     terminalOpen,
     appSettings.defaultThreadEnvMode,
     commandPaletteOpen,
-    sidebarOpen,
-    browserOpen,
     toggleSidebar,
-    toggleBrowser,
-    setSidebarOpen,
-    setBrowserOpen,
     navigate,
     onToggleSearch,
   ]);

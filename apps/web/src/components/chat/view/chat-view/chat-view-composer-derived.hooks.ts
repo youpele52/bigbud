@@ -46,6 +46,8 @@ import {
 } from "./shared";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 
+const FIRST_CLASS_COMPACT_PROVIDERS = new Set(["claudeAgent", "opencode"]);
+
 export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const sessionProvider = base.activeThread?.session?.provider ?? null;
   const selectedProviderByThreadId = base.composerDraft.activeProvider ?? null;
@@ -276,19 +278,23 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     }
 
     if (base.composerTrigger.kind === "slash-command") {
+      const activeProviderSlashCommands = activeProviderStatus?.slashCommands ?? [];
+      const supportsCompact = FIRST_CLASS_COMPACT_PROVIDERS.has(selectedProvider);
       const providerSlashCommandItems: ReadonlyArray<
         Extract<ComposerCommandItem, { type: "slash-command" }>
-      > = (activeProviderStatus?.slashCommands ?? []).map((command) => ({
-        id: `provider-slash:${selectedProvider}:${command.name}`,
-        type: "slash-command",
-        command: command.name,
-        label: `/${command.name}`,
-        description:
-          command.description ??
-          [selectedProvider, command.input?.hint ? `input: ${command.input.hint}` : null]
-            .filter(Boolean)
-            .join(" · "),
-      }));
+      > = activeProviderSlashCommands
+        .filter((command) => command.name.toLowerCase() !== "compact")
+        .map((command) => ({
+          id: `provider-slash:${selectedProvider}:${command.name}`,
+          type: "slash-command",
+          command: command.name,
+          label: `/${command.name}`,
+          description:
+            command.description ??
+            [selectedProvider, command.input?.hint ? `input: ${command.input.hint}` : null]
+              .filter(Boolean)
+              .join(" · "),
+        }));
       const slashCommandItems = [
         {
           id: "slash:model",
@@ -325,6 +331,17 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
           label: "/skills",
           description: "Browse discovered skills across providers",
         },
+        ...(supportsCompact
+          ? [
+              {
+                id: `slash:compact:${selectedProvider}`,
+                type: "slash-command",
+                command: "compact",
+                label: "/compact",
+                description: `Compact context now using ${selectedProvider}`,
+              } satisfies Extract<ComposerCommandItem, { type: "slash-command" }>,
+            ]
+          : []),
         ...providerSlashCommandItems,
       ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
       const query = base.composerTrigger.query.trim().toLowerCase();

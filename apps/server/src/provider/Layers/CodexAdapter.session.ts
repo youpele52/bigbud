@@ -23,6 +23,10 @@ import {
   type CodexAppServerStartSessionInput,
 } from "../../codex/codexAppServerManager.ts";
 import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
+import {
+  appendAttachedFileContents,
+  extractPromptTextFromFile,
+} from "../../attachments/documentText.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
@@ -189,9 +193,38 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   });
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
+    const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
     const codexAttachments = yield* Effect.forEach(
       input.attachments ?? [],
-      (attachment) => resolveAttachment(input, attachment),
+      (attachment) =>
+        Effect.gen(function* () {
+          if (attachment.type === "file") {
+            const sourcePath =
+              attachment.sourcePath ??
+              resolveAttachmentPath({ attachmentsDir: serverConfig.attachmentsDir, attachment });
+            if (sourcePath) {
+              const extractedText = yield* Effect.tryPromise({
+                try: () =>
+                  extractPromptTextFromFile({
+                    filePath: sourcePath,
+                    mimeType: attachment.mimeType,
+                    fileName: attachment.name,
+                  }),
+                catch: (cause) =>
+                  new ProviderAdapterRequestError({
+                    provider: PROVIDER,
+                    method: "turn/start",
+                    detail: toMessage(cause, "Failed to extract attachment text."),
+                    cause,
+                  }),
+              });
+              if (extractedText !== null) {
+                extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+              }
+            }
+          }
+          return yield* resolveAttachment(input, attachment);
+        }),
       { concurrency: 1 },
     );
 
@@ -199,7 +232,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       try: () => {
         const managerInput = {
           threadId: input.threadId,
-          ...(input.input !== undefined ? { input: input.input } : {}),
+          input: appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
           ...(input.modelSelection?.provider === "codex"
             ? { model: input.modelSelection.model }
             : {}),

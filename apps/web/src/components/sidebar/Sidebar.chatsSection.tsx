@@ -191,6 +191,7 @@ export function SidebarChatsSection({
                         commitRename={sharedProjectItemProps.commitRename}
                         cancelRename={sharedProjectItemProps.cancelRename}
                         attemptArchiveThread={sharedProjectItemProps.attemptArchiveThread}
+                        forkThread={sharedProjectItemProps.forkThread}
                         requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
                         openPrLink={sharedProjectItemProps.openPrLink}
                         pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}

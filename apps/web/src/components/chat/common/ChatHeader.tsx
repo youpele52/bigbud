@@ -14,11 +14,11 @@ import ProjectScriptsControl, {
 import { Toggle } from "../../ui/toggle";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
-import { useIsThreadRunning } from "../../../stores/main";
+import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
-import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
+import { ThreadActivityDots, threadActivityLabel } from "./threadActivityIndicator";
 
 interface ChatHeaderProps {
   activeThreadId: ThreadId;
@@ -76,12 +76,9 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleBrowser,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
-  const {
-    open: sidebarOpen,
-    toggleSidebar: rawToggleSidebar,
-    setOpen: setSidebarOpen,
-  } = useSidebar();
-  const setBrowserOpen = useBrowserPanelStore((state) => state.setOpen);
+  const isThreadCompacting = useIsThreadCompacting(activeThreadId);
+  const { open: sidebarOpen, toggleSidebar } = useSidebar();
+  const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -103,24 +100,13 @@ export const ChatHeader = memo(function ChatHeader({
           <span className="text-muted-foreground">
             {truncateThreadName(activeThreadTitle)}
             <span className="ml-3">
-              {isThreadRunning && (
+              {activityTone && (
                 <span
                   aria-hidden="true"
-                  title="Agent is working"
+                  title={threadActivityLabel(activityTone)}
                   className="inline-flex items-center gap-[3px] pr-1"
                 >
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:200ms]"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-1 animate-pulse rounded-full bg-info-foreground [animation-delay:400ms]"
-                  />
+                  <ThreadActivityDots tone={activityTone} dotClassName="h-1 w-1" />
                 </span>
               )}
             </span>
@@ -155,12 +141,7 @@ export const ChatHeader = memo(function ChatHeader({
               <Toggle
                 className="shrink-0"
                 pressed={sidebarOpen}
-                onPressedChange={() => {
-                  if (!sidebarOpen) {
-                    setBrowserOpen(false);
-                  }
-                  rawToggleSidebar();
-                }}
+                onPressedChange={toggleSidebar}
                 aria-label="Toggle sidebar"
                 variant="toolbar"
                 size="xs"
@@ -176,32 +157,6 @@ export const ChatHeader = memo(function ChatHeader({
           <TooltipPopup side="bottom">
             {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
             {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={browserOpen}
-                onPressedChange={() => {
-                  if (!browserOpen) {
-                    setSidebarOpen(false);
-                  }
-                  onToggleBrowser();
-                }}
-                aria-label="Toggle browser panel"
-                variant="toolbar"
-                size="xs"
-              >
-                <GlobeIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {browserToggleShortcutLabel
-              ? `Toggle browser panel (${browserToggleShortcutLabel})`
-              : "Toggle browser panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>
@@ -226,6 +181,27 @@ export const ChatHeader = memo(function ChatHeader({
               : terminalToggleShortcutLabel
                 ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
                 : "Toggle terminal drawer"}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={browserOpen}
+                onPressedChange={onToggleBrowser}
+                aria-label="Toggle browser panel"
+                variant="toolbar"
+                size="xs"
+              >
+                <GlobeIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {browserToggleShortcutLabel
+              ? `Toggle browser panel (${browserToggleShortcutLabel})`
+              : "Toggle browser panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>

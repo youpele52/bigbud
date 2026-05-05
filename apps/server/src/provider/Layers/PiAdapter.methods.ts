@@ -27,6 +27,7 @@ import type {
 import { PROVIDER } from "./PiAdapter.types.ts";
 import { createPiRpcProcess } from "./PiRpcProcess.ts";
 import {
+  appendPiAttachmentInstructions,
   applyModelSelection,
   buildResumeCursor,
   makeAppendTextFileAttachments,
@@ -232,9 +233,15 @@ export function makePiAdapterMethods(deps: {
     session.turns.push({ id: turnId, items: [] });
 
     const images = yield* resolveImages(input.attachments ?? []);
+    const attachmentAwareInput = appendPiAttachmentInstructions({
+      prompt: input.input ?? "",
+      hasFileAttachments: (input.attachments ?? []).some(
+        (attachment) => attachment.type === "file",
+      ),
+    });
     const messageText = yield* appendTextFileAttachments(
       input.attachments ?? [],
-      input.input ?? "",
+      attachmentAwareInput,
     );
     const startedEvent = yield* deps.makeSyntheticEvent(
       input.threadId,
