@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   useComposerCommandHandlers,
@@ -42,10 +44,42 @@ function makeInput(
   };
 }
 
+function renderUseComposerCommandHandlers(
+  input: UseComposerCommandHandlersInput,
+): ReturnType<typeof useComposerCommandHandlers> {
+  let handlers: ReturnType<typeof useComposerCommandHandlers> | null = null;
+
+  function TestComponent() {
+    handlers = useComposerCommandHandlers(input);
+    return null;
+  }
+
+  renderToStaticMarkup(React.createElement(TestComponent));
+
+  if (!handlers) {
+    throw new Error("Failed to initialize composer command handlers");
+  }
+
+  return handlers as ReturnType<typeof useComposerCommandHandlers>;
+}
+
 describe("useComposerCommandHandlers", () => {
+  beforeEach(() => {
+    vi.stubGlobal("window", {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 0;
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("inserts /compact for the first-class compact command", () => {
     const input = makeInput();
-    const handlers = useComposerCommandHandlers(input);
+    const handlers = renderUseComposerCommandHandlers(input);
 
     handlers.onSelectComposerItem({
       id: "slash:compact:opencode",
@@ -61,8 +95,8 @@ describe("useComposerCommandHandlers", () => {
   });
 
   it("inserts generic provider slash commands instead of toggling default mode", () => {
-    const input = makeInput({ promptRef: { current: "/rev" }, composerCursor: 4 });
-    const handlers = useComposerCommandHandlers(input);
+    const input = makeInput({ promptRef: { current: "/ag" }, composerCursor: 3 });
+    const handlers = renderUseComposerCommandHandlers(input);
 
     handlers.onSelectComposerItem({
       id: "provider-slash:claudeAgent:review",
@@ -73,8 +107,8 @@ describe("useComposerCommandHandlers", () => {
     });
 
     expect(input.handleInteractionModeChange).not.toHaveBeenCalled();
-    expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 4, "/review ", {
-      expectedText: "/rev",
+    expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 3, "/review ", {
+      expectedText: "/ag",
     });
   });
 });

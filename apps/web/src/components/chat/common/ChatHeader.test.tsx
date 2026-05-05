@@ -1,5 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+let mockIsThreadRunning = false;
+let mockIsThreadCompacting = false;
+
+vi.mock("../../../stores/main", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../../stores/main")>("../../../stores/main");
+
+  return {
+    ...actual,
+    useIsThreadRunning: () => mockIsThreadRunning,
+    useIsThreadCompacting: () => mockIsThreadCompacting,
+  };
+});
 
 import { DEFAULT_BINDINGS } from "../../../models/keybindings/keybindings.models.test.helpers";
 import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
@@ -9,6 +23,9 @@ import { ChatHeader } from "./ChatHeader";
 
 describe("ChatHeader", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
+    mockIsThreadRunning = false;
+    mockIsThreadCompacting = false;
     useBrowserPanelStore.setState({ open: false, url: "" });
     useStore.setState({
       projects: [],
@@ -61,60 +78,7 @@ describe("ChatHeader", () => {
   });
 
   it("shows blue dots while running and orange dots while compacting", () => {
-    useStore.setState({
-      projects: [],
-      threads: [],
-      sidebarThreadsById: {
-        "thread-running": {
-          id: "thread-running" as never,
-          projectId: "project-1" as never,
-          title: "Running thread",
-          interactionMode: "default",
-          session: {
-            provider: "opencode",
-            status: "running",
-            orchestrationStatus: "running",
-            activeTurnId: "turn-1" as never,
-            createdAt: "2026-02-27T00:00:00.000Z",
-            updatedAt: "2026-02-27T00:00:00.000Z",
-          },
-          createdAt: "2026-02-27T00:00:00.000Z",
-          archivedAt: null,
-          latestTurn: null,
-          branch: null,
-          worktreePath: null,
-          latestUserMessageAt: null,
-          hasPendingApprovals: false,
-          hasPendingUserInput: false,
-          hasActionableProposedPlan: false,
-        },
-        "thread-compacting": {
-          id: "thread-compacting" as never,
-          projectId: "project-1" as never,
-          title: "Compacting thread",
-          interactionMode: "default",
-          session: {
-            provider: "opencode",
-            status: "running",
-            orchestrationStatus: "running",
-            reason: "context.compacting",
-            createdAt: "2026-02-27T00:00:00.000Z",
-            updatedAt: "2026-02-27T00:00:00.000Z",
-          },
-          createdAt: "2026-02-27T00:00:00.000Z",
-          archivedAt: null,
-          latestTurn: null,
-          branch: null,
-          worktreePath: null,
-          latestUserMessageAt: null,
-          hasPendingApprovals: false,
-          hasPendingUserInput: false,
-          hasActionableProposedPlan: false,
-        },
-      },
-      threadIdsByProjectId: {},
-      bootstrapComplete: true,
-    });
+    mockIsThreadRunning = true;
 
     const runningMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
@@ -147,6 +111,10 @@ describe("ChatHeader", () => {
         />
       </SidebarProvider>,
     );
+
+    mockIsThreadRunning = false;
+    mockIsThreadCompacting = true;
+
     const compactingMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
         <ChatHeader

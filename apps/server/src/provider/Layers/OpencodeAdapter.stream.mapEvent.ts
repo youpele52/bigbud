@@ -436,6 +436,25 @@ export function makeMapEvent(
           return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId, createdAt);
         }
 
+        case "session.compacted": {
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt,
+                threadId: session.threadId,
+                ...(turnId ? { turnId } : {}),
+                raw,
+              }),
+              type: "thread.state.changed",
+              payload: {
+                state: "compacted",
+                detail: event.properties,
+              },
+            },
+          ];
+        }
+
         case "permission.asked": {
           const permission = event.properties as {
             id: string;

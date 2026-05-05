@@ -418,7 +418,7 @@ describe("ProviderRuntimeIngestion", () => {
         entry.session?.lastError === null,
     );
     expect(thread.session?.status).toBe("ready");
-    expect(thread.session?.reason).toBeNull();
+    expect(thread.session?.reason).toBe("provider crashed");
     expect(thread.session?.lastError).toBeNull();
   });
 
