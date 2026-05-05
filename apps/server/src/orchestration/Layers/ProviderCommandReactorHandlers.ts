@@ -48,14 +48,13 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 
 /**
  * Appends an `<attached_files>` XML block to the provider input text so the agent
- * immediately knows which files are attached and can act on them.
- *
- * For desktop (path transport): shows filename + original sourcePath.
- * For web (base64 transport): shows filename only (sourcePath is the internal copy).
+ * immediately knows which files are attached. The block intentionally omits
+ * source paths: adapters handle file bytes/text extraction, and exposing paths
+ * can prompt agents without document APIs to read opaque binary files directly.
  *
  * Example output:
  *   <attached_files>
- *   - report.pdf (/Users/alice/Desktop/report.pdf)
+ *   - report.pdf (application/pdf, 120000 bytes)
  *   </attached_files>
  */
 function appendFileAttachmentsToProviderInput(
@@ -64,9 +63,7 @@ function appendFileAttachmentsToProviderInput(
 ): string {
   const fileAttachments = attachments.filter((a) => a.type === "file");
   if (fileAttachments.length === 0) return text;
-  const lines = fileAttachments.map((f) =>
-    f.type === "file" && f.sourcePath ? `- ${f.name} (${f.sourcePath})` : `- ${f.name}`,
-  );
+  const lines = fileAttachments.map((f) => `- ${f.name} (${f.mimeType}, ${f.sizeBytes} bytes)`);
   const block = `<attached_files>\n${lines.join("\n")}\n</attached_files>`;
   return text.length > 0 ? `${text}\n\n${block}` : block;
 }
@@ -224,6 +221,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       thread,
       ...(workspaceCwd ? { workspaceRoot: workspaceCwd } : {}),
     });
+    const providerInputText =
+      thread.modelSelection.provider === "pi"
+        ? expandedProviderInput
+        : appendFileAttachmentsToProviderInput(expandedProviderInput, message.attachments ?? []);
 
     if (isFirstUserMessageTurn) {
       const serverSettings = yield* serverSettingsService.getSettings.pipe(
@@ -263,10 +264,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,
-      providerInputText: appendFileAttachmentsToProviderInput(
-        expandedProviderInput,
-        message.attachments ?? [],
-      ),
+      providerInputText,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }

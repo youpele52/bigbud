@@ -1,4 +1,4 @@
-import { ThreadId } from "@bigbud/contracts";
+import { ThreadId, type ModelSelection } from "@bigbud/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
@@ -7,13 +7,15 @@ import { getFallbackThreadIdAfterDelete } from "../components/sidebar/Sidebar.lo
 import { useComposerDraftStore } from "../stores/composer";
 import { useHandleNewThread } from "./useHandleNewThread";
 import { gitRemoveWorktreeMutationOptions } from "../lib/gitReactQuery";
-import { newCommandId } from "../lib/utils";
+import { newCommandId, newThreadId } from "../lib/utils";
 import { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
 import { useTerminalStateStore } from "../stores/terminal";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../utils/worktree";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
+import { prepareSeedMessages } from "../lib/threadFork";
+import { waitForThreadToExist } from "../components/chat/view/ChatView.logic";
 
 export function useThreadActions() {
   const appSettings = useSettings();
@@ -182,9 +184,125 @@ export function useThreadActions() {
     ],
   );
 
+  const forkThread = useCallback(
+    async (
+      sourceThreadId: ThreadId,
+      options?: {
+        modelSelection?: ModelSelection;
+        navigateToFork?: boolean;
+      },
+    ) => {
+      const api = readNativeApi();
+      if (!api) return null;
+
+      const threads = useStore.getState().threads;
+      const sourceThread = threads.find((entry) => entry.id === sourceThreadId);
+      if (!sourceThread) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot fork thread",
+          description: "Source thread not found.",
+        });
+        return null;
+      }
+
+      const forkedThreadId = newThreadId();
+      const createdAt = new Date().toISOString();
+      const seedMessages = prepareSeedMessages(sourceThread.messages);
+
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.create",
+          commandId: newCommandId(),
+          threadId: forkedThreadId,
+          projectId: sourceThread.projectId,
+          title: sourceThread.title,
+          modelSelection: options?.modelSelection ?? sourceThread.modelSelection,
+          runtimeMode: sourceThread.runtimeMode,
+          interactionMode: sourceThread.interactionMode,
+          branch: sourceThread.branch,
+          worktreePath: sourceThread.worktreePath,
+          parentThread: {
+            threadId: sourceThreadId,
+            title: sourceThread.title,
+          },
+          seedMessages,
+          createdAt,
+        });
+      } catch (err) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to fork thread",
+          description: err instanceof Error ? err.message : "Could not create forked thread.",
+        });
+        return null;
+      }
+
+      const store = useComposerDraftStore.getState();
+      const sourceDraft = store.draftsByThreadId[sourceThreadId];
+      if (sourceDraft) {
+        store.setPrompt(forkedThreadId, sourceDraft.prompt);
+
+        for (const [_provider, selection] of Object.entries(sourceDraft.modelSelectionByProvider)) {
+          if (selection) {
+            store.setModelSelection(forkedThreadId, selection);
+          }
+        }
+
+        if (options?.modelSelection) {
+          store.setModelSelection(forkedThreadId, options.modelSelection);
+        }
+
+        store.setRuntimeMode(forkedThreadId, sourceDraft.runtimeMode);
+        store.setInteractionMode(forkedThreadId, sourceDraft.interactionMode);
+
+        if (sourceDraft.images.length > 0) {
+          store.addImages(forkedThreadId, sourceDraft.images);
+        }
+
+        if (sourceDraft.terminalContexts.length > 0) {
+          const updatedContexts = sourceDraft.terminalContexts.map((context) => {
+            const updated = context;
+            updated.threadId = forkedThreadId;
+            return updated;
+          });
+          store.setTerminalContexts(forkedThreadId, updatedContexts);
+        }
+      }
+
+      useComposerDraftStore.getState().setBootstrapSourceThreadId(forkedThreadId, sourceThreadId);
+
+      const threadExists = await waitForThreadToExist(forkedThreadId);
+      if (!threadExists) {
+        toastManager.add({
+          type: "error",
+          title: "Fork created but not visible",
+          description: "The forked thread was created but did not appear in time.",
+        });
+        return forkedThreadId;
+      }
+
+      if (options?.navigateToFork !== false) {
+        await navigate({
+          to: "/$threadId",
+          params: { threadId: forkedThreadId },
+        });
+      }
+
+      toastManager.add({
+        type: "success",
+        title: "Thread forked",
+      });
+
+      return forkedThreadId;
+    },
+    [navigate],
+  );
+
   return {
     archiveThread,
     unarchiveThread,
     deleteThread,
+    forkThread,
   };
 }

@@ -7,10 +7,22 @@ import DiffPanel from "../components/diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../components/diff/DiffWorkerPoolProvider";
 import { type DiffPanelMode } from "../components/diff/DiffPanelShell";
 import { useComposerDraftStore } from "../stores/composer";
-import { type DiffRouteSearch, parseDiffRouteSearch, stripDiffSearchParams } from "../utils/diff";
+import {
+  closeDiffRouteSearch,
+  type DiffRouteSearch,
+  openDiffRouteSearch,
+  parseDiffRouteSearch,
+} from "../utils/diff";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useStore } from "../stores/main";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
+import {
+  closeBrowserPanel,
+  getRequestedRightPanel,
+  registerDiffPanelCloseAction,
+  requestRightPanel,
+} from "../stores/browser/browserPanel.coordinator";
+import { useBrowserPanelStore } from "../stores/browser/browser.store";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -154,25 +166,30 @@ function ChatThreadRouteView() {
   );
   const routeThreadExists = threadExists || draftThreadExists;
   const diffOpen = search.diff === "1";
+  const browserOpen = useBrowserPanelStore((state) => state.open);
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);
   const closeDiff = useCallback(() => {
+    if (getRequestedRightPanel() === "diff") {
+      requestRightPanel(null);
+    }
+
     void navigate({
       to: "/$threadId",
       params: { threadId },
-      search: { diff: undefined },
+      search: (previous) => closeDiffRouteSearch(previous),
     });
   }, [navigate, threadId]);
   const openDiff = useCallback(() => {
+    requestRightPanel("diff");
+    closeBrowserPanel();
+
     void navigate({
       to: "/$threadId",
       params: { threadId },
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
-      },
+      search: (previous) => openDiffRouteSearch(previous),
     });
   }, [navigate, threadId]);
 
@@ -181,6 +198,21 @@ function ChatThreadRouteView() {
       setHasOpenedDiff(true);
     }
   }, [diffOpen]);
+
+  useEffect(() => registerDiffPanelCloseAction(closeDiff), [closeDiff]);
+
+  useEffect(() => {
+    if (!browserOpen || !diffOpen) {
+      return;
+    }
+
+    if (getRequestedRightPanel() === "diff") {
+      closeBrowserPanel();
+      return;
+    }
+
+    closeDiff();
+  }, [browserOpen, closeDiff, diffOpen]);
 
   useEffect(() => {
     if (!bootstrapComplete) {

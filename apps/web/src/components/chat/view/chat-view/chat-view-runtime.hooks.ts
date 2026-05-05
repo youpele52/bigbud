@@ -22,12 +22,17 @@ import {
   shouldUseCompactComposerFooter,
   shouldUseCompactComposerPrimaryActions,
 } from "../composerFooterLayout";
-import { stripDiffSearchParams } from "../../../../utils/diff";
+import { closeDiffRouteSearch, openDiffRouteSearch } from "../../../../utils/diff";
 import { useSearchStore } from "../../../../stores/ui";
 import {
   insertInlineTerminalContextPlaceholder,
   type TerminalContextSelection,
 } from "../../../../lib/terminalContext";
+import {
+  closeBrowserPanel,
+  requestRightPanel,
+  toggleBrowserPanel,
+} from "../../../../stores/browser/browserPanel.coordinator";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -120,16 +125,25 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
   );
 
   const onToggleDiff = useCallback(() => {
+    if (!base.diffOpen) {
+      requestRightPanel("diff");
+      closeBrowserPanel();
+    } else {
+      requestRightPanel(null);
+    }
+
     void base.navigate({
       to: "/$threadId",
       params: { threadId: base.threadId },
       replace: true,
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return base.diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
-      },
+      search: (previous) =>
+        base.diffOpen ? closeDiffRouteSearch(previous) : openDiffRouteSearch(previous),
     });
   }, [base]);
+
+  const onToggleBrowser = useCallback(() => {
+    toggleBrowserPanel();
+  }, []);
 
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
   const onToggleSearch = useCallback(() => {
@@ -382,6 +396,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     closePullRequestDialog,
     handlePreparedPullRequestThread,
     onToggleDiff,
+    onToggleBrowser,
     onToggleSearch,
     setThreadError,
     turnActions,

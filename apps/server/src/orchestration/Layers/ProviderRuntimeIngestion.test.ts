@@ -266,6 +266,7 @@ describe("ProviderRuntimeIngestion", () => {
           providerName: "codex",
           runtimeMode: "approval-required",
           activeTurnId: null,
+          reason: null,
           updatedAt: createdAt,
           lastError: null,
         },
@@ -352,6 +353,7 @@ describe("ProviderRuntimeIngestion", () => {
       (entry) => entry.session?.status === "running" && entry.session?.activeTurnId === null,
     );
     expect(thread.session?.status).toBe("running");
+    expect(thread.session?.reason).toBe("awaiting approval");
     expect(thread.session?.lastError).toBeNull();
 
     harness.emit({
@@ -416,6 +418,7 @@ describe("ProviderRuntimeIngestion", () => {
         entry.session?.lastError === null,
     );
     expect(thread.session?.status).toBe("ready");
+    expect(thread.session?.reason).toBe("provider crashed");
     expect(thread.session?.lastError).toBeNull();
   });
 
