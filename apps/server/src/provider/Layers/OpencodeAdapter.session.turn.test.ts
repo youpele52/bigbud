@@ -254,7 +254,7 @@ endobj
       ],
     });
 
-assert.equal(promptInputs.length, 1);
+    assert.equal(promptInputs.length, 1);
     expect(promptInputs[0]).toStrictEqual({
       sessionID: "opencode-session-1",
       parts: [
