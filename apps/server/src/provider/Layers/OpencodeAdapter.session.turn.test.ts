@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { ApprovalRequestId, ThreadId } from "@bigbud/contracts";
-import { it, vi } from "@effect/vitest";
+import { it, vi, expect } from "@effect/vitest";
 import { assert } from "chai";
 import { Effect } from "effect";
 
@@ -255,15 +255,18 @@ endobj
     });
 
     assert.equal(promptInputs.length, 1);
-    // Text-extractable files (CSV, PDF with text layer) must appear inline only —
-    // no native file part — so that models without document support (e.g. Nemotron)
-    // do not receive a raw file URL and reject the request.
-    assert.deepEqual(promptInputs[0], {
+    expect(promptInputs[0]).toStrictEqual({
       sessionID: "opencode-session-1",
       parts: [
         {
           type: "text",
-          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent.trim()}\n</file>\n<file name="Science Communication Overview.pdf">\n${pdfText}\n</file>\n</attached_file_contents>`,
+          text: `summarise these\n\n<attached_file_contents>\n<file name="market_headers.csv">\n${csvContent.trim()}\n</file>\n</attached_file_contents>`,
+        },
+        {
+          filename: "Science Communication Overview.pdf",
+          mime: "application/pdf",
+          type: "file",
+          url: expect.stringMatching(/^file:\/\/\/tmp\/opencode-mixed-attachments-/),
         },
       ],
       system:
