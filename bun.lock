@@ -37,6 +37,8 @@
       },
       "devDependencies": {
         "@astrojs/check": "^0.9.7",
+        "@tailwindcss/vite": "^4.0.0",
+        "tailwindcss": "^4.0.0",
         "typescript": "catalog:",
       },
     },

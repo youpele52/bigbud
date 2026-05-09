@@ -1,23 +1,58 @@
 ---
+import {
+  INSTALL_COMMANDS,
+  RELEASE_ASSET_SUFFIXES,
+} from "../constants/downloads";
+import { APP_NAME, GITHUB_RELEASES_URL } from "../constants/app";
+import { DOWNLOAD_METADATA } from "../constants/seo";
 import Layout from "../layouts/Layout.astro";
+
+const installCommandBlocks = [
+  {
+    title: "macOS / Linux",
+    command: INSTALL_COMMANDS.unix,
+    ariaLabel: "Copy macOS and Linux install command",
+  },
+  {
+    title: "Windows",
+    command: INSTALL_COMMANDS.windows,
+    ariaLabel: "Copy Windows install command",
+  },
+] as const;
 ---
 
-<Layout title="Download — bigbud" description="Download bigbud for macOS, Windows, or Linux.">
-  <h1 class="heading">Download bigbud</h1>
+<Layout {...DOWNLOAD_METADATA}>
+  <h1 class="heading">Download {APP_NAME}</h1>
   <p class="subheading">
     <span id="version-label">Loading latest release&hellip;</span>
-    <a id="changelog-link" class="changelog-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none">View changelog<span aria-hidden="true"> &#8599;</span></a>
+    <a
+      id="changelog-link"
+      class="changelog-link"
+      href={GITHUB_RELEASES_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      View changelog<span aria-hidden="true"> &#8599;</span>
+    </a>
   </p>
 
   <section class="install-commands" aria-label="Command line installers">
-    <div class="install-command-block">
-      <h2 class="install-command-title">macOS / Linux</h2>
-      <code class="install-command">curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh</code>
-    </div>
-    <div class="install-command-block">
-      <h2 class="install-command-title">Windows</h2>
-      <code class="install-command">powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"</code>
-    </div>
+    {
+      installCommandBlocks.map((block) => (
+        <button
+          type="button"
+          class="install-command-block"
+          data-copy-text={block.command}
+          aria-label={block.ariaLabel}
+        >
+          <span class="install-command-meta">
+            <span class="install-command-title">{block.title}</span>
+            <span class="install-command-status" aria-live="polite"></span>
+          </span>
+          <code class="install-command">{block.command}</code>
+        </button>
+      ))
+    }
   </section>
 
   <div class="platforms" id="platforms">
@@ -28,11 +63,11 @@ import Layout from "../layouts/Layout.astro";
         <h2 class="platform-name">macOS</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="arm64.dmg" href="#">
+        <a class="download-card" data-asset={RELEASE_ASSET_SUFFIXES.macArm64} href="#">
           <span class="card-arch">Apple Silicon (arm64)</span>
           <span class="card-format">.dmg</span>
         </a>
-        <a class="download-card" data-asset="x64.dmg" href="#">
+        <a class="download-card" data-asset={RELEASE_ASSET_SUFFIXES.macX64} href="#">
           <span class="card-arch">Intel (x64)</span>
           <span class="card-format">.dmg</span>
         </a>
@@ -46,7 +81,7 @@ import Layout from "../layouts/Layout.astro";
         <h2 class="platform-name">Windows</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="x64.exe" href="#">
+        <a class="download-card" data-asset={RELEASE_ASSET_SUFFIXES.windowsX64} href="#">
           <span class="card-arch">Windows 10, 11</span>
           <span class="card-format">.exe</span>
         </a>
@@ -60,7 +95,7 @@ import Layout from "../layouts/Layout.astro";
         <h2 class="platform-name">Linux</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" data-asset="AppImage" href="#">
+        <a class="download-card" data-asset={RELEASE_ASSET_SUFFIXES.linuxAppImage} href="#">
           <span class="card-arch">x86_64</span>
           <span class="card-format">AppImage</span>
         </a>
@@ -70,30 +105,76 @@ import Layout from "../layouts/Layout.astro";
 
   <p class="releases-link">
     Looking for older versions? Check the
-    <a href="https://github.com/youpele52/bigbud/releases" target="_blank" rel="noopener noreferrer">
+    <a href={GITHUB_RELEASES_URL} target="_blank" rel="noopener noreferrer">
       GitHub releases page<span aria-hidden="true"> &#8599;</span>
     </a>
   </p>
 </Layout>
 
 <script>
+  import { CHANGELOG_URL } from "../constants/app";
+  import { COPY_SUCCESS_TEXT } from "../constants/downloads";
   import { fetchLatestRelease, RELEASES_URL } from "../lib/releases";
+
+  async function copyText(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.style.pointerEvents = "none";
+      textarea.style.inset = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      const execCommand = (
+        document as unknown as { execCommand: (commandId: string) => boolean }
+      ).execCommand.bind(document);
+      const didCopy = execCommand("copy");
+
+      textarea.remove();
+      return didCopy;
+    }
+  }
 
   async function init() {
     const versionLabel = document.getElementById("version-label");
     const cards = document.querySelectorAll<HTMLAnchorElement>(".download-card");
+    const changelogLink = document.getElementById("changelog-link") as HTMLAnchorElement | null;
+    const installCommandBlocks =
+      document.querySelectorAll<HTMLButtonElement>(".install-command-block");
+
+    if (changelogLink) {
+      changelogLink.href = CHANGELOG_URL;
+    }
+
+    installCommandBlocks.forEach((block) => {
+      block.addEventListener("click", async () => {
+        const text = block.dataset.copyText;
+        if (!text) return;
+
+        const status = block.querySelector<HTMLElement>(".install-command-status");
+        const copied = await copyText(text);
+
+        if (status) {
+          status.textContent = copied ? COPY_SUCCESS_TEXT : "";
+          window.setTimeout(() => {
+            status.textContent = "";
+          }, 1600);
+        }
+      });
+    });
 
     try {
       const release = await fetchLatestRelease();
 
       if (versionLabel && release.tag_name) {
         versionLabel.textContent = `Latest (${release.tag_name})`;
-      }
-
-      const changelogLink = document.getElementById("changelog-link") as HTMLAnchorElement | null;
-      if (changelogLink && release.html_url) {
-        changelogLink.href = release.html_url;
-        changelogLink.style.display = "";
       }
 
       cards.forEach((card) => {
@@ -178,16 +259,55 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .install-command-block {
+    appearance: none;
+    width: 100%;
     padding: 0.9rem 1rem;
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 0.2s ease,
+      background 0.2s ease,
+      transform 0.2s ease;
   }
+
+  .install-command-block:hover {
+    background: color-mix(in srgb, var(--foreground) 3.5%, var(--background));
+    border-color: color-mix(in srgb, var(--foreground) 14%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .install-command-block:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ring) 40%, transparent);
+    outline-offset: 2px;
+  }
+
+  .install-command-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    }
 
   .install-command-title {
     font-size: 0.9rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
+  }
+
+  .install-command-status {
+    flex-shrink: 0;
+    color: var(--fg-dim);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .install-command-status:empty {
+    display: none;
   }
 
   .install-command {
@@ -197,6 +317,8 @@ import Layout from "../layouts/Layout.astro";
     color: var(--fg-dim);
     overflow-wrap: anywhere;
     white-space: normal;
+    font-family:
+      ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
   }
 
   /* ── Platforms ── */
