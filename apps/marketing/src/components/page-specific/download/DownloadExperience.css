@@ -1,0 +1,244 @@
+.main {
+  padding: 8vh 1.5rem 4rem;
+}
+
+.heading {
+  font-weight: 500;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  opacity: 0;
+  animation: fade-in 1s ease-out forwards;
+}
+
+.subheading {
+  font-size: 0.9rem;
+  color: var(--fg-dim);
+  margin-bottom: 3.5rem;
+  opacity: 0;
+  animation: fade-in 1s ease-out 0.1s forwards;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.changelog-link {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(161, 161, 170, 0.4);
+  text-underline-offset: 3px;
+  transition:
+    color 0.3s ease,
+    text-decoration-color 0.3s ease;
+}
+
+.changelog-link:hover {
+  color: var(--fg);
+  text-decoration-color: var(--fg);
+}
+
+.install-commands {
+  width: 100%;
+  max-width: 920px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  opacity: 0;
+  animation: fade-in 1s ease-out 0.15s forwards;
+}
+
+.install-command-block {
+  appearance: none;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.install-command-block:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.install-command-block:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.install-command-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.install-command-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.install-command-status {
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.install-command-status:empty {
+  display: none;
+}
+
+.install-command {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace;
+}
+
+.platforms {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  opacity: 0;
+  animation: fade-in 1s ease-out 0.2s forwards;
+}
+
+.platform-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.platform-section + .platform-section {
+  padding-top: 1.75rem;
+}
+
+.platform-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.5rem;
+}
+
+.platform-icon {
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.platform-name {
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.download-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.download-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.download-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.download-card:active {
+  transform: translateY(0);
+}
+
+.card-arch {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.card-format {
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+}
+
+.releases-link {
+  margin-top: 3rem;
+  font-size: 0.825rem;
+  color: var(--fg-dim);
+  opacity: 0;
+  animation: fade-in 1s ease-out 0.35s forwards;
+}
+
+.releases-link a {
+  color: var(--fg-muted);
+  text-decoration: underline;
+  text-decoration-color: rgba(161, 161, 170, 0.4);
+  text-underline-offset: 3px;
+  transition:
+    color 0.3s ease,
+    text-decoration-color 0.3s ease;
+}
+
+.releases-link a:hover {
+  color: var(--fg);
+  text-decoration-color: var(--fg);
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: 5vh 1.25rem 4rem;
+  }
+
+  .platforms {
+    padding: 0 0.25rem;
+  }
+
+  .install-commands {
+    grid-template-columns: 1fr;
+    margin-bottom: 1.5rem;
+    padding: 0 0.25rem;
+  }
+
+  .download-cards {
+    grid-template-columns: 1fr;
+  }
+}

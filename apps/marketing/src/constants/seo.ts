@@ -1,5 +1,9 @@
 import { APP_NAME, MARKETING_ASSETS } from "./app";
 
+function formatPageTitle(title: string): string {
+  return `${title} | ${APP_NAME}`;
+}
+
 export const MARKETING_THEME_COLOR = "#171717";
 export const OG_LOCALE = "en_US";
 export const TWITTER_CARD = "summary_large_image";
@@ -19,7 +23,7 @@ export const DEFAULT_METADATA = {
 } as const;
 
 export const HOME_METADATA = {
-  title: `${APP_NAME} | Your AI workspace for getting things done`,
+  title: formatPageTitle("Your AI workspace for getting things done"),
   description:
     "An AI companion workspace for getting things done — whether you're coding, writing, analyzing, or exploring ideas. Built for developers and designed for everyone.",
   image: MARKETING_ASSETS.socialImagePath,
@@ -27,7 +31,7 @@ export const HOME_METADATA = {
 } as const;
 
 export const DOWNLOAD_METADATA = {
-  title: `Download ${APP_NAME} | macOS, Windows, Linux`,
+  title: formatPageTitle(`Download ${APP_NAME} | macOS, Windows, Linux`),
   description: `Download ${APP_NAME} for macOS, Windows, or Linux and get your AI workspace running in minutes.`,
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: `${APP_NAME} download preview`,
