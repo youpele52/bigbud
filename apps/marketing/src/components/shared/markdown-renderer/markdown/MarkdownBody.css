@@ -1,6 +1,7 @@
 .md-body {
   min-width: 0;
   padding-right: clamp(2.25rem, 4vw, 4rem);
+  --md-content-max-width: 58rem;
 }
 
 .md-body--content:empty {
@@ -50,7 +51,7 @@
 }
 
 .md-paragraph {
-  max-width: 44rem;
+  max-width: var(--md-content-max-width);
   margin-top: 1.25rem;
   color: var(--fg-dim);
   font-size: clamp(0.95rem, 0.95vw, 1.08rem);
@@ -64,7 +65,7 @@
 }
 
 .md-list {
-  max-width: 44rem;
+  max-width: var(--md-content-max-width);
   margin: 0.55rem 0 1rem 1.1rem;
   padding: 0;
   color: var(--fg-dim);
@@ -110,7 +111,7 @@
 }
 
 .md-code-block {
-  max-width: 44rem;
+  max-width: var(--md-content-max-width);
   margin: 1rem 0;
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -131,7 +132,7 @@
 .md-image {
   width: 100%;
   height: auto;
-  max-width: 44rem;
+  max-width: var(--md-content-max-width);
   margin: 1.4rem 0;
   border: 1px solid var(--border);
   border-radius: 1rem;
