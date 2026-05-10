@@ -1,0 +1,49 @@
+.footer-shell {
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid var(--border);
+}
+
+.footer {
+  width: min(100%, var(--marketing-max-width));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 2.5rem;
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+}
+
+.footer-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.footer-copy-mark {
+  width: 1em;
+  height: 1em;
+  max-width: none;
+  flex: 0 0 1em;
+  object-fit: contain;
+}
+
+.footer-links {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.footer-links a {
+  color: var(--fg-dim);
+  transition: color 0.3s ease;
+}
+
+.footer-links a:hover {
+  color: var(--fg);
+}
+
+@media (max-width: 640px) {
+  .footer {
+    padding: 1.25rem;
+  }
+}

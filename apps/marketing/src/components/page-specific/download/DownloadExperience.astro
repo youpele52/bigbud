@@ -1,0 +1,144 @@
+---
+import {
+    APP_NAME,
+    CHANGELOG_PATH,
+    EXTERNAL_LINK_INDICATOR,
+    GITHUB_RELEASES_URL,
+    MARKETING_ASSETS,
+} from "../../../constants/app";
+import {
+    INSTALL_COMMANDS,
+    RELEASE_ASSET_SUFFIXES,
+} from "../../../constants/downloads";
+import DownloadPlatformSection from "./DownloadPlatformSection.astro";
+import "./DownloadExperience.css";
+
+const installCommandBlocks = [
+    {
+        title: "macOS / Linux",
+        command: INSTALL_COMMANDS.unix,
+        ariaLabel: "Copy macOS and Linux install command",
+    },
+    {
+        title: "Windows",
+        command: INSTALL_COMMANDS.windows,
+        ariaLabel: "Copy Windows install command",
+    },
+] as const;
+
+const platformSections = [
+    {
+        title: "macOS",
+        platform: "apple",
+        cards: [
+            {
+                label: "Apple Silicon (arm64)",
+                format: ".dmg",
+                assetSuffix: RELEASE_ASSET_SUFFIXES.macArm64,
+            },
+            {
+                label: "Intel (x64)",
+                format: ".dmg",
+                assetSuffix: RELEASE_ASSET_SUFFIXES.macX64,
+            },
+        ],
+    },
+    {
+        title: "Windows",
+        platform: "windows",
+        cards: [
+            {
+                label: "Windows 10, 11",
+                format: ".exe",
+                assetSuffix: RELEASE_ASSET_SUFFIXES.windowsX64,
+            },
+        ],
+    },
+    {
+        title: "Linux",
+        platform: "linux",
+        cards: [
+            {
+                label: "x86_64",
+                format: "AppImage",
+                assetSuffix: RELEASE_ASSET_SUFFIXES.linuxAppImage,
+            },
+        ],
+    },
+] as const;
+---
+
+<section class="download-experience">
+    <div class="download-copy">
+        <h1 class="heading">download {APP_NAME}</h1>
+        <p class="subheading">
+            <span id="version-label">Loading latest release&hellip;</span>
+            <a id="changelog-link" class="changelog-link" href={CHANGELOG_PATH}>
+                View changelog
+            </a>
+        </p>
+
+        <section class="install-commands" aria-label="Command line installers">
+            {
+                installCommandBlocks.map((block) => (
+                    <button
+                        type="button"
+                        class="install-command-block"
+                        data-copy-text={block.command}
+                        aria-label={block.ariaLabel}
+                    >
+                        <span class="install-command-meta">
+                            <span class="install-command-title">
+                                {block.title}
+                            </span>
+                            <span
+                                class="install-command-status"
+                                aria-live="polite"
+                            />
+                        </span>
+                        <code class="install-command">{block.command}</code>
+                    </button>
+                ))
+            }
+        </section>
+
+        <div class="platforms" id="platforms">
+            {
+                platformSections.map((section) => (
+                    <DownloadPlatformSection {...section} />
+                ))
+            }
+        </div>
+
+        <p class="releases-link">
+            Looking for older versions? <span class="">
+                Check the
+                <a
+                    href={GITHUB_RELEASES_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    GitHub releases page<span aria-hidden="true">
+                        {` ${EXTERNAL_LINK_INDICATOR}`}
+                    </span>
+                </a>
+            </span>
+        </p>
+    </div>
+
+    <div class="download-visual" aria-hidden="true">
+        <div class="download-visual-frame">
+            <img
+                src={MARKETING_ASSETS.downloadScreenshotPath}
+                alt=""
+                class="download-screenshot"
+            />
+        </div>
+    </div>
+</section>
+
+<script>
+    import { initDownloadExperience } from "./DownloadExperience.client";
+
+    initDownloadExperience();
+</script>

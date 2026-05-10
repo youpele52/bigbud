@@ -18,6 +18,7 @@ import { GitCommandError } from "@bigbud/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
 import { CheckpointRef } from "@bigbud/contracts";
+import { CHECKPOINT_COMMIT_MESSAGE_PREFIX, checkpointRefCandidates } from "../Utils.ts";
 
 const makeCheckpointStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -56,22 +57,27 @@ const makeCheckpointStore = Effect.gen(function* () {
     cwd: string,
     checkpointRef: CheckpointRef,
   ): Effect.Effect<string | null, GitCommandError> =>
-    git
-      .execute({
-        operation: "CheckpointStore.resolveCheckpointCommit",
-        cwd,
-        args: ["rev-parse", "--verify", "--quiet", `${checkpointRef}^{commit}`],
-        allowNonZeroExit: true,
-      })
-      .pipe(
-        Effect.map((result) => {
-          if (result.code !== 0) {
-            return null;
-          }
-          const commit = result.stdout.trim();
-          return commit.length > 0 ? commit : null;
-        }),
-      );
+    Effect.forEach(
+      checkpointRefCandidates(checkpointRef),
+      (candidateCheckpointRef) =>
+        git
+          .execute({
+            operation: "CheckpointStore.resolveCheckpointCommit",
+            cwd,
+            args: ["rev-parse", "--verify", "--quiet", `${candidateCheckpointRef}^{commit}`],
+            allowNonZeroExit: true,
+          })
+          .pipe(
+            Effect.map((result) => {
+              if (result.code !== 0) {
+                return null;
+              }
+              const commit = result.stdout.trim();
+              return commit.length > 0 ? commit : null;
+            }),
+          ),
+      { concurrency: 1 },
+    ).pipe(Effect.map((commits) => commits.find((commit) => commit !== null) ?? null));
 
   const isGitRepository: CheckpointStoreShape["isGitRepository"] = (cwd) =>
     git
@@ -92,16 +98,16 @@ const makeCheckpointStore = Effect.gen(function* () {
     const operation = "CheckpointStore.captureCheckpoint";
 
     yield* Effect.acquireUseRelease(
-      fs.makeTempDirectory({ prefix: "t3-fs-checkpoint-" }),
+      fs.makeTempDirectory({ prefix: "bigbud-fs-checkpoint-" }),
       Effect.fn("captureCheckpoint.withTempDirectory")(function* (tempDir) {
         const tempIndexPath = path.join(tempDir, `index-${randomUUID()}`);
         const commitEnv: NodeJS.ProcessEnv = {
           ...process.env,
           GIT_INDEX_FILE: tempIndexPath,
           GIT_AUTHOR_NAME: "bigbud",
-          GIT_AUTHOR_EMAIL: "bigcode@users.noreply.github.com",
+          GIT_AUTHOR_EMAIL: "bigbud@users.noreply.github.com",
           GIT_COMMITTER_NAME: "bigbud",
-          GIT_COMMITTER_EMAIL: "bigcode@users.noreply.github.com",
+          GIT_COMMITTER_EMAIL: "bigbud@users.noreply.github.com",
         };
 
         const headExists = yield* hasHeadCommit(input.cwd);
@@ -137,7 +143,7 @@ const makeCheckpointStore = Effect.gen(function* () {
           });
         }
 
-        const message = `t3 checkpoint ref=${input.checkpointRef}`;
+        const message = `${CHECKPOINT_COMMIT_MESSAGE_PREFIX} ref=${input.checkpointRef}`;
         const commitTreeResult = yield* git.execute({
           operation,
           cwd: input.cwd,
