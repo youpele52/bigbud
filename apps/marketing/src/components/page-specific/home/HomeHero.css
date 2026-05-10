@@ -188,6 +188,16 @@
   line-height: 1;
 }
 
+.feature-icon--earth svg {
+  width: 1.38rem;
+  height: 1.38rem;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .feature h2 {
   font-size: 1rem;
   font-weight: 600;
