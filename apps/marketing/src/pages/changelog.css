@@ -4,7 +4,7 @@
 
 .changelog-page {
   position: relative;
-  width: min(100%, 1540px);
+  width: min(100%, var(--marketing-max-width));
   padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
 }
 

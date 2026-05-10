@@ -31,14 +31,14 @@ export const HOME_METADATA = {
 } as const;
 
 export const DOWNLOAD_METADATA = {
-  title: formatPageTitle(`Download ${APP_NAME} | macOS, Windows, Linux`),
+  title: formatPageTitle(`download ${APP_NAME} | macOS, Windows, Linux`),
   description: `Download ${APP_NAME} for macOS, Windows, or Linux and get your AI workspace running in minutes.`,
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: `${APP_NAME} download preview`,
 } as const;
 
 export const CHANGELOG_METADATA = {
-  title: formatPageTitle("Changelog"),
+  title: formatPageTitle("changelog"),
   description: `See notable ${APP_NAME} updates, releases, and product improvements in one place.`,
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: `${APP_NAME} changelog preview`,

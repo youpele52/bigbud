@@ -1,15 +1,23 @@
 ---
-import { APP_NAME, GITHUB_REPO_URL } from "../constants/app";
+import {
+  APP_NAME,
+  EXTERNAL_LINK_INDICATOR,
+  GITHUB_REPO_URL,
+} from "../constants/app";
 import "./LayoutFooter.css";
 ---
 
-<footer class="footer">
-  <span class="footer-copy">
-    <span class="footer-copy-year">&copy; {new Date().getFullYear()}</span>
-    <img src="/pele.svg" alt="" aria-hidden="true" class="footer-copy-mark" />
-    <span>{APP_NAME}</span>
-  </span>
-  <div class="footer-links">
-    <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+<footer class="footer-shell">
+  <div class="footer">
+    <span class="footer-copy">
+      <span class="footer-copy-year">&copy; {new Date().getFullYear()}</span>
+      <img src="/pele.svg" alt="" aria-hidden="true" class="footer-copy-mark" />
+      <span>{APP_NAME}</span>
+    </span>
+    <div class="footer-links">
+      <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">
+        GitHub<span aria-hidden="true"> {EXTERNAL_LINK_INDICATOR}</span>
+      </a>
+    </div>
   </div>
 </footer>

@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  --marketing-max-width: 1360px;
   --radius: 0.75rem;
   --brand-primary-light: color-mix(in srgb, var(--color-white) 94%, var(--color-neutral-200));
   --brand-primary-dark: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));

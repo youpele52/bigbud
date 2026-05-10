@@ -2,6 +2,7 @@
 import {
     APP_NAME,
     CHANGELOG_PATH,
+    EXTERNAL_LINK_INDICATOR,
     GITHUB_RELEASES_URL,
     MARKETING_ASSETS,
 } from "../../../constants/app";
@@ -69,7 +70,7 @@ const platformSections = [
 
 <section class="download-experience">
     <div class="download-copy">
-        <h1 class="heading">Download {APP_NAME}</h1>
+        <h1 class="heading">download {APP_NAME}</h1>
         <p class="subheading">
             <span id="version-label">Loading latest release&hellip;</span>
             <a id="changelog-link" class="changelog-link" href={CHANGELOG_PATH}>
@@ -117,7 +118,9 @@ const platformSections = [
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    GitHub releases page<span aria-hidden="true"> &#8599;</span>
+                    GitHub releases page<span aria-hidden="true">
+                        {` ${EXTERNAL_LINK_INDICATOR}`}
+                    </span>
                 </a>
             </span>
         </p>

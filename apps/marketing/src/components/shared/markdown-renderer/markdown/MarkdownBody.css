@@ -58,6 +58,11 @@
   line-height: 1.42;
 }
 
+.md-body--intro .md-paragraph {
+  font-size: 0.95rem;
+  line-height: 1.42;
+}
+
 .md-body--content .md-paragraph {
   margin-top: 0.75rem;
   font-size: 0.95rem;
