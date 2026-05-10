@@ -5,7 +5,11 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { describe, expect } from "vitest";
 
-import { checkpointRefForThreadTurn } from "../Utils.ts";
+import {
+  CHECKPOINT_COMMIT_MESSAGE_PREFIX,
+  checkpointRefForThreadTurn,
+  legacyCheckpointRefForThreadTurn,
+} from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
@@ -87,6 +91,55 @@ function buildLargeText(lineCount = 5_000): string {
 }
 
 it.layer(TestLayer)("CheckpointStoreLive", (it) => {
+  describe("resolveCheckpointCommit", () => {
+    it.effect("reads legacy checkpoint refs through the bigbud alias", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore;
+        const threadId = ThreadId.makeUnsafe("thread-checkpoint-legacy");
+        const currentCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
+        const legacyCheckpointRef = legacyCheckpointRefForThreadTurn(threadId, 0);
+
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef: legacyCheckpointRef,
+        });
+
+        const hasCurrentRef = yield* checkpointStore.hasCheckpointRef({
+          cwd: tmp,
+          checkpointRef: currentCheckpointRef,
+        });
+        const restoredCurrentRef = yield* checkpointStore.restoreCheckpoint({
+          cwd: tmp,
+          checkpointRef: currentCheckpointRef,
+          fallbackToHead: false,
+        });
+
+        expect(hasCurrentRef).toBe(true);
+        expect(restoredCurrentRef).toBe(true);
+      }),
+    );
+
+    it.effect("writes new checkpoint commits with the bigbud checkpoint message", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore;
+        const threadId = ThreadId.makeUnsafe("thread-checkpoint-message");
+        const checkpointRef = checkpointRefForThreadTurn(threadId, 0);
+
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef,
+        });
+
+        const message = yield* git(tmp, ["log", "-1", "--format=%s", checkpointRef]);
+        expect(message).toBe(`${CHECKPOINT_COMMIT_MESSAGE_PREFIX} ref=${checkpointRef}`);
+      }),
+    );
+  });
+
   describe("diffCheckpoints", () => {
     it.effect("returns full oversized checkpoint diffs without truncation", () =>
       Effect.gen(function* () {

@@ -1,0 +1,31 @@
+.page:has(.changelog-page) {
+  overflow-x: clip;
+}
+
+.changelog-page {
+  position: relative;
+  width: min(100%, var(--marketing-max-width));
+  padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
+}
+
+.changelog-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(66.666666% - 0.75rem);
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+@media (max-width: 1099px) {
+  .changelog-page {
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+  }
+
+  .changelog-page::before {
+    display: none;
+  }
+}

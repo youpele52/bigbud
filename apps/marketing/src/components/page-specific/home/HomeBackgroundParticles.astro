@@ -1,0 +1,26 @@
+<canvas id="home-background-particles" class="home-background-particles" aria-hidden="true"></canvas>
+
+<script>
+  import { initHomeBackgroundParticles } from "./HomeBackgroundParticles.client.ts";
+
+  initHomeBackgroundParticles();
+</script>
+
+<style>
+  .home-background-particles {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    --home-particle-rgb: 182 182 182;
+    opacity: 0.96;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .home-background-particles {
+      opacity: 0.58;
+    }
+  }
+</style>

@@ -1,0 +1,27 @@
+.md-layout {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+  align-items: start;
+  gap: 0;
+  color: var(--fg);
+  opacity: 0;
+  animation: fade-in 0.9s ease-out forwards;
+}
+
+.md-layout__main {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 1099px) {
+  .md-layout {
+    display: block;
+    max-width: 42rem;
+    margin: 0 auto;
+  }
+
+  .md-layout__main {
+    max-width: none;
+  }
+}

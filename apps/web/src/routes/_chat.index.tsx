@@ -2,11 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { BigbudLogo } from "../components/sidebar/SidebarProjectItem";
 import { isElectron } from "../config/env";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { SidebarTrigger } from "../components/ui/sidebar";
 import { useStore } from "../stores/main";
 
 function ChatIndexRouteView() {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
+  usePageTitle("Threads");
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-muted-foreground/40">

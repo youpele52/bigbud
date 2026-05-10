@@ -5,7 +5,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 
-import { APP_DISPLAY_NAME } from "../config/branding";
+import { APP_BASE_NAME, APP_DISPLAY_NAME } from "../config/branding";
 import { CommandPalette } from "../components/layout/CommandPalette";
 import { AppSidebarLayout } from "../components/layout/AppSidebarLayout";
 import { Button } from "../components/ui/button";
@@ -26,7 +26,7 @@ export const Route = createRootRouteWithContext<{
   component: RootRouteView,
   errorComponent: RootRouteErrorView,
   head: () => ({
-    meta: [{ name: "title", content: APP_DISPLAY_NAME }],
+    meta: [{ name: "title", content: APP_BASE_NAME }],
   }),
 });
 

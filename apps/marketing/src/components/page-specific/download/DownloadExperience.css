@@ -1,0 +1,364 @@
+.main {
+  width: 100%;
+  padding: 0 2.25rem 0;
+}
+
+.download-experience {
+  width: min(var(--marketing-max-width), 100%);
+  min-height: calc(100dvh - 5.1rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.75rem, 3.8vw, 4.5rem);
+}
+
+.download-copy {
+  position: relative;
+  z-index: 2;
+  max-width: none;
+  padding: 3.4rem 0 3rem;
+}
+
+.heading {
+  font-weight: 500;
+  font-size: clamp(3.15rem, 4.25vw, 5rem);
+  letter-spacing: -0.068em;
+  line-height: 0.9;
+  margin-bottom: 0.5rem;
+  max-width: 8ch;
+  opacity: 0;
+  animation: fade-in 0.9s ease-out forwards;
+}
+
+.subheading {
+  font-size: 0.95rem;
+  color: var(--fg-dim);
+  margin-bottom: 2.3rem;
+  opacity: 0;
+  animation: fade-in 0.9s ease-out 0.08s forwards;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.changelog-link {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(161, 161, 170, 0.4);
+  text-underline-offset: 3px;
+  transition:
+    color 0.3s ease,
+    text-decoration-color 0.3s ease;
+}
+
+.changelog-link:hover {
+  color: var(--fg);
+  text-decoration-color: var(--fg);
+}
+
+.install-commands {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 2.1rem;
+  opacity: 0;
+  animation: fade-in 0.9s ease-out 0.15s forwards;
+}
+
+.install-command-block {
+  appearance: none;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.install-command-block:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.install-command-block:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.install-command-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.install-command-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.install-command-status {
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.install-command-status:empty {
+  display: none;
+}
+
+.install-command {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace;
+}
+
+.platforms {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  opacity: 0;
+  animation: fade-in 0.9s ease-out 0.22s forwards;
+}
+
+.platform-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.platform-section + .platform-section {
+  padding-top: 1.75rem;
+}
+
+.platform-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.5rem;
+}
+
+.platform-icon {
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.platform-name {
+  font-weight: 500;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+}
+
+.download-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.download-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.download-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.download-card:active {
+  transform: translateY(0);
+}
+
+.card-arch {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.card-format {
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+}
+
+.releases-link {
+  margin-top: 3rem;
+  font-size: 0.825rem;
+  color: var(--fg-dim);
+  opacity: 0;
+  animation: fade-in 0.9s ease-out 0.3s forwards;
+}
+
+.releases-link a {
+  color: var(--fg-muted);
+  text-decoration: underline;
+  text-decoration-color: rgba(161, 161, 170, 0.4);
+  text-underline-offset: 3px;
+  transition:
+    color 0.3s ease,
+    text-decoration-color 0.3s ease;
+}
+
+.releases-link a:hover {
+  color: var(--fg);
+  text-decoration-color: var(--fg);
+}
+
+.download-visual {
+  position: relative;
+  align-self: stretch;
+  min-height: 42rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0 0 2rem;
+  border-left: 1px solid var(--border);
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.download-visual-frame {
+  position: relative;
+  width: min(100%, 72rem);
+  border-radius: 1.1rem;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.015)), var(--card);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 50px 120px rgb(0 0 0 / 0.55),
+    0 20px 40px rgb(0 0 0 / 0.4),
+    0 0 0 1px rgb(255 255 255 / 0.03);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(84px) translateY(26px) scale(0.96) rotateY(-10deg) rotateX(4deg);
+  transform-style: preserve-3d;
+  animation: download-screenshot-in 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.16s forwards;
+}
+
+.download-screenshot {
+  width: 100%;
+  display: block;
+  height: auto;
+}
+
+@keyframes download-screenshot-in {
+  from {
+    opacity: 0;
+    transform: translateX(84px) translateY(26px) scale(0.96) rotateY(-10deg) rotateX(4deg);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0) scale(1) rotateY(-6deg) rotateX(3deg);
+  }
+}
+
+@media (min-width: 1101px) and (max-height: 1180px) {
+  .download-copy {
+    padding-top: 2.5rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .heading {
+    font-size: clamp(2.75rem, 3.55vw, 4.25rem);
+    max-width: 8.5ch;
+  }
+}
+
+@media (max-width: 1100px) {
+  .download-experience {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    min-height: auto;
+  }
+
+  .download-copy {
+    max-width: 56rem;
+    padding: 3rem 0 0;
+  }
+
+  .heading {
+    font-size: clamp(3rem, 7.4vw, 4.9rem);
+    line-height: 0.92;
+    max-width: 9ch;
+  }
+
+  .download-visual {
+    min-height: auto;
+    padding: 1.25rem 0 2rem;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: 0 1.25rem;
+  }
+
+  .download-copy {
+    padding-top: 2.25rem;
+  }
+
+  .heading {
+    font-size: clamp(2.3rem, 11vw, 3.5rem);
+    line-height: 0.98;
+    max-width: none;
+  }
+
+  .subheading {
+    margin-bottom: 1.7rem;
+  }
+
+  .install-commands,
+  .download-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .download-visual {
+    min-height: 0;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+  }
+
+  .download-visual-frame {
+    border-radius: 0.95rem;
+  }
+}
