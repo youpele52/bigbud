@@ -1,0 +1,15 @@
+---
+import { APP_NAME, GITHUB_REPO_URL } from "../constants/app";
+import "./LayoutFooter.css";
+---
+
+<footer class="footer">
+  <span class="footer-copy">
+    <span class="footer-copy-year">&copy; {new Date().getFullYear()}</span>
+    <img src="/pele.svg" alt="" aria-hidden="true" class="footer-copy-mark" />
+    <span>{APP_NAME}</span>
+  </span>
+  <div class="footer-links">
+    <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+  </div>
+</footer>

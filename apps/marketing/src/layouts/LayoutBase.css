@@ -1,0 +1,96 @@
+:root {
+  color-scheme: dark;
+  --radius: 0.75rem;
+  --brand-primary-light: color-mix(in srgb, var(--color-white) 94%, var(--color-neutral-200));
+  --brand-primary-dark: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+  --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+  --foreground: var(--color-neutral-100);
+  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  --card-foreground: var(--foreground);
+  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
+  --popover-foreground: var(--foreground);
+  --primary: var(--brand-primary-light);
+  --primary-foreground: var(--brand-primary-dark);
+  --secondary: rgb(255 255 255 / 0.04);
+  --secondary-foreground: var(--foreground);
+  --muted: rgb(255 255 255 / 0.04);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
+  --accent: rgb(255 255 255 / 0.04);
+  --accent-foreground: var(--foreground);
+  --fg-dim: color-mix(in srgb, var(--color-neutral-600) 82%, var(--color-white));
+  --border: rgb(255 255 255 / 0.06);
+  --input: rgb(255 255 255 / 0.08);
+  --ring: var(--brand-primary-light);
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --fg-muted: var(--muted-foreground);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  z-index: 9999;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
