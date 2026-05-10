@@ -1,0 +1,104 @@
+---
+import {
+    APP_NAME,
+    GITHUB_RELEASES_URL,
+    MARKETING_ASSETS,
+} from "../../../constants/app";
+import { HOME_METADATA } from "../../../constants/seo";
+import FeatureItem from "../../shared/FeatureItem.astro";
+import PlatformIcon from "../../shared/PlatformIcon.astro";
+import "./HomeHero.css";
+import "./HomeHero.visual.css";
+
+const features = [
+    {
+        icon: "▷",
+        title: "Use the best fit",
+        description:
+            "Move between AI tools and models as the work changes, so you are never stuck with just one.",
+    },
+    {
+        icon: "↔",
+        title: "Switch gears easily",
+        description:
+            "Move between chats, projects, and ideas without losing the thread.",
+    },
+
+    {
+        icon: "✓",
+        title: "See what changed",
+        description:
+            "Check every edit, keep longer work on track, and always know what moved.",
+    },
+    {
+        icon: "earth",
+        title: "Research without context switching",
+        description:
+            "Use the built-in browser to look things up, annotate pages, and bring useful context into your work without breaking your flow.",
+    },
+] as const;
+---
+
+<section class="hero">
+    <div class="hero-copy">
+        <div class="hero-brand">
+            <img
+                src={MARKETING_ASSETS.navLogoPath}
+                alt={APP_NAME}
+                class="hero-brand-icon"
+            />
+            <span class="hero-brand-name">{APP_NAME}</span>
+        </div>
+        <h1 class="tagline">from idea to done.</h1>
+        <p class="tagline-copy">
+            bigbud keeps your projects where they are, and gives you one place
+            to think, write, plan, research, and build, with AI that can chat,
+            take action, and help move work from idea to execution.
+        </p>
+
+        <div class="hero-actions">
+            <a
+                id="download-btn"
+                href={GITHUB_RELEASES_URL}
+                class="hero-button"
+                aria-label="Download latest release"
+            >
+                <PlatformIcon
+                    platform="apple"
+                    class="hero-button-icon hero-button-icon--apple"
+                />
+                <PlatformIcon
+                    platform="windows"
+                    class="hero-button-icon hero-button-icon--windows"
+                />
+                <PlatformIcon
+                    platform="linux"
+                    class="hero-button-icon hero-button-icon--linux"
+                />
+                <span id="download-label">Download</span>
+            </a>
+
+            <a href="/download" class="other-platforms">Other platforms</a>
+        </div>
+
+        <div class="feature-list" aria-label="Product highlights">
+            {features.map((feature) => <FeatureItem {...feature} />)}
+        </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+        <div class="visual-frame">
+            <img
+                src={HOME_METADATA.image}
+                alt={HOME_METADATA.imageAlt}
+                class="screenshot"
+            />
+        </div>
+    </div>
+</section>
+
+<script>
+    import { initHomeHero } from "./HomeHero.client";
+
+    initHomeHero();
+</script>

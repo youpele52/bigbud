@@ -1,0 +1,99 @@
+---
+import type { RenderedMarkdown } from "../MarkdownRenderer.render";
+import MarkdownBody from "./MarkdownBody.astro";
+import MarkdownToc from "./MarkdownToc.astro";
+import "./MarkdownLayout.css";
+
+interface Props {
+  class?: string;
+  rendered: RenderedMarkdown;
+}
+
+const { class: className = "", rendered } = Astro.props;
+const tocItems = rendered.toc.filter((item) => item.level <= 3);
+const classes = ["md-layout", className].filter(Boolean).join(" ");
+---
+
+<div class={classes}>
+  <article class="md-layout__main">
+    <MarkdownBody html={rendered.introHtml} section="intro" />
+    {tocItems.length > 0 ? <MarkdownToc items={tocItems} placement="mobile" /> : null}
+    <MarkdownBody html={rendered.contentHtml} section="content" />
+  </article>
+
+  {tocItems.length > 0 ? <MarkdownToc items={tocItems} placement="desktop" /> : null}
+</div>
+
+{
+  tocItems.length > 0 ? (
+    <script>
+      const tocLinks = Array.from(document.querySelectorAll("[data-md-toc-link]"));
+
+      const applyActiveTocLink = (id: string) => {
+        tocLinks.forEach((link) => {
+          if (!(link instanceof HTMLAnchorElement)) {
+            return;
+          }
+
+          if (link.dataset.headingId === id) {
+            link.dataset.selected = "true";
+            return;
+          }
+
+          delete link.dataset.selected;
+        });
+      };
+
+      const headingIds = [
+        ...new Set(
+          tocLinks.reduce<string[]>((ids, link) => {
+            if (!(link instanceof HTMLAnchorElement)) {
+              return ids;
+            }
+
+            const id = link.dataset.headingId;
+            if (typeof id === "string" && id.length > 0) {
+              ids.push(id);
+            }
+
+            return ids;
+          }, []),
+        ),
+      ];
+
+      if (headingIds.length > 0) {
+        const syncFromHash = () => {
+          const hashId = decodeURIComponent(window.location.hash.slice(1));
+          if (hashId && headingIds.includes(hashId)) {
+            applyActiveTocLink(hashId);
+            return true;
+          }
+
+          tocLinks.forEach((link) => {
+            if (link instanceof HTMLAnchorElement) {
+              delete link.dataset.selected;
+            }
+          });
+          return false;
+        };
+
+        syncFromHash();
+
+        tocLinks.forEach((link) => {
+          if (!(link instanceof HTMLAnchorElement)) {
+            return;
+          }
+
+          link.addEventListener("click", () => {
+            const id = link.dataset.headingId;
+            if (id) {
+              applyActiveTocLink(id);
+            }
+          });
+        });
+
+        window.addEventListener("hashchange", syncFromHash);
+      }
+    </script>
+  ) : null
+}

@@ -66,6 +66,43 @@ function makeZipWithStoredEntry(fileName: string, content: string): Buffer {
   ]);
 }
 
+function makeSimplePdf(text: string): Buffer {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${text.length + 31} >>\nstream\nBT\n/F1 12 Tf\n72 720 Td\n(${text}) Tj\nET\nendstream`,
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref
+0 ${objects.length + 1}
+0000000000 65535 f
+`;
+
+  for (const offset of offsets.slice(1)) {
+    pdf += `${offset.toString().padStart(10, "0")} 00000 n
+`;
+  }
+
+  pdf += `trailer
+<< /Root 1 0 R /Size ${objects.length + 1} >>
+startxref
+${xrefOffset}
+%%EOF`;
+
+  return Buffer.from(pdf, "latin1");
+}
+
 describe("documentText", () => {
   it("extracts paragraph text from DOCX document XML", () => {
     const docx = makeZipWithStoredEntry(
@@ -94,29 +131,11 @@ describe("documentText", () => {
 
     const dir = mkdtempSync(join(tmpdir(), "documentText-test-"));
     try {
-      // Use the real CID-keyed PDF from the attachments store if present;
-      // otherwise fall back to a trivial literal-string PDF.
-      const realPdf =
-        "/Users/youpele/.bigbud/userdata/attachments/8590e930-4332-4a47-9681-7e58bad6492d-ea3ca05d-1362-4e8a-b149-13d0be3387de.pdf";
-      let usePath: string;
-      try {
-        const { readFileSync } = await import("node:fs");
-        readFileSync(realPdf);
-        usePath = realPdf;
-      } catch {
-        const pdfPath = join(dir, "simple.pdf");
-        writeFileSync(
-          pdfPath,
-          Buffer.from(
-            "%PDF-1.4\n1 0 obj\n<< /Length 44 >>\nstream\nBT\n/F1 12 Tf\n72 720 Td\n(pdftotext works) Tj\nET\nendstream\nendobj\n%%EOF",
-            "latin1",
-          ),
-        );
-        usePath = pdfPath;
-      }
+      const pdfPath = join(dir, "simple.pdf");
+      writeFileSync(pdfPath, makeSimplePdf("pdftotext works"));
 
       const result = await extractPromptTextFromFile({
-        filePath: usePath,
+        filePath: pdfPath,
         mimeType: "application/pdf",
         fileName: "test.pdf",
       });
