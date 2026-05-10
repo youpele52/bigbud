@@ -36,3 +36,10 @@ export const DOWNLOAD_METADATA = {
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: `${APP_NAME} download preview`,
 } as const;
+
+export const CHANGELOG_METADATA = {
+  title: formatPageTitle("Changelog"),
+  description: `See notable ${APP_NAME} updates, releases, and product improvements in one place.`,
+  image: MARKETING_ASSETS.socialImagePath,
+  imageAlt: `${APP_NAME} changelog preview`,
+} as const;

@@ -1,0 +1,45 @@
+---
+import type { MarkdownTocItem } from "../MarkdownRenderer.render";
+import "./MarkdownToc.css";
+
+interface Props {
+  items: MarkdownTocItem[];
+  placement: "desktop" | "mobile";
+}
+
+const { items, placement } = Astro.props;
+const headingId = `md-toc-heading-${placement}`;
+
+function getItemClass(item: MarkdownTocItem, index: number): string {
+  const previousItem = items[index - 1];
+  const startsNewGroup = item.level === 2 && previousItem?.level === 3;
+
+  return [
+    "md-toc__item",
+    `md-toc__item--h${item.level}`,
+    startsNewGroup && "md-toc__item--new-group",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+---
+
+<section class={`md-toc md-toc--${placement}`} aria-labelledby={headingId}>
+  <h2 id={headingId} class="md-toc__kicker">On this page</h2>
+  <ul class="md-toc__list">
+    {
+      items.map((item, index) => (
+        <li class={getItemClass(item, index)}>
+          <a
+            href={`#${item.id}`}
+            class="md-toc__link"
+            data-md-toc-link
+            data-heading-id={item.id}
+          >
+            {item.title}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

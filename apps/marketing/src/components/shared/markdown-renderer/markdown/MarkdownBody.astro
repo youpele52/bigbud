@@ -1,0 +1,12 @@
+---
+import "./MarkdownBody.css";
+
+interface Props {
+  html: string;
+  section: "intro" | "content";
+}
+
+const { html, section } = Astro.props;
+---
+
+<section class={`md-body md-body--${section}`} set:html={html} />

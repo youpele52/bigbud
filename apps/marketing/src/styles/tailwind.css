@@ -25,11 +25,16 @@
 }
 
 @layer base {
+  html {
+    font-size: 14px;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }
 
   body {
     @apply bg-background text-foreground relative;
+    font-size: 1rem;
   }
 }
