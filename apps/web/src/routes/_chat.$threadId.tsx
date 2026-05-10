@@ -14,6 +14,7 @@ import {
   parseDiffRouteSearch,
 } from "../utils/diff";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useStore } from "../stores/main";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
 import {
@@ -159,6 +160,9 @@ function ChatThreadRouteView() {
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
+  const threadTitle = useStore(
+    (store) => store.threads.find((thread) => thread.id === threadId)?.title ?? "New thread",
+  );
   const search = Route.useSearch();
   const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
   const draftThreadExists = useComposerDraftStore((store) =>
@@ -168,6 +172,7 @@ function ChatThreadRouteView() {
   const diffOpen = search.diff === "1";
   const browserOpen = useBrowserPanelStore((state) => state.open);
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
+  usePageTitle(threadTitle);
   // TanStack Router keeps active route components mounted across param-only navigations
   // unless remountDeps are configured, so this stays warm across thread switches.
   const [hasOpenedDiff, setHasOpenedDiff] = useState(diffOpen);

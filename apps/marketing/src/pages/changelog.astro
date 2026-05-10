@@ -1,0 +1,14 @@
+---
+import changelogContent from "../../../../docs/CHANGELOG.md?raw";
+
+import MarkdownRenderer from "../components/shared/markdown-renderer/MarkdownRenderer.astro";
+import { CHANGELOG_METADATA } from "../constants/seo";
+import Layout from "../layouts/Layout.astro";
+import "./changelog.css";
+---
+
+<Layout {...CHANGELOG_METADATA}>
+    <section class="changelog-page">
+        <MarkdownRenderer content={changelogContent} />
+    </section>
+</Layout>

@@ -1,10 +1,10 @@
-const REPO = "youpele52/bigbud";
+import { GITHUB_RELEASES_URL, GITHUB_REPO_SLUG } from "../constants/app";
 
-export const RELEASES_URL = `https://github.com/${REPO}/releases`;
+export const RELEASES_URL = GITHUB_RELEASES_URL;
 
-const LATEST_RELEASE_API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const RELEASES_API_URL = `https://api.github.com/repos/${REPO}/releases`;
-const CACHE_KEY = "bigcode-latest-release";
+const LATEST_RELEASE_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases/latest`;
+const RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases`;
+const CACHE_KEY = "bigbud-latest-release";
 
 export interface ReleaseAsset {
   name: string;

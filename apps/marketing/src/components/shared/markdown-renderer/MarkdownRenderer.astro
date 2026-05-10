@@ -1,0 +1,14 @@
+---
+import MarkdownLayout from "./markdown/MarkdownLayout.astro";
+import { renderMarkdown } from "./MarkdownRenderer.render";
+
+interface Props {
+  content: string;
+  class?: string;
+}
+
+const { content, class: className = "" } = Astro.props;
+const rendered = renderMarkdown(content);
+---
+
+<MarkdownLayout class={className} rendered={rendered} />
