@@ -42,6 +42,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
+import {
+  BrowserManager,
+  BrowserManagerError,
+  type BrowserManagerShape,
+} from "../../browser/Services/BrowserManager.ts";
+import {
+  TerminalHistoryError,
+  TerminalManager,
+  type TerminalManagerShape,
+} from "../../terminal/Services/Manager.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 const asApprovalRequestId = (value: string): ApprovalRequestId =>
@@ -104,6 +114,9 @@ describe("ProviderCommandReactor", () => {
     readonly workspaceRoot?: string;
     readonly threadModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
+    readonly stopSessionFailure?: string;
+    readonly browserCloseFailure?: string;
+    readonly terminalCloseFailure?: string;
   }) {
     const now = new Date().toISOString();
     const baseDir = input?.baseDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-"));
@@ -158,11 +171,18 @@ describe("ProviderCommandReactor", () => {
     const interruptTurn = vi.fn((_: unknown) => Effect.void);
     const respondToRequest = vi.fn<ProviderServiceShape["respondToRequest"]>(() => Effect.void);
     const respondToUserInput = vi.fn<ProviderServiceShape["respondToUserInput"]>(() => Effect.void);
-    const stopSession = vi.fn((input: unknown) =>
-      Effect.sync(() => {
+    const stopSession = vi.fn((stopInput: unknown) =>
+      Effect.gen(function* () {
+        if (input?.stopSessionFailure) {
+          return yield* new ProviderAdapterRequestError({
+            provider: modelSelection.provider,
+            method: "stopSession",
+            detail: input.stopSessionFailure,
+          });
+        }
         const threadId =
-          typeof input === "object" && input !== null && "threadId" in input
-            ? (input as { threadId?: ThreadId }).threadId
+          typeof stopInput === "object" && stopInput !== null && "threadId" in stopInput
+            ? (stopInput as { threadId?: ThreadId }).threadId
             : undefined;
         if (!threadId) {
           return;
@@ -218,6 +238,27 @@ describe("ProviderCommandReactor", () => {
         }),
       ),
     );
+    const browserClose = vi.fn<BrowserManagerShape["close"]>(() =>
+      input?.browserCloseFailure
+        ? Effect.fail(
+            new BrowserManagerError({
+              message: input.browserCloseFailure,
+            }),
+          )
+        : Effect.void,
+    );
+    const terminalClose = vi.fn<TerminalManagerShape["close"]>(() =>
+      input?.terminalCloseFailure
+        ? Effect.fail(
+            new TerminalHistoryError({
+              operation: "truncate",
+              threadId: "thread-1",
+              terminalId: "default",
+              cause: new Error(input.terminalCloseFailure),
+            }),
+          )
+        : Effect.void,
+    );
 
     const unsupported = () => Effect.die(new Error("Unsupported provider call in test")) as never;
     const service: ProviderServiceShape = {
@@ -237,6 +278,23 @@ describe("ProviderCommandReactor", () => {
       get streamEvents() {
         return Stream.fromPubSub(runtimeEventPubSub);
       },
+    };
+    const browserService: BrowserManagerShape = {
+      launch: () => Effect.void,
+      navigate: () => unsupported(),
+      screenshot: () => unsupported(),
+      getPageInfo: () => unsupported(),
+      close: browserClose,
+      closeAll: () => Effect.void,
+    };
+    const terminalService: TerminalManagerShape = {
+      open: () => unsupported(),
+      write: () => unsupported(),
+      resize: () => unsupported(),
+      clear: () => unsupported(),
+      restart: () => unsupported(),
+      close: terminalClose,
+      subscribe: () => Effect.succeed(() => undefined),
     };
 
     const orchestrationLayer = OrchestrationEngineLive.pipe(
@@ -268,6 +326,8 @@ describe("ProviderCommandReactor", () => {
           generateThreadTitle,
         }),
       ),
+      Layer.provideMerge(Layer.succeed(BrowserManager, browserService)),
+      Layer.provideMerge(Layer.succeed(TerminalManager, terminalService)),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(WorkspacePathsLive),
@@ -320,6 +380,8 @@ describe("ProviderCommandReactor", () => {
       refreshLocalStatus,
       generateBranchName,
       generateThreadTitle,
+      browserClose,
+      terminalClose,
       stateDir,
       drain,
     };
@@ -1856,5 +1918,180 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.status).toBe("stopped");
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.activeTurnId).toBeNull();
+  });
+
+  it("reacts to thread.deletion-requested by stopping provider, browser, and terminal before final delete", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.startSession(ThreadId.makeUnsafe("thread-1"), {
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        provider: "codex",
+        runtimeMode: "approval-required",
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-for-delete"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.makeUnsafe("cmd-thread-delete"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+      }),
+    );
+
+    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.browserClose.mock.calls.length === 1);
+    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))
+          ?.deletedAt !== null
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.deletingAt).toBeNull();
+    expect(thread?.deletedAt).not.toBeNull();
+    expect(thread?.session?.status).toBe("stopped");
+  });
+
+  it("aborts thread deletion when cleanup fails and leaves the thread undeleted", async () => {
+    const harness = await createHarness({
+      browserCloseFailure: "browser close failed",
+    });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.startSession(ThreadId.makeUnsafe("thread-1"), {
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        provider: "codex",
+        runtimeMode: "approval-required",
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-for-delete-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.delete",
+        commandId: CommandId.makeUnsafe("cmd-thread-delete-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+      }),
+    );
+
+    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.browserClose.mock.calls.length === 1);
+    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      const thread = readModel.threads.find(
+        (entry) => entry.id === ThreadId.makeUnsafe("thread-1"),
+      );
+      return (
+        thread?.deletingAt === null &&
+        thread.deletedAt === null &&
+        thread.activities.some((activity) => activity.kind === "thread.delete.failed")
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.deletedAt).toBeNull();
+    expect(thread?.deletingAt).toBeNull();
+    expect(thread?.activities.some((activity) => activity.kind === "thread.delete.failed")).toBe(
+      true,
+    );
+  });
+
+  it("reacts to project.delete by deleting live child threads before final project delete", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.startSession(ThreadId.makeUnsafe("thread-1"), {
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        provider: "codex",
+        runtimeMode: "approval-required",
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-session-set-for-project-delete"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "project.delete",
+        commandId: CommandId.makeUnsafe("cmd-project-delete-live-thread"),
+        projectId: asProjectId("project-1"),
+      }),
+    );
+
+    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.browserClose.mock.calls.length === 1);
+    await waitFor(() => harness.terminalClose.mock.calls.length === 1);
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.projects.find((project) => project.id === asProjectId("project-1"))?.deletedAt !==
+        null
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const project = readModel.projects.find((entry) => entry.id === asProjectId("project-1"));
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(project?.deletedAt).not.toBeNull();
+    expect(project?.deletingAt).toBeNull();
+    expect(thread?.deletedAt).not.toBeNull();
+    expect(thread?.session?.status).toBe("stopped");
   });
 });

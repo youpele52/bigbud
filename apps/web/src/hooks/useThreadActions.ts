@@ -10,20 +10,17 @@ import { gitRemoveWorktreeMutationOptions } from "../lib/gitReactQuery";
 import { newCommandId, newThreadId } from "../lib/utils";
 import { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
-import { useTerminalStateStore } from "../stores/terminal";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../utils/worktree";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
 import { prepareSeedMessages } from "../lib/threadFork";
-import { waitForThreadToExist } from "../components/chat/view/ChatView.logic";
+import {
+  waitForThreadToDisappear,
+  waitForThreadToExist,
+} from "../components/chat/view/ChatView.logic";
 
 export function useThreadActions() {
   const appSettings = useSettings();
-  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
-  const clearProjectDraftThreadById = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadById,
-  );
-  const clearTerminalState = useTerminalStateStore((state) => state.clearTerminalState);
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -102,23 +99,6 @@ export function useThreadActions() {
           ].join("\n"),
         ));
 
-      if (thread.session && thread.session.status !== "closed") {
-        await api.orchestration
-          .dispatchCommand({
-            type: "thread.session.stop",
-            commandId: newCommandId(),
-            threadId,
-            createdAt: new Date().toISOString(),
-          })
-          .catch(() => undefined);
-      }
-
-      try {
-        await api.terminal.close({ threadId, deleteHistory: true });
-      } catch {
-        // Terminal may already be closed.
-      }
-
       const deletedThreadIds = opts.deletedThreadIds ?? new Set<ThreadId>();
       const shouldNavigateToFallback = routeThreadId === threadId;
       const fallbackThreadId = getFallbackThreadIdAfterDelete({
@@ -132,9 +112,6 @@ export function useThreadActions() {
         commandId: newCommandId(),
         threadId,
       });
-      clearComposerDraftForThread(threadId);
-      clearProjectDraftThreadById(thread.projectId, thread.id);
-      clearTerminalState(threadId);
 
       if (shouldNavigateToFallback) {
         if (fallbackThreadId) {
@@ -149,6 +126,17 @@ export function useThreadActions() {
       }
 
       if (!shouldDeleteWorktree || !orphanedWorktreePath || !threadProject) {
+        return;
+      }
+
+      const deleted = await waitForThreadToDisappear(threadId);
+      if (!deleted) {
+        toastManager.add({
+          type: "warning",
+          title: "Skipping worktree removal",
+          description:
+            "Thread deletion is still in progress. Worktree removal was skipped to avoid removing files before cleanup finished.",
+        });
         return;
       }
 
@@ -173,15 +161,7 @@ export function useThreadActions() {
         });
       }
     },
-    [
-      clearComposerDraftForThread,
-      clearProjectDraftThreadById,
-      clearTerminalState,
-      appSettings.sidebarThreadSortOrder,
-      navigate,
-      removeWorktreeMutation,
-      routeThreadId,
-    ],
+    [appSettings.sidebarThreadSortOrder, navigate, removeWorktreeMutation, routeThreadId],
   );
 
   const forkThread = useCallback(

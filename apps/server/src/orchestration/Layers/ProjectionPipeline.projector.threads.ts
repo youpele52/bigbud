@@ -39,9 +39,40 @@ export function makeThreadsProjector(
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           archivedAt: null,
+          deletingAt: null,
           deletedAt: null,
         });
         return;
+
+      case "thread.deletion-requested": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          deletingAt: event.payload.deletingAt,
+          updatedAt: event.payload.deletingAt,
+        });
+        return;
+      }
+
+      case "thread.deletion-failed": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          deletingAt: null,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
 
       case "thread.archived": {
         const existingRow = yield* projectionThreadRepository.getById({
@@ -135,6 +166,7 @@ export function makeThreadsProjector(
         }
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
+          deletingAt: null,
           deletedAt: event.payload.deletedAt,
           updatedAt: event.payload.deletedAt,
         });

@@ -1,7 +1,8 @@
 /**
  * Projector — thread lifecycle event cases.
  *
- * Handles: thread.created, thread.deleted, thread.archived, thread.unarchived,
+ * Handles: thread.created, thread.deletion-requested, thread.deletion-failed,
+ * thread.deleted, thread.archived, thread.unarchived,
  * thread.meta-updated, thread.runtime-mode-set, thread.interaction-mode-set
  */
 import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contracts";
@@ -12,6 +13,8 @@ import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
   ThreadArchivedPayload,
   ThreadCreatedPayload,
+  ThreadDeletionFailedPayload,
+  ThreadDeletionRequestedPayload,
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
@@ -46,6 +49,7 @@ export function projectThreadCreated(
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,
+        deletingAt: null,
         deletedAt: null,
         ...(payload.parentThread !== undefined ? { parentThread: payload.parentThread } : {}),
         messages: [],
@@ -66,6 +70,36 @@ export function projectThreadCreated(
   });
 }
 
+export function projectThreadDeletionRequested(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.deletion-requested" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadDeletionRequestedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        deletingAt: payload.deletingAt,
+        updatedAt: payload.deletingAt,
+      }),
+    })),
+  );
+}
+
+export function projectThreadDeletionFailed(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.deletion-failed" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadDeletionFailedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        deletingAt: null,
+        updatedAt: payload.updatedAt,
+      }),
+    })),
+  );
+}
+
 export function projectThreadDeleted(
   nextBase: OrchestrationReadModel,
   event: Extract<OrchestrationEvent, { type: "thread.deleted" }>,
@@ -74,6 +108,7 @@ export function projectThreadDeleted(
     Effect.map((payload) => ({
       ...nextBase,
       threads: updateThread(nextBase.threads, payload.threadId, {
+        deletingAt: null,
         deletedAt: payload.deletedAt,
         updatedAt: payload.deletedAt,
       }),

@@ -70,6 +70,7 @@ describe("deriveOrchestrationBatchEffects", () => {
 
     expect(effects.clearPromotedDraftThreadIds).toEqual([createdThreadId]);
     expect(effects.clearDeletedThreadIds).toEqual([deletedThreadId]);
+    expect(effects.clearDeletedProjectIds).toEqual([]);
     expect(effects.removeSelectedThreadIds).toEqual([deletedThreadId]);
     expect(effects.removeTerminalStateThreadIds).toEqual([deletedThreadId, archivedThreadId]);
     expect(effects.needsProviderInvalidation).toBe(false);
@@ -109,6 +110,7 @@ describe("deriveOrchestrationBatchEffects", () => {
 
     expect(effects.clearPromotedDraftThreadIds).toEqual([threadId]);
     expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.clearDeletedProjectIds).toEqual([]);
     expect(effects.removeSelectedThreadIds).toEqual([]);
     expect(effects.removeTerminalStateThreadIds).toEqual([]);
     expect(effects.needsProviderInvalidation).toBe(true);
@@ -131,6 +133,24 @@ describe("deriveOrchestrationBatchEffects", () => {
 
     expect(effects.clearPromotedDraftThreadIds).toEqual([]);
     expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.clearDeletedProjectIds).toEqual([]);
+    expect(effects.removeSelectedThreadIds).toEqual([]);
+    expect(effects.removeTerminalStateThreadIds).toEqual([]);
+  });
+
+  it("clears project-scoped drafts when a project is deleted", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+
+    const effects = deriveOrchestrationBatchEffects([
+      makeEvent("project.deleted", {
+        projectId,
+        deletedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    ]);
+
+    expect(effects.clearPromotedDraftThreadIds).toEqual([]);
+    expect(effects.clearDeletedThreadIds).toEqual([]);
+    expect(effects.clearDeletedProjectIds).toEqual([projectId]);
     expect(effects.removeSelectedThreadIds).toEqual([]);
     expect(effects.removeTerminalStateThreadIds).toEqual([]);
   });

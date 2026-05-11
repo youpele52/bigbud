@@ -13,6 +13,8 @@ import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "
 import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
+  ProjectDeletionFailedPayload,
+  ProjectDeletionRequestedPayload,
   ProjectMetaUpdatedPayload,
 } from "./Schemas.ts";
 
@@ -63,6 +65,7 @@ export function projectProjectCreated(
         scripts: payload.scripts,
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
+        deletingAt: null,
         deletedAt: null,
       };
 
@@ -108,6 +111,47 @@ export function projectProjectDeleted(
   event: Extract<OrchestrationEvent, { type: "project.deleted" }>,
 ): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
   return decodeForEvent(ProjectDeletedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      projects: nextBase.projects.map((project) =>
+        project.id === payload.projectId
+          ? {
+              ...project,
+              deletingAt: null,
+              deletedAt: payload.deletedAt,
+              updatedAt: payload.deletedAt,
+            }
+          : project,
+      ),
+    })),
+  );
+}
+
+export function projectProjectDeletionRequested(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "project.deletion-requested" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ProjectDeletionRequestedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      projects: nextBase.projects.map((project) =>
+        project.id === payload.projectId
+          ? {
+              ...project,
+              deletingAt: payload.deletingAt,
+              updatedAt: payload.deletingAt,
+            }
+          : project,
+      ),
+    })),
+  );
+}
+
+export function projectProjectDeletionFailed(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "project.deletion-failed" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ProjectDeletionFailedPayload, event.payload, event.type, "payload").pipe(
     // oxlint-disable-next-line no-map-spread -- copy-on-write required for immutable read model
     Effect.map((payload) => ({
       ...nextBase,
@@ -115,8 +159,8 @@ export function projectProjectDeleted(
         project.id === payload.projectId
           ? {
               ...project,
-              deletedAt: payload.deletedAt,
-              updatedAt: payload.deletedAt,
+              deletingAt: null,
+              updatedAt: payload.updatedAt,
             }
           : project,
       ),
