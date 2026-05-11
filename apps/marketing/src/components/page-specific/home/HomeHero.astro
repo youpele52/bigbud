@@ -1,10 +1,10 @@
 ---
 import {
     APP_NAME,
-    GITHUB_RELEASES_URL,
     MARKETING_ASSETS,
 } from "../../../constants/app";
 import { HOME_METADATA } from "../../../constants/seo";
+import Button from "../../shared/Button.astro";
 import FeatureItem from "../../shared/FeatureItem.astro";
 import PlatformIcon from "../../shared/PlatformIcon.astro";
 import "./HomeHero.css";
@@ -57,9 +57,9 @@ const features = [
         </p>
 
         <div class="hero-actions">
-            <a
+            <Button
                 id="download-btn"
-                href={GITHUB_RELEASES_URL}
+                href="/download"
                 class="hero-button"
                 aria-label="Download latest release"
             >
@@ -76,7 +76,7 @@ const features = [
                     class="hero-button-icon hero-button-icon--linux"
                 />
                 <span id="download-label">Download</span>
-            </a>
+            </Button>
 
             <a href="/download" class="other-platforms">Other platforms</a>
         </div>
@@ -89,7 +89,7 @@ const features = [
     <div class="hero-visual" aria-hidden="true">
         <div class="visual-frame">
             <img
-                src={HOME_METADATA.image}
+                src={MARKETING_ASSETS.homepageScreenshotPath}
                 alt={HOME_METADATA.imageAlt}
                 class="screenshot"
             />

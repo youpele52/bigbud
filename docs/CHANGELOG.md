@@ -2,9 +2,9 @@
 
 This document tracks notable project changes in a format that is useful for developers, users, AI assistants, and public release sharing.
 
-This first entry summarizes the major work completed between `2026-04-27` and `2026-05-01`.
+Entries below are grouped by release tag and date.
 
-## 2026-05-11
+## v0.1.620 (11 May, 2026)
 
 ### Marketing Site Refinement
 
@@ -39,7 +39,7 @@ This first entry summarizes the major work completed between `2026-04-27` and `2
 
 - Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus repeated focused verification for the marketing app while the changelog and download surfaces were being refined.
 
-## 2026-05-05
+## v0.1.619 (5 May, 2026)
 
 ### Thread Forking
 
@@ -75,7 +75,7 @@ This first entry summarizes the major work completed between `2026-04-27` and `2
 - Added focused tests for OpenCode event mapping, document text extraction, browser panel coordination, thread fork seed preparation, and provider command reactor handlers.
 - Validated with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
 
-## 2026-05-02
+## v0.1.618 (2 May, 2026)
 
 ### Embedded Browser Link Handling and Annotation Controls
 
@@ -103,7 +103,7 @@ This first entry summarizes the major work completed between `2026-04-27` and `2
 - Added focused tests for composer annotation attachment styling and removal, sent-message annotation rendering, annotation prompt formatting, persisted composer annotation state, and browser-annotation parsing behavior.
 - Revalidated the repo with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
 
-## 2026-04-27 to 2026-05-01
+## v0.1.615 to v0.1.617 (27 April, 2026 to 1 May, 2026)
 
 ### Browser Workspace and Navigation
 

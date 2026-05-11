@@ -1,0 +1,35 @@
+.download-card {
+  --download-card-min-height: 5.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-height: var(--download-card-min-height);
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgb(255 255 255 / 0.02);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.download-card:hover {
+  background: rgb(255 255 255 / 0.06);
+  border-color: rgb(255 255 255 / 0.15);
+  transform: translateY(-1px);
+}
+
+.download-card:active {
+  transform: translateY(0);
+}
+
+.card-arch {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.card-format {
+  font-size: 0.95rem;
+  color: var(--fg-dim);
+}

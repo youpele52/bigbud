@@ -10,7 +10,9 @@ import {
     INSTALL_COMMANDS,
     RELEASE_ASSET_SUFFIXES,
 } from "../../../constants/downloads";
-import DownloadPlatformSection from "./DownloadPlatformSection.astro";
+import CopyCommandButton from "../../shared/CopyCommandButton.astro";
+import DownloadPlatformSection from "../../shared/DownloadPlatformSection.astro";
+import MacUnsignedInstallNote from "../../shared/MacUnsignedInstallNote.astro";
 import "./DownloadExperience.css";
 
 const installCommandBlocks = [
@@ -66,6 +68,8 @@ const platformSections = [
         ],
     },
 ] as const;
+
+const [macosSection, windowsSection, linuxSection] = platformSections;
 ---
 
 <section class="download-experience">
@@ -74,40 +78,31 @@ const platformSections = [
         <p class="subheading">
             <span id="version-label">Loading latest release&hellip;</span>
             <a id="changelog-link" class="changelog-link" href={CHANGELOG_PATH}>
-                View changelog
+                view changelog
             </a>
         </p>
 
         <section class="install-commands" aria-label="Command line installers">
             {
                 installCommandBlocks.map((block) => (
-                    <button
-                        type="button"
+                    <CopyCommandButton
                         class="install-command-block"
-                        data-copy-text={block.command}
-                        aria-label={block.ariaLabel}
-                    >
-                        <span class="install-command-meta">
-                            <span class="install-command-title">
-                                {block.title}
-                            </span>
-                            <span
-                                class="install-command-status"
-                                aria-live="polite"
-                            />
-                        </span>
-                        <code class="install-command">{block.command}</code>
-                    </button>
+                        command={block.command}
+                        label={block.title}
+                        ariaLabel={block.ariaLabel}
+                    />
                 ))
             }
         </section>
 
         <div class="platforms" id="platforms">
-            {
-                platformSections.map((section) => (
-                    <DownloadPlatformSection {...section} />
-                ))
-            }
+            <DownloadPlatformSection {...macosSection}>
+                <div slot="afterCards" class="download-mac-note download-mac-note--after-cards">
+                    <MacUnsignedInstallNote />
+                </div>
+            </DownloadPlatformSection>
+            <DownloadPlatformSection {...windowsSection} />
+            <DownloadPlatformSection {...linuxSection} />
         </div>
 
         <p class="releases-link">

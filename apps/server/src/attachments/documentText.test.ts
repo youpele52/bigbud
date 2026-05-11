@@ -86,11 +86,11 @@ function makeSimplePdf(text: string): Buffer {
   const xrefOffset = Buffer.byteLength(pdf, "latin1");
   pdf += `xref
 0 ${objects.length + 1}
-0000000000 65535 f 
+0000000000 65535 f
 `;
 
   for (const offset of offsets.slice(1)) {
-    pdf += `${offset.toString().padStart(10, "0")} 00000 n 
+    pdf += `${offset.toString().padStart(10, "0")} 00000 n
 `;
   }
 
