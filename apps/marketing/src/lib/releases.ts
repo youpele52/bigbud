@@ -4,7 +4,6 @@ export const RELEASES_URL = GITHUB_RELEASES_URL;
 
 const LATEST_RELEASE_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases/latest`;
 const RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases`;
-const CACHE_KEY = "bigbud-latest-release";
 
 export interface ReleaseAsset {
   name: string;
@@ -40,32 +39,6 @@ async function fetchReleaseCandidate(url: string): Promise<unknown | null> {
   return response.json();
 }
 
-function readCachedRelease(): Release | null {
-  if (typeof sessionStorage === "undefined") {
-    return null;
-  }
-
-  const cached = sessionStorage.getItem(CACHE_KEY);
-  if (!cached) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(cached) as unknown;
-    return isRelease(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedRelease(release: Release): void {
-  if (typeof sessionStorage === "undefined") {
-    return;
-  }
-
-  sessionStorage.setItem(CACHE_KEY, JSON.stringify(release));
-}
-
 function pickFallbackRelease(value: unknown): Release | null {
   if (!Array.isArray(value)) {
     return null;
@@ -80,12 +53,8 @@ function pickFallbackRelease(value: unknown): Release | null {
 }
 
 export async function fetchLatestRelease(): Promise<Release> {
-  const cached = readCachedRelease();
-  if (cached) return cached;
-
   const latestRelease = await fetchReleaseCandidate(LATEST_RELEASE_API_URL);
   if (isRelease(latestRelease) && latestRelease.assets.length > 0) {
-    writeCachedRelease(latestRelease);
     return latestRelease;
   }
 
@@ -95,6 +64,5 @@ export async function fetchLatestRelease(): Promise<Release> {
     throw new Error("No GitHub releases are available.");
   }
 
-  writeCachedRelease(fallbackRelease);
   return fallbackRelease;
 }

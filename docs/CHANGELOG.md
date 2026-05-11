@@ -4,7 +4,18 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
-## v0.1.620 (11 May, 2026)
+## v0.1.622 (11 May, 2026)
+
+### Marketing
+
+- Removed the marketing download page's client-side release cache so it always fetches the latest published GitHub release metadata on load.
+- Fixed a stale-version issue where the download UI could keep showing and linking an older release like `v0.1.620` after a newer release such as `v0.1.621` had already been published.
+
+### Validation
+
+- Validated this release metadata fix with `bun fmt`, `bun lint`, and `bun typecheck`.
+
+## v0.1.621 (11 May, 2026)
 
 ### Reliability
 
@@ -12,14 +23,16 @@ Entries below are grouped by release tag and date.
 - Switched OpenCode turn execution to a background `prompt` flow and mapped the final response back into canonical runtime events so completions, token usage, and upstream provider failures are surfaced predictably again.
 - Made the PDF extraction test self-contained by generating a valid PDF fixture instead of depending on a user-specific local file path.
 
+### Validation
+
+- Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus focused provider verification for the OpenCode fix.
+
+## v0.1.620 (11 May, 2026)
+
 ### UI and Marketing
 
 - Refined the marketing site structure and presentation, including the new changelog page, updated homepage/download layouts, and shared layout cleanup.
 - Added a few app-facing polish changes, including route-aware page titles and minor branding cleanup.
-
-### Validation
-
-- Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus focused provider verification for the OpenCode fix.
 
 ## v0.1.619 (5 May, 2026)
 
