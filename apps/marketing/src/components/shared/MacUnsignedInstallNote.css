@@ -1,0 +1,61 @@
+.mac-unsigned-note {
+  display: block;
+  width: 100%;
+  color: var(--fg-dim);
+  font-size: 0.95rem;
+  line-height: 1.42;
+}
+
+.mac-unsigned-note__header {
+  margin-bottom: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mac-unsigned-note__eyebrow {
+  color: var(--fg);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.mac-unsigned-note code {
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    SF Mono,
+    Menlo,
+    Consolas,
+    Liberation Mono,
+    monospace;
+  font-size: 0.9em;
+}
+
+.mac-unsigned-note__commands {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.mac-unsigned-note__copy-command {
+  --copy-command-padding: 0.85rem 1rem;
+  --copy-command-radius: 10px;
+  min-height: var(--download-card-min-height, 5.15rem);
+  background: color-mix(in srgb, var(--color-black) 26%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.mac-unsigned-note__copy-command:hover {
+  background: color-mix(in srgb, var(--color-black) 18%, var(--background));
+  border-color: color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
+@media (max-width: 640px) {
+  .mac-unsigned-note__commands {
+    grid-template-columns: 1fr;
+  }
+}
