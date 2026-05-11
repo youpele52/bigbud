@@ -1,0 +1,34 @@
+---
+import PlatformIcon from "../../shared/PlatformIcon.astro";
+
+interface DownloadCard {
+  label: string;
+  format: string;
+  assetSuffix: string;
+}
+
+interface Props {
+  title: string;
+  platform: "apple" | "windows" | "linux";
+  cards: ReadonlyArray<DownloadCard>;
+}
+
+const { title, platform, cards } = Astro.props;
+---
+
+<section class="platform-section">
+  <div class="platform-header">
+    <PlatformIcon platform={platform} class="platform-icon" />
+    <h2 class="platform-name">{title}</h2>
+  </div>
+  <div class="download-cards">
+    {
+      cards.map((card) => (
+        <a class="download-card" data-asset={card.assetSuffix} href="#">
+          <span class="card-arch">{card.label}</span>
+          <span class="card-format">{card.format}</span>
+        </a>
+      ))
+    }
+  </div>
+</section>
