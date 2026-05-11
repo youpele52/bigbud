@@ -6,38 +6,20 @@ Entries below are grouped by release tag and date.
 
 ## v0.1.620 (11 May, 2026)
 
-### Marketing Site Refinement
-
-- Reworked the Astro marketing site into clearer shared and page-specific components so the home page, download page, and future marketing surfaces are easier to evolve.
-- Refined marketing branding, metadata, shared constants, and platform-aware download/install flows so the site reads more like a cohesive product surface instead of a few standalone pages.
-- Split the root marketing layout into dedicated meta, header, footer, and base-style files, keeping `Layout.astro` focused on assembly.
-- Added a shared `--marketing-max-width: 1360px` shell and aligned the header, footer, home page, download page, and changelog page to that same content width.
-- Enforced lowercase marketing `h1` headings and normalized visible page-name labels like `download` and `changelog` to match the site’s typography direction.
-
-### Changelog Page
-
-- Added a new `/changelog` marketing page backed directly by `docs/CHANGELOG.md`.
-- Built a reusable markdown renderer with semantic article/section structure, a responsive table of contents, markdown image support, and styling tuned to match the homepage.
-- Refined the changelog layout with a wider readable content column, responsive TOC behavior, full-height divider alignment, and consistent internal navigation from the marketing header and download page.
-
-### Homepage and Download Presentation
-
-- Updated the homepage copy and feature presentation, including replacing the browser research glyph with a globe-style icon that matches the other feature icons.
-- Reworked the download page into the same split-layout visual language as the homepage, with the install and release information on the left and a framed product screenshot on the right.
-- Added the `pele.svg` mark to the marketing footer alongside the current year and app name.
-
-### Branding and App Identity
-
-- Renamed checkpoint refs from `refs/t3/checkpoints` to `refs/bigbud/checkpoints` while keeping legacy fallback support so existing checkpoint history still resolves.
-- Added route-aware page titles in the main web app so browser tabs reflect the current thread or settings surface more accurately.
-
 ### Reliability
 
+- Fixed a broken OpenCode turn path where the app could emit `turn.started` and then appear to hang because the current OpenCode `promptAsync` flow returned without producing follow-up session events.
+- Switched OpenCode turn execution to a background `prompt` flow and mapped the final response back into canonical runtime events so completions, token usage, and upstream provider failures are surfaced predictably again.
 - Made the PDF extraction test self-contained by generating a valid PDF fixture instead of depending on a user-specific local file path.
+
+### UI and Marketing
+
+- Refined the marketing site structure and presentation, including the new changelog page, updated homepage/download layouts, and shared layout cleanup.
+- Added a few app-facing polish changes, including route-aware page titles and minor branding cleanup.
 
 ### Validation
 
-- Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus repeated focused verification for the marketing app while the changelog and download surfaces were being refined.
+- Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus focused provider verification for the OpenCode fix.
 
 ## v0.1.619 (5 May, 2026)
 
