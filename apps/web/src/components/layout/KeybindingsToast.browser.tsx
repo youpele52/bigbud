@@ -101,6 +101,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         scripts: [],
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
+        deletingAt: null,
         deletedAt: null,
       },
     ],

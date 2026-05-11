@@ -4,6 +4,21 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.623 (11 May, 2026)
+
+### Sidebar Threads
+
+- Fixed the project sidebar's `See more (N)` thread count so it now reflects the full hidden thread set instead of a stale locally previewed subset.
+- Removed duplicate per-project preview/counting logic and aligned project thread expansion with the shared sidebar rendering state, which keeps the count correct after deleting hidden project threads.
+- Confirmed recent chats were already counting hidden threads from the full rendered recents list, so no matching recents fix was needed.
+
+### Deletion Reliability
+
+- Routed `project.delete` through the same staged server-side deletion workflow as thread deletion, so live child threads are stopped and deleted before the project is finalized.
+- Moved thread and project cleanup guarantees behind the server lifecycle, including provider shutdown, terminal teardown, and browser cleanup before final deletion events are emitted.
+- Delayed orphaned worktree removal until the client observes the final `thread.deleted` result instead of deleting files optimistically after the initial request.
+- Corrected thread deletion lifecycle timestamps so `thread.delete.finalize` and `thread.delete.abort` now record the actual cleanup completion time rather than the original request time.
+
 ## v0.1.622 (11 May, 2026)
 
 ### Marketing

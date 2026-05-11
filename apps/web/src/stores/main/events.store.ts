@@ -48,6 +48,7 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         scripts: event.payload.scripts,
         createdAt: event.payload.createdAt,
         updatedAt: event.payload.updatedAt,
+        deletingAt: null,
         deletedAt: null,
       });
       const projects =
@@ -99,6 +100,7 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         createdAt: event.payload.createdAt,
         updatedAt: event.payload.updatedAt,
         archivedAt: null,
+        deletingAt: null,
         deletedAt: null,
         messages: [],
         proposedPlans: [],
@@ -155,6 +157,22 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         sidebarThreadsById,
         threadIdsByProjectId,
       };
+    }
+
+    case "thread.deletion-requested": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        deletingAt: event.payload.deletingAt,
+        updatedAt: event.payload.deletingAt,
+      }));
+    }
+
+    case "thread.deletion-failed": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        deletingAt: null,
+        updatedAt: event.payload.updatedAt,
+      }));
     }
 
     case "thread.archived": {
