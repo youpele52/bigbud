@@ -1,0 +1,18 @@
+---
+import "./DownloadAssetCard.css";
+
+interface Props {
+  label: string;
+  format: string;
+  assetSuffix: string;
+  href?: string;
+  class?: string;
+}
+
+const { label, format, assetSuffix, href = "#", class: className } = Astro.props;
+---
+
+<a class:list={["download-card", className]} data-asset={assetSuffix} href={href}>
+  <span class="card-arch">{label}</span>
+  <span class="card-format">{format}</span>
+</a>

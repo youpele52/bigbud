@@ -8,6 +8,9 @@ export const INSTALL_COMMANDS = {
   windows: `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${INSTALLER_BASE_URL}/install.ps1 | iex"`,
 } as const;
 
+export const MACOS_QUARANTINE_COMMAND =
+  `xattr -dr com.apple.quarantine "/Applications/bigbud (Alpha).app"` as const;
+
 export const DOWNLOAD_BUTTON_LABELS = {
   mac: "Download for macOS",
   win: "Download for Windows",

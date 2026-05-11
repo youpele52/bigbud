@@ -31,8 +31,16 @@ An AI companion workspace for getting things done — whether you're coding, wri
 
 #### macOS / Linux
 
+Recommended macOS install path for unsigned builds:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh
+```
+
+If you downloaded the macOS DMG in your browser and macOS says the app is damaged, copy bigbud to `/Applications`, then run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/bigbud (Alpha).app"
 ```
 
 #### Windows
