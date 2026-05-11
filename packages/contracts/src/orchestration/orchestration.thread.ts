@@ -162,6 +162,7 @@ export const OrchestrationThread = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
+  deletingAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   parentThread: Schema.optional(ParentThreadReference),
   messages: Schema.Array(OrchestrationMessage),

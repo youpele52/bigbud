@@ -36,6 +36,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
   };
 }
@@ -62,6 +63,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at,
           updated_at,
           archived_at,
+          deleting_at,
           deleted_at
         )
         VALUES (
@@ -79,6 +81,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.createdAt},
           ${row.updatedAt},
           ${row.archivedAt},
+          ${row.deletingAt},
           ${row.deletedAt}
         )
         ON CONFLICT (thread_id)
@@ -96,6 +99,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           archived_at = excluded.archived_at,
+          deleting_at = excluded.deleting_at,
           deleted_at = excluded.deleted_at
       `,
   });
@@ -122,6 +126,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE thread_id = ${threadId}
@@ -150,6 +155,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE project_id = ${projectId}

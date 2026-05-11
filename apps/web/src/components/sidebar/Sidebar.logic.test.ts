@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createThreadJumpHintVisibilityController,
+  getHiddenSidebarThreadCount,
   getVisibleSidebarThreadIds,
   getVisibleRecentThreadIds,
   resolveAdjacentThreadId,
@@ -691,6 +692,48 @@ describe("getVisibleThreadsForProject", () => {
       threads.map((thread) => thread.id),
     );
     expect(result.hiddenThreads).toEqual([]);
+  });
+});
+
+describe("getHiddenSidebarThreadCount", () => {
+  it("returns the full hidden project-thread count from total vs rendered threads", () => {
+    expect(
+      getHiddenSidebarThreadCount({
+        totalThreadCount: 12,
+        renderedThreadCount: 5,
+      }),
+    ).toBe(7);
+  });
+
+  it("matches project previews that include the active thread outside the folded limit", () => {
+    const threads = Array.from({ length: 8 }, (_, index) =>
+      makeThread({
+        id: ThreadId.makeUnsafe(`thread-${index + 1}`),
+      }),
+    );
+
+    const result = getVisibleThreadsForProject({
+      threads,
+      activeThreadId: ThreadId.makeUnsafe("thread-8"),
+      isThreadListExpanded: false,
+      previewLimit: 6,
+    });
+
+    expect(
+      getHiddenSidebarThreadCount({
+        totalThreadCount: threads.length,
+        renderedThreadCount: result.visibleThreads.length,
+      }),
+    ).toBe(result.hiddenThreads.length);
+  });
+
+  it("never returns a negative count", () => {
+    expect(
+      getHiddenSidebarThreadCount({
+        totalThreadCount: 4,
+        renderedThreadCount: 6,
+      }),
+    ).toBe(0);
   });
 });
 

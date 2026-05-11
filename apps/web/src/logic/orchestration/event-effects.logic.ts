@@ -1,8 +1,9 @@
-import type { OrchestrationEvent, ThreadId } from "@bigbud/contracts";
+import type { OrchestrationEvent, ProjectId, ThreadId } from "@bigbud/contracts";
 
 export interface OrchestrationBatchEffects {
   clearPromotedDraftThreadIds: ThreadId[];
   clearDeletedThreadIds: ThreadId[];
+  clearDeletedProjectIds: ProjectId[];
   removeSelectedThreadIds: ThreadId[];
   removeTerminalStateThreadIds: ThreadId[];
   needsProviderInvalidation: boolean;
@@ -73,8 +74,14 @@ export function deriveOrchestrationBatchEffects(
 
   const clearPromotedDraftThreadIds: ThreadId[] = [];
   const clearDeletedThreadIds: ThreadId[] = [];
+  const clearDeletedProjectIds: ProjectId[] = [];
   const removeSelectedThreadIds: ThreadId[] = [];
   const removeTerminalStateThreadIds: ThreadId[] = [];
+  for (const event of events) {
+    if (event.type === "project.deleted") {
+      clearDeletedProjectIds.push(event.payload.projectId);
+    }
+  }
   for (const [threadId, effect] of threadLifecycleEffects) {
     if (effect.clearPromotedDraft) {
       clearPromotedDraftThreadIds.push(threadId);
@@ -91,6 +98,7 @@ export function deriveOrchestrationBatchEffects(
   return {
     clearPromotedDraftThreadIds,
     clearDeletedThreadIds,
+    clearDeletedProjectIds,
     removeSelectedThreadIds,
     removeTerminalStateThreadIds,
     needsProviderInvalidation,

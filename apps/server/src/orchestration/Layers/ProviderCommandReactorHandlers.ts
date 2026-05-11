@@ -34,6 +34,8 @@ import {
   serverCommandId,
   stalePendingRequestDetail,
 } from "./ProviderCommandReactorHelpers.ts";
+import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
+import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
   ensureSessionForThread,
@@ -77,7 +79,9 @@ type ProviderIntentEvent = Extract<
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
-      | "thread.session-stop-requested";
+      | "thread.session-stop-requested"
+      | "thread.deletion-requested"
+      | "project.deletion-requested";
   }
 >;
 
@@ -165,6 +169,20 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     return readModel.threads.find((entry) => entry.id === threadId);
   });
 
+  const resolveProject = Effect.fn("resolveProject")(function* (
+    projectId: import("@bigbud/contracts").ProjectId,
+  ) {
+    const readModel = yield* orchestrationEngine.getReadModel();
+    return readModel.projects.find((entry) => entry.id === projectId);
+  });
+
+  const resolveThreadsByProject = Effect.fn("resolveThreadsByProject")(function* (
+    projectId: import("@bigbud/contracts").ProjectId,
+  ) {
+    const readModel = yield* orchestrationEngine.getReadModel();
+    return readModel.threads.filter((entry) => entry.projectId === projectId);
+  });
+
   const sessionOpServices: SessionOpServices = {
     orchestrationEngine,
     providerService,
@@ -176,6 +194,8 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     setThreadSession,
     resolveThread,
   };
+  const processDeletionRequested = yield* makeProcessDeletionRequested;
+  const processProjectDeletionRequested = yield* makeProcessProjectDeletionRequested;
 
   const expandTurnMessageText = expandProviderInputMentions({
     discoveryRegistry,
@@ -435,7 +455,9 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError, Scope.Scope> {
     yield* Effect.annotateCurrentSpan({
       "orchestration.event_type": event.type,
-      "orchestration.thread_id": event.payload.threadId,
+      ...("threadId" in event.payload
+        ? { "orchestration.thread_id": event.payload.threadId }
+        : { "orchestration.project_id": event.payload.projectId }),
       ...(event.commandId ? { "orchestration.command_id": event.commandId } : {}),
     });
     yield* increment(orchestrationEventsProcessedTotal, {
@@ -469,6 +491,24 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         return;
       case "thread.session-stop-requested":
         yield* processSessionStopRequested(event);
+        return;
+      case "thread.deletion-requested":
+        yield* processDeletionRequested(
+          {
+            resolveThread,
+            setThreadSession,
+          },
+          event,
+        );
+        return;
+      case "project.deletion-requested":
+        yield* processProjectDeletionRequested(
+          {
+            resolveProject,
+            resolveThreadsByProject,
+          },
+          event,
+        );
         return;
     }
   });

@@ -5,12 +5,36 @@ import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationThread,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+
+function requireThreadReadyForMutation(input: {
+  readonly thread: OrchestrationThread;
+  readonly command: OrchestrationCommand;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (input.thread.deletedAt !== null) {
+    return Effect.fail(
+      new OrchestrationCommandInvariantError({
+        commandType: input.command.type,
+        detail: `Thread '${input.thread.id}' has already been deleted and cannot handle command '${input.command.type}'.`,
+      }),
+    );
+  }
+  if (input.thread.deletingAt !== null && input.thread.deletingAt !== undefined) {
+    return Effect.fail(
+      new OrchestrationCommandInvariantError({
+        commandType: input.command.type,
+        detail: `Thread '${input.thread.id}' is being deleted and cannot handle command '${input.command.type}'.`,
+      }),
+    );
+  }
+  return Effect.void;
+}
 
 export type ThreadTurnCommand = Exclude<
   OrchestrationCommand,
@@ -19,8 +43,12 @@ export type ThreadTurnCommand = Exclude<
       | "project.create"
       | "project.meta.update"
       | "project.delete"
+      | "project.delete.finalize"
+      | "project.delete.abort"
       | "thread.create"
       | "thread.delete"
+      | "thread.delete.finalize"
+      | "thread.delete.abort"
       | "thread.archive"
       | "thread.unarchive"
       | "thread.meta.update"
@@ -46,6 +74,7 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread: targetThread, command });
       const sourceProposedPlan = command.sourceProposedPlan;
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({
@@ -119,11 +148,17 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.turn.interrupt": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      if (thread.deletedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
+        });
+      }
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -141,11 +176,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.approval.respond": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -167,11 +203,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.user-input.respond": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -193,11 +230,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.checkpoint.revert": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -215,11 +253,17 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.session.stop": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      if (thread.deletedAt !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
+        });
+      }
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -258,11 +302,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.message.assistant.delta": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -285,11 +330,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.message.assistant.complete": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -312,11 +358,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.proposed-plan.upsert": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",

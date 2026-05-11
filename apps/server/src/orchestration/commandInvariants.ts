@@ -55,6 +55,44 @@ export function requireProject(input: {
   );
 }
 
+export function requireProjectDeleting(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+}): Effect.Effect<OrchestrationProject, OrchestrationCommandInvariantError> {
+  return requireProject(input).pipe(
+    Effect.flatMap((project) =>
+      project.deletingAt !== null && project.deletingAt !== undefined
+        ? Effect.succeed(project)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Project '${input.projectId}' is not pending deletion for command '${input.command.type}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
+export function requireProjectNotDeleting(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+}): Effect.Effect<OrchestrationProject, OrchestrationCommandInvariantError> {
+  return requireProject(input).pipe(
+    Effect.flatMap((project) =>
+      project.deletingAt === null || project.deletingAt === undefined
+        ? Effect.succeed(project)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Project '${input.projectId}' is already being deleted and cannot handle command '${input.command.type}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
 export function requireProjectAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
@@ -120,6 +158,44 @@ export function requireThreadNotArchived(input: {
             invariantError(
               input.command.type,
               `Thread '${input.threadId}' is already archived and cannot handle command '${input.command.type}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
+export function requireThreadDeleting(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly threadId: ThreadId;
+}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
+  return requireThread(input).pipe(
+    Effect.flatMap((thread) =>
+      thread.deletingAt !== null && thread.deletingAt !== undefined
+        ? Effect.succeed(thread)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Thread '${input.threadId}' is not pending deletion for command '${input.command.type}'.`,
+            ),
+          ),
+    ),
+  );
+}
+
+export function requireThreadNotDeleting(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly threadId: ThreadId;
+}): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
+  return requireThread(input).pipe(
+    Effect.flatMap((thread) =>
+      thread.deletingAt === null || thread.deletingAt === undefined
+        ? Effect.succeed(thread)
+        : Effect.fail(
+            invariantError(
+              input.command.type,
+              `Thread '${input.threadId}' is already being deleted and cannot handle command '${input.command.type}'.`,
             ),
           ),
     ),
