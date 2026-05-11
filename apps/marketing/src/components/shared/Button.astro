@@ -1,0 +1,25 @@
+---
+import "./Button.css";
+
+interface Props {
+  href: string;
+  id?: string;
+  ariaLabel?: string;
+  class?: string;
+  target?: string;
+  rel?: string;
+}
+
+const { href, id, ariaLabel, class: className, target, rel } = Astro.props;
+---
+
+<a
+  id={id}
+  href={href}
+  aria-label={ariaLabel}
+  target={target}
+  rel={rel}
+  class:list={["button", className]}
+>
+  <slot />
+</a>

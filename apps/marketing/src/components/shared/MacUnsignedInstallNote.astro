@@ -1,0 +1,34 @@
+---
+import {
+  INSTALL_COMMANDS,
+  MACOS_QUARANTINE_COMMAND,
+} from "../../constants/downloads";
+import CopyCommandButton from "./CopyCommandButton.astro";
+import "./MacUnsignedInstallNote.css";
+---
+
+<aside class="mac-unsigned-note">
+  <div class="mac-unsigned-note__header">
+    <p class="mac-unsigned-note__eyebrow">Recommendation</p>
+    <p>Use curl for the smoothest macOS install path.</p>
+    <p>
+      If you must use the download, run <code>{MACOS_QUARANTINE_COMMAND}</code> afterwards.
+    </p>
+  </div>
+  <div class="mac-unsigned-note__commands">
+    <CopyCommandButton
+      class="mac-unsigned-note__copy-command"
+      command={INSTALL_COMMANDS.unix}
+      label="Install via Terminal"
+      description="Recommended for unsigned macOS builds."
+      ariaLabel="Copy macOS install command"
+    />
+    <CopyCommandButton
+      class="mac-unsigned-note__copy-command"
+      command={MACOS_QUARANTINE_COMMAND}
+      label="Quarantine fix"
+      description="Run after moving bigbud to /Applications."
+      ariaLabel="Copy macOS quarantine removal command"
+    />
+  </div>
+</aside>

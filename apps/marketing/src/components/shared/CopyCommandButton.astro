@@ -1,0 +1,35 @@
+---
+import "./CopyCommandButton.css";
+
+interface Props {
+  command: string;
+  label: string;
+  ariaLabel: string;
+  description?: string;
+  showCommand?: boolean;
+  class?: string;
+}
+
+const {
+  command,
+  label,
+  ariaLabel,
+  description,
+  showCommand = true,
+  class: className,
+} = Astro.props;
+---
+
+<button
+  type="button"
+  class:list={["copy-command-button", className]}
+  data-copy-text={command}
+  aria-label={ariaLabel}
+>
+  <span class="copy-command-button__meta">
+    <span class="copy-command-button__label">{label}</span>
+    <span class="copy-command-button__status" data-copy-status aria-live="polite" />
+  </span>
+  {description && <span class="copy-command-button__description">{description}</span>}
+  {showCommand && <code class="copy-command-button__code">{command}</code>}
+</button>
