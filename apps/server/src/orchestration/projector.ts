@@ -20,12 +20,16 @@ import {
   decodeForEvent,
   projectProjectCreated,
   projectProjectDeleted,
+  projectProjectDeletionFailed,
+  projectProjectDeletionRequested,
   projectProjectMetaUpdated,
   updateThread,
 } from "./projectorHelpers.ts";
 import {
   projectThreadArchived,
   projectThreadCreated,
+  projectThreadDeletionFailed,
+  projectThreadDeletionRequested,
   projectThreadDeleted,
   projectThreadInteractionModeSet,
   projectThreadMetaUpdated,
@@ -164,11 +168,23 @@ export function projectEvent(
     case "project.meta-updated":
       return projectProjectMetaUpdated(nextBase, event);
 
+    case "project.deletion-requested":
+      return projectProjectDeletionRequested(nextBase, event);
+
+    case "project.deletion-failed":
+      return projectProjectDeletionFailed(nextBase, event);
+
     case "project.deleted":
       return projectProjectDeleted(nextBase, event);
 
     case "thread.created":
       return projectThreadCreated(nextBase, event);
+
+    case "thread.deletion-requested":
+      return projectThreadDeletionRequested(nextBase, event);
+
+    case "thread.deletion-failed":
+      return projectThreadDeletionFailed(nextBase, event);
 
     case "thread.deleted":
       return projectThreadDeleted(nextBase, event);

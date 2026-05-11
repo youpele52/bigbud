@@ -35,6 +35,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json,
           created_at,
           updated_at,
+          deleting_at,
           deleted_at
         )
         VALUES (
@@ -45,6 +46,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           ${JSON.stringify(row.scripts)},
           ${row.createdAt},
           ${row.updatedAt},
+          ${row.deletingAt},
           ${row.deletedAt}
         )
         ON CONFLICT (project_id)
@@ -55,6 +57,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json = excluded.scripts_json,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
+          deleting_at = excluded.deleting_at,
           deleted_at = excluded.deleted_at
       `,
   });
@@ -72,6 +75,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_projects
         WHERE project_id = ${projectId}
@@ -91,6 +95,7 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_projects
         ORDER BY created_at ASC, project_id ASC

@@ -1,8 +1,12 @@
 import {
   ProjectCreatedPayload as ContractsProjectCreatedPayloadSchema,
+  ProjectDeletionFailedPayload as ContractsProjectDeletionFailedPayloadSchema,
+  ProjectDeletionRequestedPayload as ContractsProjectDeletionRequestedPayloadSchema,
   ProjectMetaUpdatedPayload as ContractsProjectMetaUpdatedPayloadSchema,
   ProjectDeletedPayload as ContractsProjectDeletedPayloadSchema,
   ThreadCreatedPayload as ContractsThreadCreatedPayloadSchema,
+  ThreadDeletionFailedPayload as ContractsThreadDeletionFailedPayloadSchema,
+  ThreadDeletionRequestedPayload as ContractsThreadDeletionRequestedPayloadSchema,
   ThreadArchivedPayload as ContractsThreadArchivedPayloadSchema,
   ThreadMetaUpdatedPayload as ContractsThreadMetaUpdatedPayloadSchema,
   ThreadRuntimeModeSetPayload as ContractsThreadRuntimeModeSetPayloadSchema,
@@ -25,9 +29,13 @@ import {
 // Server-internal alias surface, backed by contract schemas as the source of truth.
 export const ProjectCreatedPayload = ContractsProjectCreatedPayloadSchema;
 export const ProjectMetaUpdatedPayload = ContractsProjectMetaUpdatedPayloadSchema;
+export const ProjectDeletionRequestedPayload = ContractsProjectDeletionRequestedPayloadSchema;
+export const ProjectDeletionFailedPayload = ContractsProjectDeletionFailedPayloadSchema;
 export const ProjectDeletedPayload = ContractsProjectDeletedPayloadSchema;
 
 export const ThreadCreatedPayload = ContractsThreadCreatedPayloadSchema;
+export const ThreadDeletionRequestedPayload = ContractsThreadDeletionRequestedPayloadSchema;
+export const ThreadDeletionFailedPayload = ContractsThreadDeletionFailedPayloadSchema;
 export const ThreadArchivedPayload = ContractsThreadArchivedPayloadSchema;
 export const ThreadMetaUpdatedPayload = ContractsThreadMetaUpdatedPayloadSchema;
 export const ThreadRuntimeModeSetPayload = ContractsThreadRuntimeModeSetPayloadSchema;

@@ -39,8 +39,12 @@ import { CheckpointRef } from "../core/baseSchemas";
 export const OrchestrationEventType = Schema.Literals([
   "project.created",
   "project.meta-updated",
+  "project.deletion-requested",
+  "project.deletion-failed",
   "project.deleted",
   "thread.created",
+  "thread.deletion-requested",
+  "thread.deletion-failed",
   "thread.deleted",
   "thread.archived",
   "thread.unarchived",
@@ -88,6 +92,16 @@ export const ProjectDeletedPayload = Schema.Struct({
   deletedAt: IsoDateTime,
 });
 
+export const ProjectDeletionRequestedPayload = Schema.Struct({
+  projectId: ProjectId,
+  deletingAt: IsoDateTime,
+});
+
+export const ProjectDeletionFailedPayload = Schema.Struct({
+  projectId: ProjectId,
+  updatedAt: IsoDateTime,
+});
+
 export const ThreadCreatedPayload = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
@@ -107,6 +121,16 @@ export const ThreadCreatedPayload = Schema.Struct({
 export const ThreadDeletedPayload = Schema.Struct({
   threadId: ThreadId,
   deletedAt: IsoDateTime,
+});
+
+export const ThreadDeletionRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  deletingAt: IsoDateTime,
+});
+
+export const ThreadDeletionFailedPayload = Schema.Struct({
+  threadId: ThreadId,
+  updatedAt: IsoDateTime,
 });
 
 export const ThreadArchivedPayload = Schema.Struct({
@@ -265,6 +289,16 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("project.deletion-requested"),
+    payload: ProjectDeletionRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.deletion-failed"),
+    payload: ProjectDeletionFailedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("project.deleted"),
     payload: ProjectDeletedPayload,
   }),
@@ -272,6 +306,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.created"),
     payload: ThreadCreatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.deletion-requested"),
+    payload: ThreadDeletionRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.deletion-failed"),
+    payload: ThreadDeletionFailedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
