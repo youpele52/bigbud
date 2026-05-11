@@ -339,6 +339,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       scripts: row.scripts,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      deletingAt: row.deletingAt,
       deletedAt: row.deletedAt,
     }));
 
@@ -358,6 +359,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
             archivedAt: row.archivedAt,
+            deletingAt: row.deletingAt,
             deletedAt: row.deletedAt,
             messages: messagesByThread.get(row.threadId) ?? [],
             proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
@@ -427,6 +429,7 @@ export function makeGetActiveProjectByWorkspaceRoot(
             scripts: row.scripts,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
+            deletingAt: row.deletingAt,
             deletedAt: row.deletedAt,
           }),
         ),

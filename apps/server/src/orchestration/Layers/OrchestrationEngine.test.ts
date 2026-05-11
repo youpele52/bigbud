@@ -108,6 +108,7 @@ describe("OrchestrationEngine", () => {
           scripts: [],
           createdAt: "2026-03-03T00:00:00.000Z",
           updatedAt: "2026-03-03T00:00:01.000Z",
+          deletingAt: null,
           deletedAt: null,
         },
       ],
@@ -353,8 +354,14 @@ describe("OrchestrationEngine", () => {
     expect(events.map((event) => event.type)).toEqual([
       "project.created",
       "thread.created",
-      "thread.deleted",
+      "thread.deletion-requested",
     ]);
+    const readModel = await system.run(engine.getReadModel());
+    const thread = readModel.threads.find(
+      (entry) => entry.id === ThreadId.makeUnsafe("thread-replay"),
+    );
+    expect(thread?.deletingAt).not.toBeNull();
+    expect(thread?.deletedAt).toBeNull();
     await system.dispose();
   });
 
@@ -543,20 +550,24 @@ describe("OrchestrationEngine", () => {
       "project.created",
       "thread.created",
       "thread.created",
-      "thread.deleted",
-      "thread.deleted",
-      "project.deleted",
+      "thread.deletion-requested",
+      "thread.deletion-requested",
+      "project.deletion-requested",
     ]);
 
     const readModel = await system.run(engine.getReadModel());
     expect(
       readModel.projects.find((project) => project.id === asProjectId("project-cascade"))
-        ?.deletedAt,
+        ?.deletingAt,
     ).not.toBeNull();
+    expect(
+      readModel.projects.find((project) => project.id === asProjectId("project-cascade"))
+        ?.deletedAt,
+    ).toBeNull();
     expect(
       readModel.threads
         .filter((thread) => thread.projectId === asProjectId("project-cascade"))
-        .every((thread) => thread.deletedAt !== null),
+        .every((thread) => thread.deletingAt !== null && thread.deletedAt === null),
     ).toBe(true);
 
     await system.dispose();

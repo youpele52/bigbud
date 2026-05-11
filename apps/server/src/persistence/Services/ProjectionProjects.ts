@@ -20,6 +20,7 @@ export const ProjectionProject = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+  deletingAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
   deletedAt: Schema.NullOr(IsoDateTime),
 });
 export type ProjectionProject = typeof ProjectionProject.Type;

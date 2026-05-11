@@ -72,6 +72,8 @@ import {
 import { deriveServerPaths, ServerConfig } from "../src/startup/config.ts";
 import { WorkspaceEntriesLive } from "../src/workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../src/workspace/Layers/WorkspacePaths.ts";
+import { BrowserManager } from "../src/browser/Services/BrowserManager.ts";
+import { TerminalManager } from "../src/terminal/Services/Manager.ts";
 
 function runGit(cwd: string, args: ReadonlyArray<string>) {
   return execFileSync("git", args, {
@@ -354,6 +356,25 @@ export const makeOrchestrationIntegrationHarness = (
       ),
       Layer.provideMerge(WorkspacePathsLive),
     );
+    const browserLayer = Layer.succeed(BrowserManager, {
+      launch: () => Effect.void,
+      navigate: () => Effect.die(new Error("Unexpected browser navigate in integration harness")),
+      screenshot: () =>
+        Effect.die(new Error("Unexpected browser screenshot in integration harness")),
+      getPageInfo: () =>
+        Effect.die(new Error("Unexpected browser page info in integration harness")),
+      close: () => Effect.void,
+      closeAll: () => Effect.void,
+    });
+    const terminalLayer = Layer.succeed(TerminalManager, {
+      open: () => Effect.die(new Error("Unexpected terminal open in integration harness")),
+      write: () => Effect.die(new Error("Unexpected terminal write in integration harness")),
+      resize: () => Effect.die(new Error("Unexpected terminal resize in integration harness")),
+      clear: () => Effect.die(new Error("Unexpected terminal clear in integration harness")),
+      restart: () => Effect.die(new Error("Unexpected terminal restart in integration harness")),
+      close: () => Effect.void,
+      subscribe: () => Effect.succeed(() => undefined),
+    });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
@@ -362,6 +383,8 @@ export const makeOrchestrationIntegrationHarness = (
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),
       Layer.provideMerge(orchestrationReactorLayer),
+      Layer.provideMerge(browserLayer),
+      Layer.provideMerge(terminalLayer),
       Layer.provide(persistenceLayer),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),
