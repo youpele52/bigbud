@@ -1,16 +1,11 @@
-.main {
-  width: 100%;
-  padding: 0 2.25rem 0;
-}
-
 .hero {
-  width: min(var(--marketing-max-width), 100%);
+  width: min(100%, var(--marketing-max-width));
   min-height: calc(100dvh - 5.1rem);
   display: grid;
   grid-template-columns: minmax(22rem, 34rem) minmax(0, 1fr);
   align-items: center;
   gap: clamp(1.75rem, 3.8vw, 4.5rem);
-  padding: 0;
+  padding: 0 2.25rem;
 }
 
 .hero-copy {
@@ -86,45 +81,6 @@
   gap: 1rem;
   flex-wrap: wrap;
   margin-top: 1.6rem;
-}
-
-.hero-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.55rem;
-  min-height: 2.5rem;
-  padding: 0 1rem;
-  border: 1px solid var(--primary);
-  background: var(--primary);
-  color: var(--primary-foreground);
-  border-radius: var(--radius);
-  font-weight: 600;
-  font-size: 0.94rem;
-  transition:
-    background-color 0.25s ease,
-    transform 0.25s ease,
-    box-shadow 0.25s ease;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
-    0 1px 2px rgb(0 0 0 / 0.12),
-    0 8px 20px rgb(0 0 0 / 0.14);
-}
-
-.hero-button:hover {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--primary) 90%, transparent);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16),
-    0 1px 2px rgb(0 0 0 / 0.12),
-    0 10px 24px rgb(0 0 0 / 0.16);
-}
-
-.hero-button:active {
-  transform: translateY(0);
-  box-shadow:
-    inset 0 1px 0 rgb(0 0 0 / 0.08),
-    0 1px 2px rgb(0 0 0 / 0.1);
 }
 
 .hero-button-icon {
@@ -274,6 +230,8 @@
     grid-template-columns: 1fr;
     gap: 2rem;
     min-height: auto;
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
   }
 
   .hero-copy {
@@ -344,13 +302,9 @@
 }
 
 @media (max-width: 640px) {
-  .main {
-    padding: 1.75rem 1rem 0;
-  }
-
   .hero {
     gap: 2rem;
-    padding-top: 1rem;
+    padding: 2.75rem 1.25rem 0;
   }
 
   .hero-copy {

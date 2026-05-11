@@ -1,5 +1,7 @@
 ---
-import PlatformIcon from "../../shared/PlatformIcon.astro";
+import PlatformIcon from "./PlatformIcon.astro";
+import DownloadAssetCard from "./DownloadAssetCard.astro";
+import "./DownloadPlatformSection.css";
 
 interface DownloadCard {
   label: string;
@@ -21,14 +23,17 @@ const { title, platform, cards } = Astro.props;
     <PlatformIcon platform={platform} class="platform-icon" />
     <h2 class="platform-name">{title}</h2>
   </div>
+  <slot name="beforeCards" />
   <div class="download-cards">
     {
       cards.map((card) => (
-        <a class="download-card" data-asset={card.assetSuffix} href="#">
-          <span class="card-arch">{card.label}</span>
-          <span class="card-format">{card.format}</span>
-        </a>
+        <DownloadAssetCard
+          label={card.label}
+          format={card.format}
+          assetSuffix={card.assetSuffix}
+        />
       ))
     }
   </div>
+  <slot name="afterCards" />
 </section>

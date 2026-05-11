@@ -1,15 +1,11 @@
-.main {
-  width: 100%;
-  padding: 0 2.25rem 0;
-}
-
 .download-experience {
-  width: min(var(--marketing-max-width), 100%);
+  width: min(100%, var(--marketing-max-width));
   min-height: calc(100dvh - 5.1rem);
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
   align-items: center;
   gap: clamp(1.75rem, 3.8vw, 4.5rem);
+  padding: 0 2.25rem;
 }
 
 .download-copy {
@@ -31,7 +27,7 @@
 }
 
 .subheading {
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   color: var(--fg-dim);
   margin-bottom: 2.3rem;
   opacity: 0;
@@ -68,73 +64,15 @@
   animation: fade-in 0.9s ease-out 0.15s forwards;
 }
 
-.install-command-block {
-  appearance: none;
+.download-mac-note {
   width: 100%;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--foreground) 2%, var(--background));
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    transform 0.2s ease;
+  margin: 0 0 1rem;
+  opacity: 0;
+  animation: fade-in 0.9s ease-out 0.18s forwards;
 }
 
-.install-command-block:hover {
-  background: color-mix(in srgb, var(--foreground) 3.5%, var(--background));
-  border-color: color-mix(in srgb, var(--foreground) 14%, transparent);
-  transform: translateY(-1px);
-}
-
-.install-command-block:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 40%, transparent);
-  outline-offset: 2px;
-}
-
-.install-command-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.install-command-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.install-command-status {
-  flex-shrink: 0;
-  color: var(--fg-dim);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.install-command-status:empty {
-  display: none;
-}
-
-.install-command {
-  display: block;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  color: var(--fg-dim);
-  overflow-wrap: anywhere;
-  white-space: normal;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    SF Mono,
-    Menlo,
-    Consolas,
-    Liberation Mono,
-    monospace;
+.download-mac-note--after-cards {
+  margin: 1rem 0 0;
 }
 
 .platforms {
@@ -146,79 +84,9 @@
   animation: fade-in 0.9s ease-out 0.22s forwards;
 }
 
-.platform-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.platform-section + .platform-section {
-  padding-top: 1.75rem;
-}
-
-.platform-header {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding-bottom: 0.5rem;
-}
-
-.platform-icon {
-  width: 1.15em;
-  height: 1.15em;
-  color: var(--fg-muted);
-  flex-shrink: 0;
-}
-
-.platform-name {
-  font-weight: 500;
-  font-size: 1.1rem;
-  letter-spacing: -0.01em;
-}
-
-.download-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-}
-
-.download-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.85rem 1rem;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
-}
-
-.download-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
-  transform: translateY(-1px);
-}
-
-.download-card:active {
-  transform: translateY(0);
-}
-
-.card-arch {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-
-.card-format {
-  font-size: 0.8rem;
-  color: var(--fg-dim);
-}
-
 .releases-link {
   margin-top: 3rem;
-  font-size: 0.825rem;
+  font-size: 0.95rem;
   color: var(--fg-dim);
   opacity: 0;
   animation: fade-in 0.9s ease-out 0.3s forwards;
@@ -306,6 +174,8 @@
     grid-template-columns: 1fr;
     gap: 2rem;
     min-height: auto;
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
   }
 
   .download-copy {
@@ -329,10 +199,6 @@
 }
 
 @media (max-width: 640px) {
-  .main {
-    padding: 0 1.25rem;
-  }
-
   .download-copy {
     padding-top: 2.25rem;
   }
