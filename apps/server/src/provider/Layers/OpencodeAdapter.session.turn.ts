@@ -24,9 +24,264 @@ import {
   resolveProviderIDForModel,
 } from "./OpencodeAdapter.session.helpers.ts";
 import { openCodeQuestionId } from "./OpencodeAdapter.stream.mapEvent.ts";
-import { PROVIDER } from "./OpencodeAdapter.types.ts";
+import { PROVIDER, type ActiveOpencodeSession } from "./OpencodeAdapter.types.ts";
 
 import type { TurnMethodDeps } from "./OpencodeAdapter.session.ts";
+
+type PromptResultInfo = {
+  readonly id: string;
+  readonly role: string;
+  readonly modelID?: string;
+  readonly providerID?: string;
+  readonly finish?: string;
+  readonly error?: {
+    readonly name?: string;
+    readonly data?: {
+      readonly message?: string;
+      readonly responseBody?: string;
+      readonly statusCode?: number;
+    };
+  };
+  readonly tokens?: {
+    readonly input: number;
+    readonly output: number;
+    readonly reasoning: number;
+    readonly cache: {
+      readonly read: number;
+      readonly write: number;
+    };
+  };
+};
+
+type PromptResultPart = {
+  readonly id: string;
+  readonly type: string;
+  readonly text?: string;
+  readonly tool?: string;
+  readonly state?: {
+    readonly status?: string;
+    readonly output?: string;
+    readonly error?: string;
+    readonly title?: string;
+    readonly input?: unknown;
+  };
+  readonly metadata?: Record<string, unknown>;
+};
+
+function toPromptTurnEvents(input: {
+  readonly record: ActiveOpencodeSession;
+  readonly threadId: import("@bigbud/contracts").ThreadId;
+  readonly turnId: TurnId;
+  readonly promptInfo: PromptResultInfo;
+  readonly promptParts: ReadonlyArray<PromptResultPart>;
+  readonly syntheticEventFn: TurnMethodDeps["syntheticEventFn"];
+}) {
+  const { record, threadId, turnId, promptInfo, promptParts, syntheticEventFn } = input;
+
+  return Effect.gen(function* () {
+    const events = [];
+
+    if (promptInfo.modelID) {
+      record.model = promptInfo.modelID;
+    }
+    if (promptInfo.providerID) {
+      record.providerID = promptInfo.providerID;
+    }
+
+    if (promptInfo.tokens) {
+      const inputTokens = promptInfo.tokens.input ?? 0;
+      const outputTokens = promptInfo.tokens.output ?? 0;
+      const cachedInputTokens = promptInfo.tokens.cache?.read ?? 0;
+      const usedTokens = inputTokens + outputTokens + cachedInputTokens;
+
+      if (usedTokens > 0) {
+        const usage = {
+          usedTokens,
+          totalProcessedTokens: usedTokens,
+          ...(inputTokens > 0 ? { inputTokens, lastInputTokens: inputTokens } : {}),
+          ...(cachedInputTokens > 0
+            ? { cachedInputTokens, lastCachedInputTokens: cachedInputTokens }
+            : {}),
+          ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
+          ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
+        };
+        record.lastUsage = usage;
+        events.push(
+          yield* syntheticEventFn(
+            threadId,
+            "thread.token-usage.updated",
+            { usage },
+            {
+              turnId,
+              itemId: promptInfo.id,
+            },
+          ),
+        );
+      }
+    }
+
+    for (const part of promptParts) {
+      if (
+        (part.type === "text" || part.type === "reasoning") &&
+        typeof part.text === "string" &&
+        part.text.trim().length > 0
+      ) {
+        events.push(
+          yield* syntheticEventFn(
+            threadId,
+            "content.delta",
+            {
+              streamKind: part.type === "text" ? "assistant_text" : "reasoning_text",
+              delta: part.text,
+            },
+            {
+              turnId,
+              itemId: part.id,
+            },
+          ),
+        );
+        continue;
+      }
+
+      if (part.type === "tool" && typeof part.tool === "string") {
+        const status =
+          part.state?.status === "error"
+            ? "failed"
+            : part.state?.status === "completed"
+              ? "completed"
+              : undefined;
+        const detail =
+          (typeof part.state?.error === "string" && part.state.error.trim().length > 0
+            ? part.state.error.trim()
+            : undefined) ??
+          (typeof part.state?.output === "string" && part.state.output.trim().length > 0
+            ? part.state.output.trim()
+            : undefined);
+        const title =
+          (typeof part.state?.title === "string" && part.state.title.trim().length > 0
+            ? part.state.title.trim()
+            : undefined) ??
+          (typeof part.metadata?.title === "string" && part.metadata.title.trim().length > 0
+            ? part.metadata.title.trim()
+            : undefined) ??
+          part.tool;
+
+        events.push(
+          yield* syntheticEventFn(
+            threadId,
+            "item.completed",
+            {
+              itemType: "dynamic_tool_call",
+              ...(status ? { status } : {}),
+              title,
+              ...(detail ? { detail } : {}),
+              data: part,
+            },
+            {
+              turnId,
+              itemId: part.id,
+            },
+          ),
+        );
+      }
+    }
+
+    const assistantText = promptParts
+      .reduce((chunks, part) => {
+        if (part.type !== "text" || typeof part.text !== "string") {
+          return chunks;
+        }
+        const text = part.text.trim();
+        if (text.length > 0) {
+          chunks.push(text);
+        }
+        return chunks;
+      }, [] as Array<string>)
+      .join("\n\n");
+
+    events.push(
+      yield* syntheticEventFn(
+        threadId,
+        "item.completed",
+        {
+          itemType: "assistant_message",
+          status: promptInfo.error ? "failed" : "completed",
+          title: "Assistant message",
+          ...(assistantText ? { detail: assistantText } : {}),
+          data: promptInfo,
+        },
+        {
+          turnId,
+          itemId: promptInfo.id,
+        },
+      ),
+    );
+
+    if (promptInfo.error) {
+      const errorMessage =
+        promptInfo.error.data?.message ?? promptInfo.error.name ?? "Unknown OpenCode error";
+      record.lastError = errorMessage;
+
+      const detail = {
+        ...(promptInfo.error.name ? { name: promptInfo.error.name } : {}),
+        ...(promptInfo.error.data?.message ? { message: promptInfo.error.data.message } : {}),
+        ...(promptInfo.error.data?.responseBody
+          ? { responseBody: promptInfo.error.data.responseBody }
+          : {}),
+        ...(typeof promptInfo.error.data?.statusCode === "number"
+          ? { statusCode: promptInfo.error.data.statusCode }
+          : {}),
+      };
+
+      events.push(
+        yield* syntheticEventFn(
+          threadId,
+          "runtime.error",
+          {
+            message: errorMessage,
+            class: "provider_error",
+            ...(Object.keys(detail).length > 0 ? { detail } : {}),
+          },
+          { turnId },
+        ),
+      );
+      events.push(
+        yield* syntheticEventFn(
+          threadId,
+          "turn.completed",
+          {
+            state: "failed",
+            ...(record.lastUsage ? { usage: record.lastUsage } : {}),
+            errorMessage,
+          },
+          { turnId },
+        ),
+      );
+    } else {
+      record.lastError = undefined;
+      events.push(
+        yield* syntheticEventFn(
+          threadId,
+          "turn.completed",
+          {
+            state: "completed",
+            ...(record.lastUsage ? { usage: record.lastUsage } : {}),
+          },
+          { turnId },
+        ),
+      );
+    }
+
+    events.push(
+      yield* syntheticEventFn(threadId, "session.state.changed", {
+        state: "ready",
+        reason: "session.prompt.completed",
+      }),
+    );
+
+    return events;
+  });
+}
 
 // ── Answer mapping helper ─────────────────────────────────────────────
 
@@ -93,7 +348,10 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         ),
       ]);
 
-      // Use promptAsync for non-blocking send with SSE streaming.
+      // `promptAsync` currently returns success without producing any session
+      // events against the OpenCode 1.14.x server, which leaves the thread
+      // stuck on `turn.started`. Run `prompt` in a background fiber instead and
+      // translate the final response into canonical runtime events.
       //
       // Attachment handling: some OpenCode providers/models reject certain MIME
       // types (e.g. `text/csv`) as SDK file parts. For text-extractable files we
@@ -118,7 +376,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         if (!sourcePath) {
           return yield* new ProviderAdapterRequestError({
             provider: PROVIDER,
-            method: "session.promptAsync",
+            method: "session.prompt",
             detail: `Invalid attachment id '${attachment.id}'.`,
           });
         }
@@ -134,7 +392,7 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
             catch: (cause) =>
               new ProviderAdapterRequestError({
                 provider: PROVIDER,
-                method: "session.promptAsync",
+                method: "session.prompt",
                 detail: `Failed to extract text from file attachment '${attachment.name}' for OpenCode.`,
                 cause,
               }),
@@ -171,43 +429,118 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         });
       }
 
-      const promptResp = yield* Effect.tryPromise({
-        try: () =>
-          record.client.session.promptAsync({
-            sessionID: record.opencodeSessionId,
-            parts: [{ type: "text" as const, text: promptText }, ...fileParts],
-            system:
-              "You have access to a Chromium browser in this environment. " +
-              "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
-              "Prefer codebase inspection first when the task is local-only. " +
-              "Summarize what was verified, including URL and important observations. " +
-              "Avoid unnecessary browser use when terminal or file tools are sufficient.",
-            ...(record.model
-              ? {
-                  model: {
-                    providerID: record.providerID ?? "",
-                    modelID: record.model,
-                  },
-                }
-              : {}),
-          }),
-        catch: (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "session.promptAsync",
-            detail: toMessage(cause, "Failed to send OpenCode turn."),
-            cause,
-          }),
-      });
-
-      if (promptResp.error) {
-        record.activeTurnId = undefined;
-        return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
-          method: "session.promptAsync",
-          detail: `Failed to send OpenCode turn: ${String(promptResp.error)}`,
+      const promptEffect = Effect.gen(function* () {
+        const promptResp = yield* Effect.tryPromise({
+          try: () =>
+            record.client.session.prompt({
+              sessionID: record.opencodeSessionId,
+              parts: [{ type: "text" as const, text: promptText }, ...fileParts],
+              system:
+                "You have access to a Chromium browser in this environment. " +
+                "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
+                "Prefer codebase inspection first when the task is local-only. " +
+                "Summarize what was verified, including URL and important observations. " +
+                "Avoid unnecessary browser use when terminal or file tools are sufficient.",
+              ...(record.model
+                ? {
+                    model: {
+                      providerID: record.providerID ?? "",
+                      modelID: record.model,
+                    },
+                  }
+                : {}),
+            }),
+          catch: (cause) =>
+            new ProviderAdapterRequestError({
+              provider: PROVIDER,
+              method: "session.prompt",
+              detail: toMessage(cause, "Failed to send OpenCode turn."),
+              cause,
+            }),
         });
-      }
+
+        if (promptResp.error || !promptResp.data) {
+          const errorMessage = `Failed to send OpenCode turn: ${String(promptResp.error)}`;
+          record.lastError = errorMessage;
+          record.activeTurnId = undefined;
+          record.updatedAt = new Date().toISOString();
+          yield* emitFn([
+            yield* syntheticEventFn(
+              input.threadId,
+              "runtime.error",
+              {
+                message: errorMessage,
+                class: "provider_error",
+              },
+              { turnId },
+            ),
+            yield* syntheticEventFn(
+              input.threadId,
+              "turn.completed",
+              {
+                state: "failed",
+                errorMessage,
+              },
+              { turnId },
+            ),
+            yield* syntheticEventFn(input.threadId, "session.state.changed", {
+              state: "ready",
+              reason: "session.prompt.failed",
+            }),
+          ]);
+          return;
+        }
+
+        const promptInfo = promptResp.data.info as PromptResultInfo;
+        const promptParts = promptResp.data.parts as ReadonlyArray<PromptResultPart>;
+        const events = yield* toPromptTurnEvents({
+          record,
+          threadId: input.threadId,
+          turnId,
+          promptInfo,
+          promptParts,
+          syntheticEventFn,
+        });
+        record.activeTurnId = undefined;
+        record.updatedAt = new Date().toISOString();
+        yield* emitFn(events);
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const errorMessage = toMessage(error, "Failed to send OpenCode turn.");
+            record.lastError = errorMessage;
+            record.activeTurnId = undefined;
+            record.updatedAt = new Date().toISOString();
+            yield* emitFn([
+              yield* syntheticEventFn(
+                input.threadId,
+                "runtime.error",
+                {
+                  message: errorMessage,
+                  class: "provider_error",
+                },
+                { turnId },
+              ),
+              yield* syntheticEventFn(
+                input.threadId,
+                "turn.completed",
+                {
+                  state: "failed",
+                  ...(record.lastUsage ? { usage: record.lastUsage } : {}),
+                  errorMessage,
+                },
+                { turnId },
+              ),
+              yield* syntheticEventFn(input.threadId, "session.state.changed", {
+                state: "ready",
+                reason: "session.prompt.failed",
+              }),
+            ]);
+          }),
+        ),
+      );
+
+      yield* promptEffect.pipe(Effect.forkDetach);
 
       return {
         threadId: input.threadId,
