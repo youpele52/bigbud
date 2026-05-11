@@ -12,11 +12,9 @@ Entries below are grouped by release tag and date.
 - Switched OpenCode turn execution to a background `prompt` flow and mapped the final response back into canonical runtime events so completions, token usage, and upstream provider failures are surfaced predictably again.
 - Made the PDF extraction test self-contained by generating a valid PDF fixture instead of depending on a user-specific local file path.
 
-
 ### Validation
 
 - Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus focused provider verification for the OpenCode fix.
-
 
 ## v0.1.620 (11 May, 2026)
 
@@ -24,7 +22,6 @@ Entries below are grouped by release tag and date.
 
 - Refined the marketing site structure and presentation, including the new changelog page, updated homepage/download layouts, and shared layout cleanup.
 - Added a few app-facing polish changes, including route-aware page titles and minor branding cleanup.
-
 
 ## v0.1.619 (5 May, 2026)
 
