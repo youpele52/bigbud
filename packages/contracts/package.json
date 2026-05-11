@@ -29,7 +29,7 @@
   "scripts": {
     "dev": "tsdown src/index.ts --format esm,cjs --dts --watch --clean",
     "build": "tsdown src/index.ts --format esm,cjs --dts --clean",
-    "prepare": "effect-language-service patch",
+    "prepare": "node -e \"if (process.env.CF_PAGES || process.env.CLOUDFLARE) process.exit(0); process.exit(require('child_process').spawnSync('effect-language-service', ['patch'], { stdio: 'inherit', shell: true }).status ?? 1)\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
