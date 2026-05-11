@@ -9,4 +9,5 @@ export const MARKETING_ASSETS = {
   navLogoPath: "/bigCode-white.svg",
   socialImagePath: "/download-workspace.png",
   downloadScreenshotPath: "/download-workspace.png",
+  homepageScreenshotPath: "/bigbud.png",
 } as const;
