@@ -125,6 +125,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_projects
         ORDER BY created_at ASC, project_id ASC
@@ -153,6 +154,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
         ORDER BY created_at ASC, thread_id ASC

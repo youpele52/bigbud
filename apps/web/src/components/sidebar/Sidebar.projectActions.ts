@@ -18,9 +18,6 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { isNonEmpty as isNonEmptyString } from "effect/String";
 import { isMacPlatform, newCommandId, newProjectId } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
-import { useComposerDraftStore } from "../../stores/composer";
-import { useThreadSelectionStore } from "../../stores/thread";
-import { useTerminalStateStore } from "../../stores/terminal";
 import { useStore } from "../../stores/main";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
@@ -132,18 +129,6 @@ export function useSidebarProjectActions({
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
-  const clearComposerDraftForThread = useComposerDraftStore((store) => store.clearDraftThread);
-  const clearProjectDraftThreadById = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadById,
-  );
-  const getDraftThreadByProjectId = useComposerDraftStore(
-    (store) => store.getDraftThreadByProjectId,
-  );
-  const clearProjectDraftThreadId = useComposerDraftStore(
-    (store) => store.clearProjectDraftThreadId,
-  );
-  const clearTerminalState = useTerminalStateStore((store) => store.clearTerminalState);
-  const removeFromSelection = useThreadSelectionStore((store) => store.removeFromSelection);
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -270,27 +255,6 @@ export function useSidebarProjectActions({
       );
       const deletedThreadIds = new Set<ThreadIdType>(projectThreads.map((thread) => thread.id));
 
-      for (const thread of projectThreads) {
-        if (thread.session && thread.session.status !== "closed") {
-          await api.orchestration
-            .dispatchCommand({
-              type: "thread.session.stop",
-              commandId: newCommandId(),
-              threadId: thread.id,
-              createdAt: new Date().toISOString(),
-            })
-            .catch(() => undefined);
-        }
-
-        try {
-          await api.terminal.close({ threadId: thread.id, deleteHistory: true });
-        } catch {
-          // Terminal may already be closed.
-        }
-      }
-
-      const projectDraftThread = getDraftThreadByProjectId(projectId);
-
       const fallbackThreadId =
         routeThreadId && deletedThreadIds.has(routeThreadId)
           ? getFallbackThreadIdAfterDelete({
@@ -306,17 +270,6 @@ export function useSidebarProjectActions({
         commandId: newCommandId(),
         projectId,
       });
-
-      for (const thread of projectThreads) {
-        clearComposerDraftForThread(thread.id);
-        clearProjectDraftThreadById(thread.projectId, thread.id);
-        clearTerminalState(thread.id);
-      }
-      if (projectDraftThread) {
-        clearComposerDraftForThread(projectDraftThread.threadId);
-      }
-      clearProjectDraftThreadId(projectId);
-      removeFromSelection(projectThreads.map((thread) => thread.id));
 
       if (routeThreadId && deletedThreadIds.has(routeThreadId)) {
         if (fallbackThreadId) {
@@ -339,15 +292,9 @@ export function useSidebarProjectActions({
       });
     }
   }, [
-    clearComposerDraftForThread,
-    clearProjectDraftThreadById,
-    clearProjectDraftThreadId,
-    clearTerminalState,
-    getDraftThreadByProjectId,
     appSettings.sidebarThreadSortOrder,
     navigate,
     pendingProjectDeleteConfirmation,
-    removeFromSelection,
     routeThreadId,
     threadIdsByProjectId,
   ]);

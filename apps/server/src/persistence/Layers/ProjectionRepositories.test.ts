@@ -34,6 +34,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         scripts: [],
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
+        deletingAt: null,
         deletedAt: null,
       });
 
@@ -88,6 +89,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
+        deletingAt: null,
         deletedAt: null,
       });
 

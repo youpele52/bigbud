@@ -59,6 +59,20 @@ const ProjectDeleteCommand = Schema.Struct({
   projectId: ProjectId,
 });
 
+const ProjectDeleteFinalizeCommand = Schema.Struct({
+  type: Schema.Literal("project.delete.finalize"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
+});
+
+const ProjectDeleteAbortCommand = Schema.Struct({
+  type: Schema.Literal("project.delete.abort"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
+});
+
 const ThreadCreateCommand = Schema.Struct({
   type: Schema.Literal("thread.create"),
   commandId: CommandId,
@@ -229,6 +243,20 @@ const ThreadSessionStopCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadDeleteFinalizeCommand = Schema.Struct({
+  type: Schema.Literal("thread.delete.finalize"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadDeleteAbortCommand = Schema.Struct({
+  type: Schema.Literal("thread.delete.abort"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
 const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
@@ -336,6 +364,10 @@ const ThreadRevertCompleteCommand = Schema.Struct({
 });
 
 const InternalOrchestrationCommand = Schema.Union([
+  ProjectDeleteFinalizeCommand,
+  ProjectDeleteAbortCommand,
+  ThreadDeleteFinalizeCommand,
+  ThreadDeleteAbortCommand,
   ThreadSessionSetCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantCompleteCommand,

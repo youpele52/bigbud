@@ -28,7 +28,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
   if (
     command.type === "project.create" ||
     command.type === "project.meta.update" ||
-    command.type === "project.delete"
+    command.type === "project.delete" ||
+    command.type === "project.delete.finalize" ||
+    command.type === "project.delete.abort"
   ) {
     return yield* decideProjectCommand({ command, readModel });
   }

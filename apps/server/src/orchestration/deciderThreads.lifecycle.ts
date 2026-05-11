@@ -10,11 +10,13 @@ import type {
 import { Effect } from "effect";
 
 import {
-  requireProject,
+  requireProjectNotDeleting,
   requireThread,
   requireThreadArchived,
   requireThreadAbsent,
   requireThreadNotArchived,
+  requireThreadDeleting,
+  requireThreadNotDeleting,
 } from "./commandInvariants.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
@@ -28,6 +30,8 @@ export type ThreadLifecycleCommand = Extract<
     type:
       | "thread.create"
       | "thread.delete"
+      | "thread.delete.finalize"
+      | "thread.delete.abort"
       | "thread.archive"
       | "thread.unarchive"
       | "thread.meta.update"
@@ -48,7 +52,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
 > {
   switch (command.type) {
     case "thread.create": {
-      yield* requireProject({
+      yield* requireProjectNotDeleting({
         readModel,
         command,
         projectId: command.projectId,
@@ -130,12 +134,34 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.delete": {
-      yield* requireThread({
+      yield* requireThreadNotDeleting({
         readModel,
         command,
         threadId: command.threadId,
       });
       const occurredAt = nowIso();
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.deletion-requested",
+        payload: {
+          threadId: command.threadId,
+          deletingAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.delete.finalize": {
+      yield* requireThreadDeleting({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = command.createdAt;
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -151,7 +177,33 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
       };
     }
 
+    case "thread.delete.abort": {
+      yield* requireThreadDeleting({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.deletion-failed",
+        payload: {
+          threadId: command.threadId,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
     case "thread.archive": {
+      yield* requireThreadNotDeleting({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
       yield* requireThreadNotArchived({
         readModel,
         command,
@@ -175,6 +227,11 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.unarchive": {
+      yield* requireThreadNotDeleting({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
       yield* requireThreadArchived({
         readModel,
         command,
@@ -197,7 +254,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.meta.update": {
-      yield* requireThread({
+      yield* requireThreadNotDeleting({
         readModel,
         command,
         threadId: command.threadId,
@@ -225,7 +282,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.runtime-mode.set": {
-      yield* requireThread({
+      yield* requireThreadNotDeleting({
         readModel,
         command,
         threadId: command.threadId,
@@ -248,7 +305,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
     }
 
     case "thread.interaction-mode.set": {
-      yield* requireThread({
+      yield* requireThreadNotDeleting({
         readModel,
         command,
         threadId: command.threadId,

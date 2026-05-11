@@ -30,6 +30,7 @@ export function makeProjectsProjector(
           scripts: event.payload.scripts,
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
+          deletingAt: null,
           deletedAt: null,
         });
         return;
@@ -56,6 +57,36 @@ export function makeProjectsProjector(
         return;
       }
 
+      case "project.deletion-requested": {
+        const existingRow = yield* projectionProjectRepository.getById({
+          projectId: event.payload.projectId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionProjectRepository.upsert({
+          ...existingRow.value,
+          deletingAt: event.payload.deletingAt,
+          updatedAt: event.payload.deletingAt,
+        });
+        return;
+      }
+
+      case "project.deletion-failed": {
+        const existingRow = yield* projectionProjectRepository.getById({
+          projectId: event.payload.projectId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionProjectRepository.upsert({
+          ...existingRow.value,
+          deletingAt: null,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
+
       case "project.deleted": {
         const existingRow = yield* projectionProjectRepository.getById({
           projectId: event.payload.projectId,
@@ -65,6 +96,7 @@ export function makeProjectsProjector(
         }
         yield* projectionProjectRepository.upsert({
           ...existingRow.value,
+          deletingAt: null,
           deletedAt: event.payload.deletedAt,
           updatedAt: event.payload.deletedAt,
         });

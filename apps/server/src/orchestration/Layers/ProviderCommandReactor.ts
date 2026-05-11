@@ -12,12 +12,14 @@ type ProviderIntentEvent = Extract<
   OrchestrationEvent,
   {
     type:
+      | "project.deletion-requested"
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
-      | "thread.session-stop-requested";
+      | "thread.session-stop-requested"
+      | "thread.deletion-requested";
   }
 >;
 
@@ -43,33 +45,39 @@ const make = Effect.gen(function* () {
   // Per-thread worker map: each thread gets its own DrainableWorker so that
   // a slow operation on one thread (e.g. spawning the Codex process) does not
   // block intent events for any other thread.
-  const threadWorkers = new Map<string, DrainableWorker<ProviderIntentEvent>>();
+  const aggregateWorkers = new Map<string, DrainableWorker<ProviderIntentEvent>>();
   const outerScope = yield* Effect.scope;
 
-  const getOrCreateThreadWorker = (
-    threadId: string,
+  const getOrCreateAggregateWorker = (
+    aggregateKey: string,
   ): Effect.Effect<DrainableWorker<ProviderIntentEvent>> => {
-    const existing = threadWorkers.get(threadId);
+    const existing = aggregateWorkers.get(aggregateKey);
     if (existing !== undefined) {
       return Effect.succeed(existing);
     }
     return makeDrainableWorker(processDomainEventSafely).pipe(
       Effect.provideService(Scope.Scope, outerScope),
-      Effect.tap((worker) => Effect.sync(() => threadWorkers.set(threadId, worker))),
+      Effect.tap((worker) => Effect.sync(() => aggregateWorkers.set(aggregateKey, worker))),
     );
   };
 
   const start: ProviderCommandReactorShape["start"] = Effect.fn("start")(function* () {
     const processEvent = Effect.fn("processEvent")(function* (event: OrchestrationEvent) {
       if (
+        event.type === "project.deletion-requested" ||
         event.type === "thread.runtime-mode-set" ||
         event.type === "thread.turn-start-requested" ||
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||
-        event.type === "thread.session-stop-requested"
+        event.type === "thread.session-stop-requested" ||
+        event.type === "thread.deletion-requested"
       ) {
-        const worker = yield* getOrCreateThreadWorker(event.payload.threadId);
+        const worker = yield* getOrCreateAggregateWorker(
+          "projectId" in event.payload
+            ? `project:${event.payload.projectId}`
+            : `thread:${event.payload.threadId}`,
+        );
         return yield* worker.enqueue(event);
       }
     });
@@ -84,7 +92,7 @@ const make = Effect.gen(function* () {
     // Lazily capture workers at drain time so newly-created thread workers are
     // included. Runs all active per-thread drain effects concurrently.
     drain: Effect.suspend(() =>
-      Effect.forEach(Array.from(threadWorkers.values()), (worker) => worker.drain, {
+      Effect.forEach(Array.from(aggregateWorkers.values()), (worker) => worker.drain, {
         concurrency: "unbounded",
       }),
     ).pipe(Effect.asVoid),

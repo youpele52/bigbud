@@ -305,6 +305,9 @@ export function EventRouter() {
         draftStore.clearDraftThread(threadId);
         clearThreadUi(threadId);
       }
+      for (const projectId of batchEffects.clearDeletedProjectIds) {
+        draftStore.clearProjectDraftThreadId(projectId);
+      }
       if (batchEffects.removeSelectedThreadIds.length > 0) {
         removeFromSelection(batchEffects.removeSelectedThreadIds);
       }

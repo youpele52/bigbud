@@ -20,6 +20,8 @@ import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThread
 const LIFECYCLE_TYPES = new Set([
   "thread.create",
   "thread.delete",
+  "thread.delete.finalize",
+  "thread.delete.abort",
   "thread.archive",
   "thread.unarchive",
   "thread.meta.update",
@@ -33,7 +35,14 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
 }: {
   readonly command: Exclude<
     OrchestrationCommand,
-    { type: "project.create" | "project.meta.update" | "project.delete" }
+    {
+      type:
+        | "project.create"
+        | "project.meta.update"
+        | "project.delete"
+        | "project.delete.finalize"
+        | "project.delete.abort";
+    }
   >;
   readonly readModel: OrchestrationReadModel;
 }): Effect.fn.Return<
