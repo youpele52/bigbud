@@ -36,7 +36,16 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     >;
     system?: string;
   }> = [];
-  const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+  const prompt = vi.fn(async () => ({
+    data: {
+      info: {
+        id: "assistant-msg-1",
+        role: "assistant",
+      },
+      parts: [],
+    },
+    error: undefined,
+  }));
 
   return Effect.gen(function* () {
     yield* Effect.addFinalizer(() =>
@@ -62,9 +71,9 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     const record = {
       client: {
         session: {
-          promptAsync: async (input: (typeof promptInputs)[number]) => {
+          prompt: async (input: (typeof promptInputs)[number]) => {
             promptInputs.push(input);
-            return promptAsync();
+            return prompt();
           },
         },
       },
@@ -114,6 +123,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
       input: "Can you see this image?",
       attachments: [attachment],
     });
+    yield* Effect.yieldNow;
 
     assert.equal(promptInputs.length, 1);
     const promptInput = promptInputs[0];
@@ -178,7 +188,16 @@ endobj
     >;
     system?: string;
   }> = [];
-  const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+  const prompt = vi.fn(async () => ({
+    data: {
+      info: {
+        id: "assistant-msg-2",
+        role: "assistant",
+      },
+      parts: [],
+    },
+    error: undefined,
+  }));
 
   return Effect.gen(function* () {
     yield* Effect.addFinalizer(() =>
@@ -188,9 +207,9 @@ endobj
     const record = {
       client: {
         session: {
-          promptAsync: async (input: (typeof promptInputs)[number]) => {
+          prompt: async (input: (typeof promptInputs)[number]) => {
             promptInputs.push(input);
-            return promptAsync();
+            return prompt();
           },
         },
       },
@@ -253,6 +272,7 @@ endobj
         },
       ],
     });
+    yield* Effect.yieldNow;
 
     assert.equal(promptInputs.length, 1);
     expect(promptInputs[0]).toStrictEqual({
@@ -266,11 +286,143 @@ endobj
           filename: "Science Communication Overview.pdf",
           mime: "application/pdf",
           type: "file",
-          url: expect.stringMatching(/^file:\/\/\/tmp\/opencode-mixed-attachments-/),
+          url: expect.stringMatching(/^file:\/\/\/.+opencode-mixed-attachments-/),
         },
       ],
       system:
         "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
+    });
+  });
+});
+
+it.effect("maps prompt responses into canonical OpenCode runtime events", () => {
+  const emitted: Array<{ type: string; payload: unknown; itemId?: string; turnId?: string }> = [];
+
+  const record = {
+    client: {
+      session: {
+        prompt: async () => ({
+          data: {
+            info: {
+              id: "assistant-msg-3",
+              role: "assistant",
+              modelID: "big-pickle",
+              providerID: "opencode",
+              tokens: {
+                input: 12,
+                output: 8,
+                reasoning: 0,
+                cache: { read: 5, write: 0 },
+              },
+            },
+            parts: [
+              {
+                id: "reasoning-part-1",
+                type: "reasoning",
+                text: "Thinking",
+              },
+              {
+                id: "text-part-1",
+                type: "text",
+                text: "Hello from OpenCode",
+              },
+            ],
+          },
+          error: undefined,
+        }),
+      },
+    },
+    releaseServer: () => undefined,
+    opencodeSessionId: "opencode-session-1",
+    threadId: THREAD_ID,
+    createdAt: new Date().toISOString(),
+    runtimeMode: "full-access" as const,
+    pendingPermissions: new Map(),
+    pendingUserInputs: new Map(),
+    turns: [],
+    sseAbortController: null,
+    cwd: "/tmp/opencode-project",
+    model: "big-pickle",
+    providerID: "opencode",
+    updatedAt: new Date().toISOString(),
+    lastError: undefined,
+    activeTurnId: undefined,
+    lastUsage: undefined,
+    wasRetrying: false,
+  };
+
+  const { sendTurn } = makeTurnMethods({
+    requireSession: () => Effect.succeed(record as never),
+    syntheticEventFn: (_threadId, type, payload, extra) =>
+      Effect.succeed({
+        type,
+        payload,
+        ...(extra?.itemId ? { itemId: extra.itemId } : {}),
+        ...(extra?.turnId ? { turnId: extra.turnId } : {}),
+      } as never),
+    emitFn: (runtimeEvents) =>
+      Effect.sync(() => {
+        emitted.push(...(runtimeEvents as unknown as Array<(typeof emitted)[number]>));
+      }),
+    serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
+  });
+
+  return Effect.gen(function* () {
+    const result = yield* sendTurn({
+      threadId: THREAD_ID,
+      input: "Say hello",
+    });
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+
+    expect(result.resumeCursor).toEqual({ sessionId: "opencode-session-1" });
+    expect(record.activeTurnId).toBeUndefined();
+    expect(record.lastUsage).toEqual({
+      usedTokens: 25,
+      totalProcessedTokens: 25,
+      inputTokens: 12,
+      lastInputTokens: 12,
+      cachedInputTokens: 5,
+      lastCachedInputTokens: 5,
+      outputTokens: 8,
+      lastOutputTokens: 8,
+      lastUsedTokens: 25,
+    });
+    expect(emitted.map((event) => event.type)).toEqual([
+      "turn.started",
+      "thread.token-usage.updated",
+      "content.delta",
+      "content.delta",
+      "item.completed",
+      "turn.completed",
+      "session.state.changed",
+    ]);
+    expect(emitted[2]).toMatchObject({
+      type: "content.delta",
+      payload: { streamKind: "reasoning_text", delta: "Thinking" },
+      itemId: "reasoning-part-1",
+    });
+    expect(emitted[3]).toMatchObject({
+      type: "content.delta",
+      payload: { streamKind: "assistant_text", delta: "Hello from OpenCode" },
+      itemId: "text-part-1",
+    });
+    expect(emitted[4]).toMatchObject({
+      type: "item.completed",
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+        title: "Assistant message",
+        detail: "Hello from OpenCode",
+      },
+      itemId: "assistant-msg-3",
+    });
+    expect(emitted[5]).toMatchObject({
+      type: "turn.completed",
+      payload: {
+        state: "completed",
+      },
     });
   });
 });
