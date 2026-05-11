@@ -4,6 +4,17 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.622 (11 May, 2026)
+
+### Marketing
+
+- Removed the marketing download page's client-side release cache so it always fetches the latest published GitHub release metadata on load.
+- Fixed a stale-version issue where the download UI could keep showing and linking an older release like `v0.1.620` after a newer release such as `v0.1.621` had already been published.
+
+### Validation
+
+- Validated this release metadata fix with `bun fmt`, `bun lint`, and `bun typecheck`.
+
 ## v0.1.621 (11 May, 2026)
 
 ### Reliability
