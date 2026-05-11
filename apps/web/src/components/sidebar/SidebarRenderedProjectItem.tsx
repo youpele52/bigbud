@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import {
   useCallback,
-  useState,
   type Dispatch,
   type KeyboardEvent,
   type MouseEvent,
@@ -19,6 +18,7 @@ import {
 import { isBuiltInChatsProject, type ProjectId, type ThreadId } from "@bigbud/contracts";
 
 import {
+  getHiddenSidebarThreadCount,
   resolveSidebarNewThreadEnvMode,
   resolveSidebarNewThreadSeedContext,
   resolveThreadStatusPill,
@@ -38,7 +38,6 @@ import { useSwipeRevealAction } from "./useSwipeRevealAction";
 
 type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusPill>>;
 
-const INITIAL_VISIBLE_THREAD_COUNT = 5;
 const SIDEBAR_PROJECT_ICON_SIZE = "size-4";
 
 export interface RenderedProjectData {
@@ -156,8 +155,10 @@ export function SidebarRenderedProjectItem({
   project,
   projectStatus,
   renderedThreadIds,
+  hasHiddenThreads,
   showEmptyThreadState,
   shouldShowThreadPanel,
+  isThreadListExpanded,
 
   newThreadShortcutLabel,
   showThreadJumpHints,
@@ -204,20 +205,20 @@ export function SidebarRenderedProjectItem({
   openPrLink,
   prByThreadId,
   handleNewThread,
+  expandThreadListForProject,
+  collapseThreadListForProject,
 }: SidebarRenderedProjectItemProps) {
   const isChatsProject = isBuiltInChatsProject(project.id);
-  const [showAllThreads, setShowAllThreads] = useState(false);
   const swipeReveal = useSwipeRevealAction<HTMLButtonElement>({
     itemId: project.id,
     disabled: renamingProjectId === project.id || isChatsProject,
   });
 
-  // Calculate visible threads with "See more" limit
-  const hasMoreThreads = renderedThreadIds.length > INITIAL_VISIBLE_THREAD_COUNT;
-  const visibleThreadIds = showAllThreads
-    ? renderedThreadIds
-    : renderedThreadIds.slice(0, INITIAL_VISIBLE_THREAD_COUNT);
-  const hiddenThreadCount = renderedThreadIds.length - INITIAL_VISIBLE_THREAD_COUNT;
+  const visibleThreadIds = renderedThreadIds;
+  const hiddenThreadCount = getHiddenSidebarThreadCount({
+    totalThreadCount: orderedProjectThreadIds.length,
+    renderedThreadCount: renderedThreadIds.length,
+  });
 
   const handleProjectDeleteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -511,18 +512,24 @@ export function SidebarRenderedProjectItem({
             />
           ))}
 
-        {/* See more / Show less for thread count limit */}
-        {project.expanded && hasMoreThreads && (
+        {/* See more / Show less for the shared project-thread preview */}
+        {project.expanded && hasHiddenThreads && (
           <SidebarMenuSubItem className="w-full">
             <SidebarMenuSubButton
               render={<button type="button" />}
               data-thread-selection-safe
               size="sm"
               className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-              onClick={() => setShowAllThreads(!showAllThreads)}
+              onClick={() => {
+                if (isThreadListExpanded) {
+                  collapseThreadListForProject(project.id);
+                  return;
+                }
+                expandThreadListForProject(project.id);
+              }}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
-                {showAllThreads ? (
+                {isThreadListExpanded ? (
                   <span>Show less</span>
                 ) : (
                   <span>{`See more (${hiddenThreadCount})`}</span>

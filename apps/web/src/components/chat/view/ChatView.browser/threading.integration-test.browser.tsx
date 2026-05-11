@@ -1,8 +1,14 @@
-import { ORCHESTRATION_WS_METHODS, type ThreadId } from "@bigbud/contracts";
+import {
+  EventId,
+  ORCHESTRATION_WS_METHODS,
+  type OrchestrationEvent,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { useComposerDraftStore } from "../../../../stores/composer";
+import { useStore } from "../../../../stores/main";
 import { createChatViewBrowserTestContext } from "./context";
 import {
   DEFAULT_VIEWPORT,
@@ -25,6 +31,52 @@ import { createDraftOnlySnapshot } from "./scenarioFixtures";
 const ctx = createChatViewBrowserTestContext();
 ctx.registerLifecycleHooks();
 
+function makeThreadDeletedEvent(
+  threadId: ThreadId,
+  sequence: number,
+): Extract<OrchestrationEvent, { type: "thread.deleted" }> {
+  return {
+    sequence,
+    eventId: EventId.makeUnsafe(`event-thread-deleted-${sequence}`),
+    aggregateKind: "thread",
+    aggregateId: threadId,
+    occurredAt: `2026-03-04T12:00:0${sequence}.000Z`,
+    commandId: null,
+    causationEventId: null,
+    correlationId: null,
+    metadata: {},
+    type: "thread.deleted",
+    payload: {
+      threadId,
+      deletedAt: `2026-03-04T12:00:0${sequence}.000Z`,
+    },
+  };
+}
+
+function createProjectSnapshotWithThreadCount(threadCount: number) {
+  const snapshot = createSnapshotForTargetUser({
+    targetMessageId: "msg-user-project-overflow-target" as never,
+    targetText: "project overflow test",
+  });
+
+  return {
+    ...snapshot,
+    threads: Array.from({ length: threadCount }, (_, index) => ({
+      ...snapshot.threads[0]!,
+      id: `thread-project-overflow-${index + 1}` as ThreadId,
+      title: `Project thread ${index + 1}`,
+      createdAt: `2026-03-04T12:00:${String(index).padStart(2, "0")}.000Z`,
+      updatedAt: `2026-03-04T12:00:${String(index).padStart(2, "0")}.000Z`,
+      messages: [],
+      activities: [],
+      proposedPlans: [],
+      checkpoints: [],
+      latestTurn: null,
+      session: null,
+    })),
+  };
+}
+
 describe("ChatView threading integration", () => {
   it("shows an explicit empty state for projects without threads in the sidebar", async () => {
     const mounted = await ctx.mountChatView({
@@ -33,6 +85,38 @@ describe("ChatView threading integration", () => {
     });
     try {
       await expect.element(page.getByText("No threads yet")).toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("updates the project see-more count from the full hidden thread set after deletions", async () => {
+    const snapshot = createProjectSnapshotWithThreadCount(8);
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot,
+    });
+
+    try {
+      await expect.element(page.getByText("See more (2)")).toBeInTheDocument();
+
+      useStore
+        .getState()
+        .applyOrchestrationEvent(
+          makeThreadDeletedEvent("thread-project-overflow-8" as ThreadId, 2),
+        );
+
+      await expect.element(page.getByText("See more (1)")).toBeInTheDocument();
+
+      useStore
+        .getState()
+        .applyOrchestrationEvent(
+          makeThreadDeletedEvent("thread-project-overflow-7" as ThreadId, 3),
+        );
+
+      await vi.waitFor(() => {
+        expect(document.body.textContent?.includes("See more (")).toBe(false);
+      });
     } finally {
       await mounted.cleanup();
     }

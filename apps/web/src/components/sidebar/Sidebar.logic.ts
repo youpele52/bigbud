@@ -183,6 +183,13 @@ export function getVisibleRecentThreadIds<TThreadId>(input: {
     : input.renderedChatThreadIds.slice(0, input.initialVisibleCount);
 }
 
+export function getHiddenSidebarThreadCount(input: {
+  totalThreadCount: number;
+  renderedThreadCount: number;
+}): number {
+  return Math.max(0, input.totalThreadCount - input.renderedThreadCount);
+}
+
 export function resolveAdjacentThreadId<T>(input: {
   threadIds: readonly T[];
   currentThreadId: T | null;
