@@ -47,12 +47,13 @@ import { WorkspaceEntries } from "../workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner";
-import { makeDispatchBootstrapTurnStart } from "./wsBootstrap";
+import { makeDispatchBootstrapThreadCommand } from "./wsBootstrap";
 import {
   makeOrderedOrchestrationDomainEventStream,
   makeServerConfigUpdateStream,
 } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
+import { makeDispatchShellCommand } from "./wsShellDispatch";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -116,7 +117,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         Effect.flatMap(() => gitStatusBroadcaster.invalidateRemote(cwd)),
       );
 
-    const dispatchBootstrapTurnStart = makeDispatchBootstrapTurnStart(
+    const dispatchBootstrapThreadCommand = makeDispatchBootstrapThreadCommand(
       orchestrationEngine,
       git,
       projectSetupScriptRunner,
@@ -136,7 +137,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> => {
       const dispatchEffect =
         normalizedCommand.type === "thread.turn.start" && normalizedCommand.bootstrap
-          ? dispatchBootstrapTurnStart(normalizedCommand)
+          ? dispatchBootstrapThreadCommand(normalizedCommand)
           : orchestrationEngine
               .dispatch(normalizedCommand)
               .pipe(
@@ -153,6 +154,24 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ),
         );
     };
+
+    const dispatchShellCommand = makeDispatchShellCommand({
+      enqueueCommand: (effect) => startup.enqueueCommand(effect),
+      dispatchInitialShellCommand: (normalizedCommand) =>
+        normalizedCommand.bootstrap !== undefined
+          ? dispatchBootstrapThreadCommand(normalizedCommand)
+          : orchestrationEngine
+              .dispatch(normalizedCommand)
+              .pipe(
+                Effect.mapError((cause) =>
+                  toDispatchCommandError(cause, "Failed to dispatch shell command"),
+                ),
+              ),
+      orchestrationEngine,
+      serverSettings,
+      serverCommandId,
+      toDispatchCommandError,
+    });
 
     const loadServerConfig = Effect.gen(function* () {
       const keybindingsConfig = yield* keybindings.loadConfigState;
@@ -201,6 +220,9 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           ORCHESTRATION_WS_METHODS.dispatchCommand,
           Effect.gen(function* () {
             const normalizedCommand = yield* normalizeDispatchCommand(command);
+            if (normalizedCommand.type === "thread.shell.run") {
+              return yield* dispatchShellCommand(normalizedCommand);
+            }
             const result = yield* dispatchNormalizedCommand(normalizedCommand);
             if (normalizedCommand.type === "thread.archive") {
               yield* terminalManager.close({ threadId: normalizedCommand.threadId }).pipe(

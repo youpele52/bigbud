@@ -11,16 +11,16 @@ import {
 } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
-import { createPiRpcProcess } from "../../provider/Layers/PiRpcProcess.ts";
-import type { PiRpcStdoutEvent } from "../../provider/Layers/PiRpcProcess.ts";
+import { createPiRpcProcess } from "../../provider/Layers/Pi/RpcProcess.ts";
+import type { PiRpcStdoutEvent } from "../../provider/Layers/Pi/RpcProcess.ts";
 import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 
 import type { ThreadTitleGenerationInput } from "../Services/TextGeneration.ts";
 import { buildThreadTitlePrompt } from "../Prompts.ts";
 import { limitSection, sanitizeThreadTitle } from "../Utils.ts";
-import { makeNodeWrapperCliPath } from "../../provider/Layers/CopilotAdapter.types.ts";
-import { resolveProviderIDForModel } from "../../provider/Layers/OpencodeAdapter.session.helpers.ts";
-import type { OpencodeServerManagerShape } from "../../provider/Services/OpencodeServerManager.ts";
+import { makeNodeWrapperCliPath } from "../../provider/Layers/Copilot/Adapter.types.ts";
+import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
+import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
 
 const COPILOT_TIMEOUT_MS = 60_000;
 const OPENCODE_TIMEOUT_MS = 60_000;

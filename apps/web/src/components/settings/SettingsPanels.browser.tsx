@@ -8,7 +8,7 @@ import { render } from "vitest-browser-react";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
-import { GeneralSettingsPanel } from "./SettingsPanels";
+import { AboutSettingsPanel } from "./SettingsPanels";
 
 function createBaseServerConfig(): ServerConfig {
   return {
@@ -33,7 +33,7 @@ function createBaseServerConfig(): ServerConfig {
   };
 }
 
-describe("GeneralSettingsPanel observability", () => {
+describe("AboutSettingsPanel observability", () => {
   beforeEach(() => {
     resetServerStateForTests();
     __resetNativeApiForTests();
@@ -52,7 +52,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     await render(
       <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
+        <AboutSettingsPanel />
       </AppAtomRegistryProvider>,
     );
 
@@ -83,7 +83,7 @@ describe("GeneralSettingsPanel observability", () => {
 
     await render(
       <AppAtomRegistryProvider>
-        <GeneralSettingsPanel />
+        <AboutSettingsPanel />
       </AppAtomRegistryProvider>,
     );
 

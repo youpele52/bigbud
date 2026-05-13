@@ -42,4 +42,24 @@ describe("normalizeGitTextGenerationModelSelection", () => {
       model: "gpt-5.4-mini",
     });
   });
+
+  it("keeps Cursor git text generation on the Cursor provider", () => {
+    expect(
+      normalizeGitTextGenerationModelSelection({
+        provider: "cursor",
+        model: "claude-sonnet-4-5",
+        options: {
+          reasoning: "high",
+          fastMode: true,
+        },
+      }),
+    ).toEqual({
+      provider: "cursor",
+      model: "claude-sonnet-4-5",
+      options: {
+        reasoning: "high",
+        fastMode: true,
+      },
+    });
+  });
 });

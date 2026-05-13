@@ -21,6 +21,10 @@ export function getProviderModelOptions(
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["opencode"] | undefined;
 export function getProviderModelOptions(
+  provider: "cursor",
+  options: ProviderModelOptions | null | undefined,
+): ProviderModelOptions["cursor"] | undefined;
+export function getProviderModelOptions(
   provider: "pi",
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["pi"] | undefined;
@@ -41,6 +45,8 @@ export function getProviderModelOptions(
       return options?.copilot;
     case "opencode":
       return options?.opencode;
+    case "cursor":
+      return options?.cursor;
     case "pi":
       return options?.pi;
   }

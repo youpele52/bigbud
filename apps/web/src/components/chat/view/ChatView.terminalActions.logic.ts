@@ -41,6 +41,15 @@ export interface UseTerminalActionsResult {
   splitTerminal: () => void;
   createNewTerminal: () => void;
   closeTerminal: (terminalId: string) => void;
+  runTerminalCommand: (
+    command: string,
+    options?: {
+      cwd?: string;
+      env?: Record<string, string>;
+      worktreePath?: string | null;
+      preferNewTerminal?: boolean;
+    },
+  ) => Promise<void>;
   runProjectScript: (
     script: ProjectScript,
     options?: {
@@ -146,24 +155,22 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     ],
   );
 
-  const runProjectScript = useCallback(
+  const runTerminalCommand = useCallback(
     async (
-      script: ProjectScript,
+      command: string,
       options?: {
         cwd?: string;
         env?: Record<string, string>;
         worktreePath?: string | null;
         preferNewTerminal?: boolean;
-        rememberAsLastInvoked?: boolean;
       },
     ) => {
       const api = readNativeApi();
       if (!api || !activeThreadId || !activeProject || !activeThread) return;
-      if (options?.rememberAsLastInvoked !== false) {
-        setLastInvokedScriptByProjectId((current) => {
-          if (current[activeProject.id] === script.id) return current;
-          return { ...current, [activeProject.id]: script.id };
-        });
+      const trimmedCommand = command.trim();
+      if (!trimmedCommand) {
+        setThreadError(activeThreadId, "Enter a terminal command after !.");
+        return;
       }
       const targetCwd = options?.cwd ?? gitCwd ?? activeProject.cwd;
       if (!targetCwd) {
@@ -176,10 +183,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         DEFAULT_THREAD_TERMINAL_ID;
       const isBaseTerminalBusy = terminalState.runningTerminalIds.includes(baseTerminalId);
       const wantsNewTerminal = Boolean(options?.preferNewTerminal) || isBaseTerminalBusy;
-      const shouldCreateNewTerminal = wantsNewTerminal;
-      const targetTerminalId = shouldCreateNewTerminal
-        ? `terminal-${randomUUID()}`
-        : baseTerminalId;
+      const targetTerminalId = wantsNewTerminal ? `terminal-${randomUUID()}` : baseTerminalId;
       const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
 
       setTerminalLaunchContext({
@@ -188,7 +192,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         worktreePath: targetWorktreePath,
       });
       setTerminalOpen(true);
-      if (shouldCreateNewTerminal) {
+      if (wantsNewTerminal) {
         storeNewTerminal(activeThreadId, targetTerminalId);
       } else {
         storeSetActiveTerminal(activeThreadId, targetTerminalId);
@@ -202,7 +206,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         worktreePath: targetWorktreePath,
         ...(options?.env ? { extraEnv: options.env } : {}),
       });
-      const openTerminalInput: TerminalOpenInput = shouldCreateNewTerminal
+      const openTerminalInput: TerminalOpenInput = wantsNewTerminal
         ? {
             threadId: activeThreadId,
             terminalId: targetTerminalId,
@@ -225,13 +229,15 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         await api.terminal.write({
           threadId: activeThreadId,
           terminalId: targetTerminalId,
-          data: `${script.command}\r`,
+          data: `${trimmedCommand}\r`,
         });
+        setThreadError(activeThreadId, null);
       } catch (error) {
         setThreadError(
           activeThreadId,
-          error instanceof Error ? error.message : `Failed to run script "${script.name}".`,
+          error instanceof Error ? error.message : `Failed to run command "${trimmedCommand}".`,
         );
+        throw error;
       }
     },
     [
@@ -243,7 +249,6 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       setThreadError,
       storeNewTerminal,
       storeSetActiveTerminal,
-      setLastInvokedScriptByProjectId,
       terminalState.activeTerminalId,
       terminalState.runningTerminalIds,
       terminalState.terminalIds,
@@ -252,12 +257,38 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     ],
   );
 
+  const runProjectScript = useCallback(
+    async (
+      script: ProjectScript,
+      options?: {
+        cwd?: string;
+        env?: Record<string, string>;
+        worktreePath?: string | null;
+        preferNewTerminal?: boolean;
+        rememberAsLastInvoked?: boolean;
+      },
+    ) => {
+      if (!activeProject) {
+        return;
+      }
+      if (options?.rememberAsLastInvoked !== false) {
+        setLastInvokedScriptByProjectId((current) => {
+          if (current[activeProject.id] === script.id) return current;
+          return { ...current, [activeProject.id]: script.id };
+        });
+      }
+      await runTerminalCommand(script.command, options).catch(() => undefined);
+    },
+    [activeProject, setLastInvokedScriptByProjectId, runTerminalCommand],
+  );
+
   return {
     setTerminalOpen,
     toggleTerminalVisibility,
     splitTerminal,
     createNewTerminal,
     closeTerminal,
+    runTerminalCommand,
     runProjectScript,
     hasReachedSplitLimit,
   };

@@ -2,7 +2,7 @@
  * Bootstrap turn-start logic for the WebSocket RPC layer.
  *
  * Extracted from ws.ts to keep that file under 500 lines.
- * `dispatchBootstrapTurnStart` accepts the services it needs as parameters.
+ * `dispatchBootstrapThreadCommand` accepts the services it needs as parameters.
  */
 import { Cause, Effect, Schema } from "effect";
 import {
@@ -39,7 +39,7 @@ export type BootstrapServices = {
   readonly refreshGitStatus: (cwd: string) => Effect.Effect<void>;
 };
 
-export function makeDispatchBootstrapTurnStart(
+export function makeDispatchBootstrapThreadCommand(
   orchestrationEngine: BootstrapServices["orchestrationEngine"],
   git: BootstrapServices["git"],
   projectSetupScriptRunner: BootstrapServices["projectSetupScriptRunner"],
@@ -54,8 +54,8 @@ export function makeDispatchBootstrapTurnStart(
   }) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>,
   serverCommandId: (tag: string) => CommandId,
 ) {
-  return function dispatchBootstrapTurnStart(
-    command: Extract<OrchestrationCommand, { type: "thread.turn.start" }>,
+  return function dispatchBootstrapThreadCommand(
+    command: Extract<OrchestrationCommand, { type: "thread.turn.start" | "thread.shell.run" }>,
   ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> {
     return Effect.gen(function* () {
       const bootstrap = command.bootstrap;
@@ -213,7 +213,7 @@ export function makeDispatchBootstrapTurnStart(
           ? error
           : new OrchestrationDispatchCommandError({
               message:
-                error instanceof Error ? error.message : "Failed to bootstrap thread turn start.",
+                error instanceof Error ? error.message : "Failed to bootstrap thread command.",
               cause,
             });
       };

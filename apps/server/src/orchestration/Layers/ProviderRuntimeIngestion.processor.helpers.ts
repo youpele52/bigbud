@@ -72,6 +72,15 @@ export function makeProcessorHelpers(
           ? input.fallbackText!
           : "";
 
+    const readModel = yield* orchestrationEngine.getReadModel();
+    const existingThread = readModel.threads.find((entry) => entry.id === input.threadId);
+    const existingMessage = existingThread?.messages.find((entry) => entry.id === input.messageId);
+
+    if (text.length === 0 && !existingMessage) {
+      yield* clearAssistantMessageState(input.messageId);
+      return;
+    }
+
     if (text.length > 0) {
       yield* orchestrationEngine.dispatch({
         type: "thread.message.assistant.delta",
