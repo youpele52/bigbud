@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { useServerAvailableEditors, useServerKeybindingsConfigPath } from "../../rpc/serverState";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
-export function AdvancedSettingsSection() {
+export function KeybindingsSettingsSection() {
   const keybindingsConfigPath = useServerKeybindingsConfigPath();
   const availableEditors = useServerAvailableEditors();
   const [isOpeningKeybindings, setIsOpeningKeybindings] = useState(false);
@@ -33,10 +33,10 @@ export function AdvancedSettingsSection() {
       .finally(() => {
         setIsOpeningKeybindings(false);
       });
-  }, [keybindingsConfigPath, availableEditors]);
+  }, [availableEditors, keybindingsConfigPath]);
 
   return (
-    <SettingsSection title="Advanced">
+    <SettingsSection title="Keybindings">
       <SettingsRow
         title="Keybindings"
         description="Open the persisted `keybindings.json` file to edit advanced bindings directly."
