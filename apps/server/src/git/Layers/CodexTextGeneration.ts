@@ -28,7 +28,7 @@ import {
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
-import { getCodexModelCapabilities } from "../../provider/Layers/CodexProvider.ts";
+import { getCodexModelCapabilities } from "../../provider/Layers/Codex/Provider.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { normalizeCodexModelOptionsWithCapabilities } from "@bigbud/shared/model";
 

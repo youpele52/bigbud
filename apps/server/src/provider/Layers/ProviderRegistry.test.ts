@@ -28,11 +28,11 @@ import {
   hasCustomModelProvider,
   parseAuthStatusFromOutput,
   readCodexConfigModelProvider,
-} from "./CodexProvider";
-import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./ClaudeProvider";
+} from "./Codex/Provider";
+import { checkClaudeProviderStatus, parseClaudeAuthStatusFromOutput } from "./Claude/Provider";
 import { haveProvidersChanged, makeProviderRegistryLive } from "./ProviderRegistry";
-import { OpencodeServerManager } from "../Services/OpencodeServerManager";
-import { PiProvider } from "../Services/PiProvider";
+import { OpencodeServerManager } from "../Services/Opencode/ServerManager";
+import { PiProvider } from "../Services/Pi/Provider";
 import { ServerSettingsService, type ServerSettingsShape } from "../../ws/serverSettings";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
 

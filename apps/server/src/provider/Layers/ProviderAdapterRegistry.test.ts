@@ -4,12 +4,12 @@ import { assertFailure } from "@effect/vitest/utils";
 
 import { Effect, Layer, Stream } from "effect";
 
-import { ClaudeAdapter, ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
-import { CopilotAdapter, CopilotAdapterShape } from "../Services/CopilotAdapter.ts";
-import { CodexAdapter, CodexAdapterShape } from "../Services/CodexAdapter.ts";
-import { OpencodeAdapter, OpencodeAdapterShape } from "../Services/OpencodeAdapter.ts";
-import { PiAdapter, PiAdapterShape } from "../Services/PiAdapter.ts";
-import { CursorAdapter, CursorAdapterShape } from "../Services/CursorAdapter.ts";
+import { ClaudeAdapter, ClaudeAdapterShape } from "../Services/Claude/Adapter.ts";
+import { CopilotAdapter, CopilotAdapterShape } from "../Services/Copilot/Adapter.ts";
+import { CodexAdapter, CodexAdapterShape } from "../Services/Codex/Adapter.ts";
+import { OpencodeAdapter, OpencodeAdapterShape } from "../Services/Opencode/Adapter.ts";
+import { PiAdapter, PiAdapterShape } from "../Services/Pi/Adapter.ts";
+import { CursorAdapter, CursorAdapterShape } from "../Services/Cursor/Adapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderAdapterRegistryLive } from "./ProviderAdapterRegistry.ts";
 import { ProviderUnsupportedError } from "../Errors.ts";

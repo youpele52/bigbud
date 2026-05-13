@@ -31,7 +31,7 @@ import {
 } from "../Utils.ts";
 import { normalizeClaudeModelOptionsWithCapabilities } from "@bigbud/shared/model";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { getClaudeModelCapabilities } from "../../provider/Layers/ClaudeProvider.ts";
+import { getClaudeModelCapabilities } from "../../provider/Layers/Claude/Provider.ts";
 
 const CLAUDE_TIMEOUT_MS = 180_000;
 

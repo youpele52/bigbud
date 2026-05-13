@@ -731,6 +731,34 @@ describe("ProviderRuntimeIngestion", () => {
     expect(message?.streaming).toBe(false);
   });
 
+  it("does not create an empty assistant message when completion has no text", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-assistant-item-completed-empty"),
+      provider: "pi",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-empty"),
+      itemId: asItemId("item-empty"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+
+    await harness.drain();
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(
+      thread?.messages.some(
+        (message: ProviderRuntimeTestMessage) => message.id === "assistant:item-empty",
+      ),
+    ).toBe(false);
+  });
+
   it("projects completed plan items into first-class proposed plans", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
@@ -1333,7 +1361,7 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("buffers assistant deltas by default until completion", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({ serverSettings: { enableAssistantStreaming: false } });
     const now = new Date().toISOString();
 
     harness.emit({

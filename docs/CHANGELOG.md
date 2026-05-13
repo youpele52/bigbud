@@ -4,6 +4,36 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.624 (13 May, 2026)
+
+### Runtime and Thread UX Reliability
+
+- Preserved thread session state more aggressively when a provider turn starts, keeping sessions marked `running` with the active turn id even when provider session updates lag behind the send operation.
+- Avoided creating empty assistant messages when providers complete without yielding any assistant text.
+- Switched assistant streaming to the default delivery setting, added immediate UI flushing for streaming assistant message events, and extracted orchestration-event coalescing helpers into a shared route helper module.
+- Added deterministic fork-title suffixing like `(A)`, `(B)`, and `(AA)` for branched threads, updated the sidebar fork icon, and added focused coverage for fork title generation.
+- Added a close action to the diff panel and tightened a few scroll/terminal action state updates to reduce redundant UI churn.
+
+### Chat Shell Commands
+
+- Added bang-prefixed shell mode in the chat composer so quick commands like `!ls` can run directly from the chatbox without opening the in-app terminal.
+- Introduced a dedicated `thread.shell.run` orchestration command and server-side shell dispatch path that resolves cwd from the thread worktree, project folder, or `defaultChatCwd` fallback for chat-only threads.
+
+### Provider and Model Routing
+
+- Added native Cursor-backed git text generation routing instead of falling Cursor requests back to Codex.
+- Normalized Cursor model options against capability metadata and exposed Cursor-specific model options throughout the app's provider selection helpers, which also covers desktop builds because the desktop shell embeds the shared web UI.
+
+### Settings Navigation
+
+- Split Settings into dedicated routed sections for `Notifications`, `Providers`, `AI`, `Keybindings`, `Archive`, and `About` instead of keeping most controls under a single general page.
+- Moved AI-specific controls, including assistant streaming and text-generation model settings, into a new AI section alongside speech-to-text configuration.
+
+### Provider Structure
+
+- Reorganized server-side provider layers and services into per-provider directories so the filesystem layout now matches runtime ownership for Claude, Codex, Copilot, Cursor, OpenCode, and Pi.
+- Folded Pi provider cleanup into the same refactor by splitting session-control logic into its own module and adding focused Pi adapter tests for methods and stream handling.
+
 ## v0.1.623 (11 May, 2026)
 
 ### Sidebar Threads

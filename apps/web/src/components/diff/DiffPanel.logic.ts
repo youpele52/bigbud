@@ -16,10 +16,13 @@ import { useQuery } from "@tanstack/react-query";
 import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
 import { buildPatchCacheKey } from "~/lib/diffRendering";
-import { openDiffRouteSearch, parseDiffRouteSearch } from "../../utils/diff";
+import { closeDiffRouteSearch, openDiffRouteSearch, parseDiffRouteSearch } from "../../utils/diff";
 import { useTurnDiffSummaries } from "../../hooks/useTurnDiffSummaries";
 import { useStore } from "../../stores/main";
-import { requestRightPanel } from "../../stores/browser/browserPanel.coordinator";
+import {
+  getRequestedRightPanel,
+  requestRightPanel,
+} from "../../stores/browser/browserPanel.coordinator";
 
 export type DiffRenderMode = "stacked" | "split";
 
@@ -272,6 +275,18 @@ export function useDiffPanelData() {
     });
   };
 
+  const closeDiff = useCallback(() => {
+    if (getRequestedRightPanel() === "diff") {
+      requestRightPanel(null);
+    }
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: routeThreadId ?? activeThread!.id },
+      replace: true,
+      search: (previous) => closeDiffRouteSearch(previous),
+    });
+  }, [activeThread, navigate, routeThreadId]);
+
   return {
     diffOpen,
     activeThread,
@@ -289,5 +304,6 @@ export function useDiffPanelData() {
     checkpointDiffError,
     selectTurn,
     selectWholeConversation,
+    closeDiff,
   };
 }

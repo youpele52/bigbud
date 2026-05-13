@@ -43,6 +43,7 @@ interface RenderRowContentProps {
   workspaceRoot: string | undefined;
   isWorking: boolean;
   onTimelineImageLoad: () => void;
+  onForkThread?: () => void;
 }
 
 export function MessagesTimelineRowContent(props: RenderRowContentProps) {
@@ -66,6 +67,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
     workspaceRoot,
     isWorking,
     onTimelineImageLoad,
+    onForkThread,
   } = props;
 
   return (
@@ -276,6 +278,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           resolvedTheme={resolvedTheme}
           nowIso={nowIso}
           timestampFormat={timestampFormat}
+          onForkThread={onForkThread}
         />
       )}
 

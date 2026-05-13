@@ -5,7 +5,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureNativeApi, readNativeApi } from "../../rpc/nativeApi";
 
-const PROVIDER_KEYS = ["codex", "claudeAgent", "copilot", "opencode"] as const;
+const PROVIDER_KEYS = ["codex", "claudeAgent", "copilot", "opencode", "pi", "cursor"] as const;
 
 export function useSettingsRestore(onRestored?: () => void) {
   const { theme, setTheme } = useTheme();
@@ -32,7 +32,7 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Diff line wrapping"]
         : []),
       ...(settings.enableAssistantStreaming !== DEFAULT_UNIFIED_SETTINGS.enableAssistantStreaming
-        ? ["Assistant output"]
+        ? ["Stream replies"]
         : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]

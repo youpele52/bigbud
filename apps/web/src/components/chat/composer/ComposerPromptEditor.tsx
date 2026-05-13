@@ -77,7 +77,7 @@ interface ComposerPromptEditorProps {
     terminalContextIds: string[],
   ) => void;
   onCommandKeyDown?: (
-    key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab",
+    key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab" | "Backspace" | "Escape",
     event: KeyboardEvent,
   ) => boolean;
   onPaste: ClipboardEventHandler<HTMLElement>;

@@ -7,7 +7,7 @@ import {
   CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
   resolveCursorAcpBaseModelId,
   resolveCursorAcpConfigUpdates,
-} from "../Layers/CursorProvider.ts";
+} from "../Layers/Cursor/Provider.ts";
 import {
   AcpSessionRuntime,
   type AcpSessionRuntimeOptions,

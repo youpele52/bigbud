@@ -336,6 +336,7 @@ export function normalizePersistedDraftsByThreadId(
     }
     const draftCandidate = draftValue as PersistedComposerThreadDraftState;
     const promptCandidate = typeof draftCandidate.prompt === "string" ? draftCandidate.prompt : "";
+    const shellMode = draftCandidate.shellMode === true;
     const attachments = Array.isArray(draftCandidate.attachments)
       ? draftCandidate.attachments.flatMap((entry) => {
           const normalized = normalizePersistedAttachment(entry);
@@ -434,6 +435,7 @@ export function normalizePersistedDraftsByThreadId(
     }
     nextDraftsByThreadId[threadId as ThreadId] = {
       prompt,
+      shellMode,
       attachments,
       ...(annotations.length > 0 ? { annotations } : {}),
       ...(terminalContexts.length > 0 ? { terminalContexts } : {}),

@@ -18,6 +18,7 @@ import {
   KEY_ARROW_UP_COMMAND,
   KEY_BACKSPACE_COMMAND,
   KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
 } from "lexical";
 import { createContext, useContext, useEffect } from "react";
@@ -46,7 +47,7 @@ export const ComposerTerminalContextActionsContext = createContext<{
 
 export function ComposerCommandKeyPlugin(props: {
   onCommandKeyDown?: (
-    key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab",
+    key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab" | "Backspace" | "Escape",
     event: KeyboardEvent,
   ) => boolean;
 }) {
@@ -54,7 +55,7 @@ export function ComposerCommandKeyPlugin(props: {
 
   useEffect(() => {
     const handleCommand = (
-      key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab",
+      key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab" | "Backspace" | "Escape",
       event: KeyboardEvent | null,
     ): boolean => {
       if (!props.onCommandKeyDown || !event) {
@@ -83,6 +84,16 @@ export function ComposerCommandKeyPlugin(props: {
       (event) => handleCommand("Enter", event),
       COMMAND_PRIORITY_HIGH,
     );
+    const unregisterBackspace = editor.registerCommand(
+      KEY_BACKSPACE_COMMAND,
+      (event) => handleCommand("Backspace", event),
+      COMMAND_PRIORITY_HIGH,
+    );
+    const unregisterEscape = editor.registerCommand(
+      KEY_ESCAPE_COMMAND,
+      (event) => handleCommand("Escape", event),
+      COMMAND_PRIORITY_HIGH,
+    );
     const unregisterTab = editor.registerCommand(
       KEY_TAB_COMMAND,
       (event) => handleCommand("Tab", event),
@@ -93,6 +104,8 @@ export function ComposerCommandKeyPlugin(props: {
       unregisterArrowDown();
       unregisterArrowUp();
       unregisterEnter();
+      unregisterBackspace();
+      unregisterEscape();
       unregisterTab();
     };
   }, [editor, props]);

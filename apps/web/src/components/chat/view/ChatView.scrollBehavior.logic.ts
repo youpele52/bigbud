@@ -7,7 +7,6 @@ interface UseScrollBehaviorInput {
   composerFooterHasWideActions: boolean;
   messageCount: number;
   phase: string;
-  timelineEntries: unknown[];
   composerFormRef: React.RefObject<HTMLFormElement | null>;
   shouldUseCompactComposerFooter: (width: number, options: { hasWideActions: boolean }) => boolean;
   shouldUseCompactComposerPrimaryActions: (
@@ -43,7 +42,6 @@ export function useScrollBehavior({
   composerFooterHasWideActions,
   messageCount,
   phase,
-  timelineEntries,
   composerFormRef,
   shouldUseCompactComposerFooter,
   shouldUseCompactComposerPrimaryActions,
@@ -68,7 +66,7 @@ export function useScrollBehavior({
 
   const setMessagesScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
     messagesScrollRef.current = element;
-    setMessagesScrollElement(element);
+    setMessagesScrollElement((current) => (current === element ? current : element));
   }, []);
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
@@ -171,7 +169,10 @@ export function useScrollBehavior({
       }
     }
 
-    setShowScrollToBottom(!shouldAutoScrollRef.current);
+    const nextShowScrollToBottom = !shouldAutoScrollRef.current;
+    setShowScrollToBottom((current) =>
+      current === nextShowScrollToBottom ? current : nextShowScrollToBottom,
+    );
     lastKnownScrollTopRef.current = currentScrollTop;
   }, []);
 
@@ -259,8 +260,14 @@ export function useScrollBehavior({
 
     composerFormHeightRef.current = composerForm.getBoundingClientRect().height;
     const initialCompactness = measureFooterCompactness();
-    setIsComposerPrimaryActionsCompact(initialCompactness.primaryActionsCompact);
-    setIsComposerFooterCompact(initialCompactness.footerCompact);
+    setIsComposerPrimaryActionsCompact((current) =>
+      current === initialCompactness.primaryActionsCompact
+        ? current
+        : initialCompactness.primaryActionsCompact,
+    );
+    setIsComposerFooterCompact((current) =>
+      current === initialCompactness.footerCompact ? current : initialCompactness.footerCompact,
+    );
     if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver((entries) => {
@@ -306,11 +313,10 @@ export function useScrollBehavior({
   }, [messageCount, scheduleStickToBottom]);
 
   useEffect(() => {
-    void timelineEntries;
     if (phase !== "running") return;
     if (!shouldAutoScrollRef.current) return;
     scheduleStickToBottom();
-  }, [phase, scheduleStickToBottom, timelineEntries]);
+  }, [phase, scheduleStickToBottom]);
 
   return {
     messagesScrollElement,

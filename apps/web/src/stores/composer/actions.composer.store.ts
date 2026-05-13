@@ -51,6 +51,28 @@ export function createComposerContentActions(
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
+    setShellMode: (threadId: ThreadId, shellMode: boolean) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId];
+        if (!existing && !shellMode) {
+          return state;
+        }
+        const nextDraft: ComposerThreadDraftState = {
+          ...(existing ?? createEmptyThreadDraft()),
+          shellMode,
+        };
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        if (shouldRemoveDraft(nextDraft)) {
+          delete nextDraftsByThreadId[threadId];
+        } else {
+          nextDraftsByThreadId[threadId] = nextDraft;
+        }
+        return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
     setTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => {
       if (threadId.length === 0) {
         return;
@@ -399,6 +421,7 @@ export function createComposerContentActions(
         const nextDraft: ComposerThreadDraftState = {
           ...current,
           prompt: "",
+          shellMode: false,
           images: [],
           files: [],
           annotations: [],

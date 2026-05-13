@@ -11,7 +11,7 @@ import { PendingApprovalDialog } from "../../composer/PendingApprovalDialog";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
-import { formatWorkingTimer } from "../../messages/MessagesTimeline.assistantMessage";
+import { formatWorkingTimer } from "../../messages/MessagesTimeline.assistantMessage.meta";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import PlanSidebar from "../../plan/PlanSidebar";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
@@ -19,6 +19,7 @@ import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
+import { useThreadActions } from "../../../../hooks/useThreadActions";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -45,6 +46,7 @@ export function ChatViewContent({
   runtime,
   interactions,
 }: ChatViewContentProps) {
+  const { forkThread } = useThreadActions();
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const lastApprovalRequestIdRef = useRef<string | null>(null);
   const browserOpen = useBrowserPanelStore((state) => state.open);
@@ -200,6 +202,9 @@ export function ChatViewContent({
                 resolvedTheme={base.resolvedTheme}
                 timestampFormat={base.timestampFormat}
                 workspaceRoot={workspaceRoot}
+                onForkThread={() => {
+                  void forkThread(base.activeThread!.id, { navigateToFork: true });
+                }}
               />
             </div>
 

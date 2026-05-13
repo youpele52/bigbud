@@ -6,6 +6,7 @@ import {
   Columns2Icon,
   Rows3Icon,
   TextWrapIcon,
+  XIcon,
 } from "lucide-react";
 import { openInPreferredEditor } from "../../models/editor";
 import { cn } from "~/lib/utils";
@@ -17,6 +18,7 @@ import { useSettings } from "../../hooks/useSettings";
 import { formatShortTimestamp } from "../../utils/timestamp";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
+import { Button } from "../ui/button";
 import {
   type DiffRenderMode,
   getRenderablePatch,
@@ -131,6 +133,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     checkpointDiffError,
     selectTurn,
     selectWholeConversation,
+    closeDiff,
   } = useDiffPanelData();
 
   const selectedPatch = selectedTurn ? selectedTurnCheckpointDiff : conversationCheckpointDiff;
@@ -291,7 +294,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       <div className="flex shrink-0 items-center gap-1 [-webkit-app-region:no-drag]">
         <ToggleGroup
           className="shrink-0"
-          variant="outline"
+          variant="toolbar"
           size="xs"
           value={[diffRenderMode]}
           onValueChange={(value) => {
@@ -311,7 +314,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         <Toggle
           aria-label={diffWordWrap ? "Disable diff line wrapping" : "Enable diff line wrapping"}
           title={diffWordWrap ? "Disable line wrapping" : "Enable line wrapping"}
-          variant="outline"
+          variant="toolbar"
           size="xs"
           pressed={diffWordWrap}
           onPressedChange={(pressed) => {
@@ -320,6 +323,9 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         >
           <TextWrapIcon className="size-3" />
         </Toggle>
+        <Button variant="toolbar" size="icon-xs" onClick={closeDiff} aria-label="Close diff panel">
+          <XIcon className="size-3" />
+        </Button>
       </div>
     </>
   );

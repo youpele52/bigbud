@@ -42,8 +42,8 @@ import { ProviderAdapterRegistry } from "../src/provider/Services/ProviderAdapte
 import { ProviderSessionDirectoryLive } from "../src/provider/Layers/ProviderSessionDirectory.ts";
 import { ServerSettingsService } from "../src/ws/serverSettings.ts";
 import { makeProviderServiceLive } from "../src/provider/Layers/ProviderService.ts";
-import { makeCodexAdapterLive } from "../src/provider/Layers/CodexAdapter.ts";
-import { CodexAdapter } from "../src/provider/Services/CodexAdapter.ts";
+import { makeCodexAdapterLive } from "../src/provider/Layers/Codex/Adapter.ts";
+import { CodexAdapter } from "../src/provider/Services/Codex/Adapter.ts";
 import { ProviderService } from "../src/provider/Services/ProviderService.ts";
 import { AnalyticsService } from "../src/telemetry/Services/AnalyticsService.ts";
 import { CheckpointReactorLive } from "../src/orchestration/Layers/CheckpointReactor.ts";
