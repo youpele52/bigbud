@@ -347,6 +347,36 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
           role: "assistant",
           text: command.delta,
           turnId: command.turnId ?? null,
+          replace: false,
+          streaming: true,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "thread.message.assistant.replace": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      yield* requireThreadReadyForMutation({ thread, command });
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.message-sent",
+        payload: {
+          threadId: command.threadId,
+          messageId: command.messageId,
+          role: "assistant",
+          text: command.text,
+          turnId: command.turnId ?? null,
+          replace: true,
           streaming: true,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,
@@ -375,6 +405,7 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
           role: "assistant",
           text: "",
           turnId: command.turnId ?? null,
+          replace: false,
           streaming: false,
           createdAt: command.createdAt,
           updatedAt: command.createdAt,

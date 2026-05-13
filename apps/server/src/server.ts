@@ -56,6 +56,7 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
+import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -219,6 +220,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(ProviderRegistryLive),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
+  Layer.provideMerge(ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive))),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
   // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process

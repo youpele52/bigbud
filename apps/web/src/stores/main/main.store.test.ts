@@ -594,6 +594,41 @@ describe("incremental orchestration updates", () => {
     expect(next.threads[1]).toBe(thread2);
   });
 
+  it("replaces a streaming assistant message when the event requests replacement semantics", () => {
+    const thread = makeThread({
+      messages: [
+        {
+          id: MessageId.makeUnsafe("message-1"),
+          role: "assistant",
+          text: "hello",
+          turnId: TurnId.makeUnsafe("turn-1"),
+          createdAt: "2026-02-27T00:00:00.000Z",
+          completedAt: "2026-02-27T00:00:00.000Z",
+          streaming: false,
+        },
+      ],
+    });
+    const state = makeState(thread);
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId: MessageId.makeUnsafe("message-1"),
+        role: "assistant",
+        text: "replacement",
+        turnId: TurnId.makeUnsafe("turn-1"),
+        replace: true,
+        streaming: true,
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.threads[0]?.messages[0]?.text).toBe("replacement");
+    expect(next.threads[0]?.messages[0]?.streaming).toBe(true);
+  });
+
   it("applies replay batches in sequence and updates session state", () => {
     const thread = makeThread({
       latestTurn: {
