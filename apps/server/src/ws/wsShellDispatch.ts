@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  type ThreadId,
   OrchestrationDispatchCommandError,
   type OrchestrationCommand,
   type OrchestrationReadModel,
@@ -7,18 +8,36 @@ import {
   type ServerSettings,
   ServerSettingsError,
 } from "@bigbud/contracts";
-import { Data, Effect } from "effect";
+import { Data, Effect, Queue } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils";
 import type { OrchestrationDispatchError } from "../orchestration/Errors";
+import type { ThreadShellRunnerShape } from "../shell/Services/ThreadShellRunner";
 import type { ServerRuntimeStartupError } from "../startup/serverRuntimeStartup";
-import { runShellCommand } from "../utils/runShellCommand";
 import { resolveDefaultChatCwd } from "./serverSettings";
+import {
+  ShellOutputAccumulator,
+  SHELL_OUTPUT_BATCH_FLUSH_MS,
+  SHELL_OUTPUT_BATCH_MAX_BYTES,
+} from "./wsShellDispatch.shellOutput";
 
 class ShellCommandExecutionError extends Data.TaggedError("ShellCommandExecutionError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
+
+type ShellOutputEvent =
+  | {
+      readonly type: "append";
+      readonly text: string;
+    }
+  | {
+      readonly type: "replace";
+      readonly text: string;
+    }
+  | {
+      readonly type: "complete";
+    };
 
 interface DispatchShellCommandServices {
   readonly enqueueCommand: <A, E>(
@@ -36,6 +55,7 @@ interface DispatchShellCommandServices {
   readonly serverSettings: {
     readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
   };
+  readonly threadShellRunner: ThreadShellRunnerShape;
   readonly serverCommandId: (tag: string) => OrchestrationCommand["commandId"];
   readonly toDispatchCommandError: (
     cause: unknown,
@@ -46,12 +66,118 @@ interface DispatchShellCommandServices {
 const THREAD_READ_MODEL_WAIT_ATTEMPTS = 50;
 const THREAD_READ_MODEL_WAIT_INTERVAL = "10 millis";
 
+const dispatchShellAssistantDelta = (input: {
+  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
+  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
+  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
+  readonly delta: string;
+}) =>
+  input.orchestrationEngine
+    .dispatch({
+      type: "thread.message.assistant.delta",
+      commandId: input.serverCommandId("shell-output-delta"),
+      threadId: input.threadId,
+      messageId: input.messageId,
+      delta: input.delta,
+      createdAt: new Date().toISOString(),
+    })
+    .pipe(
+      Effect.mapError((cause) =>
+        input.toDispatchCommandError(cause, "Failed to append shell output."),
+      ),
+    );
+
+const dispatchShellAssistantComplete = (input: {
+  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
+  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
+  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
+}) =>
+  input.orchestrationEngine
+    .dispatch({
+      type: "thread.message.assistant.complete",
+      commandId: input.serverCommandId("shell-output-complete"),
+      threadId: input.threadId,
+      messageId: input.messageId,
+      createdAt: new Date().toISOString(),
+    })
+    .pipe(
+      Effect.mapError((cause) =>
+        input.toDispatchCommandError(cause, "Failed to complete shell output message."),
+      ),
+    );
+
+const dispatchShellAssistantReplace = (input: {
+  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
+  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
+  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
+  readonly text: string;
+}) =>
+  input.orchestrationEngine
+    .dispatch({
+      type: "thread.message.assistant.replace",
+      commandId: input.serverCommandId("shell-output-replace"),
+      threadId: input.threadId,
+      messageId: input.messageId,
+      text: input.text,
+      createdAt: new Date().toISOString(),
+    })
+    .pipe(
+      Effect.mapError((cause) =>
+        input.toDispatchCommandError(cause, "Failed to replace shell output message."),
+      ),
+    );
+
+const consumeShellOutputEvents = (input: {
+  readonly outputQueue: Queue.Queue<ShellOutputEvent>;
+  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
+  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
+  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
+}) =>
+  Effect.gen(function* () {
+    let hasWrittenBody = false;
+
+    while (true) {
+      const event = yield* Queue.take(input.outputQueue);
+
+      if (event.type === "complete") {
+        yield* dispatchShellAssistantComplete(input);
+        return;
+      }
+
+      if (event.text.length === 0) {
+        continue;
+      }
+
+      if (event.type === "replace") {
+        hasWrittenBody = event.text.length > 0;
+        yield* dispatchShellAssistantReplace({
+          ...input,
+          text: event.text,
+        });
+        continue;
+      }
+
+      const delta = hasWrittenBody ? event.text : `\n\n${event.text}`;
+      hasWrittenBody = true;
+      yield* dispatchShellAssistantDelta({ ...input, delta });
+    }
+  });
+
 export const makeDispatchShellCommand =
   ({
     enqueueCommand,
     dispatchInitialShellCommand,
     orchestrationEngine,
     serverSettings,
+    threadShellRunner,
     serverCommandId,
     toDispatchCommandError,
   }: DispatchShellCommandServices) =>
@@ -63,6 +189,9 @@ export const makeDispatchShellCommand =
   > =>
     enqueueCommand(
       Effect.gen(function* () {
+        const services = yield* Effect.services();
+        const runFork = Effect.runForkWith(services);
+        const runPromise = Effect.runPromiseWith(services);
         const dispatchResult = yield* dispatchInitialShellCommand(normalizedCommand);
 
         const readShellCommandThreadContext = (
@@ -111,56 +240,140 @@ export const makeDispatchShellCommand =
           normalizedCommand.bootstrap?.createThread?.worktreePath ??
           bootstrapProjectCwd ??
           resolveDefaultChatCwd(settings);
-
-        const shellResult = yield* Effect.tryPromise({
-          try: () => runShellCommand(normalizedCommand.shellCommand, { cwd }),
-          catch: (cause) =>
-            new ShellCommandExecutionError({
-              message: cause instanceof Error ? cause.message : "Failed to run shell command.",
-              cause,
-            }),
-        }).pipe(
-          Effect.catchTag("ShellCommandExecutionError", (error) =>
-            Effect.succeed({ output: error.message }),
-          ),
-        );
-
-        const output = `$ ${normalizedCommand.shellCommand}${
-          shellResult.output.length > 0 ? `\n\n${shellResult.output}` : ""
-        }`;
         const messageId = MessageId.makeUnsafe(crypto.randomUUID());
-        const createdAt = new Date().toISOString();
+        const outputQueue = yield* Queue.unbounded<ShellOutputEvent>();
+        let pendingOutputEvent = Promise.resolve();
+        const enqueueOutputEvent = (event: ShellOutputEvent): void => {
+          pendingOutputEvent = pendingOutputEvent
+            .then(() => runPromise(Queue.offer(outputQueue, event).pipe(Effect.asVoid)))
+            .catch(() => undefined);
+        };
+        const shellOutput = new ShellOutputAccumulator(normalizedCommand.shellCommand);
+        let pendingBatch = "";
+        let batchTimer: ReturnType<typeof setTimeout> | null = null;
+        let receivedChunkOutput = false;
+        const clearBatchTimer = (): void => {
+          if (batchTimer !== null) {
+            clearTimeout(batchTimer);
+            batchTimer = null;
+          }
+        };
+        const flushPendingBatch = (): void => {
+          clearBatchTimer();
+          if (pendingBatch.length === 0) {
+            return;
+          }
+          const batch = pendingBatch;
+          pendingBatch = "";
+          const update = shellOutput.ingest(batch);
+          if (!update) {
+            return;
+          }
+          enqueueOutputEvent({
+            type: update.dispatch,
+            text: update.text,
+          });
+        };
+        const queueShellChunk = (chunk: string): void => {
+          if (chunk.length === 0) {
+            return;
+          }
 
-        if (output.length > 0) {
-          yield* orchestrationEngine
-            .dispatch({
-              type: "thread.message.assistant.delta",
-              commandId: serverCommandId("shell-output-delta"),
-              threadId: normalizedCommand.threadId,
-              messageId,
-              delta: output,
-              createdAt,
-            })
-            .pipe(
-              Effect.mapError((cause) =>
-                toDispatchCommandError(cause, "Failed to append shell output."),
-              ),
-            );
-        }
+          pendingBatch += chunk;
+          if (Buffer.byteLength(pendingBatch, "utf-8") >= SHELL_OUTPUT_BATCH_MAX_BYTES) {
+            flushPendingBatch();
+            return;
+          }
 
-        yield* orchestrationEngine
-          .dispatch({
-            type: "thread.message.assistant.complete",
-            commandId: serverCommandId("shell-output-complete"),
+          if (batchTimer !== null) {
+            return;
+          }
+
+          batchTimer = setTimeout(() => {
+            batchTimer = null;
+            flushPendingBatch();
+          }, SHELL_OUTPUT_BATCH_FLUSH_MS);
+        };
+
+        runFork(
+          consumeShellOutputEvents({
+            outputQueue,
+            orchestrationEngine,
+            serverCommandId,
+            toDispatchCommandError,
             threadId: normalizedCommand.threadId,
             messageId,
-            createdAt: new Date().toISOString(),
-          })
-          .pipe(
-            Effect.mapError((cause) =>
-              toDispatchCommandError(cause, "Failed to complete shell output message."),
+          }).pipe(Effect.ignoreCause({ log: true })),
+        );
+
+        yield* dispatchShellAssistantDelta({
+          orchestrationEngine,
+          serverCommandId,
+          toDispatchCommandError,
+          threadId: normalizedCommand.threadId,
+          messageId,
+          delta: `$ ${normalizedCommand.shellCommand}`,
+        });
+
+        runFork(
+          threadShellRunner
+            .run({
+              threadId: normalizedCommand.threadId,
+              cwd,
+              command: normalizedCommand.shellCommand,
+              timeoutMs: null,
+              onOutputChunk: (chunk) => {
+                receivedChunkOutput = true;
+                queueShellChunk(chunk);
+              },
+            })
+            .pipe(
+              Effect.tap((shellResult) =>
+                Effect.sync(() => {
+                  flushPendingBatch();
+                  if (receivedChunkOutput || shellResult.output.length === 0) {
+                    return;
+                  }
+                  const update = shellOutput.ingest(shellResult.output);
+                  if (update) {
+                    enqueueOutputEvent({
+                      type: update.dispatch,
+                      text: update.text,
+                    });
+                  }
+                }),
+              ),
+              Effect.mapError(
+                (cause) =>
+                  new ShellCommandExecutionError({
+                    message:
+                      cause instanceof Error ? cause.message : "Failed to run shell command.",
+                    cause,
+                  }),
+              ),
+              Effect.catchTag("ShellCommandExecutionError", (error) =>
+                Effect.sync(() => {
+                  flushPendingBatch();
+                  const update = shellOutput.ingest(`\n${error.message}\n`);
+                  if (update) {
+                    enqueueOutputEvent({
+                      type: update.dispatch,
+                      text: update.text,
+                    });
+                  }
+                }),
+              ),
+              Effect.ensuring(
+                Effect.promise(async () => {
+                  flushPendingBatch();
+                  await shellOutput.close();
+                  enqueueOutputEvent({ type: "complete" });
+                  await pendingOutputEvent;
+                }),
+              ),
+              Effect.ignoreCause({ log: true }),
             ),
-          );
+        );
 
         return dispatchResult;
       }),

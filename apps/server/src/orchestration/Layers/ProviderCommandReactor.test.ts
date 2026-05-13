@@ -509,6 +509,87 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toBe("summarize this");
   });
 
+  it("adds attached file metadata without exposing source paths to providers", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    const sourcePath = "/Users/alice/Desktop/report.pdf";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-attachment-metadata"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-attachment-metadata"),
+          role: "user",
+          text: "summarize this",
+          attachments: [
+            {
+              type: "file",
+              id: "thread-attachment-00000000-0000-4000-8000-000000000001",
+              name: "report.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 120_000,
+              sourcePath,
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("<attached_files>");
+    expect(sendInput?.input).toContain("- report.pdf (application/pdf, 120000 bytes)");
+    expect(sendInput?.input).not.toContain(sourcePath);
+  });
+
+  it("does not add generic attached file metadata for Pi", async () => {
+    const harness = await createHarness({
+      threadModelSelection: {
+        provider: "pi",
+        model: "claude-sonnet-4",
+        subProviderID: "anthropic",
+      },
+    });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-pi-attachment-metadata"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-pi-attachment-metadata"),
+          role: "user",
+          text: "summarize this",
+          attachments: [
+            {
+              type: "file",
+              id: "thread-attachment-00000000-0000-4000-8000-000000000001",
+              name: "report.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 120_000,
+              sourcePath: "/Users/alice/Desktop/report.pdf",
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toBe("summarize this");
+  });
+
   it("expands compact agent mentions for provider input while keeping stored user text compact", async () => {
     const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3code-reactor-agent-"));
     createdBaseDirs.add(baseDir);

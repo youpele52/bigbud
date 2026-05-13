@@ -6,7 +6,6 @@ import { type TurnDiffSummary } from "../../../models/types";
 import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
 import ChatMarkdown from "../common/ChatMarkdown";
 import { Button } from "../../ui/button";
-import { ScrollArea } from "../../ui/scroll-area";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { DiffStatLabel, hasNonZeroStat } from "../diff-display/DiffStatLabel";
 import { ChangedFilesTree } from "../diff-display/ChangedFilesTree";
@@ -18,7 +17,7 @@ import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypograph
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 
-const SHELL_OUTPUT_MAX_HEIGHT = "280px";
+const SHELL_OUTPUT_MIN_WIDTH = "48rem";
 const SHELL_OUTPUT_MAX_WIDTH = "960px";
 
 export type AssistantMessageRow = Extract<MessagesTimelineRow, { kind: "message" }> & {
@@ -50,21 +49,25 @@ function ShellOutputCard(props: {
   const { messageText, terminalTypography } = props;
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
+    <div
+      className="inline-block w-fit max-w-full rounded-xl border border-border/60 bg-card/40 px-4 py-3"
+      style={{
+        minWidth: `min(100%, ${SHELL_OUTPUT_MIN_WIDTH})`,
+      }}
+    >
       <div className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
         <TerminalIcon className="size-3 shrink-0" />
         <span>Shell</span>
       </div>
-      <ScrollArea
-        scrollbarGutter
-        className="h-auto w-auto max-w-full rounded-md"
+      <div
+        className="max-w-full overflow-x-auto overflow-y-hidden rounded-md"
         style={{
-          maxHeight: SHELL_OUTPUT_MAX_HEIGHT,
           maxWidth: `min(100%, ${SHELL_OUTPUT_MAX_WIDTH})`,
+          minWidth: `min(100%, ${SHELL_OUTPUT_MIN_WIDTH})`,
         }}
       >
         <pre
-          className="m-0 min-w-full whitespace-pre text-foreground/95"
+          className="m-0 inline-block min-w-full whitespace-pre text-foreground/95"
           style={{
             width: "max-content",
             fontFamily: terminalTypography.fontFamily,
@@ -74,7 +77,7 @@ function ShellOutputCard(props: {
         >
           {messageText}
         </pre>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

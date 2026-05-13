@@ -18,6 +18,8 @@ Entries below are grouped by release tag and date.
 
 - Added bang-prefixed shell mode in the chat composer so quick commands like `!ls` can run directly from the chatbox without opening the in-app terminal.
 - Introduced a dedicated `thread.shell.run` orchestration command and server-side shell dispatch path that resolves cwd from the thread worktree, project folder, or `defaultChatCwd` fallback for chat-only threads.
+- Moved chatbox shell execution onto the hidden PTY path so interactive shell startup state, aliases, and per-thread working-directory changes behave much closer to the in-app terminal.
+- Added streamed shell output with automatic promotion from normal chat results into a bounded live-tail view for long-running commands like `docker compose up`, preventing unbounded message growth while still surfacing current logs in chat.
 
 ### Provider and Model Routing
 

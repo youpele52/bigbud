@@ -39,6 +39,7 @@ import {
 } from "../observability/RpcInstrumentation";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
 import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
+import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
 import { ServerRuntimeStartup } from "../startup/serverRuntimeStartup";
 import { ServerSettingsService } from "./serverSettings";
@@ -68,6 +69,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const terminalManager = yield* TerminalManager;
     const providerRegistry = yield* ProviderRegistry;
     const discoveryRegistry = yield* DiscoveryRegistry;
+    const threadShellRunner = yield* ThreadShellRunner;
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
@@ -169,6 +171,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
               ),
       orchestrationEngine,
       serverSettings,
+      threadShellRunner,
       serverCommandId,
       toDispatchCommandError,
     });
