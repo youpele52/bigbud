@@ -44,6 +44,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  onForkThread?: () => void;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
@@ -80,6 +81,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  onForkThread,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -326,6 +328,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   nowIso={nowIso}
                   timestampFormat={timestampFormat}
                   workspaceRoot={workspaceRoot}
+                  {...(onForkThread ? { onForkThread } : {})}
                   isWorking={isWorking}
                   onTimelineImageLoad={onTimelineImageLoad}
                 />
@@ -355,6 +358,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             nowIso={nowIso}
             timestampFormat={timestampFormat}
             workspaceRoot={workspaceRoot}
+            {...(onForkThread ? { onForkThread } : {})}
             isWorking={isWorking}
             onTimelineImageLoad={onTimelineImageLoad}
           />

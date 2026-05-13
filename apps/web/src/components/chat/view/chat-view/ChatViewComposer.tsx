@@ -177,13 +177,15 @@ export function ChatViewComposer({
                 thread.isComposerApprovalState
                   ? (thread.activePendingApproval?.detail ??
                     "Resolve this approval request to continue")
-                  : thread.isOpencodePendingUserInputMode
-                    ? "Type your answer to continue..."
-                    : thread.showPlanFollowUpPrompt && thread.activeProposedPlan
-                      ? "Add feedback to refine the plan, or leave this blank to implement it"
-                      : thread.phase === "disconnected"
-                        ? "What are we working on?"
-                        : "Ask anything, @tag files/folders, or use / to show available commands"
+                  : base.composerDraft.shellMode
+                    ? "Enter shell command"
+                    : thread.isOpencodePendingUserInputMode
+                      ? "Type your answer to continue..."
+                      : thread.showPlanFollowUpPrompt && thread.activeProposedPlan
+                        ? "Add feedback to refine the plan, or leave this blank to implement it"
+                        : thread.phase === "disconnected"
+                          ? "What are we working on?"
+                          : "Ask anything, @tag files/folders, or use / to show available commands"
               }
               disabled={base.isConnecting || thread.isComposerApprovalState}
             />

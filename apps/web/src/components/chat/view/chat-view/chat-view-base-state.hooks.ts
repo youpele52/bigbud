@@ -1,6 +1,7 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { randomUUID } from "~/lib/utils";
@@ -103,6 +104,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   );
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
+  const setComposerDraftShellMode = useComposerDraftStore((store) => store.setShellMode);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setComposerDraftRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore(
@@ -218,12 +220,12 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     () => selectThreadTerminalState(terminalStateByThreadId, threadId),
     [terminalStateByThreadId, threadId],
   );
-  const openTerminalThreadIds = useMemo(
-    () =>
-      Object.entries(terminalStateByThreadId).flatMap(([nextThreadId, nextTerminalState]) =>
+  const openTerminalThreadIds = useTerminalStateStore(
+    useShallow((state) =>
+      Object.entries(state.terminalStateByThreadId).flatMap(([nextThreadId, nextTerminalState]) =>
         nextTerminalState.terminalOpen ? [nextThreadId as ThreadId] : [],
       ),
-    [terminalStateByThreadId],
+    ),
   );
   const storeSetTerminalOpen = useTerminalStateStore((s) => s.setTerminalOpen);
   const storeSplitTerminal = useTerminalStateStore((s) => s.splitTerminal);
@@ -238,11 +240,10 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   );
 
   const threads = useStore((state) => state.threads);
-  const serverThreadIds = useMemo(() => threads.map((thread) => thread.id), [threads]);
+  const serverThreadIds = useStore(useShallow((state) => state.threads.map((thread) => thread.id)));
   const draftThreadsByThreadId = useComposerDraftStore((store) => store.draftThreadsByThreadId);
-  const draftThreadIds = useMemo(
-    () => Object.keys(draftThreadsByThreadId) as ThreadId[],
-    [draftThreadsByThreadId],
+  const draftThreadIds = useComposerDraftStore(
+    useShallow((store) => Object.keys(store.draftThreadsByThreadId) as ThreadId[]),
   );
   const [mountedTerminalThreadIds, setMountedTerminalThreadIds] = useState<ThreadId[]>([]);
 
@@ -251,6 +252,12 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
       setComposerDraftPrompt(threadId, nextPrompt);
     },
     [setComposerDraftPrompt, threadId],
+  );
+  const setComposerShellMode = useCallback(
+    (shellMode: boolean) => {
+      setComposerDraftShellMode(threadId, shellMode);
+    },
+    [setComposerDraftShellMode, threadId],
   );
   const addComposerImage = useCallback(
     (image: (typeof composerImages)[number]) => {
@@ -396,6 +403,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     composerSendState,
     nonPersistedComposerImageIds,
     setComposerDraftPrompt,
+    setComposerDraftShellMode,
     setComposerDraftModelSelection,
     setComposerDraftRuntimeMode,
     setComposerDraftInteractionMode,
@@ -496,6 +504,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     mountedTerminalThreadIds,
     setMountedTerminalThreadIds,
     setPrompt,
+    setComposerShellMode,
     addComposerImage,
     addComposerImagesToDraft,
     addComposerTerminalContextsToDraft,
