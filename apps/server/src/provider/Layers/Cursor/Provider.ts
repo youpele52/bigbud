@@ -332,11 +332,6 @@ const makeCursorAcpProbeRuntime = (cursorSettings: CursorSettings) =>
         clientInfo: { name: "bigcode-provider-probe", version: "0.0.0" },
         authMethodId: "cursor_login",
         clientCapabilities: CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
-        protocolLogging: {
-          logIncoming: true,
-          logOutgoing: true,
-          logger: (event) => Effect.sync(() => console.error("[ACP PROTO]", JSON.stringify(event))),
-        },
       }).pipe(Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner))),
     );
     return yield* Effect.service(AcpSessionRuntime).pipe(Effect.provide(acpContext));
@@ -1032,7 +1027,6 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         yield* Effect.logWarning("Cursor ACP model discovery failed", {
           cause: prettyCause,
         });
-        console.error("[CURSOR PROBE FAILED]", prettyCause);
         discoveryWarning = "Cursor ACP model discovery failed. Check server logs for details.";
       } else if (Option.isNone(discoveryExit.value)) {
         discoveryWarning = `Cursor ACP model discovery timed out after ${CURSOR_ACP_MODEL_DISCOVERY_TIMEOUT_MS}ms.`;

@@ -10,6 +10,7 @@ import {
   isClaudeUltrathinkPrompt,
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  normalizeCursorModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
   normalizeModelSlug,
   resolveApiModelId,
@@ -286,6 +287,37 @@ describe("normalize*ModelOptionsWithCapabilities", () => {
   it("preserves Pi thinking level as-is", () => {
     expect(normalizePiModelOptionsWithCapabilities(codexCaps, { thinkingLevel: "high" })).toEqual({
       thinkingLevel: "high",
+    });
+  });
+
+  it("normalizes Cursor options against model capabilities", () => {
+    expect(
+      normalizeCursorModelOptionsWithCapabilities(
+        {
+          reasoningEffortLevels: [
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High", isDefault: true },
+          ],
+          supportsFastMode: true,
+          supportsThinkingToggle: true,
+          contextWindowOptions: [
+            { value: "200k", label: "200k" },
+            { value: "1m", label: "1M", isDefault: true },
+          ],
+          promptInjectedEffortLevels: [],
+        },
+        {
+          reasoning: "medium",
+          thinking: false,
+          fastMode: false,
+          contextWindow: "1m",
+        },
+      ),
+    ).toEqual({
+      reasoning: "medium",
+      thinking: false,
+      fastMode: false,
+      contextWindow: "1m",
     });
   });
 });

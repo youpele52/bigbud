@@ -5,6 +5,7 @@ import {
   type ClaudeModelOptions,
   type CopilotModelOptions,
   type CodexModelOptions,
+  type CursorModelOptions,
   type ModelCapabilities,
   type ModelSelection,
   type OpencodeModelOptions,
@@ -144,6 +145,23 @@ export function normalizeOpencodeModelOptionsWithCapabilities(
         reasoningEffort: reasoningEffort as OpencodeModelOptions["reasoningEffort"],
       }
     : undefined;
+}
+
+export function normalizeCursorModelOptionsWithCapabilities(
+  caps: ModelCapabilities,
+  modelOptions: CursorModelOptions | null | undefined,
+): CursorModelOptions | undefined {
+  const reasoning = resolveEffort(caps, modelOptions?.reasoning);
+  const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
+  const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
+  const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
+  const nextOptions: CursorModelOptions = {
+    ...(thinking !== undefined ? { thinking } : {}),
+    ...(reasoning ? { reasoning: reasoning as CursorModelOptions["reasoning"] } : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+  };
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
 }
 
 export function normalizePiModelOptionsWithCapabilities(
