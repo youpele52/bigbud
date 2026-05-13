@@ -14,6 +14,8 @@ import {
   OrchestrationProposedPlan,
   OrchestrationSession,
   ProjectCreateCommand,
+  ThreadShellRunCommand,
+  ThreadShellRunRequestedPayload,
   ThreadMetaUpdatedPayload,
   ThreadTurnStartCommand,
   ThreadCreatedPayload,
@@ -27,8 +29,12 @@ const decodeProjectCreateCommand = Schema.decodeUnknownEffect(ProjectCreateComma
 const decodeProjectCreatedPayload = Schema.decodeUnknownEffect(ProjectCreatedPayload);
 const decodeProjectMetaUpdatedPayload = Schema.decodeUnknownEffect(ProjectMetaUpdatedPayload);
 const decodeThreadTurnStartCommand = Schema.decodeUnknownEffect(ThreadTurnStartCommand);
+const decodeThreadShellRunCommand = Schema.decodeUnknownEffect(ThreadShellRunCommand);
 const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
+);
+const decodeThreadShellRunRequestedPayload = Schema.decodeUnknownEffect(
+  ThreadShellRunRequestedPayload,
 );
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
@@ -233,6 +239,41 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
     assert.strictEqual(parsed.bootstrap?.createThread?.projectId, "project-1");
     assert.strictEqual(parsed.bootstrap?.prepareWorktree?.baseBranch, "main");
     assert.strictEqual(parsed.bootstrap?.runSetupScript, true);
+  }),
+);
+
+it.effect("accepts shell commands with bootstrap metadata in thread.shell.run", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadShellRunCommand({
+      type: "thread.shell.run",
+      commandId: "cmd-shell-bootstrap",
+      threadId: "thread-1",
+      message: {
+        messageId: "msg-shell-bootstrap",
+        role: "user",
+        text: "! ls -la",
+        attachments: [],
+      },
+      shellCommand: "ls -la",
+      bootstrap: {
+        createThread: {
+          projectId: "project-1",
+          title: "Bootstrap thread",
+          modelSelection: {
+            provider: "codex",
+            model: "gpt-5.4",
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.shellCommand, "ls -la");
+    assert.strictEqual(parsed.bootstrap?.createThread?.projectId, "project-1");
   }),
 );
 
@@ -506,6 +547,19 @@ it.effect("decodes thread.turn-start-requested title seed when present", () =>
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.titleSeed, "Investigate reconnect failures");
+  }),
+);
+
+it.effect("decodes thread.shell-run-requested payloads", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadShellRunRequestedPayload({
+      threadId: "thread-2",
+      messageId: "msg-shell-1",
+      shellCommand: "git status",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.messageId, "msg-shell-1");
+    assert.strictEqual(parsed.shellCommand, "git status");
   }),
 );
 

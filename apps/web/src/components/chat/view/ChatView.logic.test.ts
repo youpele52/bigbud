@@ -10,6 +10,7 @@ import {
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
+  readBangShellInput,
   reconcileMountedTerminalThreadIds,
   waitForStartedServerThread,
 } from "./ChatView.logic";
@@ -118,6 +119,27 @@ describe("buildExpiredTerminalContextToastCopy", () => {
       title: "Expired terminal contexts omitted from message",
       description: "Re-add it if you want that terminal output included.",
     });
+  });
+});
+
+describe("readBangShellInput", () => {
+  it("returns prompt text and a normalized shell command for bang-prefixed prompts", () => {
+    expect(readBangShellInput("! ls -la  ")).toEqual({
+      promptText: " ls -la  ",
+      shellCommand: "ls -la  ",
+    });
+  });
+
+  it("returns an empty shell command when only the bang prefix is present", () => {
+    expect(readBangShellInput("!   ")).toEqual({
+      promptText: "   ",
+      shellCommand: "",
+    });
+  });
+
+  it("requires the bang to be at position 0", () => {
+    expect(readBangShellInput(" ! ls")).toBeNull();
+    expect(readBangShellInput("please run ls")).toBeNull();
   });
 });
 

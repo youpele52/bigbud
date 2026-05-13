@@ -1,6 +1,7 @@
 import { type ProviderInteractionMode, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useCallback } from "react";
 import {
+  collapseExpandedComposerCursor,
   type ComposerTrigger,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
@@ -12,6 +13,7 @@ import {
 import { type TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ComposerCommandItem } from "../composer/ComposerCommandMenu";
 import type { ComposerPromptEditorHandle } from "../composer/ComposerPromptEditor";
+import { readBangShellInput } from "./ChatView.logic";
 
 export interface UseComposerCommandHandlersInput {
   composerMenuOpenRef: React.MutableRefObject<boolean>;
@@ -24,6 +26,7 @@ export interface UseComposerCommandHandlersInput {
   composerTerminalContexts: TerminalContextDraft[];
   composerMenuItems: ComposerCommandItem[];
   composerHighlightedItemId: string | null;
+  isComposerShellMode: boolean;
   interactionMode: ProviderInteractionMode;
   activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
   activePendingUserInput: { requestId: string } | null;
@@ -31,6 +34,7 @@ export interface UseComposerCommandHandlersInput {
   setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
+  setComposerShellMode: (shellMode: boolean) => void;
   setComposerDraftTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
   threadId: ThreadId;
   setPrompt: (prompt: string) => void;
@@ -95,12 +99,14 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     composerTerminalContexts,
     composerMenuItems,
     composerHighlightedItemId,
+    isComposerShellMode,
     activePendingProgress,
     activePendingUserInput,
     isOpencodePendingUserInputMode,
     setComposerCursor,
     setComposerTrigger,
     setComposerHighlightedItemId,
+    setComposerShellMode,
     setComposerDraftTerminalContexts,
     threadId,
     setPrompt,
@@ -324,6 +330,27 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
         );
         return;
       }
+      const bangInput =
+        isComposerShellMode || nextPrompt.startsWith("!") ? readBangShellInput(nextPrompt) : null;
+      if (isComposerShellMode || bangInput) {
+        const promptText = bangInput?.promptText ?? nextPrompt;
+        const collapsedCursor = collapseExpandedComposerCursor(
+          promptText,
+          Math.max(0, expandedCursor - (bangInput ? 1 : 0)),
+        );
+        promptRef.current = promptText;
+        setPrompt(promptText);
+        setComposerShellMode(true);
+        if (!terminalContextIdListsEqual(composerTerminalContexts, terminalContextIds)) {
+          setComposerDraftTerminalContexts(
+            threadId,
+            syncTerminalContextsByIds(composerTerminalContexts, terminalContextIds),
+          );
+        }
+        setComposerCursor(collapsedCursor);
+        setComposerTrigger(null);
+        return;
+      }
       promptRef.current = nextPrompt;
       setPrompt(nextPrompt);
       if (!terminalContextIdListsEqual(composerTerminalContexts, terminalContextIds)) {
@@ -344,16 +371,30 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       composerTerminalContexts,
       onChangeActivePendingUserInputCustomAnswer,
       setPrompt,
+      isComposerShellMode,
       setComposerDraftTerminalContexts,
       threadId,
       promptRef,
+      setComposerShellMode,
       setComposerCursor,
       setComposerTrigger,
     ],
   );
 
   const onComposerCommandKey = useCallback(
-    (key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab", event: KeyboardEvent): boolean => {
+    (
+      key: "ArrowDown" | "ArrowUp" | "Enter" | "Tab" | "Backspace" | "Escape",
+      event: KeyboardEvent,
+    ): boolean => {
+      if (
+        isComposerShellMode &&
+        readComposerSnapshot().value.length === 0 &&
+        (key === "Backspace" || key === "Escape")
+      ) {
+        setComposerShellMode(false);
+        setComposerTrigger(null);
+        return true;
+      }
       if (key === "Tab" && event.shiftKey) {
         toggleInteractionMode();
         return true;
@@ -391,7 +432,11 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       nudgeComposerMenuHighlight,
       onSelectComposerItem,
       onSend,
+      isComposerShellMode,
+      readComposerSnapshot,
       resolveActiveComposerTrigger,
+      setComposerShellMode,
+      setComposerTrigger,
       toggleInteractionMode,
     ],
   );

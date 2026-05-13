@@ -19,6 +19,57 @@ import {
   waitForThreadToExist,
 } from "../components/chat/view/ChatView.logic";
 
+const FORK_TITLE_SUFFIX_PATTERN = /\s+\(([A-Z]+)\)$/;
+
+function decodeAlphaSuffix(value: string): number {
+  let result = 0;
+  for (const char of value) {
+    result = result * 26 + (char.charCodeAt(0) - 64);
+  }
+  return result;
+}
+
+function encodeAlphaSuffix(value: number): string {
+  let remaining = value;
+  let result = "";
+  while (remaining > 0) {
+    const index = (remaining - 1) % 26;
+    result = String.fromCharCode(65 + index) + result;
+    remaining = Math.floor((remaining - 1) / 26);
+  }
+  return result;
+}
+
+export function buildForkThreadTitle(
+  sourceTitle: string,
+  siblingTitles: ReadonlyArray<string>,
+): string {
+  const trimmedSourceTitle = sourceTitle.trim();
+  const match = FORK_TITLE_SUFFIX_PATTERN.exec(trimmedSourceTitle);
+  const baseTitle = (match ? trimmedSourceTitle.slice(0, match.index) : trimmedSourceTitle).trim();
+  const normalizedBaseTitle = baseTitle.length > 0 ? baseTitle : "New thread";
+
+  let highestSuffixIndex = 0;
+  for (const title of siblingTitles) {
+    const trimmedTitle = title.trim();
+    if (trimmedTitle === normalizedBaseTitle) {
+      highestSuffixIndex = Math.max(highestSuffixIndex, 0);
+      continue;
+    }
+    const siblingMatch = FORK_TITLE_SUFFIX_PATTERN.exec(trimmedTitle);
+    if (!siblingMatch) {
+      continue;
+    }
+    const siblingBaseTitle = trimmedTitle.slice(0, siblingMatch.index).trim();
+    if (siblingBaseTitle !== normalizedBaseTitle) {
+      continue;
+    }
+    highestSuffixIndex = Math.max(highestSuffixIndex, decodeAlphaSuffix(siblingMatch[1] ?? ""));
+  }
+
+  return `${normalizedBaseTitle} (${encodeAlphaSuffix(highestSuffixIndex + 1)})`;
+}
+
 export function useThreadActions() {
   const appSettings = useSettings();
   const routeThreadId = useParams({
@@ -189,6 +240,12 @@ export function useThreadActions() {
       const forkedThreadId = newThreadId();
       const createdAt = new Date().toISOString();
       const seedMessages = prepareSeedMessages(sourceThread.messages);
+      const forkedThreadTitle = buildForkThreadTitle(
+        sourceThread.title,
+        threads
+          .filter((entry) => entry.projectId === sourceThread.projectId)
+          .map((entry) => entry.title),
+      );
 
       try {
         await api.orchestration.dispatchCommand({
@@ -196,7 +253,7 @@ export function useThreadActions() {
           commandId: newCommandId(),
           threadId: forkedThreadId,
           projectId: sourceThread.projectId,
-          title: sourceThread.title,
+          title: forkedThreadTitle,
           modelSelection: options?.modelSelection ?? sourceThread.modelSelection,
           runtimeMode: sourceThread.runtimeMode,
           interactionMode: sourceThread.interactionMode,

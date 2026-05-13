@@ -102,6 +102,7 @@ export function partializeComposerDraftStoreState(
       Object.keys(draft.modelSelectionByProvider).length > 0 || draft.activeProvider !== null;
     if (
       draft.prompt.length === 0 &&
+      !draft.shellMode &&
       draft.persistedAttachments.length === 0 &&
       draft.annotations.length === 0 &&
       draft.terminalContexts.length === 0 &&
@@ -114,6 +115,7 @@ export function partializeComposerDraftStoreState(
     }
     const persistedDraft: DeepMutable<PersistedComposerThreadDraftState> = {
       prompt: draft.prompt,
+      ...(draft.shellMode ? { shellMode: true } : {}),
       attachments: draft.persistedAttachments,
       ...(draft.persistedFileAttachments.length > 0
         ? { fileAttachments: draft.persistedFileAttachments }
@@ -222,6 +224,7 @@ export function toHydratedThreadDraft(
 
   return {
     prompt: persistedDraft.prompt,
+    shellMode: persistedDraft.shellMode ?? false,
     images: hydrateImagesFromPersisted(persistedDraft.attachments),
     files: hydrateFilesFromPersisted(persistedFileAttachments),
     annotations: persistedDraft.annotations ? [...persistedDraft.annotations] : [],

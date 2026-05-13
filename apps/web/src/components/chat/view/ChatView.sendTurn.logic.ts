@@ -74,6 +74,7 @@ export interface UseOnSendInput {
   selectedModelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
+  isComposerShellMode: boolean;
   envMode: string;
   showPlanFollowUpPrompt: boolean;
   activeProposedPlan: ProposedPlan | null;
@@ -83,6 +84,7 @@ export interface UseOnSendInput {
   shouldAutoScrollRef: React.MutableRefObject<boolean>;
   setOptimisticUserMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setPrompt: (prompt: string) => void;
+  setComposerShellMode: (shellMode: boolean) => void;
   setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -149,6 +151,7 @@ export function useOnSend(input: UseOnSendInput) {
       selectedModelSelection: modelSel,
       runtimeMode: runMode,
       interactionMode: interactMode,
+      isComposerShellMode,
       envMode: env,
       showPlanFollowUpPrompt: planFollowUp,
       activeProposedPlan: proposedPlan,
@@ -160,6 +163,13 @@ export function useOnSend(input: UseOnSendInput) {
     } = inputRef.current;
 
     if (!api || !thread) return;
+    const resetComposerDraft = () => {
+      pRef.current = "";
+      inputRef.current.clearComposerDraftContent(thread.id);
+      inputRef.current.setComposerHighlightedItemId(null);
+      inputRef.current.setComposerCursor(0);
+      inputRef.current.setComposerTrigger(null);
+    };
     const trimmed = pRef.current.trim();
     if (isOpencodePendingUserInputMode && activePendingUserInputRequestId) {
       if (!trimmed) {
@@ -176,14 +186,162 @@ export function useOnSend(input: UseOnSendInput) {
           ? Object.fromEntries(questions.map((q) => [q.id, trimmed]))
           : { [activePendingUserInputRequestId]: trimmed };
       await inputRef.current.onRespondToUserInput(activePendingUserInputRequestId, answers);
-      pRef.current = "";
-      inputRef.current.clearComposerDraftContent(thread.id);
-      inputRef.current.setComposerHighlightedItemId(null);
-      inputRef.current.setComposerCursor(0);
-      inputRef.current.setComposerTrigger(null);
+      resetComposerDraft();
       return;
     }
     if (sendBusy || connecting || inFlightRef.current) return;
+    if (planFollowUp && proposedPlan) {
+      const followUp = resolvePlanFollowUpSubmission({
+        draftText: trimmed,
+        planMarkdown: proposedPlan.planMarkdown,
+      });
+      resetComposerDraft();
+      await inputRef.current.onSubmitPlanFollowUp({
+        text: followUp.text,
+        interactionMode: followUp.interactionMode,
+      });
+      return;
+    }
+    if (isComposerShellMode) {
+      if (
+        images.length > 0 ||
+        files.length > 0 ||
+        annotations.length > 0 ||
+        termContexts.length > 0
+      ) {
+        inputRef.current.setThreadError(
+          thread.id,
+          "Shell commands can't include attachments or inline context.",
+        );
+        return;
+      }
+      const shellPromptForSend = pRef.current;
+      const shellCommand = shellPromptForSend.trimStart();
+      if (!shellCommand) {
+        inputRef.current.setThreadError(thread.id, "Enter a shell command.");
+        return;
+      }
+      if (!project) return;
+
+      const threadIdForSend = thread.id;
+      const isFirstMessage = !isServer || thread.messages.length === 0;
+      const baseBranchForWorktree =
+        isFirstMessage && env === "worktree" && !thread.worktreePath ? thread.branch : null;
+      const shouldCreateWorktree = isFirstMessage && env === "worktree" && !thread.worktreePath;
+      if (shouldCreateWorktree && !thread.branch) {
+        inputRef.current.setStoreThreadError(
+          threadIdForSend,
+          "Select a base branch before sending in New worktree mode.",
+        );
+        return;
+      }
+      if (shouldCreateWorktree && !project.cwd) {
+        inputRef.current.setStoreThreadError(
+          threadIdForSend,
+          "New worktree mode is unavailable for chats without a project folder.",
+        );
+        return;
+      }
+
+      const messageIdForSend = newMessageId();
+      const messageCreatedAt = new Date().toISOString();
+
+      inFlightRef.current = true;
+      inputRef.current.beginLocalDispatch({ preparingWorktree: Boolean(baseBranchForWorktree) });
+      inputRef.current.setThreadError(threadIdForSend, null);
+      autoScrollRef.current = true;
+      inputRef.current.forceStickToBottom();
+      resetComposerDraft();
+
+      let shellRunSucceeded = false;
+      await (async () => {
+        const threadCreateModelSelection: ModelSelection = modelSel;
+
+        if (isServer) {
+          await inputRef.current.persistThreadSettingsForNextTurn({
+            threadId: threadIdForSend,
+            createdAt: messageCreatedAt,
+            modelSelection: modelSel,
+            runtimeMode: runMode,
+            interactionMode: interactMode,
+          });
+        }
+
+        const draftTitle = isDraft ? draftTitleFromMessage(shellCommand) : undefined;
+        const bootstrap =
+          isDraft || baseBranchForWorktree
+            ? {
+                ...(isDraft
+                  ? {
+                      createThread: {
+                        projectId: project.id,
+                        title: draftTitle ?? thread.title,
+                        modelSelection: threadCreateModelSelection,
+                        runtimeMode: runMode,
+                        interactionMode: interactMode,
+                        branch: thread.branch,
+                        worktreePath: thread.worktreePath,
+                        createdAt: thread.createdAt,
+                      },
+                    }
+                  : {}),
+                ...(baseBranchForWorktree
+                  ? {
+                      prepareWorktree: {
+                        projectCwd: project.cwd!,
+                        baseBranch: baseBranchForWorktree,
+                        branch: buildTemporaryWorktreeBranchName(),
+                      },
+                      runSetupScript: true,
+                    }
+                  : {}),
+              }
+            : undefined;
+        inputRef.current.beginLocalDispatch({ preparingWorktree: false });
+        await api.orchestration.dispatchCommand({
+          type: "thread.shell.run",
+          commandId: newCommandId(),
+          threadId: threadIdForSend,
+          message: {
+            messageId: messageIdForSend,
+            role: "user",
+            text: shellCommand,
+            attachments: [],
+          },
+          shellCommand,
+          ...(bootstrap ? { bootstrap } : {}),
+          createdAt: messageCreatedAt,
+        });
+        shellRunSucceeded = true;
+      })().catch((err: unknown) => {
+        if (
+          !shellRunSucceeded &&
+          pRef.current.length === 0 &&
+          imagesRef.current.length === 0 &&
+          filesRef.current.length === 0 &&
+          annotationsRef.current.length === 0 &&
+          termContextsRef.current.length === 0
+        ) {
+          inputRef.current.setOptimisticUserMessages((existing) =>
+            existing.filter((message) => message.id !== messageIdForSend),
+          );
+          pRef.current = shellPromptForSend;
+          inputRef.current.setPrompt(shellPromptForSend);
+          inputRef.current.setComposerShellMode(true);
+          inputRef.current.setComposerCursor(
+            collapseExpandedComposerCursor(shellPromptForSend, shellPromptForSend.length),
+          );
+          inputRef.current.setComposerTrigger(null);
+        }
+        inputRef.current.setThreadError(
+          threadIdForSend,
+          err instanceof Error ? err.message : "Failed to run shell command.",
+        );
+      });
+      inFlightRef.current = false;
+      inputRef.current.resetLocalDispatch();
+      return;
+    }
     const promptForSend = pRef.current;
     const {
       trimmedPrompt,
@@ -197,22 +355,6 @@ export function useOnSend(input: UseOnSendInput) {
       annotationCount: annotations.length,
       terminalContexts: termContexts,
     });
-    if (planFollowUp && proposedPlan) {
-      const followUp = resolvePlanFollowUpSubmission({
-        draftText: trimmedPrompt,
-        planMarkdown: proposedPlan.planMarkdown,
-      });
-      pRef.current = "";
-      inputRef.current.clearComposerDraftContent(thread.id);
-      inputRef.current.setComposerHighlightedItemId(null);
-      inputRef.current.setComposerCursor(0);
-      inputRef.current.setComposerTrigger(null);
-      await inputRef.current.onSubmitPlanFollowUp({
-        text: followUp.text,
-        interactionMode: followUp.interactionMode,
-      });
-      return;
-    }
     const standaloneSlashCommand =
       images.length === 0 &&
       files.length === 0 &&
@@ -224,11 +366,7 @@ export function useOnSend(input: UseOnSendInput) {
       if (standaloneSlashCommand === "plan" || standaloneSlashCommand === "default") {
         inputRef.current.handleInteractionModeChange(standaloneSlashCommand);
       }
-      pRef.current = "";
-      inputRef.current.clearComposerDraftContent(thread.id);
-      inputRef.current.setComposerHighlightedItemId(null);
-      inputRef.current.setComposerCursor(0);
-      inputRef.current.setComposerTrigger(null);
+      resetComposerDraft();
       return;
     }
     if (!hasSendableContent) {
@@ -368,11 +506,7 @@ export function useOnSend(input: UseOnSendInput) {
         description: toastCopy.description,
       });
     }
-    pRef.current = "";
-    inputRef.current.clearComposerDraftContent(threadIdForSend);
-    inputRef.current.setComposerHighlightedItemId(null);
-    inputRef.current.setComposerCursor(0);
-    inputRef.current.setComposerTrigger(null);
+    resetComposerDraft();
 
     let turnStartSucceeded = false;
     await (async () => {

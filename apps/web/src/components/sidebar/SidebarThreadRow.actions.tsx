@@ -1,4 +1,4 @@
-import { ArchiveIcon, GitBranchIcon } from "lucide-react";
+import { ArchiveIcon, SplitIcon } from "lucide-react";
 import { type MouseEvent } from "react";
 import type { ThreadId } from "@bigbud/contracts";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -50,7 +50,7 @@ export function SidebarThreadRowActions({
               }}
               onClick={handleForkAction}
             >
-              <GitBranchIcon className="size-3.5" />
+              <SplitIcon className="size-3.5" />
             </button>
           }
         />

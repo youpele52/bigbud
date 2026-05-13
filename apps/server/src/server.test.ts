@@ -11,6 +11,7 @@ import {
   TerminalNotRunningError,
   type OrchestrationCommand,
   type OrchestrationEvent,
+  type OrchestrationReadModel,
   ORCHESTRATION_WS_METHODS,
   ProjectId,
   ResolvedKeybindingRule,
@@ -1307,6 +1308,155 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(dispatchResult.sequence, 8);
       assert.deepEqual(closeInputs, [{ threadId }]);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("runs thread.shell.run in defaultChatCwd and appends raw command output", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const defaultChatCwd = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-shell-default-chat-cwd-",
+      });
+      const baseReadModel = makeDefaultOrchestrationReadModel();
+      const readModel: OrchestrationReadModel = {
+        ...baseReadModel,
+        projects: [
+          {
+            ...baseReadModel.projects[0]!,
+            workspaceRoot: null,
+          },
+        ],
+      };
+      const dispatchedCommands: Array<OrchestrationCommand> = [];
+
+      yield* buildAppUnderTest({
+        layers: {
+          serverSettings: {
+            getSettings: Effect.succeed({
+              ...DEFAULT_SERVER_SETTINGS,
+              defaultChatCwd,
+            }),
+          },
+          orchestrationEngine: {
+            getReadModel: () => Effect.succeed(readModel),
+            dispatch: (command) =>
+              Effect.sync(() => {
+                dispatchedCommands.push(command);
+                return { sequence: dispatchedCommands.length };
+              }),
+            readEvents: () => Stream.empty,
+          },
+        },
+      });
+
+      const createdAt = new Date().toISOString();
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const response = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.shell.run",
+            commandId: CommandId.makeUnsafe("cmd-shell-default-chat-cwd"),
+            threadId: defaultThreadId,
+            message: {
+              messageId: MessageId.makeUnsafe("msg-shell-default-chat-cwd"),
+              role: "user",
+              text: "!pwd",
+              attachments: [],
+            },
+            shellCommand: "pwd",
+            createdAt,
+          }),
+        ),
+      );
+
+      assert.equal(response.sequence, 1);
+      assert.deepEqual(
+        dispatchedCommands.map((command) => command.type),
+        ["thread.shell.run", "thread.message.assistant.delta", "thread.message.assistant.complete"],
+      );
+      assertTrue(dispatchedCommands.every((command) => command.type !== "thread.turn.start"));
+
+      const outputCommand = dispatchedCommands[1];
+      assertTrue(outputCommand?.type === "thread.message.assistant.delta");
+      if (outputCommand?.type === "thread.message.assistant.delta") {
+        assert.include(outputCommand.delta, "$ pwd");
+        assert.include(outputCommand.delta, defaultChatCwd);
+      }
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect(
+    "prefers the thread worktree path over the project workspace root for thread.shell.run",
+    () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const projectCwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-shell-project-cwd-",
+        });
+        const worktreeCwd = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "t3-shell-worktree-cwd-",
+        });
+        const baseReadModel = makeDefaultOrchestrationReadModel();
+        const readModel: OrchestrationReadModel = {
+          ...baseReadModel,
+          projects: [
+            {
+              ...baseReadModel.projects[0]!,
+              workspaceRoot: projectCwd,
+            },
+          ],
+          threads: [
+            {
+              ...baseReadModel.threads[0]!,
+              branch: "bigbud/test",
+              worktreePath: worktreeCwd,
+            },
+          ],
+        };
+        const dispatchedCommands: Array<OrchestrationCommand> = [];
+
+        yield* buildAppUnderTest({
+          layers: {
+            orchestrationEngine: {
+              getReadModel: () => Effect.succeed(readModel),
+              dispatch: (command) =>
+                Effect.sync(() => {
+                  dispatchedCommands.push(command);
+                  return { sequence: dispatchedCommands.length };
+                }),
+              readEvents: () => Stream.empty,
+            },
+          },
+        });
+
+        const createdAt = new Date().toISOString();
+        const wsUrl = yield* getWsServerUrl("/ws");
+        const response = yield* Effect.scoped(
+          withWsRpcClient(wsUrl, (client) =>
+            client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+              type: "thread.shell.run",
+              commandId: CommandId.makeUnsafe("cmd-shell-worktree-cwd"),
+              threadId: defaultThreadId,
+              message: {
+                messageId: MessageId.makeUnsafe("msg-shell-worktree-cwd"),
+                role: "user",
+                text: "!pwd",
+                attachments: [],
+              },
+              shellCommand: "pwd",
+              createdAt,
+            }),
+          ),
+        );
+
+        assert.equal(response.sequence, 1);
+        const outputCommand = dispatchedCommands[1];
+        assertTrue(outputCommand?.type === "thread.message.assistant.delta");
+        if (outputCommand?.type === "thread.message.assistant.delta") {
+          assert.include(outputCommand.delta, "$ pwd");
+          assert.include(outputCommand.delta, worktreeCwd);
+          assert.equal(outputCommand.delta.includes(projectCwd), false);
+        }
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect(
