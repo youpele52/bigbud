@@ -11,18 +11,18 @@
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
 import { Deferred, Effect, Equal, Layer, Option, PubSub, Ref, Stream } from "effect";
 
-import { ClaudeProviderLive } from "./ClaudeProvider";
-import { CopilotProviderLive } from "./CopilotProvider";
-import { CodexProviderLive } from "./CodexProvider";
-import { CursorProviderLive } from "./CursorProvider";
-import { OpencodeProviderLive } from "./OpencodeProvider";
-import { PiProviderLive } from "./PiProvider";
-import { ClaudeProvider } from "../Services/ClaudeProvider";
-import { CopilotProvider } from "../Services/CopilotProvider";
-import { CodexProvider } from "../Services/CodexProvider";
-import { CursorProvider } from "../Services/CursorProvider";
-import { OpencodeProvider } from "../Services/OpencodeProvider";
-import { PiProvider } from "../Services/PiProvider";
+import { ClaudeProviderLive } from "./Claude/Provider";
+import { CopilotProviderLive } from "./Copilot/Provider";
+import { CodexProviderLive } from "./Codex/Provider";
+import { CursorProviderLive } from "./Cursor/Provider";
+import { OpencodeProviderLive } from "./Opencode/Provider";
+import { PiProviderLive } from "./Pi/Provider";
+import { ClaudeProvider } from "../Services/Claude/Provider";
+import { CopilotProvider } from "../Services/Copilot/Provider";
+import { CodexProvider } from "../Services/Codex/Provider";
+import { CursorProvider } from "../Services/Cursor/Provider";
+import { OpencodeProvider } from "../Services/Opencode/Provider";
+import { PiProvider } from "../Services/Pi/Provider";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 import type { ServerProviderShape } from "../Services/ServerProvider";
 
