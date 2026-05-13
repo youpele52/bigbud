@@ -10,7 +10,6 @@ import { useTerminalStateStore } from "../../stores/terminal";
 import { useSettings } from "../../hooks/useSettings";
 import {
   getTerminalSelectionRect,
-  terminalFontFamilyFromSettings,
   resolveTerminalSelectionActionPosition,
   selectTerminalEventEntriesAfterSnapshot,
   shouldHandleTerminalSelectionMouseUp,
@@ -19,6 +18,7 @@ import {
   writeSystemMessage,
   writeTerminalSnapshot,
 } from "./ThreadTerminalDrawer.logic";
+import { terminalFontFamilyFromSettings } from "./terminalTypography";
 import { applyPendingTerminalEvents, makeApplyTerminalEvent } from "./TerminalViewport.events";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 

@@ -147,6 +147,31 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
       return [userMessageEvent, turnStartRequestedEvent];
     }
 
+    case "thread.shell.run": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      yield* requireThreadReadyForMutation({ thread, command });
+      const shellRunRequestedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.shell-run-requested",
+        payload: {
+          threadId: command.threadId,
+          messageId: command.message.messageId,
+          shellCommand: command.shellCommand,
+          createdAt: command.createdAt,
+        },
+      };
+      return shellRunRequestedEvent;
+    }
+
     case "thread.turn.interrupt": {
       const thread = yield* requireThread({
         readModel,

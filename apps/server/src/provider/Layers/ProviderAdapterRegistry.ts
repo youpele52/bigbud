@@ -15,12 +15,12 @@ import {
   ProviderAdapterRegistry,
   type ProviderAdapterRegistryShape,
 } from "../Services/ProviderAdapterRegistry.ts";
-import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
-import { CopilotAdapter } from "../Services/CopilotAdapter.ts";
-import { CodexAdapter } from "../Services/CodexAdapter.ts";
-import { CursorAdapter } from "../Services/CursorAdapter.ts";
-import { OpencodeAdapter } from "../Services/OpencodeAdapter.ts";
-import { PiAdapter } from "../Services/PiAdapter.ts";
+import { ClaudeAdapter } from "../Services/Claude/Adapter.ts";
+import { CopilotAdapter } from "../Services/Copilot/Adapter.ts";
+import { CodexAdapter } from "../Services/Codex/Adapter.ts";
+import { CursorAdapter } from "../Services/Cursor/Adapter.ts";
+import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
+import { PiAdapter } from "../Services/Pi/Adapter.ts";
 
 export interface ProviderAdapterRegistryLiveOptions {
   readonly adapters?: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>;

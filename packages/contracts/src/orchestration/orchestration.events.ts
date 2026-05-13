@@ -53,6 +53,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.interaction-mode-set",
   "thread.message-sent",
   "thread.turn-start-requested",
+  "thread.shell-run-requested",
   "thread.turn-interrupt-requested",
   "thread.approval-response-requested",
   "thread.user-input-response-requested",
@@ -190,6 +191,13 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   ),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  createdAt: IsoDateTime,
+});
+
+export const ThreadShellRunRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  messageId: MessageId,
+  shellCommand: Schema.String,
   createdAt: IsoDateTime,
 });
 
@@ -356,6 +364,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.turn-start-requested"),
     payload: ThreadTurnStartRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.shell-run-requested"),
+    payload: ThreadShellRunRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

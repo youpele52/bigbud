@@ -12,6 +12,7 @@ import {
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCopilotModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
+  normalizeCursorModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
 } from "@bigbud/shared/model";
@@ -65,11 +66,13 @@ function getProviderStateFromCapabilities(
       ? modelOptions?.codex
       : provider === "claudeAgent"
         ? modelOptions?.claudeAgent
-        : provider === "opencode"
-          ? modelOptions?.opencode
-          : provider === "pi"
-            ? modelOptions?.pi
-            : modelOptions?.copilot;
+        : provider === "cursor"
+          ? modelOptions?.cursor
+          : provider === "opencode"
+            ? modelOptions?.opencode
+            : provider === "pi"
+              ? modelOptions?.pi
+              : modelOptions?.copilot;
   const rawEffort = providerOptions
     ? "effort" in providerOptions
       ? providerOptions.effort
@@ -89,6 +92,8 @@ function getProviderStateFromCapabilities(
       caps,
       modelOptions?.claudeAgent,
     );
+  } else if (provider === "cursor") {
+    normalizedOptions = normalizeCursorModelOptionsWithCapabilities(caps, modelOptions?.cursor);
   } else if (provider === "opencode") {
     normalizedOptions = normalizeOpencodeModelOptionsWithCapabilities(caps, modelOptions?.opencode);
   } else if (provider === "pi") {

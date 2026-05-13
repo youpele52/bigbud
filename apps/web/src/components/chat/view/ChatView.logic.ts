@@ -49,6 +49,19 @@ export function draftTitleFromMessage(messageText: string): string {
     : `${candidate.slice(0, DRAFT_TITLE_MAX_CHARS - 1).trimEnd()}…`;
 }
 
+export function readBangShellInput(
+  messageText: string,
+): { promptText: string; shellCommand: string } | null {
+  if (!messageText.startsWith("!")) {
+    return null;
+  }
+  const promptText = messageText.slice(1);
+  return {
+    promptText,
+    shellCommand: promptText.trimStart(),
+  };
+}
+
 export function buildLocalDraftThread(
   threadId: ThreadId,
   draftThread: DraftThreadState,

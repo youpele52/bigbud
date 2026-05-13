@@ -1,7 +1,7 @@
-import type { ComponentType } from "react";
-import { ArchiveIcon, ArrowLeftIcon, Settings2Icon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { SETTINGS_NAV_ITEMS } from "./SettingsSidebarNav.items";
 import {
   SidebarContent,
   SidebarFooter,
@@ -11,17 +11,6 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from "../ui/sidebar";
-
-export type SettingsSectionPath = "/settings/general" | "/settings/archived";
-
-export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
-  label: string;
-  to: SettingsSectionPath;
-  icon: ComponentType<{ className?: string }>;
-}> = [
-  { label: "General", to: "/settings/general", icon: Settings2Icon },
-  { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
-];
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();

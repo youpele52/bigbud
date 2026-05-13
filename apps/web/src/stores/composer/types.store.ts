@@ -104,6 +104,7 @@ export type PersistedComposerFileAttachment = typeof PersistedComposerFileAttach
 
 export const PersistedComposerThreadDraftState = Schema.Struct({
   prompt: Schema.String,
+  shellMode: Schema.optionalKey(Schema.Boolean),
   attachments: Schema.Array(PersistedComposerImageAttachment),
   fileAttachments: Schema.optionalKey(Schema.Array(PersistedComposerFileAttachment)),
   annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationAttachment)),
@@ -187,6 +188,7 @@ export const PersistedComposerDraftStoreStorage = Schema.Struct({
 
 export interface ComposerThreadDraftState {
   prompt: string;
+  shellMode: boolean;
   images: ComposerImageAttachment[];
   files: ComposerFileAttachment[];
   annotations: ComposerAnnotationAttachment[];
@@ -252,6 +254,7 @@ export interface ComposerDraftStoreState {
   clearDraftThread: (threadId: ThreadId) => void;
   setStickyModelSelection: (modelSelection: ModelSelection | null | undefined) => void;
   setPrompt: (threadId: ThreadId, prompt: string) => void;
+  setShellMode: (threadId: ThreadId, shellMode: boolean) => void;
   setTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
   setModelSelection: (
     threadId: ThreadId,
@@ -314,6 +317,7 @@ export interface EffectiveComposerModelState {
 /** Frozen sentinel — use as the default for threads with no draft. */
 export const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   prompt: "",
+  shellMode: false,
   images: Object.freeze([]) as unknown as ComposerImageAttachment[],
   files: Object.freeze([]) as unknown as ComposerFileAttachment[],
   annotations: Object.freeze([]) as unknown as ComposerAnnotationAttachment[],

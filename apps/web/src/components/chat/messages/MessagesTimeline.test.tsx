@@ -420,5 +420,59 @@ describe("MessagesTimeline", () => {
     );
 
     expect(markup).toContain("Copy message");
+    expect(markup).toContain(
+      "opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100",
+    );
+  });
+
+  it("renders shell output messages as a shell block", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-shell-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("assistant-shell-1"),
+              role: "assistant",
+              text: "$ ls\n\nAntworten\nDone\nKorrektur",
+              turnId: null,
+              createdAt: "2026-03-17T19:12:28.000Z",
+              completedAt: "2026-03-17T19:12:29.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("Shell");
+    expect(markup).toContain("$ ls");
+    expect(markup).toContain("Antworten");
+    expect(markup).toContain("font-size:12px");
+    expect(markup).toContain("MesloLGL Nerd Font Mono");
   });
 });

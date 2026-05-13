@@ -1,3 +1,4 @@
+import { ORCHESTRATION_WS_METHODS } from "@bigbud/contracts";
 import {
   INLINE_TERMINAL_CONTEXT_PLACEHOLDER,
   removeInlineTerminalContextPlaceholder,
@@ -25,6 +26,76 @@ const ctx = createChatViewBrowserTestContext();
 ctx.registerLifecycleHooks();
 
 describe("ChatView composer integration", () => {
+  it("submits bang-prefixed prompts through thread.shell.run", async () => {
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-terminal-command-target" as never,
+        targetText: "terminal command thread",
+      }),
+    });
+
+    try {
+      await waitForComposerEditor();
+      await page.getByTestId("composer-editor").fill("! ls");
+
+      const sendButton = await waitForSendButton();
+      expect(sendButton.disabled).toBe(false);
+      sendButton.click();
+
+      await vi.waitFor(() => {
+        expect(
+          ctx.wsRequests.find(
+            (request) =>
+              request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+              request.type === "thread.shell.run",
+          ),
+        ).toMatchObject({
+          _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+          type: "thread.shell.run",
+          threadId: THREAD_ID,
+          shellCommand: "ls",
+          message: {
+            text: "ls",
+          },
+        });
+      });
+      await vi.waitFor(() => {
+        expect(page.getByTestId("composer-editor")).toHaveValue("");
+      });
+      await vi.waitFor(() => {
+        expect(document.body.textContent ?? "").not.toContain("! ls");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("switches the composer into shell mode when ! is typed first", async () => {
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-shell-mode-target" as never,
+        targetText: "shell mode thread",
+      }),
+    });
+
+    try {
+      const composerEditor = await waitForComposerEditor();
+      composerEditor.focus();
+      await page.getByTestId("composer-editor").fill("!");
+
+      await vi.waitFor(() => {
+        const editor = document.querySelector<HTMLElement>('[data-testid="composer-editor"]');
+        expect(editor?.getAttribute("aria-placeholder")).toBe("Enter shell command");
+        expect(editor).toHaveValue("");
+        expect(document.body.textContent).toContain("Enter shell command");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
   it("toggles plan mode with Shift+Tab only while the composer is focused", async () => {
     const mounted = await ctx.mountChatView({
       viewport: DEFAULT_VIEWPORT,
