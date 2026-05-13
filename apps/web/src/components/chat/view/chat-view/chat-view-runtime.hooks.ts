@@ -379,7 +379,6 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     composerFooterHasWideActions: thread.composerFooterHasWideActions,
     messageCount: timeline.timelineEntries.length,
     phase: thread.phase,
-    timelineEntries: timeline.timelineEntries,
     composerFormRef: base.composerFormRef,
     shouldUseCompactComposerFooter,
     shouldUseCompactComposerPrimaryActions,

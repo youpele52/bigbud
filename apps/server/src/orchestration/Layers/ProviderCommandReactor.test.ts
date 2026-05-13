@@ -423,7 +423,9 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
+    expect(thread?.session?.status).toBe("running");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+    expect(thread?.session?.activeTurnId).toEqual(asTurnId("turn-1"));
   });
 
   it("adds attached file metadata without exposing source paths to providers", async () => {

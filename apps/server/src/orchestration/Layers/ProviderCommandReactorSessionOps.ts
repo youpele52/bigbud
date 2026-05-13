@@ -268,7 +268,7 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     readonly bootstrapSourceThreadId?: ThreadId;
     readonly createdAt: string;
   }) {
-    const { providerService, threadModelSelections, resolveThread } = services;
+    const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
       return;
@@ -338,13 +338,45 @@ export const sendTurnForThread = (services: SessionOpServices) =>
           : requestedModelSelection
         : input.modelSelection;
 
-    yield* providerService.sendTurn({
+    const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
     });
+
+    const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    const sessionUnchangedSinceSend =
+      sessionBeforeTurn !== null &&
+      sessionAfterTurn !== null &&
+      sessionAfterTurn.status === sessionBeforeTurn.status &&
+      sessionAfterTurn.activeTurnId === sessionBeforeTurn.activeTurnId &&
+      sessionAfterTurn.updatedAt === sessionBeforeTurn.updatedAt &&
+      sessionAfterTurn.providerName === sessionBeforeTurn.providerName &&
+      sessionAfterTurn.runtimeMode === sessionBeforeTurn.runtimeMode;
+
+    if (sessionAfterTurn === null || sessionUnchangedSinceSend) {
+      yield* setThreadSession({
+        threadId: input.threadId,
+        session: {
+          threadId: input.threadId,
+          status: "running",
+          providerName:
+            sessionAfterTurn?.providerName ??
+            sessionBeforeTurn?.providerName ??
+            thread.modelSelection.provider,
+          runtimeMode:
+            sessionAfterTurn?.runtimeMode ?? sessionBeforeTurn?.runtimeMode ?? thread.runtimeMode,
+          activeTurnId: turn.turnId,
+          reason: null,
+          lastError: null,
+          updatedAt: input.createdAt,
+        },
+        createdAt: input.createdAt,
+      });
+    }
   });
 
 export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: SessionOpServices) =>

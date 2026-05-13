@@ -29,6 +29,7 @@ import {
   sameId,
   toTurnId,
 } from "./ProviderRuntimeIngestion.helpers.ts";
+import { resolveAssistantDeliveryMode } from "./ProviderRuntimeIngestion.assistantDelivery.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 
 /** Service references threaded into the processor. */
@@ -238,7 +239,11 @@ export function makeRuntimeEventProcessor(
 
       const assistantDeliveryMode = yield* Effect.map(
         serverSettingsService.getSettings,
-        (settings) => (settings.enableAssistantStreaming ? "streaming" : "buffered"),
+        (settings) =>
+          resolveAssistantDeliveryMode({
+            provider: event.provider,
+            settings,
+          }),
       );
       if (assistantDeliveryMode === "buffered") {
         const spillChunk = yield* appendBufferedAssistantText(assistantMessageId, assistantDelta);
