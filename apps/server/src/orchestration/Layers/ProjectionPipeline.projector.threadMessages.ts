@@ -33,6 +33,9 @@ export function makeThreadMessagesProjector(
         const nextText = Option.match(existingMessage, {
           onNone: () => event.payload.text,
           onSome: (message) => {
+            if (event.payload.replace === true) {
+              return event.payload.text;
+            }
             if (event.payload.streaming) {
               return `${message.text}${event.payload.text}`;
             }

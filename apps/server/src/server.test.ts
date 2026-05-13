@@ -74,6 +74,10 @@ import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerShape,
 } from "./project/Services/ProjectSetupScriptRunner.ts";
+import {
+  ThreadShellRunner,
+  type ThreadShellRunnerShape,
+} from "./shell/Services/ThreadShellRunner.ts";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
@@ -84,6 +88,25 @@ const defaultModelSelection = {
   provider: "codex",
   model: "gpt-5-codex",
 } as const;
+
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 2000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const poll = async (): Promise<void> => {
+    if (await predicate()) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for expectation.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return poll();
+  };
+
+  return poll();
+}
 
 const makeDefaultOrchestrationReadModel = () => {
   const now = new Date().toISOString();
@@ -149,6 +172,7 @@ const buildAppUnderTest = (options?: {
     gitCore?: Partial<GitCoreShape>;
     gitManager?: Partial<GitManagerShape>;
     projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
+    threadShellRunner?: Partial<ThreadShellRunnerShape>;
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
@@ -262,6 +286,17 @@ const buildAppUnderTest = (options?: {
         Layer.mock(ProjectSetupScriptRunner)({
           runForThread: () => Effect.succeed({ status: "no-script" as const }),
           ...options?.layers?.projectSetupScriptRunner,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ThreadShellRunner)({
+          run: ({ command, cwd }) =>
+            Effect.succeed({
+              output: command.trim() === "pwd" ? cwd : "",
+              exitCode: 0,
+            }),
+          closeThread: () => Effect.void,
+          ...options?.layers?.threadShellRunner,
         }),
       ),
       Layer.provide(
@@ -1369,18 +1404,37 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       );
 
       assert.equal(response.sequence, 1);
+      yield* Effect.promise(() =>
+        waitFor(
+          () =>
+            dispatchedCommands.some(
+              (command) => command.type === "thread.message.assistant.complete",
+            ),
+          5_000,
+        ),
+      );
       assert.deepEqual(
         dispatchedCommands.map((command) => command.type),
-        ["thread.shell.run", "thread.message.assistant.delta", "thread.message.assistant.complete"],
+        [
+          "thread.shell.run",
+          "thread.message.assistant.delta",
+          "thread.message.assistant.delta",
+          "thread.message.assistant.complete",
+        ],
       );
       assertTrue(dispatchedCommands.every((command) => command.type !== "thread.turn.start"));
 
-      const outputCommand = dispatchedCommands[1];
-      assertTrue(outputCommand?.type === "thread.message.assistant.delta");
-      if (outputCommand?.type === "thread.message.assistant.delta") {
-        assert.include(outputCommand.delta, "$ pwd");
-        assert.include(outputCommand.delta, defaultChatCwd);
-      }
+      const output = dispatchedCommands
+        .filter(
+          (
+            command,
+          ): command is Extract<OrchestrationCommand, { type: "thread.message.assistant.delta" }> =>
+            command.type === "thread.message.assistant.delta",
+        )
+        .map((command) => command.delta)
+        .join("");
+      assert.include(output, "$ pwd");
+      assert.include(output, defaultChatCwd);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
@@ -1449,13 +1503,29 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         );
 
         assert.equal(response.sequence, 1);
-        const outputCommand = dispatchedCommands[1];
-        assertTrue(outputCommand?.type === "thread.message.assistant.delta");
-        if (outputCommand?.type === "thread.message.assistant.delta") {
-          assert.include(outputCommand.delta, "$ pwd");
-          assert.include(outputCommand.delta, worktreeCwd);
-          assert.equal(outputCommand.delta.includes(projectCwd), false);
-        }
+        yield* Effect.promise(() =>
+          waitFor(
+            () =>
+              dispatchedCommands.some(
+                (command) => command.type === "thread.message.assistant.complete",
+              ),
+            5_000,
+          ),
+        );
+        const output = dispatchedCommands
+          .filter(
+            (
+              command,
+            ): command is Extract<
+              OrchestrationCommand,
+              { type: "thread.message.assistant.delta" }
+            > => command.type === "thread.message.assistant.delta",
+          )
+          .map((command) => command.delta)
+          .join("");
+        assert.include(output, "$ pwd");
+        assert.include(output, worktreeCwd);
+        assert.equal(output.includes(projectCwd), false);
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
