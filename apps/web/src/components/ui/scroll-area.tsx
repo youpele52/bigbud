@@ -10,14 +10,19 @@ function ScrollArea({
   scrollFade = false,
   scrollbarGutter = false,
   hideScrollbars = false,
+  fillContainer = true,
   ...props
 }: ScrollAreaPrimitive.Root.Props & {
   scrollFade?: boolean;
   scrollbarGutter?: boolean;
   hideScrollbars?: boolean;
+  fillContainer?: boolean;
 }) {
   return (
-    <ScrollAreaPrimitive.Root className={cn("size-full min-h-0", className)} {...props}>
+    <ScrollAreaPrimitive.Root
+      className={cn(fillContainer ? "size-full min-h-0" : "min-h-0", className)}
+      {...props}
+    >
       <ScrollAreaPrimitive.Viewport
         className={cn(
           "h-full overscroll-contain rounded-[inherit] outline-none transition-shadows focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background data-has-overflow-x:overscroll-x-contain",
@@ -35,7 +40,10 @@ function ScrollArea({
         <>
           <ScrollBar orientation="vertical" />
           <ScrollBar orientation="horizontal" />
-          <ScrollAreaPrimitive.Corner data-slot="scroll-area-corner" />
+          <ScrollAreaPrimitive.Corner
+            className="rounded-[inherit] bg-transparent"
+            data-slot="scroll-area-corner"
+          />
         </>
       )}
     </ScrollAreaPrimitive.Root>
