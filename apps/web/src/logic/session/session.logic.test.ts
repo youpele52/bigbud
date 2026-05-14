@@ -1090,6 +1090,43 @@ describe("deriveTimelineEntries", () => {
     });
   });
 
+  it("orders same-timestamp work entries before assistant messages", () => {
+    const createdAt = "2026-02-23T00:00:01.000Z";
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.makeUnsafe("user-message"),
+          role: "user",
+          text: "hello",
+          createdAt,
+          streaming: false,
+        },
+        {
+          id: MessageId.makeUnsafe("assistant-message"),
+          role: "assistant",
+          text: "hi",
+          createdAt,
+          streaming: false,
+        },
+      ],
+      [],
+      [
+        {
+          id: "thinking-work",
+          createdAt,
+          label: "Thinking",
+          tone: "thinking",
+        },
+      ],
+    );
+
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "user-message",
+      "thinking-work",
+      "assistant-message",
+    ]);
+  });
+
   it("anchors the completion divider to latestTurn.assistantMessageId before timestamp fallback", () => {
     const entries = deriveTimelineEntries(
       [

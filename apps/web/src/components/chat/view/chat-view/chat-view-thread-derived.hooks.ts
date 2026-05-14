@@ -1,3 +1,4 @@
+import type { OrchestrationThreadActivity } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef } from "react";
 
 import {
@@ -27,6 +28,10 @@ import {
 import { EMPTY_PENDING_USER_INPUT_ANSWERS } from "./shared";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { isSessionCompacting } from "../../common/threadActivityIndicator";
+import { useServerSettings } from "../../../../rpc/serverState";
+import { useThinkingStreamStore } from "../../../../stores/thinkingStream/thinkingStream.store";
+
+const EMPTY_TRANSIENT_THINKING_ACTIVITY_MAP: Record<string, OrchestrationThreadActivity> = {};
 
 export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const {
@@ -48,6 +53,18 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     threadId,
     nowTick,
   } = base;
+  const serverSettings = useServerSettings();
+  const transientThinkingActivityMap = useThinkingStreamStore(
+    useMemo(
+      () => (state) =>
+        state.activitiesByThreadId[activeThreadId ?? ""] ?? EMPTY_TRANSIENT_THINKING_ACTIVITY_MAP,
+      [activeThreadId],
+    ),
+  );
+  const transientThinkingActivities = useMemo(
+    () => Object.values(transientThinkingActivityMap),
+    [transientThinkingActivityMap],
+  );
   const threadPlanCatalog = useThreadPlanCatalog(
     useMemo(() => {
       const threadIds = [] as (typeof threadId)[];
@@ -89,6 +106,22 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   ]);
 
   const latestTurnSettled = isLatestTurnSettled(activeLatestTurn, activeThread?.session ?? null);
+  const mergedActivities = useMemo(() => {
+    const persistedActivities = activeThread?.activities ?? [];
+    if (!serverSettings.enableThinkingStreaming || transientThinkingActivities.length === 0) {
+      return persistedActivities;
+    }
+
+    const byId = new Map(persistedActivities.map((activity) => [activity.id, activity]));
+    for (const activity of transientThinkingActivities) {
+      byId.set(activity.id, activity);
+    }
+    return [...byId.values()];
+  }, [
+    activeThread?.activities,
+    serverSettings.enableThinkingStreaming,
+    transientThinkingActivities,
+  ]);
 
   useEffect(() => {
     if (!serverThread?.id) return;
@@ -109,9 +142,8 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   ]);
 
   const workLogEntries = useMemo(
-    () =>
-      deriveWorkLogEntries(activeThread?.activities ?? [], activeLatestTurn?.turnId ?? undefined),
-    [activeLatestTurn?.turnId, activeThread?.activities],
+    () => deriveWorkLogEntries(mergedActivities, activeLatestTurn?.turnId ?? undefined),
+    [activeLatestTurn?.turnId, mergedActivities],
   );
 
   const latestTurnHasToolActivity = useMemo(

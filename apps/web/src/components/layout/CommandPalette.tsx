@@ -76,7 +76,10 @@ function CommandPaletteDialogContent() {
     const chatsProject = projects.find((project) => isBuiltInChatsProject(project.id)) ?? null;
     const visibleProjects = projects.filter((project) => !isBuiltInChatsProject(project.id));
     const recentChatThreads = threads.filter(
-      (thread) => thread.archivedAt === null && isBuiltInChatsProject(thread.projectId),
+      (thread) =>
+        thread.archivedAt === null &&
+        thread.deletingAt === null &&
+        isBuiltInChatsProject(thread.projectId),
     );
     const paletteShortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
 
@@ -142,7 +145,12 @@ function CommandPaletteDialogContent() {
       icon: <FolderIcon className="size-4" />,
       onSelect: async () => {
         const latestThread = threads
-          .filter((thread) => thread.projectId === project.id && thread.archivedAt === null)
+          .filter(
+            (thread) =>
+              thread.projectId === project.id &&
+              thread.archivedAt === null &&
+              thread.deletingAt === null,
+          )
           .toSorted((left, right) => {
             const rightTime = Date.parse(right.updatedAt ?? right.createdAt);
             const leftTime = Date.parse(left.updatedAt ?? left.createdAt);
@@ -178,7 +186,12 @@ function CommandPaletteDialogContent() {
       }));
 
     const threadItems = threads
-      .filter((thread) => thread.archivedAt === null && !isBuiltInChatsProject(thread.projectId))
+      .filter(
+        (thread) =>
+          thread.archivedAt === null &&
+          thread.deletingAt === null &&
+          !isBuiltInChatsProject(thread.projectId),
+      )
       .toSorted((left, right) => {
         const rightTime = Date.parse(right.updatedAt ?? right.createdAt);
         const leftTime = Date.parse(left.updatedAt ?? left.createdAt);

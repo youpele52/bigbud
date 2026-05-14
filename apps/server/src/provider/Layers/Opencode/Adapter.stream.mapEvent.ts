@@ -131,11 +131,11 @@ export function makeMapEvent(
         }
 
         const streamKind =
-          partDelta.properties.field === "text"
-            ? "assistant_text"
-            : partDelta.properties.field === "reasoning"
+          partDelta.properties.field === "text" || partDelta.properties.field === "reasoning"
+            ? session.reasoningPartIds.has(itemId)
               ? "reasoning_text"
-              : undefined;
+              : "assistant_text"
+            : undefined;
 
         if (!streamKind) {
           return [];
@@ -163,6 +163,14 @@ export function makeMapEvent(
       switch (eventType) {
         case "message.part.updated": {
           const part = (event.properties as { part: { id: string; type: string } }).part;
+
+          // Track reasoning part IDs so `message.part.delta` can distinguish
+          // reasoning deltas (field: "text") from assistant-text deltas.
+          if (part.type === "reasoning") {
+            session.reasoningPartIds.add(part.id);
+            return [];
+          }
+
           if (part.type === "tool") {
             const toolPart = part as unknown as {
               id: string;

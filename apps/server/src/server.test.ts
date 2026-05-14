@@ -55,6 +55,7 @@ import {
   ProviderRegistry,
   type ProviderRegistryShape,
 } from "./provider/Services/ProviderRegistry.ts";
+import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService.ts";
 import {
   DiscoveryRegistry,
   type DiscoveryRegistryShape,
@@ -166,6 +167,7 @@ const buildAppUnderTest = (options?: {
   layers?: {
     keybindings?: Partial<KeybindingsShape>;
     providerRegistry?: Partial<ProviderRegistryShape>;
+    providerService?: Partial<ProviderServiceShape>;
     discoveryRegistry?: Partial<DiscoveryRegistryShape>;
     serverSettings?: Partial<ServerSettingsShape>;
     open?: Partial<OpenShape>;
@@ -230,6 +232,22 @@ const buildAppUnderTest = (options?: {
           refresh: () => Effect.succeed([]),
           streamChanges: Stream.empty,
           ...options?.layers?.providerRegistry,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(ProviderService)({
+          startSession: () => Effect.die("not implemented"),
+          startSessionFresh: () => Effect.die("not implemented"),
+          sendTurn: () => Effect.die("not implemented"),
+          interruptTurn: () => Effect.die("not implemented"),
+          respondToRequest: () => Effect.die("not implemented"),
+          respondToUserInput: () => Effect.die("not implemented"),
+          stopSession: () => Effect.die("not implemented"),
+          listSessions: () => Effect.succeed([]),
+          getCapabilities: () => Effect.die("not implemented"),
+          rollbackConversation: () => Effect.die("not implemented"),
+          streamEvents: Stream.empty,
+          ...options?.layers?.providerService,
         }),
       ),
       Layer.provide(

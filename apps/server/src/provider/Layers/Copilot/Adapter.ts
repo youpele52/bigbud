@@ -159,6 +159,8 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       session.turns.at(-1)?.items.push(event);
     } else if (
       event.type === "assistant.message_delta" ||
+      event.type === "assistant.reasoning_delta" ||
+      event.type === "assistant.reasoning" ||
       event.type === "assistant.usage" ||
       event.type === "tool.execution_start" ||
       event.type === "tool.execution_complete" ||
@@ -173,10 +175,6 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
       event.type === "session.error"
     ) {
       session.turns.at(-1)?.items.push(event);
-      if (event.type === "session.idle" || event.type === "abort") {
-        session.activeTurnId = undefined;
-        session.activeMessageId = undefined;
-      }
     }
 
     if (event.type === "assistant.usage") {
@@ -191,6 +189,13 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     const mapped = yield* mapEvent(mapEventDeps, session, event);
     if (mapped.length > 0) {
       yield* emit(mapped);
+    }
+
+    // Clear active turn/message AFTER mapEvent so that turn.completed and
+    // turn.aborted events are emitted with the correct turnId.
+    if (event.type === "session.idle" || event.type === "abort") {
+      session.activeTurnId = undefined;
+      session.activeMessageId = undefined;
     }
   });
 

@@ -336,7 +336,7 @@ export function runtimeEventToActivities(
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "info",
+          tone: "thinking",
           kind: "task.progress",
           summary: "Reasoning update",
           payload: {

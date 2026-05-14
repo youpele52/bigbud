@@ -94,6 +94,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
       activeTurnId: undefined,
       lastUsage: undefined,
       wasRetrying: false,
+      reasoningPartIds: new Set(),
     };
 
     const events: Array<unknown> = [];
@@ -230,6 +231,7 @@ endobj
       activeTurnId: undefined,
       lastUsage: undefined,
       wasRetrying: false,
+      reasoningPartIds: new Set(),
     };
 
     const { sendTurn } = makeTurnMethods({
@@ -349,6 +351,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
     activeTurnId: undefined,
     lastUsage: undefined,
     wasRetrying: false,
+    reasoningPartIds: new Set(),
   };
 
   const { sendTurn } = makeTurnMethods({
@@ -416,7 +419,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
         title: "Assistant message",
         detail: "Hello from OpenCode",
       },
-      itemId: "assistant-msg-3",
+      itemId: "text-part-1",
     });
     expect(emitted[5]).toMatchObject({
       type: "turn.completed",

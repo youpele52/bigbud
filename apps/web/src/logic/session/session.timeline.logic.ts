@@ -134,9 +134,23 @@ export function deriveTimelineEntries(
     createdAt: pendingUserInput.createdAt,
     pendingUserInput,
   }));
-  return [...messageRows, ...proposedPlanRows, ...workRows, ...userInputRows].toSorted((a, b) =>
-    a.createdAt.localeCompare(b.createdAt),
-  );
+  return [...messageRows, ...proposedPlanRows, ...workRows, ...userInputRows].toSorted((a, b) => {
+    const createdAtOrder = a.createdAt.localeCompare(b.createdAt);
+    if (createdAtOrder !== 0) {
+      return createdAtOrder;
+    }
+    return timelineTieBreakPriority(a) - timelineTieBreakPriority(b);
+  });
+}
+
+function timelineTieBreakPriority(entry: TimelineEntry): number {
+  if (entry.kind === "work") {
+    return 1;
+  }
+  if (entry.kind === "message" && entry.message.role === "assistant") {
+    return 2;
+  }
+  return 0;
 }
 
 export function deriveCompletionDividerBeforeEntryId(

@@ -186,7 +186,11 @@ function toPromptTurnEvents(input: {
       }
     }
 
-    const assistantText = promptParts
+    const assistantTextParts = promptParts.filter(
+      (part) =>
+        part.type === "text" && typeof part.text === "string" && part.text.trim().length > 0,
+    );
+    const assistantText = assistantTextParts
       .reduce((chunks, part) => {
         if (part.type !== "text" || typeof part.text !== "string") {
           return chunks;
@@ -198,6 +202,7 @@ function toPromptTurnEvents(input: {
         return chunks;
       }, [] as Array<string>)
       .join("\n\n");
+    const assistantCompletionItemId = assistantTextParts[0]?.id ?? promptInfo.id;
 
     events.push(
       yield* syntheticEventFn(
@@ -212,7 +217,7 @@ function toPromptTurnEvents(input: {
         },
         {
           turnId,
-          itemId: promptInfo.id,
+          itemId: assistantCompletionItemId,
         },
       ),
     );

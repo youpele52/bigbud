@@ -138,7 +138,8 @@ export function useSidebarState(): SidebarState {
 
   // ── Sorted projects (passed to renderedProjects) ───────────────────────────
   const visibleThreads = useMemo(
-    () => sidebarThreads.filter((thread) => thread.archivedAt === null),
+    () =>
+      sidebarThreads.filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
     [sidebarThreads],
   );
   const visibleChatThreads = useMemo(
@@ -182,7 +183,7 @@ export function useSidebarState(): SidebarState {
         (threadIdsByProjectId[projectId as string] ?? [])
           .map((threadId) => sidebarThreadsById[threadId as string])
           .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
-          .filter((thread) => thread.archivedAt === null),
+          .filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
         appSettings.sidebarThreadSortOrder,
       )[0];
       if (!latestThread) return;

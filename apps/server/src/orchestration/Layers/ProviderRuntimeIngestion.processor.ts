@@ -8,9 +8,11 @@
  */
 import {
   CommandId,
+  EventId,
   MessageId,
   CheckpointRef,
   ThreadId,
+  type ThinkingActivityStreamKind,
   type ProviderRuntimeEvent,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
@@ -31,6 +33,7 @@ import {
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import { resolveAssistantDeliveryMode } from "./ProviderRuntimeIngestion.assistantDelivery.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
+import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
 
 /** Service references threaded into the processor. */
 export interface RuntimeProcessorServices {
@@ -75,6 +78,26 @@ export interface RuntimeProcessorCacheHelpers {
     planId: string,
   ) => Effect.Effect<{ text: string; createdAt: string } | undefined>;
   readonly clearBufferedProposedPlan: (planId: string) => Effect.Effect<void>;
+  readonly appendBufferedThinking: (input: {
+    activityId: EventId;
+    threadId: ThreadId;
+    turnId: import("@bigbud/contracts").TurnId | undefined;
+    streamKind: ThinkingActivityStreamKind;
+    createdAt: string;
+    delta: string;
+  }) => Effect.Effect<void>;
+  readonly takeBufferedThinking: (
+    activityId: string,
+  ) => Effect.Effect<import("../thinkingActivity.ts").BufferedThinkingActivity | undefined>;
+  readonly listBufferedThinkingActivityIdsByThreadPrefix: (
+    prefix: string,
+  ) => Effect.Effect<ReadonlyArray<string>>;
+  readonly listBufferedThinkingActivityIdsByTurnPrefix: (
+    prefix: string,
+  ) => Effect.Effect<ReadonlyArray<string>>;
+  readonly listBufferedThinkingActivityIdsByItemToken: (
+    token: string,
+  ) => Effect.Effect<ReadonlyArray<string>>;
   readonly clearTurnStateForSession: (threadId: ThreadId) => Effect.Effect<void>;
 }
 
@@ -104,6 +127,12 @@ export function makeRuntimeEventProcessor(
     getSourceProposedPlanReferenceForAcceptedTurnStart,
     markSourceProposedPlanImplementedWithLogging,
   } = makeProcessorHelpers(services, cacheHelpers, providerCommandId);
+  const {
+    appendThinkingDelta,
+    finalizeThinkingForItem,
+    finalizeThinkingForTurn,
+    finalizeThinkingForThread,
+  } = makeThinkingProcessorHelpers(services, cacheHelpers, providerCommandId);
 
   return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
     const readModel = yield* orchestrationEngine.getReadModel();
@@ -271,6 +300,8 @@ export function makeRuntimeEventProcessor(
       }
     }
 
+    yield* appendThinkingDelta(event);
+
     if (proposedPlanDelta && proposedPlanDelta.length > 0) {
       const planId = proposedPlanIdFromEvent(event, thread.id);
       yield* appendBufferedProposedPlan(planId, proposedPlanDelta, now);
@@ -295,8 +326,13 @@ export function makeRuntimeEventProcessor(
         : undefined;
 
     if (assistantCompletion) {
-      const assistantMessageId = assistantCompletion.messageId;
       const turnId = toTurnId(event.turnId);
+      if (turnId) {
+        yield* finalizeThinkingForTurn(event, thread.id, turnId);
+      } else if (event.itemId) {
+        yield* finalizeThinkingForItem(event, String(event.itemId));
+      }
+      const assistantMessageId = assistantCompletion.messageId;
       const existingAssistantMessage = thread.messages.find(
         (entry) => entry.id === assistantMessageId,
       );
@@ -339,6 +375,7 @@ export function makeRuntimeEventProcessor(
     if (event.type === "turn.completed") {
       const turnId = toTurnId(event.turnId);
       if (turnId) {
+        yield* finalizeThinkingForTurn(event, thread.id, turnId);
         const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
         yield* Effect.forEach(
           assistantMessageIds,
@@ -368,6 +405,7 @@ export function makeRuntimeEventProcessor(
     }
 
     if (event.type === "session.exited") {
+      yield* finalizeThinkingForThread(event, thread.id);
       yield* clearTurnStateForSession(thread.id);
     }
 

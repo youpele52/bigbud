@@ -89,7 +89,7 @@ function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
     if (!normalizedQuery) return [];
 
     return threads
-      .filter((thread) => thread.archivedAt === null)
+      .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
       .filter((thread) => {
         const title = thread.title.toLowerCase();
         return title.includes(normalizedQuery);
