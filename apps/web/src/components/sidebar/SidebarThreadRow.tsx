@@ -1,12 +1,5 @@
 import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
-import {
-  useCallback,
-  type Dispatch,
-  type MouseEvent,
-  type MutableRefObject,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
+import { useCallback, type MouseEvent, type ReactNode } from "react";
 
 import { type ThreadId, type GitStatusResult } from "@bigbud/contracts";
 import {
@@ -94,7 +87,6 @@ export interface SidebarThreadRowProps {
   selectedThreadIds: ReadonlySet<ThreadId>;
   showThreadJumpHints: boolean;
   jumpLabel: string | null;
-  appSettingsConfirmThreadArchive: boolean;
   renamingThreadId: ThreadId | null;
   renamingTitle: string;
   setRenamingTitle: (title: string) => void;
@@ -104,9 +96,6 @@ export interface SidebarThreadRowProps {
   hasRenameCommitted: () => boolean;
   /** Marks the rename as committed to prevent double-commit on blur. */
   markRenameCommitted: () => void;
-  confirmingArchiveThreadId: ThreadId | null;
-  setConfirmingArchiveThreadId: Dispatch<SetStateAction<ThreadId | null>>;
-  confirmArchiveButtonRefs: MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
   handleThreadClick: (
     event: MouseEvent,
     threadId: ThreadId,
@@ -121,8 +110,9 @@ export interface SidebarThreadRowProps {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
   forkThread: (threadId: ThreadId) => Promise<void>;
+  favoriteThreadIds: ReadonlySet<ThreadId>;
+  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   pr: ThreadPr | null;
@@ -167,15 +157,9 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     threadStatus?.label === "Working" || threadStatus?.label === "Compacting" ? null : threadStatus;
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
-  const isConfirmingArchive =
-    thread !== null && thread !== undefined
-      ? props.confirmingArchiveThreadId === thread.id && !isThreadRunning
-      : false;
-  const threadMetaClassName = isConfirmingArchive
-    ? "pointer-events-none opacity-0"
-    : !isThreadRunning
-      ? "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0"
-      : "pointer-events-none";
+  const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
+  const threadMetaClassName =
+    "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0";
 
   const handleDeleteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
@@ -197,11 +181,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     [effectiveThreadId, props],
   );
 
-  const handleArchiveAction = useCallback(
+  const handleFavoriteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      void props.attemptArchiveThread(effectiveThreadId);
+      void props.toggleFavoriteThread(effectiveThreadId);
     },
     [effectiveThreadId, props],
   );
@@ -211,22 +195,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   }
 
   return (
-    <SidebarMenuSubItem
-      className="w-full"
-      data-thread-item
-      onMouseLeave={() => {
-        props.setConfirmingArchiveThreadId((current) => (current === thread.id ? null : current));
-      }}
-      onBlurCapture={(event) => {
-        const currentTarget = event.currentTarget;
-        requestAnimationFrame(() => {
-          if (currentTarget.contains(document.activeElement)) {
-            return;
-          }
-          props.setConfirmingArchiveThreadId((current) => (current === thread.id ? null : current));
-        });
-      }}
-    >
+    <SidebarMenuSubItem className="w-full" data-thread-item>
       <div
         ref={swipeReveal.registerBoundaryElement}
         className="relative overflow-hidden rounded-lg"
@@ -268,12 +237,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           }`}
           style={{ transform: `translateX(${swipeReveal.revealOffset}px)` }}
           onPointerDown={swipeReveal.handlePointerDown}
-          onPointerMove={(event) => {
-            props.setConfirmingArchiveThreadId((current) =>
-              current === effectiveThreadId ? null : current,
-            );
-            swipeReveal.handlePointerMove(event);
-          }}
+          onPointerMove={swipeReveal.handlePointerMove}
           onPointerUp={swipeReveal.handlePointerUp}
           onPointerCancel={swipeReveal.handlePointerCancel}
           onWheel={swipeReveal.handleWheel}
@@ -398,46 +362,14 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
               </span>
             )}
             <div className="flex min-w-12 justify-end">
-              {isConfirmingArchive ? (
-                <button
-                  ref={(element) => {
-                    if (element) {
-                      props.confirmArchiveButtonRefs.current.set(thread.id, element);
-                    } else {
-                      props.confirmArchiveButtonRefs.current.delete(thread.id);
-                    }
-                  }}
-                  type="button"
-                  data-thread-selection-safe
-                  data-testid={`thread-archive-confirm-${thread.id}`}
-                  aria-label={`Confirm archive ${thread.title}`}
-                  className="absolute top-1/2 right-1 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                  }}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    props.setConfirmingArchiveThreadId((current) =>
-                      current === thread.id ? null : current,
-                    );
-                    void props.attemptArchiveThread(thread.id);
-                  }}
-                >
-                  Confirm
-                </button>
-              ) : !isThreadRunning ? (
-                <SidebarThreadRowActions
-                  threadId={thread.id}
-                  threadTitle={thread.title}
-                  appSettingsConfirmThreadArchive={props.appSettingsConfirmThreadArchive}
-                  confirmArchiveButtonRefs={props.confirmArchiveButtonRefs}
-                  swipeRevealIsRevealed={swipeReveal.isRevealed}
-                  handleForkAction={handleForkAction}
-                  handleArchiveAction={handleArchiveAction}
-                  setConfirmingArchiveThreadId={props.setConfirmingArchiveThreadId}
-                />
-              ) : null}
+              <SidebarThreadRowActions
+                threadId={thread.id}
+                threadTitle={thread.title}
+                swipeRevealIsRevealed={swipeReveal.isRevealed}
+                isFavorite={isFavorite}
+                handleForkAction={handleForkAction}
+                handleFavoriteAction={handleFavoriteAction}
+              />
               <span className={threadMetaClassName}>
                 {props.showThreadJumpHints && props.jumpLabel ? (
                   <span

@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
+import { ThreadId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -19,6 +19,7 @@ import {
   DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
   SIDEBAR_THREAD_SORT_ORDERS,
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
+  FAVORITE_THREAD_LIMIT,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
@@ -158,6 +159,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
+  favoriteThreadIds: Schema.Array(ThreadId)
+    .check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT))
+    .pipe(Schema.withDecodingDefault(() => [])),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
       provider: DEFAULT_PROVIDER_KIND,
@@ -310,6 +314,9 @@ export const ServerSettingsPatch = Schema.Struct({
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
+  favoriteThreadIds: Schema.optionalKey(
+    Schema.Array(ThreadId).check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT)),
+  ),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({

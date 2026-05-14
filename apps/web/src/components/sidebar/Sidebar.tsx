@@ -14,6 +14,8 @@ import {
 import { SettingsIcon } from "lucide-react";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarAppHeader } from "./SidebarHeader";
+import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
+import { SidebarSearchSection } from "./Sidebar.searchSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { useSidebarState } from "./Sidebar.state";
@@ -34,6 +36,16 @@ export default function Sidebar() {
         <SettingsSidebarNav pathname={s.pathname} />
       ) : (
         <>
+          <SidebarSearchSection />
+
+          <SidebarFavoritesSection
+            renderedFavorites={s.renderedFavorites}
+            isExpanded={s.areFavouritesExpanded}
+            onExpandedChange={s.setAreFavouritesExpanded}
+            sharedProjectItemProps={s.sharedProjectItemProps}
+            bootstrapComplete={s.bootstrapComplete}
+          />
+
           <SidebarChatsSection
             renderedChats={s.renderedChats}
             isExpanded={s.areChatsExpanded}

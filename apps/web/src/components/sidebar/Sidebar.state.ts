@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
+  FAVORITE_THREAD_LIMIT,
   isBuiltInChatsProject,
   type ProjectId,
   ThreadId,
@@ -41,12 +42,15 @@ export function useSidebarState(): SidebarState {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
-  const { projectExpandedById, projectOrder } = useUiStateStore(
-    useShallow((store) => ({
-      projectExpandedById: store.projectExpandedById,
-      projectOrder: store.projectOrder,
-    })),
-  );
+  const { favouritesExpanded, projectExpandedById, projectOrder, setFavouritesExpanded } =
+    useUiStateStore(
+      useShallow((store) => ({
+        favouritesExpanded: store.favouritesExpanded,
+        projectExpandedById: store.projectExpandedById,
+        projectOrder: store.projectOrder,
+        setFavouritesExpanded: store.setFavouritesExpanded,
+      })),
+    );
 
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
@@ -271,6 +275,25 @@ export function useSidebarState(): SidebarState {
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
   const [showAllChats, setShowAllChats] = useState(false);
 
+  const favoriteThreadIds = useMemo(
+    () => new Set(appSettings.favoriteThreadIds),
+    [appSettings.favoriteThreadIds],
+  );
+
+  const renderedFavorites = useMemo(() => {
+    const orderedThreadIds = appSettings.favoriteThreadIds
+      .map((threadId) => sidebarThreadsById[threadId])
+      .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
+      .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
+      .map((thread) => thread.id)
+      .slice(0, FAVORITE_THREAD_LIMIT);
+
+    return orderedThreadIds.map((threadId) => ({
+      threadId,
+      orderedThreadIds,
+    }));
+  }, [appSettings.favoriteThreadIds, sidebarThreadsById]);
+
   const renderedChats = useMemo(() => {
     const orderedChats = sortThreadsForSidebar(
       visibleChatThreads,
@@ -332,7 +355,6 @@ export function useSidebarState(): SidebarState {
       newThreadShortcutLabel: renderedProjectsState.newThreadShortcutLabel,
       showThreadJumpHints: renderedProjectsState.showThreadJumpHints,
       threadJumpLabelById: renderedProjectsState.threadJumpLabelById,
-      appSettingsConfirmThreadArchive: appSettings.confirmThreadArchive,
       appSettingsDefaultThreadEnvMode: appSettings.defaultThreadEnvMode,
       routeThreadId,
       selectedThreadIds: threadActions.selectedThreadIds,
@@ -342,9 +364,8 @@ export function useSidebarState(): SidebarState {
       onRenamingInputMount: threadActions.onRenamingInputMount,
       hasRenameCommitted: threadActions.hasRenameCommitted,
       markRenameCommitted: threadActions.markRenameCommitted,
-      confirmingArchiveThreadId: threadActions.confirmingArchiveThreadId,
-      setConfirmingArchiveThreadId: threadActions.setConfirmingArchiveThreadId,
-      confirmArchiveButtonRefs: threadActions.confirmArchiveButtonRefs,
+      favoriteThreadIds,
+      toggleFavoriteThread: threadActions.toggleFavoriteThread,
       activeThread,
       activeDraftThread,
       renamingProjectId: projectActions.renamingProjectId,
@@ -368,7 +389,6 @@ export function useSidebarState(): SidebarState {
       clearSelection: threadActions.clearSelection,
       commitRename: threadActions.commitRename,
       cancelRename: threadActions.cancelRename,
-      attemptArchiveThread: threadActions.attemptArchiveThread,
       forkThread: threadActions.forkThread,
       requestThreadDelete: threadActions.requestThreadDelete,
       openPrLink: threadActions.openPrLink,
@@ -385,13 +405,13 @@ export function useSidebarState(): SidebarState {
       renderedProjectsState.attachThreadListAutoAnimateRef,
       renderedProjectsState.expandThreadListForProject,
       renderedProjectsState.collapseThreadListForProject,
-      appSettings.confirmThreadArchive,
       appSettings.defaultThreadEnvMode,
       routeThreadId,
       threadActions,
       activeThread,
       activeDraftThread,
       projectActions,
+      favoriteThreadIds,
       prByThreadId,
       handleNewThread,
     ],
@@ -401,6 +421,9 @@ export function useSidebarState(): SidebarState {
     projects,
     bootstrapComplete,
     chatsProject,
+    renderedFavorites,
+    areFavouritesExpanded: favouritesExpanded,
+    setAreFavouritesExpanded: setFavouritesExpanded,
     areChatsExpanded,
     setAreChatsExpanded,
     showAllChats,
@@ -447,11 +470,9 @@ export function useSidebarState(): SidebarState {
     markRenameCommitted: threadActions.markRenameCommitted,
     cancelRename: threadActions.cancelRename,
     commitRename: threadActions.commitRename,
-    confirmingArchiveThreadId: threadActions.confirmingArchiveThreadId,
-    setConfirmingArchiveThreadId: threadActions.setConfirmingArchiveThreadId,
-    confirmArchiveButtonRefs: threadActions.confirmArchiveButtonRefs,
     attemptArchiveThread: threadActions.attemptArchiveThread,
     forkThread: threadActions.forkThread,
+    toggleFavoriteThread: threadActions.toggleFavoriteThread,
     pendingDeleteConfirmation: threadActions.pendingDeleteConfirmation,
     dismissPendingDeleteConfirmation: threadActions.dismissPendingDeleteConfirmation,
     confirmPendingDeleteThreads: threadActions.confirmPendingDeleteThreads,
