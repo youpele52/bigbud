@@ -44,6 +44,9 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  focusMessageId?: MessageId | null;
+  onReplyToMessage?: (messageId: MessageId) => void;
+  onOpenReplySource?: (messageId: MessageId) => void;
   onForkThread?: () => void;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
@@ -81,11 +84,15 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  focusMessageId = null,
+  onReplyToMessage = () => {},
+  onOpenReplySource = () => {},
   onForkThread,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
+  const [focusedMessageId, setFocusedMessageId] = useState<MessageId | null>(null);
 
   useLayoutEffect(() => {
     const timelineRoot = timelineRootRef.current;
@@ -248,6 +255,38 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }
     };
   }, []);
+  useEffect(() => {
+    if (!focusMessageId) {
+      return;
+    }
+
+    const rowIndex = rows.findIndex(
+      (row) => row.kind === "message" && row.message.id === focusMessageId,
+    );
+    if (rowIndex < 0) {
+      return;
+    }
+
+    if (rowIndex < virtualizedRowCount) {
+      rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = timelineRootRef.current?.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(focusMessageId)}"]`,
+      );
+      element?.scrollIntoView({ block: "center", behavior: "smooth" });
+      setFocusedMessageId(focusMessageId);
+    });
+    const timeoutId = window.setTimeout(() => {
+      setFocusedMessageId((current) => (current === focusMessageId ? null : current));
+    }, 2_000);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [focusMessageId, rowVirtualizer, rows, virtualizedRowCount]);
   useLayoutEffect(() => {
     if (!onVirtualizerSnapshot) {
       return;
@@ -328,6 +367,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   nowIso={nowIso}
                   timestampFormat={timestampFormat}
                   workspaceRoot={workspaceRoot}
+                  focusedMessageId={focusedMessageId}
+                  onReplyToMessage={onReplyToMessage}
+                  onOpenReplySource={onOpenReplySource}
                   {...(onForkThread ? { onForkThread } : {})}
                   isWorking={isWorking}
                   onTimelineImageLoad={onTimelineImageLoad}
@@ -358,6 +400,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             nowIso={nowIso}
             timestampFormat={timestampFormat}
             workspaceRoot={workspaceRoot}
+            focusedMessageId={focusedMessageId}
+            onReplyToMessage={onReplyToMessage}
+            onOpenReplySource={onOpenReplySource}
             {...(onForkThread ? { onForkThread } : {})}
             isWorking={isWorking}
             onTimelineImageLoad={onTimelineImageLoad}

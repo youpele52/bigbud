@@ -178,6 +178,12 @@ export function runtimeEventToActivities(
             ...(typeof event.payload.autoApproveAfterMs === "number"
               ? { autoApproveAfterMs: event.payload.autoApproveAfterMs }
               : {}),
+            ...(typeof event.payload.sessionApprovalAvailable === "boolean"
+              ? { sessionApprovalAvailable: event.payload.sessionApprovalAvailable }
+              : {}),
+            ...(event.payload.sessionApprovalLabel
+              ? { sessionApprovalLabel: truncateDetail(event.payload.sessionApprovalLabel) }
+              : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -336,7 +342,7 @@ export function runtimeEventToActivities(
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "info",
+          tone: "thinking",
           kind: "task.progress",
           summary: "Reasoning update",
           payload: {

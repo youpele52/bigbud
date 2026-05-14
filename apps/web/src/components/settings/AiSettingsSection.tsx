@@ -62,6 +62,32 @@ export function AiSettingsSection() {
       />
 
       <SettingsRow
+        title="Stream thinking"
+        description="Display provider thinking live as it arrives."
+        resetAction={
+          settings.enableThinkingStreaming !== DEFAULT_UNIFIED_SETTINGS.enableThinkingStreaming ? (
+            <SettingResetButton
+              label="stream thinking"
+              onClick={() =>
+                updateSettings({
+                  enableThinkingStreaming: DEFAULT_UNIFIED_SETTINGS.enableThinkingStreaming,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={settings.enableThinkingStreaming}
+            onCheckedChange={(checked) =>
+              updateSettings({ enableThinkingStreaming: Boolean(checked) })
+            }
+            aria-label="Stream thinking"
+          />
+        }
+      />
+
+      <SettingsRow
         title="Text generation model"
         description="Configure the model used for generated commit messages, PR titles, and similar Git text."
         resetAction={

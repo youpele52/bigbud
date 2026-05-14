@@ -9,6 +9,8 @@ import { type TurnDiffSummary } from "../../../models/types";
 import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/types/app.types";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
+import { MessageReplyButton } from "../common/MessageReplyButton";
+import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
 import { MessagesTimelineBrowserAnnotations } from "./MessagesTimeline.browserAnnotations";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
@@ -16,12 +18,14 @@ import {
   type AssistantMessageRow,
   AssistantMessageBody,
 } from "./MessagesTimeline.assistantMessage";
+import { ThinkingMessageBody } from "./MessagesTimeline.thinking";
 import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
+import { cn } from "~/lib/utils";
 
 interface RenderRowContentProps {
   row: MessagesTimelineRow;
@@ -43,6 +47,9 @@ interface RenderRowContentProps {
   workspaceRoot: string | undefined;
   isWorking: boolean;
   onTimelineImageLoad: () => void;
+  focusedMessageId: MessageId | null;
+  onReplyToMessage: (messageId: MessageId) => void;
+  onOpenReplySource: (messageId: MessageId) => void;
   onForkThread?: () => void;
 }
 
@@ -67,6 +74,9 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
     workspaceRoot,
     isWorking,
     onTimelineImageLoad,
+    focusedMessageId,
+    onReplyToMessage,
+    onOpenReplySource,
     onForkThread,
   } = props;
 
@@ -138,9 +148,24 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           const terminalContexts = displayedUserMessage.contexts;
           const browserAnnotations = displayedUserMessage.browserAnnotations;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
+          const replyTarget = row.message.replyTo;
           return (
             <div className="group flex flex-col items-end gap-1">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+              <div
+                className={cn(
+                  "max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",
+                  focusedMessageId === row.message.id ? "border-primary/70 bg-secondary/85" : "",
+                )}
+              >
+                {replyTarget ? (
+                  <div className="mb-2">
+                    <MessageReplyPreview
+                      replyTarget={replyTarget}
+                      onClick={() => onOpenReplySource(replyTarget.messageId)}
+                      className="bg-background/30"
+                    />
+                  </div>
+                ) : null}
                 {userImages.length > 0 && (
                   <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
                     {userImages.map((image) => (
@@ -249,6 +274,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
                 {displayedUserMessage.copyText && (
                   <MessageCopyButton text={displayedUserMessage.copyText} />
                 )}
+                <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
                 {canRevertAgentWork && (
                   <Button
                     type="button"
@@ -278,7 +304,18 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           resolvedTheme={resolvedTheme}
           nowIso={nowIso}
           timestampFormat={timestampFormat}
+          focusedMessageId={focusedMessageId}
+          onReplyToMessage={onReplyToMessage}
+          onOpenReplySource={onOpenReplySource}
           onForkThread={onForkThread}
+        />
+      )}
+
+      {row.kind === "thinking" && (
+        <ThinkingMessageBody
+          row={row}
+          markdownCwd={markdownCwd}
+          timestampFormat={timestampFormat}
         />
       )}
 

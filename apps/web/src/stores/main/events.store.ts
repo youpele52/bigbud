@@ -269,6 +269,7 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
           ...(event.payload.attachments !== undefined
             ? { attachments: event.payload.attachments }
             : {}),
+          ...(event.payload.replyTo !== undefined ? { replyTo: event.payload.replyTo } : {}),
           turnId: event.payload.turnId,
           streaming: event.payload.streaming,
           createdAt: event.payload.createdAt,
@@ -301,6 +302,11 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
                     ...(message.attachments !== undefined
                       ? { attachments: message.attachments }
                       : {}),
+                    ...(message.replyTo !== undefined
+                      ? { replyTo: message.replyTo }
+                      : entry.replyTo !== undefined
+                        ? { replyTo: entry.replyTo }
+                        : {}),
                   },
             )
           : [...thread.messages, message];

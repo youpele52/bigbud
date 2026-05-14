@@ -62,11 +62,19 @@ export interface ChatFileAttachment {
 
 export type ChatAttachment = ChatImageAttachment | ChatFileAttachment;
 
+export interface ChatMessageReplyTarget {
+  messageId: MessageId;
+  role: "user" | "assistant" | "system";
+  createdAt: string;
+  excerpt: string;
+}
+
 export interface ChatMessage {
   id: MessageId;
   role: "user" | "assistant" | "system";
   text: string;
   attachments?: ChatAttachment[];
+  replyTo?: ChatMessageReplyTarget;
   turnId?: TurnId | null;
   createdAt: string;
   completedAt?: string | undefined;

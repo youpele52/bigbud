@@ -4,6 +4,38 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.625 (14 May, 2026)
+
+### Conversation Flow and Context
+
+- Added inline replies for both your messages and AI messages, with a compact quoted preview in the composer and in chat so follow-up questions can point to a specific earlier message.
+- Carried reply context all the way through the app, including reconnects and restarts, so the AI can still understand what you replied to instead of losing that reference mid-conversation.
+- Fixed live-update gaps that could make new messages or deleted threads appear only after a reload.
+- Corrected timeline ordering so visible thinking or work steps appear before the final answer when they land at nearly the same time.
+- Improved first-message thread titles by seeding better fallback titles and retrying weak AI-generated titles instead of leaving chats with vague placeholders.
+
+### Thinking and Response Visibility
+
+- Improved streamed thinking visibility across supported AI services so reasoning updates appear more consistently instead of leaking into the wrong part of the conversation.
+- Made the `Stream thinking` setting apply end to end, so hidden thinking stays hidden and visible thinking gets its own cleaner layout when enabled.
+
+### Sidebar and Organization
+
+- Added a new pinned section in the sidebar so you can keep up to five important chats easy to reach without changing where those chats belong.
+- Split sidebar search into its own section, kept pinned chats out of numbered quick-jump ordering, and preserved the pinned section's open or closed state across reloads.
+
+### Approvals and Session Reliability
+
+- Reworked approval prompts so they stay tied to the chat they came from instead of pulling you into another thread automatically.
+- Added clearer approval context, including the source chat, project, and folder, plus an explicit action to open that thread when you want to inspect it.
+- Tightened approval availability so session-level approval controls are shown only when the connected AI service actually supports them.
+- Hardened OpenCode session handling so prompts recover more gracefully from broken transport state and stream results more reliably.
+
+### Validation
+
+- Added focused unit, integration, and browser coverage for replies, thinking visibility, title generation, sidebar pinning, approvals, and OpenCode session recovery.
+- Revalidated this work with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
+
 ## v0.1.624 (13 May, 2026)
 
 ### Runtime and Thread UX Reliability

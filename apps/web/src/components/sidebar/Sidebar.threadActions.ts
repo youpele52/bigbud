@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState, type MouseEvent } from "react";
-import { type ThreadId, type ProjectId } from "@bigbud/contracts";
+import { FAVORITE_THREAD_LIMIT, type ThreadId, type ProjectId } from "@bigbud/contracts";
 import { isMacPlatform, newCommandId } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useSettings } from "../../hooks/useSettings";
+import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
@@ -34,12 +34,9 @@ export interface SidebarThreadActionsOutput {
   markRenameCommitted: () => void;
   cancelRename: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
-  // Archive confirm state
-  confirmingArchiveThreadId: ThreadId | null;
-  setConfirmingArchiveThreadId: React.Dispatch<React.SetStateAction<ThreadId | null>>;
-  confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
   forkThread: (threadId: ThreadId) => Promise<void>;
+  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   pendingDeleteConfirmation: {
     title: string;
     description: string;
@@ -75,6 +72,7 @@ export function useSidebarThreadActions({
   cancelProjectRename,
 }: SidebarThreadActionsInput): SidebarThreadActionsOutput {
   const markThreadUnread = useUiStateStore((store) => store.markThreadUnread);
+  const { updateSettings } = useUpdateSettings();
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
@@ -89,7 +87,6 @@ export function useSidebarThreadActions({
 
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
-  const [confirmingArchiveThreadId, setConfirmingArchiveThreadId] = useState<ThreadId | null>(null);
   const [pendingDeleteConfirmation, setPendingDeleteConfirmation] = useState<{
     title: string;
     description: string;
@@ -97,7 +94,6 @@ export function useSidebarThreadActions({
   } | null>(null);
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
-  const confirmArchiveButtonRefs = useRef(new Map<ThreadId, HTMLButtonElement>());
 
   const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
     threadId: ThreadId;
@@ -218,6 +214,32 @@ export function useSidebarThreadActions({
       }
     },
     [archiveThread],
+  );
+
+  const toggleFavoriteThread = useCallback(
+    async (threadId: ThreadId) => {
+      const favoriteThreadIds = appSettings.favoriteThreadIds;
+      if (favoriteThreadIds.includes(threadId)) {
+        updateSettings({
+          favoriteThreadIds: favoriteThreadIds.filter((favoriteId) => favoriteId !== threadId),
+        });
+        return;
+      }
+
+      if (favoriteThreadIds.length >= FAVORITE_THREAD_LIMIT) {
+        toastManager.add({
+          type: "warning",
+          title: "Pinned limit reached",
+          description: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+        });
+        return;
+      }
+
+      updateSettings({
+        favoriteThreadIds: [threadId, ...favoriteThreadIds],
+      });
+    },
+    [appSettings.favoriteThreadIds, updateSettings],
   );
 
   const handleForkThread = useCallback(
@@ -364,10 +386,16 @@ export function useSidebarThreadActions({
       if (!thread) return;
       const threadWorkspacePath =
         thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
+      const isFavorite = appSettings.favoriteThreadIds.includes(threadId);
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
           { id: "fork", label: "Fork thread" },
+          {
+            id: "favorite",
+            label: isFavorite ? "Unpin thread" : "Pin thread",
+          },
+          { id: "archive", label: "Archive thread" },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
@@ -386,6 +414,22 @@ export function useSidebarThreadActions({
 
       if (clicked === "fork") {
         await handleForkThread(threadId);
+        return;
+      }
+
+      if (clicked === "favorite") {
+        await toggleFavoriteThread(threadId);
+        return;
+      }
+
+      if (clicked === "archive") {
+        const shouldArchive =
+          !appSettings.confirmThreadArchive ||
+          (await api.dialogs.confirm(`Archive thread "${thread.title}"?`));
+        if (!shouldArchive) {
+          return;
+        }
+        await attemptArchiveThread(threadId);
         return;
       }
 
@@ -414,6 +458,9 @@ export function useSidebarThreadActions({
     },
     [
       cancelProjectRename,
+      appSettings.favoriteThreadIds,
+      appSettings.confirmThreadArchive,
+      attemptArchiveThread,
       copyPathToClipboard,
       copyThreadIdToClipboard,
       handleForkThread,
@@ -421,6 +468,7 @@ export function useSidebarThreadActions({
       projectCwdById,
       requestThreadDelete,
       sidebarThreadsById,
+      toggleFavoriteThread,
     ],
   );
 
@@ -486,11 +534,9 @@ export function useSidebarThreadActions({
     markRenameCommitted,
     cancelRename,
     commitRename,
-    confirmingArchiveThreadId,
-    setConfirmingArchiveThreadId,
-    confirmArchiveButtonRefs,
     attemptArchiveThread,
     forkThread: handleForkThread,
+    toggleFavoriteThread,
     pendingDeleteConfirmation,
     dismissPendingDeleteConfirmation,
     confirmPendingDeleteThreads,

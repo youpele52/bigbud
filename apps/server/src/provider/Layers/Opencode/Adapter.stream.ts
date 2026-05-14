@@ -46,15 +46,22 @@ export function makeHandleEvent(
     yield* logNativeEvent(nativeEventLogger, session.threadId, event);
     const mapped = yield* mapEventFn(session, event);
     if (mapped.length > 0) {
-      yield* emitFn(mapped);
-
       if (session.runtimeMode === "full-access") {
+        const visibleEvents = [] as ProviderRuntimeEvent[];
         for (const mappedEvent of mapped) {
           if (mappedEvent.type === "request.opened" && mappedEvent.requestId) {
             scheduleAutoApprovePendingPermission(session, mappedEvent.requestId);
+            continue;
           }
+          visibleEvents.push(mappedEvent);
         }
+        if (visibleEvents.length > 0) {
+          yield* emitFn(visibleEvents);
+        }
+        return;
       }
+
+      yield* emitFn(mapped);
     }
   });
 }

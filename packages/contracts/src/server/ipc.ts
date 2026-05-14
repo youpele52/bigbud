@@ -49,6 +49,7 @@ import type {
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
 import { ServerSettings, ServerSettingsPatch } from "../core/settings";
@@ -208,6 +209,10 @@ export interface NativeApi {
     replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,
+      options?: { onResubscribe?: () => void },
+    ) => () => void;
+    onThinkingDelta: (
+      callback: (event: ThinkingActivityDeltaEvent) => void,
       options?: { onResubscribe?: () => void },
     ) => () => void;
   };

@@ -24,8 +24,8 @@ import {
   appendBrowserAnnotationsToPrompt,
   readFileAsDataUrl,
   cloneComposerImageForRetry,
-  draftTitleFromMessage,
 } from "./ChatView.logic";
+import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { toastManager } from "../../ui/toast";
 import { readNativeApi } from "../../../rpc/nativeApi";
@@ -97,6 +97,8 @@ export interface UseOnSendInput {
   clearComposerDraftContent: (threadId: ThreadId) => void;
   bootstrapSourceThreadId: ThreadId | null;
   clearBootstrapSourceThreadId: (threadId: ThreadId) => void;
+  replyTarget: ChatMessage["replyTo"] | null;
+  setReplyTarget: (threadId: ThreadId, replyTarget: ChatMessage["replyTo"] | null) => void;
   beginLocalDispatch: (opts: { preparingWorktree: boolean }) => void;
   resetLocalDispatch: () => void;
   forceStickToBottom: () => void;
@@ -159,6 +161,7 @@ export function useOnSend(input: UseOnSendInput) {
       activePendingUserInputRequestId,
       activePendingUserInput,
       bootstrapSourceThreadId,
+      replyTarget,
       shouldAutoScrollRef: autoScrollRef,
     } = inputRef.current;
 
@@ -267,7 +270,10 @@ export function useOnSend(input: UseOnSendInput) {
           });
         }
 
-        const draftTitle = isDraft ? draftTitleFromMessage(shellCommand) : undefined;
+        const seededTitle =
+          isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
+            ? draftTitleFromMessage(shellCommand)
+            : undefined;
         const bootstrap =
           isDraft || baseBranchForWorktree
             ? {
@@ -275,7 +281,7 @@ export function useOnSend(input: UseOnSendInput) {
                   ? {
                       createThread: {
                         projectId: project.id,
-                        title: draftTitle ?? thread.title,
+                        title: seededTitle ?? thread.title,
                         modelSelection: threadCreateModelSelection,
                         runtimeMode: runMode,
                         interactionMode: interactMode,
@@ -487,6 +493,7 @@ export function useOnSend(input: UseOnSendInput) {
         role: "user" as const,
         text: outgoingMessageText,
         ...(optimisticAttachments.length > 0 ? { attachments: optimisticAttachments } : {}),
+        ...(replyTarget ? { replyTo: replyTarget } : {}),
         createdAt: messageCreatedAt,
         streaming: false,
       },
@@ -523,7 +530,10 @@ export function useOnSend(input: UseOnSendInput) {
       }
 
       const turnAttachments = await turnAttachmentsPromise;
-      const draftTitle = isDraft ? draftTitleFromMessage(promptForSend) : undefined;
+      const seededTitle =
+        isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
+          ? draftTitleFromMessage(promptForSend)
+          : undefined;
       const bootstrap =
         isDraft || baseBranchForWorktree
           ? {
@@ -531,7 +541,7 @@ export function useOnSend(input: UseOnSendInput) {
                 ? {
                     createThread: {
                       projectId: project.id,
-                      title: draftTitle ?? thread.title,
+                      title: seededTitle ?? thread.title,
                       modelSelection: threadCreateModelSelection,
                       runtimeMode: runMode,
                       interactionMode: interactMode,
@@ -563,13 +573,14 @@ export function useOnSend(input: UseOnSendInput) {
           role: "user",
           text: outgoingMessageText,
           attachments: turnAttachments,
+          ...(replyTarget ? { replyToMessageId: replyTarget.messageId } : {}),
         },
         modelSelection: modelSel,
         runtimeMode: runMode,
         interactionMode: interactMode,
         ...(bootstrap ? { bootstrap } : {}),
         ...(bootstrapSourceThreadId ? { bootstrapSourceThreadId } : {}),
-        ...(draftTitle ? { titleSeed: draftTitle } : {}),
+        ...(seededTitle ? { titleSeed: seededTitle } : {}),
         createdAt: messageCreatedAt,
       });
       if (bootstrapSourceThreadId) {
@@ -610,6 +621,7 @@ export function useOnSend(input: UseOnSendInput) {
         inputRef.current.addComposerFilesToDraft(composerFilesSnapshot);
         inputRef.current.addComposerAnnotationsToDraft(composerAnnotationsSnapshot);
         inputRef.current.addComposerTerminalContextsToDraft(composerTerminalContextsSnapshot);
+        inputRef.current.setReplyTarget(threadIdForSend, replyTarget);
         inputRef.current.setComposerTrigger(
           detectComposerTrigger(promptForSend, promptForSend.length),
         );

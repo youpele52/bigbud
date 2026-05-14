@@ -429,6 +429,7 @@ export function createComposerContentActions(
           persistedAttachments: [],
           persistedFileAttachments: [],
           terminalContexts: [],
+          replyTarget: null,
         };
         const nextDraftsByThreadId = { ...state.draftsByThreadId };
         if (shouldRemoveDraft(nextDraft)) {
@@ -455,6 +456,32 @@ export function createComposerContentActions(
         const nextDraft: ComposerThreadDraftState = {
           ...(existing ?? createEmptyThreadDraft()),
           bootstrapSourceThreadId: normalizedSourceThreadId,
+        };
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        if (shouldRemoveDraft(nextDraft)) {
+          delete nextDraftsByThreadId[threadId];
+        } else {
+          nextDraftsByThreadId[threadId] = nextDraft;
+        }
+        return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
+    setReplyTarget: (
+      threadId: ThreadId,
+      replyTarget: ComposerThreadDraftState["replyTarget"] | undefined,
+    ) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      const normalizedReplyTarget = replyTarget ?? null;
+      set((state) => {
+        const existing = state.draftsByThreadId[threadId];
+        if (!existing && normalizedReplyTarget === null) {
+          return state;
+        }
+        const nextDraft: ComposerThreadDraftState = {
+          ...(existing ?? createEmptyThreadDraft()),
+          replyTarget: normalizedReplyTarget,
         };
         const nextDraftsByThreadId = { ...state.draftsByThreadId };
         if (shouldRemoveDraft(nextDraft)) {

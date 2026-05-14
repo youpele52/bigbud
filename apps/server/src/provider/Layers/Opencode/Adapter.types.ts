@@ -62,6 +62,12 @@ export interface ActiveOpencodeSession {
   lastUsage: ThreadTokenUsageSnapshot | undefined;
   /** True while the session is in a retry/rate-limit back-off loop. */
   wasRetrying: boolean;
+  /**
+   * Part IDs whose type is "reasoning". Populated from `message.part.updated`
+   * events so that `message.part.delta` can distinguish reasoning deltas
+   * (field: "text") from assistant-text deltas (also field: "text").
+   */
+  readonly reasoningPartIds: Set<string>;
 }
 
 export interface OpencodeAdapterLiveOptions {

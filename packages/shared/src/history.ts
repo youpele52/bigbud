@@ -18,7 +18,19 @@ const LATEST_PROMPT_HEADER = "Latest user request (answer this now):";
 const OMITTED_SUMMARY = (count: number) =>
   `[${count} earlier message(s) omitted to stay within input limits.]`;
 
-type BootstrapMessage = Pick<OrchestrationMessage, "role" | "text" | "attachments">;
+type BootstrapMessage = Pick<OrchestrationMessage, "role" | "text" | "attachments" | "replyTo">;
+type ReplyTarget = NonNullable<OrchestrationMessage["replyTo"]>;
+
+const REPLY_TO_MESSAGE_TAG = "reply_to_message";
+
+function escapeXmlText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
 
 function messageRoleLabel(message: BootstrapMessage): "USER" | "ASSISTANT" | "SYSTEM" {
   switch (message.role satisfies OrchestrationMessageRole) {
@@ -46,8 +58,32 @@ function attachmentSummary(message: BootstrapMessage): string | null {
   return `[Attached image${count === 1 ? "" : "s"}: ${namesSummary}${extraSummary}]`;
 }
 
+function buildReplyContextBlock(replyTo: ReplyTarget): string {
+  const attributes = [
+    `message_id="${replyTo.messageId}"`,
+    `role="${replyTo.role}"`,
+    `created_at="${replyTo.createdAt}"`,
+  ].join(" ");
+  const excerpt = escapeXmlText(
+    replyTo.excerpt.trim().length > 0 ? replyTo.excerpt : "(empty message)",
+  );
+  return `<${REPLY_TO_MESSAGE_TAG} ${attributes}>\n${excerpt}\n</${REPLY_TO_MESSAGE_TAG}>`;
+}
+
+export function buildProviderMessageText(input: {
+  readonly text: string;
+  readonly replyTo?: OrchestrationMessage["replyTo"];
+}): string {
+  if (!input.replyTo) {
+    return input.text;
+  }
+
+  const replyContext = buildReplyContextBlock(input.replyTo);
+  return input.text.length > 0 ? `${replyContext}\n\n${input.text}` : replyContext;
+}
+
 function buildMessageBlock(message: BootstrapMessage): string {
-  const text = message.text;
+  const text = buildProviderMessageText(message);
   const attachments = attachmentSummary(message);
 
   if (text && attachments) {

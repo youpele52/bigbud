@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("../common/ChatMarkdown", () => ({
-  default: ({ text }: { text: string }) => <div>{text}</div>,
+  default: ({ text, className }: { text: string; className?: string }) => (
+    <div className={className}>{text}</div>
+  ),
 }));
 
 function matchMedia() {
@@ -240,6 +242,156 @@ describe("MessagesTimeline", () => {
 
     expect(markup).toContain("Context compacted");
     expect(markup).toContain("Work log");
+  });
+
+  it("renders reply previews for replied user messages", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-reply-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-reply-1"),
+              role: "user",
+              text: "following up",
+              replyTo: {
+                messageId: MessageId.makeUnsafe("message-parent-1"),
+                role: "assistant",
+                createdAt: "2026-03-17T19:10:00.000Z",
+                excerpt: "Earlier answer",
+              },
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("Earlier answer");
+    expect(markup).toContain("AI");
+    expect(markup).toContain("following up");
+  });
+
+  it("renders thinking entries as chat-style markdown blocks instead of work-log rows", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "thinking-entry-1",
+            kind: "thinking",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "thinking-work-1",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Thinking",
+              detail: "Checking the current thread state",
+              tone: "thinking",
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("Thinking");
+    expect(markup).toContain("Checking the current thread state");
+    expect(markup).toContain("thinking-markdown");
+    expect(markup).toContain("text-xs");
+    expect(markup).toContain("text-muted-foreground/68");
+    expect(markup).not.toContain("Work log");
+  });
+
+  it("collapses long thinking entries by default", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const detail = `${"Checking the current thread state. ".repeat(24)}Final sentence.`;
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "thinking-entry-long",
+            kind: "thinking",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "thinking-work-long",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Thinking",
+              detail,
+              tone: "thinking",
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("Expand thinking");
+    expect(markup).not.toContain("Final sentence.");
   });
 
   it("renders sent browser annotations as a compact expandable attachment", async () => {

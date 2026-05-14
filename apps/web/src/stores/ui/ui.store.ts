@@ -20,11 +20,13 @@ const LEGACY_PERSISTED_STATE_KEYS = [
 export interface PersistedUiState {
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
+  favouritesExpanded?: boolean;
   projectOrderCwds?: string[];
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
 }
 
 export interface UiProjectState {
+  favouritesExpanded: boolean;
   projectExpandedById: Record<string, boolean>;
   projectOrder: ProjectId[];
 }
@@ -47,6 +49,7 @@ export interface SyncThreadInput {
 }
 
 const initialState: UiState = {
+  favouritesExpanded: true,
   projectExpandedById: {},
   projectOrder: [],
   threadLastVisitedAtById: {},
@@ -85,6 +88,8 @@ function readPersistedState(): UiState {
     hydratePersistedProjectState(parsed);
     return {
       ...initialState,
+      favouritesExpanded:
+        typeof parsed.favouritesExpanded === "boolean" ? parsed.favouritesExpanded : true,
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -181,6 +186,7 @@ export function persistState(state: UiState): void {
       JSON.stringify({
         collapsedProjectCwds,
         expandedProjectCwds,
+        favouritesExpanded: state.favouritesExpanded,
         projectOrderCwds,
         threadChangedFilesExpandedById,
       } satisfies PersistedUiState),
@@ -551,6 +557,16 @@ export function reorderProjects(
   };
 }
 
+export function setFavouritesExpanded(state: UiState, expanded: boolean): UiState {
+  if (state.favouritesExpanded === expanded) {
+    return state;
+  }
+  return {
+    ...state,
+    favouritesExpanded: expanded,
+  };
+}
+
 interface UiStateStore extends UiState {
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
   syncThreads: (threads: readonly SyncThreadInput[]) => void;
@@ -558,6 +574,7 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: ThreadId, latestTurnCompletedAt: string | null | undefined) => void;
   clearThreadUi: (threadId: ThreadId) => void;
   setThreadChangedFilesExpanded: (threadId: ThreadId, turnId: string, expanded: boolean) => void;
+  setFavouritesExpanded: (expanded: boolean) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   reorderProjects: (draggedProjectId: ProjectId, targetProjectId: ProjectId) => void;
@@ -574,6 +591,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setFavouritesExpanded: (expanded) => set((state) => setFavouritesExpanded(state, expanded)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

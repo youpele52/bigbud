@@ -95,7 +95,7 @@ export function useSidebarRenderedProjects({
           (threadIdsByProjectId[project.id as string] ?? [])
             .map((threadId) => sidebarThreadsById[threadId])
             .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
-            .filter((thread) => thread.archivedAt === null),
+            .filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
           appSettings.sidebarThreadSortOrder,
         );
         const projectStatus = resolveProjectStatusIndicator(

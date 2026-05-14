@@ -23,11 +23,20 @@ import { OrchestrationProject } from "./orchestration.project";
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 
+export const OrchestrationMessageReply = Schema.Struct({
+  messageId: MessageId,
+  role: OrchestrationMessageRole,
+  createdAt: IsoDateTime,
+  excerpt: Schema.String,
+});
+export type OrchestrationMessageReply = typeof OrchestrationMessageReply.Type;
+
 export const OrchestrationMessage = Schema.Struct({
   id: MessageId,
   role: OrchestrationMessageRole,
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  replyTo: Schema.optional(OrchestrationMessageReply),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -110,6 +119,7 @@ export type OrchestrationCheckpointSummary = typeof OrchestrationCheckpointSumma
 
 export const OrchestrationThreadActivityTone = Schema.Literals([
   "info",
+  "thinking",
   "tool",
   "approval",
   "error",

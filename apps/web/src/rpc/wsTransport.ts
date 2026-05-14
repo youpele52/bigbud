@@ -34,6 +34,10 @@ function formatErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function isUnknownRequestTagError(error: unknown): boolean {
+  return formatErrorMessage(error).includes("Unknown request tag:");
+}
+
 export class WsTransport {
   private readonly lifecycleHandlers: WsProtocolLifecycleHandlers | undefined;
   private readonly url: string | undefined;
@@ -134,6 +138,12 @@ export class WsTransport {
         } catch (error) {
           cancelCurrentStream = NOOP;
           if (!active || this.disposed) {
+            return;
+          }
+          if (isUnknownRequestTagError(error)) {
+            console.warn("WebSocket RPC subscription unavailable", {
+              error: formatErrorMessage(error),
+            });
             return;
           }
 

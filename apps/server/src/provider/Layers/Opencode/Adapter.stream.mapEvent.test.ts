@@ -30,6 +30,7 @@ function makeSession(): ActiveOpencodeSession {
     activeTurnId: TURN_ID,
     lastUsage: undefined,
     wasRetrying: false,
+    reasoningPartIds: new Set(),
   };
 }
 
@@ -141,3 +142,76 @@ it.effect("maps native session.compacted events to thread compacted state", () =
     ]);
   });
 });
+
+it.effect("maps message.part.updated(reasoning) + message.part.delta to reasoning_text", () => {
+  const session = makeSession();
+  const mapEvent = makeMapEventUnderTest();
+  const PART_ID = "reasoning-part-1";
+
+  return Effect.gen(function* () {
+    // First, register the part as reasoning via message.part.updated
+    const updatedEvents = yield* mapEvent(session, {
+      type: "message.part.updated",
+      properties: {
+        sessionID: session.opencodeSessionId,
+        part: { id: PART_ID, type: "reasoning", text: "", time: { start: 0 } },
+        time: 0,
+      },
+    } as OpencodeEvent);
+
+    // message.part.updated for reasoning emits no events
+    assert.deepEqual(updatedEvents, []);
+    assert.isTrue(session.reasoningPartIds.has(PART_ID));
+
+    // Then a delta arrives with field: "text" — must map to reasoning_text
+    const deltaEvents = yield* mapEvent(session, {
+      type: "message.part.delta",
+      properties: {
+        sessionID: session.opencodeSessionId,
+        messageID: "msg-1",
+        partID: PART_ID,
+        field: "text",
+        delta: "thinking...",
+      },
+    } as OpencodeEvent);
+
+    assert.equal(deltaEvents.length, 1);
+    const ev = deltaEvents[0];
+    assert.equal(ev?.type, "content.delta");
+    const payload = (ev as { payload: { streamKind: string; delta: string } }).payload;
+    assert.deepEqual(payload, {
+      streamKind: "reasoning_text",
+      delta: "thinking...",
+    });
+  });
+});
+
+it.effect(
+  "maps message.part.delta with field:text and no registered part to assistant_text",
+  () => {
+    const session = makeSession();
+    const mapEvent = makeMapEventUnderTest();
+
+    return Effect.gen(function* () {
+      const deltaEvents = yield* mapEvent(session, {
+        type: "message.part.delta",
+        properties: {
+          sessionID: session.opencodeSessionId,
+          messageID: "msg-2",
+          partID: "text-part-1",
+          field: "text",
+          delta: "Hello world",
+        },
+      } as OpencodeEvent);
+
+      assert.equal(deltaEvents.length, 1);
+      const ev = deltaEvents[0];
+      assert.equal(ev?.type, "content.delta");
+      const payload = (ev as { payload: { streamKind: string; delta: string } }).payload;
+      assert.deepEqual(payload, {
+        streamKind: "assistant_text",
+        delta: "Hello world",
+      });
+    });
+  },
+);

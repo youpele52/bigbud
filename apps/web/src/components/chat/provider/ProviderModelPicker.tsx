@@ -20,16 +20,7 @@ import {
   MenuTrigger,
 } from "../../ui/menu";
 import { Searchbar } from "../../ui/Searchbar";
-import {
-  ClaudeAI,
-  CursorIcon,
-  Gemini,
-  GitHubIcon,
-  Icon,
-  OpenAI,
-  OpenCodeIcon,
-  PiIcon,
-} from "../../Icons";
+import { ClaudeAI, CopilotIcon, CursorIcon, Icon, OpenAI, OpenCodeIcon, PiIcon } from "../../Icons";
 import { cn } from "~/lib/utils";
 import { getProviderSnapshot } from "../../../models/provider";
 import { useRecentlyUsedModels } from "../../../hooks/useRecentlyUsedModels";
@@ -46,7 +37,7 @@ function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): o
 const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
   claudeAgent: ClaudeAI,
-  copilot: GitHubIcon,
+  copilot: CopilotIcon,
   opencode: OpenCodeIcon,
   pi: PiIcon,
   cursor: CursorIcon,
@@ -54,7 +45,6 @@ const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
-const COMING_SOON_PROVIDER_OPTIONS = [{ id: "gemini", label: "Gemini", icon: Gemini }] as const;
 
 /**
  * Converts a model slug like "gemini-3-flash-preview" to a human-readable name "Gemini 3 Flash Preview".
@@ -492,19 +482,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                       aria-hidden="true"
                       className="size-4 shrink-0 text-muted-foreground/85 opacity-80"
                     />
-                    <span>{option.label}</span>
-                    <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                      Coming soon
-                    </span>
-                  </MenuItem>
-                );
-              })}
-              {UNAVAILABLE_PROVIDER_OPTIONS.length === 0 && <MenuDivider />}
-              {COMING_SOON_PROVIDER_OPTIONS.map((option) => {
-                const OptionIcon = option.icon;
-                return (
-                  <MenuItem key={option.id} disabled>
-                    <OptionIcon aria-hidden="true" className="size-4 shrink-0 opacity-80" />
                     <span>{option.label}</span>
                     <span className="ms-auto text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
                       Coming soon

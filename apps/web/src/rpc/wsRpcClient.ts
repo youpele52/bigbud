@@ -6,6 +6,7 @@ import {
   type GitStatusStreamEvent,
   type NativeApi,
   ORCHESTRATION_WS_METHODS,
+  type ThinkingActivityDeltaEvent,
   type ServerSettingsPatch,
   WS_METHODS,
 } from "@bigbud/contracts";
@@ -104,6 +105,10 @@ export interface WsRpcClient {
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
     readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
     readonly onDomainEvent: RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>;
+    readonly onThinkingDelta: (
+      listener: (event: ThinkingActivityDeltaEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
   };
 }
 
@@ -231,6 +236,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       onDomainEvent: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
+          listener,
+          options,
+        ),
+      onThinkingDelta: (listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeThinkingActivityDeltas]({}),
           listener,
           options,
         ),

@@ -242,6 +242,25 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
   }),
 );
 
+it.effect("accepts reply targets in thread.turn.start", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-turn-reply",
+      threadId: "thread-1",
+      message: {
+        messageId: "msg-reply",
+        role: "user",
+        text: "follow up",
+        attachments: [],
+        replyToMessageId: "msg-parent",
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.message.replyToMessageId, "msg-parent");
+  }),
+);
+
 it.effect("accepts shell commands with bootstrap metadata in thread.shell.run", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadShellRunCommand({
@@ -560,6 +579,48 @@ it.effect("decodes thread.shell-run-requested payloads", () =>
     });
     assert.strictEqual(parsed.messageId, "msg-shell-1");
     assert.strictEqual(parsed.shellCommand, "git status");
+  }),
+);
+
+it.effect("decodes thread.message-sent reply metadata when present", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationEvent({
+      type: "thread.message-sent",
+      sequence: 1,
+      eventId: "evt-reply-1",
+      aggregateKind: "thread",
+      aggregateId: "thread-1",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      commandId: "cmd-reply-1",
+      causationEventId: null,
+      correlationId: "cmd-reply-1",
+      metadata: {},
+      payload: {
+        threadId: "thread-1",
+        messageId: "msg-1",
+        role: "user",
+        text: "follow up",
+        replyTo: {
+          messageId: "msg-parent",
+          role: "assistant",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          excerpt: "Earlier answer",
+        },
+        turnId: null,
+        streaming: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    if (parsed.type !== "thread.message-sent") {
+      assert.fail("expected thread.message-sent event");
+    }
+    assert.deepStrictEqual(parsed.payload.replyTo, {
+      messageId: "msg-parent",
+      role: "assistant",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      excerpt: "Earlier answer",
+    });
   }),
 );
 

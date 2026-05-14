@@ -36,14 +36,21 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     >;
     system?: string;
   }> = [];
-  const prompt = vi.fn(async () => ({
-    data: {
-      info: {
-        id: "assistant-msg-1",
-        role: "assistant",
-      },
-      parts: [],
-    },
+  let promptSent = false;
+  const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+  const messages = vi.fn(async () => ({
+    data: promptSent
+      ? [
+          {
+            info: {
+              id: "assistant-msg-1",
+              role: "assistant",
+              time: { completed: Date.now() },
+            },
+            parts: [],
+          },
+        ]
+      : [],
     error: undefined,
   }));
 
@@ -71,10 +78,12 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
     const record = {
       client: {
         session: {
-          prompt: async (input: (typeof promptInputs)[number]) => {
+          promptAsync: async (input: (typeof promptInputs)[number]) => {
             promptInputs.push(input);
-            return prompt();
+            promptSent = true;
+            return promptAsync();
           },
+          messages,
         },
       },
       releaseServer: () => undefined,
@@ -94,6 +103,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
       activeTurnId: undefined,
       lastUsage: undefined,
       wasRetrying: false,
+      reasoningPartIds: new Set(),
     };
 
     const events: Array<unknown> = [];
@@ -115,6 +125,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
         Effect.sync(() => {
           events.push(...runtimeEvents);
         }),
+      teardownSessionRecord: () => Effect.void,
       serverConfig: { attachmentsDir },
     });
 
@@ -124,10 +135,13 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
       attachments: [attachment],
     });
     yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
 
     assert.equal(promptInputs.length, 1);
     const promptInput = promptInputs[0];
     assert.isDefined(promptInput);
+    assert.notProperty(promptInput, "messageID");
     assert.deepEqual(promptInput, {
       sessionID: "opencode-session-1",
       parts: [
@@ -145,7 +159,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
       system:
         "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
     });
-    assert.equal(events.length, 1);
+    assert.isAtLeast(events.length, 1);
   });
 });
 
@@ -188,14 +202,21 @@ endobj
     >;
     system?: string;
   }> = [];
-  const prompt = vi.fn(async () => ({
-    data: {
-      info: {
-        id: "assistant-msg-2",
-        role: "assistant",
-      },
-      parts: [],
-    },
+  let promptSent = false;
+  const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
+  const messages = vi.fn(async () => ({
+    data: promptSent
+      ? [
+          {
+            info: {
+              id: "assistant-msg-2",
+              role: "assistant",
+              time: { completed: Date.now() },
+            },
+            parts: [],
+          },
+        ]
+      : [],
     error: undefined,
   }));
 
@@ -207,10 +228,12 @@ endobj
     const record = {
       client: {
         session: {
-          prompt: async (input: (typeof promptInputs)[number]) => {
+          promptAsync: async (input: (typeof promptInputs)[number]) => {
             promptInputs.push(input);
-            return prompt();
+            promptSent = true;
+            return promptAsync();
           },
+          messages,
         },
       },
       releaseServer: () => undefined,
@@ -230,6 +253,7 @@ endobj
       activeTurnId: undefined,
       lastUsage: undefined,
       wasRetrying: false,
+      reasoningPartIds: new Set(),
     };
 
     const { sendTurn } = makeTurnMethods({
@@ -247,6 +271,7 @@ endobj
           ...(extra?.requestId ? { requestId: extra.requestId } : {}),
         } as never),
       emitFn: () => Effect.void,
+      teardownSessionRecord: () => Effect.void,
       serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
     });
 
@@ -273,6 +298,8 @@ endobj
       ],
     });
     yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
 
     assert.equal(promptInputs.length, 1);
     expect(promptInputs[0]).toStrictEqual({
@@ -297,37 +324,50 @@ endobj
 
 it.effect("maps prompt responses into canonical OpenCode runtime events", () => {
   const emitted: Array<{ type: string; payload: unknown; itemId?: string; turnId?: string }> = [];
+  let promptSent = false;
 
   const record = {
     client: {
       session: {
-        prompt: async () => ({
-          data: {
-            info: {
-              id: "assistant-msg-3",
-              role: "assistant",
-              modelID: "big-pickle",
-              providerID: "opencode",
-              tokens: {
-                input: 12,
-                output: 8,
-                reasoning: 0,
-                cache: { read: 5, write: 0 },
-              },
-            },
-            parts: [
-              {
-                id: "reasoning-part-1",
-                type: "reasoning",
-                text: "Thinking",
-              },
-              {
-                id: "text-part-1",
-                type: "text",
-                text: "Hello from OpenCode",
-              },
-            ],
-          },
+        promptAsync: async () => {
+          promptSent = true;
+          return {
+            data: {},
+            error: undefined,
+          };
+        },
+        messages: async () => ({
+          data: promptSent
+            ? [
+                {
+                  info: {
+                    id: "assistant-msg-3",
+                    role: "assistant",
+                    modelID: "big-pickle",
+                    providerID: "opencode",
+                    time: { completed: Date.now() },
+                    tokens: {
+                      input: 12,
+                      output: 8,
+                      reasoning: 0,
+                      cache: { read: 5, write: 0 },
+                    },
+                  },
+                  parts: [
+                    {
+                      id: "reasoning-part-1",
+                      type: "reasoning",
+                      text: "Thinking",
+                    },
+                    {
+                      id: "text-part-1",
+                      type: "text",
+                      text: "Hello from OpenCode",
+                    },
+                  ],
+                },
+              ]
+            : [],
           error: undefined,
         }),
       },
@@ -349,6 +389,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
     activeTurnId: undefined,
     lastUsage: undefined,
     wasRetrying: false,
+    reasoningPartIds: new Set(),
   };
 
   const { sendTurn } = makeTurnMethods({
@@ -364,6 +405,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
       Effect.sync(() => {
         emitted.push(...(runtimeEvents as unknown as Array<(typeof emitted)[number]>));
       }),
+    teardownSessionRecord: () => Effect.void,
     serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
   });
 
@@ -391,24 +433,44 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
     });
     expect(emitted.map((event) => event.type)).toEqual([
       "turn.started",
+      "content.delta",
+      "content.delta",
       "thread.token-usage.updated",
-      "content.delta",
-      "content.delta",
       "item.completed",
       "turn.completed",
       "session.state.changed",
     ]);
-    expect(emitted[2]).toMatchObject({
+    expect(
+      emitted.find(
+        (event) =>
+          event.type === "content.delta" &&
+          (event.payload as { streamKind?: string }).streamKind === "reasoning_text",
+      ),
+    ).toMatchObject({
       type: "content.delta",
       payload: { streamKind: "reasoning_text", delta: "Thinking" },
       itemId: "reasoning-part-1",
     });
-    expect(emitted[3]).toMatchObject({
+    expect(
+      emitted.find(
+        (event) =>
+          event.type === "content.delta" &&
+          (event.payload as { streamKind?: string }).streamKind === "assistant_text",
+      ),
+    ).toMatchObject({
       type: "content.delta",
       payload: { streamKind: "assistant_text", delta: "Hello from OpenCode" },
       itemId: "text-part-1",
     });
-    expect(emitted[4]).toMatchObject({
+    expect(emitted.find((event) => event.type === "thread.token-usage.updated")).toMatchObject({
+      type: "thread.token-usage.updated",
+      payload: {
+        usage: {
+          usedTokens: 25,
+        },
+      },
+    });
+    expect(emitted.find((event) => event.type === "item.completed")).toMatchObject({
       type: "item.completed",
       payload: {
         itemType: "assistant_message",
@@ -416,14 +478,88 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
         title: "Assistant message",
         detail: "Hello from OpenCode",
       },
-      itemId: "assistant-msg-3",
+      itemId: "text-part-1",
     });
-    expect(emitted[5]).toMatchObject({
+    expect(emitted.find((event) => event.type === "turn.completed")).toMatchObject({
       type: "turn.completed",
       payload: {
         state: "completed",
       },
     });
+  });
+});
+
+it.effect("tears down broken OpenCode sessions when prompt transport fails", () => {
+  const emitted: Array<{ type: string; payload: unknown }> = [];
+  let tornDown = false;
+
+  const record = {
+    client: {
+      session: {
+        messages: async () => ({
+          data: [],
+          error: undefined,
+        }),
+        promptAsync: async () => ({
+          data: undefined,
+          error: new TypeError("fetch failed"),
+        }),
+      },
+    },
+    releaseServer: () => undefined,
+    opencodeSessionId: "opencode-session-transport-failure",
+    threadId: THREAD_ID,
+    createdAt: new Date().toISOString(),
+    runtimeMode: "full-access" as const,
+    pendingPermissions: new Map(),
+    pendingUserInputs: new Map(),
+    turns: [],
+    sseAbortController: null,
+    cwd: "/tmp/opencode-project",
+    model: undefined,
+    providerID: undefined,
+    updatedAt: new Date().toISOString(),
+    lastError: undefined,
+    activeTurnId: undefined,
+    lastUsage: undefined,
+    wasRetrying: false,
+    reasoningPartIds: new Set(),
+  };
+
+  const { sendTurn } = makeTurnMethods({
+    requireSession: () => Effect.succeed(record as never),
+    syntheticEventFn: (_threadId, type, payload) =>
+      Effect.succeed({
+        type,
+        payload,
+      } as never),
+    emitFn: (runtimeEvents) =>
+      Effect.sync(() => {
+        emitted.push(...(runtimeEvents as unknown as Array<(typeof emitted)[number]>));
+      }),
+    teardownSessionRecord: () =>
+      Effect.sync(() => {
+        tornDown = true;
+      }),
+    serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
+  });
+
+  return Effect.gen(function* () {
+    yield* sendTurn({
+      threadId: THREAD_ID,
+      input: "Say hello",
+    });
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+
+    expect(tornDown).toBe(true);
+    expect(emitted.map((event) => event.type)).toEqual([
+      "turn.started",
+      "runtime.error",
+      "turn.completed",
+      "session.state.changed",
+    ]);
   });
 });
 
@@ -468,6 +604,7 @@ it.effect("maps OpenCode user-input answers from stable, header, and question ke
       Effect.sync(() => {
         emitted.push(...runtimeEvents);
       }),
+    teardownSessionRecord: () => Effect.void,
     serverConfig: { attachmentsDir: "/tmp/unused-attachments-dir" },
   });
 

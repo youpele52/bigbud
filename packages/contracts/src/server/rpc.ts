@@ -43,6 +43,7 @@ import {
   OrchestrationReplayEventsError,
   OrchestrationReplayEventsInput,
   OrchestrationRpcSchemas,
+  ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import {
   ProjectSearchEntriesError,
@@ -271,6 +272,15 @@ export const WsSubscribeOrchestrationDomainEventsRpc = Rpc.make(
   },
 );
 
+export const WsSubscribeThinkingActivityDeltasRpc = Rpc.make(
+  WS_METHODS.subscribeThinkingActivityDeltas,
+  {
+    payload: Schema.Struct({}),
+    success: ThinkingActivityDeltaEvent,
+    stream: true,
+  },
+);
+
 export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: Schema.Struct({}),
   success: TerminalEvent,
@@ -318,6 +328,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
   WsSubscribeOrchestrationDomainEventsRpc,
+  WsSubscribeThinkingActivityDeltasRpc,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
