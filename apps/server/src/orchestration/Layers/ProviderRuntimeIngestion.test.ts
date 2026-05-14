@@ -2205,7 +2205,9 @@ describe("ProviderRuntimeIngestion", () => {
   });
 
   it("projects Codex task lifecycle chunks into thread activities", async () => {
-    const harness = await createHarness();
+    const harness = await createHarness({
+      serverSettings: { enableThinkingStreaming: true },
+    });
     const now = new Date().toISOString();
 
     harness.emit({

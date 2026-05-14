@@ -27,6 +27,7 @@ export {
   findSidebarProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
+  deriveVisibleWorkLogEntries,
   deriveTimelineEntries,
   deriveCompletionDividerBeforeEntryId,
   inferCheckpointTurnCountByTurnId,
@@ -102,6 +103,12 @@ export type TimelineEntry =
   | {
       id: string;
       kind: "work";
+      createdAt: string;
+      entry: import("./worklog.logic").WorkLogEntry;
+    }
+  | {
+      id: string;
+      kind: "thinking";
       createdAt: string;
       entry: import("./worklog.logic").WorkLogEntry;
     }

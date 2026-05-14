@@ -33,7 +33,10 @@ import {
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import { resolveAssistantDeliveryMode } from "./ProviderRuntimeIngestion.assistantDelivery.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
-import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
+import {
+  isThinkingActivity,
+  makeThinkingProcessorHelpers,
+} from "./ProviderRuntimeIngestion.processor.thinking.ts";
 
 /** Service references threaded into the processor. */
 export interface RuntimeProcessorServices {
@@ -475,14 +478,22 @@ export function makeRuntimeEventProcessor(
     }
 
     const activities = runtimeEventToActivities(event);
+    const thinkingStreamingEnabled =
+      !activities.some(isThinkingActivity) ||
+      (yield* serverSettingsService.getSettings.pipe(
+        Effect.map((settings) => settings.enableThinkingStreaming),
+        Effect.catch(() => Effect.succeed(false)),
+      ));
     yield* Effect.forEach(activities, (activity) =>
-      orchestrationEngine.dispatch({
-        type: "thread.activity.append",
-        commandId: providerCommandId(event, "thread-activity-append"),
-        threadId: thread.id,
-        activity,
-        createdAt: activity.createdAt,
-      }),
+      thinkingStreamingEnabled || !isThinkingActivity(activity)
+        ? orchestrationEngine.dispatch({
+            type: "thread.activity.append",
+            commandId: providerCommandId(event, "thread-activity-append"),
+            threadId: thread.id,
+            activity,
+            createdAt: activity.createdAt,
+          })
+        : Effect.void,
     ).pipe(Effect.asVoid);
   });
 }

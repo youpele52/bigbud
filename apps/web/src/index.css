@@ -356,6 +356,16 @@ label:has(> select#reasoning-effort) select {
   font-size: 0.75rem;
 }
 
+.chat-markdown.thinking-markdown :not(pre) > code {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
 .chat-markdown pre {
   max-width: 100%;
   overflow-x: auto;

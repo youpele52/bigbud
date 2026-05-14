@@ -21,7 +21,7 @@ import { deriveLatestContextWindowSnapshot } from "../../../../lib/contextWindow
 import { randomSpinnerVerb } from "../../../../utils/copy";
 import { useLocalDispatchState } from "../ChatView.localDispatch.logic";
 import {
-  deriveWorkLogEntries,
+  deriveVisibleWorkLogEntries,
   findLatestProposedPlan,
   findSidebarProposedPlan,
 } from "../../../../logic/session";
@@ -142,8 +142,11 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   ]);
 
   const workLogEntries = useMemo(
-    () => deriveWorkLogEntries(mergedActivities, activeLatestTurn?.turnId ?? undefined),
-    [activeLatestTurn?.turnId, mergedActivities],
+    () =>
+      deriveVisibleWorkLogEntries(mergedActivities, activeLatestTurn?.turnId ?? undefined, {
+        includeThinking: serverSettings.enableThinkingStreaming,
+      }),
+    [activeLatestTurn?.turnId, mergedActivities, serverSettings.enableThinkingStreaming],
   );
 
   const latestTurnHasToolActivity = useMemo(

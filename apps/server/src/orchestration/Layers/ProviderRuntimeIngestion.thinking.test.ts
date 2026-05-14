@@ -13,6 +13,7 @@ import {
   EventId,
   ProjectId,
   RuntimeItemId,
+  RuntimeTaskId,
   type ServerSettings,
   ThreadId,
   TurnId,
@@ -143,7 +144,7 @@ describe("ProviderRuntimeIngestion thinking", () => {
     }
   });
 
-  async function createHarness() {
+  async function createHarness(settingsOverrides: Partial<ServerSettings> = {}) {
     const workspaceRoot = makeTempDir("bigbud-provider-thinking-");
     fs.mkdirSync(path.join(workspaceRoot, ".git"));
     const provider = createProviderServiceHarness();
@@ -158,7 +159,12 @@ describe("ProviderRuntimeIngestion thinking", () => {
       Layer.provideMerge(orchestrationLayer),
       Layer.provideMerge(SqlitePersistenceMemory),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
-      Layer.provideMerge(makeTestServerSettingsLayer()),
+      Layer.provideMerge(
+        makeTestServerSettingsLayer({
+          enableThinkingStreaming: true,
+          ...settingsOverrides,
+        }),
+      ),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
       Layer.provideMerge(NodeServices.layer),
     );
@@ -360,5 +366,101 @@ describe("ProviderRuntimeIngestion thinking", () => {
     expect(payload?.fullCharCount).toBe(fullText.length);
     expect(payload?.persistedCharCount).toBe(persistedText.length);
     expect(payload?.truncated).toBe(true);
+  });
+
+  it("does not persist finalized thinking activities when thinking streaming is disabled", async () => {
+    const harness = await createHarness({ enableThinkingStreaming: false });
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-thinking-disabled-delta"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking-disabled"),
+      itemId: asItemId("item-thinking-disabled"),
+      payload: {
+        streamKind: "reasoning_text",
+        delta: "thinking that should stay hidden",
+      },
+    });
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-thinking-disabled-completed"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking-disabled"),
+      itemId: asItemId("item-thinking-disabled"),
+      payload: {
+        itemType: "assistant_message",
+        status: "completed",
+      },
+    });
+    harness.emit({
+      type: "runtime.warning",
+      eventId: asEventId("evt-thinking-disabled-warning"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        message: "flush hidden thinking path",
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.activities.some(
+        (activity: TestActivity) => activity.id === "evt-thinking-disabled-warning",
+      ),
+    );
+
+    expect(
+      thread.activities.some(
+        (activity: TestActivity) =>
+          activity.id ===
+          "thinking:thread-1:turn:turn-thinking-disabled:item:item-thinking-disabled:reasoning_text",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not project reasoning-style task progress when thinking streaming is disabled", async () => {
+    const harness = await createHarness({ enableThinkingStreaming: false });
+    const now = new Date().toISOString();
+
+    harness.emit({
+      type: "task.progress",
+      eventId: asEventId("evt-thinking-disabled-task-progress"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-thinking-disabled-task-progress"),
+      payload: {
+        taskId: RuntimeTaskId.makeUnsafe("task-thinking-disabled"),
+        description: "This should not be shown as provider thinking.",
+      },
+    });
+    harness.emit({
+      type: "runtime.warning",
+      eventId: asEventId("evt-thinking-disabled-task-warning"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        message: "flush hidden task progress path",
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) =>
+      entry.activities.some(
+        (activity: TestActivity) => activity.id === "evt-thinking-disabled-task-warning",
+      ),
+    );
+
+    expect(
+      thread.activities.some(
+        (activity: TestActivity) => activity.id === "evt-thinking-disabled-task-progress",
+      ),
+    ).toBe(false);
   });
 });

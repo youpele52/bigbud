@@ -1118,7 +1118,7 @@ describe("deriveTimelineEntries", () => {
     });
   });
 
-  it("orders same-timestamp work entries before assistant messages", () => {
+  it("projects thinking entries separately and keeps them before assistant messages", () => {
     const createdAt = "2026-02-23T00:00:01.000Z";
     const entries = deriveTimelineEntries(
       [
@@ -1153,6 +1153,13 @@ describe("deriveTimelineEntries", () => {
       "thinking-work",
       "assistant-message",
     ]);
+    expect(entries[1]).toMatchObject({
+      kind: "thinking",
+      entry: {
+        id: "thinking-work",
+        tone: "thinking",
+      },
+    });
   });
 
   it("anchors the completion divider to latestTurn.assistantMessageId before timestamp fallback", () => {

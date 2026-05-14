@@ -16,6 +16,7 @@ import {
   type AssistantMessageRow,
   AssistantMessageBody,
 } from "./MessagesTimeline.assistantMessage";
+import { ThinkingMessageBody } from "./MessagesTimeline.thinking";
 import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
@@ -279,6 +280,14 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           nowIso={nowIso}
           timestampFormat={timestampFormat}
           onForkThread={onForkThread}
+        />
+      )}
+
+      {row.kind === "thinking" && (
+        <ThinkingMessageBody
+          row={row}
+          markdownCwd={markdownCwd}
+          timestampFormat={timestampFormat}
         />
       )}
 

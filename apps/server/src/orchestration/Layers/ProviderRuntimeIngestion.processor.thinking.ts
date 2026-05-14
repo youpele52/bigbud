@@ -1,4 +1,9 @@
-import { type CommandId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
+import {
+  type CommandId,
+  type OrchestrationThreadActivity,
+  type ProviderRuntimeEvent,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import {
@@ -17,8 +22,12 @@ import type {
 } from "./ProviderRuntimeIngestion.processor.ts";
 import { toTurnId } from "./ProviderRuntimeIngestion.helpers.ts";
 
+export function isThinkingActivity(activity: Pick<OrchestrationThreadActivity, "tone">): boolean {
+  return activity.tone === "thinking";
+}
+
 export function makeThinkingProcessorHelpers(
-  services: Pick<RuntimeProcessorServices, "orchestrationEngine">,
+  services: Pick<RuntimeProcessorServices, "orchestrationEngine" | "serverSettingsService">,
   cacheHelpers: Pick<
     RuntimeProcessorCacheHelpers,
     | "appendBufferedThinking"
@@ -29,12 +38,22 @@ export function makeThinkingProcessorHelpers(
   >,
   providerCommandId: (event: ProviderRuntimeEvent, tag: string) => CommandId,
 ) {
-  const { orchestrationEngine } = services;
+  const { orchestrationEngine, serverSettingsService } = services;
+
+  const readThinkingStreamingEnabled = Effect.fn("readThinkingStreamingEnabled")(function* () {
+    return yield* serverSettingsService.getSettings.pipe(
+      Effect.map((settings) => settings.enableThinkingStreaming),
+      Effect.catch(() => Effect.succeed(false)),
+    );
+  });
 
   const appendThinkingDelta = Effect.fn("appendThinkingDelta")(function* (
     event: ProviderRuntimeEvent,
   ) {
     if (event.type !== "content.delta" || !isThinkingStreamKind(event.payload.streamKind)) {
+      return;
+    }
+    if (!(yield* readThinkingStreamingEnabled())) {
       return;
     }
     if (event.payload.delta.length === 0) return;
@@ -60,6 +79,9 @@ export function makeThinkingProcessorHelpers(
   ) {
     const bufferedThinking = yield* cacheHelpers.takeBufferedThinking(activityId);
     if (!bufferedThinking) {
+      return;
+    }
+    if (!(yield* readThinkingStreamingEnabled())) {
       return;
     }
 

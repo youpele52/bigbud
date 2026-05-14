@@ -19,6 +19,7 @@ import type {
   TurnDiffSummary,
 } from "../../models/types";
 import type { LatestProposedPlanState, TimelineEntry } from "./session.logic";
+import { deriveWorkLogEntries, type WorkLogEntry } from "./worklog.logic";
 
 // ── Internal helpers ──────────────────────────────────────────────────
 
@@ -104,6 +105,30 @@ export function hasToolActivityForTurn(
   return activities.some((activity) => activity.turnId === turnId && activity.tone === "tool");
 }
 
+export function deriveVisibleWorkLogEntries(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  latestTurnId: TurnId | undefined,
+  options?: {
+    includeThinking?: boolean;
+  },
+): WorkLogEntry[] {
+  const visibleActivities =
+    options?.includeThinking === false
+      ? activities.filter((activity) => activity.tone !== "thinking")
+      : activities;
+  const thinkingEntries = deriveWorkLogEntries(visibleActivities, undefined).filter(
+    (entry) => entry.tone === "thinking",
+  );
+  const latestTurnWorkEntries = deriveWorkLogEntries(visibleActivities, latestTurnId).filter(
+    (entry) => entry.tone !== "thinking",
+  );
+
+  return [...thinkingEntries, ...latestTurnWorkEntries].toSorted(
+    (left, right) =>
+      left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+  );
+}
+
 export function deriveTimelineEntries(
   messages: ChatMessage[],
   proposedPlans: ProposedPlan[],
@@ -122,19 +147,35 @@ export function deriveTimelineEntries(
     createdAt: proposedPlan.createdAt,
     proposedPlan,
   }));
-  const workRows: TimelineEntry[] = workEntries.map((entry) => ({
-    id: entry.id,
-    kind: "work",
-    createdAt: entry.createdAt,
-    entry,
-  }));
+  const thinkingRows: TimelineEntry[] = workEntries
+    .filter((entry) => entry.tone === "thinking")
+    .map((entry) => ({
+      id: entry.id,
+      kind: "thinking" as const,
+      createdAt: entry.createdAt,
+      entry,
+    }));
+  const workRows: TimelineEntry[] = workEntries
+    .filter((entry) => entry.tone !== "thinking")
+    .map((entry) => ({
+      id: entry.id,
+      kind: "work",
+      createdAt: entry.createdAt,
+      entry,
+    }));
   const userInputRows: TimelineEntry[] = (pendingUserInputs ?? []).map((pendingUserInput) => ({
     id: `user-input-question:${pendingUserInput.requestId}`,
     kind: "user-input-question",
     createdAt: pendingUserInput.createdAt,
     pendingUserInput,
   }));
-  return [...messageRows, ...proposedPlanRows, ...workRows, ...userInputRows].toSorted((a, b) => {
+  return [
+    ...messageRows,
+    ...proposedPlanRows,
+    ...thinkingRows,
+    ...workRows,
+    ...userInputRows,
+  ].toSorted((a, b) => {
     const createdAtOrder = a.createdAt.localeCompare(b.createdAt);
     if (createdAtOrder !== 0) {
       return createdAtOrder;
@@ -144,7 +185,7 @@ export function deriveTimelineEntries(
 }
 
 function timelineTieBreakPriority(entry: TimelineEntry): number {
-  if (entry.kind === "work") {
+  if (entry.kind === "work" || entry.kind === "thinking") {
     return 1;
   }
   if (entry.kind === "message" && entry.message.role === "assistant") {
