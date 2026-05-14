@@ -31,6 +31,7 @@ import {
   HANDLED_TURN_START_KEY_TTL_MINUTES,
   isUnknownPendingApprovalRequestError,
   isUnknownPendingUserInputRequestError,
+  resolveThreadTitleSeed,
   serverCommandId,
   stalePendingRequestDetail,
 } from "./ProviderCommandReactorHelpers.ts";
@@ -250,6 +251,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       const serverSettings = yield* serverSettingsService.getSettings.pipe(
         Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
       );
+      const resolvedTitleSeed = resolveThreadTitleSeed({
+        currentTitle: thread.title,
+        messageText: message.text,
+        ...(event.payload.titleSeed !== undefined ? { titleSeed: event.payload.titleSeed } : {}),
+      });
       const generationCwd =
         resolveThreadWorkspaceCwd({
           thread,
@@ -258,7 +264,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       const generationInput = {
         messageText: message.text,
         ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
-        ...(event.payload.titleSeed !== undefined ? { titleSeed: event.payload.titleSeed } : {}),
+        ...(resolvedTitleSeed !== undefined ? { titleSeed: resolvedTitleSeed } : {}),
       };
 
       yield* maybeGenerateAndRenameWorktreeBranchForFirstTurn(sessionOpServices)({
@@ -268,7 +274,16 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         ...generationInput,
       }).pipe(Effect.forkScoped);
 
-      if (canReplaceThreadTitle(thread.title, event.payload.titleSeed)) {
+      if (canReplaceThreadTitle(thread.title, resolvedTitleSeed)) {
+        if (resolvedTitleSeed !== undefined && thread.title.trim() !== resolvedTitleSeed.trim()) {
+          yield* orchestrationEngine.dispatch({
+            type: "thread.meta.update",
+            commandId: serverCommandId("thread-title-seed"),
+            threadId: event.payload.threadId,
+            title: resolvedTitleSeed,
+          });
+        }
+
         // Fall back to the thread's own modelSelection when the turn-start event doesn't
         // carry one (e.g. Pi, where the thread is already bound to a provider).
         const titleModelSelection = event.payload.modelSelection ?? thread.modelSelection;

@@ -77,6 +77,31 @@ function createProjectSnapshotWithThreadCount(threadCount: number) {
   };
 }
 
+function createPlaceholderThreadSnapshot() {
+  const snapshot = createSnapshotForTargetUser({
+    targetMessageId: "msg-user-placeholder-thread-target" as never,
+    targetText: "placeholder thread test",
+  });
+  const threads = [...snapshot.threads];
+  const threadIndex = threads.findIndex((thread) => thread.id === THREAD_ID);
+  if (threadIndex >= 0) {
+    threads[threadIndex] = {
+      ...threads[threadIndex]!,
+      title: "New thread",
+      messages: [],
+      activities: [],
+      proposedPlans: [],
+      latestTurn: null,
+      session: null,
+    };
+  }
+
+  return {
+    ...snapshot,
+    threads,
+  };
+}
+
 describe("ChatView threading integration", () => {
   it("shows an explicit empty state for projects without threads in the sidebar", async () => {
     const mounted = await ctx.mountChatView({
@@ -168,7 +193,7 @@ describe("ChatView threading integration", () => {
     }
   });
 
-  it("does not send a client-generated first-send thread title", async () => {
+  it("seeds the first-send thread title for local draft threads", async () => {
     useComposerDraftStore.setState({
       draftThreadsByThreadId: {
         [THREAD_ID]: {
@@ -225,7 +250,52 @@ describe("ChatView threading integration", () => {
         expect(turnStartRequest).toMatchObject({
           _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
           type: "thread.turn.start",
+          titleSeed: "Please investigate reconn...",
+          bootstrap: {
+            createThread: {
+              title: "Please investigate reconn...",
+            },
+          },
         });
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("seeds the first-send thread title for server placeholder threads", async () => {
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createPlaceholderThreadSnapshot(),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return { sequence: 2 };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "hi");
+      const sendButton = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
+        "Unable to find send button.",
+      );
+      sendButton.click();
+
+      await vi.waitFor(() => {
+        const turnStartRequest = ctx.wsRequests.find(
+          (request) =>
+            request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+            request.type === "thread.turn.start",
+        );
+
+        expect(turnStartRequest).toMatchObject({
+          _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+          type: "thread.turn.start",
+          titleSeed: "hi",
+        });
+        expect(turnStartRequest && "bootstrap" in turnStartRequest).toBe(false);
       });
     } finally {
       await mounted.cleanup();

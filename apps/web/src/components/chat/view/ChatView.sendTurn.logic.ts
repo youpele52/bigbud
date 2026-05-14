@@ -24,8 +24,8 @@ import {
   appendBrowserAnnotationsToPrompt,
   readFileAsDataUrl,
   cloneComposerImageForRetry,
-  draftTitleFromMessage,
 } from "./ChatView.logic";
+import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { toastManager } from "../../ui/toast";
 import { readNativeApi } from "../../../rpc/nativeApi";
@@ -267,7 +267,10 @@ export function useOnSend(input: UseOnSendInput) {
           });
         }
 
-        const draftTitle = isDraft ? draftTitleFromMessage(shellCommand) : undefined;
+        const seededTitle =
+          isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
+            ? draftTitleFromMessage(shellCommand)
+            : undefined;
         const bootstrap =
           isDraft || baseBranchForWorktree
             ? {
@@ -275,7 +278,7 @@ export function useOnSend(input: UseOnSendInput) {
                   ? {
                       createThread: {
                         projectId: project.id,
-                        title: draftTitle ?? thread.title,
+                        title: seededTitle ?? thread.title,
                         modelSelection: threadCreateModelSelection,
                         runtimeMode: runMode,
                         interactionMode: interactMode,
@@ -523,7 +526,10 @@ export function useOnSend(input: UseOnSendInput) {
       }
 
       const turnAttachments = await turnAttachmentsPromise;
-      const draftTitle = isDraft ? draftTitleFromMessage(promptForSend) : undefined;
+      const seededTitle =
+        isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
+          ? draftTitleFromMessage(promptForSend)
+          : undefined;
       const bootstrap =
         isDraft || baseBranchForWorktree
           ? {
@@ -531,7 +537,7 @@ export function useOnSend(input: UseOnSendInput) {
                 ? {
                     createThread: {
                       projectId: project.id,
-                      title: draftTitle ?? thread.title,
+                      title: seededTitle ?? thread.title,
                       modelSelection: threadCreateModelSelection,
                       runtimeMode: runMode,
                       interactionMode: interactMode,
@@ -569,7 +575,7 @@ export function useOnSend(input: UseOnSendInput) {
         interactionMode: interactMode,
         ...(bootstrap ? { bootstrap } : {}),
         ...(bootstrapSourceThreadId ? { bootstrapSourceThreadId } : {}),
-        ...(draftTitle ? { titleSeed: draftTitle } : {}),
+        ...(seededTitle ? { titleSeed: seededTitle } : {}),
         createdAt: messageCreatedAt,
       });
       if (bootstrapSourceThreadId) {

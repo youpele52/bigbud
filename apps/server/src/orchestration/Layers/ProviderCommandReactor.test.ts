@@ -420,6 +420,13 @@ describe("ProviderCommandReactor", () => {
       runtimeMode: "approval-required",
     });
 
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.session
+          ?.status === "running"
+      );
+    });
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
@@ -800,6 +807,197 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.title).toBe("Generated title");
+  });
+
+  it("retries thread title generation up to three times before succeeding", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.generateThreadTitle
+      .mockReturnValueOnce(
+        Effect.fail(
+          new TextGenerationError({
+            operation: "generateThreadTitle",
+            detail: "Temporary title generation failure 1.",
+          }),
+        ),
+      )
+      .mockReturnValueOnce(
+        Effect.fail(
+          new TextGenerationError({
+            operation: "generateThreadTitle",
+            detail: "Temporary title generation failure 2.",
+          }),
+        ),
+      )
+      .mockReturnValueOnce(Effect.succeed({ title: "Recovered generated title" }));
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-title-retry-success"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-title-retry-success"),
+          role: "user",
+          text: "Please investigate reconnect failures after restarting the session.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+        modelSelection: {
+          provider: "opencode",
+          model: "nemotron-3-super-free",
+          subProviderID: "openrouter",
+        },
+      }),
+    );
+
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 3);
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
+        "Recovered generated title"
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.title).toBe("Recovered generated title");
+  });
+
+  it("retries when the generated title matches the fallback prompt prefix", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.generateThreadTitle
+      .mockReturnValueOnce(Effect.succeed({ title: "Please investigate reconnect bug" }))
+      .mockReturnValueOnce(Effect.succeed({ title: "Please investigate reconnect issue" }))
+      .mockReturnValueOnce(Effect.succeed({ title: "Reconnect session restore bug" }));
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-title-retry-prefix-match"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-title-retry-prefix-match"),
+          role: "user",
+          text: "Please investigate reconnect failures after restarting the session.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+        modelSelection: {
+          provider: "opencode",
+          model: "nemotron-3-super-free",
+          subProviderID: "openrouter",
+        },
+      }),
+    );
+
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 3);
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
+        "Reconnect session restore bug"
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.title).toBe("Reconnect session restore bug");
+  });
+
+  it("applies the prompt fallback title immediately for placeholder first-turn threads", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.generateThreadTitle.mockReturnValue(
+      Effect.fail(
+        new TextGenerationError({
+          operation: "generateThreadTitle",
+          detail: "Synthetic OpenCode title failure.",
+        }),
+      ),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-title-seed"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-title-seed"),
+          role: "user",
+          text: "Please investigate reconnect failures after restarting the session.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+        modelSelection: {
+          provider: "opencode",
+          model: "nemotron-3-super-free",
+          subProviderID: "openrouter",
+        },
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
+        "Please investigate reconn..."
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.title).toBe("Please investigate reconn...");
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 4);
+  });
+
+  it("does not let a placeholder AI title overwrite the prompt fallback title", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.generateThreadTitle.mockReturnValue(Effect.succeed({ title: "New thread" }));
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-title-placeholder-overwrite"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-title-placeholder-overwrite"),
+          role: "user",
+          text: "whats this https://github.com/youpele52/bigbud abuoit",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+        modelSelection: {
+          provider: "opencode",
+          model: "nemotron-3-super-free",
+          subProviderID: "openrouter",
+        },
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
+        "whats this https://github..."
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.title).toBe("whats this https://github...");
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 4);
   });
 
   it("does not overwrite an existing custom thread title on the first turn", async () => {

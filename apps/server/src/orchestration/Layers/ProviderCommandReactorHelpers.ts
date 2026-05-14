@@ -4,6 +4,7 @@
  */
 import { type OrchestrationSession, type RuntimeMode } from "@bigbud/contracts";
 import { CommandId } from "@bigbud/contracts";
+import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { Cause, Schema } from "effect";
 
 import { ProviderAdapterRequestError, ProviderServiceError } from "../../provider/Errors.ts";
@@ -48,6 +49,46 @@ export function canReplaceThreadTitle(currentTitle: string, titleSeed?: string):
   return trimmedTitleSeed !== undefined && trimmedTitleSeed.length > 0
     ? trimmedCurrentTitle === trimmedTitleSeed
     : false;
+}
+
+export function resolveThreadTitleSeed(input: {
+  currentTitle: string;
+  messageText: string;
+  titleSeed?: string;
+}): string | undefined {
+  const trimmedTitleSeed = input.titleSeed?.trim();
+  if (trimmedTitleSeed !== undefined && trimmedTitleSeed.length > 0) {
+    return trimmedTitleSeed;
+  }
+  if (input.currentTitle.trim() !== DEFAULT_THREAD_TITLE) {
+    return undefined;
+  }
+
+  const fallbackTitle = fallbackThreadTitleFromPrompt(input.messageText);
+  return fallbackTitle.trim().length > 0 ? fallbackTitle : undefined;
+}
+
+export function shouldRetryGeneratedThreadTitle(input: {
+  generatedTitle: string;
+  titleSeed?: string;
+}): boolean {
+  const normalizedGeneratedTitle = input.generatedTitle.trim().replace(/\s+/g, " ").toLowerCase();
+  if (normalizedGeneratedTitle === DEFAULT_THREAD_TITLE.toLowerCase()) {
+    return true;
+  }
+
+  const normalizedTitleSeed = input.titleSeed?.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!normalizedTitleSeed || normalizedTitleSeed.length === 0) {
+    return false;
+  }
+  if (normalizedGeneratedTitle === normalizedTitleSeed) {
+    return true;
+  }
+  return (
+    normalizedGeneratedTitle.length >= 10 &&
+    normalizedTitleSeed.length >= 10 &&
+    normalizedGeneratedTitle.slice(0, 10) === normalizedTitleSeed.slice(0, 10)
+  );
 }
 
 export function isUnknownPendingApprovalRequestError(
