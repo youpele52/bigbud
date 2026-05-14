@@ -16,6 +16,8 @@ function matchMedia() {
   };
 }
 
+let MessagesTimeline: (typeof import("./MessagesTimeline"))["MessagesTimeline"];
+
 beforeAll(() => {
   const classList = {
     add: () => {},
@@ -48,9 +50,12 @@ beforeAll(() => {
   });
 });
 
+beforeAll(async () => {
+  ({ MessagesTimeline } = await import("./MessagesTimeline"));
+});
+
 describe("MessagesTimeline", () => {
   it("renders inline terminal labels with the composer chip UI", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -105,7 +110,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders agent mentions as inline chips in user messages", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -153,7 +157,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders trailing skill mentions as inline chips in user messages", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -200,7 +203,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders context compaction entries in the normal work log", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -245,7 +247,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders reply previews for replied user messages", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -298,7 +299,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders thinking entries as chat-style markdown blocks instead of work-log rows", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -348,7 +348,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("collapses long thinking entries by default", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const detail = `${"Checking the current thread state. ".repeat(24)}Final sentence.`;
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -395,7 +394,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders sent browser annotations as a compact expandable attachment", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const annotation = [
       "Browser annotation",
       "",
@@ -468,7 +466,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders per-turn changed-files expansion state from props", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const assistantMessageId = MessageId.makeUnsafe("message-diff-1");
     const turnId = TurnId.makeUnsafe("turn-diff-1");
     const markup = renderToStaticMarkup(
@@ -529,7 +526,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders a copy button for assistant messages", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
@@ -578,7 +574,6 @@ describe("MessagesTimeline", () => {
   });
 
   it("renders shell output messages as a shell block", async () => {
-    const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         isWorking={false}
