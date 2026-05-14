@@ -23,50 +23,17 @@ import {
   isOpencodeModelSelection,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
+import {
+  isOpencodeTransportFailure,
+  sendPromptAsyncAndWaitForCompletion,
+  type PromptResultInfo,
+  type PromptResultPart,
+  type StreamedPromptDelta,
+} from "./Adapter.session.prompt.ts";
 import { openCodeQuestionId } from "./Adapter.stream.mapEvent.ts";
 import { PROVIDER, type ActiveOpencodeSession } from "./Adapter.types.ts";
 
 import type { TurnMethodDeps } from "./Adapter.session.ts";
-
-type PromptResultInfo = {
-  readonly id: string;
-  readonly role: string;
-  readonly modelID?: string;
-  readonly providerID?: string;
-  readonly finish?: string;
-  readonly error?: {
-    readonly name?: string;
-    readonly data?: {
-      readonly message?: string;
-      readonly responseBody?: string;
-      readonly statusCode?: number;
-    };
-  };
-  readonly tokens?: {
-    readonly input: number;
-    readonly output: number;
-    readonly reasoning: number;
-    readonly cache: {
-      readonly read: number;
-      readonly write: number;
-    };
-  };
-};
-
-type PromptResultPart = {
-  readonly id: string;
-  readonly type: string;
-  readonly text?: string;
-  readonly tool?: string;
-  readonly state?: {
-    readonly status?: string;
-    readonly output?: string;
-    readonly error?: string;
-    readonly title?: string;
-    readonly input?: unknown;
-  };
-  readonly metadata?: Record<string, unknown>;
-};
 
 function toPromptTurnEvents(input: {
   readonly record: ActiveOpencodeSession;
@@ -121,28 +88,6 @@ function toPromptTurnEvents(input: {
     }
 
     for (const part of promptParts) {
-      if (
-        (part.type === "text" || part.type === "reasoning") &&
-        typeof part.text === "string" &&
-        part.text.trim().length > 0
-      ) {
-        events.push(
-          yield* syntheticEventFn(
-            threadId,
-            "content.delta",
-            {
-              streamKind: part.type === "text" ? "assistant_text" : "reasoning_text",
-              delta: part.text,
-            },
-            {
-              turnId,
-              itemId: part.id,
-            },
-          ),
-        );
-        continue;
-      }
-
       if (part.type === "tool" && typeof part.tool === "string") {
         const status =
           part.state?.status === "error"
@@ -316,11 +261,13 @@ function toOpencodeQuestionAnswers(
 // ── Turn method factories ─────────────────────────────────────────────
 
 export function makeTurnMethods(deps: TurnMethodDeps) {
-  const { requireSession, syntheticEventFn, emitFn } = deps;
+  const { requireSession, syntheticEventFn, emitFn, teardownSessionRecord } = deps;
 
   const sendTurn: OpencodeAdapterShape["sendTurn"] = (input) =>
     Effect.gen(function* () {
       const record = yield* requireSession(input.threadId);
+      const effectServices = yield* Effect.services();
+      const runPromise = Effect.runPromiseWith(effectServices);
 
       if (isOpencodeModelSelection(input.modelSelection)) {
         record.model = input.modelSelection.model;
@@ -353,11 +300,6 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
         ),
       ]);
 
-      // `promptAsync` currently returns success without producing any session
-      // events against the OpenCode 1.14.x server, which leaves the thread
-      // stuck on `turn.started`. Run `prompt` in a background fiber instead and
-      // translate the final response into canonical runtime events.
-      //
       // Attachment handling: some OpenCode providers/models reject certain MIME
       // types (e.g. `text/csv`) as SDK file parts. For text-extractable files we
       // embed the contents inline in the prompt (matching Pi's approach); for
@@ -424,6 +366,12 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
 
       const baseText = input.input ?? "";
       const promptText = appendAttachedFileContents(baseText, inlineTextBlocks);
+      const systemPrompt =
+        "You have access to a Chromium browser in this environment. " +
+        "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
+        "Prefer codebase inspection first when the task is local-only. " +
+        "Summarize what was verified, including URL and important observations. " +
+        "Avoid unnecessary browser use when terminal or file tools are sufficient.";
 
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
@@ -435,17 +383,13 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       }
 
       const promptEffect = Effect.gen(function* () {
-        const promptResp = yield* Effect.tryPromise({
+        const promptResult = yield* Effect.tryPromise({
           try: () =>
-            record.client.session.prompt({
+            sendPromptAsyncAndWaitForCompletion({
+              client: record.client,
               sessionID: record.opencodeSessionId,
               parts: [{ type: "text" as const, text: promptText }, ...fileParts],
-              system:
-                "You have access to a Chromium browser in this environment. " +
-                "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
-                "Prefer codebase inspection first when the task is local-only. " +
-                "Summarize what was verified, including URL and important observations. " +
-                "Avoid unnecessary browser use when terminal or file tools are sufficient.",
+              system: systemPrompt,
               ...(record.model
                 ? {
                     model: {
@@ -454,6 +398,24 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
                     },
                   }
                 : {}),
+              turnStillActive: () => record.activeTurnId === turnId,
+              onDelta: async (delta: StreamedPromptDelta) => {
+                const runtimeEvent = await runPromise(
+                  syntheticEventFn(
+                    input.threadId,
+                    "content.delta",
+                    {
+                      streamKind: delta.streamKind,
+                      delta: delta.delta,
+                    },
+                    {
+                      turnId,
+                      itemId: delta.itemId,
+                    },
+                  ),
+                );
+                await runPromise(emitFn([runtimeEvent]));
+              },
             }),
           catch: (cause) =>
             new ProviderAdapterRequestError({
@@ -464,46 +426,16 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
             }),
         });
 
-        if (promptResp.error || !promptResp.data) {
-          const errorMessage = `Failed to send OpenCode turn: ${String(promptResp.error)}`;
-          record.lastError = errorMessage;
-          record.activeTurnId = undefined;
-          record.updatedAt = new Date().toISOString();
-          yield* emitFn([
-            yield* syntheticEventFn(
-              input.threadId,
-              "runtime.error",
-              {
-                message: errorMessage,
-                class: "provider_error",
-              },
-              { turnId },
-            ),
-            yield* syntheticEventFn(
-              input.threadId,
-              "turn.completed",
-              {
-                state: "failed",
-                errorMessage,
-              },
-              { turnId },
-            ),
-            yield* syntheticEventFn(input.threadId, "session.state.changed", {
-              state: "ready",
-              reason: "session.prompt.failed",
-            }),
-          ]);
+        if (!promptResult) {
           return;
         }
 
-        const promptInfo = promptResp.data.info as PromptResultInfo;
-        const promptParts = promptResp.data.parts as ReadonlyArray<PromptResultPart>;
         const events = yield* toPromptTurnEvents({
           record,
           threadId: input.threadId,
           turnId,
-          promptInfo,
-          promptParts,
+          promptInfo: promptResult.info as PromptResultInfo,
+          promptParts: promptResult.parts as ReadonlyArray<PromptResultPart>,
           syntheticEventFn,
         });
         record.activeTurnId = undefined;
@@ -516,6 +448,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
             record.lastError = errorMessage;
             record.activeTurnId = undefined;
             record.updatedAt = new Date().toISOString();
+            if (isOpencodeTransportFailure(error)) {
+              yield* teardownSessionRecord(record);
+            }
             yield* emitFn([
               yield* syntheticEventFn(
                 input.threadId,

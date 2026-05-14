@@ -1,5 +1,6 @@
 import { ChevronRightIcon, PinIcon } from "lucide-react";
 import { SidebarThreadRow } from "./SidebarThreadRow";
+import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuSub } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
@@ -21,11 +22,7 @@ export function SidebarFavoritesSection({
 }: SidebarFavoritesSectionProps) {
   return (
     <SidebarGroup className="px-2 py-2">
-      <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-          Favourites
-        </span>
-      </div>
+      <SidebarSectionLabel>Favourites</SidebarSectionLabel>
 
       {!bootstrapComplete ? (
         <div className="flex justify-center px-2 pt-6">

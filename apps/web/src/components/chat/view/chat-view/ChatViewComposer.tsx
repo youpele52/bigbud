@@ -198,6 +198,8 @@ export function ChatViewComposer({
                 isResponding={runtime.turnActions.respondingRequestIds.includes(
                   thread.activePendingApproval.requestId,
                 )}
+                sessionApprovalAvailable={thread.activePendingApproval.sessionApprovalAvailable}
+                sessionApprovalLabel={thread.activePendingApproval.sessionApprovalLabel}
                 onRespondToApproval={runtime.turnActions.onRespondToApproval}
               />
             </div>

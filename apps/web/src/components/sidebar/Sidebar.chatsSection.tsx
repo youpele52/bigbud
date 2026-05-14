@@ -7,6 +7,7 @@ import {
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { ChatSortMenu } from "./SidebarChatSortMenu";
+import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import {
   SidebarGroup,
   SidebarMenu,
@@ -58,37 +59,37 @@ export function SidebarChatsSection({
 
   return (
     <SidebarGroup className="px-2 py-2">
-      {/* Header with label, sort controls, and add button */}
-      <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-          Chats
-        </span>
-        <div className="flex items-center gap-1">
-          {onChatsSortOrderChange && (
-            <ChatSortMenu
-              chatsSortOrder={chatsSortOrder}
-              onChatsSortOrderChange={onChatsSortOrderChange}
-            />
-          )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label="New chat"
-                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                  onClick={onNewChat}
-                />
-              }
-            >
-              <SquarePenIcon className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipPopup side="right">
-              {newThreadShortcutLabel ? `New chat (${newThreadShortcutLabel})` : "New chat"}
-            </TooltipPopup>
-          </Tooltip>
-        </div>
-      </div>
+      <SidebarSectionLabel
+        actions={
+          <>
+            {onChatsSortOrderChange && (
+              <ChatSortMenu
+                chatsSortOrder={chatsSortOrder}
+                onChatsSortOrderChange={onChatsSortOrderChange}
+              />
+            )}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="New chat"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={onNewChat}
+                  />
+                }
+              >
+                <SquarePenIcon className="size-3.5" />
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {newThreadShortcutLabel ? `New chat (${newThreadShortcutLabel})` : "New chat"}
+              </TooltipPopup>
+            </Tooltip>
+          </>
+        }
+      >
+        Chats
+      </SidebarSectionLabel>
 
       {/* Loading spinner - shown during bootstrap */}
       {!bootstrapComplete && (

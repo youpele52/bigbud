@@ -36,9 +36,13 @@ import {
   startEventStream,
   toMessage,
 } from "./Adapter.stream.ts";
-import { isOpencodeModelSelection, resolveProviderIDForModel } from "./Adapter.session.helpers.ts";
+import {
+  buildOpenCodePermissionRules,
+  isOpencodeModelSelection,
+  resolveProviderIDForModel,
+} from "./Adapter.session.helpers.ts";
 import { makeTurnMethods } from "./Adapter.session.turn.ts";
-import { makeQueryMethods } from "./Adapter.session.query.ts";
+import { makeQueryMethods, makeStopSessionRecord } from "./Adapter.session.query.ts";
 
 // ── Shared dep interfaces (used by sub-modules) ───────────────────────
 
@@ -49,12 +53,18 @@ export interface TurnMethodDeps {
   ) => Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError>;
   readonly syntheticEventFn: ReturnType<typeof makeSyntheticEventFn>;
   readonly emitFn: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>;
+  readonly teardownSessionRecord: (record: ActiveOpencodeSession) => Effect.Effect<void>;
   readonly serverConfig: { readonly attachmentsDir: string };
 }
 
 /** Deps required by query/stop methods. */
-export interface QueryMethodDeps extends TurnMethodDeps {
+export interface QueryMethodDeps {
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
+  readonly requireSession: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError>;
+  readonly syntheticEventFn: ReturnType<typeof makeSyntheticEventFn>;
+  readonly emitFn: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>;
 }
 
 // ── Top-level deps ────────────────────────────────────────────────────
@@ -97,15 +107,36 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
       : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }));
   };
 
-  const sharedDeps: QueryMethodDeps = {
+  const queryDeps = {
     sessions,
     requireSession,
     syntheticEventFn,
     emitFn,
+  } satisfies QueryMethodDeps;
+
+  const stopSessionRecord = makeStopSessionRecord(sessions);
+  const teardownSessionRecord = (record: ActiveOpencodeSession) =>
+    stopSessionRecord(record).pipe(
+      Effect.catch(() =>
+        Effect.sync(() => {
+          record.sseAbortController?.abort();
+          record.sseAbortController = null;
+          record.pendingPermissions.clear();
+          record.pendingUserInputs.clear();
+          sessions.delete(record.threadId);
+        }),
+      ),
+    );
+
+  const turnMethodDeps: TurnMethodDeps = {
+    requireSession,
+    syntheticEventFn,
+    emitFn,
+    teardownSessionRecord,
     serverConfig,
   };
 
-  const turnMethods = makeTurnMethods(sharedDeps);
+  const turnMethodsWithRecovery = makeTurnMethods(turnMethodDeps);
 
   const autoApprovePendingPermission = (session: ActiveOpencodeSession, requestId: string) =>
     Effect.gen(function* () {
@@ -114,7 +145,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
       if (!pending || pending.responding) {
         return;
       }
-      yield* turnMethods.respondToRequest(
+      yield* turnMethodsWithRecovery.respondToRequest(
         session.threadId,
         ApprovalRequestId.makeUnsafe(requestId),
         "accept",
@@ -235,7 +266,10 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
       // Create an OpenCode session
       const sessionResp = yield* Effect.tryPromise({
         try: () =>
-          client.session.create(input.cwd ? { title: `bigbud session in ${input.cwd}` } : {}),
+          client.session.create({
+            ...(input.cwd ? { title: `bigbud session in ${input.cwd}` } : {}),
+            permission: buildOpenCodePermissionRules(input.runtimeMode),
+          }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
@@ -314,11 +348,11 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
 
   // ── Compose all methods ───────────────────────────────────────────
 
-  const queryMethods = makeQueryMethods(sharedDeps);
+  const queryMethods = makeQueryMethods(queryDeps);
 
   return {
     startSession,
-    ...turnMethods,
+    ...turnMethodsWithRecovery,
     ...queryMethods,
   };
 }
