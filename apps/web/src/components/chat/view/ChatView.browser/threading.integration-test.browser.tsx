@@ -1,5 +1,6 @@
 import {
   EventId,
+  MessageId,
   ORCHESTRATION_WS_METHODS,
   type OrchestrationEvent,
   type ThreadId,
@@ -102,6 +103,49 @@ function createPlaceholderThreadSnapshot() {
   };
 }
 
+function createReplyThreadSnapshot() {
+  const snapshot = createSnapshotForTargetUser({
+    targetMessageId: "msg-user-reply-bootstrap" as MessageId,
+    targetText: "reply bootstrap",
+  });
+  const thread = snapshot.threads[0]!;
+  const messages: typeof thread.messages = [
+    {
+      id: "msg-user-reply-source" as MessageId,
+      role: "user",
+      text: "Original user message",
+      turnId: null,
+      streaming: false,
+      createdAt: "2026-03-04T12:00:00.000Z",
+      updatedAt: "2026-03-04T12:00:01.000Z",
+    },
+    {
+      id: "msg-assistant-reply-source" as MessageId,
+      role: "assistant",
+      text: "Original assistant answer",
+      turnId: null,
+      streaming: false,
+      createdAt: "2026-03-04T12:00:02.000Z",
+      updatedAt: "2026-03-04T12:00:03.000Z",
+    },
+  ];
+
+  return {
+    ...snapshot,
+    threads: [
+      {
+        ...thread,
+        messages,
+        activities: [],
+        proposedPlans: [],
+        checkpoints: [],
+        latestTurn: null,
+        session: null,
+      },
+    ],
+  };
+}
+
 describe("ChatView threading integration", () => {
   it("shows an explicit empty state for projects without threads in the sidebar", async () => {
     const mounted = await ctx.mountChatView({
@@ -189,6 +233,72 @@ describe("ChatView threading integration", () => {
       });
     } finally {
       resolveDispatch({ sequence: 2 });
+      await mounted.cleanup();
+    }
+  });
+
+  it("sends reply target metadata when replying to an existing message", async () => {
+    const mounted = await ctx.mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createReplyThreadSnapshot(),
+      resolveRpc: (body) => {
+        if (body._tag === ORCHESTRATION_WS_METHODS.dispatchCommand) {
+          return { sequence: 2 };
+        }
+        return undefined;
+      },
+    });
+
+    try {
+      const replyButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-message-id="msg-assistant-reply-source"] button[aria-label="Reply to message"]',
+          ),
+        "Unable to find reply button for assistant message.",
+      );
+      replyButton.click();
+
+      await vi.waitFor(() => {
+        expect(useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]?.replyTarget).toEqual({
+          messageId: "msg-assistant-reply-source",
+          role: "assistant",
+          createdAt: "2026-03-04T12:00:02.000Z",
+          excerpt: "Original assistant answer",
+        });
+      });
+      await waitForElement(
+        () =>
+          Array.from(
+            document.querySelectorAll<HTMLElement>('[data-chat-composer-form="true"] p'),
+          ).find((element) => element.textContent?.includes("Original assistant answer")) ?? null,
+        "Unable to find composer reply preview excerpt.",
+      );
+
+      useComposerDraftStore.getState().setPrompt(THREAD_ID, "follow up reply");
+      const sendButton = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
+        "Unable to find send button.",
+      );
+      sendButton.click();
+
+      await vi.waitFor(() => {
+        const turnStartRequest = ctx.wsRequests.find(
+          (request) =>
+            request._tag === ORCHESTRATION_WS_METHODS.dispatchCommand &&
+            request.type === "thread.turn.start",
+        );
+
+        expect(turnStartRequest).toMatchObject({
+          _tag: ORCHESTRATION_WS_METHODS.dispatchCommand,
+          type: "thread.turn.start",
+          message: {
+            replyToMessageId: "msg-assistant-reply-source",
+            text: "follow up reply",
+          },
+        });
+      });
+    } finally {
       await mounted.cleanup();
     }
   });

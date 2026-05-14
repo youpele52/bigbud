@@ -1,3 +1,4 @@
+import { type MessageId } from "@bigbud/contracts";
 import { PaperclipIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
@@ -17,6 +18,7 @@ import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingAppr
 import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
+import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
@@ -32,6 +34,7 @@ interface ChatViewComposerProps {
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   interactions: ChatViewInteractionsState;
+  onOpenReplySource: (messageId: MessageId) => void;
 }
 
 export function ChatViewComposer({
@@ -40,6 +43,7 @@ export function ChatViewComposer({
   thread,
   runtime,
   interactions,
+  onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
   const promptHasText = base.prompt.trim().length > 0;
@@ -51,6 +55,7 @@ export function ChatViewComposer({
   // bar and hide the send button.
   const [isRecording, setIsRecording] = useState(false);
   const micRef = useRef<ComposerMicButtonHandle>(null);
+  const activeReplyTarget = base.composerDraft.replyTarget;
 
   /**
    * Injects transcript text into the composer the same way setPromptFromTraits
@@ -134,6 +139,15 @@ export function ChatViewComposer({
 
             {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (
               <>
+                {activeReplyTarget &&
+                !thread.showPlanFollowUpPrompt &&
+                !base.composerDraft.shellMode ? (
+                  <ComposerReplyPreview
+                    replyTarget={activeReplyTarget}
+                    onClear={() => base.setComposerReplyTarget(base.activeThread!.id, null)}
+                    onOpenSource={() => onOpenReplySource(activeReplyTarget.messageId)}
+                  />
+                ) : null}
                 <ComposerImagePreviews
                   composerImages={base.composerImages}
                   nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}

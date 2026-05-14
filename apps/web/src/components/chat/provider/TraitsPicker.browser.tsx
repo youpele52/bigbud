@@ -194,6 +194,7 @@ async function mountClaudePicker(props?: {
       interactionMode: null,
       shellMode: false,
       bootstrapSourceThreadId: null,
+      replyTarget: null,
     },
   };
   useComposerDraftStore.setState({
@@ -398,6 +399,7 @@ async function mountCodexPicker(props: { model?: string; options?: CodexModelOpt
       interactionMode: null,
       shellMode: false,
       bootstrapSourceThreadId: null,
+      replyTarget: null,
     },
   };
 

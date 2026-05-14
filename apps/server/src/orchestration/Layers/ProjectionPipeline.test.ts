@@ -317,6 +317,66 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
   },
 );
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-replies-")))(
+  "OrchestrationProjectionPipeline",
+  (it) => {
+    it.effect("persists reply metadata into projection message rows", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const now = new Date().toISOString();
+
+        yield* eventStore.append({
+          type: "thread.message-sent",
+          eventId: EventId.makeUnsafe("evt-reply-metadata"),
+          aggregateKind: "thread",
+          aggregateId: ThreadId.makeUnsafe("thread-replies"),
+          occurredAt: now,
+          commandId: CommandId.makeUnsafe("cmd-reply-metadata"),
+          causationEventId: null,
+          correlationId: CommandId.makeUnsafe("cmd-reply-metadata"),
+          metadata: {},
+          payload: {
+            threadId: ThreadId.makeUnsafe("thread-replies"),
+            messageId: MessageId.makeUnsafe("message-replies"),
+            role: "user",
+            text: "follow up",
+            replyTo: {
+              messageId: MessageId.makeUnsafe("message-parent"),
+              role: "assistant",
+              createdAt: now,
+              excerpt: "Earlier answer",
+            },
+            turnId: null,
+            streaming: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+
+        yield* projectionPipeline.bootstrap;
+
+        const rows = yield* sql<{
+          readonly replyToJson: string | null;
+        }>`
+          SELECT
+            reply_to_json AS "replyToJson"
+          FROM projection_thread_messages
+          WHERE message_id = 'message-replies'
+        `;
+        assert.equal(rows.length, 1);
+        assert.deepEqual(JSON.parse(rows[0]?.replyToJson ?? "null"), {
+          messageId: "message-parent",
+          role: "assistant",
+          createdAt: now,
+          excerpt: "Earlier answer",
+        });
+      }),
+    );
+  },
+);
+
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect(
     "passes explicit empty attachment arrays through the projection pipeline to clear attachments",

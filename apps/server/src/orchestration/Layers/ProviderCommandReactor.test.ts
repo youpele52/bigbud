@@ -474,6 +474,57 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).not.toContain(sourcePath);
   });
 
+  it("injects structured reply context into provider input for replied messages", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-parent"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-parent"),
+          role: "user",
+          text: "original question",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-reply"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-reply"),
+          role: "user",
+          text: "follow up",
+          attachments: [],
+          replyToMessageId: asMessageId("user-message-parent"),
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+
+    const sendInput = harness.sendTurn.mock.calls[1]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("<reply_to_message");
+    expect(sendInput?.input).toContain('message_id="user-message-parent"');
+    expect(sendInput?.input).toContain('role="user"');
+    expect(sendInput?.input).toContain("original question");
+    expect(sendInput?.input).toContain("follow up");
+  });
+
   it("does not add generic attached file metadata for Pi", async () => {
     const harness = await createHarness({
       threadModelSelection: {

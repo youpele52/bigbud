@@ -654,6 +654,38 @@ describe("incremental orchestration updates", () => {
     expect(next.threads[0]?.messages[0]?.streaming).toBe(true);
   });
 
+  it("stores reply metadata from thread.message-sent events", () => {
+    const thread = makeThread();
+    const state = makeState(thread);
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId: MessageId.makeUnsafe("message-reply-1"),
+        role: "user",
+        text: "following up",
+        replyTo: {
+          messageId: MessageId.makeUnsafe("message-parent-1"),
+          role: "assistant",
+          createdAt: "2026-02-27T00:00:00.000Z",
+          excerpt: "Earlier answer",
+        },
+        turnId: null,
+        streaming: false,
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.threads[0]?.messages[0]?.replyTo).toEqual({
+      messageId: MessageId.makeUnsafe("message-parent-1"),
+      role: "assistant",
+      createdAt: "2026-02-27T00:00:00.000Z",
+      excerpt: "Earlier answer",
+    });
+  });
+
   it("applies replay batches in sequence and updates session state", () => {
     const thread = makeThread({
       latestTurn: {

@@ -42,6 +42,7 @@ export function createEmptyThreadDraft(): ComposerThreadDraftState {
     runtimeMode: null,
     interactionMode: null,
     bootstrapSourceThreadId: null,
+    replyTarget: null,
   };
 }
 
@@ -121,7 +122,8 @@ export function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     draft.activeProvider === null &&
     draft.runtimeMode === null &&
     draft.interactionMode === null &&
-    (draft.bootstrapSourceThreadId ?? null) === null
+    (draft.bootstrapSourceThreadId ?? null) === null &&
+    draft.replyTarget === null
   );
 }
 

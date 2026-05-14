@@ -149,6 +149,7 @@ export function mapMessage(message: OrchestrationMessage): ChatMessage {
     id: message.id,
     role: message.role,
     text: message.text,
+    ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
     turnId: message.turnId,
     createdAt: message.createdAt,
     streaming: message.streaming,

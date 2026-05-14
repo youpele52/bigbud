@@ -13,6 +13,7 @@ import {
   ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
+import { buildProviderMessageText } from "@bigbud/shared/history";
 import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
@@ -242,10 +243,14 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       thread,
       ...(workspaceCwd ? { workspaceRoot: workspaceCwd } : {}),
     });
+    const providerMessageText = buildProviderMessageText({
+      text: expandedProviderInput,
+      replyTo: message.replyTo ?? event.payload.replyTo,
+    });
     const providerInputText =
       thread.modelSelection.provider === "pi"
-        ? expandedProviderInput
-        : appendFileAttachmentsToProviderInput(expandedProviderInput, message.attachments ?? []);
+        ? providerMessageText
+        : appendFileAttachmentsToProviderInput(providerMessageText, message.attachments ?? []);
 
     if (isFirstUserMessageTurn) {
       const serverSettings = yield* serverSettingsService.getSettings.pipe(

@@ -10,6 +10,7 @@ import {
   MessageId,
   NonNegativeInt,
   OrchestrationCheckpointFile,
+  OrchestrationMessageReply,
   ParentThreadReference,
   OrchestrationProposedPlanId,
   ModelSelection,
@@ -45,6 +46,7 @@ export const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFie
   Struct.assign({
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
+    replyTo: Schema.NullOr(Schema.fromJsonString(OrchestrationMessageReply)),
   }),
 );
 export const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
@@ -173,6 +175,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           role,
           text,
           attachments_json AS "attachments",
+          reply_to_json AS "replyTo",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"

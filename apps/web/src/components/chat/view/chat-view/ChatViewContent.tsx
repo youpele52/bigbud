@@ -1,5 +1,6 @@
+import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -19,6 +20,7 @@ import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
+import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -27,6 +29,16 @@ import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
+
+const REPLY_PREVIEW_MAX_CHARS = 240;
+
+function truncateReplyPreview(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= REPLY_PREVIEW_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, REPLY_PREVIEW_MAX_CHARS - 3).trimEnd()}...`;
+}
 
 interface ChatViewContentProps {
   base: ChatViewBaseState;
@@ -47,6 +59,7 @@ export function ChatViewContent({
 }: ChatViewContentProps) {
   const { forkThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
+  const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
@@ -73,6 +86,34 @@ export function ChatViewContent({
     planSidebarDismissedForTurnRef,
     setPlanSidebarOpen,
   ]);
+
+  const handleReplyToMessage = useCallback(
+    (messageId: MessageId) => {
+      const message = base.activeThread?.messages.find((entry) => entry.id === messageId);
+      if (!message) {
+        return;
+      }
+      base.setComposerReplyTarget(base.activeThread!.id, {
+        messageId: message.id,
+        role: message.role,
+        createdAt: message.createdAt,
+        excerpt: truncateReplyPreview(
+          message.role === "user"
+            ? deriveDisplayedUserMessageState(message.text).copyText || "(empty message)"
+            : message.text || "(empty message)",
+        ),
+      });
+      runtime.scheduleComposerFocus();
+    },
+    [base, runtime],
+  );
+
+  const handleOpenReplySource = useCallback((messageId: MessageId) => {
+    setFocusMessageId(null);
+    window.requestAnimationFrame(() => {
+      setFocusMessageId(messageId);
+    });
+  }, []);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -181,6 +222,9 @@ export function ChatViewContent({
                 resolvedTheme={base.resolvedTheme}
                 timestampFormat={base.timestampFormat}
                 workspaceRoot={workspaceRoot}
+                focusMessageId={focusMessageId}
+                onReplyToMessage={handleReplyToMessage}
+                onOpenReplySource={handleOpenReplySource}
                 onForkThread={() => {
                   void forkThread(base.activeThread!.id, { navigateToFork: true });
                 }}
@@ -244,6 +288,7 @@ export function ChatViewContent({
               thread={thread}
               runtime={runtime}
               interactions={interactions}
+              onOpenReplySource={handleOpenReplySource}
             />
           </div>
 
