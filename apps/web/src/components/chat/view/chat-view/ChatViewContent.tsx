@@ -1,5 +1,6 @@
+import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -7,7 +8,6 @@ import { cn } from "~/lib/utils";
 import { ChatHeader } from "../../common/ChatHeader";
 import { ConfirmationPanel } from "../../../common/ConfirmationPanel";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
-import { PendingApprovalDialog } from "../../composer/PendingApprovalDialog";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
@@ -20,6 +20,7 @@ import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
+import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -28,6 +29,16 @@ import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
+
+const REPLY_PREVIEW_MAX_CHARS = 240;
+
+function truncateReplyPreview(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= REPLY_PREVIEW_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, REPLY_PREVIEW_MAX_CHARS - 3).trimEnd()}...`;
+}
 
 interface ChatViewContentProps {
   base: ChatViewBaseState;
@@ -47,27 +58,8 @@ export function ChatViewContent({
   interactions,
 }: ChatViewContentProps) {
   const { forkThread } = useThreadActions();
-  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-  const lastApprovalRequestIdRef = useRef<string | null>(null);
   const browserOpen = useBrowserPanelStore((state) => state.open);
-
-  useEffect(() => {
-    const requestId = thread.activePendingApproval?.requestId ?? null;
-    if (!requestId) {
-      setApprovalDialogOpen(false);
-      lastApprovalRequestIdRef.current = null;
-      return;
-    }
-    if (lastApprovalRequestIdRef.current !== requestId) {
-      lastApprovalRequestIdRef.current = requestId;
-      setApprovalDialogOpen(true);
-    }
-  }, [thread.activePendingApproval]);
-
-  const activeApprovalRequestId = thread.activePendingApproval?.requestId ?? null;
-  const isRespondingToActiveApproval =
-    activeApprovalRequestId !== null &&
-    runtime.turnActions.respondingRequestIds.includes(activeApprovalRequestId);
+  const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
@@ -94,6 +86,34 @@ export function ChatViewContent({
     planSidebarDismissedForTurnRef,
     setPlanSidebarOpen,
   ]);
+
+  const handleReplyToMessage = useCallback(
+    (messageId: MessageId) => {
+      const message = base.activeThread?.messages.find((entry) => entry.id === messageId);
+      if (!message) {
+        return;
+      }
+      base.setComposerReplyTarget(base.activeThread!.id, {
+        messageId: message.id,
+        role: message.role,
+        createdAt: message.createdAt,
+        excerpt: truncateReplyPreview(
+          message.role === "user"
+            ? deriveDisplayedUserMessageState(message.text).copyText || "(empty message)"
+            : message.text || "(empty message)",
+        ),
+      });
+      runtime.scheduleComposerFocus();
+    },
+    [base, runtime],
+  );
+
+  const handleOpenReplySource = useCallback((messageId: MessageId) => {
+    setFocusMessageId(null);
+    window.requestAnimationFrame(() => {
+      setFocusMessageId(messageId);
+    });
+  }, []);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
@@ -202,6 +222,9 @@ export function ChatViewContent({
                 resolvedTheme={base.resolvedTheme}
                 timestampFormat={base.timestampFormat}
                 workspaceRoot={workspaceRoot}
+                focusMessageId={focusMessageId}
+                onReplyToMessage={handleReplyToMessage}
+                onOpenReplySource={handleOpenReplySource}
                 onForkThread={() => {
                   void forkThread(base.activeThread!.id, { navigateToFork: true });
                 }}
@@ -265,6 +288,7 @@ export function ChatViewContent({
               thread={thread}
               runtime={runtime}
               interactions={interactions}
+              onOpenReplySource={handleOpenReplySource}
             />
           </div>
 
@@ -339,17 +363,6 @@ export function ChatViewContent({
           expandedImage={base.expandedImage}
           onClose={interactions.closeExpandedImage}
           onNavigate={interactions.navigateExpandedImage}
-        />
-      ) : null}
-
-      {thread.activePendingApproval ? (
-        <PendingApprovalDialog
-          approval={thread.activePendingApproval}
-          pendingCount={thread.pendingApprovals.length}
-          open={approvalDialogOpen}
-          isResponding={isRespondingToActiveApproval}
-          onOpenChange={setApprovalDialogOpen}
-          onRespondToApproval={runtime.turnActions.onRespondToApproval}
         />
       ) : null}
     </div>

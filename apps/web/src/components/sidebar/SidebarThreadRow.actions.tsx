@@ -1,4 +1,4 @@
-import { ArchiveIcon, SplitIcon } from "lucide-react";
+import { PinIcon, SplitIcon } from "lucide-react";
 import { type MouseEvent } from "react";
 import type { ThreadId } from "@bigbud/contracts";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -6,27 +6,23 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 export interface SidebarThreadRowActionsProps {
   threadId: ThreadId;
   threadTitle: string;
-  appSettingsConfirmThreadArchive: boolean;
-  confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
   swipeRevealIsRevealed: boolean;
+  isFavorite: boolean;
   handleForkAction: (event: MouseEvent<HTMLButtonElement>) => void;
-  handleArchiveAction: (event: MouseEvent<HTMLButtonElement>) => void;
-  setConfirmingArchiveThreadId: (threadId: ThreadId) => void;
+  handleFavoriteAction: (event: MouseEvent<HTMLButtonElement>) => void;
 }
 
 /**
  * Action buttons displayed on hover/focus for a sidebar thread row.
- * Contains fork and archive buttons with appropriate tooltips and confirmation states.
+ * Contains fork and pin buttons with appropriate tooltips.
  */
 export function SidebarThreadRowActions({
   threadId,
   threadTitle,
-  appSettingsConfirmThreadArchive,
-  confirmArchiveButtonRefs,
   swipeRevealIsRevealed,
+  isFavorite,
   handleForkAction,
-  handleArchiveAction,
-  setConfirmingArchiveThreadId,
+  handleFavoriteAction,
 }: SidebarThreadRowActionsProps) {
   return (
     <div
@@ -56,49 +52,30 @@ export function SidebarThreadRowActions({
         />
         <TooltipPopup side="top">Fork thread</TooltipPopup>
       </Tooltip>
-      {appSettingsConfirmThreadArchive ? (
-        <button
-          type="button"
-          data-thread-selection-safe
-          data-testid={`thread-archive-${threadId}`}
-          aria-label={`Archive ${threadTitle}`}
-          className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-          onPointerDown={(event) => {
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setConfirmingArchiveThreadId(threadId);
-            requestAnimationFrame(() => {
-              confirmArchiveButtonRefs.current.get(threadId)?.focus();
-            });
-          }}
-        >
-          <ArchiveIcon className="size-3.5" />
-        </button>
-      ) : (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                type="button"
-                data-thread-selection-safe
-                data-testid={`thread-archive-${threadId}`}
-                aria-label={`Archive ${threadTitle}`}
-                className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                }}
-                onClick={handleArchiveAction}
-              >
-                <ArchiveIcon className="size-3.5" />
-              </button>
-            }
-          />
-          <TooltipPopup side="top">Archive</TooltipPopup>
-        </Tooltip>
-      )}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              data-thread-selection-safe
+              data-testid={`thread-favorite-${threadId}`}
+              aria-label={`${isFavorite ? "Unpin" : "Pin"} ${threadTitle}`}
+              className={`inline-flex size-5 cursor-pointer items-center justify-center transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring ${
+                isFavorite
+                  ? "text-primary hover:text-primary/90"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={handleFavoriteAction}
+            >
+              <PinIcon className={`size-3.5 ${isFavorite ? "fill-current" : ""}`} />
+            </button>
+          }
+        />
+        <TooltipPopup side="top">{isFavorite ? "Unpin thread" : "Pin thread"}</TooltipPopup>
+      </Tooltip>
     </div>
   );
 }

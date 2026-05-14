@@ -3,6 +3,7 @@ import type { PermissionRequest } from "@github/copilot-sdk";
 
 import {
   approvalDecisionToPermissionResult,
+  getCopilotSessionApprovalMetadata,
   requestDetailFromPermissionRequest,
   requestTypeFromPermissionRequest,
 } from "./Adapter.types.ts";
@@ -33,6 +34,19 @@ describe("CopilotAdapter.types", () => {
 
     expect(approvalDecisionToPermissionResult("acceptForSession", request)).toEqual({
       kind: "approve-once",
+    });
+  });
+
+  it("reports when session-scoped shell approval is unavailable", () => {
+    const request = {
+      kind: "shell",
+      canOfferSessionApproval: false,
+      commands: [{ identifier: "grep" }],
+      fullCommandText: "grep foo file.ts",
+    } as PermissionRequest;
+
+    expect(getCopilotSessionApprovalMetadata(request)).toEqual({
+      available: false,
     });
   });
 

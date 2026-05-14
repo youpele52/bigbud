@@ -27,6 +27,7 @@ import { ProjectScript } from "./orchestration.project";
 import {
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
+  OrchestrationMessageReply,
   OrchestrationMessageRole,
   ParentThreadReference,
   OrchestrationProposedPlan,
@@ -174,6 +175,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
   role: OrchestrationMessageRole,
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
+  replyTo: Schema.optional(OrchestrationMessageReply),
   turnId: Schema.NullOr(TurnId),
   replace: Schema.optional(Schema.Boolean),
   streaming: Schema.Boolean,
@@ -184,6 +186,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
+  replyTo: Schema.optional(OrchestrationMessageReply),
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),

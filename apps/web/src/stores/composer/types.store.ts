@@ -3,6 +3,7 @@ import {
   COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
   COMPOSER_DRAFT_STORAGE_KEY,
   COMPOSER_DRAFT_STORAGE_VERSION,
+  MessageId,
   ModelSelection,
   ProjectId,
   ProviderInteractionMode,
@@ -13,7 +14,11 @@ import {
 } from "@bigbud/contracts";
 import * as Schema from "effect/Schema";
 import { type TerminalContextDraft } from "../../lib/terminalContext";
-import { type ChatImageAttachment, type ChatFileAttachment } from "../../models/types";
+import {
+  type ChatFileAttachment,
+  type ChatImageAttachment,
+  type ChatMessageReplyTarget,
+} from "../../models/types";
 
 export {
   COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
@@ -116,6 +121,16 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
   bootstrapSourceThreadId: Schema.optionalKey(Schema.NullOr(ThreadId)),
+  replyTarget: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        messageId: MessageId,
+        role: Schema.Literals(["user", "assistant", "system"]),
+        createdAt: Schema.String,
+        excerpt: Schema.String,
+      }),
+    ),
+  ),
 });
 export type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -201,6 +216,7 @@ export interface ComposerThreadDraftState {
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
   bootstrapSourceThreadId: ThreadId | null;
+  replyTarget: ChatMessageReplyTarget | null;
 }
 
 export interface DraftThreadState {
@@ -307,6 +323,10 @@ export interface ComposerDraftStoreState {
     threadId: ThreadId,
     sourceThreadId: ThreadId | null | undefined,
   ) => void;
+  setReplyTarget: (
+    threadId: ThreadId,
+    replyTarget: ChatMessageReplyTarget | null | undefined,
+  ) => void;
 }
 
 export interface EffectiveComposerModelState {
@@ -330,6 +350,7 @@ export const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   runtimeMode: null,
   interactionMode: null,
   bootstrapSourceThreadId: null,
+  replyTarget: null,
 });
 
 export const EMPTY_PERSISTED_DRAFT_STORE_STATE = Object.freeze<PersistedComposerDraftStoreState>({

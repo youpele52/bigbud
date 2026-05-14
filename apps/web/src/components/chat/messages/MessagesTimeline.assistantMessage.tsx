@@ -7,6 +7,8 @@ import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
 import ChatMarkdown from "../common/ChatMarkdown";
 import { Button } from "../../ui/button";
 import { MessageCopyButton } from "../common/MessageCopyButton";
+import { MessageReplyButton } from "../common/MessageReplyButton";
+import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { DiffStatLabel, hasNonZeroStat } from "../diff-display/DiffStatLabel";
 import { ChangedFilesTree } from "../diff-display/ChangedFilesTree";
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
@@ -14,6 +16,7 @@ import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { useMemo } from "react";
 import { useSettings } from "../../../hooks/useSettings";
 import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypography";
+import { cn } from "~/lib/utils";
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 
@@ -39,6 +42,9 @@ interface AssistantMessageBodyProps {
   resolvedTheme: "light" | "dark";
   nowIso: string;
   timestampFormat: TimestampFormat;
+  focusedMessageId: MessageId | null;
+  onReplyToMessage: (messageId: MessageId) => void;
+  onOpenReplySource: (messageId: MessageId) => void;
   onForkThread: (() => void) | undefined;
 }
 
@@ -93,11 +99,15 @@ export function AssistantMessageBody({
   resolvedTheme,
   nowIso,
   timestampFormat,
+  focusedMessageId,
+  onReplyToMessage,
+  onOpenReplySource,
   onForkThread,
 }: AssistantMessageBodyProps) {
   const messageText =
     row.message.text || (row.message.streaming ? "" : `(${stableVerbFromId(row.message.id)}...)`);
   const shellOutputMessage = isShellOutputMessage(row);
+  const replyTarget = row.message.replyTo;
   const settings = useSettings();
   const terminalTypography = useMemo(
     () => ({
@@ -118,7 +128,20 @@ export function AssistantMessageBody({
           <span className="h-px flex-1 bg-border" />
         </div>
       )}
-      <div className="group min-w-0 px-1 py-0.5">
+      <div
+        className={cn(
+          "group min-w-0 rounded-xl px-1 py-0.5 transition-colors duration-300",
+          focusedMessageId === row.message.id ? "bg-card/55" : "",
+        )}
+      >
+        {replyTarget ? (
+          <div className="mb-2 max-w-[80%]">
+            <MessageReplyPreview
+              replyTarget={replyTarget}
+              onClick={() => onOpenReplySource(replyTarget.messageId)}
+            />
+          </div>
+        ) : null}
         {shellOutputMessage ? (
           <ShellOutputCard messageText={messageText} terminalTypography={terminalTypography} />
         ) : (
@@ -140,6 +163,9 @@ export function AssistantMessageBody({
           <div className="flex min-w-0 items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
             {row.showAssistantCopyButton && messageText.length > 0 ? (
               <MessageCopyButton text={messageText} />
+            ) : null}
+            {row.showAssistantCopyButton ? (
+              <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
             ) : null}
             {row.showAssistantCopyButton && onForkThread ? (
               <Button

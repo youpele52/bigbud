@@ -51,6 +51,11 @@ export interface PendingApprovalRequest {
   readonly resolve: (result: PermissionRequestResult) => void;
 }
 
+export interface CopilotSessionApprovalMetadata {
+  readonly available: boolean;
+  readonly label?: string;
+}
+
 export interface PendingUserInputRequest {
   readonly turnId: TurnId | undefined;
   readonly choices: ReadonlyArray<string>;
@@ -405,6 +410,49 @@ function getCopilotSessionApproval(
       };
     default:
       return undefined;
+  }
+}
+
+export function getCopilotSessionApprovalMetadata(
+  request: PermissionRequest,
+): CopilotSessionApprovalMetadata {
+  switch (request.kind) {
+    case "shell": {
+      const approval = getCopilotSessionApproval(request);
+      return {
+        available: approval !== undefined,
+        ...(approval !== undefined ? { label: "Allow matching commands this session" } : {}),
+      };
+    }
+    case "write":
+      return {
+        available: getCopilotSessionApproval(request) !== undefined,
+        label: "Allow writes this session",
+      };
+    case "read":
+      return {
+        available: true,
+        label: "Allow reads this session",
+      };
+    case "mcp":
+      return {
+        available: getCopilotSessionApproval(request) !== undefined,
+        label: "Allow this MCP tool this session",
+      };
+    case "custom-tool":
+      return {
+        available: getCopilotSessionApproval(request) !== undefined,
+        label: "Allow this tool this session",
+      };
+    case "memory":
+      return {
+        available: true,
+        label: "Allow memory actions this session",
+      };
+    default:
+      return {
+        available: false,
+      };
   }
 }
 

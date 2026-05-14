@@ -5,6 +5,7 @@ import {
   clearThreadUi,
   markThreadUnread,
   reorderProjects,
+  setFavouritesExpanded,
   setProjectExpanded,
   setThreadChangedFilesExpanded,
   syncProjects,
@@ -14,6 +15,7 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    favouritesExpanded: true,
     projectExpandedById: {},
     projectOrder: [],
     threadLastVisitedAtById: {},
@@ -190,6 +192,16 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.projectExpandedById[project1]).toBe(false);
     expect(next.projectOrder).toEqual([project1]);
+  });
+
+  it("setFavouritesExpanded updates the favourites section state", () => {
+    const initialState = makeUiState({
+      favouritesExpanded: true,
+    });
+
+    const next = setFavouritesExpanded(initialState, false);
+
+    expect(next.favouritesExpanded).toBe(false);
   });
 
   it("clearThreadUi removes visit state for deleted threads", () => {

@@ -40,6 +40,11 @@ export const SIDEBAR_THREAD_SORT_ORDERS = ["updated_at", "created_at"] as const;
 export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER = "updated_at" as const;
 
 /**
+ * Maximum number of pinned threads shown in the sidebar favourites section.
+ */
+export const FAVORITE_THREAD_LIMIT = 5 as const;
+
+/**
  * Thread environment modes.
  *
  * - `local`: Thread runs in the main workspace

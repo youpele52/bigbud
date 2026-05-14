@@ -103,6 +103,8 @@ export function createWsNativeApi(): NativeApi {
           .then((events) => [...events]),
       onDomainEvent: (callback, options) =>
         rpcClient.orchestration.onDomainEvent(callback, options),
+      onThinkingDelta: (callback, options) =>
+        rpcClient.orchestration.onThinkingDelta(callback, options),
     },
   };
 

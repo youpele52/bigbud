@@ -2,6 +2,7 @@ import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
 import {
   OrchestrationEvent,
   type ServerLifecycleWelcomePayload,
+  type ThinkingActivityDeltaEvent,
   type ThreadId,
 } from "@bigbud/contracts";
 import { useEffect, useEffectEvent, useRef } from "react";
@@ -18,6 +19,7 @@ import {
   startServerStateSync,
   useServerConfig,
   useServerConfigUpdatedSubscription,
+  useServerSettings,
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import {
@@ -28,6 +30,7 @@ import {
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useStore } from "../stores/main";
 import { useThreadSelectionStore } from "../stores/thread";
+import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
 import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
@@ -64,6 +67,11 @@ export function EventRouter() {
   const syncThreads = useUiStateStore((store) => store.syncThreads);
   const clearThreadUi = useUiStateStore((store) => store.clearThreadUi);
   const removeFromSelection = useThreadSelectionStore((store) => store.removeFromSelection);
+  const applyThinkingDelta = useThinkingStreamStore((store) => store.applyThinkingDelta);
+  const clearAllThinkingDeltas = useThinkingStreamStore((store) => store.clearAll);
+  const reconcileThinkingActivities = useThinkingStreamStore(
+    (store) => store.reconcilePersistedActivities,
+  );
   const removeTerminalState = useTerminalStateStore((store) => store.removeTerminalState);
   const removeOrphanedTerminalStates = useTerminalStateStore(
     (store) => store.removeOrphanedTerminalStates,
@@ -80,6 +88,8 @@ export function EventRouter() {
   const disposedRef = useRef(false);
   const bootstrapFromSnapshotRef = useRef<() => Promise<void>>(async () => undefined);
   const serverConfig = useServerConfig();
+  const serverSettings = useServerSettings();
+  const readThinkingStreamingEnabled = useEffectEvent(() => serverSettings.enableThinkingStreaming);
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;
@@ -173,6 +183,32 @@ export function EventRouter() {
     },
   );
 
+  const handleThinkingDelta = useEffectEvent((event: ThinkingActivityDeltaEvent) => {
+    if (!readThinkingStreamingEnabled()) {
+      return;
+    }
+    applyThinkingDelta(event);
+  });
+
+  useEffect(() => {
+    if (!serverSettings.enableThinkingStreaming) {
+      clearAllThinkingDeltas();
+    }
+  }, [clearAllThinkingDeltas, serverSettings.enableThinkingStreaming]);
+
+  useEffect(() => {
+    const api = readNativeApi();
+    if (!api || !serverSettings.enableThinkingStreaming) {
+      return;
+    }
+
+    return api.orchestration.onThinkingDelta(handleThinkingDelta, {
+      onResubscribe: () => {
+        clearAllThinkingDeltas();
+      },
+    });
+  }, [clearAllThinkingDeltas, serverSettings.enableThinkingStreaming]);
+
   useEffect(() => {
     const api = readNativeApi();
     if (!api) return;
@@ -248,6 +284,7 @@ export function EventRouter() {
       }
 
       applyOrchestrationEvents(uiEvents);
+      reconcileThinkingActivities(uiEvents);
       if (needsProjectUiSync) {
         const projects = useStore.getState().projects;
         syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
@@ -312,6 +349,7 @@ export function EventRouter() {
           { shouldAbort: () => disposed },
         );
         if (!disposed) {
+          clearAllThinkingDeltas();
           applyEventBatch(events);
         }
       } catch {
@@ -448,7 +486,9 @@ export function EventRouter() {
     };
   }, [
     applyOrchestrationEvents,
+    clearAllThinkingDeltas,
     queryClient,
+    reconcileThinkingActivities,
     removeFromSelection,
     removeTerminalState,
     removeOrphanedTerminalStates,

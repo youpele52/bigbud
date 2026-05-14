@@ -206,6 +206,8 @@ export function useChatViewInteractions({
     forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
     bootstrapSourceThreadId: base.composerDraft.bootstrapSourceThreadId,
     clearBootstrapSourceThreadId: (threadId) => base.setBootstrapSourceThreadId(threadId, null),
+    replyTarget: base.composerDraft.replyTarget,
+    setReplyTarget: base.setComposerReplyTarget,
     persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
     onSubmitPlanFollowUp: planHandlers.onSubmitPlanFollowUp,
     handleInteractionModeChange: runtime.handleInteractionModeChange,
