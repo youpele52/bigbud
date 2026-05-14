@@ -38,6 +38,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
     interactionMode: null,
     shellMode: false,
     bootstrapSourceThreadId: null,
+    replyTarget: null,
   };
   useComposerDraftStore.setState({
     draftsByThreadId,

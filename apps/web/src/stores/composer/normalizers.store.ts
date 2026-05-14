@@ -1,4 +1,4 @@
-import type { ThreadId } from "@bigbud/contracts";
+import type { MessageId, ThreadId } from "@bigbud/contracts";
 import {
   type ModelSelection,
   PROVIDER_KINDS,
@@ -367,6 +367,23 @@ export function normalizePersistedDraftsByThreadId(
       draftCandidate.bootstrapSourceThreadId.length > 0
         ? (draftCandidate.bootstrapSourceThreadId as ThreadId)
         : null;
+    const replyTarget =
+      draftCandidate.replyTarget &&
+      typeof draftCandidate.replyTarget === "object" &&
+      typeof draftCandidate.replyTarget.messageId === "string" &&
+      draftCandidate.replyTarget.messageId.length > 0 &&
+      (draftCandidate.replyTarget.role === "user" ||
+        draftCandidate.replyTarget.role === "assistant" ||
+        draftCandidate.replyTarget.role === "system") &&
+      typeof draftCandidate.replyTarget.createdAt === "string" &&
+      typeof draftCandidate.replyTarget.excerpt === "string"
+        ? {
+            messageId: draftCandidate.replyTarget.messageId as MessageId,
+            role: draftCandidate.replyTarget.role,
+            createdAt: draftCandidate.replyTarget.createdAt,
+            excerpt: draftCandidate.replyTarget.excerpt,
+          }
+        : null;
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -429,7 +446,8 @@ export function normalizePersistedDraftsByThreadId(
       !hasModelData &&
       !runtimeMode &&
       !interactionMode &&
-      bootstrapSourceThreadId === null
+      bootstrapSourceThreadId === null &&
+      replyTarget === null
     ) {
       continue;
     }
@@ -443,6 +461,7 @@ export function normalizePersistedDraftsByThreadId(
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
       ...(bootstrapSourceThreadId !== null ? { bootstrapSourceThreadId } : {}),
+      ...(replyTarget !== null ? { replyTarget } : {}),
     };
   }
 

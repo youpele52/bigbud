@@ -4,7 +4,12 @@
  *
  * @module OpencodeAdapter.session.helpers
  */
-import type { ProviderApprovalDecision, ProviderSendTurnInput } from "@bigbud/contracts";
+import type {
+  ProviderApprovalDecision,
+  ProviderSendTurnInput,
+  ProviderSession,
+} from "@bigbud/contracts";
+import type { PermissionRuleset } from "@opencode-ai/sdk/v2";
 
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
@@ -41,6 +46,34 @@ export function approvalDecisionToOpencodeResponse(
     default:
       return "reject";
   }
+}
+
+// ── Permission rules ──────────────────────────────────────────────────
+
+export function buildOpenCodePermissionRules(
+  runtimeMode: ProviderSession["runtimeMode"],
+): PermissionRuleset {
+  if (runtimeMode === "full-access") {
+    return [{ permission: "*", pattern: "*", action: "allow" }];
+  }
+
+  const approvalRequiredRules: PermissionRuleset = [
+    { permission: "*", pattern: "*", action: "ask" },
+    { permission: "bash", pattern: "*", action: "ask" },
+    { permission: "edit", pattern: "*", action: "ask" },
+    { permission: "webfetch", pattern: "*", action: "ask" },
+    { permission: "websearch", pattern: "*", action: "ask" },
+    { permission: "codesearch", pattern: "*", action: "ask" },
+    { permission: "external_directory", pattern: "*", action: "ask" },
+    { permission: "doom_loop", pattern: "*", action: "ask" },
+    { permission: "question", pattern: "*", action: "allow" },
+  ];
+
+  if (runtimeMode === "auto-accept-edits") {
+    return [...approvalRequiredRules, { permission: "edit", pattern: "*", action: "allow" }];
+  }
+
+  return approvalRequiredRules;
 }
 
 // ── Provider ID resolver ──────────────────────────────────────────────

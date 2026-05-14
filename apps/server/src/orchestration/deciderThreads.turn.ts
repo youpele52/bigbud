@@ -36,6 +36,17 @@ function requireThreadReadyForMutation(input: {
   return Effect.void;
 }
 
+const REPLY_EXCERPT_MAX_CHARS = 240;
+const TERMINAL_CONTEXT_BLOCK_REGEX = /\n*<terminal_context>\n[\s\S]*?\n<\/terminal_context>\s*/g;
+
+function buildReplyExcerpt(text: string): string {
+  const normalized = text.replace(TERMINAL_CONTEXT_BLOCK_REGEX, "\n").replace(/\s+/g, " ").trim();
+  if (normalized.length <= REPLY_EXCERPT_MAX_CHARS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, REPLY_EXCERPT_MAX_CHARS - 3).trimEnd()}...`;
+}
+
 export type ThreadTurnCommand = Exclude<
   OrchestrationCommand,
   {
@@ -99,6 +110,29 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
           detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
         });
       }
+      const replyToMessageId = command.message.replyToMessageId;
+      const replyTarget =
+        replyToMessageId !== undefined
+          ? (targetThread.messages.find((entry) => entry.id === replyToMessageId) ?? null)
+          : null;
+      if (replyToMessageId !== undefined && !replyTarget) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Reply target message '${replyToMessageId}' does not exist on thread '${targetThread.id}'.`,
+        });
+      }
+      if (replyTarget?.role === "system") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Reply target message '${replyToMessageId}' cannot reference a system message.`,
+        });
+      }
+      if (replyTarget?.streaming) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Reply target message '${replyToMessageId}' is still streaming and cannot be referenced yet.`,
+        });
+      }
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "thread",
@@ -113,6 +147,16 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
           role: "user",
           text: command.message.text,
           attachments: command.message.attachments,
+          ...(replyTarget
+            ? {
+                replyTo: {
+                  messageId: replyTarget.id,
+                  role: replyTarget.role,
+                  createdAt: replyTarget.createdAt,
+                  excerpt: buildReplyExcerpt(replyTarget.text),
+                },
+              }
+            : {}),
           turnId: null,
           streaming: false,
           createdAt: command.createdAt,
@@ -131,6 +175,16 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
         payload: {
           threadId: command.threadId,
           messageId: command.message.messageId,
+          ...(replyTarget
+            ? {
+                replyTo: {
+                  messageId: replyTarget.id,
+                  role: replyTarget.role,
+                  createdAt: replyTarget.createdAt,
+                  excerpt: buildReplyExcerpt(replyTarget.text),
+                },
+              }
+            : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
             : {}),

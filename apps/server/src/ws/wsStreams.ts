@@ -1,15 +1,21 @@
-import { Effect, Ref, Stream } from "effect";
+import { Effect, Queue, Ref, Stream } from "effect";
 import {
   KeybindingsConfigError,
   type OrchestrationEvent,
+  type ProviderRuntimeEvent,
   type ServerDiscoveryCatalog,
   type ServerProvider,
   type ServerSettings,
   ServerSettingsError,
   type ServerConfig,
   type ServerConfigIssue,
+  type ThinkingActivityDeltaEvent,
 } from "@bigbud/contracts";
 import type { OrchestrationEventStoreError } from "../persistence/Errors";
+import {
+  isThinkingStreamKind,
+  thinkingActivityIdFromRuntimeEvent,
+} from "../orchestration/thinkingActivity";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 
 export function makeOrderedOrchestrationDomainEventStream(input: {
@@ -22,6 +28,12 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
   };
 }) {
   return Effect.gen(function* () {
+    const liveEventQueue = yield* Queue.unbounded<OrchestrationEvent>();
+    yield* Stream.runForEach(input.orchestrationEngine.streamDomainEvents, (event) =>
+      Queue.offer(liveEventQueue, event),
+    ).pipe(Effect.forkScoped);
+    yield* Effect.yieldNow;
+
     const snapshot = yield* input.orchestrationEngine.getReadModel();
     const fromSequenceExclusive = snapshot.snapshotSequence;
     const replayEvents: Array<OrchestrationEvent> = yield* Stream.runCollect(
@@ -31,7 +43,7 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
       Effect.catch(() => Effect.succeed([] as Array<OrchestrationEvent>)),
     );
     const replayStream = Stream.fromIterable(replayEvents);
-    const source = Stream.merge(replayStream, input.orchestrationEngine.streamDomainEvents);
+    const source = Stream.merge(replayStream, Stream.fromQueue(liveEventQueue));
     type SequenceState = {
       readonly nextSequence: number;
       readonly pendingBySequence: Map<number, OrchestrationEvent>;
@@ -68,6 +80,7 @@ export function makeOrderedOrchestrationDomainEventStream(input: {
         ),
       ),
       Stream.flatMap((events) => Stream.fromIterable(events)),
+      Stream.ensuring(Queue.shutdown(liveEventQueue)),
     );
   });
 }
@@ -137,6 +150,53 @@ export function makeServerConfigUpdateStream(input: {
       Stream.merge(
         keybindingsUpdates,
         Stream.merge(providerStatuses, Stream.merge(settingsUpdates, discoveryUpdates)),
+      ),
+    );
+  });
+}
+
+export function makeThinkingActivityDeltaStream(input: {
+  readonly providerService: {
+    readonly streamEvents: Stream.Stream<ProviderRuntimeEvent>;
+  };
+  readonly serverSettings: {
+    readonly getSettings: Effect.Effect<
+      Pick<ServerSettings, "enableThinkingStreaming">,
+      ServerSettingsError
+    >;
+  };
+}) {
+  return Effect.gen(function* () {
+    const settings = yield* input.serverSettings.getSettings.pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("thinking activity delta stream disabled: failed to load settings", {
+          error,
+        }).pipe(Effect.as({ enableThinkingStreaming: false })),
+      ),
+    );
+    if (!settings.enableThinkingStreaming) {
+      return Stream.empty;
+    }
+
+    return input.providerService.streamEvents.pipe(
+      Stream.flatMap((event) =>
+        event.type === "content.delta" && isThinkingStreamKind(event.payload.streamKind)
+          ? Stream.succeed({
+              type: "delta" as const,
+              threadId: event.threadId,
+              activityId: thinkingActivityIdFromRuntimeEvent({
+                threadId: event.threadId,
+                turnId: event.turnId,
+                itemId: event.itemId,
+                streamKind: event.payload.streamKind,
+              }),
+              turnId: event.turnId ?? null,
+              provider: event.provider,
+              streamKind: event.payload.streamKind,
+              delta: event.payload.delta,
+              createdAt: event.createdAt,
+            } satisfies ThinkingActivityDeltaEvent)
+          : Stream.empty,
       ),
     );
   });

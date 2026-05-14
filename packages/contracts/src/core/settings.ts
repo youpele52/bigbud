@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
+import { ThreadId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -19,6 +19,7 @@ import {
   DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
   SIDEBAR_THREAD_SORT_ORDERS,
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
+  FAVORITE_THREAD_LIMIT,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
@@ -138,8 +139,8 @@ export const PiSettings = Schema.Struct({
 export type PiSettings = typeof PiSettings.Type;
 
 export const CursorSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  binaryPath: makeBinaryPathSetting("cursor"),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("agent"),
   apiEndpoint: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
 });
@@ -153,10 +154,14 @@ export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
 export const ServerSettings = Schema.Struct({
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  enableThinkingStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
+  favoriteThreadIds: Schema.Array(ThreadId)
+    .check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT))
+    .pipe(Schema.withDecodingDefault(() => [])),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
       provider: DEFAULT_PROVIDER_KIND,
@@ -306,8 +311,12 @@ const CursorSettingsPatch = Schema.Struct({
 
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
+  enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
+  favoriteThreadIds: Schema.optionalKey(
+    Schema.Array(ThreadId).check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT)),
+  ),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({

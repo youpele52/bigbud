@@ -163,6 +163,10 @@ export function buildLegacyServerSettingsMigrationPatch(legacySettings: Record<s
     patch.enableAssistantStreaming = legacySettings.enableAssistantStreaming;
   }
 
+  if (Predicate.isBoolean(legacySettings.enableThinkingStreaming)) {
+    patch.enableThinkingStreaming = legacySettings.enableThinkingStreaming;
+  }
+
   if (Schema.is(ThreadEnvMode)(legacySettings.defaultThreadEnvMode)) {
     patch.defaultThreadEnvMode = legacySettings.defaultThreadEnvMode;
   }

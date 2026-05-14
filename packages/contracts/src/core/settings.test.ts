@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { describe, expect, test } from "vitest";
 
-import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS } from "./settings";
+import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS, DEFAULT_SERVER_SETTINGS } from "./settings";
 
 const decodeClientSettings = Schema.decodeUnknownEffect(ClientSettingsSchema);
 
@@ -11,6 +11,16 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
   test("defaults terminal appearance settings for client settings", () => {
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("meslo-nerd-font-mono");
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontSize).toBe(12);
+  });
+});
+
+describe("DEFAULT_SERVER_SETTINGS", () => {
+  test("defaults Cursor to enabled", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.cursor.enabled).toBe(true);
+  });
+
+  test("defaults Cursor to the agent CLI binary", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.cursor.binaryPath).toBe("agent");
   });
 });
 

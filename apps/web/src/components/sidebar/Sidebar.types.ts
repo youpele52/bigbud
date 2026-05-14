@@ -32,7 +32,6 @@ export interface SharedProjectItemProps {
   newThreadShortcutLabel: string | null | undefined;
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
-  appSettingsConfirmThreadArchive: boolean;
   appSettingsDefaultThreadEnvMode: "local" | "worktree";
   routeThreadId: ThreadId | null;
   selectedThreadIds: ReadonlySet<ThreadId>;
@@ -45,9 +44,8 @@ export interface SharedProjectItemProps {
   hasRenameCommitted: () => boolean;
   /** Marks the rename as committed to prevent double-commit on blur. */
   markRenameCommitted: () => void;
-  confirmingArchiveThreadId: ThreadId | null;
-  setConfirmingArchiveThreadId: React.Dispatch<React.SetStateAction<ThreadId | null>>;
-  confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
+  favoriteThreadIds: ReadonlySet<ThreadId>;
+  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   activeThread: { projectId: ProjectId; branch: string | null; worktreePath: string | null } | null;
   activeDraftThread: {
     projectId: ProjectId;
@@ -94,7 +92,6 @@ export interface SharedProjectItemProps {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
   forkThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
@@ -115,6 +112,9 @@ export interface SidebarState {
   projects: ReturnType<typeof useStore<Project[]>>;
   bootstrapComplete: boolean;
   chatsProject: Project | null;
+  renderedFavorites: SidebarRenderedThreadEntry[];
+  areFavouritesExpanded: boolean;
+  setAreFavouritesExpanded: (expanded: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
@@ -176,12 +176,9 @@ export interface SidebarState {
   markRenameCommitted: () => void;
   cancelRename: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
-  // Thread archive confirm
-  confirmingArchiveThreadId: ThreadId | null;
-  setConfirmingArchiveThreadId: React.Dispatch<React.SetStateAction<ThreadId | null>>;
-  confirmArchiveButtonRefs: React.MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
   forkThread: (threadId: ThreadId) => Promise<void>;
+  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   pendingDeleteConfirmation: {
     title: string;
     description: string;

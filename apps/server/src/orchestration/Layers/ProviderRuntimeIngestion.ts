@@ -7,7 +7,13 @@
  *
  * @module ProviderRuntimeIngestion
  */
-import { MessageId, ThreadId } from "@bigbud/contracts";
+import {
+  EventId,
+  MessageId,
+  ThreadId,
+  type ThinkingActivityStreamKind,
+  type TurnId,
+} from "@bigbud/contracts";
 import { Cache, Cause, Duration, Effect, Layer, Option, Scope, Stream } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
@@ -29,14 +35,23 @@ import {
   TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import {
+  appendBufferedThinkingActivity,
+  createBufferedThinkingActivity,
+  type BufferedThinkingActivity,
+  thinkingActivityThreadPrefix,
+} from "../thinkingActivity.ts";
+import {
   makeRuntimeEventProcessor,
   type RuntimeProcessorCacheHelpers,
   type RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
+import { buildStartupReconciliationCommands } from "./ProviderRuntimeIngestion.reconcile.ts";
 
 const TURN_MESSAGE_IDS_BY_TURN_TTL = Duration.minutes(120);
 const BUFFERED_MESSAGE_TEXT_BY_MESSAGE_ID_TTL = Duration.minutes(120);
 const BUFFERED_PROPOSED_PLAN_BY_ID_TTL = Duration.minutes(120);
+const BUFFERED_THINKING_BY_ACTIVITY_ID_TTL = Duration.minutes(120);
+const BUFFERED_THINKING_BY_ACTIVITY_ID_CAPACITY = 10_000;
 
 const providerTurnKey = (threadId: ThreadId, turnId: string) => `${threadId}:${turnId}`;
 
@@ -62,6 +77,13 @@ const make = Effect.fn("make")(function* () {
     capacity: BUFFERED_PROPOSED_PLAN_BY_ID_CACHE_CAPACITY,
     timeToLive: BUFFERED_PROPOSED_PLAN_BY_ID_TTL,
     lookup: () => Effect.succeed({ text: "", createdAt: "" }),
+  });
+
+  const bufferedThinkingByActivityId = yield* Cache.make<string, BufferedThinkingActivity>({
+    capacity: BUFFERED_THINKING_BY_ACTIVITY_ID_CAPACITY,
+    timeToLive: BUFFERED_THINKING_BY_ACTIVITY_ID_TTL,
+    lookup: () =>
+      Effect.die(new Error("bufferedThinkingByActivityId lookup should not be used without set")),
   });
 
   const rememberAssistantMessageId = (threadId: ThreadId, turnId: string, messageId: MessageId) =>
@@ -165,6 +187,51 @@ const make = Effect.fn("make")(function* () {
   const clearBufferedProposedPlan = (planId: string) =>
     Cache.invalidate(bufferedProposedPlanById, planId);
 
+  const appendBufferedThinking = (input: {
+    activityId: EventId;
+    threadId: ThreadId;
+    turnId: TurnId | undefined;
+    streamKind: ThinkingActivityStreamKind;
+    createdAt: string;
+    delta: string;
+  }) =>
+    Cache.getOption(bufferedThinkingByActivityId, input.activityId).pipe(
+      Effect.flatMap((existingEntry) =>
+        Cache.set(
+          bufferedThinkingByActivityId,
+          input.activityId,
+          Option.match(existingEntry, {
+            onNone: () => createBufferedThinkingActivity(input),
+            onSome: (entry) => appendBufferedThinkingActivity(entry, input.delta),
+          }),
+        ),
+      ),
+    );
+
+  const takeBufferedThinking = (activityId: string) =>
+    Cache.getOption(bufferedThinkingByActivityId, activityId).pipe(
+      Effect.flatMap((existingEntry) =>
+        Cache.invalidate(bufferedThinkingByActivityId, activityId).pipe(
+          Effect.as(Option.getOrUndefined(existingEntry)),
+        ),
+      ),
+    );
+
+  const listBufferedThinkingActivityIdsByThreadPrefix = (prefix: string) =>
+    Cache.keys(bufferedThinkingByActivityId).pipe(
+      Effect.map((keys) => Array.from(keys).filter((key) => key.startsWith(prefix))),
+    );
+
+  const listBufferedThinkingActivityIdsByTurnPrefix = (prefix: string) =>
+    Cache.keys(bufferedThinkingByActivityId).pipe(
+      Effect.map((keys) => Array.from(keys).filter((key) => key.startsWith(prefix))),
+    );
+
+  const listBufferedThinkingActivityIdsByItemToken = (token: string) =>
+    Cache.keys(bufferedThinkingByActivityId).pipe(
+      Effect.map((keys) => Array.from(keys).filter((key) => key.includes(token))),
+    );
+
   const clearBufferedAssistantTextAlias = (messageId: MessageId) =>
     clearBufferedAssistantText(messageId);
 
@@ -173,8 +240,10 @@ const make = Effect.fn("make")(function* () {
   ) {
     const prefix = `${threadId}:`;
     const proposedPlanPrefix = `plan:${threadId}:`;
+    const thinkingPrefix = thinkingActivityThreadPrefix(threadId);
     const turnKeys = Array.from(yield* Cache.keys(turnMessageIdsByTurnKey));
     const proposedPlanKeys = Array.from(yield* Cache.keys(bufferedProposedPlanById));
+    const thinkingKeys = Array.from(yield* Cache.keys(bufferedThinkingByActivityId));
     yield* Effect.forEach(
       turnKeys,
       Effect.fn(function* (key) {
@@ -201,6 +270,14 @@ const make = Effect.fn("make")(function* () {
           : Effect.void,
       { concurrency: 1 },
     ).pipe(Effect.asVoid);
+    yield* Effect.forEach(
+      thinkingKeys,
+      (key) =>
+        key.startsWith(thinkingPrefix)
+          ? Cache.invalidate(bufferedThinkingByActivityId, key)
+          : Effect.void,
+      { concurrency: 1 },
+    ).pipe(Effect.asVoid);
   });
 
   const processorServices: RuntimeProcessorServices = {
@@ -221,6 +298,11 @@ const make = Effect.fn("make")(function* () {
     appendBufferedProposedPlan,
     takeBufferedProposedPlan,
     clearBufferedProposedPlan,
+    appendBufferedThinking,
+    takeBufferedThinking,
+    listBufferedThinkingActivityIdsByThreadPrefix,
+    listBufferedThinkingActivityIdsByTurnPrefix,
+    listBufferedThinkingActivityIdsByItemToken,
     clearTurnStateForSession,
   };
 
@@ -245,10 +327,6 @@ const make = Effect.fn("make")(function* () {
         });
       }),
     );
-
-  // Per-thread worker map: each thread gets its own DrainableWorker so that
-  // processing a large burst of events for one thread does not delay ingestion
-  // for any other thread.
   const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionInput>>();
   const outerScope = yield* Effect.scope;
 
@@ -263,7 +341,42 @@ const make = Effect.fn("make")(function* () {
     );
   };
 
+  const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
+    function* () {
+      const [readModel, liveSessions] = yield* Effect.all([
+        orchestrationEngine.getReadModel(),
+        providerService.listSessions(),
+      ]);
+      const occurredAt = new Date().toISOString();
+      const commands = buildStartupReconciliationCommands({
+        threads: readModel.threads,
+        liveSessions,
+        occurredAt,
+      });
+
+      yield* Effect.forEach(
+        commands,
+        (command) => orchestrationEngine.dispatch(command).pipe(Effect.asVoid),
+        { concurrency: 1 },
+      ).pipe(Effect.asVoid);
+
+      if (commands.length > 0) {
+        yield* Effect.logInfo("provider runtime ingestion reconciled thread sessions at startup", {
+          reconciledCount: commands.length,
+          liveSessionCount: liveSessions.length,
+        });
+      }
+    },
+  );
+
   const start: ProviderRuntimeIngestionShape["start"] = Effect.fn("start")(function* () {
+    yield* reconcileThreadSessionsAtStartup().pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("provider runtime ingestion failed to reconcile thread sessions", {
+          cause: Cause.pretty(cause),
+        }),
+      ),
+    );
     yield* Effect.forkScoped(
       Stream.runForEach(providerService.streamEvents, (event) =>
         getOrCreateThreadWorker(event.threadId).pipe(
@@ -285,8 +398,6 @@ const make = Effect.fn("make")(function* () {
 
   return {
     start,
-    // Lazily capture workers at drain time so newly-created thread workers are
-    // included. Runs all active per-thread drain effects concurrently.
     drain: Effect.suspend(() =>
       Effect.forEach(Array.from(threadWorkers.values()), (worker) => worker.drain, {
         concurrency: "unbounded",

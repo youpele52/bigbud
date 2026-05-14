@@ -227,6 +227,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
         role: row.role,
         text: row.text,
         ...(row.attachments !== null ? { attachments: row.attachments } : {}),
+        ...(row.replyTo !== null ? { replyTo: row.replyTo } : {}),
         turnId: row.turnId,
         streaming: row.isStreaming === 1,
         createdAt: row.createdAt,
