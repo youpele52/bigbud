@@ -178,6 +178,12 @@ export function runtimeEventToActivities(
             ...(typeof event.payload.autoApproveAfterMs === "number"
               ? { autoApproveAfterMs: event.payload.autoApproveAfterMs }
               : {}),
+            ...(typeof event.payload.sessionApprovalAvailable === "boolean"
+              ? { sessionApprovalAvailable: event.payload.sessionApprovalAvailable }
+              : {}),
+            ...(event.payload.sessionApprovalLabel
+              ? { sessionApprovalLabel: truncateDetail(event.payload.sessionApprovalLabel) }
+              : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,

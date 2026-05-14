@@ -144,6 +144,34 @@ describe("derivePendingApprovals", () => {
     ]);
   });
 
+  it("preserves session approval metadata for provider-specific UI handling", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-session-metadata",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-session-metadata-1",
+          requestType: "command_execution_approval",
+          detail: "grep foo file.ts",
+          sessionApprovalAvailable: false,
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-session-metadata-1",
+        requestKind: "command",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        detail: "grep foo file.ts",
+        sessionApprovalAvailable: false,
+      },
+    ]);
+  });
+
   it("clears stale pending approvals when provider reports unknown pending request", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

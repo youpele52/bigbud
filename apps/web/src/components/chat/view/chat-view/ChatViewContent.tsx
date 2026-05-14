@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -7,7 +7,6 @@ import { cn } from "~/lib/utils";
 import { ChatHeader } from "../../common/ChatHeader";
 import { ConfirmationPanel } from "../../../common/ConfirmationPanel";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
-import { PendingApprovalDialog } from "../../composer/PendingApprovalDialog";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
@@ -47,27 +46,7 @@ export function ChatViewContent({
   interactions,
 }: ChatViewContentProps) {
   const { forkThread } = useThreadActions();
-  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-  const lastApprovalRequestIdRef = useRef<string | null>(null);
   const browserOpen = useBrowserPanelStore((state) => state.open);
-
-  useEffect(() => {
-    const requestId = thread.activePendingApproval?.requestId ?? null;
-    if (!requestId) {
-      setApprovalDialogOpen(false);
-      lastApprovalRequestIdRef.current = null;
-      return;
-    }
-    if (lastApprovalRequestIdRef.current !== requestId) {
-      lastApprovalRequestIdRef.current = requestId;
-      setApprovalDialogOpen(true);
-    }
-  }, [thread.activePendingApproval]);
-
-  const activeApprovalRequestId = thread.activePendingApproval?.requestId ?? null;
-  const isRespondingToActiveApproval =
-    activeApprovalRequestId !== null &&
-    runtime.turnActions.respondingRequestIds.includes(activeApprovalRequestId);
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
@@ -339,17 +318,6 @@ export function ChatViewContent({
           expandedImage={base.expandedImage}
           onClose={interactions.closeExpandedImage}
           onNavigate={interactions.navigateExpandedImage}
-        />
-      ) : null}
-
-      {thread.activePendingApproval ? (
-        <PendingApprovalDialog
-          approval={thread.activePendingApproval}
-          pendingCount={thread.pendingApprovals.length}
-          open={approvalDialogOpen}
-          isResponding={isRespondingToActiveApproval}
-          onOpenChange={setApprovalDialogOpen}
-          onRespondToApproval={runtime.turnActions.onRespondToApproval}
         />
       ) : null}
     </div>

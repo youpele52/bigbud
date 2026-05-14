@@ -5,6 +5,8 @@ import { Button } from "../../ui/button";
 interface ComposerPendingApprovalActionsProps {
   requestId: ApprovalRequestId;
   isResponding: boolean;
+  sessionApprovalAvailable?: boolean | undefined;
+  sessionApprovalLabel?: string | undefined;
   onRespondToApproval: (
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
@@ -14,6 +16,8 @@ interface ComposerPendingApprovalActionsProps {
 export const ComposerPendingApprovalActions = memo(function ComposerPendingApprovalActions({
   requestId,
   isResponding,
+  sessionApprovalAvailable,
+  sessionApprovalLabel,
   onRespondToApproval,
 }: ComposerPendingApprovalActionsProps) {
   return (
@@ -34,14 +38,16 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
       >
         Decline
       </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "acceptForSession")}
-      >
-        Always allow this session
-      </Button>
+      {sessionApprovalAvailable !== false ? (
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isResponding}
+          onClick={() => void onRespondToApproval(requestId, "acceptForSession")}
+        >
+          {sessionApprovalLabel ?? "Always allow this session"}
+        </Button>
+      ) : null}
       <Button
         size="sm"
         variant="default"

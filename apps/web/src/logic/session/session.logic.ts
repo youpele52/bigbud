@@ -56,6 +56,8 @@ export interface PendingApproval {
   createdAt: string;
   detail?: string;
   autoApproveAfterMs?: number;
+  sessionApprovalAvailable?: boolean;
+  sessionApprovalLabel?: string;
 }
 
 export interface PendingUserInput {

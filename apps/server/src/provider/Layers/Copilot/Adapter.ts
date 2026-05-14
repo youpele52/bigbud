@@ -43,6 +43,7 @@ import {
   type PendingUserInputRequest,
   approvalDecisionToPermissionResult,
   eventBase,
+  getCopilotSessionApprovalMetadata,
   isCopilotModelSelection,
   normalizeUsage,
   requestDetailFromPermissionRequest,
@@ -236,6 +237,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         const currentTurnId = activeTurnId();
         const requestType = requestTypeFromPermissionRequest(request);
         const requestDetail = requestDetailFromPermissionRequest(request);
+        const sessionApproval = getCopilotSessionApprovalMetadata(request);
         pendingApprovals.set(requestId, {
           request,
           requestType,
@@ -250,6 +252,8 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
             requestType,
             ...(requestDetail ? { detail: requestDetail } : {}),
             args: request,
+            sessionApprovalAvailable: sessionApproval.available,
+            ...(sessionApproval.label ? { sessionApprovalLabel: sessionApproval.label } : {}),
             ...(input.runtimeMode === "full-access"
               ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
               : {}),

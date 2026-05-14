@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { type ApprovalRequestId, type ProviderApprovalDecision } from "@bigbud/contracts";
 
 import { type PendingApproval } from "../../../logic/session";
+import { Button } from "../../ui/button";
 import {
   Dialog,
   DialogDescription,
@@ -19,6 +20,10 @@ interface PendingApprovalDialogProps {
   pendingCount: number;
   open: boolean;
   isResponding: boolean;
+  projectName?: string | undefined;
+  threadTitle: string;
+  workingDirectory?: string | undefined;
+  onOpenThread?: (() => void) | undefined;
   onOpenChange: (open: boolean) => void;
   onRespondToApproval: (
     requestId: ApprovalRequestId,
@@ -31,6 +36,10 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
   pendingCount,
   open,
   isResponding,
+  projectName,
+  threadTitle,
+  workingDirectory,
+  onOpenThread,
   onOpenChange,
   onRespondToApproval,
 }: PendingApprovalDialogProps) {
@@ -103,6 +112,34 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
               {autoApproveCopy}
             </div>
           ) : null}
+          <div className="rounded-xl border border-border/70 bg-muted/24 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="font-medium text-sm">Request source</p>
+              {onOpenThread ? (
+                <Button size="sm" variant="outline" onClick={onOpenThread}>
+                  Open thread
+                </Button>
+              ) : null}
+            </div>
+            <dl className="grid gap-2 text-sm sm:grid-cols-[auto,1fr]">
+              <dt className="text-muted-foreground">Thread</dt>
+              <dd className="break-words">{threadTitle}</dd>
+              {projectName ? (
+                <>
+                  <dt className="text-muted-foreground">Project</dt>
+                  <dd className="break-words">{projectName}</dd>
+                </>
+              ) : null}
+              {workingDirectory ? (
+                <>
+                  <dt className="text-muted-foreground">Directory</dt>
+                  <dd className="break-all font-mono text-xs text-foreground">
+                    {workingDirectory}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+          </div>
           {approval.detail ? (
             <div className="rounded-xl border border-border/70 bg-muted/24 p-3">
               <p className="mb-2 font-medium text-sm">Requested action</p>
@@ -120,6 +157,8 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
           <ComposerPendingApprovalActions
             requestId={approval.requestId}
             isResponding={isResponding}
+            sessionApprovalAvailable={approval.sessionApprovalAvailable}
+            sessionApprovalLabel={approval.sessionApprovalLabel}
             onRespondToApproval={onRespondToApproval}
           />
         </DialogFooter>
