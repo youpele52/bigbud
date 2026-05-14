@@ -167,6 +167,14 @@ export function derivePendingApprovals(
       payload && typeof payload.autoApproveAfterMs === "number"
         ? payload.autoApproveAfterMs
         : undefined;
+    const sessionApprovalAvailable =
+      payload && typeof payload.sessionApprovalAvailable === "boolean"
+        ? payload.sessionApprovalAvailable
+        : undefined;
+    const sessionApprovalLabel =
+      payload && typeof payload.sessionApprovalLabel === "string"
+        ? payload.sessionApprovalLabel
+        : undefined;
 
     if (activity.kind === "approval.requested" && requestId) {
       openByRequestId.set(requestId, {
@@ -175,6 +183,8 @@ export function derivePendingApprovals(
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
         ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
+        ...(sessionApprovalAvailable !== undefined ? { sessionApprovalAvailable } : {}),
+        ...(sessionApprovalLabel ? { sessionApprovalLabel } : {}),
       });
       continue;
     }

@@ -204,4 +204,35 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       fs.rmSync(tempDir, { recursive: true, force: true });
     }));
+
+  it("rehydrates persisted cursor mappings across layer restart", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-directory-cursor-"));
+      const dbPath = path.join(tempDir, "orchestration.sqlite");
+      const directoryLayer = makeDirectoryLayer(makeSqlitePersistenceLive(dbPath));
+
+      const threadId = ThreadId.makeUnsafe("thread-cursor-restart");
+
+      yield* Effect.gen(function* () {
+        const directory = yield* ProviderSessionDirectory;
+        yield* directory.upsert({
+          provider: "cursor",
+          threadId,
+        });
+      }).pipe(Effect.provide(directoryLayer));
+
+      yield* Effect.gen(function* () {
+        const directory = yield* ProviderSessionDirectory;
+        const provider = yield* directory.getProvider(threadId);
+        assert.equal(provider, "cursor");
+
+        const resolvedBinding = yield* directory.getBinding(threadId);
+        assertSome(resolvedBinding, {
+          threadId,
+          provider: "cursor",
+        });
+      }).pipe(Effect.provide(directoryLayer));
+
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }));
 });

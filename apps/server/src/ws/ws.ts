@@ -38,6 +38,7 @@ import {
   observeRpcStreamEffect,
 } from "../observability/RpcInstrumentation";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
+import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
@@ -52,6 +53,7 @@ import { makeDispatchBootstrapThreadCommand } from "./wsBootstrap";
 import {
   makeOrderedOrchestrationDomainEventStream,
   makeServerConfigUpdateStream,
+  makeThinkingActivityDeltaStream,
 } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
@@ -67,6 +69,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     const git = yield* GitCore;
     const gitStatusBroadcaster = yield* GitStatusBroadcaster;
     const terminalManager = yield* TerminalManager;
+    const providerService = yield* ProviderService;
     const providerRegistry = yield* ProviderRegistry;
     const discoveryRegistry = yield* DiscoveryRegistry;
     const threadShellRunner = yield* ThreadShellRunner;
@@ -301,6 +304,12 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         observeRpcStreamEffect(
           WS_METHODS.subscribeOrchestrationDomainEvents,
           makeOrderedOrchestrationDomainEventStream({ orchestrationEngine }),
+          { "rpc.aggregate": "orchestration" },
+        ),
+      [WS_METHODS.subscribeThinkingActivityDeltas]: (_input) =>
+        observeRpcStreamEffect(
+          WS_METHODS.subscribeThinkingActivityDeltas,
+          makeThinkingActivityDeltaStream({ providerService, serverSettings }),
           { "rpc.aggregate": "orchestration" },
         ),
       [WS_METHODS.serverGetConfig]: (_input) =>

@@ -50,7 +50,7 @@ export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
 export function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
   if (tone === "error") return "text-destructive-foreground/80";
   if (tone === "tool") return "text-muted-foreground/70";
-  if (tone === "thinking") return "text-muted-foreground/50";
+  if (tone === "thinking") return "text-muted-foreground/65";
   return "text-muted-foreground/40";
 }
 

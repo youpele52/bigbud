@@ -83,6 +83,24 @@ export const mapEvent = (
             },
           },
         ];
+      case "assistant.reasoning_delta":
+        return [
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt: event.timestamp,
+              threadId: session.threadId,
+              ...(turnId ? { turnId } : {}),
+              itemId: event.data.reasoningId,
+              raw,
+            }),
+            type: "content.delta",
+            payload: {
+              streamKind: "reasoning_text",
+              delta: event.data.deltaContent,
+            },
+          },
+        ];
       case "assistant.message":
         return [
           {
@@ -99,6 +117,27 @@ export const mapEvent = (
               itemType: "assistant_message",
               status: "completed",
               title: "Assistant message",
+              detail: event.data.content,
+              data: event.data,
+            },
+          },
+        ];
+      case "assistant.reasoning":
+        return [
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt: event.timestamp,
+              threadId: session.threadId,
+              ...(turnId ? { turnId } : {}),
+              itemId: event.data.reasoningId,
+              raw,
+            }),
+            type: "item.completed",
+            payload: {
+              itemType: "reasoning",
+              status: "completed",
+              title: "Assistant reasoning",
               detail: event.data.content,
               data: event.data,
             },

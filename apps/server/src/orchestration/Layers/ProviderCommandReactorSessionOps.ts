@@ -13,6 +13,7 @@ import {
   type OrchestrationMessage,
   type OrchestrationSession,
   ProviderKind,
+  TextGenerationError,
   type OrchestrationThread,
   ThreadId,
   type ProviderSession,
@@ -36,6 +37,7 @@ import {
   isTemporaryWorktreeBranch,
   mapProviderSessionStatusToOrchestrationStatus,
   serverCommandId,
+  shouldRetryGeneratedThreadTitle,
   toNonEmptyProviderInput,
 } from "./ProviderCommandReactorHelpers.ts";
 
@@ -452,20 +454,34 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
     const { textGeneration, orchestrationEngine, resolveThread } = services;
     const attachments = input.attachments ?? [];
     yield* Effect.gen(function* () {
-      const generated = yield* textGeneration.generateThreadTitle({
-        cwd: input.cwd,
-        message: input.messageText,
-        ...(attachments.length > 0 ? { attachments } : {}),
-        modelSelection: input.modelSelection,
-      });
-      if (!generated) return;
-
+      const generated = yield* Effect.suspend(() =>
+        textGeneration.generateThreadTitle({
+          cwd: input.cwd,
+          message: input.messageText,
+          ...(attachments.length > 0 ? { attachments } : {}),
+          modelSelection: input.modelSelection,
+        }),
+      ).pipe(
+        Effect.flatMap((result) =>
+          shouldRetryGeneratedThreadTitle({
+            generatedTitle: result.title,
+            ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
+          })
+            ? Effect.fail(
+                new TextGenerationError({
+                  operation: "generateThreadTitle",
+                  detail: "Generated thread title was too weak to replace the fallback.",
+                }),
+              )
+            : Effect.succeed(result),
+        ),
+        Effect.retry({ times: 3 }),
+      );
       const thread = yield* resolveThread(input.threadId);
       if (!thread) return;
       if (!canReplaceThreadTitle(thread.title, input.titleSeed)) {
         return;
       }
-
       yield* orchestrationEngine.dispatch({
         type: "thread.meta.update",
         commandId: serverCommandId("thread-title-rename"),

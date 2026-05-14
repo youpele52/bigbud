@@ -150,6 +150,49 @@ describe("normalizeCompactToolLabel", () => {
 });
 
 describe("deriveMessagesTimelineRows", () => {
+  it("renders thinking timeline entries as dedicated chat-style rows", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "thinking-entry-1",
+          kind: "thinking",
+          createdAt: "2026-01-01T00:00:01Z",
+          entry: {
+            id: "thinking-work-1",
+            createdAt: "2026-01-01T00:00:01Z",
+            label: "Thinking",
+            detail: "Checking the repository layout",
+            tone: "thinking",
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: null,
+      isWorking: true,
+      activeTurnStartedAt: "2026-01-01T00:00:00Z",
+    });
+
+    expect(rows).toEqual([
+      {
+        kind: "thinking",
+        id: "thinking-entry-1",
+        createdAt: "2026-01-01T00:00:01Z",
+        entry: {
+          id: "thinking-work-1",
+          createdAt: "2026-01-01T00:00:01Z",
+          label: "Thinking",
+          detail: "Checking the repository layout",
+          tone: "thinking",
+        },
+        streaming: true,
+      },
+      {
+        kind: "working",
+        id: "working-indicator-row",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ]);
+  });
+
   it("only shows assistant copy on the final assistant message in a turn", () => {
     const turnId = TurnId.makeUnsafe("turn-1");
     const rows = deriveMessagesTimelineRows({

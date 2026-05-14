@@ -16,7 +16,7 @@ import {
   WebSocketConnectionSurface,
 } from "../components/WebSocketConnectionSurface";
 import { readNativeApi } from "../rpc/nativeApi";
-import { PendingApprovalNavigation } from "../notifications/pendingApprovalNavigation";
+import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { EventRouter, ServerStateBootstrap } from "./__root.logic";
 
@@ -50,7 +50,7 @@ function RootRouteView() {
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
-        <PendingApprovalNavigation />
+        <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
           <CommandPalette>

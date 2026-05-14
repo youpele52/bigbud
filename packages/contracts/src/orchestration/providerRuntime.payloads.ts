@@ -176,6 +176,8 @@ export const RequestOpenedPayload = Schema.Struct({
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
   autoApproveAfterMs: Schema.optional(NonNegativeInt),
+  sessionApprovalAvailable: Schema.optional(Schema.Boolean),
+  sessionApprovalLabel: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 export type RequestOpenedPayload = typeof RequestOpenedPayload.Type;
 

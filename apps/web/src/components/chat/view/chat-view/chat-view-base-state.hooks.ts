@@ -149,6 +149,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const setBootstrapSourceThreadId = useComposerDraftStore(
     (store) => store.setBootstrapSourceThreadId,
   );
+  const setComposerReplyTarget = useComposerDraftStore((store) => store.setReplyTarget);
   const draftThread = useComposerDraftStore(
     (store) => store.draftThreadsByThreadId[threadId] ?? null,
   );
@@ -428,6 +429,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     setProjectDraftThreadId,
     clearProjectDraftThreadId,
     setBootstrapSourceThreadId,
+    setComposerReplyTarget,
     draftThread,
     promptRef,
     isDragOverComposer,

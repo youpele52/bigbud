@@ -7,11 +7,12 @@ import {
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { SidebarContent, SidebarGroup } from "../ui/sidebar";
+import { SidebarGroup } from "../ui/sidebar";
 import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProjectItem";
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem, type RenderedProjectData } from "./SidebarRenderedProjectItem";
+import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import type { RenderedProjectEntry, SharedProjectItemProps } from "./Sidebar.types";
 
 interface DesktopUpdateButtonProps {
@@ -89,7 +90,7 @@ export function SidebarProjectsSection({
   sharedProjectItemProps,
 }: SidebarProjectsSectionProps) {
   return (
-    <SidebarContent className="gap-0">
+    <>
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup className="px-2 pt-2 pb-0">
           <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8">
@@ -114,44 +115,45 @@ export function SidebarProjectsSection({
         </SidebarGroup>
       ) : null}
       <SidebarGroup className="px-2 py-2">
-        <div className="mb-1 flex items-center justify-between pl-2 pr-1.5">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            Projects
-          </span>
-          <div className="flex items-center gap-1">
-            <ProjectSortMenu
-              projectSortOrder={appSettingsSidebarProjectSortOrder}
-              threadSortOrder={appSettingsSidebarThreadSortOrder}
-              onProjectSortOrderChange={onProjectSortOrderChange}
-              onThreadSortOrderChange={onThreadSortOrderChange}
-            />
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
-                    aria-pressed={shouldShowProjectPathEntry}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-                    onClick={() => {
-                      onCloseMobileSidebar();
-                      handleStartAddProject();
-                    }}
+        <SidebarSectionLabel
+          actions={
+            <>
+              <ProjectSortMenu
+                projectSortOrder={appSettingsSidebarProjectSortOrder}
+                threadSortOrder={appSettingsSidebarThreadSortOrder}
+                onProjectSortOrderChange={onProjectSortOrderChange}
+                onThreadSortOrderChange={onThreadSortOrderChange}
+              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
+                      aria-pressed={shouldShowProjectPathEntry}
+                      className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                      onClick={() => {
+                        onCloseMobileSidebar();
+                        handleStartAddProject();
+                      }}
+                    />
+                  }
+                >
+                  <PlusIcon
+                    className={`size-3.5 transition-transform duration-150 ${
+                      shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
+                    }`}
                   />
-                }
-              >
-                <PlusIcon
-                  className={`size-3.5 transition-transform duration-150 ${
-                    shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
-                  }`}
-                />
-              </TooltipTrigger>
-              <TooltipPopup side="right">
-                {shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
-              </TooltipPopup>
-            </Tooltip>
-          </div>
-        </div>
+                </TooltipTrigger>
+                <TooltipPopup side="right">
+                  {shouldShowProjectPathEntry ? "Cancel new project" : "New project"}
+                </TooltipPopup>
+              </Tooltip>
+            </>
+          }
+        >
+          Projects
+        </SidebarSectionLabel>
 
         {shouldShowProjectPathEntry && (
           <SidebarNewProjectFlow
@@ -187,6 +189,6 @@ export function SidebarProjectsSection({
           )}
         />
       </SidebarGroup>
-    </SidebarContent>
+    </>
   );
 }

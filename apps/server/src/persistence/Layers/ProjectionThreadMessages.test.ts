@@ -110,4 +110,49 @@ layer("ProjectionThreadMessageRepository", (it) => {
       assert.deepEqual(rows[0]?.attachments, []);
     }),
   );
+
+  it.effect("preserves existing reply targets when upsert omits reply metadata", () =>
+    Effect.gen(function* () {
+      const repository = yield* ProjectionThreadMessageRepository;
+      const threadId = ThreadId.makeUnsafe("thread-preserve-reply");
+      const messageId = MessageId.makeUnsafe("message-preserve-reply");
+      const createdAt = "2026-02-28T19:20:00.000Z";
+      const replyTo = {
+        messageId: MessageId.makeUnsafe("message-parent"),
+        role: "assistant" as const,
+        createdAt: "2026-02-28T19:19:00.000Z",
+        excerpt: "Earlier answer",
+      };
+
+      yield* repository.upsert({
+        messageId,
+        threadId,
+        turnId: null,
+        role: "user",
+        text: "initial",
+        replyTo,
+        isStreaming: false,
+        createdAt,
+        updatedAt: "2026-02-28T19:20:01.000Z",
+      });
+
+      yield* repository.upsert({
+        messageId,
+        threadId,
+        turnId: null,
+        role: "user",
+        text: "updated",
+        isStreaming: false,
+        createdAt,
+        updatedAt: "2026-02-28T19:20:02.000Z",
+      });
+
+      const rowById = yield* repository.getByMessageId({ messageId });
+      assert.equal(rowById._tag, "Some");
+      if (rowById._tag === "Some") {
+        assert.equal(rowById.value.text, "updated");
+        assert.deepEqual(rowById.value.replyTo, replyTo);
+      }
+    }),
+  );
 });

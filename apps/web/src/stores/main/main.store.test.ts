@@ -218,6 +218,31 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.modelSelection.model).toBe("claude-sonnet-4-6");
   });
 
+  it("preserves cursor as the active session provider", () => {
+    const initialState = makeState(makeThread());
+    const readModel = makeReadModel(
+      makeReadModelThread({
+        modelSelection: {
+          provider: "cursor",
+          model: "kimi-k2.5",
+        },
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "cursor",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:00.000Z",
+        },
+      }),
+    );
+
+    const next = syncServerReadModel(initialState, readModel);
+
+    expect(next.threads[0]?.session?.provider).toBe("cursor");
+  });
+
   it("preserves project and thread updatedAt timestamps from the read model", () => {
     const initialState = makeState(makeThread());
     const readModel = makeReadModel(
@@ -627,6 +652,38 @@ describe("incremental orchestration updates", () => {
 
     expect(next.threads[0]?.messages[0]?.text).toBe("replacement");
     expect(next.threads[0]?.messages[0]?.streaming).toBe(true);
+  });
+
+  it("stores reply metadata from thread.message-sent events", () => {
+    const thread = makeThread();
+    const state = makeState(thread);
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.message-sent", {
+        threadId: thread.id,
+        messageId: MessageId.makeUnsafe("message-reply-1"),
+        role: "user",
+        text: "following up",
+        replyTo: {
+          messageId: MessageId.makeUnsafe("message-parent-1"),
+          role: "assistant",
+          createdAt: "2026-02-27T00:00:00.000Z",
+          excerpt: "Earlier answer",
+        },
+        turnId: null,
+        streaming: false,
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.threads[0]?.messages[0]?.replyTo).toEqual({
+      messageId: MessageId.makeUnsafe("message-parent-1"),
+      role: "assistant",
+      createdAt: "2026-02-27T00:00:00.000Z",
+      excerpt: "Earlier answer",
+    });
   });
 
   it("applies replay batches in sequence and updates session state", () => {

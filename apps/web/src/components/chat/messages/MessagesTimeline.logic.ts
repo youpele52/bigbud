@@ -22,6 +22,13 @@ export type MessagesTimelineRow =
       groupedEntries: WorkLogEntry[];
     }
   | {
+      kind: "thinking";
+      id: string;
+      createdAt: string;
+      entry: WorkLogEntry;
+      streaming: boolean;
+    }
+  | {
       kind: "message";
       id: string;
       createdAt: string;
@@ -74,6 +81,10 @@ export function deriveMessagesTimelineRows(input: {
   activeTurnStartedAt: string | null;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
+  const activeTurnStartedAtMs =
+    typeof input.activeTurnStartedAt === "string"
+      ? Date.parse(input.activeTurnStartedAt)
+      : Number.NaN;
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
@@ -111,6 +122,22 @@ export function deriveMessagesTimelineRows(input: {
         groupedEntries,
       });
       index = cursor - 1;
+      continue;
+    }
+
+    if (timelineEntry.kind === "thinking") {
+      const entryCreatedAtMs = Date.parse(timelineEntry.createdAt);
+      nextRows.push({
+        kind: "thinking",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        entry: timelineEntry.entry,
+        streaming:
+          input.isWorking &&
+          !Number.isNaN(activeTurnStartedAtMs) &&
+          !Number.isNaN(entryCreatedAtMs) &&
+          entryCreatedAtMs >= activeTurnStartedAtMs,
+      });
       continue;
     }
 
@@ -175,6 +202,16 @@ export function estimateMessagesTimelineRowHeight(
   switch (row.kind) {
     case "work":
       return estimateWorkRowHeight(row, input);
+    case "thinking":
+      return (
+        estimateTimelineMessageHeight(
+          {
+            role: "assistant",
+            text: row.entry.detail ?? row.entry.label,
+          },
+          { timelineWidthPx: input.timelineWidthPx },
+        ) + 34
+      );
     case "proposed-plan":
       return estimateTimelineProposedPlanHeight(row.proposedPlan);
     case "user-input-question":

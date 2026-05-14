@@ -1,3 +1,4 @@
+import { MessageId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import { buildBootstrapInput } from "./history";
@@ -97,5 +98,28 @@ describe("buildBootstrapInput", () => {
 
     expect(result.text).toContain("Attached image");
     expect(result.text).toContain("screenshot.png");
+  });
+
+  it("includes reply context as a structured block", () => {
+    const result = buildBootstrapInput(
+      [
+        {
+          role: "user",
+          text: "follow up",
+          replyTo: {
+            messageId: MessageId.makeUnsafe("message-1"),
+            role: "assistant",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            excerpt: "Earlier answer",
+          },
+        },
+      ],
+      "what next?",
+      1_500,
+    );
+
+    expect(result.text).toContain("<reply_to_message");
+    expect(result.text).toContain('role="assistant"');
+    expect(result.text).toContain("Earlier answer");
   });
 });

@@ -6,15 +6,7 @@ import {
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
-import {
-  useCallback,
-  type Dispatch,
-  type KeyboardEvent,
-  type MouseEvent,
-  type MutableRefObject,
-  type PointerEvent,
-  type SetStateAction,
-} from "react";
+import { useCallback, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { isBuiltInChatsProject, type ProjectId, type ThreadId } from "@bigbud/contracts";
 
 import {
@@ -63,7 +55,6 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   newThreadShortcutLabel: string | null | undefined;
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
-  appSettingsConfirmThreadArchive: boolean;
   appSettingsDefaultThreadEnvMode: SidebarNewThreadEnvMode;
   routeThreadId: ThreadId | null;
   selectedThreadIds: ReadonlySet<ThreadId>;
@@ -76,9 +67,8 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   hasRenameCommitted: () => boolean;
   /** Marks the rename as committed to prevent double-commit on blur. */
   markRenameCommitted: () => void;
-  confirmingArchiveThreadId: ThreadId | null;
-  setConfirmingArchiveThreadId: Dispatch<SetStateAction<ThreadId | null>>;
-  confirmArchiveButtonRefs: MutableRefObject<Map<ThreadId, HTMLButtonElement>>;
+  favoriteThreadIds: ReadonlySet<ThreadId>;
+  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   activeThread: {
     projectId: ProjectId;
     branch: string | null;
@@ -129,7 +119,6 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
   forkThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
@@ -163,7 +152,6 @@ export function SidebarRenderedProjectItem({
   newThreadShortcutLabel,
   showThreadJumpHints,
   threadJumpLabelById,
-  appSettingsConfirmThreadArchive,
   appSettingsDefaultThreadEnvMode,
   routeThreadId,
   selectedThreadIds,
@@ -173,9 +161,8 @@ export function SidebarRenderedProjectItem({
   onRenamingInputMount,
   hasRenameCommitted,
   markRenameCommitted,
-  confirmingArchiveThreadId,
-  setConfirmingArchiveThreadId,
-  confirmArchiveButtonRefs,
+  favoriteThreadIds,
+  toggleFavoriteThread,
   activeThread,
   activeDraftThread,
   renamingProjectId,
@@ -199,7 +186,6 @@ export function SidebarRenderedProjectItem({
   clearSelection,
   commitRename,
   cancelRename,
-  attemptArchiveThread,
   forkThread,
   requestThreadDelete,
   openPrLink,
@@ -487,16 +473,12 @@ export function SidebarRenderedProjectItem({
               selectedThreadIds={selectedThreadIds}
               showThreadJumpHints={showThreadJumpHints}
               jumpLabel={threadJumpLabelById.get(threadId) ?? null}
-              appSettingsConfirmThreadArchive={appSettingsConfirmThreadArchive}
               renamingThreadId={renamingThreadId}
               renamingTitle={renamingTitle}
               setRenamingTitle={setRenamingTitle}
               onRenamingInputMount={onRenamingInputMount}
               hasRenameCommitted={hasRenameCommitted}
               markRenameCommitted={markRenameCommitted}
-              confirmingArchiveThreadId={confirmingArchiveThreadId}
-              setConfirmingArchiveThreadId={setConfirmingArchiveThreadId}
-              confirmArchiveButtonRefs={confirmArchiveButtonRefs}
               handleThreadClick={handleThreadClick}
               navigateToThread={navigateToThread}
               handleMultiSelectContextMenu={handleMultiSelectContextMenu}
@@ -504,8 +486,9 @@ export function SidebarRenderedProjectItem({
               clearSelection={clearSelection}
               commitRename={commitRename}
               cancelRename={cancelRename}
-              attemptArchiveThread={attemptArchiveThread}
               forkThread={forkThread}
+              favoriteThreadIds={favoriteThreadIds}
+              toggleFavoriteThread={toggleFavoriteThread}
               requestThreadDelete={requestThreadDelete}
               openPrLink={openPrLink}
               pr={prByThreadId.get(threadId) ?? null}
