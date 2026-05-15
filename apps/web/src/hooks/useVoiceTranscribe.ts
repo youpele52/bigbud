@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // Vite resolves `?worker&url` to the bundled worklet script URL at build time.
 // @ts-ignore – Vite virtual module; no type declaration needed
 import pcm16WorkletUrl from "./pcm16-processor.worklet.ts?worker&url";
+import {
+  buildRealtimeTranscriptionSessionUpdate,
+  getRealtimeTranscriptionErrorMessage,
+  REALTIME_TRANSCRIPTION_WEBSOCKET_URL,
+  VOICE_TRANSCRIBE_SAMPLE_RATE,
+} from "./useVoiceTranscribe.session";
 import { useSttStore } from "../stores/stt/stt.store";
 
 export type VoiceTranscribeStatus = "idle" | "requesting" | "recording" | "stopping" | "error";
@@ -23,9 +29,6 @@ export interface UseVoiceTranscribeResult {
   startRecording: () => Promise<void>;
   stopRecording: () => void;
 }
-
-// PCM16 sample rate sent to OpenAI.
-const SAMPLE_RATE = 24000;
 
 /** Convert a raw PCM16 ArrayBuffer to a base64-encoded string. */
 function pcm16BufferToBase64(buffer: ArrayBuffer): string {
@@ -62,6 +65,7 @@ export function useVoiceTranscribe({
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const accumulatedRef = useRef<string>("");
+  const startRequestIdRef = useRef(0);
 
   const { apiKey, selectedModel } = useSttStore();
 
@@ -101,6 +105,9 @@ export function useVoiceTranscribe({
   }, [stopAudio]);
 
   const startRecording = useCallback(async () => {
+    const requestId = startRequestIdRef.current + 1;
+    startRequestIdRef.current = requestId;
+
     if (!apiKey) {
       setError("No OpenAI API key configured.");
       setStatus("error");
@@ -123,34 +130,31 @@ export function useVoiceTranscribe({
     streamRef.current = stream;
 
     // --- 2. Open WebSocket to OpenAI realtime transcription endpoint ---
-    const ws = new WebSocket(`wss://api.openai.com/v1/realtime?intent=transcription`, [
+    const ws = new WebSocket(REALTIME_TRANSCRIPTION_WEBSOCKET_URL, [
       "realtime",
       `openai-insecure-api-key.${apiKey}`,
-      "openai-beta.realtime-v1",
     ]);
     wsRef.current = ws;
 
     ws.addEventListener("open", async () => {
-      // Configure the transcription session.
-      ws.send(
-        JSON.stringify({
-          type: "transcription_session.update",
-          session: {
-            input_audio_format: "pcm16",
-            input_audio_transcription: {
-              model: selectedModel,
-            },
-            turn_detection: null, // Manual turn — we commit when the user stops.
-          },
-        }),
-      );
+      if (startRequestIdRef.current !== requestId || wsRef.current !== ws) return;
+
+      // Configure the transcription session using the current Realtime session shape.
+      ws.send(JSON.stringify(buildRealtimeTranscriptionSessionUpdate(selectedModel)));
 
       // --- 3. Set up AudioWorklet to capture PCM16 and stream it ---
       try {
-        const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+        const audioCtx = new AudioContext({ sampleRate: VOICE_TRANSCRIBE_SAMPLE_RATE });
         audioCtxRef.current = audioCtx;
 
         await audioCtx.audioWorklet.addModule(pcm16WorkletUrl as string);
+        if (
+          startRequestIdRef.current !== requestId ||
+          wsRef.current !== ws ||
+          audioCtx.state === "closed"
+        ) {
+          return;
+        }
 
         const source = audioCtx.createMediaStreamSource(stream);
         const workletNode = new AudioWorkletNode(audioCtx, "pcm16-processor");
@@ -193,9 +197,11 @@ export function useVoiceTranscribe({
         onFinal(msg.transcript);
         // Now we have the final text — close the WS cleanly.
         ws.close();
-      } else if (msg.type === "error") {
-        const errMsg = (msg as unknown as { error?: { message?: string } }).error?.message;
-        setError(errMsg ?? "Transcription error.");
+      } else if (
+        msg.type === "error" ||
+        msg.type === "conversation.item.input_audio_transcription.failed"
+      ) {
+        setError(getRealtimeTranscriptionErrorMessage(msg) ?? "Transcription error.");
         setStatus("error");
         cleanup();
       }
@@ -209,6 +215,7 @@ export function useVoiceTranscribe({
 
     ws.addEventListener("close", () => {
       // WS closed (either after completed event or externally) — full cleanup.
+      startRequestIdRef.current += 1;
       stopAudio();
       wsRef.current = null;
       setStatus((prev) => (prev === "error" ? "error" : "idle"));

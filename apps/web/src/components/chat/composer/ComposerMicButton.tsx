@@ -3,6 +3,7 @@ import { useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { Ref } from "react";
 import { useVoiceTranscribe } from "../../../hooks/useVoiceTranscribe";
 import { useSttStore } from "../../../stores/stt/stt.store";
+import { toastManager } from "../../ui/toast";
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 
@@ -61,7 +62,7 @@ export function ComposerMicButton({
     [onTranscript],
   );
 
-  const { status, startRecording, stopRecording } = useVoiceTranscribe({
+  const { status, error, startRecording, stopRecording } = useVoiceTranscribe({
     onPartial: handlePartial,
     onFinal: handleFinal,
   });
@@ -77,6 +78,22 @@ export function ComposerMicButton({
   useEffect(() => {
     onRecordingChange?.(isRecording || isStopping);
   }, [isRecording, isStopping, onRecordingChange]);
+
+  const lastErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!error) {
+      lastErrorRef.current = null;
+      return;
+    }
+    if (lastErrorRef.current === error) return;
+    lastErrorRef.current = error;
+    toastManager.add({
+      type: "error",
+      title: "Voice input failed",
+      description: error,
+    });
+  }, [error]);
 
   const handleClick = useCallback(() => {
     if (isRecording || isStopping) {
