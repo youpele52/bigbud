@@ -17,7 +17,11 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 
 Long term maintainability is a core priority. Before adding new functionality, check for shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
-**File length limit:** Non-`.md` source files must not exceed **500 lines**. If a file approaches or exceeds this limit, split it by concern using dot-notation (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, etc.) rather than adding more code inline.
+**File length limit:** Non-test TypeScript source files must not exceed **400 lines**. Treat this as a hard limit for new non-test files. Existing non-test TypeScript files over 400 lines should be split by concern using dot-notation (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, etc.) rather than extended inline, and files over 500 lines are priority cleanup debt that should be reduced to 400 lines or less.
+
+**Test file limit:** TypeScript test files should target **400 lines or less**. During the migration to the stricter limit, test files may remain up to **500 lines**, but new or heavily edited tests should still be kept at or below 400 lines where practical.
+
+**Generated files:** Generated files are exempt from the file length limit, but their generators should still prefer smaller outputs when feasible.
 
 ## Package Roles
 

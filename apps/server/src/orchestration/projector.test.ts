@@ -8,7 +8,8 @@ import {
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { createEmptyReadModel, projectEvent } from "./projector.ts";
+import { projectEvent } from "./projector.ts";
+import { createEmptyReadModel } from "./projectorReadModel.ts";
 
 function makeEvent(input: {
   sequence: number;

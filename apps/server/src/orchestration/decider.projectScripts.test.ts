@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
 import { decideOrchestrationCommand } from "./decider.ts";
-import { createEmptyReadModel, projectEvent } from "./projector.ts";
+import { projectEvent } from "./projector.ts";
+import { createEmptyReadModel } from "./projectorReadModel.ts";
 
 const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
