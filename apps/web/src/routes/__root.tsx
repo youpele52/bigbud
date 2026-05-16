@@ -4,10 +4,12 @@ import {
   createRootRouteWithContext,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME } from "../config/branding";
 import { CommandPalette } from "../components/layout/CommandPalette";
 import { AppSidebarLayout } from "../components/layout/AppSidebarLayout";
+import { StartupSplash } from "../components/layout/StartupSplash";
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
 import {
@@ -18,7 +20,10 @@ import {
 import { readNativeApi } from "../rpc/nativeApi";
 import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
+import { useStore } from "../stores/main";
 import { EventRouter, ServerStateBootstrap } from "./__root.logic";
+
+const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -31,16 +36,33 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootRouteView() {
+  const bootstrapComplete = useStore((store) => store.bootstrapComplete);
+  const [showStartupSplash, setShowStartupSplash] = useState(() => !bootstrapComplete);
+  const [startupSplashVisible, setStartupSplashVisible] = useState(() => !bootstrapComplete);
+
+  useEffect(() => {
+    if (!bootstrapComplete) {
+      setShowStartupSplash(true);
+      setStartupSplashVisible(true);
+      return;
+    }
+
+    setShowStartupSplash(true);
+    const animationFrameId = window.requestAnimationFrame(() => {
+      setStartupSplashVisible(false);
+    });
+    const timeoutId = window.setTimeout(() => {
+      setShowStartupSplash(false);
+    }, STARTUP_SPLASH_EXIT_DURATION_MS);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [bootstrapComplete]);
+
   if (!readNativeApi()) {
-    return (
-      <div className="flex h-screen flex-col bg-background text-foreground">
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-muted-foreground">
-            Connecting to {APP_DISPLAY_NAME} server...
-          </p>
-        </div>
-      </div>
-    );
+    return <StartupSplash />;
   }
 
   return (
@@ -53,11 +75,25 @@ function RootRouteView() {
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
-          <CommandPalette>
-            <AppSidebarLayout>
-              <Outlet />
-            </AppSidebarLayout>
-          </CommandPalette>
+          {bootstrapComplete ? (
+            <div className="relative h-screen overflow-hidden">
+              <CommandPalette>
+                <AppSidebarLayout>
+                  <Outlet />
+                </AppSidebarLayout>
+              </CommandPalette>
+
+              {showStartupSplash ? (
+                <StartupSplash
+                  className={`pointer-events-none absolute inset-0 z-50 transition-opacity duration-[220ms] ease-out ${
+                    startupSplashVisible ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <StartupSplash />
+          )}
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
     </ToastProvider>
