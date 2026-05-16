@@ -56,6 +56,7 @@ import {
   formatUnsupportedProviderExecutionTargetDetail,
   supportsProviderExecutionTarget,
 } from "../providerExecutionTargets.ts";
+import { getProviderCapabilities } from "../providerCapabilities.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 
 export interface ProviderServiceLiveOptions {
@@ -140,13 +141,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           providerRuntimeExecutionTargetId: parsed.providerRuntimeExecutionTargetId,
           workspaceExecutionTargetId: parsed.workspaceExecutionTargetId,
           executionTargetId: parsed.executionTargetId,
-          useLegacyExecutionTargetForProviderRuntime: provider !== "pi",
-          defaultProviderRuntimeExecutionTargetId:
-            provider === "pi"
-              ? LOCAL_EXECUTION_TARGET_ID
-              : (persistedBinding?.providerRuntimeExecutionTargetId ??
-                persistedBinding?.executionTargetId ??
-                workspaceDefaultExecutionTargetId),
+          useLegacyExecutionTargetForProviderRuntime:
+            !getProviderCapabilities(provider).supportsLocalRuntimeRemoteWorkspace,
+          defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(provider)
+            .supportsLocalRuntimeRemoteWorkspace
+            ? LOCAL_EXECUTION_TARGET_ID
+            : (persistedBinding?.providerRuntimeExecutionTargetId ??
+              persistedBinding?.executionTargetId ??
+              workspaceDefaultExecutionTargetId),
           defaultWorkspaceExecutionTargetId: workspaceDefaultExecutionTargetId,
         }),
       };

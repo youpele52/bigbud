@@ -1533,14 +1533,74 @@ validation.layer("ProviderServiceLive validation", (it) => {
     }),
   );
 
+  it.effect("defaults remote Claude sessions to a local provider runtime", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+
+      validation.claude.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
+        Effect.sync(() => {
+          const now = new Date().toISOString();
+          return {
+            provider: "claudeAgent",
+            status: "ready",
+            threadId: input.threadId,
+            providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+            workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+            executionTargetId: input.executionTargetId,
+            runtimeMode: input.runtimeMode,
+            cwd: input.cwd ?? "/root/project",
+            createdAt: now,
+            updatedAt: now,
+          } satisfies ProviderSession;
+        }),
+      );
+
+      const session = yield* provider.startSession(asThreadId("thread-remote-claude"), {
+        provider: "claudeAgent",
+        threadId: asThreadId("thread-remote-claude"),
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/root/project",
+        runtimeMode: "approval-required",
+      });
+
+      assert.equal(session.providerRuntimeExecutionTargetId, "local");
+      assert.equal(
+        session.workspaceExecutionTargetId,
+        "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      );
+      assert.deepStrictEqual(validation.claude.startSession.mock.calls.at(-1)?.[0], {
+        provider: "claudeAgent",
+        threadId: asThreadId("thread-remote-claude"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/root/project",
+        runtimeMode: "approval-required",
+      });
+
+      const runtime = yield* runtimeRepository.getByThreadId({
+        threadId: session.threadId,
+      });
+      assert.equal(Option.isSome(runtime), true);
+      if (Option.isSome(runtime)) {
+        assert.equal(runtime.value.providerRuntimeExecutionTargetId, "local");
+        assert.equal(
+          runtime.value.workspaceExecutionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
+      }
+    }),
+  );
+
   it.effect("rejects unsupported remote providers", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
       const failure = yield* Effect.result(
-        provider.startSession(asThreadId("thread-remote-claude"), {
-          provider: "claudeAgent",
-          threadId: asThreadId("thread-remote-claude"),
+        provider.startSession(asThreadId("thread-remote-copilot"), {
+          provider: "copilot",
+          threadId: asThreadId("thread-remote-copilot"),
           executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
           cwd: "/root/project",
           runtimeMode: "full-access",
@@ -1559,7 +1619,7 @@ validation.layer("ProviderServiceLive validation", (it) => {
 
       assert.equal(
         failure.failure.issue,
-        "Provider sessions is not implemented for provider 'claudeAgent' on execution target 'ssh:host=devbox&user=root&port=22&auth=ssh-key' yet.",
+        "Provider sessions is not implemented for provider 'copilot' on execution target 'ssh:host=devbox&user=root&port=22&auth=ssh-key' yet.",
       );
     }),
   );

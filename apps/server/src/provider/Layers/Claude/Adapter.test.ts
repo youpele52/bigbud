@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -97,6 +97,68 @@ describe("ClaudeAdapterLive", () => {
       const createInput = harness.getLastCreateQueryInput();
       assert.equal(createInput?.options.permissionMode, "bypassPermissions");
       assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("runs remote Claude workspaces through a local MCP bridge", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+        runtimeMode: "approval-required",
+      });
+
+      const createInput = harness.getLastCreateQueryInput();
+      assert.equal(session.cwd, "/srv/project");
+      assert.equal(session.providerRuntimeExecutionTargetId, "local");
+      assert.equal(session.workspaceExecutionTargetId, "ssh:host=devbox&user=root&port=22");
+      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.cwd?.includes("bigbud-claude-remote-workspace-"), true);
+      assert.deepEqual(createInput?.options.tools, [
+        "AskUserQuestion",
+        "TodoWrite",
+        "ExitPlanMode",
+      ]);
+      assert.deepEqual(createInput?.options.allowedTools, [
+        "mcp__bigbud_remote_workspace__read",
+        "mcp__bigbud_remote_workspace__grep",
+        "mcp__bigbud_remote_workspace__glob",
+        "mcp__bigbud_remote_workspace__list",
+      ]);
+      assert.deepEqual(createInput?.options.additionalDirectories, undefined);
+      const remoteWorkspaceServer = createInput?.options.mcpServers?.bigbud_remote_workspace;
+      assert.equal(
+        !!remoteWorkspaceServer &&
+          (!("type" in remoteWorkspaceServer) || remoteWorkspaceServer.type === "stdio"),
+        true,
+      );
+      if (
+        !remoteWorkspaceServer ||
+        ("type" in remoteWorkspaceServer && remoteWorkspaceServer.type !== "stdio")
+      ) {
+        return;
+      }
+      assert.equal(remoteWorkspaceServer.command, process.execPath);
+      assert.deepEqual(remoteWorkspaceServer.args, [
+        path.join(createInput?.options.cwd ?? "", ".bigbud/remote-workspace-mcp-server.mjs"),
+      ]);
+
+      const syntheticCwd = createInput?.options.cwd;
+      assert.equal(typeof syntheticCwd, "string");
+      if (!syntheticCwd) {
+        return;
+      }
+
+      assert.equal(existsSync(syntheticCwd), true);
+      yield* adapter.stopSession(THREAD_ID);
+      assert.equal(existsSync(syntheticCwd), false);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

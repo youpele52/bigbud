@@ -12,7 +12,7 @@ export interface ProviderCapabilities {
 const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
   claudeAgent: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: false,
+    supportsLocalRuntimeRemoteWorkspace: true,
     toolInjectionMode: "mcp",
     needsBuiltinsDisabled: true,
   },

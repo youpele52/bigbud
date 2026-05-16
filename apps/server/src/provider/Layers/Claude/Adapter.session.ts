@@ -13,12 +13,12 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
+  LOCAL_EXECUTION_TARGET_ID,
   type EventId,
   ProviderItemId,
   type ProviderRuntimeEvent,
   type RuntimeMode,
   type ProviderSession,
-  type ProviderSendTurnInput,
   type ProviderSessionStartInput,
   ThreadId,
   ClaudeCodeEffort,
@@ -26,13 +26,12 @@ import {
 import { resolveApiModelId, resolveEffort } from "@bigbud/shared/model";
 import { Cause, Effect, FileSystem, Fiber, Queue, Random, Ref, Stream } from "effect";
 
-import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
+import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { getClaudeModelCapabilities } from "./Provider.ts";
-import {
-  ProviderAdapterProcessError,
-  ProviderAdapterRequestError,
-  ProviderAdapterValidationError,
-} from "../../Errors.ts";
+import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
+import { getProviderCapabilities } from "../../providerCapabilities.ts";
+import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type {
   ClaudeQueryRuntime,
@@ -44,11 +43,9 @@ import type {
 import { PROVIDER } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import { makeApprovalHandlers } from "./Adapter.approval.ts";
+import { createClaudeRemoteWorkspaceBridge } from "./ClaudeRemoteWorkspaceBridge.ts";
 import {
   asCanonicalTurnId,
-  buildClaudeImageContentBlock,
-  buildPromptText,
-  buildUserMessage,
   getEffectiveClaudeCodeEffort,
   readClaudeResumeState,
   sdkNativeItemId,
@@ -56,7 +53,6 @@ import {
   toError,
   toMessage,
   CLAUDE_SETTING_SOURCES,
-  SUPPORTED_CLAUDE_IMAGE_MIME_TYPES,
 } from "./Adapter.utils.ts";
 
 export interface SessionStartDeps {
@@ -80,7 +76,7 @@ export interface SessionStartDeps {
   readonly streamHandlers: StreamHandlers;
 }
 
-function resolveBasePermissionMode(runtimeMode: RuntimeMode | undefined) {
+export function resolveBasePermissionMode(runtimeMode: RuntimeMode | undefined) {
   switch (runtimeMode) {
     case "auto-accept-edits":
       return "acceptEdits" as const;
@@ -131,102 +127,6 @@ export const makeLogNativeSdkMessage = (deps: Pick<SessionStartDeps, "nativeEven
       },
       context.session.threadId,
     );
-  });
-};
-
-/** Build the SDK user message for a turn, including image attachment bytes. */
-export const makeBuildUserMessageEffect = (
-  deps: Pick<SessionStartDeps, "fileSystem" | "serverConfig">,
-) => {
-  const { fileSystem, serverConfig } = deps;
-  return Effect.fn("buildUserMessageEffect")(function* (input: ProviderSendTurnInput) {
-    const text = buildPromptText(input);
-    const sdkContent: Array<Record<string, unknown>> = [];
-
-    if (text.length > 0) {
-      sdkContent.push({ type: "text", text });
-    }
-
-    for (const attachment of input.attachments ?? []) {
-      if (attachment.type === "image") {
-        if (!SUPPORTED_CLAUDE_IMAGE_MIME_TYPES.has(attachment.mimeType)) {
-          return yield* new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "turn/start",
-            detail: `Unsupported Claude image attachment type '${attachment.mimeType}'.`,
-          });
-        }
-
-        const attachmentPath = resolveAttachmentPath({
-          attachmentsDir: serverConfig.attachmentsDir,
-          attachment,
-        });
-        if (!attachmentPath) {
-          return yield* new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "turn/start",
-            detail: `Invalid attachment id '${attachment.id}'.`,
-          });
-        }
-
-        const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
-          Effect.mapError(
-            (cause) =>
-              new ProviderAdapterRequestError({
-                provider: PROVIDER,
-                method: "turn/start",
-                detail: toMessage(cause, "Failed to read attachment file."),
-                cause,
-              }),
-          ),
-        );
-
-        sdkContent.push(
-          buildClaudeImageContentBlock({
-            mimeType: attachment.mimeType,
-            bytes,
-          }),
-        );
-        continue;
-      }
-
-      // Non-image file — pass as a base64 document block
-      const attachmentPath = resolveAttachmentPath({
-        attachmentsDir: serverConfig.attachmentsDir,
-        attachment,
-      });
-      if (!attachmentPath) {
-        return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
-          method: "turn/start",
-          detail: `Invalid file attachment id '${attachment.id}'.`,
-        });
-      }
-
-      const fileBytes = yield* fileSystem.readFile(attachmentPath).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProviderAdapterRequestError({
-              provider: PROVIDER,
-              method: "turn/start",
-              detail: toMessage(cause, "Failed to read file attachment."),
-              cause,
-            }),
-        ),
-      );
-
-      sdkContent.push({
-        type: "document",
-        source: {
-          type: "base64",
-          media_type: attachment.mimeType,
-          data: Buffer.from(fileBytes).toString("base64"),
-        },
-        title: attachment.name,
-      });
-    }
-
-    return buildUserMessage({ sdkContent });
   });
 };
 
@@ -306,6 +206,31 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ),
     );
     const claudeBinaryPath = claudeSettings.binaryPath;
+    const executionContext = resolveProviderExecutionContext({
+      providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+      executionTargetId: input.executionTargetId,
+      cwd: input.cwd,
+      defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(PROVIDER)
+        .supportsLocalRuntimeRemoteWorkspace
+        ? LOCAL_EXECUTION_TARGET_ID
+        : undefined,
+      useLegacyExecutionTargetForProviderRuntime: false,
+    });
+    const remoteWorkspaceBridge =
+      isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+      isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+        ? yield* Effect.tryPromise({
+            try: () => createClaudeRemoteWorkspaceBridge(executionContext.workspaceTarget),
+            catch: (cause) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: toMessage(cause, "Failed to prepare Claude remote workspace bridge."),
+                cause,
+              }),
+          })
+        : undefined;
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const caps = getClaudeModelCapabilities(modelSelection?.model);
@@ -323,9 +248,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
       ...(fastMode ? { fastMode: true } : {}),
     };
+    const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
 
     const queryOptions: ClaudeQueryOptions = {
-      ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(runtimeCwd ? { cwd: runtimeCwd } : {}),
       ...(apiModelId ? { model: apiModelId } : {}),
       pathToClaudeCodeExecutable: claudeBinaryPath,
       settingSources: [...CLAUDE_SETTING_SOURCES],
@@ -334,10 +260,11 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
       ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
       ...(newSessionId ? { sessionId: newSessionId } : {}),
+      ...remoteWorkspaceBridge?.queryOptions,
       includePartialMessages: true,
       canUseTool,
       env: process.env,
-      ...(input.cwd ? { additionalDirectories: [input.cwd] } : {}),
+      ...(runtimeCwd && !remoteWorkspaceBridge ? { additionalDirectories: [runtimeCwd] } : {}),
     };
 
     const queryRuntime = yield* Effect.try({
@@ -353,7 +280,13 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           detail: toMessage(cause, "Failed to start Claude runtime session."),
           cause,
         }),
-    });
+    }).pipe(
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+        }),
+      ),
+    );
 
     const session: ProviderSession = {
       threadId,
@@ -361,6 +294,18 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       status: "ready",
       runtimeMode: input.runtimeMode,
       ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(executionContext.executionTargets.providerRuntimeExecutionTargetId
+        ? {
+            providerRuntimeExecutionTargetId:
+              executionContext.executionTargets.providerRuntimeExecutionTargetId,
+          }
+        : {}),
+      ...(executionContext.executionTargets.workspaceExecutionTargetId
+        ? {
+            workspaceExecutionTargetId:
+              executionContext.executionTargets.workspaceExecutionTargetId,
+          }
+        : {}),
       ...(modelSelection?.model ? { model: modelSelection.model } : {}),
       ...(threadId ? { threadId } : {}),
       resumeCursor: {
@@ -379,6 +324,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       session,
       promptQueue,
       query: queryRuntime,
+      ...(remoteWorkspaceBridge?.cleanup
+        ? { cleanupRemoteWorkspaceBridge: remoteWorkspaceBridge.cleanup }
+        : {}),
       streamFiber: undefined,
       startedAt,
       basePermissionMode: permissionMode,

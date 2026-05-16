@@ -40,7 +40,8 @@ import type {
 } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
-import { makeStartSession, makeBuildUserMessageEffect } from "./Adapter.session.ts";
+import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
+import { makeStartSession } from "./Adapter.session.ts";
 import { toRequestError } from "./Adapter.utils.ts";
 
 export type { ClaudeAdapterLiveOptions };
