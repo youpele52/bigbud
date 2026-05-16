@@ -11,21 +11,8 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import {
-  type ProviderRuntimeEvent,
-  type ProviderSendTurnInput,
-  type ProviderSession,
-  type ProviderTurnStartResult,
-  ThreadId,
-  TurnId,
-} from "@bigbud/contracts";
-import {
-  CopilotClient,
-  type CopilotClientOptions,
-  type MessageOptions,
-  type SessionConfig,
-  type SessionEvent,
-} from "@github/copilot-sdk";
+import { type ProviderSession, type ProviderTurnStartResult, TurnId } from "@bigbud/contracts";
+import { type MessageOptions } from "@github/copilot-sdk";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
@@ -33,219 +20,18 @@ import {
   appendAttachedFileContents,
   extractPromptTextFromFile,
 } from "../../../attachments/documentText.ts";
-import {
-  ProviderAdapterProcessError,
-  ProviderAdapterRequestError,
-  ProviderAdapterSessionNotFoundError,
-  ProviderAdapterValidationError,
-} from "../../Errors.ts";
+import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import { type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
 import {
   PROVIDER,
-  DEFAULT_BINARY_PATH,
   type ActiveCopilotSession,
-  type CopilotAdapterLiveOptions,
-  type PendingApprovalRequest,
-  type PendingUserInputRequest,
   buildThreadSnapshot,
   isSessionNotFoundError,
-  makeNodeWrapperCliPath,
   toMessage,
 } from "./Adapter.types.ts";
-
-/** Deps threaded into session lifecycle operations. */
-export interface SessionOpsDeps {
-  readonly sessions: Map<ThreadId, ActiveCopilotSession>;
-  readonly serverConfig: { readonly attachmentsDir: string };
-  readonly serverSettings: {
-    readonly getSettings: Effect.Effect<
-      {
-        readonly providers: {
-          readonly copilot: { readonly binaryPath: string };
-        };
-      },
-      Error
-    >;
-  };
-  readonly options: CopilotAdapterLiveOptions | undefined;
-  readonly emit: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>;
-  // biome-ignore lint/suspicious/noExplicitAny: wide type used intentionally to avoid generic function assignment errors
-  readonly makeSyntheticEvent: (
-    threadId: ThreadId,
-    type: string,
-    payload: any,
-    extra?: { turnId?: TurnId; itemId?: string; requestId?: string },
-  ) => Effect.Effect<ProviderRuntimeEvent>;
-  readonly buildSessionConfig: (
-    input: {
-      threadId: ThreadId;
-      runtimeMode: ProviderSession["runtimeMode"];
-      cwd?: string;
-      modelSelection?: ProviderSendTurnInput["modelSelection"] | ProviderSession["resumeCursor"];
-    },
-    pendingApprovals: Map<string, PendingApprovalRequest>,
-    pendingUserInputs: Map<string, PendingUserInputRequest>,
-    activeTurnId: () => TurnId | undefined,
-    stoppedRef: { stopped: boolean },
-  ) => SessionConfig;
-  readonly handleEvent: (session: ActiveCopilotSession, event: SessionEvent) => Effect.Effect<void>;
-  readonly requireSession: (
-    threadId: ThreadId,
-  ) => Effect.Effect<ActiveCopilotSession, ProviderAdapterSessionNotFoundError>;
-}
-
-export const makeStartSession =
-  (deps: SessionOpsDeps): CopilotAdapterShape["startSession"] =>
-  (input) =>
-    Effect.gen(function* () {
-      if (input.provider !== undefined && input.provider !== PROVIDER) {
-        return yield* new ProviderAdapterValidationError({
-          provider: PROVIDER,
-          operation: "startSession",
-          issue: `Expected provider '${PROVIDER}' but received '${input.provider}'.`,
-        });
-      }
-
-      const existing = deps.sessions.get(input.threadId);
-      if (existing) {
-        return {
-          provider: PROVIDER,
-          status: existing.activeTurnId ? "running" : "ready",
-          runtimeMode: existing.runtimeMode,
-          threadId: input.threadId,
-          ...(existing.cwd ? { cwd: existing.cwd } : {}),
-          ...(existing.model ? { model: existing.model } : {}),
-          resumeCursor: { sessionId: existing.session.sessionId },
-          createdAt: existing.createdAt,
-          updatedAt: existing.updatedAt,
-          ...(existing.lastError ? { lastError: existing.lastError } : {}),
-        } satisfies ProviderSession;
-      }
-
-      const copilotSettings = yield* deps.serverSettings.getSettings.pipe(
-        Effect.map((settings) => settings.providers.copilot),
-        Effect.orDie,
-      );
-      const useCustomBinary = copilotSettings.binaryPath !== DEFAULT_BINARY_PATH;
-      // When running in Electron, use a shell wrapper as cliPath so the copilot
-      // CLI is spawned via the real `node` binary rather than the Electron binary.
-      // See makeNodeWrapperCliPath() for full explanation.
-      const resolvedCliPath = useCustomBinary
-        ? copilotSettings.binaryPath
-        : makeNodeWrapperCliPath();
-      const clientOptions: CopilotClientOptions = {
-        ...(resolvedCliPath !== undefined ? { cliPath: resolvedCliPath } : {}),
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        logLevel: "error",
-      };
-      const client =
-        deps.options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
-      const pendingApprovals = new Map<string, PendingApprovalRequest>();
-      const pendingUserInputs = new Map<string, PendingUserInputRequest>();
-      let activeTurn: TurnId | undefined;
-      const stoppedRef = { stopped: false };
-      const sessionConfig = deps.buildSessionConfig(
-        {
-          threadId: input.threadId,
-          runtimeMode: input.runtimeMode,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
-        },
-        pendingApprovals,
-        pendingUserInputs,
-        () => activeTurn,
-        stoppedRef,
-      );
-
-      const session = yield* Effect.tryPromise({
-        try: () => {
-          const sessionId =
-            typeof input.resumeCursor === "object" &&
-            input.resumeCursor !== null &&
-            "sessionId" in input.resumeCursor &&
-            typeof input.resumeCursor.sessionId === "string"
-              ? input.resumeCursor.sessionId
-              : undefined;
-          return sessionId
-            ? client.resumeSession(sessionId, sessionConfig)
-            : client.createSession(sessionConfig);
-        },
-        catch: (cause) =>
-          new ProviderAdapterProcessError({
-            provider: PROVIDER,
-            threadId: input.threadId,
-            detail: toMessage(cause, "Failed to start GitHub Copilot session."),
-            cause,
-          }),
-      });
-
-      const createdAt = new Date().toISOString();
-      const record: ActiveCopilotSession = {
-        client,
-        session,
-        threadId: input.threadId,
-        createdAt,
-        runtimeMode: input.runtimeMode,
-        pendingApprovals,
-        pendingUserInputs,
-        turns: [],
-        renewSession: () => client.createSession(sessionConfig),
-        unsubscribe: () => {},
-        cwd: input.cwd,
-        model:
-          input.modelSelection?.provider === "copilot" ? input.modelSelection.model : undefined,
-        updatedAt: createdAt,
-        lastError: undefined,
-        activeTurnId: undefined,
-        activeMessageId: undefined,
-        lastUsage: undefined,
-        get stopped() {
-          return stoppedRef.stopped;
-        },
-        set stopped(value: boolean) {
-          stoppedRef.stopped = value;
-        },
-      };
-
-      record.unsubscribe = session.on((event) => {
-        activeTurn =
-          event.type === "assistant.turn_start" ? TurnId.makeUnsafe(event.data.turnId) : activeTurn;
-        void deps
-          .handleEvent(record, event)
-          .pipe(Effect.runPromise)
-          .catch(() => undefined);
-        activeTurn = record.activeTurnId;
-      });
-
-      deps.sessions.set(input.threadId, record);
-
-      yield* deps.emit([
-        yield* deps.makeSyntheticEvent(
-          input.threadId,
-          "session.started",
-          input.resumeCursor !== undefined ? { resume: input.resumeCursor } : {},
-        ),
-        yield* deps.makeSyntheticEvent(input.threadId, "thread.started", {
-          providerThreadId: session.sessionId,
-        }),
-        yield* deps.makeSyntheticEvent(input.threadId, "session.state.changed", {
-          state: "ready",
-          reason: "session.started",
-        }),
-      ]);
-
-      return {
-        provider: PROVIDER,
-        status: "ready",
-        runtimeMode: input.runtimeMode,
-        threadId: input.threadId,
-        ...(input.cwd ? { cwd: input.cwd } : {}),
-        ...(record.model ? { model: record.model } : {}),
-        resumeCursor: { sessionId: session.sessionId },
-        createdAt,
-        updatedAt: createdAt,
-      } satisfies ProviderSession;
-    });
+export { makeStartSession } from "./Adapter.session.start.ts";
+export type { SessionOpsDeps } from "./Adapter.session.start.ts";
+import { type SessionOpsDeps } from "./Adapter.session.start.ts";
 
 export const makeSendTurn =
   (deps: SessionOpsDeps): CopilotAdapterShape["sendTurn"] =>
@@ -422,6 +208,7 @@ export const stopSessionRecord = (
       record.pendingUserInputs.clear();
       await record.session.disconnect();
       await record.client.stop();
+      await record.cleanupRemoteWorkspaceBridge?.();
     },
     catch: (cause) =>
       new ProviderAdapterRequestError({
@@ -451,6 +238,12 @@ export const makeListSessions =
             status: record.activeTurnId ? ("running" as const) : ("ready" as const),
             runtimeMode: record.runtimeMode,
             threadId: record.threadId,
+            ...(record.providerRuntimeExecutionTargetId
+              ? { providerRuntimeExecutionTargetId: record.providerRuntimeExecutionTargetId }
+              : {}),
+            ...(record.workspaceExecutionTargetId
+              ? { workspaceExecutionTargetId: record.workspaceExecutionTargetId }
+              : {}),
             resumeCursor: { sessionId: record.session.sessionId },
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,

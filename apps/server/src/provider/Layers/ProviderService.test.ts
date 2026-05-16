@@ -1593,7 +1593,67 @@ validation.layer("ProviderServiceLive validation", (it) => {
     }),
   );
 
-  it.effect("rejects unsupported remote providers", () =>
+  it.effect("defaults remote Copilot sessions to a local provider runtime", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+
+      validation.copilot.startSession.mockImplementationOnce((input: ProviderSessionStartInput) =>
+        Effect.sync(() => {
+          const now = new Date().toISOString();
+          return {
+            provider: "copilot",
+            status: "ready",
+            threadId: input.threadId,
+            providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+            workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+            executionTargetId: input.executionTargetId,
+            runtimeMode: input.runtimeMode,
+            cwd: input.cwd ?? "/root/project",
+            createdAt: now,
+            updatedAt: now,
+          } satisfies ProviderSession;
+        }),
+      );
+
+      const session = yield* provider.startSession(asThreadId("thread-remote-copilot"), {
+        provider: "copilot",
+        threadId: asThreadId("thread-remote-copilot"),
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/root/project",
+        runtimeMode: "approval-required",
+      });
+
+      assert.equal(session.providerRuntimeExecutionTargetId, "local");
+      assert.equal(
+        session.workspaceExecutionTargetId,
+        "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      );
+      assert.deepStrictEqual(validation.copilot.startSession.mock.calls.at(-1)?.[0], {
+        provider: "copilot",
+        threadId: asThreadId("thread-remote-copilot"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/root/project",
+        runtimeMode: "approval-required",
+      });
+
+      const runtime = yield* runtimeRepository.getByThreadId({
+        threadId: session.threadId,
+      });
+      assert.equal(Option.isSome(runtime), true);
+      if (Option.isSome(runtime)) {
+        assert.equal(runtime.value.providerRuntimeExecutionTargetId, "local");
+        assert.equal(
+          runtime.value.workspaceExecutionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
+      }
+    }),
+  );
+
+  it.effect("rejects unsupported remote provider runtimes", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
 
@@ -1601,6 +1661,8 @@ validation.layer("ProviderServiceLive validation", (it) => {
         provider.startSession(asThreadId("thread-remote-copilot"), {
           provider: "copilot",
           threadId: asThreadId("thread-remote-copilot"),
+          providerRuntimeExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+          workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
           executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
           cwd: "/root/project",
           runtimeMode: "full-access",

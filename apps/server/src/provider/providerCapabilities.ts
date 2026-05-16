@@ -24,9 +24,9 @@ const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
   },
   copilot: {
     supportsRemoteProviderRuntime: false,
-    supportsLocalRuntimeRemoteWorkspace: false,
+    supportsLocalRuntimeRemoteWorkspace: true,
     toolInjectionMode: "mcp",
-    needsBuiltinsDisabled: false,
+    needsBuiltinsDisabled: true,
   },
   cursor: {
     supportsRemoteProviderRuntime: false,

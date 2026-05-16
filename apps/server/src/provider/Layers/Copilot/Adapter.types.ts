@@ -84,11 +84,14 @@ export interface ActiveCopilotSession {
   readonly threadId: ThreadId;
   readonly createdAt: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
+  readonly providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];
+  readonly workspaceExecutionTargetId: ProviderSession["workspaceExecutionTargetId"];
   readonly pendingApprovals: Map<string, PendingApprovalRequest>;
   readonly pendingUserInputs: Map<string, PendingUserInputRequest>;
   readonly turns: Array<MutableTurnSnapshot>;
   /** Creates a fresh session to replace a stale one (e.g. after server restart). */
   readonly renewSession: () => Promise<CopilotSession>;
+  readonly cleanupRemoteWorkspaceBridge?: () => Promise<void>;
   unsubscribe: () => void;
   cwd: string | undefined;
   model: string | undefined;
