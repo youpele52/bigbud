@@ -1,4 +1,5 @@
 import { ChevronRightIcon, PinIcon } from "lucide-react";
+import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuSub } from "../ui/sidebar";
@@ -26,7 +27,7 @@ export function SidebarFavoritesSection({
 
       {!bootstrapComplete ? (
         <div className="flex justify-center px-2 pt-6">
-          <Spinner className="size-4 text-muted-foreground/40" />
+          <Spinner className={`${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/40`} />
         </div>
       ) : (
         <SidebarMenu>
@@ -42,11 +43,13 @@ export function SidebarFavoritesSection({
                 className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
               >
                 <ChevronRightIcon
-                  className={`-ml-0.5 size-4 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  className={`-ml-0.5 ${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
                     isExpanded ? "rotate-90" : ""
                   }`}
                 />
-                <PinIcon className="size-4 shrink-0 text-muted-foreground/70" />
+                <PinIcon
+                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 rotate-45 text-muted-foreground/70`}
+                />
                 <span className="flex-1 truncate text-xs font-medium text-foreground/90">
                   Pinned
                 </span>

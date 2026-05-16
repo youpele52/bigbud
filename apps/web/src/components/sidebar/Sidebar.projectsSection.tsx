@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarGroup } from "../ui/sidebar";
 import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProjectItem";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem, type RenderedProjectData } from "./SidebarRenderedProjectItem";
@@ -154,7 +155,7 @@ export function SidebarProjectsSection({
                   }
                 >
                   <PlusIcon
-                    className={`size-3.5 transition-transform duration-150 ${
+                    className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} transition-transform duration-150 ${
                       shouldShowProjectPathEntry ? "rotate-45" : "rotate-0"
                     }`}
                   />
@@ -228,7 +229,7 @@ export function SidebarProjectsSection({
                       />
                     }
                   >
-                    <PlusIcon className="size-3.5" />
+                    <PlusIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                   </TooltipTrigger>
                   <TooltipPopup side="right">Add remote project</TooltipPopup>
                 </Tooltip>

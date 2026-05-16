@@ -1,4 +1,5 @@
 import { PinIcon, SplitIcon } from "lucide-react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type MouseEvent } from "react";
 import type { ThreadId } from "@bigbud/contracts";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -46,7 +47,7 @@ export function SidebarThreadRowActions({
               }}
               onClick={handleForkAction}
             >
-              <SplitIcon className="size-3.5" />
+              <SplitIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
             </button>
           }
         />
@@ -70,7 +71,11 @@ export function SidebarThreadRowActions({
               }}
               onClick={handleFavoriteAction}
             >
-              <PinIcon className={`size-3.5 ${isFavorite ? "fill-current" : ""}`} />
+              <PinIcon
+                className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} rotate-45 ${
+                  isFavorite ? "fill-current" : ""
+                }`}
+              />
             </button>
           }
         />

@@ -1,5 +1,6 @@
 import { type RefObject } from "react";
 import { FolderIcon } from "lucide-react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 
 interface SidebarNewProjectFlowProps {
   isElectron: boolean;
@@ -39,7 +40,7 @@ export function SidebarNewProjectFlow({
           onClick={onPickFolder}
           disabled={isPickingFolder || isAddingProject}
         >
-          <FolderIcon className="size-3.5" />
+          <FolderIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
           {isPickingFolder ? "Picking folder..." : "Browse for folder"}
         </button>
       ) : null}

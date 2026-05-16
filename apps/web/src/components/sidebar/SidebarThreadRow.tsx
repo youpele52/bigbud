@@ -10,6 +10,7 @@ import {
 import { useUiStateStore } from "../../stores/ui";
 import { selectThreadTerminalState } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { resolveThreadStatusPill, resolveThreadRowClassName } from "./Sidebar.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -219,7 +220,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             }}
             onClick={handleDeleteAction}
           >
-            <Trash2Icon className="size-3.5" />
+            <Trash2Icon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
           </button>
         </div>
         <SidebarMenuSubButton

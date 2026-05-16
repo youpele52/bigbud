@@ -7,6 +7,7 @@ import {
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { useCallback, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { isBuiltInChatsProject, type ProjectId, type ThreadId } from "@bigbud/contracts";
 
@@ -32,8 +33,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 
 type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusPill>>;
-
-const SIDEBAR_PROJECT_ICON_SIZE = "size-4";
 
 export interface RenderedProjectData {
   hasHiddenThreads: boolean;
@@ -250,7 +249,7 @@ export function SidebarRenderedProjectItem({
               }}
               onClick={handleProjectDeleteAction}
             >
-              <Trash2Icon className="size-3.5" />
+              <Trash2Icon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
             </button>
           </div>
           <SidebarMenuButton
@@ -268,7 +267,7 @@ export function SidebarRenderedProjectItem({
                 ref={dragHandleProps.setActivatorNodeRef}
                 type="button"
                 aria-label={`Reorder project ${project.name}`}
-                className="inline-flex size-4 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
+                className="inline-flex size-3.5 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
                 onPointerDown={(event) => {
                   event.stopPropagation();
                 }}
@@ -285,7 +284,7 @@ export function SidebarRenderedProjectItem({
                 {...dragHandleProps.attributes}
                 {...dragHandleProps.listeners}
               >
-                <GripVerticalIcon className="size-3.5" />
+                <GripVerticalIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
               </button>
             ) : null}
             <button
@@ -342,23 +341,23 @@ export function SidebarRenderedProjectItem({
                     />
                   </span>
                   <ChevronRightIcon
-                    className={`absolute inset-0 m-auto ${SIDEBAR_PROJECT_ICON_SIZE} text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100`}
+                    className={`absolute inset-0 m-auto ${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100`}
                   />
                 </span>
               ) : (
                 <ChevronRightIcon
-                  className={`-ml-0.5 ${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  className={`-ml-0.5 ${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
                     project.expanded ? "rotate-90" : ""
                   }`}
                 />
               )}
               {project.expanded ? (
                 <FolderOpenIcon
-                  className={`${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                 />
               ) : (
                 <FolderIcon
-                  className={`${SIDEBAR_PROJECT_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                 />
               )}
               {renamingProjectId === project.id ? (
@@ -456,7 +455,7 @@ export function SidebarRenderedProjectItem({
                     });
                   }}
                 >
-                  <SquarePenIcon className="size-3.5" />
+                  <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                 </SidebarMenuAction>
               }
             />

@@ -15,6 +15,7 @@ import {
 import { SettingsIcon } from "lucide-react";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarAppHeader } from "./SidebarHeader";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarSearchSection } from "./Sidebar.searchSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
@@ -122,7 +123,7 @@ export default function Sidebar() {
                   className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
                   onClick={() => void navigate({ to: "/settings" })}
                 >
-                  <SettingsIcon className="size-3.5" />
+                  <SettingsIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                   <span className="text-xs">Settings</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

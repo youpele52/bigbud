@@ -1,4 +1,5 @@
 import { ArrowUpDownIcon } from "lucide-react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type ReactNode } from "react";
 import { type ProjectId } from "@bigbud/contracts";
 import {
@@ -67,7 +68,7 @@ export function ProjectSortMenu({
             <MenuTrigger className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground" />
           }
         >
-          <ArrowUpDownIcon className="size-3.5" />
+          <ArrowUpDownIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
         </TooltipTrigger>
         <TooltipPopup side="right">Sort projects</TooltipPopup>
       </Tooltip>

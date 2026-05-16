@@ -5,6 +5,7 @@ import {
   SquarePenIcon,
 } from "lucide-react";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { ChatSortMenu } from "./SidebarChatSortMenu";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
@@ -21,8 +22,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
 
 export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 5;
-
-const SIDEBAR_SECTION_ICON_SIZE = "size-4";
 
 interface SidebarChatsSectionProps {
   renderedChats: SidebarRenderedThreadEntry[];
@@ -79,7 +78,7 @@ export function SidebarChatsSection({
                   />
                 }
               >
-                <SquarePenIcon className="size-3.5" />
+                <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
               </TooltipTrigger>
               <TooltipPopup side="right">
                 {newThreadShortcutLabel ? `New chat (${newThreadShortcutLabel})` : "New chat"}
@@ -94,7 +93,7 @@ export function SidebarChatsSection({
       {/* Loading spinner - shown during bootstrap */}
       {!bootstrapComplete && (
         <div className="flex justify-center px-2 pt-6">
-          <Spinner className="size-4 text-muted-foreground/40" />
+          <Spinner className={`${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/40`} />
         </div>
       )}
 
@@ -113,17 +112,17 @@ export function SidebarChatsSection({
                 className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
               >
                 <ChevronRightIcon
-                  className={`-ml-0.5 ${SIDEBAR_SECTION_ICON_SIZE} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
+                  className={`-ml-0.5 ${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
                     isExpanded ? "rotate-90" : ""
                   }`}
                 />
                 {isExpanded ? (
                   <MessageSquareTextIcon
-                    className={`${SIDEBAR_SECTION_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                    className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                   />
                 ) : (
                   <MessageSquareIcon
-                    className={`${SIDEBAR_SECTION_ICON_SIZE} shrink-0 text-muted-foreground/70`}
+                    className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                   />
                 )}
                 <span className="flex-1 truncate text-xs font-medium text-foreground/90">
