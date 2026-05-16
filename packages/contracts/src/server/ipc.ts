@@ -30,6 +30,8 @@ import type {
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyInput,
   ServerUnlockSshKeyResult,
+  ServerUnlockSshPasswordInput,
+  ServerUnlockSshPasswordResult,
   ServerUpsertKeybindingResult,
   ServerVerifyExecutionTargetInput,
   ServerVerifyExecutionTargetResult,
@@ -203,6 +205,9 @@ export interface NativeApi {
       input: ServerVerifyExecutionTargetInput,
     ) => Promise<ServerVerifyExecutionTargetResult>;
     unlockSshKey: (input: ServerUnlockSshKeyInput) => Promise<ServerUnlockSshKeyResult>;
+    unlockSshPassword: (
+      input: ServerUnlockSshPasswordInput,
+    ) => Promise<ServerUnlockSshPasswordResult>;
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;

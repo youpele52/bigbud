@@ -37,7 +37,7 @@ describe("buildRemoteCodexSshInvocation", () => {
     ]);
   });
 
-  it("rejects password ssh auth", () => {
+  it("requires an authenticated ssh password session before remote startup", () => {
     expect(() =>
       buildRemoteCodexSshInvocation(
         {
@@ -50,6 +50,8 @@ describe("buildRemoteCodexSshInvocation", () => {
         },
         ["app-server"],
       ),
-    ).toThrow("Password SSH authentication is not supported for remote execution yet.");
+    ).toThrow(
+      "SSH password is required for root@46.225.127.53. Re-enter it before using this target.",
+    );
   });
 });

@@ -74,6 +74,9 @@ import {
   ServerUnlockSshKeyError,
   ServerUnlockSshKeyInput,
   ServerUnlockSshKeyResult,
+  ServerUnlockSshPasswordError,
+  ServerUnlockSshPasswordInput,
+  ServerUnlockSshPasswordResult,
   ServerUpsertKeybindingInput,
   ServerUpsertKeybindingResult,
   ServerVerifyExecutionTargetError,
@@ -112,6 +115,12 @@ export const WsServerUnlockSshKeyRpc = Rpc.make(WS_METHODS.serverUnlockSshKey, {
   payload: ServerUnlockSshKeyInput,
   success: ServerUnlockSshKeyResult,
   error: ServerUnlockSshKeyError,
+});
+
+export const WsServerUnlockSshPasswordRpc = Rpc.make(WS_METHODS.serverUnlockSshPassword, {
+  payload: ServerUnlockSshPasswordInput,
+  success: ServerUnlockSshPasswordResult,
+  error: ServerUnlockSshPasswordError,
 });
 
 export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
@@ -325,6 +334,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRefreshProvidersRpc,
   WsServerVerifyExecutionTargetRpc,
   WsServerUnlockSshKeyRpc,
+  WsServerUnlockSshPasswordRpc,
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,

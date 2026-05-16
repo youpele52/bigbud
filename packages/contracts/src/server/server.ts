@@ -216,6 +216,25 @@ export class ServerUnlockSshKeyError extends Schema.TaggedErrorClass<ServerUnloc
   },
 ) {}
 
+export const ServerUnlockSshPasswordInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  password: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshPasswordInput = typeof ServerUnlockSshPasswordInput.Type;
+
+export const ServerUnlockSshPasswordResult = Schema.Struct({
+  message: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshPasswordResult = typeof ServerUnlockSshPasswordResult.Type;
+
+export class ServerUnlockSshPasswordError extends Schema.TaggedErrorClass<ServerUnlockSshPasswordError>()(
+  "ServerUnlockSshPasswordError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ServerConfigUpdatedPayload = Schema.Struct({
   issues: ServerConfigIssues,
   providers: ServerProviders,

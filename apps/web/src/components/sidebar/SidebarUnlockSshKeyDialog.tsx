@@ -16,11 +16,15 @@ interface SidebarUnlockSshKeyDialogProps {
   open: boolean;
   keyPath: string;
   description: ReactNode;
-  passphrase: string;
+  title?: string;
+  fieldLabel?: string;
+  placeholder?: string;
+  submitLabel?: string;
+  secret: string;
   error: string | null;
   isSubmitting: boolean;
   onOpenChange: (open: boolean) => void;
-  onPassphraseChange: (value: string) => void;
+  onSecretChange: (value: string) => void;
   onSubmit: () => void;
 }
 
@@ -31,33 +35,37 @@ export function SidebarUnlockSshKeyDialog({
   open,
   keyPath: _keyPath,
   description,
-  passphrase,
+  title = "Unlock SSH key",
+  fieldLabel = "Key passphrase",
+  placeholder = "Enter the SSH key passphrase",
+  submitLabel = "Unlock SSH key",
+  secret,
   error,
   isSubmitting,
   onOpenChange,
-  onPassphraseChange,
+  onSecretChange,
   onSubmit,
 }: SidebarUnlockSshKeyDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Unlock SSH key</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <DialogPanel className="space-y-4">
           <label htmlFor="remote-project-key-passphrase" className="block">
-            <span className="text-xs font-medium text-foreground">Key passphrase</span>
+            <span className="text-xs font-medium text-foreground">{fieldLabel}</span>
             <Input
               id="remote-project-key-passphrase"
               autoFocus
               type="password"
               className={passphraseInputClassName}
-              placeholder="Enter the SSH key passphrase"
+              placeholder={placeholder}
               spellCheck={false}
-              value={passphrase}
-              onChange={(event) => onPassphraseChange(event.target.value)}
+              value={secret}
+              onChange={(event) => onSecretChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !isSubmitting) {
                   event.preventDefault();
@@ -80,10 +88,10 @@ export function SidebarUnlockSshKeyDialog({
           </Button>
           <Button
             size="sm"
-            disabled={isSubmitting || passphrase.trim().length === 0}
+            disabled={isSubmitting || secret.trim().length === 0}
             onClick={onSubmit}
           >
-            {isSubmitting ? "Unlocking..." : "Unlock SSH key"}
+            {isSubmitting ? "Submitting..." : submitLabel}
           </Button>
         </DialogFooter>
       </DialogPopup>

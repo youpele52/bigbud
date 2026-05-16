@@ -3,6 +3,7 @@ import {
   formatSshDestination,
   parseSshExecutionTarget,
 } from "./sshExecutionTarget.ts";
+import { buildSshPasswordSessionTransportArgs } from "./sshSession.ts";
 
 export interface SshCommandInvocation {
   readonly command: string;
@@ -36,7 +37,10 @@ export function buildSshTransportArgs(input: {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId ?? "local"}'.`);
   }
   if (target.authMode === "password") {
-    throw new Error("Password SSH authentication is not supported for remote execution yet.");
+    return buildSshPasswordSessionTransportArgs({
+      executionTargetId: target.executionTargetId,
+      ...(input.allocateTty !== undefined ? { allocateTty: input.allocateTty } : {}),
+    });
   }
 
   return [
@@ -53,9 +57,6 @@ export function buildSshCommandInvocation(input: BuildSshCommandInput): SshComma
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId ?? "local"}'.`);
-  }
-  if (target.authMode === "password") {
-    throw new Error("Password SSH authentication is not supported for remote execution yet.");
   }
 
   const envAssignments = Object.entries(input.env ?? {})

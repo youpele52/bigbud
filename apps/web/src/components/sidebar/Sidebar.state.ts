@@ -11,6 +11,7 @@ import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { isElectron } from "../../config/env";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { useSidebarGitStatus } from "../../hooks/useSidebarGitStatus";
 import { resolveNewChatOptions, useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
@@ -33,6 +34,7 @@ import { toastManager } from "../ui/toast";
 import { useSidebarProjectAddActions } from "./Sidebar.projectAddActions";
 import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteThreadActivation } from "./Sidebar.remoteThreadActivation";
+import { buildSidebarProjectSnapshots } from "./Sidebar.state.projectSnapshots";
 import { buildSharedProjectItemProps } from "./Sidebar.state.sharedProjectItemProps";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
@@ -54,6 +56,9 @@ export function useSidebarState(): SidebarState {
         setFavouritesExpanded: store.setFavouritesExpanded,
       })),
     );
+  const verifiedExecutionTargetIds = useRemoteAccessStore(
+    (store) => store.verifiedExecutionTargetIds,
+  );
 
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
@@ -111,11 +116,12 @@ export function useSidebarState(): SidebarState {
 
   const sidebarProjects = useMemo<SidebarProjectSnapshot[]>(
     () =>
-      orderedProjects.map((project) => ({
-        ...project,
-        expanded: projectExpandedById[project.id] ?? true,
-      })),
-    [orderedProjects, projectExpandedById],
+      buildSidebarProjectSnapshots({
+        orderedProjects,
+        projectExpandedById,
+        verifiedExecutionTargetIds,
+      }),
+    [orderedProjects, projectExpandedById, verifiedExecutionTargetIds],
   );
 
   const sidebarThreads = useMemo(() => Object.values(sidebarThreadsById), [sidebarThreadsById]);
@@ -429,6 +435,7 @@ export function useSidebarState(): SidebarState {
     updateRemoteProjectDraft: projectAddActions.updateRemoteProjectDraft,
     submitRemoteProjectDialog: projectAddActions.submitRemoteProjectDialog,
     isRemoteProjectUnlockDialogOpen: projectAddActions.isRemoteProjectUnlockDialogOpen,
+    remoteProjectUnlockMode: projectAddActions.remoteProjectUnlockMode,
     remoteProjectUnlockKeyPath: projectAddActions.remoteProjectUnlockKeyPath,
     remoteProjectUnlockPassphrase: projectAddActions.remoteProjectUnlockPassphrase,
     remoteProjectUnlockError: projectAddActions.remoteProjectUnlockError,
@@ -436,14 +443,6 @@ export function useSidebarState(): SidebarState {
     closeRemoteProjectUnlockDialog: projectAddActions.closeRemoteProjectUnlockDialog,
     setRemoteProjectUnlockPassphrase: projectAddActions.setRemoteProjectUnlockPassphrase,
     submitRemoteProjectUnlock: projectAddActions.submitRemoteProjectUnlock,
-    isRemoteThreadUnlockDialogOpen: remoteThreadActivation.isRemoteThreadUnlockDialogOpen,
-    remoteThreadUnlockKeyPath: remoteThreadActivation.remoteThreadUnlockKeyPath,
-    remoteThreadUnlockPassphrase: remoteThreadActivation.remoteThreadUnlockPassphrase,
-    remoteThreadUnlockError: remoteThreadActivation.remoteThreadUnlockError,
-    isUnlockingRemoteThreadKey: remoteThreadActivation.isUnlockingRemoteThreadKey,
-    closeRemoteThreadUnlockDialog: remoteThreadActivation.closeRemoteThreadUnlockDialog,
-    setRemoteThreadUnlockPassphrase: remoteThreadActivation.setRemoteThreadUnlockPassphrase,
-    submitRemoteThreadUnlock: remoteThreadActivation.submitRemoteThreadUnlock,
     renamingProjectId: projectActions.renamingProjectId,
     renamingProjectTitle: projectActions.renamingProjectTitle,
     setRenamingProjectTitle: projectActions.setRenamingProjectTitle,

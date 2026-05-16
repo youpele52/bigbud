@@ -22,11 +22,13 @@ import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { useSidebarState } from "./Sidebar.state";
+import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const s = useSidebarState();
+  const remoteExecutionAccess = useRemoteExecutionAccessGate();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -203,13 +205,32 @@ export default function Sidebar() {
           <SidebarUnlockSshKeyDialog
             open={s.isRemoteProjectUnlockDialogOpen}
             keyPath={s.remoteProjectUnlockKeyPath}
-            description={
-              <>
-                BigBud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
-                it can verify and add this remote project.
-              </>
+            title={
+              s.remoteProjectUnlockMode === "password" ? "Enter SSH password" : "Unlock SSH key"
             }
-            passphrase={s.remoteProjectUnlockPassphrase}
+            fieldLabel={
+              s.remoteProjectUnlockMode === "password" ? "SSH password" : "Key passphrase"
+            }
+            placeholder={
+              s.remoteProjectUnlockMode === "password"
+                ? "Enter the SSH password"
+                : "Enter the SSH key passphrase"
+            }
+            submitLabel={s.remoteProjectUnlockMode === "password" ? "Continue" : "Unlock SSH key"}
+            description={
+              s.remoteProjectUnlockMode === "password" ? (
+                <>
+                  BigBud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
+                  before it can verify and add this remote project.
+                </>
+              ) : (
+                <>
+                  BigBud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
+                  it can verify and add this remote project.
+                </>
+              )
+            }
+            secret={s.remoteProjectUnlockPassphrase}
             error={s.remoteProjectUnlockError}
             isSubmitting={s.isUnlockingRemoteProjectKey}
             onOpenChange={(open) => {
@@ -217,32 +238,61 @@ export default function Sidebar() {
                 s.closeRemoteProjectUnlockDialog();
               }
             }}
-            onPassphraseChange={s.setRemoteProjectUnlockPassphrase}
+            onSecretChange={s.setRemoteProjectUnlockPassphrase}
             onSubmit={() => {
               void s.submitRemoteProjectUnlock();
             }}
           />
 
           <SidebarUnlockSshKeyDialog
-            open={s.isRemoteThreadUnlockDialogOpen}
-            keyPath={s.remoteThreadUnlockKeyPath}
-            description={
-              <>
-                BigBud needs the passphrase for <code>{s.remoteThreadUnlockKeyPath}</code> before it
-                can reconnect to this remote project.
-              </>
+            open={remoteExecutionAccess.isRemoteExecutionAuthDialogOpen}
+            keyPath={remoteExecutionAccess.remoteExecutionAuthPromptLabel}
+            title={
+              remoteExecutionAccess.remoteExecutionAuthMode === "password"
+                ? "Enter SSH password"
+                : "Unlock SSH key"
             }
-            passphrase={s.remoteThreadUnlockPassphrase}
-            error={s.remoteThreadUnlockError}
-            isSubmitting={s.isUnlockingRemoteThreadKey}
+            fieldLabel={
+              remoteExecutionAccess.remoteExecutionAuthMode === "password"
+                ? "SSH password"
+                : "Key passphrase"
+            }
+            placeholder={
+              remoteExecutionAccess.remoteExecutionAuthMode === "password"
+                ? "Enter the SSH password"
+                : "Enter the SSH key passphrase"
+            }
+            submitLabel={
+              remoteExecutionAccess.remoteExecutionAuthMode === "password"
+                ? "Continue"
+                : "Unlock SSH key"
+            }
+            description={
+              remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
+                <>
+                  BigBud needs the SSH password for{" "}
+                  <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
+                  access this remote project.
+                </>
+              ) : (
+                <>
+                  BigBud needs the passphrase for{" "}
+                  <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
+                  access this remote project.
+                </>
+              )
+            }
+            secret={remoteExecutionAccess.remoteExecutionAuthSecret}
+            error={remoteExecutionAccess.remoteExecutionAuthError}
+            isSubmitting={remoteExecutionAccess.isAuthenticatingRemoteExecution}
             onOpenChange={(open) => {
               if (!open) {
-                s.closeRemoteThreadUnlockDialog();
+                remoteExecutionAccess.closeRemoteExecutionAuthDialog();
               }
             }}
-            onPassphraseChange={s.setRemoteThreadUnlockPassphrase}
+            onSecretChange={remoteExecutionAccess.setRemoteExecutionAuthSecret}
             onSubmit={() => {
-              void s.submitRemoteThreadUnlock();
+              void remoteExecutionAccess.submitRemoteExecutionAuth();
             }}
           />
         </>

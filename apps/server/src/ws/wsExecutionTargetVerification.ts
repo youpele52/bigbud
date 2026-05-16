@@ -2,13 +2,20 @@ import {
   ServerUnlockSshKeyError,
   type ServerUnlockSshKeyInput,
   type ServerUnlockSshKeyResult,
+  ServerUnlockSshPasswordError,
+  type ServerUnlockSshPasswordInput,
+  type ServerUnlockSshPasswordResult,
   ServerVerifyExecutionTargetError,
   type ServerVerifyExecutionTargetInput,
   type ServerVerifyExecutionTargetResult,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
-import { unlockSshExecutionTargetKey, verifySshExecutionTarget } from "../ssh/sshVerification.ts";
+import {
+  unlockSshExecutionTargetCredential,
+  unlockSshExecutionTargetKey,
+  verifySshExecutionTarget,
+} from "../ssh/sshVerification.ts";
 
 export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffect")(function* (
   input: ServerVerifyExecutionTargetInput,
@@ -39,6 +46,23 @@ export const unlockSshKeyEffect = Effect.fn("unlockSshKeyEffect")(function* (
     catch: (cause) =>
       new ServerUnlockSshKeyError({
         message: cause instanceof Error ? cause.message : "Failed to unlock SSH key.",
+        cause,
+      }),
+  });
+});
+
+export const unlockSshPasswordEffect = Effect.fn("unlockSshPasswordEffect")(function* (
+  input: ServerUnlockSshPasswordInput,
+): Effect.fn.Return<ServerUnlockSshPasswordResult, ServerUnlockSshPasswordError> {
+  return yield* Effect.tryPromise({
+    try: () =>
+      unlockSshExecutionTargetCredential({
+        executionTargetId: input.executionTargetId,
+        secret: input.password,
+      }),
+    catch: (cause) =>
+      new ServerUnlockSshPasswordError({
+        message: cause instanceof Error ? cause.message : "Failed to unlock SSH password.",
         cause,
       }),
   });

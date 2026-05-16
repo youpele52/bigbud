@@ -16,6 +16,10 @@ export interface CreateProjectInput {
   readonly workspaceExecutionTargetId: string;
 }
 
+export type CreateProjectResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly error: string };
+
 export type RemoteProjectFieldErrors = Partial<Record<RemoteProjectField, string>>;
 
 export function createRemoteProjectFieldErrors(

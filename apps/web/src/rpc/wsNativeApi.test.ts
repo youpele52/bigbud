@@ -70,6 +70,7 @@ const rpcClientMock = {
     refreshProviders: vi.fn(),
     verifyExecutionTarget: vi.fn(),
     unlockSshKey: vi.fn(),
+    unlockSshPassword: vi.fn(),
     upsertKeybinding: vi.fn(),
     getSettings: vi.fn(),
     updateSettings: vi.fn(),

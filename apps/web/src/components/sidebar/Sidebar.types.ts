@@ -174,6 +174,7 @@ export interface SidebarState {
   ) => void;
   submitRemoteProjectDialog: () => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;
+  remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
   remoteProjectUnlockKeyPath: string;
   remoteProjectUnlockPassphrase: string;
   remoteProjectUnlockError: string | null;
@@ -181,14 +182,6 @@ export interface SidebarState {
   closeRemoteProjectUnlockDialog: () => void;
   setRemoteProjectUnlockPassphrase: (passphrase: string) => void;
   submitRemoteProjectUnlock: () => Promise<void>;
-  isRemoteThreadUnlockDialogOpen: boolean;
-  remoteThreadUnlockKeyPath: string;
-  remoteThreadUnlockPassphrase: string;
-  remoteThreadUnlockError: string | null;
-  isUnlockingRemoteThreadKey: boolean;
-  closeRemoteThreadUnlockDialog: () => void;
-  setRemoteThreadUnlockPassphrase: (passphrase: string) => void;
-  submitRemoteThreadUnlock: () => Promise<void>;
   // Project rename
   renamingProjectId: ProjectId | null;
   renamingProjectTitle: string;

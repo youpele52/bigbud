@@ -204,10 +204,9 @@ export function SidebarRemoteProjectDialog({
               />
               <AuthModeButton
                 active={draft.authMode === "password"}
-                disabled
-                description="Password auth is not implemented for remote execution yet."
+                description="Prompt for the SSH password when the remote target needs reconnecting."
                 label="Password"
-                onClick={() => undefined}
+                onClick={() => onFieldChange("authMode", "password")}
               />
             </div>
           </div>

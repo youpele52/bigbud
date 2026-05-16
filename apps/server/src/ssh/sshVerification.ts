@@ -9,6 +9,11 @@ import {
   formatSshDestination,
   parseSshExecutionTarget,
 } from "./sshExecutionTarget.ts";
+import {
+  assertSshPasswordExecutionTargetReady,
+  formatSshPasswordRequiredMessage,
+  unlockSshExecutionTargetPassword,
+} from "./sshSession.ts";
 import { runProcess } from "../utils/processRunner.ts";
 
 const SSH_VERIFY_TIMEOUT_MS = 8_000;
@@ -108,7 +113,8 @@ export function assertSshExecutionTargetReady(executionTargetId: string | null |
   }
 
   if (target.authMode === "password") {
-    throw new Error("Password SSH authentication is not supported for remote execution yet.");
+    assertSshPasswordExecutionTargetReady(target.executionTargetId);
+    return;
   }
 
   if (!target.keyPath) {
@@ -256,3 +262,27 @@ export async function verifySshExecutionTarget(input: {
     ...(verifiedCwd ? { cwd: verifiedCwd } : {}),
   };
 }
+
+export async function unlockSshExecutionTargetCredential(input: {
+  readonly executionTargetId: string;
+  readonly secret: string;
+}): Promise<{ readonly message: string }> {
+  const target = parseSshExecutionTarget(input.executionTargetId);
+  if (!target) {
+    throw new Error(`Invalid SSH execution target '${input.executionTargetId}'.`);
+  }
+
+  if (target.authMode === "password") {
+    return unlockSshExecutionTargetPassword({
+      executionTargetId: target.executionTargetId,
+      password: input.secret,
+    });
+  }
+
+  return unlockSshExecutionTargetKey({
+    executionTargetId: target.executionTargetId,
+    passphrase: input.secret,
+  });
+}
+
+export { formatSshPasswordRequiredMessage };

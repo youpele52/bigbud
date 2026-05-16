@@ -61,6 +61,7 @@ import { makeDispatchShellCommand } from "./wsShellDispatch";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import {
   unlockSshKeyEffect,
+  unlockSshPasswordEffect,
   verifyExecutionTargetEffect,
 } from "./wsExecutionTargetVerification.ts";
 
@@ -355,6 +356,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         ),
       [WS_METHODS.serverUnlockSshKey]: (input) =>
         observeRpcEffect(WS_METHODS.serverUnlockSshKey, unlockSshKeyEffect(input), {
+          "rpc.aggregate": "server",
+        }),
+      [WS_METHODS.serverUnlockSshPassword]: (input) =>
+        observeRpcEffect(WS_METHODS.serverUnlockSshPassword, unlockSshPasswordEffect(input), {
           "rpc.aggregate": "server",
         }),
       [WS_METHODS.serverUpsertKeybinding]: (rule) =>
