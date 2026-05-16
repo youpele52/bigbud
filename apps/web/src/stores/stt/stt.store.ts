@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type SttModel = "gpt-4o-mini-transcribe" | "gpt-4o-transcribe";
+export type SttModel = "gpt-realtime-whisper";
 
 export interface SttState {
   apiKey: string;
@@ -12,16 +12,16 @@ export interface SttState {
   setSelectedModel: (model: SttModel) => void;
 }
 
-const STORAGE_KEY = "bigbud:stt:v1";
+const STORAGE_KEY = "bigbud:stt:v2";
 
 function readPersistedSttState(): Pick<SttState, "apiKey" | "keyVerified" | "selectedModel"> {
   if (typeof window === "undefined") {
-    return { apiKey: "", keyVerified: null, selectedModel: "gpt-4o-mini-transcribe" };
+    return { apiKey: "", keyVerified: null, selectedModel: "gpt-realtime-whisper" };
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { apiKey: "", keyVerified: null, selectedModel: "gpt-4o-mini-transcribe" };
+      return { apiKey: "", keyVerified: null, selectedModel: "gpt-realtime-whisper" };
     }
     const parsed = JSON.parse(raw) as Partial<
       Pick<SttState, "apiKey" | "keyVerified" | "selectedModel">
@@ -31,15 +31,15 @@ function readPersistedSttState(): Pick<SttState, "apiKey" | "keyVerified" | "sel
       keyVerified: typeof parsed.keyVerified === "boolean" ? parsed.keyVerified : null,
       selectedModel: isValidSttModel(parsed.selectedModel)
         ? parsed.selectedModel
-        : "gpt-4o-mini-transcribe",
+        : "gpt-realtime-whisper",
     };
   } catch {
-    return { apiKey: "", keyVerified: null, selectedModel: "gpt-4o-mini-transcribe" };
+    return { apiKey: "", keyVerified: null, selectedModel: "gpt-realtime-whisper" };
   }
 }
 
 function isValidSttModel(value: unknown): value is SttModel {
-  return value === "gpt-4o-mini-transcribe" || value === "gpt-4o-transcribe";
+  return value === "gpt-realtime-whisper";
 }
 
 function persistSttState(state: Pick<SttState, "apiKey" | "keyVerified" | "selectedModel">): void {
