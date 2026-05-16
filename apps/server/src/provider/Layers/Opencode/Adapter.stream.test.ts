@@ -20,6 +20,8 @@ function makeSession(
     threadId: THREAD_ID,
     createdAt: CREATED_AT,
     runtimeMode,
+    providerRuntimeExecutionTargetId: "local",
+    workspaceExecutionTargetId: "local",
     executionTargetId: "local",
     pendingPermissions: new Map(),
     pendingUserInputs: new Map(),

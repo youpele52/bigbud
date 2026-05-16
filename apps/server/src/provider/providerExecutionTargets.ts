@@ -1,6 +1,7 @@
 import { type ProviderKind, resolveExecutionTargetId } from "@bigbud/contracts";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import { getProviderCapabilities } from "./providerCapabilities.ts";
 
 export function supportsProviderExecutionTarget(input: {
   readonly provider: ProviderKind;
@@ -11,7 +12,7 @@ export function supportsProviderExecutionTarget(input: {
     return true;
   }
 
-  return input.provider === "codex" || input.provider === "opencode" || input.provider === "pi";
+  return getProviderCapabilities(input.provider).supportsRemoteProviderRuntime;
 }
 
 export function formatUnsupportedProviderExecutionTargetDetail(input: {

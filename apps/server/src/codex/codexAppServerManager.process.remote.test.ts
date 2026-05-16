@@ -26,20 +26,14 @@ describe("buildRemoteCodexSshInvocation", () => {
       "-T",
       "-o",
       "BatchMode=yes",
+      "-o",
+      "IdentitiesOnly=yes",
       "-p",
       "22",
       "-i",
       expect.stringContaining(".ssh/open_stack"),
       "root@46.225.127.53",
-      "sh",
-      "-lc",
-      'if [ -n "$1" ]; then cd "$1" || exit 1; fi; shift; while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do export "$1"; shift; done; shift; exec "$@"',
-      "sh",
-      "/root/project",
-      "CODEX_HOME=/root/.codex",
-      "--",
-      "codex",
-      "app-server",
+      expect.stringContaining("'codex' 'app-server'"),
     ]);
   });
 

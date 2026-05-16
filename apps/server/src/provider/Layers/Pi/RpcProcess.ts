@@ -7,7 +7,7 @@ import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 import { buildPiRpcInvocation } from "./Cli.ts";
 import {
   createPiRemoteWorkspaceBridge,
-  type PiRemoteWorkspaceBridge,
+  type PiRemoteWorkspaceExtensionBridge,
 } from "./PiRemoteWorkspaceBridge.ts";
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReady } from "../../../ssh/sshVerification.ts";
@@ -67,7 +67,7 @@ function resolvePiRpcProcessInvocation(options: PiRpcProcessOptions): {
 
 async function preparePiRpcProcessBridge(
   options: PiRpcProcessOptions,
-): Promise<PiRemoteWorkspaceBridge | undefined> {
+): Promise<PiRemoteWorkspaceExtensionBridge | undefined> {
   if (
     !isLocalProviderRuntimeTarget(options.providerRuntimeTarget) ||
     !isRemoteWorkspaceTarget(options.workspaceTarget)

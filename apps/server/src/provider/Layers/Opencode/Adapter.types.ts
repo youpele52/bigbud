@@ -45,10 +45,14 @@ export interface ActiveOpencodeSession {
   readonly client: OpencodeClient;
   /** Releases the shared server handle acquired from OpencodeServerManager. */
   readonly releaseServer: () => void;
+  /** Cleans up a synthetic remote-workspace bridge when one was created. */
+  readonly cleanupBridge?: (() => Promise<void>) | undefined;
   readonly opencodeSessionId: string;
   readonly threadId: ThreadId;
   readonly createdAt: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
+  readonly providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];
+  readonly workspaceExecutionTargetId: ProviderSession["workspaceExecutionTargetId"];
   readonly executionTargetId: ProviderSession["executionTargetId"];
   readonly pendingPermissions: Map<string, PendingPermissionRequest>;
   readonly pendingUserInputs: Map<string, PendingUserInputRequest>;

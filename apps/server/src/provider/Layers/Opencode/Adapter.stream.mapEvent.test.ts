@@ -18,6 +18,8 @@ function makeSession(): ActiveOpencodeSession {
     threadId: THREAD_ID,
     createdAt: CREATED_AT,
     runtimeMode: "full-access",
+    providerRuntimeExecutionTargetId: "local",
+    workspaceExecutionTargetId: "local",
     executionTargetId: "local",
     pendingPermissions: new Map(),
     pendingUserInputs: new Map(),

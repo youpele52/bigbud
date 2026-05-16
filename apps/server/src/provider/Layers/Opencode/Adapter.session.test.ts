@@ -1,4 +1,11 @@
-import { EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import fs from "node:fs/promises";
+
+import {
+  EventId,
+  LOCAL_EXECUTION_TARGET_ID,
+  ThreadId,
+  type ProviderRuntimeEvent,
+} from "@bigbud/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import type { PermissionRuleset } from "@opencode-ai/sdk/v2";
 import { Effect, Queue } from "effect";
@@ -113,7 +120,7 @@ describe("Opencode session lifecycle", () => {
     );
   }
 
-  it.effect("forwards remote execution targets to the OpenCode server manager", () =>
+  it.effect("runs OpenCode locally against a synthetic workspace for remote projects", () =>
     Effect.gen(function* () {
       const acquireCalls: Array<unknown> = [];
       const subscribe = async () => ({
@@ -174,14 +181,30 @@ describe("Opencode session lifecycle", () => {
         cwd: "/root/project",
       });
 
-      expect(acquireCalls).toEqual([
-        {
-          binaryPath: "/opt/opencode/bin/opencode",
-          directory: "/root/project",
-          executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        },
-      ]);
+      expect(acquireCalls).toHaveLength(1);
+      const acquireInput = acquireCalls[0] as {
+        readonly binaryPath: string;
+        readonly directory: string;
+        readonly executionTargetId: string;
+      };
+      expect(acquireInput.binaryPath).toBe("/opt/opencode/bin/opencode");
+      expect(acquireInput.executionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);
+      expect(acquireInput.directory).not.toBe("/root/project");
+      expect(acquireInput.directory).toContain("bigbud-opencode-remote-workspace-");
+      yield* Effect.promise(() =>
+        expect(
+          fs.access(`${acquireInput.directory}/.opencode/tools/read.ts`),
+        ).resolves.toBeUndefined(),
+      );
+
+      expect(session.providerRuntimeExecutionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);
+      expect(session.workspaceExecutionTargetId).toBe(
+        "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      );
       expect(session.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+
+      yield* methods.stopSession(THREAD_ID);
+      yield* Effect.promise(() => expect(fs.access(acquireInput.directory)).rejects.toThrow());
     }),
   );
 });

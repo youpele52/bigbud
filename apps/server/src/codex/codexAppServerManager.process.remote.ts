@@ -27,7 +27,7 @@ export function buildRemoteCodexSshInvocation(
   }
 
   return buildSshCommandInvocation({
-    executionTargetId: input.executionTargetId,
+    executionTargetId: input.providerRuntimeExecutionTargetId ?? input.executionTargetId,
     cwd: remoteCwd,
     command: input.binaryPath,
     args: commandArgs,
@@ -36,7 +36,11 @@ export function buildRemoteCodexSshInvocation(
 }
 
 function readRemoteVersionCacheKey(input: CodexAppServerStartSessionInput): string {
-  return [input.executionTargetId ?? "", input.binaryPath, input.homePath ?? ""].join("::");
+  return [
+    input.providerRuntimeExecutionTargetId ?? input.executionTargetId ?? "",
+    input.binaryPath,
+    input.homePath ?? "",
+  ].join("::");
 }
 
 export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartSessionInput): void {
@@ -45,7 +49,7 @@ export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartS
     return;
   }
 
-  assertSshExecutionTargetReady(input.executionTargetId);
+  assertSshExecutionTargetReady(input.providerRuntimeExecutionTargetId ?? input.executionTargetId);
   const invocation = buildRemoteCodexSshInvocation(input, ["--version"]);
   const result = spawnSync(invocation.command, invocation.args, {
     encoding: "utf8",
@@ -83,7 +87,10 @@ export function startRemoteCodexAppServerProcess(
   input: CodexAppServerStartSessionInput,
 ): ChildProcessWithoutNullStreams {
   assertSupportedRemoteCodexCliVersion(input);
-  const invocation = buildRemoteCodexSshInvocation(input, ["app-server"]);
+  const invocation = buildRemoteCodexSshInvocation(input, [
+    "app-server",
+    ...(input.configArgs ?? []),
+  ]);
   return spawn(invocation.command, invocation.args, {
     env: process.env,
     stdio: ["pipe", "pipe", "pipe"],

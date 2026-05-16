@@ -49,7 +49,7 @@ export async function startSession(
   try {
     const resolvedCwd =
       input.cwd ??
-      (isLocalExecutionTarget(input.executionTargetId)
+      (isLocalExecutionTarget(input.workspaceExecutionTargetId ?? input.executionTargetId)
         ? process.cwd()
         : (() => {
             throw new Error("Remote Codex sessions require a remote workspace path.");
@@ -59,6 +59,12 @@ export async function startSession(
       provider: "codex",
       status: "connecting",
       runtimeMode: input.runtimeMode,
+      ...(input.providerRuntimeExecutionTargetId
+        ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
+        : {}),
+      ...(input.workspaceExecutionTargetId
+        ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
+        : {}),
       ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
       model: normalizeCodexModelSlug(input.model),
       cwd: resolvedCwd,
@@ -83,6 +89,9 @@ export async function startSession(
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
       nextRequestId: 1,
+      ...(input.cleanupRemoteWorkspaceBridge
+        ? { cleanupRemoteWorkspaceBridge: input.cleanupRemoteWorkspaceBridge }
+        : {}),
       stopping: false,
     };
 
@@ -121,6 +130,9 @@ export async function startSession(
       model: normalizedModel ?? null,
       ...(input.serviceTier !== undefined ? { serviceTier: input.serviceTier } : {}),
       cwd: input.cwd ?? null,
+      ...(input.developerInstructions
+        ? { developerInstructions: input.developerInstructions }
+        : {}),
       ...mapCodexRuntimeMode(input.runtimeMode ?? "full-access"),
     };
 

@@ -12,7 +12,7 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { afterAll, it, vi } from "@effect/vitest";
+import { afterAll, expect, it, vi } from "@effect/vitest";
 
 import { Effect, Fiber, Layer, Option, Stream } from "effect";
 
@@ -42,6 +42,12 @@ class FakeCodexManager extends CodexAppServerManager {
         status: "ready",
         runtimeMode: input.runtimeMode,
         threadId: input.threadId,
+        ...(input.providerRuntimeExecutionTargetId
+          ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
+          : {}),
+        ...(input.workspaceExecutionTargetId
+          ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
+          : {}),
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         cwd: input.cwd,
         createdAt: now,
@@ -204,6 +210,9 @@ validationLayer("CodexAdapterLive validation", (it) => {
       assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
         provider: "codex",
         threadId: asThreadId("thread-1"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "local",
+        executionTargetId: "local",
         binaryPath: "codex",
         model: "gpt-5.3-codex",
         serviceTier: "fast",
@@ -225,14 +234,24 @@ validationLayer("CodexAdapterLive validation", (it) => {
         runtimeMode: "full-access",
       });
 
-      assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
-        provider: "codex",
-        threadId: asThreadId("thread-remote"),
-        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        cwd: "/workspace/project",
-        binaryPath: "codex",
-        runtimeMode: "full-access",
-      });
+      const startInput = validationManager.startSessionImpl.mock.calls[0]?.[0];
+      assert.equal(startInput?.provider, "codex");
+      assert.equal(startInput?.threadId, asThreadId("thread-remote"));
+      assert.equal(startInput?.providerRuntimeExecutionTargetId, "local");
+      assert.equal(
+        startInput?.workspaceExecutionTargetId,
+        "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      );
+      assert.equal(startInput?.executionTargetId, "ssh:host=devbox&user=root&port=22&auth=ssh-key");
+      assert.equal(startInput?.binaryPath, "codex");
+      assert.equal(startInput?.runtimeMode, "full-access");
+      assert.equal(typeof startInput?.cwd, "string");
+      assert.notEqual(startInput?.cwd, "/workspace/project");
+      expect(startInput?.configArgs?.[0]).toBe("-c");
+      expect(startInput?.configArgs?.[1]).toBe("app.default_tools_enabled=false");
+      expect(startInput?.configArgs?.[2]).toBe("-c");
+      expect(startInput?.configArgs?.[3]).toContain("mcp_servers.bigbud_remote_workspace.command=");
+      expect(startInput?.developerInstructions).toContain("Bigbud remote workspace mode");
     }),
   );
 });

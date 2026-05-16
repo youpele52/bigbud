@@ -10,6 +10,7 @@
  * @module OpencodeAdapter.session
  */
 import {
+  LOCAL_EXECUTION_TARGET_ID,
   ApprovalRequestId,
   ThreadId,
   type ProviderRuntimeEvent,
@@ -42,8 +43,13 @@ import {
   isOpencodeModelSelection,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
+import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
 import { makeTurnMethods } from "./Adapter.session.turn.ts";
 import { makeQueryMethods, makeStopSessionRecord } from "./Adapter.session.query.ts";
+import { getProviderCapabilities } from "../../providerCapabilities.ts";
+import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
+import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 
 // ── Shared dep interfaces (used by sub-modules) ───────────────────────
 
@@ -226,6 +232,12 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
           provider: PROVIDER,
           status: existing.activeTurnId ? "running" : "ready",
           runtimeMode: existing.runtimeMode,
+          ...(existing.providerRuntimeExecutionTargetId
+            ? { providerRuntimeExecutionTargetId: existing.providerRuntimeExecutionTargetId }
+            : {}),
+          ...(existing.workspaceExecutionTargetId
+            ? { workspaceExecutionTargetId: existing.workspaceExecutionTargetId }
+            : {}),
           threadId: input.threadId,
           ...(existing.executionTargetId ? { executionTargetId: existing.executionTargetId } : {}),
           ...(existing.cwd ? { cwd: existing.cwd } : {}),
@@ -249,14 +261,43 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
             }),
         ),
       );
+      const executionContext = resolveProviderExecutionContext({
+        providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+        executionTargetId: input.executionTargetId,
+        cwd: input.cwd,
+        defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(PROVIDER)
+          .supportsLocalRuntimeRemoteWorkspace
+          ? LOCAL_EXECUTION_TARGET_ID
+          : undefined,
+        useLegacyExecutionTargetForProviderRuntime: false,
+      });
+      const remoteWorkspaceBridge =
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+          ? yield* Effect.tryPromise({
+              try: () => createOpencodeRemoteWorkspaceBridge(executionContext.workspaceTarget),
+              catch: (cause) =>
+                new ProviderAdapterProcessError({
+                  provider: PROVIDER,
+                  threadId: input.threadId,
+                  detail: toMessage(cause, "Failed to prepare OpenCode remote workspace bridge."),
+                  cause,
+                }),
+            })
+          : undefined;
 
       // Acquire a handle from the shared OpenCode server manager
       const serverHandle = yield* Effect.tryPromise({
         try: () =>
           serverManager.acquire({
             binaryPath: opencodeSettings.binaryPath,
-            ...(input.cwd ? { directory: input.cwd } : {}),
-            ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+            ...(remoteWorkspaceBridge?.cwd
+              ? { directory: remoteWorkspaceBridge.cwd }
+              : input.cwd
+                ? { directory: input.cwd }
+                : {}),
+            executionTargetId: executionContext.providerRuntimeTarget.executionTargetId,
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
@@ -265,7 +306,13 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
             detail: toMessage(cause, "Failed to start OpenCode server."),
             cause,
           }),
-      });
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+          }),
+        ),
+      );
       const client = serverHandle.client;
 
       // Determine model to use
@@ -303,6 +350,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
 
       if (sessionResp.error || !sessionResp.data) {
         serverHandle.release();
+        void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
         return yield* new ProviderAdapterProcessError({
           provider: PROVIDER,
           threadId: input.threadId,
@@ -316,11 +364,15 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
       const record: ActiveOpencodeSession = {
         client,
         releaseServer: () => serverHandle.release(),
+        ...(remoteWorkspaceBridge ? { cleanupBridge: remoteWorkspaceBridge.cleanup } : {}),
         opencodeSessionId,
         threadId: input.threadId,
         createdAt,
         runtimeMode: input.runtimeMode,
-        executionTargetId: input.executionTargetId,
+        providerRuntimeExecutionTargetId:
+          executionContext.executionTargets.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: executionContext.executionTargets.workspaceExecutionTargetId,
+        executionTargetId: executionContext.executionTargets.executionTargetId,
         pendingPermissions: new Map(),
         pendingUserInputs: new Map(),
         turns: [],
@@ -360,8 +412,11 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         provider: PROVIDER,
         status: "ready",
         runtimeMode: input.runtimeMode,
+        providerRuntimeExecutionTargetId:
+          executionContext.executionTargets.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: executionContext.executionTargets.workspaceExecutionTargetId,
         threadId: input.threadId,
-        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+        executionTargetId: executionContext.executionTargets.executionTargetId,
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(modelID ? { model: modelID } : {}),
         resumeCursor: { sessionId: opencodeSessionId },

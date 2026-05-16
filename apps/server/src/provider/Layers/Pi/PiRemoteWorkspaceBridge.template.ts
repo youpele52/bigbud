@@ -1,12 +1,6 @@
-interface PiRemoteWorkspaceBridgeTemplateInput {
-  readonly cwd?: string;
-  readonly destination: string;
-  readonly transportArgs: ReadonlyArray<string>;
-}
+import type { RemoteWorkspaceBridgeConfig } from "../../../remote-workspace-bridge/remoteWorkspaceBridge.ts";
 
-export function renderPiRemoteWorkspaceBridgeSource(
-  input: PiRemoteWorkspaceBridgeTemplateInput,
-): string {
+export function renderPiRemoteWorkspaceBridgeSource(input: RemoteWorkspaceBridgeConfig): string {
   const config = JSON.stringify(
     {
       ...(input.cwd ? { cwd: input.cwd } : {}),

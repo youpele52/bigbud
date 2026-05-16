@@ -5,11 +5,15 @@ import { assertSupportedCodexCliVersion } from "./codexVersionCheck.ts";
 import { startRemoteCodexAppServerProcess } from "./codexAppServerManager.process.remote.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
+function resolveProviderRuntimeExecutionTargetId(input: CodexAppServerStartSessionInput): string {
+  return input.providerRuntimeExecutionTargetId ?? input.executionTargetId ?? "local";
+}
+
 export function startCodexAppServerProcess(
   input: CodexAppServerStartSessionInput,
   cwd: string,
 ): ChildProcessWithoutNullStreams {
-  if (!isLocalExecutionTarget(input.executionTargetId)) {
+  if (!isLocalExecutionTarget(resolveProviderRuntimeExecutionTargetId(input))) {
     return startRemoteCodexAppServerProcess({
       ...input,
       cwd,
@@ -22,7 +26,7 @@ export function startCodexAppServerProcess(
     ...(input.homePath ? { homePath: input.homePath } : {}),
   });
 
-  return spawn(input.binaryPath, ["app-server"], {
+  return spawn(input.binaryPath, ["app-server", ...(input.configArgs ?? [])], {
     cwd,
     env: {
       ...process.env,
