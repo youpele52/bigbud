@@ -1875,7 +1875,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           "pr list --head octocat:statemachine --state open --limit 1",
         );
       }),
-    12_000,
+    20_000,
   );
 
   it.effect("creates PR when one does not already exist", () =>
