@@ -80,11 +80,14 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "bigbud";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Beta)";
 const APP_USER_MODEL_ID = "ai.bigbud.desktop";
 const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "bigbud-dev.desktop" : "bigbud.desktop";
 const LINUX_WM_CLASS = isDevelopment ? "bigbud-dev" : "bigbud";
 const USER_DATA_DIR_NAME = isDevelopment ? "bigbud-dev" : "bigbud";
+// Intentionally keep the legacy Alpha-era directory name here so packaged users
+// from older T3 Code builds continue to migrate their existing desktop data.
+// Remove this once the legacy Alpha-to-Beta upgrade window is no longer needed.
 const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
 const LOG_DIR = Path.join(STATE_DIR, "logs");
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
@@ -212,7 +215,7 @@ function registerDesktopProtocol(): void {
  *
  * Electron derives the default userData path from `productName` in
  * package.json, which would produce directories with spaces and parentheses
- * (e.g. `~/.config/bigbud (Alpha)` on Linux). This is
+ * (e.g. `~/.config/bigbud (Beta)` on Linux). This is
  * unfriendly for shell usage and violates Linux naming conventions.
  *
  * We override it to a clean lowercase name (`bigbud`). If the legacy

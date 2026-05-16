@@ -143,7 +143,7 @@ macOS app bundle example:
 BIGBUD_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 BIGBUD_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
 BIGBUD_OTLP_SERVICE_NAME=bigbud-desktop \
-"/Applications/bigbud (Alpha).app/Contents/MacOS/bigbud (Alpha)"
+"/Applications/bigbud (Beta).app/Contents/MacOS/bigbud (Beta)"
 ```
 
 Direct binary example:
