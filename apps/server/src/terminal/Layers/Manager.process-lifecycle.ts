@@ -67,6 +67,7 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
   return {
     threadId: session.threadId,
     terminalId: session.terminalId,
+    executionTargetId: session.executionTargetId,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
     status: session.status,

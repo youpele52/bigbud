@@ -8,6 +8,7 @@ import {
   GitCheckoutInput,
   GitCheckoutResult,
   GitCommandError,
+  GitExecutionTargetError,
   GitCreateBranchInput,
   GitCreateBranchResult,
   GitCreateWorktreeInput,
@@ -24,6 +25,7 @@ import {
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
+  GitServiceError,
   GitStatusInput,
   GitStatusResult,
   GitStatusStreamEvent,
@@ -69,8 +71,14 @@ import {
   ServerConfig,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
+  ServerUnlockSshKeyError,
+  ServerUnlockSshKeyInput,
+  ServerUnlockSshKeyResult,
   ServerUpsertKeybindingInput,
   ServerUpsertKeybindingResult,
+  ServerVerifyExecutionTargetError,
+  ServerVerifyExecutionTargetInput,
+  ServerVerifyExecutionTargetResult,
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
@@ -92,6 +100,18 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, {
   payload: Schema.Struct({}),
   success: ServerProviderUpdatedPayload,
+});
+
+export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerifyExecutionTarget, {
+  payload: ServerVerifyExecutionTargetInput,
+  success: ServerVerifyExecutionTargetResult,
+  error: ServerVerifyExecutionTargetError,
+});
+
+export const WsServerUnlockSshKeyRpc = Rpc.make(WS_METHODS.serverUnlockSshKey, {
+  payload: ServerUnlockSshKeyInput,
+  success: ServerUnlockSshKeyResult,
+  error: ServerUnlockSshKeyError,
 });
 
 export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
@@ -133,7 +153,7 @@ export const WsSubscribeGitStatusRpc = Rpc.make(WS_METHODS.subscribeGitStatus, {
 export const WsGitPullRpc = Rpc.make(WS_METHODS.gitPull, {
   payload: GitPullInput,
   success: GitPullResult,
-  error: GitCommandError,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
 });
 
 export const WsGitRefreshStatusRpc = Rpc.make(WS_METHODS.gitRefreshStatus, {
@@ -164,35 +184,35 @@ export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePu
 export const WsGitListBranchesRpc = Rpc.make(WS_METHODS.gitListBranches, {
   payload: GitListBranchesInput,
   success: GitListBranchesResult,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsGitCreateWorktreeRpc = Rpc.make(WS_METHODS.gitCreateWorktree, {
   payload: GitCreateWorktreeInput,
   success: GitCreateWorktreeResult,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsGitRemoveWorktreeRpc = Rpc.make(WS_METHODS.gitRemoveWorktree, {
   payload: GitRemoveWorktreeInput,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
   payload: GitCreateBranchInput,
   success: GitCreateBranchResult,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsGitCheckoutRpc = Rpc.make(WS_METHODS.gitCheckout, {
   payload: GitCheckoutInput,
   success: GitCheckoutResult,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsGitInitRpc = Rpc.make(WS_METHODS.gitInit, {
   payload: GitInitInput,
-  error: GitCommandError,
+  error: GitServiceError,
 });
 
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
@@ -303,6 +323,8 @@ export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServer
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
+  WsServerVerifyExecutionTargetRpc,
+  WsServerUnlockSshKeyRpc,
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,

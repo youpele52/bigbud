@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import {
   ApprovalRequestId,
   CommandId,
+  ExecutionTargetId,
   EventId,
   IsoDateTime,
   MessageId,
@@ -73,6 +74,9 @@ export const OrchestrationActorKind = Schema.Literals(["client", "server", "prov
 export const ProjectCreatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),
@@ -83,6 +87,9 @@ export const ProjectCreatedPayload = Schema.Struct({
 export const ProjectMetaUpdatedPayload = Schema.Struct({
   projectId: ProjectId,
   title: Schema.optional(TrimmedNonEmptyString),
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
@@ -108,6 +115,9 @@ export const ThreadCreatedPayload = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(
@@ -149,6 +159,9 @@ export const ThreadUnarchivedPayload = Schema.Struct({
 export const ThreadMetaUpdatedPayload = Schema.Struct({
   threadId: ThreadId,
   title: Schema.optional(TrimmedNonEmptyString),
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   modelSelection: Schema.optional(ModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),

@@ -1,4 +1,4 @@
-import { type MessageId, type TurnId } from "@bigbud/contracts";
+import { type ExecutionTargetId, type MessageId, type TurnId } from "@bigbud/contracts";
 import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -44,6 +44,7 @@ interface MessagesTimelineProps {
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  workspaceExecutionTargetId?: ExecutionTargetId | undefined;
   focusMessageId?: MessageId | null;
   onReplyToMessage?: (messageId: MessageId) => void;
   onOpenReplySource?: (messageId: MessageId) => void;
@@ -84,6 +85,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  workspaceExecutionTargetId,
   focusMessageId = null,
   onReplyToMessage = () => {},
   onOpenReplySource = () => {},
@@ -367,6 +369,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                   nowIso={nowIso}
                   timestampFormat={timestampFormat}
                   workspaceRoot={workspaceRoot}
+                  workspaceExecutionTargetId={workspaceExecutionTargetId}
                   focusedMessageId={focusedMessageId}
                   onReplyToMessage={onReplyToMessage}
                   onOpenReplySource={onOpenReplySource}
@@ -400,6 +403,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             nowIso={nowIso}
             timestampFormat={timestampFormat}
             workspaceRoot={workspaceRoot}
+            workspaceExecutionTargetId={workspaceExecutionTargetId}
             focusedMessageId={focusedMessageId}
             onReplyToMessage={onReplyToMessage}
             onOpenReplySource={onOpenReplySource}

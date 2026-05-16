@@ -1,124 +1,30 @@
-import {
-  type ApprovalRequestId,
-  type ModelSelection,
-  type ProviderInteractionMode,
-  type ProviderKind,
-  type RuntimeMode,
-  type ServerProvider,
-  type ThreadId,
-} from "@bigbud/contracts";
 import { useCallback, useRef } from "react";
-import type { PendingUserInput } from "../../../logic/session";
-import {
-  type ComposerTrigger,
-  collapseExpandedComposerCursor,
-  detectComposerTrigger,
-  parseStandaloneComposerSlashCommand,
-} from "../../../logic/composer";
+import { parseStandaloneComposerSlashCommand } from "../../../logic/composer";
 import { resolvePlanFollowUpSubmission } from "../../../logic/proposed-plan";
-import { buildTemporaryWorktreeBranchName } from "@bigbud/shared/git";
 import {
   deriveComposerSendState,
   buildExpiredTerminalContextToastCopy,
   formatOutgoingPrompt,
   appendBrowserAnnotationsToPrompt,
-  readFileAsDataUrl,
-  cloneComposerImageForRetry,
 } from "./ChatView.logic";
-import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { toastManager } from "../../ui/toast";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { newCommandId, newMessageId } from "~/lib/utils";
-import {
-  type ComposerImageAttachment,
-  type ComposerFileAttachment,
-  type ComposerAnnotationAttachment,
-} from "../../../stores/composer";
-import type { TerminalContextDraft } from "../../../lib/terminalContext";
-import type {
-  ChatAttachment,
-  ChatMessage,
-  Thread,
-  Project,
-  ProposedPlan,
-} from "../../../models/types";
-import { isElectron } from "~/config/env/env.config";
 import { recordModelUsage } from "../../../models/recentlyUsedModels";
-
-const IMAGE_ONLY_BOOTSTRAP_PROMPT =
-  "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
-
-export interface UseOnSendInput {
-  activeThread: Thread | undefined;
-  activeProject: Project | undefined;
-  activeThreadId: ThreadId | null;
-  isServerThread: boolean;
-  isLocalDraftThread: boolean;
-  isSendBusy: boolean;
-  isConnecting: boolean;
-  sendInFlightRef: React.MutableRefObject<boolean>;
-  promptRef: React.MutableRefObject<string>;
-  composerImages: ComposerImageAttachment[];
-  composerImagesRef: React.MutableRefObject<ComposerImageAttachment[]>;
-  composerFiles: ComposerFileAttachment[];
-  composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
-  composerAnnotations: ComposerAnnotationAttachment[];
-  composerAnnotationsRef: React.MutableRefObject<ComposerAnnotationAttachment[]>;
-  composerTerminalContexts: TerminalContextDraft[];
-  composerTerminalContextsRef: React.MutableRefObject<TerminalContextDraft[]>;
-  selectedProvider: ProviderKind;
-  selectedModel: string;
-  selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
-  selectedPromptEffort: string | null;
-  selectedModelSelection: ModelSelection;
-  runtimeMode: RuntimeMode;
-  interactionMode: ProviderInteractionMode;
-  isComposerShellMode: boolean;
-  envMode: string;
-  showPlanFollowUpPrompt: boolean;
-  activeProposedPlan: ProposedPlan | null;
-  isOpencodePendingUserInputMode: boolean;
-  activePendingUserInputRequestId: ApprovalRequestId | null;
-  activePendingUserInput: PendingUserInput | null;
-  shouldAutoScrollRef: React.MutableRefObject<boolean>;
-  setOptimisticUserMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  setPrompt: (prompt: string) => void;
-  setComposerShellMode: (shellMode: boolean) => void;
-  setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
-  setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
-  setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
-  setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
-  setStoreThreadError: (threadId: ThreadId, error: string | null) => void;
-  addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
-  addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
-  addComposerAnnotationsToDraft: (annotations: ComposerAnnotationAttachment[]) => void;
-  addComposerTerminalContextsToDraft: (contexts: TerminalContextDraft[]) => void;
-  clearComposerDraftContent: (threadId: ThreadId) => void;
-  bootstrapSourceThreadId: ThreadId | null;
-  clearBootstrapSourceThreadId: (threadId: ThreadId) => void;
-  replyTarget: ChatMessage["replyTo"] | null;
-  setReplyTarget: (threadId: ThreadId, replyTarget: ChatMessage["replyTo"] | null) => void;
-  beginLocalDispatch: (opts: { preparingWorktree: boolean }) => void;
-  resetLocalDispatch: () => void;
-  forceStickToBottom: () => void;
-  persistThreadSettingsForNextTurn: (input: {
-    threadId: ThreadId;
-    createdAt: string;
-    modelSelection?: ModelSelection;
-    runtimeMode: RuntimeMode;
-    interactionMode: ProviderInteractionMode;
-  }) => Promise<void>;
-  onSubmitPlanFollowUp: (input: {
-    text: string;
-    interactionMode: ProviderInteractionMode;
-  }) => Promise<void>;
-  handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
-  onRespondToUserInput: (
-    requestId: ApprovalRequestId,
-    answers: Record<string, unknown>,
-  ) => Promise<void>;
-}
+import type { ChatAttachment } from "../../../models/types";
+import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
+import {
+  buildOptimisticAttachments,
+  buildThreadBootstrap,
+  buildTurnAttachments,
+  getWorktreeValidationError,
+  IMAGE_ONLY_BOOTSTRAP_PROMPT,
+  resolveSendContext,
+  restoreMessageComposerDraftAfterFailure,
+  restoreShellComposerDraftAfterFailure,
+} from "./ChatView.sendTurn.helpers";
+import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 /** Returns the `onSend` handler for the composer form. */
 export function useOnSend(input: UseOnSendInput) {
@@ -226,23 +132,19 @@ export function useOnSend(input: UseOnSendInput) {
       }
       if (!project) return;
 
-      const threadIdForSend = thread.id;
-      const isFirstMessage = !isServer || thread.messages.length === 0;
-      const baseBranchForWorktree =
-        isFirstMessage && env === "worktree" && !thread.worktreePath ? thread.branch : null;
-      const shouldCreateWorktree = isFirstMessage && env === "worktree" && !thread.worktreePath;
-      if (shouldCreateWorktree && !thread.branch) {
-        inputRef.current.setStoreThreadError(
-          threadIdForSend,
-          "Select a base branch before sending in New worktree mode.",
-        );
-        return;
-      }
-      if (shouldCreateWorktree && !project.cwd) {
-        inputRef.current.setStoreThreadError(
-          threadIdForSend,
-          "New worktree mode is unavailable for chats without a project folder.",
-        );
+      const { threadIdForSend, isFirstMessage, baseBranchForWorktree, shouldCreateWorktree } =
+        resolveSendContext({
+          thread,
+          isServer,
+          envMode: env,
+        });
+      const worktreeValidationError = getWorktreeValidationError({
+        shouldCreateWorktree,
+        thread,
+        project,
+      });
+      if (worktreeValidationError) {
+        inputRef.current.setStoreThreadError(threadIdForSend, worktreeValidationError);
         return;
       }
 
@@ -258,8 +160,6 @@ export function useOnSend(input: UseOnSendInput) {
 
       let shellRunSucceeded = false;
       await (async () => {
-        const threadCreateModelSelection: ModelSelection = modelSel;
-
         if (isServer) {
           await inputRef.current.persistThreadSettingsForNextTurn({
             threadId: threadIdForSend,
@@ -270,39 +170,17 @@ export function useOnSend(input: UseOnSendInput) {
           });
         }
 
-        const seededTitle =
-          isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
-            ? draftTitleFromMessage(shellCommand)
-            : undefined;
-        const bootstrap =
-          isDraft || baseBranchForWorktree
-            ? {
-                ...(isDraft
-                  ? {
-                      createThread: {
-                        projectId: project.id,
-                        title: seededTitle ?? thread.title,
-                        modelSelection: threadCreateModelSelection,
-                        runtimeMode: runMode,
-                        interactionMode: interactMode,
-                        branch: thread.branch,
-                        worktreePath: thread.worktreePath,
-                        createdAt: thread.createdAt,
-                      },
-                    }
-                  : {}),
-                ...(baseBranchForWorktree
-                  ? {
-                      prepareWorktree: {
-                        projectCwd: project.cwd!,
-                        baseBranch: baseBranchForWorktree,
-                        branch: buildTemporaryWorktreeBranchName(),
-                      },
-                      runSetupScript: true,
-                    }
-                  : {}),
-              }
-            : undefined;
+        const bootstrap = buildThreadBootstrap({
+          thread,
+          project,
+          isDraft,
+          isFirstMessage,
+          promptText: shellCommand,
+          modelSelection: modelSel,
+          runtimeMode: runMode,
+          interactionMode: interactMode,
+          baseBranchForWorktree,
+        });
         inputRef.current.beginLocalDispatch({ preparingWorktree: false });
         await api.orchestration.dispatchCommand({
           type: "thread.shell.run",
@@ -320,25 +198,27 @@ export function useOnSend(input: UseOnSendInput) {
         });
         shellRunSucceeded = true;
       })().catch((err: unknown) => {
-        if (
-          !shellRunSucceeded &&
-          pRef.current.length === 0 &&
-          imagesRef.current.length === 0 &&
-          filesRef.current.length === 0 &&
-          annotationsRef.current.length === 0 &&
-          termContextsRef.current.length === 0
-        ) {
-          inputRef.current.setOptimisticUserMessages((existing) =>
-            existing.filter((message) => message.id !== messageIdForSend),
-          );
-          pRef.current = shellPromptForSend;
-          inputRef.current.setPrompt(shellPromptForSend);
-          inputRef.current.setComposerShellMode(true);
-          inputRef.current.setComposerCursor(
-            collapseExpandedComposerCursor(shellPromptForSend, shellPromptForSend.length),
-          );
-          inputRef.current.setComposerTrigger(null);
-        }
+        restoreShellComposerDraftAfterFailure({
+          currentDraftEmpty:
+            !shellRunSucceeded &&
+            pRef.current.length === 0 &&
+            imagesRef.current.length === 0 &&
+            filesRef.current.length === 0 &&
+            annotationsRef.current.length === 0 &&
+            termContextsRef.current.length === 0,
+          messageIdForSend,
+          promptText: shellPromptForSend,
+          promptRef: pRef,
+          setOptimisticUserMessages: inputRef.current.setOptimisticUserMessages,
+          setPrompt: inputRef.current.setPrompt,
+          setComposerShellMode: inputRef.current.setComposerShellMode,
+          setComposerCursor: (next) => {
+            inputRef.current.setComposerCursor(next);
+          },
+          setComposerTrigger: (trigger) => {
+            inputRef.current.setComposerTrigger(trigger);
+          },
+        });
         inputRef.current.setThreadError(
           threadIdForSend,
           err instanceof Error ? err.message : "Failed to run shell command.",
@@ -390,23 +270,19 @@ export function useOnSend(input: UseOnSendInput) {
       return;
     }
     if (!project) return;
-    const threadIdForSend = thread.id;
-    const isFirstMessage = !isServer || thread.messages.length === 0;
-    const baseBranchForWorktree =
-      isFirstMessage && env === "worktree" && !thread.worktreePath ? thread.branch : null;
-    const shouldCreateWorktree = isFirstMessage && env === "worktree" && !thread.worktreePath;
-    if (shouldCreateWorktree && !thread.branch) {
-      inputRef.current.setStoreThreadError(
-        threadIdForSend,
-        "Select a base branch before sending in New worktree mode.",
-      );
-      return;
-    }
-    if (shouldCreateWorktree && !project.cwd) {
-      inputRef.current.setStoreThreadError(
-        threadIdForSend,
-        "New worktree mode is unavailable for chats without a project folder.",
-      );
+    const { threadIdForSend, isFirstMessage, baseBranchForWorktree, shouldCreateWorktree } =
+      resolveSendContext({
+        thread,
+        isServer,
+        envMode: env,
+      });
+    const worktreeValidationError = getWorktreeValidationError({
+      shouldCreateWorktree,
+      thread,
+      project,
+    });
+    if (worktreeValidationError) {
+      inputRef.current.setStoreThreadError(threadIdForSend, worktreeValidationError);
       return;
     }
 
@@ -434,58 +310,14 @@ export function useOnSend(input: UseOnSendInput) {
       effort,
       text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
     });
-    const turnAttachmentsPromise = Promise.all([
-      ...composerImagesSnapshot.map(async (image) => ({
-        type: "image" as const,
-        name: image.name,
-        mimeType: image.mimeType,
-        sizeBytes: image.sizeBytes,
-        dataUrl: await readFileAsDataUrl(image.file),
-      })),
-      ...composerFilesSnapshot.map(async (file) => {
-        if (isElectron && file.filePath) {
-          return {
-            type: "file" as const,
-            transport: "path" as const,
-            name: file.name,
-            mimeType: file.mimeType,
-            sizeBytes: file.sizeBytes,
-            filePath: file.filePath,
-          };
-        }
-        if (isElectron) {
-          throw new Error(`Missing filesystem path for attachment '${file.name}'.`);
-        }
-        // Web fallback: base64
-        const dataUrl = file.file ? await readFileAsDataUrl(file.file) : "";
-        return {
-          type: "file" as const,
-          transport: "base64" as const,
-          name: file.name,
-          mimeType: file.mimeType,
-          sizeBytes: file.sizeBytes,
-          dataUrl,
-        };
-      }),
-    ]);
-    const optimisticAttachments: ChatAttachment[] = [
-      ...composerImagesSnapshot.map((image) => ({
-        type: "image" as const,
-        id: image.id,
-        name: image.name,
-        mimeType: image.mimeType,
-        sizeBytes: image.sizeBytes,
-        previewUrl: image.previewUrl,
-      })),
-      ...composerFilesSnapshot.map((file) => ({
-        type: "file" as const,
-        id: file.id,
-        name: file.name,
-        mimeType: file.mimeType,
-        sizeBytes: file.sizeBytes,
-        ...(file.filePath ? { sourcePath: file.filePath } : {}),
-      })),
-    ];
+    const turnAttachmentsPromise = buildTurnAttachments(
+      composerImagesSnapshot,
+      composerFilesSnapshot,
+    );
+    const optimisticAttachments: ChatAttachment[] = buildOptimisticAttachments(
+      composerImagesSnapshot,
+      composerFilesSnapshot,
+    );
     inputRef.current.setOptimisticUserMessages((existing) => [
       ...existing,
       {
@@ -517,8 +349,6 @@ export function useOnSend(input: UseOnSendInput) {
 
     let turnStartSucceeded = false;
     await (async () => {
-      const threadCreateModelSelection: ModelSelection = modelSel;
-
       if (isServer) {
         await inputRef.current.persistThreadSettingsForNextTurn({
           threadId: threadIdForSend,
@@ -534,35 +364,17 @@ export function useOnSend(input: UseOnSendInput) {
         isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
           ? draftTitleFromMessage(promptForSend)
           : undefined;
-      const bootstrap =
-        isDraft || baseBranchForWorktree
-          ? {
-              ...(isDraft
-                ? {
-                    createThread: {
-                      projectId: project.id,
-                      title: seededTitle ?? thread.title,
-                      modelSelection: threadCreateModelSelection,
-                      runtimeMode: runMode,
-                      interactionMode: interactMode,
-                      branch: thread.branch,
-                      worktreePath: thread.worktreePath,
-                      createdAt: thread.createdAt,
-                    },
-                  }
-                : {}),
-              ...(baseBranchForWorktree
-                ? {
-                    prepareWorktree: {
-                      projectCwd: project.cwd!,
-                      baseBranch: baseBranchForWorktree,
-                      branch: buildTemporaryWorktreeBranchName(),
-                    },
-                    runSetupScript: true,
-                  }
-                : {}),
-            }
-          : undefined;
+      const bootstrap = buildThreadBootstrap({
+        thread,
+        project,
+        isDraft,
+        isFirstMessage,
+        promptText: promptForSend,
+        modelSelection: modelSel,
+        runtimeMode: runMode,
+        interactionMode: interactMode,
+        baseBranchForWorktree,
+      });
       inputRef.current.beginLocalDispatch({ preparingWorktree: false });
       await api.orchestration.dispatchCommand({
         type: "thread.turn.start",
@@ -594,45 +406,43 @@ export function useOnSend(input: UseOnSendInput) {
       );
     })().catch(async (err: unknown) => {
       const { revokeUserMessagePreviewUrls } = await import("./ChatView.logic");
-      if (
-        !turnStartSucceeded &&
-        pRef.current.length === 0 &&
-        imagesRef.current.length === 0 &&
-        filesRef.current.length === 0 &&
-        annotationsRef.current.length === 0 &&
-        termContextsRef.current.length === 0
-      ) {
-        inputRef.current.setOptimisticUserMessages((existing) => {
-          const removed = existing.filter((message) => message.id === messageIdForSend);
-          for (const message of removed) {
-            revokeUserMessagePreviewUrls(message);
-          }
-          const next = existing.filter((message) => message.id !== messageIdForSend);
-          return next.length === existing.length ? existing : next;
-        });
-        pRef.current = promptForSend;
-        inputRef.current.setPrompt(promptForSend);
-        inputRef.current.setComposerCursor(
-          collapseExpandedComposerCursor(promptForSend, promptForSend.length),
-        );
-        inputRef.current.addComposerImagesToDraft(
-          composerImagesSnapshot.map(cloneComposerImageForRetry),
-        );
-        inputRef.current.addComposerFilesToDraft(composerFilesSnapshot);
-        inputRef.current.addComposerAnnotationsToDraft(composerAnnotationsSnapshot);
-        inputRef.current.addComposerTerminalContextsToDraft(composerTerminalContextsSnapshot);
-        inputRef.current.setReplyTarget(threadIdForSend, replyTarget);
-        inputRef.current.setComposerTrigger(
-          detectComposerTrigger(promptForSend, promptForSend.length),
-        );
-      }
+      restoreMessageComposerDraftAfterFailure({
+        currentDraftEmpty:
+          !turnStartSucceeded &&
+          pRef.current.length === 0 &&
+          imagesRef.current.length === 0 &&
+          filesRef.current.length === 0 &&
+          annotationsRef.current.length === 0 &&
+          termContextsRef.current.length === 0,
+        messageIdForSend,
+        promptText: promptForSend,
+        promptRef: pRef,
+        replyTarget,
+        composerImages: composerImagesSnapshot,
+        composerFiles: composerFilesSnapshot,
+        composerAnnotations: composerAnnotationsSnapshot,
+        composerTerminalContexts: composerTerminalContextsSnapshot,
+        setOptimisticUserMessages: inputRef.current.setOptimisticUserMessages,
+        revokeUserMessagePreviewUrls,
+        setPrompt: inputRef.current.setPrompt,
+        setComposerCursor: (next) => {
+          inputRef.current.setComposerCursor(next);
+        },
+        addComposerImagesToDraft: inputRef.current.addComposerImagesToDraft,
+        addComposerFilesToDraft: inputRef.current.addComposerFilesToDraft,
+        addComposerAnnotationsToDraft: inputRef.current.addComposerAnnotationsToDraft,
+        addComposerTerminalContextsToDraft: inputRef.current.addComposerTerminalContextsToDraft,
+        setReplyTarget: (nextReplyTarget) => {
+          inputRef.current.setReplyTarget(threadIdForSend, nextReplyTarget);
+        },
+        setComposerTrigger: (trigger) => {
+          inputRef.current.setComposerTrigger(trigger);
+        },
+      });
       inputRef.current.setThreadError(
         threadIdForSend,
         err instanceof Error ? err.message : "Failed to send message.",
       );
-      // Clear bootstrapSourceThreadId on failure too — a failed dispatch
-      // should not re-attempt bootstrap on the next retry because the context
-      // has already been consumed (the server may have processed part of it).
       if (bootstrapSourceThreadId) {
         inputRef.current.clearBootstrapSourceThreadId(threadIdForSend);
       }

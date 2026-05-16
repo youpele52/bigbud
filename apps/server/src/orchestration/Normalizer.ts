@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Path } from "effect";
 import {
+  isLocalExecutionTargetId,
   type ClientOrchestrationCommand,
   type OrchestrationCommand,
   OrchestrationDispatchCommandError,
@@ -10,6 +11,7 @@ import {
 import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore";
 import { ServerConfig } from "../startup/config";
 import { parseBase64DataUrl } from "../attachments/imageMime";
+import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths";
 
 export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
@@ -19,8 +21,16 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
     const serverConfig = yield* ServerConfig;
     const workspacePaths = yield* WorkspacePaths;
 
-    const normalizeProjectWorkspaceRoot = (workspaceRoot: string) =>
-      workspacePaths.normalizeWorkspaceRoot(workspaceRoot).pipe(
+    const normalizeProjectWorkspaceRoot = (
+      workspaceRoot: string,
+      executionTargetId: string | null | undefined,
+    ) => {
+      const trimmedWorkspaceRoot = workspaceRoot.trim();
+      if (!isLocalExecutionTargetId(executionTargetId)) {
+        return Effect.succeed(trimmedWorkspaceRoot);
+      }
+
+      return workspacePaths.normalizeWorkspaceRoot(trimmedWorkspaceRoot).pipe(
         Effect.mapError(
           (cause) =>
             new OrchestrationDispatchCommandError({
@@ -28,24 +38,41 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             }),
         ),
       );
+    };
 
     if (command.type === "project.create") {
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+      });
       return {
         ...command,
         workspaceRoot:
           command.workspaceRoot === null
             ? null
-            : yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
+            : yield* normalizeProjectWorkspaceRoot(
+                command.workspaceRoot,
+                executionTargets.workspaceExecutionTargetId,
+              ),
       } satisfies OrchestrationCommand;
     }
 
     if (command.type === "project.meta.update" && command.workspaceRoot !== undefined) {
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+      });
       return {
         ...command,
         workspaceRoot:
           command.workspaceRoot === null
             ? null
-            : yield* normalizeProjectWorkspaceRoot(command.workspaceRoot),
+            : yield* normalizeProjectWorkspaceRoot(
+                command.workspaceRoot,
+                executionTargets.workspaceExecutionTargetId,
+              ),
       } satisfies OrchestrationCommand;
     }
 

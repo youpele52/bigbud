@@ -11,6 +11,8 @@ import {
   resolveShellCandidates,
   toSessionKey,
 } from "./Manager.shell";
+import { buildRemoteTerminalShellCandidate } from "./Manager.remote.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import {
   cleanupProcessHandles,
   enqueueProcessEvent,
@@ -288,8 +290,13 @@ export function startSessionWith(
       increment(terminalSessionsTotal, { lifecycle: eventType }).pipe(
         Effect.andThen(
           Effect.gen(function* () {
-            const shellCandidates = resolveShellCandidates(ctx.shellResolver);
-            const terminalEnv = createTerminalSpawnEnv(process.env, session.runtimeEnv);
+            const shellCandidates = isLocalExecutionTarget(session.executionTargetId)
+              ? resolveShellCandidates(ctx.shellResolver)
+              : [buildRemoteTerminalShellCandidate(session)];
+            const terminalEnv = createTerminalSpawnEnv(
+              process.env,
+              isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+            );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
             ptyProcess = spawnResult.process;
             startedShell = spawnResult.shellLabel;

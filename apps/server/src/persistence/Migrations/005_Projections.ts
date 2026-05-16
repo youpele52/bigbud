@@ -8,6 +8,7 @@ export default Effect.gen(function* () {
     CREATE TABLE IF NOT EXISTS projection_projects (
       project_id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
+      execution_target_id TEXT NOT NULL DEFAULT 'local',
       workspace_root TEXT NOT NULL,
       default_model TEXT,
       scripts_json TEXT NOT NULL,
@@ -22,6 +23,7 @@ export default Effect.gen(function* () {
       thread_id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
+      execution_target_id TEXT NOT NULL DEFAULT 'local',
       model TEXT NOT NULL,
       branch TEXT,
       worktree_path TEXT,

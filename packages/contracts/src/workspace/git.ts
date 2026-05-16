@@ -1,5 +1,12 @@
 import { Schema } from "effect";
-import { NonNegativeInt, PositiveInt, ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import {
+  ExecutionTargetId,
+  LOCAL_EXECUTION_TARGET_ID,
+  NonNegativeInt,
+  PositiveInt,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "../core/baseSchemas";
 import {
   GIT_STACKED_ACTIONS,
   GIT_ACTION_PROGRESS_PHASES,
@@ -16,10 +23,14 @@ export {
   GIT_ACTION_PROGRESS_STREAMS,
   GIT_PR_STATES,
   GIT_PREPARE_PR_THREAD_MODES,
+  LOCAL_EXECUTION_TARGET_ID,
 };
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const GIT_LIST_BRANCHES_MAX_LIMIT = 200;
+const ExecutionTargetInputShape = {
+  executionTargetId: Schema.optional(ExecutionTargetId),
+};
 
 // Domain Types
 
@@ -109,16 +120,19 @@ export type GitResolvedPullRequest = typeof GitResolvedPullRequest.Type;
 // RPC Inputs
 
 export const GitStatusInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitStatusInput = typeof GitStatusInput.Type;
 
 export const GitPullInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitPullInput = typeof GitPullInput.Type;
 
 export const GitRunStackedActionInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   actionId: TrimmedNonEmptyStringSchema,
   cwd: TrimmedNonEmptyStringSchema,
   action: GitStackedAction,
@@ -131,6 +145,7 @@ export const GitRunStackedActionInput = Schema.Struct({
 export type GitRunStackedActionInput = typeof GitRunStackedActionInput.Type;
 
 export const GitListBranchesInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   query: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(256))),
   cursor: Schema.optional(NonNegativeInt),
@@ -141,6 +156,7 @@ export const GitListBranchesInput = Schema.Struct({
 export type GitListBranchesInput = typeof GitListBranchesInput.Type;
 
 export const GitCreateWorktreeInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
   newBranch: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -149,12 +165,14 @@ export const GitCreateWorktreeInput = Schema.Struct({
 export type GitCreateWorktreeInput = typeof GitCreateWorktreeInput.Type;
 
 export const GitPullRequestRefInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   reference: GitPullRequestReference,
 });
 export type GitPullRequestRefInput = typeof GitPullRequestRefInput.Type;
 
 export const GitPreparePullRequestThreadInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   reference: GitPullRequestReference,
   mode: GitPreparePullRequestThreadMode,
@@ -163,6 +181,7 @@ export const GitPreparePullRequestThreadInput = Schema.Struct({
 export type GitPreparePullRequestThreadInput = typeof GitPreparePullRequestThreadInput.Type;
 
 export const GitRemoveWorktreeInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   path: TrimmedNonEmptyStringSchema,
   force: Schema.optional(Schema.Boolean),
@@ -170,6 +189,7 @@ export const GitRemoveWorktreeInput = Schema.Struct({
 export type GitRemoveWorktreeInput = typeof GitRemoveWorktreeInput.Type;
 
 export const GitCreateBranchInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
   checkout: Schema.optional(Schema.Boolean),
@@ -182,12 +202,14 @@ export const GitCreateBranchResult = Schema.Struct({
 export type GitCreateBranchResult = typeof GitCreateBranchResult.Type;
 
 export const GitCheckoutInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
   branch: TrimmedNonEmptyStringSchema,
 });
 export type GitCheckoutInput = typeof GitCheckoutInput.Type;
 
 export const GitInitInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
 });
 export type GitInitInput = typeof GitInitInput.Type;
@@ -336,6 +358,20 @@ export class GitCommandError extends Schema.TaggedErrorClass<GitCommandError>()(
   }
 }
 
+export class GitExecutionTargetError extends Schema.TaggedErrorClass<GitExecutionTargetError>()(
+  "GitExecutionTargetError",
+  {
+    operation: Schema.String,
+    executionTargetId: ExecutionTargetId,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message(): string {
+    return `Git execution target failed in ${this.operation}: ${this.executionTargetId} - ${this.detail}`;
+  }
+}
+
 export class GitHubCliError extends Schema.TaggedErrorClass<GitHubCliError>()("GitHubCliError", {
   operation: Schema.String,
   detail: Schema.String,
@@ -369,9 +405,13 @@ export class GitManagerError extends Schema.TaggedErrorClass<GitManagerError>()(
   }
 }
 
+export const GitServiceError = Schema.Union([GitCommandError, GitExecutionTargetError]);
+export type GitServiceError = typeof GitServiceError.Type;
+
 export const GitManagerServiceError = Schema.Union([
   GitManagerError,
   GitCommandError,
+  GitExecutionTargetError,
   GitHubCliError,
   TextGenerationError,
 ]);

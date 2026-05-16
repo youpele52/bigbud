@@ -15,6 +15,11 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
 });
 
 describe("DEFAULT_SERVER_SETTINGS", () => {
+  test("defaults assistant and thinking streaming to enabled", () => {
+    expect(DEFAULT_SERVER_SETTINGS.enableAssistantStreaming).toBe(true);
+    expect(DEFAULT_SERVER_SETTINGS.enableThinkingStreaming).toBe(true);
+  });
+
   test("defaults Cursor to enabled", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.enabled).toBe(true);
   });

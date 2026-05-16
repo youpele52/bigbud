@@ -1,5 +1,9 @@
 import { Plus, SquareSplitHorizontal, Trash2 } from "lucide-react";
-import { type ResolvedKeybindingsConfig, type ThreadId } from "@bigbud/contracts";
+import {
+  type ExecutionTargetId,
+  type ResolvedKeybindingsConfig,
+  type ThreadId,
+} from "@bigbud/contracts";
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
@@ -30,6 +34,7 @@ export {
 
 interface ThreadTerminalDrawerProps {
   threadId: ThreadId;
+  executionTargetId?: ExecutionTargetId | undefined;
   cwd: string;
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
@@ -54,6 +59,7 @@ interface ThreadTerminalDrawerProps {
 
 export default function ThreadTerminalDrawer({
   threadId,
+  executionTargetId,
   cwd,
   worktreePath,
   runtimeEnv,
@@ -382,6 +388,7 @@ export default function ThreadTerminalDrawer({
                         threadId={threadId}
                         terminalId={terminalId}
                         terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
+                        executionTargetId={executionTargetId}
                         cwd={cwd}
                         {...(worktreePath !== undefined ? { worktreePath } : {})}
                         {...(runtimeEnv ? { runtimeEnv } : {})}
@@ -404,6 +411,7 @@ export default function ThreadTerminalDrawer({
                   threadId={threadId}
                   terminalId={resolvedActiveTerminalId}
                   terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
+                  executionTargetId={executionTargetId}
                   cwd={cwd}
                   {...(worktreePath !== undefined ? { worktreePath } : {})}
                   {...(runtimeEnv ? { runtimeEnv } : {})}

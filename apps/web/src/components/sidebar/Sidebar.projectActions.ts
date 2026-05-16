@@ -6,7 +6,6 @@ import {
   type MouseEvent,
   type KeyboardEvent,
 } from "react";
-import type React from "react";
 import { type DragCancelEvent, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import {
   isBuiltInChatsProject,
@@ -15,19 +14,15 @@ import {
   type ThreadId as ThreadIdType,
 } from "@bigbud/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { isNonEmpty as isNonEmptyString } from "effect/String";
-import { isMacPlatform, newCommandId, newProjectId } from "../../lib/utils";
-import { useUiStateStore } from "../../stores/ui";
+import { isMacPlatform, newCommandId } from "../../lib/utils";
 import { useStore } from "../../stores/main";
+import { useUiStateStore } from "../../stores/ui";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
-import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useSettings } from "../../hooks/useSettings";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
 import type { Project } from "../../models/types";
 import type { SidebarProjectSnapshot } from "./Sidebar.types";
-import { useServerProviders } from "../../rpc/serverState";
-import { getDefaultModelSelection } from "../../models/provider/provider.models";
 
 export interface SidebarProjectActionsInput {
   /** Projects list from the main store. */
@@ -35,25 +30,13 @@ export interface SidebarProjectActionsInput {
   threadIdsByProjectId: Record<string, ThreadIdType[]>;
   sidebarProjects: SidebarProjectSnapshot[];
   appSettings: ReturnType<typeof useSettings>;
-  isAddingProject: boolean;
-  setIsAddingProject: (v: boolean) => void;
-  newCwd: string;
-  setNewCwd: (v: string) => void;
-  setAddProjectError: (v: string | null) => void;
-  setAddingProject: (updater: (prev: boolean) => boolean) => void;
-  isPickingFolder: boolean;
-  setIsPickingFolder: (v: boolean) => void;
-  addProjectInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  shouldBrowseForProjectImmediately: boolean;
   /** Shared drag refs — owned by the composition hook. */
-  dragInProgressRef: React.MutableRefObject<boolean>;
-  suppressProjectClickAfterDragRef: React.MutableRefObject<boolean>;
-  suppressProjectClickForContextMenuRef: React.MutableRefObject<boolean>;
+  dragInProgressRef: { current: boolean };
+  suppressProjectClickAfterDragRef: { current: boolean };
+  suppressProjectClickForContextMenuRef: { current: boolean };
   selectedThreadIdsSize: number;
   clearSelection: () => void;
   copyPathToClipboard: (text: string, ctx: { path: string }) => void;
-  focusMostRecentThreadForProject: (projectId: ProjectId) => void;
-  handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
   /** Called when a thread rename is in progress — cancels it so both can't be active at once. */
   cancelThreadRename: () => void;
 }
@@ -83,12 +66,6 @@ export interface SidebarProjectActionsOutput {
   dismissPendingProjectDeleteConfirmation: () => void;
   confirmPendingProjectDelete: () => Promise<void>;
   requestProjectDelete: (projectId: ProjectId) => void;
-  // Other actions
-  addProjectFromPath: (rawCwd: string) => Promise<void>;
-  handleAddProject: () => void;
-  handlePickFolder: () => Promise<void>;
-  handleStartAddProject: () => void;
-  cancelAddProject: () => void;
   handleProjectContextMenu: (projectId: ProjectId, position: { x: number; y: number }) => void;
   handleProjectDragStart: (event: DragStartEvent) => void;
   handleProjectDragEnd: (event: DragEndEvent) => void;
@@ -107,24 +84,12 @@ export function useSidebarProjectActions({
   threadIdsByProjectId,
   sidebarProjects,
   appSettings,
-  isAddingProject,
-  setIsAddingProject,
-  newCwd,
-  setNewCwd,
-  setAddProjectError,
-  setAddingProject,
-  isPickingFolder,
-  setIsPickingFolder,
-  addProjectInputRef,
-  shouldBrowseForProjectImmediately,
   dragInProgressRef,
   suppressProjectClickAfterDragRef,
   suppressProjectClickForContextMenuRef,
   selectedThreadIdsSize,
   clearSelection,
   copyPathToClipboard,
-  focusMostRecentThreadForProject,
-  handleNewThread,
   cancelThreadRename,
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
@@ -134,7 +99,6 @@ export function useSidebarProjectActions({
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
   const navigate = useNavigate();
-  const serverProviders = useServerProviders();
 
   const [renamingProjectId, setRenamingProjectId] = useState<ProjectId | null>(null);
   const [renamingProjectTitle, setRenamingProjectTitle] = useState("");
@@ -299,118 +263,6 @@ export function useSidebarProjectActions({
     threadIdsByProjectId,
   ]);
 
-  const addProjectFromPath = useCallback(
-    async (rawCwd: string) => {
-      const cwd = rawCwd.trim();
-      if (!cwd || isAddingProject) return;
-      const api = readNativeApi();
-      if (!api) return;
-
-      setIsAddingProject(true);
-      const finishAddingProject = () => {
-        setIsAddingProject(false);
-        setNewCwd("");
-        setAddProjectError(null);
-        setAddingProject(() => false);
-      };
-
-      const existing = projects.find((project) => project.cwd === cwd);
-      if (existing) {
-        focusMostRecentThreadForProject(existing.id);
-        finishAddingProject();
-        return;
-      }
-
-      const projectId = newProjectId();
-      const createdAt = new Date().toISOString();
-      const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "project.create",
-          commandId: newCommandId(),
-          projectId,
-          title,
-          workspaceRoot: cwd,
-          defaultModelSelection: getDefaultModelSelection(serverProviders),
-          createdAt,
-        });
-        await handleNewThread(projectId, {
-          envMode: appSettings.defaultThreadEnvMode,
-        }).catch(() => undefined);
-      } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "An error occurred while adding the project.";
-        setIsAddingProject(false);
-        if (shouldBrowseForProjectImmediately) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description,
-          });
-        } else {
-          setAddProjectError(description);
-        }
-        return;
-      }
-      finishAddingProject();
-    },
-    [
-      focusMostRecentThreadForProject,
-      handleNewThread,
-      isAddingProject,
-      projects,
-      serverProviders,
-      shouldBrowseForProjectImmediately,
-      appSettings.defaultThreadEnvMode,
-      setIsAddingProject,
-      setNewCwd,
-      setAddProjectError,
-      setAddingProject,
-    ],
-  );
-
-  const handleAddProject = () => {
-    void addProjectFromPath(newCwd);
-  };
-
-  const handlePickFolder = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api || isPickingFolder) return;
-    setIsPickingFolder(true);
-    let pickedPath: string | null = null;
-    try {
-      pickedPath = await api.dialogs.pickFolder();
-    } catch {
-      // Ignore picker failures and leave the current thread selection unchanged.
-    }
-    if (pickedPath) {
-      await addProjectFromPath(pickedPath);
-    } else if (!shouldBrowseForProjectImmediately) {
-      addProjectInputRef.current?.focus();
-    }
-    setIsPickingFolder(false);
-  }, [
-    addProjectFromPath,
-    isPickingFolder,
-    shouldBrowseForProjectImmediately,
-    setIsPickingFolder,
-    addProjectInputRef,
-  ]);
-
-  const handleStartAddProject = useCallback(() => {
-    setAddProjectError(null);
-    if (shouldBrowseForProjectImmediately) {
-      void handlePickFolder();
-      return;
-    }
-    setAddingProject((prev) => !prev);
-  }, [handlePickFolder, setAddProjectError, setAddingProject, shouldBrowseForProjectImmediately]);
-
-  const cancelAddProject = useCallback(() => {
-    setAddingProject(() => false);
-    setAddProjectError(null);
-  }, [setAddingProject, setAddProjectError]);
-
   const handleProjectContextMenuAsync = useCallback(
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
@@ -567,11 +419,6 @@ export function useSidebarProjectActions({
     dismissPendingProjectDeleteConfirmation,
     confirmPendingProjectDelete,
     requestProjectDelete,
-    addProjectFromPath,
-    handleAddProject,
-    handlePickFolder,
-    handleStartAddProject,
-    cancelAddProject,
     handleProjectContextMenu,
     handleProjectDragStart,
     handleProjectDragEnd,

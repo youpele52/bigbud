@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
+import { LOCAL_EXECUTION_TARGET_ID } from "../core/baseSchemas";
 import { ProviderSendTurnInput, ProviderSessionStartInput } from "./provider";
 
 const decodeProviderSessionStartInput = Schema.decodeUnknownSync(ProviderSessionStartInput);
@@ -25,11 +26,29 @@ describe("ProviderSessionStartInput", () => {
     expect(parsed.runtimeMode).toBe("full-access");
     expect(parsed.modelSelection?.provider).toBe("codex");
     expect(parsed.modelSelection?.model).toBe("gpt-5.3-codex");
+    expect(parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID).toBe(LOCAL_EXECUTION_TARGET_ID);
     if (parsed.modelSelection?.provider !== "codex") {
       throw new Error("Expected codex modelSelection");
     }
     expect(parsed.modelSelection.options?.reasoningEffort).toBe("high");
     expect(parsed.modelSelection.options?.fastMode).toBe(true);
+  });
+
+  it("accepts separate provider runtime and workspace targets", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-1",
+      provider: "pi",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      cwd: "/root/project",
+      runtimeMode: "full-access",
+    });
+
+    expect(parsed.providerRuntimeExecutionTargetId).toBe("local");
+    expect(parsed.workspaceExecutionTargetId).toBe(
+      "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+    );
+    expect(parsed.executionTargetId).toBeUndefined();
   });
 
   it("rejects payloads without runtime mode", () => {
@@ -67,6 +86,7 @@ describe("ProviderSessionStartInput", () => {
     expect(parsed.modelSelection.options?.effort).toBe("max");
     expect(parsed.modelSelection.options?.fastMode).toBe(true);
     expect(parsed.runtimeMode).toBe("full-access");
+    expect(parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID).toBe(LOCAL_EXECUTION_TARGET_ID);
   });
 });
 

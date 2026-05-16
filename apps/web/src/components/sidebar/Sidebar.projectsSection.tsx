@@ -12,7 +12,14 @@ import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProje
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem, type RenderedProjectData } from "./SidebarRenderedProjectItem";
-import { SidebarSectionLabel } from "./SidebarSectionLabel";
+import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import {
+  SidebarSectionLabel,
+  sidebarSectionLabelActionsClassName,
+  sidebarSectionLabelRowClassName,
+  sidebarSectionLabelTextClassName,
+} from "./SidebarSectionLabel";
 import type { RenderedProjectEntry, SharedProjectItemProps } from "./Sidebar.types";
 
 interface DesktopUpdateButtonProps {
@@ -33,6 +40,7 @@ interface SidebarProjectsSectionProps {
   onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   shouldShowProjectPathEntry: boolean;
   handleStartAddProject: () => void;
+  openRemoteProjectDialog: () => void;
   onCloseMobileSidebar: () => void;
   // New project flow
   isElectron: boolean;
@@ -50,7 +58,6 @@ interface SidebarProjectsSectionProps {
   renderedProjects: RenderedProjectEntry[];
   isManualProjectSorting: boolean;
   bootstrapComplete: boolean;
-  hasProjects: boolean;
   onDragStart: (event: import("@dnd-kit/core").DragStartEvent) => void;
   onDragEnd: (event: import("@dnd-kit/core").DragEndEvent) => void;
   onDragCancel: (event: import("@dnd-kit/core").DragCancelEvent) => void;
@@ -68,6 +75,7 @@ export function SidebarProjectsSection({
   onThreadSortOrderChange,
   shouldShowProjectPathEntry,
   handleStartAddProject,
+  openRemoteProjectDialog,
   onCloseMobileSidebar,
   isElectron,
   newCwd,
@@ -83,12 +91,18 @@ export function SidebarProjectsSection({
   renderedProjects,
   isManualProjectSorting,
   bootstrapComplete,
-  hasProjects,
   onDragStart,
   onDragEnd,
   onDragCancel,
   sharedProjectItemProps,
 }: SidebarProjectsSectionProps) {
+  const localProjects = renderedProjects.filter(
+    (entry) => !isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
+  );
+  const remoteProjects = renderedProjects.filter((entry) =>
+    isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
+  );
+
   return (
     <>
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
@@ -172,11 +186,11 @@ export function SidebarProjectsSection({
         )}
 
         <SidebarProjectList
-          renderedProjects={renderedProjects as unknown as RenderedProject[]}
+          renderedProjects={localProjects as unknown as RenderedProject[]}
           isManualSorting={isManualProjectSorting}
           bootstrapComplete={bootstrapComplete}
-          hasProjects={hasProjects}
-          showEmptyState={!shouldShowProjectPathEntry}
+          hasProjects={localProjects.length > 0}
+          showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
@@ -188,6 +202,64 @@ export function SidebarProjectsSection({
             />
           )}
         />
+
+        <div className="mt-3">
+          <div className="-mx-2 px-4 pt-1.5 pb-2">
+            <div className={sidebarSectionLabelRowClassName}>
+              <div className={sidebarSectionLabelTextClassName}>Remote Projects</div>
+              <div className={sidebarSectionLabelActionsClassName}>
+                <ProjectSortMenu
+                  projectSortOrder={appSettingsSidebarProjectSortOrder}
+                  threadSortOrder={appSettingsSidebarThreadSortOrder}
+                  onProjectSortOrderChange={onProjectSortOrderChange}
+                  onThreadSortOrderChange={onThreadSortOrderChange}
+                />
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        aria-label="Add remote project"
+                        className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                        onClick={() => {
+                          onCloseMobileSidebar();
+                          openRemoteProjectDialog();
+                        }}
+                      />
+                    }
+                  >
+                    <PlusIcon className="size-3.5" />
+                  </TooltipTrigger>
+                  <TooltipPopup side="right">Add remote project</TooltipPopup>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          <SidebarProjectList
+            renderedProjects={remoteProjects as unknown as RenderedProject[]}
+            isManualSorting={isManualProjectSorting}
+            bootstrapComplete={bootstrapComplete}
+            hasProjects={remoteProjects.length > 0}
+            showEmptyState={false}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDragCancel={onDragCancel}
+            renderProjectItem={(rp, dragHandleProps) => (
+              <SidebarRenderedProjectItem
+                {...sharedProjectItemProps}
+                {...(rp as unknown as RenderedProjectData)}
+                dragHandleProps={dragHandleProps as SortableProjectHandleProps | null}
+              />
+            )}
+          />
+
+          {bootstrapComplete &&
+          remoteProjects.length === 0 &&
+          (localProjects.length > 0 || shouldShowProjectPathEntry) ? (
+            <div className="px-4 py-2 text-xs text-muted-foreground/60">No remote projects yet</div>
+          ) : null}
+        </div>
       </SidebarGroup>
     </>
   );

@@ -1,10 +1,11 @@
 import { Schema } from "effect";
-import { PositiveInt, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ExecutionTargetId, PositiveInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
+  executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyString,
   query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_ENTRIES_MAX_LIMIT)),
@@ -35,6 +36,7 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
 ) {}
 
 export const ProjectWriteFileInput = Schema.Struct({
+  executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,

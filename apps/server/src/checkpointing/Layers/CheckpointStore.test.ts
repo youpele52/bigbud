@@ -14,9 +14,8 @@ import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { GitCore } from "../../git/Services/GitCore.ts";
-import { GitCommandError } from "@bigbud/contracts";
+import { ThreadId, type GitCommandError, type GitServiceError } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
-import { ThreadId } from "@bigbud/contracts";
 
 const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
   prefix: "t3-checkpoint-store-test-",
@@ -70,7 +69,7 @@ function initRepoWithCommit(
   cwd: string,
 ): Effect.Effect<
   void,
-  GitCommandError | PlatformError.PlatformError,
+  GitServiceError | PlatformError.PlatformError,
   GitCore | FileSystem.FileSystem
 > {
   return Effect.gen(function* () {

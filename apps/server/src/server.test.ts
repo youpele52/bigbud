@@ -1643,6 +1643,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         );
         assert.deepEqual(createWorktree.mock.calls[0]?.[0], {
           cwd: "/tmp/project",
+          executionTargetId: "local",
           branch: "main",
           newBranch: "bigcode/bootstrap-branch",
           path: null,
@@ -1650,7 +1651,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         assert.deepEqual(runForThread.mock.calls[0]?.[0], {
           threadId: ThreadId.makeUnsafe("thread-bootstrap"),
           projectId: defaultProjectId,
-          projectCwd: "/tmp/project",
+          projectCwd: "/tmp/default-project",
           worktreePath: "/tmp/bootstrap-worktree",
         });
 
@@ -1668,6 +1669,90 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           assert.equal(finalCommand.bootstrap, undefined);
         }
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("propagates project execution targets into bootstrap worktree creation", () =>
+    Effect.gen(function* () {
+      const readModel = makeDefaultOrchestrationReadModel();
+      const createWorktree = vi.fn((_: Parameters<GitCoreShape["createWorktree"]>[0]) =>
+        Effect.succeed({
+          worktree: {
+            branch: "bigcode/bootstrap-branch",
+            path: "/tmp/bootstrap-worktree",
+          },
+        }),
+      );
+
+      yield* buildAppUnderTest({
+        layers: {
+          gitCore: {
+            createWorktree,
+          },
+          orchestrationEngine: {
+            getReadModel: () =>
+              Effect.succeed({
+                ...readModel,
+                projects: [
+                  {
+                    ...readModel.projects[0]!,
+                    workspaceRoot: "/tmp/project",
+                    providerRuntimeExecutionTargetId: "local",
+                    workspaceExecutionTargetId: "ssh:workspace-devbox",
+                    executionTargetId: "local",
+                  },
+                ],
+              }),
+          },
+        },
+      });
+
+      const createdAt = new Date().toISOString();
+      const wsUrl = yield* getWsServerUrl("/ws");
+      yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[ORCHESTRATION_WS_METHODS.dispatchCommand]({
+            type: "thread.turn.start",
+            commandId: CommandId.makeUnsafe("cmd-bootstrap-turn-start-target"),
+            threadId: ThreadId.makeUnsafe("thread-bootstrap-target"),
+            message: {
+              messageId: MessageId.makeUnsafe("msg-bootstrap-target"),
+              role: "user",
+              text: "hello",
+              attachments: [],
+            },
+            modelSelection: defaultModelSelection,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            bootstrap: {
+              createThread: {
+                projectId: defaultProjectId,
+                title: "Bootstrap Thread",
+                modelSelection: defaultModelSelection,
+                runtimeMode: "full-access",
+                interactionMode: "default",
+                branch: "main",
+                worktreePath: null,
+                createdAt,
+              },
+              prepareWorktree: {
+                projectCwd: "/tmp/project",
+                baseBranch: "main",
+                branch: "bigcode/bootstrap-branch",
+              },
+            },
+            createdAt,
+          }),
+        ),
+      );
+
+      assert.deepEqual(createWorktree.mock.calls[0]?.[0], {
+        cwd: "/tmp/project",
+        executionTargetId: "ssh:workspace-devbox",
+        branch: "main",
+        newBranch: "bigcode/bootstrap-branch",
+        path: null,
+      });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
   it.effect("records setup-script failures without aborting bootstrap turn start", () =>

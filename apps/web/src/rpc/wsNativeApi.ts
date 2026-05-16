@@ -88,6 +88,8 @@ export function createWsNativeApi(): NativeApi {
     server: {
       getConfig: rpcClient.server.getConfig,
       refreshProviders: rpcClient.server.refreshProviders,
+      verifyExecutionTarget: rpcClient.server.verifyExecutionTarget,
+      unlockSshKey: rpcClient.server.unlockSshKey,
       upsertKeybinding: rpcClient.server.upsertKeybinding,
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,

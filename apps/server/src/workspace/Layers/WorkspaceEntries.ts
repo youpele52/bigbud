@@ -3,7 +3,7 @@ import type { Dirent } from "node:fs";
 
 import { Cache, Duration, Effect, Exit, Layer, Option, Path } from "effect";
 
-import { type ProjectEntry } from "@bigbud/contracts";
+import { resolveExecutionTargetId, type ProjectEntry } from "@bigbud/contracts";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import {
@@ -24,6 +24,8 @@ import {
   scoreEntry,
   insertRankedEntry,
 } from "./WorkspaceEntriesSearch.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { buildRemoteWorkspaceIndex } from "./WorkspaceEntries.remote.ts";
 
 const WORKSPACE_CACHE_TTL_MS = 15_000;
 const WORKSPACE_CACHE_MAX_KEYS = 4;
@@ -261,8 +263,23 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   });
 
   const buildWorkspaceIndex = Effect.fn("WorkspaceEntries.buildWorkspaceIndex")(function* (
-    cwd: string,
+    cacheKey: string,
   ): Effect.fn.Return<WorkspaceIndex, WorkspaceEntriesError> {
+    const [executionTargetId, cwd] = cacheKey.split("\u0000");
+    if (cwd === undefined || !executionTargetId) {
+      return yield* new WorkspaceEntriesError({
+        cwd: cacheKey,
+        operation: "workspaceEntries.cacheKey",
+        detail: "Invalid workspace cache key.",
+      });
+    }
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      return yield* buildRemoteWorkspaceIndex({
+        cwd,
+        executionTargetId,
+      });
+    }
+
     const gitIndexed = yield* buildWorkspaceIndexFromGit(cwd);
     if (gitIndexed) {
       return gitIndexed;
@@ -298,17 +315,26 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
       const normalizedCwd = yield* normalizeWorkspaceRoot(cwd).pipe(
         Effect.catch(() => Effect.succeed(cwd)),
       );
-      yield* Cache.invalidate(workspaceIndexCache, cwd);
+      yield* Cache.invalidate(workspaceIndexCache, `local\u0000${cwd}`);
       if (normalizedCwd !== cwd) {
-        yield* Cache.invalidate(workspaceIndexCache, normalizedCwd);
+        yield* Cache.invalidate(workspaceIndexCache, `local\u0000${normalizedCwd}`);
       }
     },
   );
 
   const search: WorkspaceEntriesShape["search"] = Effect.fn("WorkspaceEntries.search")(
     function* (input) {
-      const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
-      return yield* Cache.get(workspaceIndexCache, normalizedCwd).pipe(
+      const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+      const normalizedCwd = isLocalExecutionTarget(executionTargetId)
+        ? yield* normalizeWorkspaceRoot(input.cwd)
+        : input.cwd;
+      const indexEffect = isLocalExecutionTarget(executionTargetId)
+        ? Cache.get(workspaceIndexCache, `${executionTargetId}\u0000${normalizedCwd}`)
+        : buildRemoteWorkspaceIndex({
+            cwd: normalizedCwd,
+            executionTargetId,
+          });
+      return yield* indexEffect.pipe(
         Effect.map((index) => {
           const normalizedQueryStr = normalizeQuery(input.query);
           const limit = Math.max(0, Math.floor(input.limit));

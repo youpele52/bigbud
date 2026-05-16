@@ -26,6 +26,7 @@ import {
   getProviderModels,
   resolveSelectableProvider,
 } from "../../../../models/provider";
+import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
 import { useEffectiveComposerModelState } from "../../../../stores/composer";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../../provider/ProviderModelPicker";
 import { getComposerProviderState } from "../../provider/composerProviderRegistry";
@@ -152,7 +153,12 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     (debouncerState) => ({ isPending: debouncerState.isPending }),
   );
   const effectivePathQuery = pathTriggerQuery.length > 0 ? debouncedPathQuery : "";
-  const gitStatusQuery = useQuery(gitStatusQueryOptions(gitCwd));
+  const gitStatusQuery = useQuery(
+    gitStatusQueryOptions(
+      gitCwd,
+      base.activeProject ? resolveWorkspaceExecutionTargetId(base.activeProject) : undefined,
+    ),
+  );
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
   const discoveredAgents = useServerDiscoveredAgents() ?? EMPTY_DISCOVERED_AGENTS;
@@ -211,6 +217,9 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const workspaceEntriesQuery = useQuery(
     projectSearchEntriesQueryOptions({
       cwd: gitCwd,
+      executionTargetId: base.activeProject
+        ? resolveWorkspaceExecutionTargetId(base.activeProject)
+        : undefined,
       query: effectivePathQuery,
       enabled: isPathTrigger,
       limit: 80,

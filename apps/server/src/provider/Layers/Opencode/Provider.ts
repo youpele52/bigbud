@@ -144,13 +144,14 @@ const getOpencodeVersion = Effect.fn("getOpencodeVersion")(function* (binaryPath
  * release the handle.  Reuses a running server if one is already active.
  */
 const withOpencodeServer = <A>(
+  binaryPath: string,
   f: (client: OpencodeClient) => Promise<A>,
 ): Effect.Effect<A, ProviderAdapterProcessError, OpencodeServerManager> =>
   Effect.gen(function* () {
     const manager = yield* OpencodeServerManager;
     return yield* Effect.acquireUseRelease(
       Effect.tryPromise({
-        try: () => manager.acquire(),
+        try: () => manager.acquire({ binaryPath }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
@@ -286,7 +287,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
     });
   }
 
-  const statusResult = yield* withOpencodeServer(async (client) => {
+  const statusResult = yield* withOpencodeServer(opencodeSettings.binaryPath, async (client) => {
     // Fetch provider config to enumerate available models.
     const providersResp = await client.config.providers();
 

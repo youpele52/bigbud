@@ -99,6 +99,7 @@ export interface CodexAppServerSendTurnInput {
 export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
+  readonly executionTargetId?: string;
   readonly cwd?: string;
   readonly model?: string;
   readonly serviceTier?: string;

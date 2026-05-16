@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import {
+  ExecutionTargetId,
   IsoDateTime,
   NonNegativeInt,
   ProjectId,
@@ -174,6 +175,46 @@ export const ServerUpsertKeybindingResult = Schema.Struct({
   issues: ServerConfigIssues,
 });
 export type ServerUpsertKeybindingResult = typeof ServerUpsertKeybindingResult.Type;
+
+export const ServerVerifyExecutionTargetInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  cwd: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerVerifyExecutionTargetInput = typeof ServerVerifyExecutionTargetInput.Type;
+
+export const ServerVerifyExecutionTargetResult = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  message: TrimmedNonEmptyString,
+  cwd: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerVerifyExecutionTargetResult = typeof ServerVerifyExecutionTargetResult.Type;
+
+export class ServerVerifyExecutionTargetError extends Schema.TaggedErrorClass<ServerVerifyExecutionTargetError>()(
+  "ServerVerifyExecutionTargetError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ServerUnlockSshKeyInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  passphrase: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshKeyInput = typeof ServerUnlockSshKeyInput.Type;
+
+export const ServerUnlockSshKeyResult = Schema.Struct({
+  message: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshKeyResult = typeof ServerUnlockSshKeyResult.Type;
+
+export class ServerUnlockSshKeyError extends Schema.TaggedErrorClass<ServerUnlockSshKeyError>()(
+  "ServerUnlockSshKeyError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
 
 export const ServerConfigUpdatedPayload = Schema.Struct({
   issues: ServerConfigIssues,

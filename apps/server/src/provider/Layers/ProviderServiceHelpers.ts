@@ -9,6 +9,7 @@ import { ModelSelection, NonNegativeInt, ThreadId } from "@bigbud/contracts";
 import { Effect, Schema, SchemaIssue } from "effect";
 
 import { ProviderValidationError } from "../Errors.ts";
+import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import type { ProviderRuntimeBinding } from "../Services/ProviderSessionDirectory.ts";
 
 export const ProviderRollbackConversationInput = Schema.Struct({
@@ -63,6 +64,9 @@ export function toRuntimeStatus(session: {
 
 export function toRuntimePayloadFromSession(
   session: {
+    providerRuntimeExecutionTargetId?: string | null | undefined;
+    workspaceExecutionTargetId?: string | null | undefined;
+    executionTargetId?: string | null | undefined;
     cwd?: string | null | undefined;
     model?: string | null | undefined;
     activeTurnId?: string | null | undefined;
@@ -74,7 +78,15 @@ export function toRuntimePayloadFromSession(
     readonly lastRuntimeEventAt?: string;
   },
 ): Record<string, unknown> {
+  const executionTargets = resolveProviderSessionExecutionTargets({
+    providerRuntimeExecutionTargetId: session.providerRuntimeExecutionTargetId,
+    workspaceExecutionTargetId: session.workspaceExecutionTargetId,
+    executionTargetId: session.executionTargetId,
+  });
   return {
+    providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+    workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+    executionTargetId: executionTargets.executionTargetId,
     cwd: session.cwd ?? null,
     model: session.model ?? null,
     activeTurnId: session.activeTurnId ?? null,

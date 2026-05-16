@@ -3,7 +3,7 @@
  *
  * @module ProjectionPipeline.projector.threads
  */
-import { type OrchestrationEvent } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type OrchestrationEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
 import {
@@ -27,6 +27,15 @@ export function makeThreadsProjector(
           threadId: event.payload.threadId,
           projectId: event.payload.projectId,
           title: event.payload.title,
+          providerRuntimeExecutionTargetId:
+            event.payload.providerRuntimeExecutionTargetId ??
+            event.payload.executionTargetId ??
+            LOCAL_EXECUTION_TARGET_ID,
+          workspaceExecutionTargetId:
+            event.payload.workspaceExecutionTargetId ??
+            event.payload.executionTargetId ??
+            LOCAL_EXECUTION_TARGET_ID,
+          executionTargetId: event.payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
           modelSelection: event.payload.modelSelection,
           runtimeMode: event.payload.runtimeMode,
           interactionMode: event.payload.interactionMode,
@@ -114,6 +123,15 @@ export function makeThreadsProjector(
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
           ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+          ...(event.payload.providerRuntimeExecutionTargetId !== undefined
+            ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
+            : {}),
+          ...(event.payload.workspaceExecutionTargetId !== undefined
+            ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
+            : {}),
+          ...(event.payload.executionTargetId !== undefined
+            ? { executionTargetId: event.payload.executionTargetId }
+            : {}),
           ...(event.payload.modelSelection !== undefined
             ? { modelSelection: event.payload.modelSelection }
             : {}),

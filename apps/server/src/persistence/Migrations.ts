@@ -40,6 +40,9 @@ import Migration0024 from "./Migrations/024_ProjectionThreadSessionReason.ts";
 import Migration0025 from "./Migrations/025_ProjectionThreadsDeletingAt.ts";
 import Migration0026 from "./Migrations/026_ProjectionProjectsDeletingAt.ts";
 import Migration0027 from "./Migrations/027_ProjectionThreadMessageReplies.ts";
+import Migration0028 from "./Migrations/028_ExecutionTargets.ts";
+import Migration0029 from "./Migrations/029_ProviderRuntimeWorkspaceExecutionTargets.ts";
+import Migration0030 from "./Migrations/030_ProjectionRuntimeWorkspaceExecutionTargets.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -79,6 +82,9 @@ export const migrationEntries = [
   [25, "ProjectionThreadsDeletingAt", Migration0025],
   [26, "ProjectionProjectsDeletingAt", Migration0026],
   [27, "ProjectionThreadMessageReplies", Migration0027],
+  [28, "ExecutionTargets", Migration0028],
+  [29, "ProviderRuntimeWorkspaceExecutionTargets", Migration0029],
+  [30, "ProjectionRuntimeWorkspaceExecutionTargets", Migration0030],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

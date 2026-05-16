@@ -28,6 +28,7 @@ import type { GitStatusBroadcasterShape } from "../../git/Services/GitStatusBroa
 import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
+import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd, type ServerSettingsShape } from "../../ws/serverSettings.ts";
 import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
@@ -159,15 +160,25 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       readonly resumeCursor?: unknown;
       readonly provider?: import("@bigbud/contracts").ProviderKind;
       readonly fresh?: boolean;
-    }) =>
-      (input?.fresh ? providerService.startSessionFresh : providerService.startSession)(threadId, {
-        threadId,
-        ...(preferredProvider ? { provider: preferredProvider } : {}),
-        ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-        modelSelection: desiredModelSelection,
-        ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-        runtimeMode: desiredRuntimeMode,
+    }) => {
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: thread.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: thread.workspaceExecutionTargetId,
+        executionTargetId: thread.executionTargetId,
       });
+      return (input?.fresh ? providerService.startSessionFresh : providerService.startSession)(
+        threadId,
+        {
+          threadId,
+          ...(preferredProvider ? { provider: preferredProvider } : {}),
+          ...executionTargets,
+          ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
+          modelSelection: desiredModelSelection,
+          ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+          runtimeMode: desiredRuntimeMode,
+        },
+      );
+    };
 
     const bindSessionToThread = (session: ProviderSession) =>
       setThreadSession({

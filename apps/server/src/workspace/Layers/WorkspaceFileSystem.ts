@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Layer, Path } from "effect";
+import { resolveExecutionTargetId } from "@bigbud/contracts";
 
 import {
   WorkspaceFileSystem,
@@ -7,6 +8,9 @@ import {
 } from "../Services/WorkspaceFileSystem.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
+import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 
 export const makeWorkspaceFileSystem = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -17,10 +21,41 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
   const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
   )(function* (input) {
+    const workspaceTarget = resolveWorkspaceTarget({
+      executionTargetId: input.executionTargetId,
+      cwd: input.cwd,
+    });
+    const toolTransportTarget = resolveToolTransportTarget(workspaceTarget);
+    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
     const target = yield* workspacePaths.resolveRelativePathWithinRoot({
       workspaceRoot: input.cwd,
       relativePath: input.relativePath,
     });
+
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      yield* Effect.tryPromise({
+        try: () =>
+          runToolCommand({
+            target: toolTransportTarget,
+            command: "sh",
+            args: ["-lc", 'mkdir -p "$(dirname -- "$1")" && cat > "$1"', "sh", target.relativePath],
+            stdin: input.contents,
+            timeoutMs: 30_000,
+            maxBufferBytes: 256 * 1024,
+            outputMode: "truncate",
+          }),
+        catch: (cause) =>
+          new WorkspaceFileSystemError({
+            cwd: input.cwd,
+            relativePath: input.relativePath,
+            operation: "workspaceFileSystem.writeFileRemote",
+            detail: cause instanceof Error ? cause.message : String(cause),
+            cause,
+          }),
+      });
+      yield* workspaceEntries.invalidate(input.cwd);
+      return { relativePath: target.relativePath };
+    }
 
     yield* fileSystem.makeDirectory(path.dirname(target.absolutePath), { recursive: true }).pipe(
       Effect.mapError(

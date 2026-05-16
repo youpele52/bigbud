@@ -28,7 +28,11 @@ import type {
 import type {
   ServerConfig,
   ServerProviderUpdatedPayload,
+  ServerUnlockSshKeyInput,
+  ServerUnlockSshKeyResult,
   ServerUpsertKeybindingResult,
+  ServerVerifyExecutionTargetInput,
+  ServerVerifyExecutionTargetResult,
 } from "./server";
 import type {
   TerminalClearInput,
@@ -195,6 +199,10 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<ServerConfig>;
     refreshProviders: () => Promise<ServerProviderUpdatedPayload>;
+    verifyExecutionTarget: (
+      input: ServerVerifyExecutionTargetInput,
+    ) => Promise<ServerVerifyExecutionTargetResult>;
+    unlockSshKey: (input: ServerUnlockSshKeyInput) => Promise<ServerUnlockSshKeyResult>;
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;

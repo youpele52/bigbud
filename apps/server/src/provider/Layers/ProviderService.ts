@@ -10,7 +10,7 @@
  * @module ProviderServiceLive
  */
 import {
-  ThreadId,
+  LOCAL_EXECUTION_TARGET_ID,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
@@ -18,7 +18,6 @@ import {
   ProviderSessionStartInput,
   ProviderStopSessionInput,
   type ProviderRuntimeEvent,
-  type ProviderSession,
 } from "@bigbud/contracts";
 import { Effect, Layer, Option, PubSub, Stream } from "effect";
 
@@ -38,12 +37,7 @@ import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.t
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import {
-  toValidationError,
-  decodeInputOrValidationError,
-  toRuntimeStatus,
-  toRuntimePayloadFromSession,
-} from "./ProviderServiceHelpers.ts";
+import { toValidationError, decodeInputOrValidationError } from "./ProviderServiceHelpers.ts";
 import type { ProviderServiceError } from "../Errors.ts";
 import {
   makeRecoverSessionForThread,
@@ -54,6 +48,15 @@ import {
   makeRollbackConversation,
   makeRunStopAll,
 } from "./ProviderService.operations.ts";
+import {
+  makeStopStaleSessionsForThread,
+  makeUpsertSessionBinding,
+} from "./ProviderService.sessionLifecycle.ts";
+import {
+  formatUnsupportedProviderExecutionTargetDetail,
+  supportsProviderExecutionTarget,
+} from "../providerExecutionTargets.ts";
+import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -84,23 +87,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Effect.asVoid,
     );
 
-  const upsertSessionBinding = (
-    session: ProviderSession,
-    threadId: ThreadId,
-    extra?: {
-      readonly modelSelection?: unknown;
-      readonly lastRuntimeEvent?: string;
-      readonly lastRuntimeEventAt?: string;
-    },
-  ) =>
-    directory.upsert({
-      threadId,
-      provider: session.provider,
-      runtimeMode: session.runtimeMode,
-      status: toRuntimeStatus(session),
-      ...(session.resumeCursor !== undefined ? { resumeCursor: session.resumeCursor } : {}),
-      runtimePayload: toRuntimePayloadFromSession(session, extra),
-    });
+  const upsertSessionBinding = makeUpsertSessionBinding(directory);
 
   const providers = yield* registry.listProviders();
   const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
@@ -127,37 +114,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     recoverSessionForThread,
   );
 
-  const stopStaleSessionsForThread = Effect.fn("stopStaleSessionsForThread")(function* (input: {
-    readonly threadId: ThreadId;
-    readonly currentProvider: ProviderSession["provider"];
-  }) {
-    yield* Effect.forEach(
-      adapters,
-      (adapter) =>
-        adapter.provider === input.currentProvider
-          ? Effect.void
-          : Effect.gen(function* () {
-              const hasSession = yield* adapter.hasSession(input.threadId);
-              if (!hasSession) {
-                return;
-              }
-
-              yield* adapter.stopSession(input.threadId).pipe(
-                Effect.tap(() =>
-                  analytics.record("provider.session.stopped", { provider: adapter.provider }),
-                ),
-                Effect.catchCause((cause) =>
-                  Effect.logWarning("provider.session.stop-stale-failed", {
-                    threadId: input.threadId,
-                    provider: adapter.provider,
-                    cause,
-                  }),
-                ),
-              );
-            }),
-      { discard: true },
-    );
-  });
+  const stopStaleSessionsForThread = makeStopStaleSessionsForThread(adapters, analytics);
 
   const startSessionInternal = (options?: {
     readonly reusePersistedResumeCursor?: boolean;
@@ -168,11 +125,30 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         schema: ProviderSessionStartInput,
         payload: rawInput,
       });
+      const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
 
+      const provider = parsed.provider ?? "codex";
+      const workspaceDefaultExecutionTargetId =
+        persistedBinding?.workspaceExecutionTargetId ??
+        persistedBinding?.executionTargetId ??
+        LOCAL_EXECUTION_TARGET_ID;
       const input = {
         ...parsed,
         threadId,
-        provider: parsed.provider ?? "codex",
+        provider,
+        ...resolveProviderSessionExecutionTargets({
+          providerRuntimeExecutionTargetId: parsed.providerRuntimeExecutionTargetId,
+          workspaceExecutionTargetId: parsed.workspaceExecutionTargetId,
+          executionTargetId: parsed.executionTargetId,
+          useLegacyExecutionTargetForProviderRuntime: provider !== "pi",
+          defaultProviderRuntimeExecutionTargetId:
+            provider === "pi"
+              ? LOCAL_EXECUTION_TARGET_ID
+              : (persistedBinding?.providerRuntimeExecutionTargetId ??
+                persistedBinding?.executionTargetId ??
+                workspaceDefaultExecutionTargetId),
+          defaultWorkspaceExecutionTargetId: workspaceDefaultExecutionTargetId,
+        }),
       };
       yield* Effect.annotateCurrentSpan({
         "provider.operation": "start-session",
@@ -181,6 +157,21 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.runtime_mode": input.runtimeMode,
       });
       return yield* Effect.gen(function* () {
+        if (
+          !supportsProviderExecutionTarget({
+            provider: input.provider,
+            executionTargetId: input.providerRuntimeExecutionTargetId,
+          })
+        ) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            formatUnsupportedProviderExecutionTargetDetail({
+              provider: input.provider,
+              executionTargetId: input.providerRuntimeExecutionTargetId,
+              surface: "Provider sessions",
+            }),
+          );
+        }
         const settings = yield* serverSettings.getSettings.pipe(
           Effect.mapError((error) =>
             toValidationError(
@@ -196,7 +187,6 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
             `Provider '${input.provider}' is disabled in bigbud settings.`,
           );
         }
-        const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
         const effectiveResumeCursor =
           input.resumeCursor ??
           (options?.reusePersistedResumeCursor !== false &&

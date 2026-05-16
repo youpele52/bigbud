@@ -240,12 +240,26 @@ const autoBootstrapWelcome = Effect.gen(function* () {
       if (Option.isNone(existingThreadId)) {
         const createdAt = new Date().toISOString();
         const createdThreadId = ThreadId.makeUnsafe(crypto.randomUUID());
+        const targetProject = Option.getOrUndefined(existingProject);
         yield* orchestrationEngine.dispatch({
           type: "thread.create",
           commandId: CommandId.makeUnsafe(crypto.randomUUID()),
           threadId: createdThreadId,
           projectId: nextProjectId,
           title: "New thread",
+          ...(targetProject?.providerRuntimeExecutionTargetId
+            ? {
+                providerRuntimeExecutionTargetId: targetProject.providerRuntimeExecutionTargetId,
+              }
+            : {}),
+          ...(targetProject?.workspaceExecutionTargetId
+            ? {
+                workspaceExecutionTargetId: targetProject.workspaceExecutionTargetId,
+              }
+            : {}),
+          ...(targetProject?.executionTargetId
+            ? { executionTargetId: targetProject.executionTargetId }
+            : {}),
           modelSelection: nextProjectDefaultModelSelection,
           interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
           runtimeMode: "full-access",

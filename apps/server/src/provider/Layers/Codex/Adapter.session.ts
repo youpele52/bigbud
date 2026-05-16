@@ -128,6 +128,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,

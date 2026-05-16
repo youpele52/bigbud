@@ -26,6 +26,7 @@ interface PullRequestThreadDialogProps {
   open: boolean;
   threadId: ThreadId;
   cwd: string | null;
+  executionTargetId?: string | undefined;
   initialReference: string | null;
   onOpenChange: (open: boolean) => void;
   onPrepared: (input: { branch: string; worktreePath: string | null }) => Promise<void> | void;
@@ -35,6 +36,7 @@ export function PullRequestThreadDialog({
   open,
   threadId,
   cwd,
+  executionTargetId,
   initialReference,
   onOpenChange,
   onPrepared,
@@ -73,6 +75,7 @@ export function PullRequestThreadDialog({
   const resolvePullRequestQuery = useQuery(
     gitResolvePullRequestQueryOptions({
       cwd,
+      executionTargetId,
       reference: open ? parsedDebouncedReference : null,
     }),
   );
@@ -83,13 +86,14 @@ export function PullRequestThreadDialog({
     const cached = queryClient.getQueryData<GitResolvePullRequestResult>([
       "git",
       "pull-request",
+      executionTargetId ?? "local",
       cwd,
       parsedReference,
     ]);
     return cached?.pullRequest ?? null;
-  }, [cwd, parsedReference, queryClient]);
+  }, [cwd, executionTargetId, parsedReference, queryClient]);
   const preparePullRequestThreadMutation = useMutation(
-    gitPreparePullRequestThreadMutationOptions({ cwd, queryClient }),
+    gitPreparePullRequestThreadMutationOptions({ cwd, executionTargetId, queryClient }),
   );
 
   const liveResolvedPullRequest =

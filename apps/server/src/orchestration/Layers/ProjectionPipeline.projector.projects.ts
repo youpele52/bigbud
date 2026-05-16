@@ -4,7 +4,7 @@
  * @module ProjectionPipeline.projector.projects
  */
 import { Effect, Option } from "effect";
-import type { OrchestrationEvent } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type OrchestrationEvent } from "@bigbud/contracts";
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
   type AttachmentSideEffects,
@@ -25,6 +25,15 @@ export function makeProjectsProjector(
         yield* projectionProjectRepository.upsert({
           projectId: event.payload.projectId,
           title: event.payload.title,
+          providerRuntimeExecutionTargetId:
+            event.payload.providerRuntimeExecutionTargetId ??
+            event.payload.executionTargetId ??
+            LOCAL_EXECUTION_TARGET_ID,
+          workspaceExecutionTargetId:
+            event.payload.workspaceExecutionTargetId ??
+            event.payload.executionTargetId ??
+            LOCAL_EXECUTION_TARGET_ID,
+          executionTargetId: event.payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
           workspaceRoot: event.payload.workspaceRoot,
           defaultModelSelection: event.payload.defaultModelSelection,
           scripts: event.payload.scripts,
@@ -45,6 +54,15 @@ export function makeProjectsProjector(
         yield* projectionProjectRepository.upsert({
           ...existingRow.value,
           ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+          ...(event.payload.providerRuntimeExecutionTargetId !== undefined
+            ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
+            : {}),
+          ...(event.payload.workspaceExecutionTargetId !== undefined
+            ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
+            : {}),
+          ...(event.payload.executionTargetId !== undefined
+            ? { executionTargetId: event.payload.executionTargetId }
+            : {}),
           ...(event.payload.workspaceRoot !== undefined
             ? { workspaceRoot: event.payload.workspaceRoot }
             : {}),

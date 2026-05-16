@@ -29,6 +29,7 @@ import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerM
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
+import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 import {
   FULL_ACCESS_AUTO_APPROVE_AFTER_MS,
   makeHandleEvent,
@@ -73,6 +74,7 @@ export interface SessionMethodDeps {
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
   readonly runtimeEventQueue: Queue.Queue<ProviderRuntimeEvent>;
   readonly serverManager: OpencodeServerManagerShape;
+  readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
   readonly serverConfig: { readonly attachmentsDir: string };
   readonly nextEventId: Effect.Effect<EventId>;
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
@@ -87,6 +89,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     sessions,
     runtimeEventQueue,
     serverManager,
+    serverSettings,
     serverConfig,
     nextEventId,
     makeEventStamp,
@@ -224,6 +227,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
           status: existing.activeTurnId ? "running" : "ready",
           runtimeMode: existing.runtimeMode,
           threadId: input.threadId,
+          ...(existing.executionTargetId ? { executionTargetId: existing.executionTargetId } : {}),
           ...(existing.cwd ? { cwd: existing.cwd } : {}),
           ...(existing.model ? { model: existing.model } : {}),
           resumeCursor: { sessionId: existing.opencodeSessionId },
@@ -233,9 +237,27 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         } satisfies ProviderSession;
       }
 
+      const opencodeSettings = yield* serverSettings.getSettings.pipe(
+        Effect.map((settings) => settings.providers.opencode),
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterProcessError({
+              provider: PROVIDER,
+              threadId: input.threadId,
+              detail: toMessage(cause, "Failed to read OpenCode settings."),
+              cause,
+            }),
+        ),
+      );
+
       // Acquire a handle from the shared OpenCode server manager
       const serverHandle = yield* Effect.tryPromise({
-        try: () => serverManager.acquire(input.cwd),
+        try: () =>
+          serverManager.acquire({
+            binaryPath: opencodeSettings.binaryPath,
+            ...(input.cwd ? { directory: input.cwd } : {}),
+            ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+          }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: PROVIDER,
@@ -298,6 +320,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         threadId: input.threadId,
         createdAt,
         runtimeMode: input.runtimeMode,
+        executionTargetId: input.executionTargetId,
         pendingPermissions: new Map(),
         pendingUserInputs: new Map(),
         turns: [],
@@ -338,6 +361,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
         status: "ready",
         runtimeMode: input.runtimeMode,
         threadId: input.threadId,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         ...(input.cwd ? { cwd: input.cwd } : {}),
         ...(modelID ? { model: modelID } : {}),
         resumeCursor: { sessionId: opencodeSessionId },

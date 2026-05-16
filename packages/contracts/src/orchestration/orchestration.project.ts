@@ -1,5 +1,10 @@
 import { Schema } from "effect";
-import { IsoDateTime, ProjectId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import {
+  ExecutionTargetId,
+  IsoDateTime,
+  ProjectId,
+  TrimmedNonEmptyString,
+} from "../core/baseSchemas";
 import { ModelSelection } from "./orchestration.provider";
 
 export const ProjectScriptIcon = Schema.Literals([
@@ -24,6 +29,9 @@ export type ProjectScript = typeof ProjectScript.Type;
 export const OrchestrationProject = Schema.Struct({
   id: ProjectId,
   title: TrimmedNonEmptyString,
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),

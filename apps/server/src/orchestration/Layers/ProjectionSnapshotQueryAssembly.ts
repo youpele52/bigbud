@@ -5,6 +5,7 @@
  * All row-to-domain mapping and cross-cutting assembly logic lives here.
  */
 import {
+  LOCAL_EXECUTION_TARGET_ID,
   OrchestrationReadModel,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
@@ -335,6 +336,11 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
     const projects: ReadonlyArray<OrchestrationProject> = projectRows.map((row) => ({
       id: row.projectId,
       title: row.title,
+      providerRuntimeExecutionTargetId:
+        row.providerRuntimeExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      workspaceExecutionTargetId:
+        row.workspaceExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      executionTargetId: row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
       workspaceRoot: row.workspaceRoot,
       defaultModelSelection: row.defaultModelSelection,
       scripts: row.scripts,
@@ -351,6 +357,13 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
             id: row.threadId,
             projectId: row.projectId,
             title: row.title,
+            providerRuntimeExecutionTargetId:
+              row.providerRuntimeExecutionTargetId ??
+              row.executionTargetId ??
+              LOCAL_EXECUTION_TARGET_ID,
+            workspaceExecutionTargetId:
+              row.workspaceExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+            executionTargetId: row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
             modelSelection: row.modelSelection,
             runtimeMode: row.runtimeMode,
             interactionMode: row.interactionMode,
@@ -425,6 +438,13 @@ export function makeGetActiveProjectByWorkspaceRoot(
           (row): OrchestrationProject => ({
             id: row.projectId,
             title: row.title,
+            providerRuntimeExecutionTargetId:
+              row.providerRuntimeExecutionTargetId ??
+              row.executionTargetId ??
+              LOCAL_EXECUTION_TARGET_ID,
+            workspaceExecutionTargetId:
+              row.workspaceExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+            executionTargetId: row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
             workspaceRoot: row.workspaceRoot,
             defaultModelSelection: row.defaultModelSelection,
             scripts: row.scripts,
@@ -490,6 +510,7 @@ export function makeGetThreadCheckpointContext(
       return Option.some({
         threadId: threadRow.value.threadId,
         projectId: threadRow.value.projectId,
+        executionTargetId: threadRow.value.executionTargetId,
         workspaceRoot: threadRow.value.workspaceRoot,
         worktreePath: threadRow.value.worktreePath,
         checkpoints: checkpointRows.map(

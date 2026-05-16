@@ -9,13 +9,14 @@ import {
 } from "@bigbud/contracts";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { isElectron } from "../../config/env";
-import { isLinuxPlatform } from "../../lib/utils";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { useSidebarGitStatus } from "../../hooks/useSidebarGitStatus";
 import { resolveNewChatOptions, useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { useServerProviders } from "../../rpc/serverState";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import {
   getVisibleRecentThreadIds,
   shouldClearThreadSelectionOnMouseDown,
@@ -29,14 +30,16 @@ import {
 } from "../layout/desktopUpdate.logic";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { toastManager } from "../ui/toast";
+import { useSidebarProjectAddActions } from "./Sidebar.projectAddActions";
 import { useSidebarProjectActions } from "./Sidebar.projectActions";
+import { useSidebarRemoteThreadActivation } from "./Sidebar.remoteThreadActivation";
+import { buildSharedProjectItemProps } from "./Sidebar.state.sharedProjectItemProps";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
 import { RECENT_CHAT_INITIAL_VISIBLE_COUNT } from "./Sidebar.chatsSection";
 import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
-/** Thin composition hook — wires sub-hooks together and assembles `SidebarState`. */
 export function useSidebarState(): SidebarState {
   const projects = useStore((store) => store.projects);
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
@@ -57,9 +60,8 @@ export function useSidebarState(): SidebarState {
   const isOnSettings = pathname.startsWith("/settings");
   const appSettings = useSettings();
   const { updateSettings } = useUpdateSettings();
+  const serverProviders = useServerProviders();
   const platform = navigator.platform;
-  const isLinuxDesktop = isElectron && isLinuxPlatform(platform);
-  const shouldBrowseForProjectImmediately = isElectron && !isLinuxDesktop;
 
   const {
     activeDraftThread,
@@ -92,7 +94,6 @@ export function useSidebarState(): SidebarState {
     handleDesktopUpdateButtonClick,
   } = useDesktopUpdateState();
 
-  // ── Ordered / snapshot projects ────────────────────────────────────────────
   const orderedProjects = useMemo(
     () =>
       orderItemsByPreferredIds({
@@ -123,6 +124,15 @@ export function useSidebarState(): SidebarState {
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
   );
+  const projectExecutionTargetIdById = useMemo(
+    () =>
+      new Map(
+        projects.map(
+          (project) => [project.id, resolveWorkspaceExecutionTargetId(project)] as const,
+        ),
+      ),
+    [projects],
+  );
 
   const threadGitTargets = useMemo(
     () =>
@@ -130,17 +140,19 @@ export function useSidebarState(): SidebarState {
         threadId: thread.id,
         branch: thread.branch,
         cwd: thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null,
+        executionTargetId:
+          thread.workspaceExecutionTargetId !== undefined || thread.executionTargetId !== undefined
+            ? resolveWorkspaceExecutionTargetId(thread)
+            : projectExecutionTargetIdById.get(thread.projectId),
       })),
-    [projectCwdById, sidebarThreads],
+    [projectCwdById, projectExecutionTargetIdById, sidebarThreads],
   );
   const prByThreadId = useSidebarGitStatus(threadGitTargets);
 
-  // ── Shared refs (passed to sub-hooks) ──────────────────────────────────────
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
 
-  // ── Sorted projects (passed to renderedProjects) ───────────────────────────
   const visibleThreads = useMemo(
     () =>
       sidebarThreads.filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
@@ -157,7 +169,6 @@ export function useSidebarState(): SidebarState {
   );
   const isManualProjectSorting = appSettings.sidebarProjectSortOrder === "manual";
 
-  // ── Clipboard helper shared with project actions ───────────────────────────
   const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
     onCopy: (ctx) => {
       toastManager.add({ type: "success", title: "Path copied", description: ctx.path });
@@ -171,32 +182,6 @@ export function useSidebarState(): SidebarState {
     },
   });
 
-  // ── Add-project form state ─────────────────────────────────────────────────
-  const [addingProject, setAddingProject] = useState(false);
-  const [newCwd, setNewCwd] = useState("");
-  const [isPickingFolder, setIsPickingFolder] = useState(false);
-  const [isAddingProject, setIsAddingProject] = useState(false);
-  const [addProjectError, setAddProjectError] = useState<string | null>(null);
-  const addProjectInputRef = useRef<HTMLInputElement | null>(null);
-  const shouldShowProjectPathEntry = addingProject && !shouldBrowseForProjectImmediately;
-
-  // ── focusMostRecentThread (shared between project actions and thread route) ─
-  const focusMostRecentThreadForProject = useCallback(
-    (projectId: ProjectId) => {
-      const latestThread = sortThreadsForSidebar(
-        (threadIdsByProjectId[projectId as string] ?? [])
-          .map((threadId) => sidebarThreadsById[threadId as string])
-          .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
-          .filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
-        appSettings.sidebarThreadSortOrder,
-      )[0];
-      if (!latestThread) return;
-      void navigate({ to: "/$threadId", params: { threadId: latestThread.id } });
-    },
-    [appSettings.sidebarThreadSortOrder, navigate, sidebarThreadsById, threadIdsByProjectId],
-  );
-
-  // ── Navigate to thread route (shared by thread actions) ───────────────────
   const navigateToThreadRoute = useCallback(
     (threadId: ThreadId) => {
       void navigate({ to: "/$threadId", params: { threadId } });
@@ -209,9 +194,33 @@ export function useSidebarState(): SidebarState {
     return handleNewThread(projectId, resolveNewChatOptions());
   }, [chatsProjectId, handleNewThread]);
 
-  // ── Stable forwarder refs for cross-hook cancellation ─────────────────────
-  // These break the circular initialisation order between thread and project sub-hooks
-  // without violating hook call order rules.
+  const remoteThreadActivation = useSidebarRemoteThreadActivation({
+    sidebarThreadsById,
+    projectCwdById,
+    navigateToThreadRoute,
+  });
+  const { navigateToThread: navigateToVerifiedThread } = remoteThreadActivation;
+
+  const focusMostRecentThreadForProject = useCallback(
+    (projectId: ProjectId) => {
+      const latestThread = sortThreadsForSidebar(
+        (threadIdsByProjectId[projectId as string] ?? [])
+          .map((threadId) => sidebarThreadsById[threadId as string])
+          .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
+          .filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
+        appSettings.sidebarThreadSortOrder,
+      )[0];
+      if (!latestThread) return;
+      navigateToVerifiedThread(latestThread.id);
+    },
+    [
+      appSettings.sidebarThreadSortOrder,
+      navigateToVerifiedThread,
+      sidebarThreadsById,
+      threadIdsByProjectId,
+    ],
+  );
+
   const cancelProjectRenameRef = useRef<(() => void) | null>(null);
   const cancelThreadRenameRef = useRef<(() => void) | null>(null);
 
@@ -223,52 +232,45 @@ export function useSidebarState(): SidebarState {
     cancelThreadRenameRef.current?.();
   }, []);
 
-  // ── Thread actions sub-hook ────────────────────────────────────────────────
   const threadActions = useSidebarThreadActions({
     sidebarThreadsById,
     projectCwdById,
     appSettings,
-    navigateToThreadRoute,
+    navigateToThreadRoute: remoteThreadActivation.navigateToThread,
     cancelProjectRename: forwardCancelProjectRename,
   });
 
-  // ── Project actions sub-hook ───────────────────────────────────────────────
+  const projectAddActions = useSidebarProjectAddActions({
+    projects,
+    focusMostRecentThreadForProject,
+    handleNewThread,
+    defaultThreadEnvMode: appSettings.defaultThreadEnvMode,
+    serverProviders,
+  });
+
   const projectActions = useSidebarProjectActions({
     projects,
     threadIdsByProjectId,
     sidebarProjects,
     appSettings,
-    isAddingProject,
-    setIsAddingProject,
-    newCwd,
-    setNewCwd,
-    setAddProjectError,
-    setAddingProject: (updater) => setAddingProject(updater),
-    isPickingFolder,
-    setIsPickingFolder,
-    addProjectInputRef,
-    shouldBrowseForProjectImmediately,
     dragInProgressRef,
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
     selectedThreadIdsSize: threadActions.selectedThreadIds.size,
     clearSelection: threadActions.clearSelection,
     copyPathToClipboard,
-    focusMostRecentThreadForProject,
-    handleNewThread,
     cancelThreadRename: forwardCancelThreadRename,
   });
 
   useEffect(
     () =>
       registerSidebarAddProjectHandlers({
-        handleStartAddProject: projectActions.handleStartAddProject,
-        isFlowVisible: () => shouldShowProjectPathEntry,
+        handleStartAddProject: projectAddActions.handleStartAddProject,
+        isFlowVisible: () => projectAddActions.shouldShowProjectPathEntry,
       }),
-    [projectActions.handleStartAddProject, shouldShowProjectPathEntry],
+    [projectAddActions.handleStartAddProject, projectAddActions.shouldShowProjectPathEntry],
   );
 
-  // Populate the forwarder refs after both sub-hooks are initialised.
   cancelProjectRenameRef.current = projectActions.cancelProjectRename;
   cancelThreadRenameRef.current = threadActions.cancelRename;
 
@@ -326,7 +328,6 @@ export function useSidebarState(): SidebarState {
     platform,
   });
 
-  // ── Global mousedown handler to clear thread selection ────────────────────
   useEffect(() => {
     const onMouseDown = (event: globalThis.MouseEvent) => {
       if (threadActions.selectedThreadIds.size === 0) return;
@@ -340,7 +341,6 @@ export function useSidebarState(): SidebarState {
     };
   }, [threadActions]);
 
-  // ── ARM64 warning ──────────────────────────────────────────────────────────
   const showArm64IntelBuildWarning =
     isElectron && shouldShowArm64IntelBuildWarning(desktopUpdateState);
   const arm64IntelBuildWarningDescription =
@@ -348,63 +348,27 @@ export function useSidebarState(): SidebarState {
       ? getArm64IntelBuildWarningDescription(desktopUpdateState)
       : null;
 
-  // ── Shared props bundle ────────────────────────────────────────────────────
   const sharedProjectItemProps = useMemo(
-    (): SharedProjectItemProps => ({
-      isManualProjectSorting,
-      newThreadShortcutLabel: renderedProjectsState.newThreadShortcutLabel,
-      showThreadJumpHints: renderedProjectsState.showThreadJumpHints,
-      threadJumpLabelById: renderedProjectsState.threadJumpLabelById,
-      appSettingsDefaultThreadEnvMode: appSettings.defaultThreadEnvMode,
-      routeThreadId,
-      selectedThreadIds: threadActions.selectedThreadIds,
-      renamingThreadId: threadActions.renamingThreadId,
-      renamingTitle: threadActions.renamingTitle,
-      setRenamingTitle: threadActions.setRenamingTitle,
-      onRenamingInputMount: threadActions.onRenamingInputMount,
-      hasRenameCommitted: threadActions.hasRenameCommitted,
-      markRenameCommitted: threadActions.markRenameCommitted,
-      favoriteThreadIds,
-      toggleFavoriteThread: threadActions.toggleFavoriteThread,
-      activeThread,
-      activeDraftThread,
-      renamingProjectId: projectActions.renamingProjectId,
-      renamingProjectTitle: projectActions.renamingProjectTitle,
-      setRenamingProjectTitle: projectActions.setRenamingProjectTitle,
-      onProjectRenamingInputMount: projectActions.onProjectRenamingInputMount,
-      hasProjectRenameCommitted: projectActions.hasProjectRenameCommitted,
-      markProjectRenameCommitted: projectActions.markProjectRenameCommitted,
-      commitProjectRename: projectActions.commitProjectRename,
-      cancelProjectRename: projectActions.cancelProjectRename,
-      requestProjectDelete: projectActions.requestProjectDelete,
-      attachThreadListAutoAnimateRef: renderedProjectsState.attachThreadListAutoAnimateRef,
-      handleProjectTitlePointerDownCapture: projectActions.handleProjectTitlePointerDownCapture,
-      handleProjectTitleClick: projectActions.handleProjectTitleClick,
-      handleProjectTitleKeyDown: projectActions.handleProjectTitleKeyDown,
-      handleProjectContextMenu: projectActions.handleProjectContextMenu,
-      handleThreadClick: threadActions.handleThreadClick,
-      navigateToThread: threadActions.navigateToThread,
-      handleMultiSelectContextMenu: threadActions.handleMultiSelectContextMenu,
-      handleThreadContextMenu: threadActions.handleThreadContextMenu,
-      clearSelection: threadActions.clearSelection,
-      commitRename: threadActions.commitRename,
-      cancelRename: threadActions.cancelRename,
-      forkThread: threadActions.forkThread,
-      requestThreadDelete: threadActions.requestThreadDelete,
-      openPrLink: threadActions.openPrLink,
-      prByThreadId,
-      handleNewThread,
-      expandThreadListForProject: renderedProjectsState.expandThreadListForProject,
-      collapseThreadListForProject: renderedProjectsState.collapseThreadListForProject,
-    }),
+    (): SharedProjectItemProps =>
+      buildSharedProjectItemProps({
+        isManualProjectSorting,
+        newThreadShortcutLabel: renderedProjectsState.newThreadShortcutLabel,
+        showThreadJumpHints: renderedProjectsState.showThreadJumpHints,
+        threadJumpLabelById: renderedProjectsState.threadJumpLabelById,
+        appSettingsDefaultThreadEnvMode: appSettings.defaultThreadEnvMode,
+        routeThreadId,
+        threadActions,
+        activeThread,
+        activeDraftThread,
+        projectActions,
+        favoriteThreadIds,
+        prByThreadId,
+        handleNewThread,
+        renderedProjectsState,
+      }),
     [
       isManualProjectSorting,
-      renderedProjectsState.newThreadShortcutLabel,
-      renderedProjectsState.showThreadJumpHints,
-      renderedProjectsState.threadJumpLabelById,
-      renderedProjectsState.attachThreadListAutoAnimateRef,
-      renderedProjectsState.expandThreadListForProject,
-      renderedProjectsState.collapseThreadListForProject,
+      renderedProjectsState,
       appSettings.defaultThreadEnvMode,
       routeThreadId,
       threadActions,
@@ -441,19 +405,45 @@ export function useSidebarState(): SidebarState {
     handleDesktopUpdateButtonClick,
     showArm64IntelBuildWarning,
     arm64IntelBuildWarningDescription,
-    addingProject,
-    newCwd,
-    isPickingFolder,
-    isAddingProject,
-    addProjectError,
-    addProjectInputRef,
-    shouldShowProjectPathEntry,
-    setNewCwd,
-    setAddProjectError,
-    handleStartAddProject: projectActions.handleStartAddProject,
-    handleAddProject: projectActions.handleAddProject,
-    handlePickFolder: projectActions.handlePickFolder,
-    cancelAddProject: projectActions.cancelAddProject,
+    addingProject: projectAddActions.addingProject,
+    newCwd: projectAddActions.newCwd,
+    isPickingFolder: projectAddActions.isPickingFolder,
+    isAddingProject: projectAddActions.isAddingProject,
+    addProjectError: projectAddActions.addProjectError,
+    addProjectInputRef: projectAddActions.addProjectInputRef,
+    shouldShowProjectPathEntry: projectAddActions.shouldShowProjectPathEntry,
+    setNewCwd: projectAddActions.setNewCwd,
+    setAddProjectError: projectAddActions.setAddProjectError,
+    handleStartAddProject: projectAddActions.handleStartAddProject,
+    handleAddProject: projectAddActions.handleAddProject,
+    handlePickFolder: projectAddActions.handlePickFolder,
+    cancelAddProject: projectAddActions.cancelAddProject,
+    isRemoteProjectDialogOpen: projectAddActions.isRemoteProjectDialogOpen,
+    remoteProjectDraft: projectAddActions.remoteProjectDraft,
+    remoteProjectFieldErrors: projectAddActions.remoteProjectFieldErrors,
+    remoteProjectError: projectAddActions.remoteProjectError,
+    remoteProjectVerificationMessage: projectAddActions.remoteProjectVerificationMessage,
+    isVerifyingRemoteProject: projectAddActions.isVerifyingRemoteProject,
+    openRemoteProjectDialog: projectAddActions.openRemoteProjectDialog,
+    closeRemoteProjectDialog: projectAddActions.closeRemoteProjectDialog,
+    updateRemoteProjectDraft: projectAddActions.updateRemoteProjectDraft,
+    submitRemoteProjectDialog: projectAddActions.submitRemoteProjectDialog,
+    isRemoteProjectUnlockDialogOpen: projectAddActions.isRemoteProjectUnlockDialogOpen,
+    remoteProjectUnlockKeyPath: projectAddActions.remoteProjectUnlockKeyPath,
+    remoteProjectUnlockPassphrase: projectAddActions.remoteProjectUnlockPassphrase,
+    remoteProjectUnlockError: projectAddActions.remoteProjectUnlockError,
+    isUnlockingRemoteProjectKey: projectAddActions.isUnlockingRemoteProjectKey,
+    closeRemoteProjectUnlockDialog: projectAddActions.closeRemoteProjectUnlockDialog,
+    setRemoteProjectUnlockPassphrase: projectAddActions.setRemoteProjectUnlockPassphrase,
+    submitRemoteProjectUnlock: projectAddActions.submitRemoteProjectUnlock,
+    isRemoteThreadUnlockDialogOpen: remoteThreadActivation.isRemoteThreadUnlockDialogOpen,
+    remoteThreadUnlockKeyPath: remoteThreadActivation.remoteThreadUnlockKeyPath,
+    remoteThreadUnlockPassphrase: remoteThreadActivation.remoteThreadUnlockPassphrase,
+    remoteThreadUnlockError: remoteThreadActivation.remoteThreadUnlockError,
+    isUnlockingRemoteThreadKey: remoteThreadActivation.isUnlockingRemoteThreadKey,
+    closeRemoteThreadUnlockDialog: remoteThreadActivation.closeRemoteThreadUnlockDialog,
+    setRemoteThreadUnlockPassphrase: remoteThreadActivation.setRemoteThreadUnlockPassphrase,
+    submitRemoteThreadUnlock: remoteThreadActivation.submitRemoteThreadUnlock,
     renamingProjectId: projectActions.renamingProjectId,
     renamingProjectTitle: projectActions.renamingProjectTitle,
     setRenamingProjectTitle: projectActions.setRenamingProjectTitle,

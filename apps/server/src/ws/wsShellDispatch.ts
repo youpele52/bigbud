@@ -1,6 +1,7 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   type ThreadId,
+  LOCAL_EXECUTION_TARGET_ID,
   OrchestrationDispatchCommandError,
   type OrchestrationCommand,
   type OrchestrationReadModel,
@@ -14,6 +15,8 @@ import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils";
 import type { OrchestrationDispatchError } from "../orchestration/Errors";
 import type { ThreadShellRunnerShape } from "../shell/Services/ThreadShellRunner";
 import type { ServerRuntimeStartupError } from "../startup/serverRuntimeStartup";
+import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
+import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget";
 import { resolveDefaultChatCwd } from "./serverSettings";
 import {
   ShellOutputAccumulator,
@@ -223,12 +226,34 @@ export const makeDispatchShellCommand =
           Effect.catchTag("ServerSettingsError", () => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
         );
         const bootstrapProjectId = normalizedCommand.bootstrap?.createThread?.projectId ?? null;
+        const activeProjectId = thread?.projectId ?? bootstrapProjectId;
+        const activeProject =
+          activeProjectId === null
+            ? null
+            : (readModel.projects.find(
+                (project: OrchestrationReadModel["projects"][number]) =>
+                  project.id === activeProjectId,
+              ) ?? null);
+        const executionTargetId =
+          (thread ? resolveWorkspaceExecutionTargetId(thread) : undefined) ??
+          (normalizedCommand.bootstrap?.createThread
+            ? resolveWorkspaceExecutionTargetId(normalizedCommand.bootstrap.createThread)
+            : undefined) ??
+          (activeProject ? resolveWorkspaceExecutionTargetId(activeProject) : undefined) ??
+          LOCAL_EXECUTION_TARGET_ID;
+
+        if (!isLocalExecutionTarget(executionTargetId)) {
+          return yield* new OrchestrationDispatchCommandError({
+            message: formatRemoteExecutionTargetDetail({
+              executionTargetId,
+              surface: "Shell commands",
+            }),
+          });
+        }
+
         const bootstrapProjectCwd =
           normalizedCommand.bootstrap?.prepareWorktree?.projectCwd ??
-          readModel.projects.find(
-            (project: OrchestrationReadModel["projects"][number]) =>
-              project.id === bootstrapProjectId,
-          )?.workspaceRoot ??
+          activeProject?.workspaceRoot ??
           null;
         const cwd =
           (thread

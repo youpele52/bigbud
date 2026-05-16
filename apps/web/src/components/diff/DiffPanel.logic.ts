@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
 import { buildPatchCacheKey } from "~/lib/diffRendering";
+import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { closeDiffRouteSearch, openDiffRouteSearch, parseDiffRouteSearch } from "../../utils/diff";
 import { useTurnDiffSummaries } from "../../hooks/useTurnDiffSummaries";
 import { useStore } from "../../stores/main";
@@ -161,7 +162,12 @@ export function useDiffPanelData() {
     activeProjectId ? store.projects.find((project) => project.id === activeProjectId) : undefined,
   );
   const activeCwd = activeThread?.worktreePath ?? activeProject?.cwd;
-  const gitStatusQuery = useQuery(gitStatusQueryOptions(activeCwd ?? null));
+  const gitStatusQuery = useQuery(
+    gitStatusQueryOptions(
+      activeCwd ?? null,
+      activeProject ? resolveWorkspaceExecutionTargetId(activeProject) : undefined,
+    ),
+  );
   const isGitRepo = gitStatusQuery.data?.isRepo ?? true;
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);

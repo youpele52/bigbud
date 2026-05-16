@@ -17,6 +17,7 @@ import {
   type TerminalEvent,
   WS_METHODS,
   WsRpcGroup,
+  GitCommandError,
 } from "@bigbud/contracts";
 import { clamp } from "effect/Number";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -57,6 +58,11 @@ import {
 } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
+import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
+import {
+  unlockSshKeyEffect,
+  verifyExecutionTargetEffect,
+} from "./wsExecutionTargetVerification.ts";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -136,6 +142,25 @@ const WsRpcLayer = WsRpcGroup.toLayer(
         Effect.flatMap(() => gitStatusBroadcaster.invalidateLocal(cwd)),
         Effect.flatMap(() => gitStatusBroadcaster.invalidateRemote(cwd)),
       );
+
+    const assertLocalGitExecutionTarget = (
+      cwd: string,
+      executionTargetId: string | null | undefined,
+      operation: string,
+    ) =>
+      isLocalExecutionTarget(executionTargetId)
+        ? Effect.void
+        : Effect.fail(
+            new GitCommandError({
+              operation,
+              command: "execution-target",
+              cwd,
+              detail: formatRemoteExecutionTargetDetail({
+                executionTargetId,
+                surface: "Git execution",
+              }),
+            }),
+          );
 
     const dispatchNormalizedCommand = (
       normalizedCommand: OrchestrationCommand,
@@ -322,6 +347,16 @@ const WsRpcLayer = WsRpcGroup.toLayer(
           providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
           { "rpc.aggregate": "server" },
         ),
+      [WS_METHODS.serverVerifyExecutionTarget]: (input) =>
+        observeRpcEffect(
+          WS_METHODS.serverVerifyExecutionTarget,
+          verifyExecutionTargetEffect(input),
+          { "rpc.aggregate": "server" },
+        ),
+      [WS_METHODS.serverUnlockSshKey]: (input) =>
+        observeRpcEffect(WS_METHODS.serverUnlockSshKey, unlockSshKeyEffect(input), {
+          "rpc.aggregate": "server",
+        }),
       [WS_METHODS.serverUpsertKeybinding]: (rule) =>
         observeRpcEffect(
           WS_METHODS.serverUpsertKeybinding,
@@ -381,7 +416,11 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.subscribeGitStatus]: (input) =>
         observeRpcStreamEffect(
           WS_METHODS.subscribeGitStatus,
-          gitStatusBroadcaster.subscribe(input.cwd),
+          assertLocalGitExecutionTarget(
+            input.cwd,
+            input.executionTargetId,
+            "git.subscribeStatus",
+          ).pipe(Effect.andThen(gitStatusBroadcaster.subscribe(input.cwd))),
           { "rpc.aggregate": "git" },
         ),
       [WS_METHODS.gitRefreshStatus]: (input) =>
@@ -391,7 +430,10 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       [WS_METHODS.gitPull]: (input) =>
         observeRpcEffect(
           WS_METHODS.gitPull,
-          git.pullCurrentBranch(input.cwd).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+          assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.pull").pipe(
+            Effect.andThen(git.pullCurrentBranch(input.cwd)),
+            Effect.tap(() => refreshGitStatus(input.cwd)),
+          ),
           {
             "rpc.aggregate": "git",
           },

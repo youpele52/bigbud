@@ -76,6 +76,15 @@ describe("Opencode session lifecycle", () => {
           serverManager: {
             acquire: async () => handle,
           },
+          serverSettings: {
+            getSettings: Effect.succeed({
+              providers: {
+                opencode: {
+                  binaryPath: "opencode",
+                },
+              },
+            } as never),
+          },
           serverConfig: { attachmentsDir: "/tmp/attachments" },
           nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
           makeEventStamp: () =>
@@ -103,4 +112,76 @@ describe("Opencode session lifecycle", () => {
       }),
     );
   }
+
+  it.effect("forwards remote execution targets to the OpenCode server manager", () =>
+    Effect.gen(function* () {
+      const acquireCalls: Array<unknown> = [];
+      const subscribe = async () => ({
+        stream: makeEmptyAsyncIterable<unknown>(),
+      });
+      const handle: OpencodeServerHandle = {
+        client: {
+          session: {
+            create: async () => ({
+              data: {
+                id: "opencode-session-remote",
+              },
+              error: undefined,
+            }),
+          },
+          event: {
+            subscribe,
+          },
+        } as never,
+        url: "http://127.0.0.1:4097",
+        release() {},
+      };
+
+      const methods = makeSessionMethods({
+        sessions: new Map(),
+        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+        serverManager: {
+          acquire: async (input) => {
+            acquireCalls.push(input);
+            return handle;
+          },
+        },
+        serverSettings: {
+          getSettings: Effect.succeed({
+            providers: {
+              opencode: {
+                binaryPath: "/opt/opencode/bin/opencode",
+              },
+            },
+          } as never),
+        },
+        serverConfig: { attachmentsDir: "/tmp/attachments" },
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
+        makeEventStamp: () =>
+          Effect.succeed({
+            eventId: EventId.makeUnsafe("evt-remote"),
+            createdAt: CREATED_AT,
+          }),
+        nativeEventLogger: undefined,
+        services: yield* Effect.services<never>(),
+      });
+
+      const session = yield* methods.startSession({
+        threadId: THREAD_ID,
+        provider: "opencode",
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        runtimeMode: "full-access",
+        cwd: "/root/project",
+      });
+
+      expect(acquireCalls).toEqual([
+        {
+          binaryPath: "/opt/opencode/bin/opencode",
+          directory: "/root/project",
+          executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        },
+      ]);
+      expect(session.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+    }),
+  );
 });

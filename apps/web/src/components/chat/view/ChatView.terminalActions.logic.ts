@@ -209,6 +209,9 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       const openTerminalInput: TerminalOpenInput = wantsNewTerminal
         ? {
             threadId: activeThreadId,
+            ...(activeProject.executionTargetId
+              ? { executionTargetId: activeProject.executionTargetId }
+              : {}),
             terminalId: targetTerminalId,
             cwd: targetCwd,
             ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),
@@ -218,6 +221,9 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
           }
         : {
             threadId: activeThreadId,
+            ...(activeProject.executionTargetId
+              ? { executionTargetId: activeProject.executionTargetId }
+              : {}),
             terminalId: targetTerminalId,
             cwd: targetCwd,
             ...(targetWorktreePath !== null ? { worktreePath: targetWorktreePath } : {}),

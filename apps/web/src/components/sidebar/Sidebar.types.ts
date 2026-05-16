@@ -7,8 +7,10 @@ import type { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import type { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import type { resolveThreadStatusPill } from "./Sidebar.logic";
+import type { RemoteProjectDraft } from "./Sidebar.projects.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
+import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -148,6 +150,45 @@ export interface SidebarState {
   handlePickFolder: () => Promise<void>;
   /** Cancel the add-project flow, resetting both the form and the visibility flag. */
   cancelAddProject: () => void;
+  isRemoteProjectDialogOpen: boolean;
+  remoteProjectDraft: RemoteProjectDraft;
+  remoteProjectFieldErrors: Partial<
+    Record<"displayName" | "host" | "username" | "port" | "workspaceRoot" | "sshKeyPath", string>
+  >;
+  remoteProjectError: string | null;
+  remoteProjectVerificationMessage: string | null;
+  isVerifyingRemoteProject: boolean;
+  openRemoteProjectDialog: () => void;
+  closeRemoteProjectDialog: () => void;
+  updateRemoteProjectDraft: (
+    field:
+      | "displayName"
+      | "host"
+      | "username"
+      | "port"
+      | "workspaceRoot"
+      | "sshKeyPath"
+      | "authMode"
+      | "providerRuntimeLocation",
+    value: string | ProviderRuntimeLocation,
+  ) => void;
+  submitRemoteProjectDialog: () => Promise<void>;
+  isRemoteProjectUnlockDialogOpen: boolean;
+  remoteProjectUnlockKeyPath: string;
+  remoteProjectUnlockPassphrase: string;
+  remoteProjectUnlockError: string | null;
+  isUnlockingRemoteProjectKey: boolean;
+  closeRemoteProjectUnlockDialog: () => void;
+  setRemoteProjectUnlockPassphrase: (passphrase: string) => void;
+  submitRemoteProjectUnlock: () => Promise<void>;
+  isRemoteThreadUnlockDialogOpen: boolean;
+  remoteThreadUnlockKeyPath: string;
+  remoteThreadUnlockPassphrase: string;
+  remoteThreadUnlockError: string | null;
+  isUnlockingRemoteThreadKey: boolean;
+  closeRemoteThreadUnlockDialog: () => void;
+  setRemoteThreadUnlockPassphrase: (passphrase: string) => void;
+  submitRemoteThreadUnlock: () => Promise<void>;
   // Project rename
   renamingProjectId: ProjectId | null;
   renamingProjectTitle: string;

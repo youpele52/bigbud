@@ -20,6 +20,7 @@ import type {
   GitListBranchesResult,
   GitPullResult,
   GitRemoveWorktreeInput,
+  GitServiceError,
   GitStatusInput,
   GitStatusResult,
 } from "@bigbud/contracts";
@@ -151,7 +152,7 @@ export interface GitCoreShape {
   /**
    * Read Git status for a repository.
    */
-  readonly status: (input: GitStatusInput) => Effect.Effect<GitStatusResult, GitCommandError>;
+  readonly status: (input: GitStatusInput) => Effect.Effect<GitStatusResult, GitServiceError>;
 
   /**
    * Read detailed working tree / branch status for a repository.
@@ -232,7 +233,7 @@ export interface GitCoreShape {
    */
   readonly listBranches: (
     input: GitListBranchesInput,
-  ) => Effect.Effect<GitListBranchesResult, GitCommandError>;
+  ) => Effect.Effect<GitListBranchesResult, GitServiceError>;
 
   /**
    * Pull current branch from upstream using fast-forward only.
@@ -244,7 +245,7 @@ export interface GitCoreShape {
    */
   readonly createWorktree: (
     input: GitCreateWorktreeInput,
-  ) => Effect.Effect<GitCreateWorktreeResult, GitCommandError>;
+  ) => Effect.Effect<GitCreateWorktreeResult, GitServiceError>;
 
   /**
    * Materialize a GitHub pull request head as a local branch without switching checkout.
@@ -275,7 +276,7 @@ export interface GitCoreShape {
   /**
    * Remove an existing worktree.
    */
-  readonly removeWorktree: (input: GitRemoveWorktreeInput) => Effect.Effect<void, GitCommandError>;
+  readonly removeWorktree: (input: GitRemoveWorktreeInput) => Effect.Effect<void, GitServiceError>;
 
   /**
    * Rename an existing local branch.
@@ -289,19 +290,19 @@ export interface GitCoreShape {
    */
   readonly createBranch: (
     input: GitCreateBranchInput,
-  ) => Effect.Effect<GitCreateBranchResult, GitCommandError>;
+  ) => Effect.Effect<GitCreateBranchResult, GitServiceError>;
 
   /**
    * Checkout an existing branch and refresh its upstream metadata in background.
    */
   readonly checkoutBranch: (
     input: GitCheckoutInput,
-  ) => Effect.Effect<GitCheckoutResult, GitCommandError>;
+  ) => Effect.Effect<GitCheckoutResult, GitServiceError>;
 
   /**
    * Initialize a repository in the provided directory.
    */
-  readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitCommandError>;
+  readonly initRepo: (input: GitInitInput) => Effect.Effect<void, GitServiceError>;
 
   /**
    * List local branch names (short format).

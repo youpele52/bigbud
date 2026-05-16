@@ -8,6 +8,26 @@ export const PositiveInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 export const IsoDateTime = Schema.String;
 export type IsoDateTime = typeof IsoDateTime.Type;
+export const ExecutionTargetId = TrimmedNonEmptyString;
+export type ExecutionTargetId = typeof ExecutionTargetId.Type;
+export const LOCAL_EXECUTION_TARGET_ID: ExecutionTargetId = "local";
+export function resolveExecutionTargetId(
+  executionTargetId: ExecutionTargetId | null | undefined,
+): ExecutionTargetId {
+  return executionTargetId ?? LOCAL_EXECUTION_TARGET_ID;
+}
+
+export function isLocalExecutionTargetId(
+  executionTargetId: ExecutionTargetId | null | undefined,
+): boolean {
+  return resolveExecutionTargetId(executionTargetId) === LOCAL_EXECUTION_TARGET_ID;
+}
+
+export function isRemoteExecutionTargetId(
+  executionTargetId: ExecutionTargetId | null | undefined,
+): boolean {
+  return !isLocalExecutionTargetId(executionTargetId);
+}
 
 /**
  * Construct a branded identifier. Enforces non-empty trimmed strings

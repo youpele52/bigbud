@@ -1,6 +1,10 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { type ResolvedKeybindingsConfig, type ThreadId } from "@bigbud/contracts";
+import {
+  type ExecutionTargetId,
+  type ResolvedKeybindingsConfig,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -26,6 +30,7 @@ export interface TerminalViewportProps {
   threadId: ThreadId;
   terminalId: string;
   terminalLabel: string;
+  executionTargetId?: ExecutionTargetId | undefined;
   cwd: string;
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
@@ -42,6 +47,7 @@ export function TerminalViewport({
   threadId,
   terminalId,
   terminalLabel,
+  executionTargetId,
   cwd,
   worktreePath,
   runtimeEnv,
@@ -352,6 +358,7 @@ export function TerminalViewport({
         const snapshot = await api.terminal.open({
           threadId,
           terminalId,
+          ...(executionTargetId ? { executionTargetId } : {}),
           cwd,
           ...(worktreePathRef.current !== undefined
             ? { worktreePath: worktreePathRef.current }
@@ -427,6 +434,7 @@ export function TerminalViewport({
     // worktreePath is intentionally omitted — same reason, accessed via worktreePathRef.
   }, [
     cwd,
+    executionTargetId,
     runtimeEnv,
     terminalFontFamily,
     terminalFontSize,

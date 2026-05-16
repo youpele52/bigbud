@@ -13,6 +13,7 @@ import {
   Ref,
 } from "effect";
 import {
+  GitCommandError,
   GitActionProgressPhase,
   GitRunStackedActionResult,
   type GitStatusLocalResult,
@@ -43,6 +44,10 @@ import { makeBranchContext } from "./GitManager.branchContext.ts";
 import { makePrLookup } from "./GitManager.prLookup.ts";
 import { makeCommitStep } from "./GitManager.commitStep.ts";
 import { makePrStep } from "./GitManager.prStep.ts";
+import {
+  formatRemoteExecutionTargetDetail,
+  isLocalExecutionTarget,
+} from "../../executionTargets.ts";
 
 const LOCAL_STATUS_CACHE_TTL = Duration.seconds(1);
 const REMOTE_STATUS_CACHE_TTL = Duration.seconds(5);
@@ -228,23 +233,50 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   // Legacy alias used internally
   const invalidateStatusResultCache = (cwd: string) => invalidateStatus(cwd);
 
+  const assertLocalExecutionTarget = (
+    operation: string,
+    cwd: string,
+    executionTargetId: string | null | undefined,
+  ) =>
+    isLocalExecutionTarget(executionTargetId)
+      ? Effect.void
+      : Effect.fail(
+          new GitCommandError({
+            operation,
+            command: "execution-target",
+            cwd,
+            detail: formatRemoteExecutionTargetDetail({
+              executionTargetId,
+              surface: "Git workflow",
+            }),
+          }),
+        );
+
   // ── Public API methods ──────────────────────────────────────────────────
   const status: GitManagerShape["status"] = Effect.fn("status")(function* (input) {
+    yield* assertLocalExecutionTarget("git.status", input.cwd, input.executionTargetId);
     return yield* Cache.get(statusResultCache, normalizeStatusCacheKey(input.cwd));
   });
 
   const localStatus: GitManagerShape["localStatus"] = Effect.fn("localStatus")(function* (input) {
+    yield* assertLocalExecutionTarget("git.localStatus", input.cwd, input.executionTargetId);
     return yield* Cache.get(localStatusResultCache, normalizeStatusCacheKey(input.cwd));
   });
 
   const remoteStatus: GitManagerShape["remoteStatus"] = Effect.fn("remoteStatus")(
     function* (input) {
+      yield* assertLocalExecutionTarget("git.remoteStatus", input.cwd, input.executionTargetId);
       return yield* Cache.get(remoteStatusResultCache, normalizeStatusCacheKey(input.cwd));
     },
   );
 
   const resolvePullRequest: GitManagerShape["resolvePullRequest"] = Effect.fn("resolvePullRequest")(
     function* (input) {
+      yield* assertLocalExecutionTarget(
+        "git.resolvePullRequest",
+        input.cwd,
+        input.executionTargetId,
+      );
       const pullRequest = yield* gitHubCli
         .getPullRequest({
           cwd: input.cwd,
@@ -259,6 +291,11 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const preparePullRequestThread: GitManagerShape["preparePullRequestThread"] = Effect.fn(
     "preparePullRequestThread",
   )(function* (input) {
+    yield* assertLocalExecutionTarget(
+      "git.preparePullRequestThread",
+      input.cwd,
+      input.executionTargetId,
+    );
     const maybeRunSetupScript = (worktreePath: string) => {
       if (!input.threadId) {
         return Effect.void;
@@ -421,6 +458,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
 
   const runStackedAction: GitManagerShape["runStackedAction"] = Effect.fn("runStackedAction")(
     function* (input, options) {
+      yield* assertLocalExecutionTarget("git.runStackedAction", input.cwd, input.executionTargetId);
       const progress = createProgressEmitter(input, options);
       const currentPhase = yield* Ref.make<Option.Option<GitActionProgressPhase>>(Option.none());
 

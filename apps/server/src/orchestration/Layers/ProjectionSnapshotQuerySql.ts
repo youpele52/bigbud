@@ -105,6 +105,7 @@ export const ProjectionThreadIdLookupRowSchema = Schema.Struct({
 export const ProjectionThreadCheckpointContextThreadRowSchema = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
+  executionTargetId: ProjectionThread.fields.executionTargetId,
   workspaceRoot: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
 });
@@ -122,6 +123,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
@@ -143,6 +147,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
@@ -322,6 +329,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
@@ -359,6 +369,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           threads.thread_id AS "threadId",
           threads.project_id AS "projectId",
+          threads.execution_target_id AS "executionTargetId",
           projects.workspace_root AS "workspaceRoot",
           threads.worktree_path AS "worktreePath"
         FROM projection_threads AS threads

@@ -42,6 +42,7 @@ class FakeCodexManager extends CodexAppServerManager {
         status: "ready",
         runtimeMode: input.runtimeMode,
         threadId: input.threadId,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         cwd: input.cwd,
         createdAt: now,
         updatedAt: now,
@@ -206,6 +207,30 @@ validationLayer("CodexAdapterLive validation", (it) => {
         binaryPath: "codex",
         model: "gpt-5.3-codex",
         serviceTier: "fast",
+        runtimeMode: "full-access",
+      });
+    }),
+  );
+
+  it.effect("forwards remote execution targets to the codex manager", () =>
+    Effect.gen(function* () {
+      validationManager.startSessionImpl.mockClear();
+      const adapter = yield* CodexAdapter;
+
+      yield* adapter.startSession({
+        provider: "codex",
+        threadId: asThreadId("thread-remote"),
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/workspace/project",
+        runtimeMode: "full-access",
+      });
+
+      assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
+        provider: "codex",
+        threadId: asThreadId("thread-remote"),
+        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        cwd: "/workspace/project",
+        binaryPath: "codex",
         runtimeMode: "full-access",
       });
     }),

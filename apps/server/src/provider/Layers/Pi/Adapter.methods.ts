@@ -8,7 +8,10 @@ import {
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
+import { resolveProviderSessionExecutionTargets } from "../../providerSessionExecutionTargets.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -80,11 +83,25 @@ export function makePiAdapterMethods(deps: {
 
     const resumeCursor = readResumeCursor(input.resumeCursor);
     const createdAt = new Date().toISOString();
+    const executionTargets = resolveProviderSessionExecutionTargets({
+      providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+      executionTargetId: input.executionTargetId,
+      useLegacyExecutionTargetForProviderRuntime: false,
+    });
+    const providerRuntimeTarget = resolveProviderRuntimeTarget({
+      executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+    });
+    const workspaceTarget = resolveWorkspaceTarget({
+      executionTargetId: executionTargets.workspaceExecutionTargetId,
+      cwd: input.cwd,
+    });
     const rpcProcess = yield* Effect.tryPromise({
       try: () =>
         createPiRpcProcess({
           binaryPath: piSettings.binaryPath,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
+          providerRuntimeTarget,
+          workspaceTarget,
           ...(resumeCursor?.sessionFile ? { sessionFile: resumeCursor.sessionFile } : {}),
           env: process.env,
         }),
@@ -112,6 +129,9 @@ export function makePiAdapterMethods(deps: {
       pendingUserInputs: new Map(),
       turns: [],
       unsubscribe: () => undefined,
+      providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+      executionTargetId: executionTargets.executionTargetId,
       cwd: input.cwd,
       model: undefined,
       providerID: undefined,
@@ -192,6 +212,9 @@ export function makePiAdapterMethods(deps: {
       provider: PROVIDER,
       status: "ready",
       runtimeMode: input.runtimeMode,
+      providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+      executionTargetId: executionTargets.executionTargetId,
       threadId: input.threadId,
       ...(input.cwd ? { cwd: input.cwd } : {}),
       ...(session.model ? { model: session.model } : {}),

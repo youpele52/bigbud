@@ -8,7 +8,7 @@ import { describe, expect, vi } from "vitest";
 
 import { GitCoreLive, makeGitCore } from "./GitCore.ts";
 import { GitCore, type GitCoreShape } from "../Services/GitCore.ts";
-import { GitCommandError } from "@bigbud/contracts";
+import { GitCommandError, type GitServiceError } from "@bigbud/contracts";
 import { type ProcessRunResult, runProcess } from "../../utils/processRunner.ts";
 import { ServerConfig } from "../../startup/config.ts";
 
@@ -111,7 +111,7 @@ function initRepoWithCommit(
   cwd: string,
 ): Effect.Effect<
   { initialBranch: string },
-  GitCommandError | PlatformError.PlatformError,
+  GitServiceError | PlatformError.PlatformError,
   GitCore | FileSystem.FileSystem
 > {
   return Effect.gen(function* () {

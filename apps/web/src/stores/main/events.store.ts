@@ -29,6 +29,7 @@ import {
   updateThreadState,
 } from "./helpers.store";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 
 export function applyOrchestrationEvent(state: AppState, event: OrchestrationEvent): AppState {
   switch (event.type) {
@@ -38,11 +39,16 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
           project.id === event.payload.projectId ||
           (project.cwd !== null &&
             event.payload.workspaceRoot !== null &&
-            project.cwd === event.payload.workspaceRoot),
+            project.cwd === event.payload.workspaceRoot &&
+            resolveWorkspaceExecutionTargetId(project) ===
+              resolveWorkspaceExecutionTargetId(event.payload)),
       );
       const nextProject = mapProject({
         id: event.payload.projectId,
         title: event.payload.title,
+        providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId,
+        executionTargetId: event.payload.executionTargetId,
         workspaceRoot: event.payload.workspaceRoot,
         defaultModelSelection: event.payload.defaultModelSelection,
         scripts: event.payload.scripts,
@@ -64,6 +70,15 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       const projects = updateProject(state.projects, event.payload.projectId, (project) => ({
         ...project,
         ...(event.payload.title !== undefined ? { name: event.payload.title } : {}),
+        ...(event.payload.providerRuntimeExecutionTargetId !== undefined
+          ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
+          : {}),
+        ...(event.payload.workspaceExecutionTargetId !== undefined
+          ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
+          : {}),
+        ...(event.payload.executionTargetId !== undefined
+          ? { executionTargetId: event.payload.executionTargetId }
+          : {}),
         ...(event.payload.workspaceRoot !== undefined ? { cwd: event.payload.workspaceRoot } : {}),
         ...(event.payload.defaultModelSelection !== undefined
           ? {
@@ -91,6 +106,9 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
         id: event.payload.threadId,
         projectId: event.payload.projectId,
         title: event.payload.title,
+        providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId,
+        executionTargetId: event.payload.executionTargetId,
         modelSelection: event.payload.modelSelection,
         runtimeMode: event.payload.runtimeMode,
         interactionMode: event.payload.interactionMode,
@@ -195,6 +213,15 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+        ...(event.payload.providerRuntimeExecutionTargetId !== undefined
+          ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
+          : {}),
+        ...(event.payload.workspaceExecutionTargetId !== undefined
+          ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
+          : {}),
+        ...(event.payload.executionTargetId !== undefined
+          ? { executionTargetId: event.payload.executionTargetId }
+          : {}),
         ...(event.payload.modelSelection !== undefined
           ? { modelSelection: normalizeModelSlug(event.payload.modelSelection) }
           : {}),

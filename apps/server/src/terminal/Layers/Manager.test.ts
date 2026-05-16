@@ -323,6 +323,39 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
     }),
   );
 
+  it.effect("spawns remote terminals through ssh for remote execution targets", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+
+      const snapshot = yield* manager.open(
+        openInput({
+          executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+          cwd: "/root/project",
+          env: {
+            FOO: "bar",
+          },
+        }),
+      );
+
+      expect(snapshot.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.spawnInputs[0]?.shell).toBe("ssh");
+      expect(ptyAdapter.spawnInputs[0]?.args).toEqual(
+        expect.arrayContaining([
+          "-tt",
+          "-o",
+          "BatchMode=yes",
+          "-p",
+          "22",
+          "root@devbox",
+          "sh",
+          "-lc",
+        ]),
+      );
+      expect(ptyAdapter.spawnInputs[0]?.args).toEqual(expect.arrayContaining(["FOO=bar", "--"]));
+    }),
+  );
+
   it.effect("forwards write and resize to active pty process", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();

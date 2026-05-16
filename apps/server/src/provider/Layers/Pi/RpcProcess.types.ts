@@ -1,5 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
+import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+
 export interface PiRpcImage {
   readonly type: "image";
   readonly data: string;
@@ -276,7 +279,8 @@ export type PiRpcStdoutMessage = PiRpcResponse | PiRpcStdoutEvent;
 
 export interface PiRpcProcessOptions {
   readonly binaryPath: string;
-  readonly cwd?: string;
+  readonly providerRuntimeTarget: ProviderRuntimeTarget;
+  readonly workspaceTarget: WorkspaceTarget;
   readonly sessionFile?: string;
   readonly env?: NodeJS.ProcessEnv;
 }

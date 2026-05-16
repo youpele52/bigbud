@@ -8,9 +8,14 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 const STT_MODEL_OPTIONS: ReadonlyArray<{ value: SttModel; label: string; detail: string }> = [
   {
-    value: "gpt-realtime-whisper",
-    label: "GPT Realtime Whisper",
-    detail: "Live streaming transcription",
+    value: "gpt-4o-mini-transcribe",
+    label: "GPT-4o Mini Transcribe",
+    detail: "$0.003 / min — cheapest",
+  },
+  {
+    value: "gpt-4o-transcribe",
+    label: "GPT-4o Transcribe",
+    detail: "$0.006 / min",
   },
 ];
 
@@ -80,7 +85,7 @@ export function SttSettingsSection() {
     <SettingsSection title="Speech to Text" icon={<MicIcon className="size-3" />}>
       <SettingsRow
         title="OpenAI API Key"
-        description="Used to transcribe microphone audio via the OpenAI Realtime transcription API. Stored locally only — never sent to the bigbud server."
+        description="Used to transcribe microphone audio via the OpenAI Whisper API. Stored locally only — never sent to the bigbud server."
         status={keyStatusNode}
       >
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -135,7 +140,7 @@ export function SttSettingsSection() {
 
       <SettingsRow
         title="Transcription model"
-        description="Model used for live microphone transcription. The app opens an OpenAI Realtime transcription session and uses GPT Realtime Whisper for streaming speech-to-text."
+        description="Model used when transcribing your voice recordings."
         control={
           <Select
             value={selectedModel}

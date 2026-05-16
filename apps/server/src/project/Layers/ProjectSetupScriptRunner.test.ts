@@ -9,6 +9,11 @@ import { ProjectSetupScriptRunnerLive } from "./ProjectSetupScriptRunner.ts";
 
 const emptySnapshot = (
   scripts: OrchestrationReadModel["projects"][number]["scripts"],
+  input?: {
+    executionTargetId?: string;
+    workspaceExecutionTargetId?: string;
+    providerRuntimeExecutionTargetId?: string;
+  },
 ): OrchestrationReadModel =>
   ({
     snapshotSequence: 1,
@@ -17,6 +22,13 @@ const emptySnapshot = (
       {
         id: "project-1",
         title: "Project",
+        ...(input?.providerRuntimeExecutionTargetId
+          ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
+          : {}),
+        ...(input?.workspaceExecutionTargetId
+          ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
+          : {}),
+        ...(input?.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         workspaceRoot: "/repo/project",
         defaultModelSelection: null,
         scripts,
@@ -77,7 +89,7 @@ describe("ProjectSetupScriptRunner", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("opens the deterministic setup terminal with worktree env and writes the command", async () => {
+  it("opens the deterministic setup terminal with worktree env, target, and command", async () => {
     const open = vi.fn(() =>
       Effect.succeed({
         threadId: "thread-1",
@@ -101,15 +113,22 @@ describe("ProjectSetupScriptRunner", () => {
               Layer.succeed(OrchestrationEngineService, {
                 getReadModel: () =>
                   Effect.succeed(
-                    emptySnapshot([
+                    emptySnapshot(
+                      [
+                        {
+                          id: "setup",
+                          name: "Setup",
+                          command: "bun install",
+                          icon: "configure",
+                          runOnWorktreeCreate: true,
+                        },
+                      ],
                       {
-                        id: "setup",
-                        name: "Setup",
-                        command: "bun install",
-                        icon: "configure",
-                        runOnWorktreeCreate: true,
+                        providerRuntimeExecutionTargetId: "local",
+                        workspaceExecutionTargetId: "ssh:devbox",
+                        executionTargetId: "local",
                       },
-                    ]),
+                    ),
                   ),
                 readEvents: () => Stream.empty,
                 dispatch: () => Effect.die(new Error("unused")),
@@ -150,6 +169,7 @@ describe("ProjectSetupScriptRunner", () => {
     expect(open).toHaveBeenCalledWith({
       threadId: "thread-1",
       terminalId: "setup-setup",
+      executionTargetId: "ssh:devbox",
       cwd: "/repo/worktrees/a",
       worktreePath: "/repo/worktrees/a",
       env: {

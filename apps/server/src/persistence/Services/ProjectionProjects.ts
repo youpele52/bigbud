@@ -6,7 +6,13 @@
  *
  * @module ProjectionProjectRepository
  */
-import { IsoDateTime, ModelSelection, ProjectId, ProjectScript } from "@bigbud/contracts";
+import {
+  ExecutionTargetId,
+  IsoDateTime,
+  ModelSelection,
+  ProjectId,
+  ProjectScript,
+} from "@bigbud/contracts";
 import { Option, Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
@@ -15,6 +21,9 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 export const ProjectionProject = Schema.Struct({
   projectId: ProjectId,
   title: Schema.String,
+  providerRuntimeExecutionTargetId: ExecutionTargetId,
+  workspaceExecutionTargetId: ExecutionTargetId,
+  executionTargetId: ExecutionTargetId,
   workspaceRoot: Schema.NullOr(Schema.String),
   defaultModelSelection: Schema.NullOr(ModelSelection),
   scripts: Schema.Array(ProjectScript),

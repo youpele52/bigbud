@@ -54,6 +54,9 @@ export interface ActivePiSession {
   readonly pendingUserInputs: Map<string, PendingPiUserInputRequest>;
   readonly turns: Array<MutableTurnSnapshot>;
   unsubscribe: () => void;
+  providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];
+  workspaceExecutionTargetId: ProviderSession["workspaceExecutionTargetId"];
+  executionTargetId: ProviderSession["executionTargetId"];
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;

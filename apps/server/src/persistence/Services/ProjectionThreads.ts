@@ -7,6 +7,7 @@
  * @module ProjectionThreadRepository
  */
 import {
+  ExecutionTargetId,
   IsoDateTime,
   ModelSelection,
   ParentThreadReference,
@@ -25,6 +26,9 @@ export const ProjectionThread = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
   title: Schema.String,
+  providerRuntimeExecutionTargetId: ExecutionTargetId,
+  workspaceExecutionTargetId: ExecutionTargetId,
+  executionTargetId: ExecutionTargetId,
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,

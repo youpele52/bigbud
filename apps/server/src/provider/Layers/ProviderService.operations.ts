@@ -28,6 +28,7 @@ import {
   ProviderRollbackConversationInput,
 } from "./ProviderServiceHelpers.ts";
 import type { makeResolveRoutableSession } from "./ProviderServiceSessionRouting.ts";
+import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 
 /** Return type of `makeResolveRoutableSession` — the curried session resolver. */
 export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSession>;
@@ -79,9 +80,33 @@ export function makeListSessions(
       if (!binding) return session;
 
       const overrides: {
+        providerRuntimeExecutionTargetId?: ProviderSession["providerRuntimeExecutionTargetId"];
+        workspaceExecutionTargetId?: ProviderSession["workspaceExecutionTargetId"];
+        executionTargetId?: ProviderSession["executionTargetId"];
         resumeCursor?: ProviderSession["resumeCursor"];
         runtimeMode?: ProviderSession["runtimeMode"];
       } = {};
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId:
+          session.providerRuntimeExecutionTargetId ?? binding.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId:
+          session.workspaceExecutionTargetId ?? binding.workspaceExecutionTargetId,
+        executionTargetId: session.executionTargetId ?? binding.executionTargetId,
+        defaultProviderRuntimeExecutionTargetId:
+          binding.providerRuntimeExecutionTargetId ?? binding.executionTargetId,
+        defaultWorkspaceExecutionTargetId:
+          binding.workspaceExecutionTargetId ?? binding.executionTargetId,
+      });
+      if (session.providerRuntimeExecutionTargetId === undefined) {
+        overrides.providerRuntimeExecutionTargetId =
+          executionTargets.providerRuntimeExecutionTargetId;
+      }
+      if (session.workspaceExecutionTargetId === undefined) {
+        overrides.workspaceExecutionTargetId = executionTargets.workspaceExecutionTargetId;
+      }
+      if (session.executionTargetId === undefined) {
+        overrides.executionTargetId = executionTargets.executionTargetId;
+      }
       if (session.resumeCursor === undefined && binding.resumeCursor !== undefined) {
         overrides.resumeCursor = binding.resumeCursor;
       }

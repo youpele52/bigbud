@@ -20,6 +20,7 @@ function makeSession(
     threadId: THREAD_ID,
     createdAt: CREATED_AT,
     runtimeMode,
+    executionTargetId: "local",
     pendingPermissions: new Map(),
     pendingUserInputs: new Map(),
     turns: [],

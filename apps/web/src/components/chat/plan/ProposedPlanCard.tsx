@@ -1,4 +1,5 @@
 import { memo, useState, useId } from "react";
+import type { ExecutionTargetId } from "@bigbud/contracts";
 import {
   buildCollapsedProposedPlanPreviewMarkdown,
   buildProposedPlanMarkdownFilename,
@@ -31,10 +32,12 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   planMarkdown,
   cwd,
   workspaceRoot,
+  workspaceExecutionTargetId,
 }: {
   planMarkdown: string;
   cwd: string | undefined;
   workspaceRoot: string | undefined;
+  workspaceExecutionTargetId?: ExecutionTargetId | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
@@ -99,6 +102,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
     void api.projects
       .writeFile({
         cwd: workspaceRoot,
+        ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
         relativePath,
         contents: saveContents,
       })

@@ -49,6 +49,7 @@ export interface ActiveOpencodeSession {
   readonly threadId: ThreadId;
   readonly createdAt: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
+  readonly executionTargetId: ProviderSession["executionTargetId"];
   readonly pendingPermissions: Map<string, PendingPermissionRequest>;
   readonly pendingUserInputs: Map<string, PendingUserInputRequest>;
   readonly turns: Array<MutableTurnSnapshot>;

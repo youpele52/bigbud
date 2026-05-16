@@ -37,6 +37,7 @@ interface ChatHeaderProps {
   sidebarToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
   gitCwd: string | null;
+  executionTargetId?: string | undefined;
   diffOpen: boolean;
   browserOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
@@ -65,6 +66,7 @@ export const ChatHeader = memo(function ChatHeader({
   sidebarToggleShortcutLabel,
   browserToggleShortcutLabel,
   gitCwd,
+  executionTargetId,
   diffOpen,
   browserOpen,
   onRunProjectScript,
@@ -133,7 +135,11 @@ export const ChatHeader = memo(function ChatHeader({
           />
         )}
         {activeProjectName && gitCwd && (
-          <GitActionsControl gitCwd={gitCwd} activeThreadId={activeThreadId} />
+          <GitActionsControl
+            gitCwd={gitCwd}
+            executionTargetId={executionTargetId}
+            activeThreadId={activeThreadId}
+          />
         )}
         <Tooltip>
           <TooltipTrigger

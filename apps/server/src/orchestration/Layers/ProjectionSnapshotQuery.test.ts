@@ -601,6 +601,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         assert.deepEqual(context.value, {
           threadId: ThreadId.makeUnsafe("thread-context"),
           projectId: asProjectId("project-context"),
+          executionTargetId: "local",
           workspaceRoot: "/tmp/context-workspace",
           worktreePath: "/tmp/context-worktree",
           checkpoints: [

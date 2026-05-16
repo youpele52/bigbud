@@ -42,6 +42,7 @@ import { toastManager } from "../ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
   activeProjectCwd: string | null;
+  executionTargetId?: string | undefined;
   activeThreadBranch: string | null;
   activeWorktreePath: string | null;
   branchCwd: string | null;
@@ -73,6 +74,7 @@ function getBranchTriggerLabel(input: {
 
 export function BranchToolbarBranchSelector({
   activeProjectCwd,
+  executionTargetId,
   activeThreadBranch,
   activeWorktreePath,
   branchCwd,
@@ -86,15 +88,19 @@ export function BranchToolbarBranchSelector({
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
 
-  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd));
+  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd, executionTargetId));
   const trimmedBranchQuery = branchQuery.trim();
 
   useEffect(() => {
     if (!branchCwd) return;
     void queryClient.prefetchInfiniteQuery(
-      gitBranchSearchInfiniteQueryOptions({ cwd: branchCwd, query: "" }),
+      gitBranchSearchInfiniteQueryOptions({
+        cwd: branchCwd,
+        executionTargetId,
+        query: "",
+      }),
     );
-  }, [branchCwd, queryClient]);
+  }, [branchCwd, executionTargetId, queryClient]);
 
   const {
     data: branchesSearchData,
@@ -104,6 +110,7 @@ export function BranchToolbarBranchSelector({
   } = useInfiniteQuery(
     gitBranchSearchInfiniteQueryOptions({
       cwd: branchCwd,
+      executionTargetId,
       query: trimmedBranchQuery,
       enabled: isBranchMenuOpen,
     }),
@@ -217,7 +224,11 @@ export function BranchToolbarBranchSelector({
     runBranchAction(async () => {
       setOptimisticBranch(selectedBranchName);
       try {
-        await api.git.checkout({ cwd: selectionTarget.checkoutCwd, branch: branch.name });
+        await api.git.checkout({
+          cwd: selectionTarget.checkoutCwd,
+          ...(executionTargetId ? { executionTargetId } : {}),
+          branch: branch.name,
+        });
         await invalidateGitQueries(queryClient);
       } catch (error) {
         toastManager.add({
@@ -231,7 +242,10 @@ export function BranchToolbarBranchSelector({
       let nextBranchName = selectedBranchName;
       if (branch.isRemote) {
         const status = await api.git
-          .refreshStatus({ cwd: selectionTarget.checkoutCwd })
+          .refreshStatus({
+            cwd: selectionTarget.checkoutCwd,
+            ...(executionTargetId ? { executionTargetId } : {}),
+          })
           .catch(() => null);
         if (status?.branch) {
           nextBranchName = status.branch;
@@ -255,9 +269,17 @@ export function BranchToolbarBranchSelector({
       setOptimisticBranch(name);
 
       try {
-        await api.git.createBranch({ cwd: branchCwd, branch: name });
+        await api.git.createBranch({
+          cwd: branchCwd,
+          ...(executionTargetId ? { executionTargetId } : {}),
+          branch: name,
+        });
         try {
-          await api.git.checkout({ cwd: branchCwd, branch: name });
+          await api.git.checkout({
+            cwd: branchCwd,
+            ...(executionTargetId ? { executionTargetId } : {}),
+            branch: name,
+          });
         } catch (error) {
           toastManager.add({
             type: "error",
@@ -334,10 +356,10 @@ export function BranchToolbarBranchSelector({
         return;
       }
       void queryClient.invalidateQueries({
-        queryKey: gitQueryKeys.branches(branchCwd),
+        queryKey: gitQueryKeys.branches(branchCwd, executionTargetId),
       });
     },
-    [branchCwd, queryClient],
+    [branchCwd, executionTargetId, queryClient],
   );
 
   const triggerLabel = getBranchTriggerLabel({

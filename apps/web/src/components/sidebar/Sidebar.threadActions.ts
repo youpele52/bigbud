@@ -1,67 +1,18 @@
 import { useCallback, useRef, useState, type MouseEvent } from "react";
-import { FAVORITE_THREAD_LIMIT, type ThreadId, type ProjectId } from "@bigbud/contracts";
+import { FAVORITE_THREAD_LIMIT, type ThreadId } from "@bigbud/contracts";
 import { isMacPlatform, newCommandId } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { useUpdateSettings } from "../../hooks/useSettings";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import type { SidebarThreadSummary } from "../../models/types";
-
-export interface SidebarThreadActionsInput {
-  sidebarThreadsById: Record<ThreadId, SidebarThreadSummary | undefined>;
-  projectCwdById: Map<ProjectId, string | null>;
-  appSettings: ReturnType<typeof useSettings>;
-  /** Navigates to a thread route and clears multi-selection. */
-  navigateToThreadRoute: (threadId: ThreadId) => void;
-  /** Called when a thread rename starts — cancels any in-progress project rename. */
-  cancelProjectRename: () => void;
-}
-
-export interface SidebarThreadActionsOutput {
-  // Rename state
-  renamingThreadId: ThreadId | null;
-  renamingTitle: string;
-  setRenamingTitle: (title: string) => void;
-  /** Callback ref for the rename input element — handles focus/select on mount. */
-  onRenamingInputMount: (element: HTMLInputElement | null) => void;
-  /** Returns whether the rename has already been committed. */
-  hasRenameCommitted: () => boolean;
-  /** Marks the rename as committed to prevent double-commit on blur. */
-  markRenameCommitted: () => void;
-  cancelRename: () => void;
-  commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
-  attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
-  forkThread: (threadId: ThreadId) => Promise<void>;
-  toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
-  pendingDeleteConfirmation: {
-    title: string;
-    description: string;
-    threadIds: readonly ThreadId[];
-  } | null;
-  dismissPendingDeleteConfirmation: () => void;
-  confirmPendingDeleteThreads: () => Promise<void>;
-  requestThreadDelete: (threadId: ThreadId) => Promise<void>;
-  // Selection
-  selectedThreadIds: ReadonlySet<ThreadId>;
-  clearSelection: () => void;
-  // Handlers
-  handleThreadClick: (
-    event: MouseEvent,
-    threadId: ThreadId,
-    orderedProjectThreadIds: readonly ThreadId[],
-  ) => void;
-  navigateToThread: (threadId: ThreadId) => void;
-  handleThreadContextMenu: (
-    threadId: ThreadId,
-    position: { x: number; y: number },
-  ) => Promise<void>;
-  handleMultiSelectContextMenu: (position: { x: number; y: number }) => Promise<void>;
-  openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
-}
+import { useSidebarThreadClipboardActions } from "./Sidebar.threadActions.clipboard";
+import type {
+  SidebarThreadActionsInput,
+  SidebarThreadActionsOutput,
+} from "./Sidebar.threadActions.types";
 
 /** Encapsulates all thread-level actions for the sidebar. */
 export function useSidebarThreadActions({
@@ -95,41 +46,7 @@ export function useSidebarThreadActions({
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
 
-  const { copyToClipboard: copyThreadIdToClipboard } = useCopyToClipboard<{
-    threadId: ThreadId;
-  }>({
-    onCopy: (ctx) => {
-      toastManager.add({
-        type: "success",
-        title: "Thread ID copied",
-        description: ctx.threadId,
-      });
-    },
-    onError: (error) => {
-      toastManager.add({
-        type: "error",
-        title: "Failed to copy thread ID",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    },
-  });
-
-  const { copyToClipboard: copyPathToClipboard } = useCopyToClipboard<{ path: string }>({
-    onCopy: (ctx) => {
-      toastManager.add({
-        type: "success",
-        title: "Path copied",
-        description: ctx.path,
-      });
-    },
-    onError: (error) => {
-      toastManager.add({
-        type: "error",
-        title: "Failed to copy path",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    },
-  });
+  const { copyThreadIdToClipboard, copyPathToClipboard } = useSidebarThreadClipboardActions();
 
   const cancelRename = useCallback(() => {
     setRenamingThreadId(null);
@@ -365,12 +282,12 @@ export function useSidebarThreadActions({
       }
       setSelectionAnchor(threadId);
       closeMobileSidebar();
-      navigateToThreadRoute(threadId);
+      navigateToThread(threadId);
     },
     [
       clearSelection,
       closeMobileSidebar,
-      navigateToThreadRoute,
+      navigateToThread,
       rangeSelectTo,
       selectedThreadIds.size,
       setSelectionAnchor,

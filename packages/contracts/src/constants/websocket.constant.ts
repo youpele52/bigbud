@@ -42,6 +42,8 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverVerifyExecutionTarget: "server.verifyExecutionTarget",
+  serverUnlockSshKey: "server.unlockSshKey",
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",

@@ -3,6 +3,7 @@ import {
   FolderIcon,
   FolderOpenIcon,
   GripVerticalIcon,
+  ServerIcon,
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -16,6 +17,8 @@ import {
   resolveThreadStatusPill,
   type SidebarNewThreadEnvMode,
 } from "./Sidebar.logic";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { getProjectRemoteTargetLabel, isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
 import type { SortableProjectHandleProps } from "./SidebarProjectItem";
 import { SidebarThreadRow, type ThreadPr } from "./SidebarThreadRow";
 import {
@@ -40,6 +43,7 @@ export interface RenderedProjectData {
     id: ProjectId;
     name: string;
     cwd: string;
+    executionTargetId?: string | undefined;
     expanded: boolean;
   };
   projectStatus: ProjectStatusIndicator | null;
@@ -195,6 +199,9 @@ export function SidebarRenderedProjectItem({
   collapseThreadListForProject,
 }: SidebarRenderedProjectItemProps) {
   const isChatsProject = isBuiltInChatsProject(project.id);
+  const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(project);
+  const isRemoteProject = isRemoteExecutionTargetId(workspaceExecutionTargetId);
+  const remoteTargetLabel = getProjectRemoteTargetLabel(workspaceExecutionTargetId);
   const swipeReveal = useSwipeRevealAction<HTMLButtonElement>({
     itemId: project.id,
     disabled: renamingProjectId === project.id || isChatsProject,
@@ -382,8 +389,19 @@ export function SidebarRenderedProjectItem({
                   onPointerDown={(event) => event.stopPropagation()}
                 />
               ) : (
-                <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                  {project.name}
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate text-xs font-medium text-foreground/90">
+                    {project.name}
+                  </span>
+                  {isRemoteProject ? (
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border/70 bg-secondary/70 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-muted-foreground/80 uppercase"
+                      title={remoteTargetLabel ?? "SSH remote project"}
+                    >
+                      <ServerIcon className="size-2.5" />
+                      SSH
+                    </span>
+                  ) : null}
                 </span>
               )}
             </button>

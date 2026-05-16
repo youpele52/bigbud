@@ -3,6 +3,7 @@ import { Effect, Layer } from "effect";
 
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
+import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import {
   type ProjectSetupScriptRunnerShape,
   ProjectSetupScriptRunner,
@@ -50,6 +51,7 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
       yield* terminalManager.open({
         threadId: input.threadId,
         terminalId,
+        executionTargetId: resolveWorkspaceExecutionTargetId(project),
         cwd,
         worktreePath: input.worktreePath,
         env,

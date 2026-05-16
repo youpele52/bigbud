@@ -1,4 +1,4 @@
-import { type MessageId, type TurnId } from "@bigbud/contracts";
+import { type ExecutionTargetId, type MessageId, type TurnId } from "@bigbud/contracts";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import {
   type ExpandedImagePreview,
@@ -11,7 +11,7 @@ import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
-import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
+import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
 import { MessagesTimelineBrowserAnnotations } from "./MessagesTimeline.browserAnnotations";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
@@ -45,6 +45,7 @@ interface RenderRowContentProps {
   nowIso: string;
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
+  workspaceExecutionTargetId?: ExecutionTargetId | undefined;
   isWorking: boolean;
   onTimelineImageLoad: () => void;
   focusedMessageId: MessageId | null;
@@ -72,6 +73,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
     nowIso,
     timestampFormat,
     workspaceRoot,
+    workspaceExecutionTargetId,
     isWorking,
     onTimelineImageLoad,
     focusedMessageId,
@@ -102,30 +104,47 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
           const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
           const showHeader = hasOverflow || !onlyToolEntries;
           const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
+          const showSingleEntryActionsOutside = visibleEntries.length === 1;
+          const singleVisibleEntry = showSingleEntryActionsOutside ? visibleEntries[0] : undefined;
 
           return (
-            <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-              {showHeader && (
-                <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-                  <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
-                    {groupLabel} ({groupedEntries.length})
-                  </p>
-                  {hasOverflow && (
-                    <button
-                      type="button"
-                      className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
-                      onClick={() => onToggleWorkGroup(groupId)}
-                    >
-                      {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-                    </button>
-                  )}
+            <div className="group/work-log flex flex-col items-start gap-1">
+              <div className="w-full rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
+                {showHeader && (
+                  <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+                    <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
+                      {groupLabel} ({groupedEntries.length})
+                    </p>
+                    {hasOverflow && (
+                      <button
+                        type="button"
+                        className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
+                        onClick={() => onToggleWorkGroup(groupId)}
+                      >
+                        {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  {visibleEntries.map((workEntry) => (
+                    <SimpleWorkEntryRow
+                      key={`work-row:${workEntry.id}`}
+                      workEntry={workEntry}
+                      executionTargetId={workspaceExecutionTargetId}
+                      showActions={!showSingleEntryActionsOutside}
+                    />
+                  ))}
                 </div>
-              )}
-              <div className="space-y-0.5">
-                {visibleEntries.map((workEntry) => (
-                  <SimpleWorkEntryRow key={`work-row:${workEntry.id}`} workEntry={workEntry} />
-                ))}
               </div>
+              {singleVisibleEntry ? (
+                <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100">
+                  <WorkEntryActionButtons
+                    workEntry={singleVisibleEntry}
+                    executionTargetId={workspaceExecutionTargetId}
+                  />
+                </div>
+              ) : null}
             </div>
           );
         })()}
@@ -325,6 +344,7 @@ export function MessagesTimelineRowContent(props: RenderRowContentProps) {
             planMarkdown={row.proposedPlan.planMarkdown}
             cwd={markdownCwd}
             workspaceRoot={workspaceRoot}
+            workspaceExecutionTargetId={workspaceExecutionTargetId}
           />
         </div>
       )}

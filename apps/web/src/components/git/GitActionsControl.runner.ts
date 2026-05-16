@@ -59,6 +59,7 @@ export interface GitActionRunnerCallbacks {
 
 interface UseGitActionRunnerInput {
   gitCwd: string | null;
+  executionTargetId?: string | undefined;
   activeThreadId: ThreadId | null;
   isDefaultBranch: boolean;
   gitStatusForActions: GitStatusResult | null;
@@ -68,6 +69,7 @@ interface UseGitActionRunnerInput {
 
 export function useGitActionRunner({
   gitCwd,
+  executionTargetId,
   activeThreadId,
   isDefaultBranch,
   gitStatusForActions,
@@ -86,7 +88,7 @@ export function useGitActionRunner({
   const activeGitActionProgressRef = useRef<ActiveGitActionProgress | null>(null);
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: gitCwd, queryClient }),
+    gitRunStackedActionMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
   );
 
   const isRunning = runImmediateGitActionMutation.isPending;

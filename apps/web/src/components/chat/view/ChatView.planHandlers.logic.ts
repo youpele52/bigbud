@@ -10,6 +10,7 @@ import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
+import { buildExplicitExecutionTargets } from "../../../lib/providerExecutionTargets";
 import {
   buildPlanImplementationThreadTitle,
   buildPlanImplementationPrompt,
@@ -252,6 +253,13 @@ export function usePlanHandlers({
     });
     const nextThreadTitle = truncate(buildPlanImplementationThreadTitle(planMarkdown));
     const nextThreadModelSelection: ModelSelection = selectedModelSelection;
+    const executionTargets = buildExplicitExecutionTargets({
+      providerRuntimeExecutionTargetId:
+        activeThread.providerRuntimeExecutionTargetId ??
+        activeProject.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId:
+        activeThread.workspaceExecutionTargetId ?? activeProject.workspaceExecutionTargetId,
+    });
 
     sendInFlightRef.current = true;
     beginLocalDispatch({ preparingWorktree: false });
@@ -267,6 +275,7 @@ export function usePlanHandlers({
         threadId: nextThreadId,
         projectId: activeProject.id,
         title: nextThreadTitle,
+        ...executionTargets,
         modelSelection: nextThreadModelSelection,
         runtimeMode,
         interactionMode: "default",

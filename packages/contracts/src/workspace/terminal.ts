@@ -1,8 +1,12 @@
 import { Schema } from "effect";
-import { TrimmedNonEmptyString } from "../core/baseSchemas";
+import {
+  ExecutionTargetId,
+  LOCAL_EXECUTION_TARGET_ID,
+  TrimmedNonEmptyString,
+} from "../core/baseSchemas";
 import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 
-export { DEFAULT_TERMINAL_ID };
+export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const TerminalColsSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).check(
@@ -37,6 +41,7 @@ export type TerminalSessionInput = Schema.Codec.Encoded<typeof TerminalSessionIn
 
 export const TerminalOpenInput = Schema.Struct({
   ...TerminalSessionInput.fields,
+  executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyStringSchema,
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   cols: Schema.optional(TerminalColsSchema),
@@ -63,6 +68,7 @@ export type TerminalClearInput = Schema.Codec.Encoded<typeof TerminalClearInput>
 
 export const TerminalRestartInput = Schema.Struct({
   ...TerminalSessionInput.fields,
+  executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyStringSchema,
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   cols: TerminalColsSchema,
@@ -84,6 +90,7 @@ export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 export const TerminalSessionSnapshot = Schema.Struct({
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
   status: TerminalSessionStatus,
@@ -217,10 +224,26 @@ export class TerminalNotRunningError extends Schema.TaggedErrorClass<TerminalNot
   }
 }
 
+export class TerminalExecutionTargetError extends Schema.TaggedErrorClass<TerminalExecutionTargetError>()(
+  "TerminalExecutionTargetError",
+  {
+    threadId: Schema.String,
+    terminalId: Schema.String,
+    executionTargetId: ExecutionTargetId,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message() {
+    return `Terminal execution target failed for thread: ${this.threadId}, terminal: ${this.terminalId} (${this.executionTargetId}) - ${this.detail}`;
+  }
+}
+
 export const TerminalError = Schema.Union([
   TerminalCwdError,
   TerminalHistoryError,
   TerminalSessionLookupError,
   TerminalNotRunningError,
+  TerminalExecutionTargetError,
 ]);
 export type TerminalError = typeof TerminalError.Type;

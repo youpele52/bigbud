@@ -143,6 +143,9 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
         threadId,
         providerName: "claudeAgent",
         adapterKey: "claudeAgent",
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "local",
+        executionTargetId: "local",
         runtimeMode: "full-access",
         status: "running",
         lastSeenAt: new Date().toISOString(),
@@ -160,6 +163,50 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       if (Option.isSome(runtime)) {
         assert.equal(runtime.value.providerName, "codex");
         assert.equal(runtime.value.adapterKey, "codex");
+        assert.equal(runtime.value.providerRuntimeExecutionTargetId, "local");
+        assert.equal(runtime.value.workspaceExecutionTargetId, "local");
+      }
+    }));
+
+  it("persists separate provider runtime and workspace execution targets", () =>
+    Effect.gen(function* () {
+      const directory = yield* ProviderSessionDirectory;
+      const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+      const threadId = ThreadId.makeUnsafe("thread-split-targets");
+
+      yield* directory.upsert({
+        provider: "pi",
+        threadId,
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      });
+
+      const binding = yield* directory.getBinding(threadId);
+      assert.equal(Option.isSome(binding), true);
+      if (Option.isSome(binding)) {
+        assert.equal(binding.value.providerRuntimeExecutionTargetId, "local");
+        assert.equal(
+          binding.value.workspaceExecutionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
+        assert.equal(
+          binding.value.executionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
+      }
+
+      const runtime = yield* runtimeRepository.getByThreadId({ threadId });
+      assert.equal(Option.isSome(runtime), true);
+      if (Option.isSome(runtime)) {
+        assert.equal(runtime.value.providerRuntimeExecutionTargetId, "local");
+        assert.equal(
+          runtime.value.workspaceExecutionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
+        assert.equal(
+          runtime.value.executionTargetId,
+          "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+        );
       }
     }));
 

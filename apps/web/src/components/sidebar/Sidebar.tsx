@@ -19,6 +19,8 @@ import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarSearchSection } from "./Sidebar.searchSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
+import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
+import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { useSidebarState } from "./Sidebar.state";
 
 export default function Sidebar() {
@@ -85,6 +87,7 @@ export default function Sidebar() {
               }}
               shouldShowProjectPathEntry={s.shouldShowProjectPathEntry}
               handleStartAddProject={s.handleStartAddProject}
+              openRemoteProjectDialog={s.openRemoteProjectDialog}
               onCloseMobileSidebar={closeMobileSidebar}
               isElectron={isElectron}
               newCwd={s.newCwd}
@@ -100,7 +103,6 @@ export default function Sidebar() {
               renderedProjects={s.renderedProjects}
               isManualProjectSorting={s.isManualProjectSorting}
               bootstrapComplete={s.bootstrapComplete}
-              hasProjects={s.projects.length > 0}
               onDragStart={s.handleProjectDragStart}
               onDragEnd={s.handleProjectDragEnd}
               onDragCancel={s.handleProjectDragCancel}
@@ -178,6 +180,71 @@ export default function Sidebar() {
               ) : null}
             </AlertDialogPopup>
           </AlertDialog>
+
+          <SidebarRemoteProjectDialog
+            open={s.isRemoteProjectDialogOpen}
+            draft={s.remoteProjectDraft}
+            fieldErrors={s.remoteProjectFieldErrors}
+            error={s.remoteProjectError}
+            verificationMessage={s.remoteProjectVerificationMessage}
+            isSubmitting={s.isAddingProject}
+            isVerifying={s.isVerifyingRemoteProject}
+            onOpenChange={(open) => {
+              if (!open) {
+                s.closeRemoteProjectDialog();
+              }
+            }}
+            onFieldChange={s.updateRemoteProjectDraft}
+            onSubmit={() => {
+              void s.submitRemoteProjectDialog();
+            }}
+          />
+
+          <SidebarUnlockSshKeyDialog
+            open={s.isRemoteProjectUnlockDialogOpen}
+            keyPath={s.remoteProjectUnlockKeyPath}
+            description={
+              <>
+                BigBud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
+                it can verify and add this remote project.
+              </>
+            }
+            passphrase={s.remoteProjectUnlockPassphrase}
+            error={s.remoteProjectUnlockError}
+            isSubmitting={s.isUnlockingRemoteProjectKey}
+            onOpenChange={(open) => {
+              if (!open) {
+                s.closeRemoteProjectUnlockDialog();
+              }
+            }}
+            onPassphraseChange={s.setRemoteProjectUnlockPassphrase}
+            onSubmit={() => {
+              void s.submitRemoteProjectUnlock();
+            }}
+          />
+
+          <SidebarUnlockSshKeyDialog
+            open={s.isRemoteThreadUnlockDialogOpen}
+            keyPath={s.remoteThreadUnlockKeyPath}
+            description={
+              <>
+                BigBud needs the passphrase for <code>{s.remoteThreadUnlockKeyPath}</code> before it
+                can reconnect to this remote project.
+              </>
+            }
+            passphrase={s.remoteThreadUnlockPassphrase}
+            error={s.remoteThreadUnlockError}
+            isSubmitting={s.isUnlockingRemoteThreadKey}
+            onOpenChange={(open) => {
+              if (!open) {
+                s.closeRemoteThreadUnlockDialog();
+              }
+            }}
+            onPassphraseChange={s.setRemoteThreadUnlockPassphrase}
+            onSubmit={() => {
+              void s.submitRemoteThreadUnlock();
+            }}
+          />
         </>
       )}
     </>

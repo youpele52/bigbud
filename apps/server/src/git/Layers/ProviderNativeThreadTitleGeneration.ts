@@ -13,6 +13,8 @@ import { Effect, Option } from "effect";
 
 import { createPiRpcProcess } from "../../provider/Layers/Pi/RpcProcess.ts";
 import type { PiRpcStdoutEvent } from "../../provider/Layers/Pi/RpcProcess.ts";
+import { resolveProviderRuntimeTarget } from "../../provider-runtime/providerRuntimeTarget.ts";
+import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 
 import type { ThreadTitleGenerationInput } from "../Services/TextGeneration.ts";
@@ -196,7 +198,7 @@ export const generateOpencodeThreadTitleNative = (
 ) =>
   Effect.gen(function* () {
     const serverHandle = yield* Effect.tryPromise({
-      try: () => deps.opencodeServerManager.acquire(input.cwd),
+      try: () => deps.opencodeServerManager.acquire({ directory: input.cwd }),
       catch: (cause) =>
         new TextGenerationError({
           operation: "generateThreadTitle",
@@ -373,7 +375,11 @@ export const generatePiThreadTitleNative = (
       try: () =>
         createPiRpcProcess({
           binaryPath: piSettings.binaryPath,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
+          providerRuntimeTarget: resolveProviderRuntimeTarget({ executionTargetId: "local" }),
+          workspaceTarget: resolveWorkspaceTarget({
+            executionTargetId: "local",
+            cwd: input.cwd,
+          }),
           env: process.env,
         }),
       catch: (cause) =>

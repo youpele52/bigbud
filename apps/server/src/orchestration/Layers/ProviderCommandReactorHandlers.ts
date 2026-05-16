@@ -14,7 +14,7 @@ import {
   type TurnId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
-import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
+import { Cache, Duration, Effect, FileSystem, Option, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -28,6 +28,7 @@ import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
   canReplaceThreadTitle,
   DEFAULT_RUNTIME_MODE,
+  formatProviderServiceCauseDetail,
   HANDLED_TURN_START_KEY_MAX,
   HANDLED_TURN_START_KEY_TTL_MINUTES,
   isUnknownPendingApprovalRequestError,
@@ -320,7 +321,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
           threadId: event.payload.threadId,
           kind: "provider.turn.start.failed",
           summary: "Provider turn start failed",
-          detail: Cause.pretty(cause),
+          detail: formatProviderServiceCauseDetail(cause),
           turnId: null,
           createdAt: event.payload.createdAt,
         }),
@@ -385,7 +386,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
               summary: "Provider approval response failed",
               detail: isUnknownPendingApprovalRequestError(cause)
                 ? stalePendingRequestDetail("approval", event.payload.requestId)
-                : Cause.pretty(cause),
+                : formatProviderServiceCauseDetail(cause),
               turnId: null,
               createdAt: event.payload.createdAt,
               requestId: event.payload.requestId,
@@ -432,7 +433,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
               summary: "Provider user input response failed",
               detail: isUnknownPendingUserInputRequestError(cause)
                 ? stalePendingRequestDetail("user-input", event.payload.requestId)
-                : Cause.pretty(cause),
+                : formatProviderServiceCauseDetail(cause),
               turnId: null,
               createdAt: event.payload.createdAt,
               requestId: event.payload.requestId,
