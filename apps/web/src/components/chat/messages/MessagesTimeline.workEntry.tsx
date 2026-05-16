@@ -240,7 +240,7 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
               sessions on this remote target.
             </>
           }
-          passphrase={sshKeyPassphrase}
+          secret={sshKeyPassphrase}
           error={sshKeyUnlockError}
           isSubmitting={isUnlockingSshKey}
           onOpenChange={(open) => {
@@ -248,7 +248,7 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
               setIsUnlockDialogOpen(open);
             }
           }}
-          onPassphraseChange={setSshKeyPassphrase}
+          onSecretChange={setSshKeyPassphrase}
           onSubmit={() => {
             void submitSshKeyUnlock();
           }}
