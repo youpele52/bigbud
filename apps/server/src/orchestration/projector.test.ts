@@ -76,6 +76,9 @@ describe("orchestration projector", () => {
         id: "thread-1",
         projectId: "project-1",
         title: "demo",
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "local",
+        executionTargetId: "local",
         modelSelection: {
           provider: "codex",
           model: "gpt-5-codex",

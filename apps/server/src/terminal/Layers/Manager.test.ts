@@ -339,20 +339,25 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
 
       expect(snapshot.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
       expect(ptyAdapter.spawnInputs).toHaveLength(1);
-      expect(ptyAdapter.spawnInputs[0]?.shell).toBe("ssh");
-      expect(ptyAdapter.spawnInputs[0]?.args).toEqual(
-        expect.arrayContaining([
-          "-tt",
-          "-o",
-          "BatchMode=yes",
-          "-p",
-          "22",
-          "root@devbox",
-          "sh",
-          "-lc",
-        ]),
-      );
-      expect(ptyAdapter.spawnInputs[0]?.args).toEqual(expect.arrayContaining(["FOO=bar", "--"]));
+      const spawnInput = ptyAdapter.spawnInputs[0];
+      expect(spawnInput).toBeDefined();
+      if (!spawnInput) return;
+      const spawnArgs = spawnInput.args;
+      expect(spawnArgs).toBeDefined();
+      if (!spawnArgs) return;
+
+      expect(spawnInput.shell).toBe("ssh");
+      expect(spawnArgs.slice(0, 6)).toEqual([
+        "-tt",
+        "-o",
+        "BatchMode=yes",
+        "-p",
+        "22",
+        "root@devbox",
+      ]);
+      expect(spawnArgs[6]).toContain("'sh' '-lc'");
+      expect(spawnArgs[6]).toContain("'FOO=bar'");
+      expect(spawnArgs[6]).toContain("'--'");
     }),
   );
 
