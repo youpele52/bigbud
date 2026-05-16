@@ -9,11 +9,13 @@ import { useCallback, useMemo } from "react";
 import { readNativeApi } from "../../../../rpc/nativeApi";
 import { modelSelectionsEqual } from "../ChatView.modelSelection.logic";
 import { newCommandId, newThreadId, randomUUID } from "~/lib/utils";
+import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
 import {
   collapseExpandedComposerCursor,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
 } from "../../../../logic/composer";
+import { useRemoteExecutionAccessGate } from "../../../../hooks/useRemoteExecutionAccessGate";
 import { useTurnActions } from "../ChatView.turnActions.logic";
 import { useTerminalActions } from "../ChatView.terminalActions.logic";
 import { useProjectScripts } from "../ChatView.projectScripts.logic";
@@ -48,6 +50,7 @@ interface ChatViewRuntimeInput {
 
 export function useChatViewRuntime({ base, thread, composer, timeline }: ChatViewRuntimeInput) {
   const { setPullRequestDialogState } = base;
+  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
 
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
@@ -75,6 +78,17 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     }) => {
       if (!base.activeProject) {
         throw new Error("No active project is available for this pull request.");
+      }
+      const verified = await ensureRemoteExecutionTargetAccess({
+        executionTargetId: resolveWorkspaceExecutionTargetId(base.activeProject),
+        ...(base.activeProject.cwd ? { cwd: base.activeProject.cwd } : {}),
+        onVerified: async () => {
+          await openOrReuseProjectDraftThread(input);
+        },
+        resumeOnUnlockOnly: true,
+      });
+      if (!verified) {
+        return base.threadId;
       }
       const storedDraftThread = base.getDraftThreadByProjectId(base.activeProject.id);
       if (storedDraftThread) {
@@ -110,7 +124,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
       });
       return nextThreadId;
     },
-    [base],
+    [base, ensureRemoteExecutionTargetAccess],
   );
 
   const handlePreparedPullRequestThread = useCallback(

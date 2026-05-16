@@ -17,10 +17,14 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { isMacPlatform, newCommandId } from "../../lib/utils";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../ui/toast";
 import { useSettings } from "../../hooks/useSettings";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
 import type { Project } from "../../models/types";
 import type { SidebarProjectSnapshot } from "./Sidebar.types";
 
@@ -93,7 +97,12 @@ export function useSidebarProjectActions({
   cancelThreadRename,
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
+  const verifiedExecutionTargetIds = useRemoteAccessStore(
+    (store) => store.verifiedExecutionTargetIds,
+  );
+  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -382,15 +391,38 @@ export function useSidebarProjectActions({
       if (selectedThreadIdsSize > 0) {
         clearSelection();
       }
-      toggleProject(projectId);
+
+      const project = projects.find((entry) => entry.id === projectId);
+      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
+      const isRemoteProject =
+        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
+      const isVerifiedRemoteTarget =
+        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+
+      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        toggleProject(projectId);
+        return;
+      }
+
+      void ensureRemoteExecutionTargetAccess({
+        executionTargetId,
+        ...(project.cwd ? { cwd: project.cwd } : {}),
+        onVerified: () => {
+          setProjectExpanded(projectId, true);
+        },
+      });
     },
     [
       clearSelection,
       dragInProgressRef,
+      ensureRemoteExecutionTargetAccess,
+      projects,
       selectedThreadIdsSize,
+      setProjectExpanded,
       suppressProjectClickAfterDragRef,
       suppressProjectClickForContextMenuRef,
       toggleProject,
+      verifiedExecutionTargetIds,
     ],
   );
 
@@ -401,9 +433,34 @@ export function useSidebarProjectActions({
       if (dragInProgressRef.current) {
         return;
       }
-      toggleProject(projectId);
+      const project = projects.find((entry) => entry.id === projectId);
+      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
+      const isRemoteProject =
+        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
+      const isVerifiedRemoteTarget =
+        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+
+      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        toggleProject(projectId);
+        return;
+      }
+
+      void ensureRemoteExecutionTargetAccess({
+        executionTargetId,
+        ...(project.cwd ? { cwd: project.cwd } : {}),
+        onVerified: () => {
+          setProjectExpanded(projectId, true);
+        },
+      });
     },
-    [dragInProgressRef, toggleProject],
+    [
+      dragInProgressRef,
+      ensureRemoteExecutionTargetAccess,
+      projects,
+      setProjectExpanded,
+      toggleProject,
+      verifiedExecutionTargetIds,
+    ],
   );
 
   return {

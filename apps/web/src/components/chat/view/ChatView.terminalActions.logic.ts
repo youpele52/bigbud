@@ -4,6 +4,8 @@ import { projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
 import { DEFAULT_THREAD_TERMINAL_ID, MAX_TERMINALS_PER_GROUP } from "../../../models/types";
 import { randomUUID } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
+import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
+import { resolveWorkspaceExecutionTargetId } from "../../../lib/providerExecutionTargets";
 import type { Thread, Project } from "../../../models/types";
 import { SCRIPT_TERMINAL_COLS, SCRIPT_TERMINAL_ROWS } from "./ChatView.constants.logic";
 
@@ -80,6 +82,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     setLastInvokedScriptByProjectId,
     setThreadError,
   } = input;
+  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
 
   const activeTerminalGroup =
     terminalState.terminalGroups.find(
@@ -95,9 +98,33 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
   const setTerminalOpen = useCallback(
     (open: boolean) => {
       if (!activeThreadId) return;
+      if (open && activeProject) {
+        void (async () => {
+          const verificationCwd = gitCwd ?? activeProject.cwd;
+          const verified = await ensureRemoteExecutionTargetAccess({
+            executionTargetId: resolveWorkspaceExecutionTargetId(activeProject),
+            ...(verificationCwd ? { cwd: verificationCwd } : {}),
+            onVerified: () => {
+              setTerminalOpen(true);
+            },
+            resumeOnUnlockOnly: true,
+          });
+          if (!verified) {
+            return;
+          }
+          storeSetTerminalOpen(activeThreadId, true);
+        })();
+        return;
+      }
       storeSetTerminalOpen(activeThreadId, open);
     },
-    [activeThreadId, storeSetTerminalOpen],
+    [
+      activeProject,
+      activeThreadId,
+      ensureRemoteExecutionTargetAccess,
+      gitCwd,
+      storeSetTerminalOpen,
+    ],
   );
 
   const toggleTerminalVisibility = useCallback(() => {
@@ -175,6 +202,15 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       const targetCwd = options?.cwd ?? gitCwd ?? activeProject.cwd;
       if (!targetCwd) {
         setThreadError(activeThreadId, "This chat does not have a runnable workspace path.");
+        return;
+      }
+      const verified = await ensureRemoteExecutionTargetAccess({
+        executionTargetId: resolveWorkspaceExecutionTargetId(activeProject),
+        cwd: targetCwd,
+        onVerified: () => runTerminalCommand(command, options),
+        resumeOnUnlockOnly: true,
+      });
+      if (!verified) {
         return;
       }
       const baseTerminalId =
@@ -258,6 +294,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       terminalState.activeTerminalId,
       terminalState.runningTerminalIds,
       terminalState.terminalIds,
+      ensureRemoteExecutionTargetAccess,
       setTerminalFocusRequestId,
       setTerminalLaunchContext,
     ],

@@ -7,11 +7,12 @@ import {
 } from "@bigbud/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
-import { useShallow } from "zustand/react/shallow";
 import { useComposerDraftStore } from "../stores/composer";
 import { type DraftThreadEnvMode, type DraftThreadState } from "../stores/composer";
 import { newThreadId } from "../lib/utils";
+import { resolveWorkspaceExecutionTargetId } from "../lib/providerExecutionTargets";
 import { orderItemsByPreferredIds } from "../components/sidebar/Sidebar.logic";
+import { useRemoteExecutionAccessGate } from "./useRemoteExecutionAccessGate";
 import { useStore } from "../stores/main";
 import { useThreadById } from "../stores/main";
 import { useUiStateStore } from "../stores/ui";
@@ -58,9 +59,11 @@ export function resolveNewChatOptions(): {
 }
 
 export function useHandleNewThread() {
-  const projectIds = useStore(useShallow((store) => store.projects.map((project) => project.id)));
+  const projects = useStore((store) => store.projects);
+  const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const navigate = useNavigate();
+  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -89,6 +92,7 @@ export function useHandleNewThread() {
       const normalizedOptions = isBuiltInChatsProject(projectId)
         ? resolveNewChatOptions()
         : options;
+      const project = projects.find((projectEntry) => projectEntry.id === projectId);
       const {
         clearProjectDraftThreadId,
         getDraftThread,
@@ -104,8 +108,23 @@ export function useHandleNewThread() {
       const latestActiveDraftThread: DraftThreadState | null = routeThreadId
         ? getDraftThread(routeThreadId)
         : null;
+      const ensureProjectRemoteAccess = async () => {
+        if (!project) {
+          return true;
+        }
+
+        return ensureRemoteExecutionTargetAccess({
+          executionTargetId: resolveWorkspaceExecutionTargetId(project),
+          ...(project.cwd ? { cwd: project.cwd } : {}),
+          onVerified: () => handleNewThread(projectId, normalizedOptions),
+          resumeOnUnlockOnly: true,
+        });
+      };
       if (storedDraftThread) {
         return (async () => {
+          if (!(await ensureProjectRemoteAccess())) {
+            return;
+          }
           if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
             setDraftThreadContext(storedDraftThread.threadId, {
               ...(hasBranchOption ? { branch: normalizedOptions?.branch ?? null } : {}),
@@ -126,30 +145,37 @@ export function useHandleNewThread() {
         })();
       }
 
-      clearProjectDraftThreadId(projectId);
-
       if (
         latestActiveDraftThread &&
         routeThreadId &&
         latestActiveDraftThread.projectId === projectId &&
         !useStore.getState().threads.find((t) => t.id === routeThreadId)
       ) {
-        if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
-          setDraftThreadContext(routeThreadId, {
-            ...(hasBranchOption ? { branch: normalizedOptions?.branch ?? null } : {}),
-            ...(hasWorktreePathOption
-              ? { worktreePath: normalizedOptions?.worktreePath ?? null }
-              : {}),
-            ...(hasEnvModeOption ? { envMode: normalizedOptions?.envMode } : {}),
-          });
-        }
-        setProjectDraftThreadId(projectId, routeThreadId);
-        return Promise.resolve();
+        return (async () => {
+          if (!(await ensureProjectRemoteAccess())) {
+            return;
+          }
+
+          if (hasBranchOption || hasWorktreePathOption || hasEnvModeOption) {
+            setDraftThreadContext(routeThreadId, {
+              ...(hasBranchOption ? { branch: normalizedOptions?.branch ?? null } : {}),
+              ...(hasWorktreePathOption
+                ? { worktreePath: normalizedOptions?.worktreePath ?? null }
+                : {}),
+              ...(hasEnvModeOption ? { envMode: normalizedOptions?.envMode } : {}),
+            });
+          }
+          setProjectDraftThreadId(projectId, routeThreadId);
+        })();
       }
 
       const threadId = newThreadId();
       const createdAt = new Date().toISOString();
       return (async () => {
+        if (!(await ensureProjectRemoteAccess())) {
+          return;
+        }
+        clearProjectDraftThreadId(projectId);
         setProjectDraftThreadId(projectId, threadId, {
           createdAt,
           branch: normalizedOptions?.branch ?? null,
@@ -165,7 +191,7 @@ export function useHandleNewThread() {
         });
       })();
     },
-    [navigate, routeThreadId],
+    [ensureRemoteExecutionTargetAccess, navigate, projects, routeThreadId],
   );
 
   return {
