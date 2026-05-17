@@ -174,7 +174,7 @@ export function ProviderCard({
 
                   return (
                     <div
-                      key={`${card.provider}:${model.slug}`}
+                      key={`${card.provider}:${model.slug}:${model.subProviderID ?? "default"}:${model.isCustom ? "custom" : "built-in"}`}
                       className="flex items-center gap-2 py-1"
                     >
                       <span className="min-w-0 truncate text-xs text-foreground/90">
