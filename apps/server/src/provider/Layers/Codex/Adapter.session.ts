@@ -6,22 +6,20 @@
  *
  * @module CodexAdapter.session
  */
-import { type ProviderEvent, type ProviderSendTurnInput, ThreadId } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
 import { Effect, FileSystem, Queue, Stream } from "effect";
 
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
-  ProviderAdapterSessionClosedError,
-  ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
-  type ProviderAdapterError,
 } from "../../Errors.ts";
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
 import {
   CodexAppServerManager,
   type CodexAppServerStartSessionInput,
 } from "../../../codex/codexAppServerManager.ts";
+import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
   appendAttachedFileContents,
@@ -29,44 +27,14 @@ import {
 } from "../../../attachments/documentText.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
+import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
+import { getProviderCapabilities } from "../../providerCapabilities.ts";
+import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
+import { makeResolveAttachment, toRequestError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
-
-function toSessionError(
-  threadId: ThreadId,
-  cause: unknown,
-): ProviderAdapterSessionNotFoundError | ProviderAdapterSessionClosedError | undefined {
-  const normalized = toMessage(cause, "").toLowerCase();
-  if (normalized.includes("unknown session") || normalized.includes("unknown provider session")) {
-    return new ProviderAdapterSessionNotFoundError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  if (normalized.includes("session is closed")) {
-    return new ProviderAdapterSessionClosedError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  return undefined;
-}
-
-function toRequestError(threadId: ThreadId, method: string, cause: unknown): ProviderAdapterError {
-  const sessionError = toSessionError(threadId, cause);
-  if (sessionError) {
-    return sessionError;
-  }
-  return new ProviderAdapterRequestError({
-    provider: PROVIDER,
-    method,
-    detail: toMessage(cause, `${method} failed`),
-    cause,
-  });
-}
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
@@ -100,6 +68,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
+  const resolveAttachment = makeResolveAttachment({
+    fileSystem,
+    attachmentsDir: serverConfig.attachmentsDir,
+  });
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -125,14 +97,56 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       );
       const binaryPath = codexSettings.binaryPath;
       const homePath = codexSettings.homePath;
+      const executionContext = resolveProviderExecutionContext({
+        providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+        executionTargetId: input.executionTargetId,
+        cwd: input.cwd,
+        defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(PROVIDER)
+          .supportsLocalRuntimeRemoteWorkspace
+          ? LOCAL_EXECUTION_TARGET_ID
+          : undefined,
+        useLegacyExecutionTargetForProviderRuntime: false,
+      });
+      const remoteWorkspaceBridge =
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        isRemoteWorkspaceTarget(executionContext.workspaceTarget)
+          ? yield* Effect.tryPromise({
+              try: () => createCodexRemoteWorkspaceBridge(executionContext.workspaceTarget),
+              catch: (cause) =>
+                new ProviderAdapterProcessError({
+                  provider: PROVIDER,
+                  threadId: input.threadId,
+                  detail: toMessage(cause, "Failed to prepare Codex remote workspace bridge."),
+                  cause,
+                }),
+            })
+          : undefined;
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
-        ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+        providerRuntimeExecutionTargetId:
+          executionContext.executionTargets.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: executionContext.executionTargets.workspaceExecutionTargetId,
+        executionTargetId: executionContext.executionTargets.executionTargetId,
+        ...(remoteWorkspaceBridge?.cwd
+          ? { cwd: remoteWorkspaceBridge.cwd }
+          : input.cwd !== undefined
+            ? { cwd: input.cwd }
+            : {}),
         ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
         runtimeMode: input.runtimeMode,
         binaryPath,
         ...(homePath ? { homePath } : {}),
+        ...(remoteWorkspaceBridge?.configArgs
+          ? { configArgs: remoteWorkspaceBridge.configArgs }
+          : {}),
+        ...(remoteWorkspaceBridge?.cleanup
+          ? { cleanupRemoteWorkspaceBridge: remoteWorkspaceBridge.cleanup }
+          : {}),
+        ...(remoteWorkspaceBridge?.promptPrefix
+          ? { developerInstructions: remoteWorkspaceBridge.promptPrefix }
+          : {}),
         ...(input.modelSelection?.provider === "codex"
           ? { model: input.modelSelection.model }
           : {}),
@@ -150,47 +164,15 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             detail: toMessage(cause, "Failed to start Codex adapter session."),
             cause,
           }),
-      });
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+          }),
+        ),
+      );
     },
   );
-
-  const resolveAttachment = Effect.fn("resolveAttachment")(function* (
-    input: ProviderSendTurnInput,
-    attachment: NonNullable<ProviderSendTurnInput["attachments"]>[number],
-  ) {
-    const attachmentPath = resolveAttachmentPath({
-      attachmentsDir: serverConfig.attachmentsDir,
-      attachment,
-    });
-    if (!attachmentPath) {
-      return yield* toRequestError(
-        input.threadId,
-        "turn/start",
-        new Error(`Invalid attachment id '${attachment.id}'.`),
-      );
-    }
-    const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "turn/start",
-            detail: toMessage(cause, "Failed to read attachment file."),
-            cause,
-          }),
-      ),
-    );
-    if (attachment.type === "file") {
-      return {
-        type: "file" as const,
-        url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
-      };
-    }
-    return {
-      type: "image" as const,
-      url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
-    };
-  });
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];

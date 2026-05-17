@@ -1,6 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { SIDEBAR_ICON_SIZE_CLASS } from "../sidebar/Sidebar.iconSizes";
 import { SETTINGS_NAV_ITEMS } from "./SettingsSidebarNav.items";
 import {
   SidebarContent,
@@ -38,8 +39,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     <Icon
                       className={
                         isActive
-                          ? "size-4 shrink-0 text-foreground"
-                          : "size-4 shrink-0 text-muted-foreground"
+                          ? `${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-foreground`
+                          : `${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground`
                       }
                     />
                     <span className="truncate">{item.label}</span>
@@ -60,7 +61,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
               className="gap-2 px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={() => window.history.back()}
             >
-              <ArrowLeftIcon className="size-4" />
+              <ArrowLeftIcon className={SIDEBAR_ICON_SIZE_CLASS} />
               <span>Back</span>
             </SidebarMenuButton>
           </SidebarMenuItem>

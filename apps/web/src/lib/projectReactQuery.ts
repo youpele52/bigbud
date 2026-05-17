@@ -1,11 +1,27 @@
-import type { ProjectSearchEntriesResult } from "@bigbud/contracts";
+import {
+  resolveExecutionTargetId,
+  type ExecutionTargetId,
+  type ProjectSearchEntriesResult,
+} from "@bigbud/contracts";
 import { queryOptions } from "@tanstack/react-query";
 import { ensureNativeApi } from "../rpc/nativeApi";
 
 export const projectQueryKeys = {
   all: ["projects"] as const,
-  searchEntries: (cwd: string | null, query: string, limit: number) =>
-    ["projects", "search-entries", cwd, query, limit] as const,
+  searchEntries: (
+    cwd: string | null,
+    query: string,
+    limit: number,
+    executionTargetId?: ExecutionTargetId | null | undefined,
+  ) =>
+    [
+      "projects",
+      "search-entries",
+      resolveExecutionTargetId(executionTargetId),
+      cwd,
+      query,
+      limit,
+    ] as const,
 };
 
 const DEFAULT_SEARCH_ENTRIES_LIMIT = 80;
@@ -17,6 +33,7 @@ const EMPTY_SEARCH_ENTRIES_RESULT: ProjectSearchEntriesResult = {
 
 export function projectSearchEntriesQueryOptions(input: {
   cwd: string | null;
+  executionTargetId?: ExecutionTargetId | null | undefined;
   query: string;
   enabled?: boolean;
   limit?: number;
@@ -24,7 +41,12 @@ export function projectSearchEntriesQueryOptions(input: {
 }) {
   const limit = input.limit ?? DEFAULT_SEARCH_ENTRIES_LIMIT;
   return queryOptions({
-    queryKey: projectQueryKeys.searchEntries(input.cwd, input.query, limit),
+    queryKey: projectQueryKeys.searchEntries(
+      input.cwd,
+      input.query,
+      limit,
+      input.executionTargetId,
+    ),
     queryFn: async () => {
       const api = ensureNativeApi();
       if (!input.cwd) {
@@ -32,6 +54,7 @@ export function projectSearchEntriesQueryOptions(input: {
       }
       return api.projects.searchEntries({
         cwd: input.cwd,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
         query: input.query,
         limit,
       });

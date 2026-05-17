@@ -150,6 +150,8 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       killChildTree(context.child);
     }
 
+    void context.cleanupRemoteWorkspaceBridge?.().catch(() => undefined);
+
     this.updateSession(context, {
       status: "closed",
       activeTurnId: undefined,

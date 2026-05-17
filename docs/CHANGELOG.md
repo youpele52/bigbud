@@ -4,6 +4,56 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.626 (17 May, 2026)
+
+### Remote Projects and Reconnects
+
+- Added first-class remote project support, so you can connect bigbud to a project over SSH and work with it without having to keep the whole AI runtime on the remote machine.
+- Added remote-project support across Pi, Codex, OpenCode, Claude, and Copilot, with clearer handling when a provider or runtime combination is not supported.
+- Added a more complete remote project setup flow, including provider runtime selection when creating a remote project.
+- Added safer reconnect behavior for remote projects so, after restart, saved remote workspaces stay disconnected until SSH access is verified again instead of appearing ready and failing later.
+- Added verification checks across the main remote actions, including opening projects, activating threads, starting turns, opening terminals, and creating draft threads, so remote work resumes only after access is confirmed.
+- Added password-based SSH reconnect alongside SSH key unlock, using the same temporary in-app unlock flow without saving secrets.
+
+### Realtime Speech to Text
+
+- Switched voice transcription to the current OpenAI Realtime transcription session flow instead of the older transcription path.
+- Simplified speech-to-text model selection to the supported realtime model, `gpt-realtime-whisper`, and reset older saved STT values so they do not leak into the new flow.
+- Improved failure feedback so microphone or transcription problems now surface as clearer composer toasts without repeating the same alert over and over.
+
+### Provider Reliability and App Startup
+
+- Fixed a GitHub Copilot prompt bug where clarification requests could get stuck waiting for input instead of resuming the active turn.
+- Completed the remaining Copilot remote-workspace wiring so Copilot can follow the same local-runtime remote-project model as the other supported providers.
+- Replaced the old startup shell loading treatment with a dedicated splash screen and short fade-out transition so launch feels cleaner and less visually noisy.
+- Fixed a provider settings model row key collision that caused duplicate React key warnings when a provider like Pi or OpenCode exposed the same model slug from multiple sub-providers.
+- Stabilized Pi RPC lifecycle and chat streaming to reduce session drops and improve turn reliability.
+
+### Branding
+
+- Updated the product identity from Alpha to Beta across the entire application surface, matching the current maturity of the runtime.
+
+### UI Polish
+
+- Changed the command palette shortcut from `mod+k` to `mod+p` and centered its dialog layout for better discoverability and focus.
+- Reduced sidebar icon sizes and switched to diagonal pin icons for a cleaner, more compact sidebar appearance.
+
+### Skill and Agent Discovery
+
+- Expanded discovered-skill support so the app now respects friendly skill titles from `SKILL.md` while preserving canonical skill names for invocation, which makes Pi, OpenCode, and other shared skill directories render much more cleanly in the UI.
+- Added Cursor skill discovery using the documented `.cursor/skills` roots alongside the existing shared and provider-specific skill locations, and kept recursive `SKILL.md` scanning so nested skill directories continue to work.
+- Improved `/skills` browsing so partial command input like `/sk` now enters the skill discovery flow earlier instead of staying in the generic slash-command list.
+- Refined the `/skills` and `@agent` suggestion menus to show name, provider, and a short inline description more clearly, with a top-positioned tooltip for the full details on hover.
+
+### Validation
+
+- Added focused server, unit, and browser coverage for remote project routing, SSH reconnect and verification flows, Copilot prompt recovery, and the new realtime voice transcription handshake and error handling paths.
+- Revalidated recent work in this window with `bun fmt`, `bun lint`, targeted Vitest and browser runs, and `bun typecheck`.
+
+### Maintainability
+
+- Refactored multiple oversized TypeScript modules across the server to stay at or under 400 lines per file, including the WebSocket RPC router, GitManager pull-request and stacked-action flows, GitStatus detail readers, thread-turn start decider, UI store, OpenCode event mapping and version checks, shell WebSocket dispatch, and dev-runner orchestration projector.
+
 ## v0.1.625 (14 May, 2026)
 
 ### Conversation Flow and Context

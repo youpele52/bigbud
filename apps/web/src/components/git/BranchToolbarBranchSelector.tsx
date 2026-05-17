@@ -1,15 +1,7 @@
 import type { GitBranch } from "@bigbud/contracts";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, GitBranchIcon } from "lucide-react";
-import {
-  type CSSProperties,
-  useCallback,
-  useEffect,
-  useMemo,
-  useOptimistic,
-  useState,
-  useTransition,
-} from "react";
+import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 
 import {
   gitBranchSearchInfiniteQueryOptions,
@@ -18,20 +10,20 @@ import {
   invalidateGitQueries,
 } from "../../lib/gitReactQuery";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { parsePullRequestReference } from "../../logic/pull-request";
+import { EnvMode } from "./BranchToolbar.logic";
 import {
-  deriveLocalBranchNameFromRemoteRef,
-  EnvMode,
+  deriveBranchSelectorState,
+  deriveSelectedBranchName,
+  getBranchTriggerLabel,
   resolveBranchSelectionTarget,
-  resolveBranchToolbarValue,
-  shouldIncludeBranchPickerItem,
-} from "./BranchToolbar.logic";
+  toBranchActionErrorMessage,
+} from "./BranchToolbarBranchSelector.helpers";
+import { renderBranchPickerItem } from "./BranchToolbarBranchSelector.render";
 import { Button } from "../ui/button";
 import {
   Combobox,
   ComboboxEmpty,
   ComboboxInput,
-  ComboboxItem,
   ComboboxList,
   ComboboxPopup,
   ComboboxStatus,
@@ -42,6 +34,7 @@ import { toastManager } from "../ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
   activeProjectCwd: string | null;
+  executionTargetId?: string | undefined;
   activeThreadBranch: string | null;
   activeWorktreePath: string | null;
   branchCwd: string | null;
@@ -52,27 +45,9 @@ interface BranchToolbarBranchSelectorProps {
   onComposerFocusRequest?: () => void;
 }
 
-function toBranchActionErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "An error occurred.";
-}
-
-function getBranchTriggerLabel(input: {
-  activeWorktreePath: string | null;
-  effectiveEnvMode: EnvMode;
-  resolvedActiveBranch: string | null;
-}): string {
-  const { activeWorktreePath, effectiveEnvMode, resolvedActiveBranch } = input;
-  if (!resolvedActiveBranch) {
-    return "Select branch";
-  }
-  if (effectiveEnvMode === "worktree" && !activeWorktreePath) {
-    return `From ${resolvedActiveBranch}`;
-  }
-  return resolvedActiveBranch;
-}
-
 export function BranchToolbarBranchSelector({
   activeProjectCwd,
+  executionTargetId,
   activeThreadBranch,
   activeWorktreePath,
   branchCwd,
@@ -86,15 +61,19 @@ export function BranchToolbarBranchSelector({
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
 
-  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd));
+  const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd, executionTargetId));
   const trimmedBranchQuery = branchQuery.trim();
 
   useEffect(() => {
     if (!branchCwd) return;
     void queryClient.prefetchInfiniteQuery(
-      gitBranchSearchInfiniteQueryOptions({ cwd: branchCwd, query: "" }),
+      gitBranchSearchInfiniteQueryOptions({
+        cwd: branchCwd,
+        executionTargetId,
+        query: "",
+      }),
     );
-  }, [branchCwd, queryClient]);
+  }, [branchCwd, executionTargetId, queryClient]);
 
   const {
     data: branchesSearchData,
@@ -104,6 +83,7 @@ export function BranchToolbarBranchSelector({
   } = useInfiniteQuery(
     gitBranchSearchInfiniteQueryOptions({
       cwd: branchCwd,
+      executionTargetId,
       query: trimmedBranchQuery,
       enabled: isBranchMenuOpen,
     }),
@@ -112,53 +92,38 @@ export function BranchToolbarBranchSelector({
     () => branchesSearchData?.pages.flatMap((page) => page.branches) ?? [],
     [branchesSearchData?.pages],
   );
-  const currentGitBranch =
-    branchStatusQuery.data?.branch ?? branches.find((branch) => branch.current)?.name ?? null;
-  const canonicalActiveBranch = resolveBranchToolbarValue({
-    envMode: effectiveEnvMode,
-    activeWorktreePath,
-    activeThreadBranch,
+  const {
     currentGitBranch,
-  });
-  const branchNames = useMemo(() => branches.map((branch) => branch.name), [branches]);
-  const branchByName = useMemo(
-    () => new Map(branches.map((branch) => [branch.name, branch] as const)),
-    [branches],
-  );
-  const normalizedBranchQuery = trimmedBranchQuery.toLowerCase();
-  const prReference = parsePullRequestReference(trimmedBranchQuery);
-  const isSelectingWorktreeBase =
-    effectiveEnvMode === "worktree" && !envLocked && !activeWorktreePath;
-  const checkoutPullRequestItemValue =
-    prReference && onCheckoutPullRequestRequest ? `__checkout_pull_request__:${prReference}` : null;
-  const canCreateBranch = !isSelectingWorktreeBase && trimmedBranchQuery.length > 0;
-  const hasExactBranchMatch = branchByName.has(trimmedBranchQuery);
-  const createBranchItemValue = canCreateBranch
-    ? `__create_new_branch__:${trimmedBranchQuery}`
-    : null;
-  const branchPickerItems = useMemo(() => {
-    const items = [...branchNames];
-    if (createBranchItemValue && !hasExactBranchMatch) {
-      items.push(createBranchItemValue);
-    }
-    if (checkoutPullRequestItemValue) {
-      items.unshift(checkoutPullRequestItemValue);
-    }
-    return items;
-  }, [branchNames, checkoutPullRequestItemValue, createBranchItemValue, hasExactBranchMatch]);
-  const filteredBranchPickerItems = useMemo(
+    canonicalActiveBranch,
+    branchByName,
+    prReference,
+    isSelectingWorktreeBase,
+    checkoutPullRequestItemValue,
+    createBranchItemValue,
+    filteredBranchPickerItems,
+    branchPickerItems,
+  } = useMemo(
     () =>
-      normalizedBranchQuery.length === 0
-        ? branchPickerItems
-        : branchPickerItems.filter((itemValue) =>
-            shouldIncludeBranchPickerItem({
-              itemValue,
-              normalizedQuery: normalizedBranchQuery,
-              createBranchItemValue,
-              checkoutPullRequestItemValue,
-            }),
-          ),
-    [branchPickerItems, checkoutPullRequestItemValue, createBranchItemValue, normalizedBranchQuery],
+      deriveBranchSelectorState({
+        branches,
+        branchQuery,
+        branchStatusBranch: branchStatusQuery.data?.branch ?? null,
+        effectiveEnvMode,
+        envLocked,
+        activeWorktreePath,
+        activeThreadBranch,
+        onCheckoutPullRequestRequest,
+      }),
+    [
+      activeThreadBranch,
+      activeWorktreePath,
+      branchQuery,
+      branchStatusQuery.data?.branch,
+      branches,
+      effectiveEnvMode,
+      envLocked,
+      onCheckoutPullRequestRequest,
+    ],
   );
   const [resolvedActiveBranch, setOptimisticBranch] = useOptimistic(
     canonicalActiveBranch,
@@ -207,9 +172,7 @@ export function BranchToolbarBranchSelector({
       return;
     }
 
-    const selectedBranchName = branch.isRemote
-      ? deriveLocalBranchNameFromRemoteRef(branch.name)
-      : branch.name;
+    const selectedBranchName = deriveSelectedBranchName(branch);
 
     setIsBranchMenuOpen(false);
     onComposerFocusRequest?.();
@@ -217,7 +180,11 @@ export function BranchToolbarBranchSelector({
     runBranchAction(async () => {
       setOptimisticBranch(selectedBranchName);
       try {
-        await api.git.checkout({ cwd: selectionTarget.checkoutCwd, branch: branch.name });
+        await api.git.checkout({
+          cwd: selectionTarget.checkoutCwd,
+          ...(executionTargetId ? { executionTargetId } : {}),
+          branch: branch.name,
+        });
         await invalidateGitQueries(queryClient);
       } catch (error) {
         toastManager.add({
@@ -231,7 +198,10 @@ export function BranchToolbarBranchSelector({
       let nextBranchName = selectedBranchName;
       if (branch.isRemote) {
         const status = await api.git
-          .refreshStatus({ cwd: selectionTarget.checkoutCwd })
+          .refreshStatus({
+            cwd: selectionTarget.checkoutCwd,
+            ...(executionTargetId ? { executionTargetId } : {}),
+          })
           .catch(() => null);
         if (status?.branch) {
           nextBranchName = status.branch;
@@ -255,9 +225,17 @@ export function BranchToolbarBranchSelector({
       setOptimisticBranch(name);
 
       try {
-        await api.git.createBranch({ cwd: branchCwd, branch: name });
+        await api.git.createBranch({
+          cwd: branchCwd,
+          ...(executionTargetId ? { executionTargetId } : {}),
+          branch: name,
+        });
         try {
-          await api.git.checkout({ cwd: branchCwd, branch: name });
+          await api.git.checkout({
+            cwd: branchCwd,
+            ...(executionTargetId ? { executionTargetId } : {}),
+            branch: name,
+          });
         } catch (error) {
           toastManager.add({
             type: "error",
@@ -334,10 +312,10 @@ export function BranchToolbarBranchSelector({
         return;
       }
       void queryClient.invalidateQueries({
-        queryKey: gitQueryKeys.branches(branchCwd),
+        queryKey: gitQueryKeys.branches(branchCwd, executionTargetId),
       });
     },
-    [branchCwd, queryClient],
+    [branchCwd, executionTargetId, queryClient],
   );
 
   const triggerLabel = getBranchTriggerLabel({
@@ -345,48 +323,6 @@ export function BranchToolbarBranchSelector({
     effectiveEnvMode,
     resolvedActiveBranch,
   });
-
-  function renderPickerItem(itemValue: string, index: number, style?: CSSProperties) {
-    if (checkoutPullRequestItemValue && itemValue === checkoutPullRequestItemValue) {
-      return (
-        <ComboboxItem hideIndicator key={itemValue} index={index} value={itemValue} style={style}>
-          <div className="flex min-w-0 flex-col items-start py-1">
-            <span className="truncate font-medium">Checkout Pull Request</span>
-            <span className="truncate text-muted-foreground text-xs">{prReference}</span>
-          </div>
-        </ComboboxItem>
-      );
-    }
-    if (createBranchItemValue && itemValue === createBranchItemValue) {
-      return (
-        <ComboboxItem hideIndicator key={itemValue} index={index} value={itemValue} style={style}>
-          <span className="truncate">Create new branch "{trimmedBranchQuery}"</span>
-        </ComboboxItem>
-      );
-    }
-
-    const branch = branchByName.get(itemValue);
-    if (!branch) return null;
-
-    const hasSecondaryWorktree = branch.worktreePath && branch.worktreePath !== activeProjectCwd;
-    const badge = branch.current
-      ? "current"
-      : hasSecondaryWorktree
-        ? "worktree"
-        : branch.isRemote
-          ? "remote"
-          : branch.isDefault
-            ? "default"
-            : null;
-    return (
-      <ComboboxItem hideIndicator key={itemValue} index={index} value={itemValue} style={style}>
-        <div className="flex w-full items-center justify-between gap-2">
-          <span className="truncate">{itemValue}</span>
-          {badge && <span className="shrink-0 text-[10px] text-muted-foreground/45">{badge}</span>}
-        </div>
-      </ComboboxItem>
-    );
-  }
 
   return (
     <Combobox
@@ -429,7 +365,18 @@ export function BranchToolbarBranchSelector({
         <ComboboxEmpty>No branches found.</ComboboxEmpty>
 
         <ComboboxList className="max-h-56">
-          {filteredBranchPickerItems.map((itemValue, index) => renderPickerItem(itemValue, index))}
+          {filteredBranchPickerItems.map((itemValue, index) =>
+            renderBranchPickerItem({
+              itemValue,
+              index,
+              checkoutPullRequestItemValue,
+              createBranchItemValue,
+              prReference,
+              trimmedBranchQuery,
+              branchByName,
+              activeProjectCwd,
+            }),
+          )}
         </ComboboxList>
         {branchStatusText ? <ComboboxStatus>{branchStatusText}</ComboboxStatus> : null}
       </ComboboxPopup>

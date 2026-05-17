@@ -27,7 +27,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
   options?: import("./Adapter.types.ts").OpencodeAdapterLiveOptions,
 ) {
   const serverConfig = yield* ServerConfig;
-  yield* ServerSettingsService;
+  const serverSettings = yield* ServerSettingsService;
   const serverManager = yield* OpencodeServerManager;
 
   // Capture the Effect services context so we can run effects from
@@ -52,6 +52,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
     sessions,
     runtimeEventQueue,
     serverManager,
+    serverSettings,
     serverConfig: { attachmentsDir: serverConfig.attachmentsDir },
     nextEventId,
     makeEventStamp,

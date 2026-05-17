@@ -1,5 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
+import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+
 export interface PiRpcImage {
   readonly type: "image";
   readonly data: string;
@@ -59,7 +62,12 @@ export type PiRpcRequestCommand =
       readonly message: string;
       readonly images?: ReadonlyArray<PiRpcImage>;
     }
-  | { readonly type: "abort" };
+  | { readonly type: "abort" }
+  | { readonly type: "set_steering_mode"; readonly mode: "all" | "one-at-a-time" }
+  | { readonly type: "set_follow_up_mode"; readonly mode: "all" | "one-at-a-time" }
+  | { readonly type: "set_auto_compaction"; readonly enabled: boolean }
+  | { readonly type: "set_auto_retry"; readonly enabled: boolean }
+  | { readonly type: "compact"; readonly customInstructions?: string };
 
 export type PiRpcWriteOnlyCommand =
   | {
@@ -223,6 +231,11 @@ export type PiRpcExtensionUIRequest =
       readonly text: string;
     };
 
+export interface PiRpcToolResult {
+  readonly content?: ReadonlyArray<Record<string, unknown>>;
+  readonly details?: unknown;
+}
+
 export type PiRpcStdoutEvent =
   | { readonly type: "agent_start" }
   | { readonly type: "agent_end" }
@@ -261,7 +274,7 @@ export type PiRpcStdoutEvent =
       readonly toolCallId: string;
       readonly toolName: string;
       readonly args?: Record<string, unknown>;
-      readonly partialResult?: string;
+      readonly partialResult?: PiRpcToolResult;
     }
   | {
       readonly type: "tool_execution_end";
@@ -270,13 +283,50 @@ export type PiRpcStdoutEvent =
       readonly result?: unknown;
       readonly isError?: boolean;
     }
+  | {
+      readonly type: "queue_update";
+      readonly steering?: ReadonlyArray<string>;
+      readonly followUp?: ReadonlyArray<string>;
+    }
+  | {
+      readonly type: "compaction_start";
+      readonly reason?: string;
+    }
+  | {
+      readonly type: "compaction_end";
+      readonly reason?: string;
+      readonly result?: Record<string, unknown>;
+      readonly aborted?: boolean;
+      readonly willRetry?: boolean;
+      readonly errorMessage?: string;
+    }
+  | {
+      readonly type: "auto_retry_start";
+      readonly attempt?: number;
+      readonly maxAttempts?: number;
+      readonly delayMs?: number;
+      readonly errorMessage?: string;
+    }
+  | {
+      readonly type: "auto_retry_end";
+      readonly success?: boolean;
+      readonly attempt?: number;
+      readonly finalError?: string;
+    }
+  | {
+      readonly type: "extension_error";
+      readonly extensionPath?: string;
+      readonly event?: string;
+      readonly error?: string;
+    }
   | PiRpcExtensionUIRequest;
 
 export type PiRpcStdoutMessage = PiRpcResponse | PiRpcStdoutEvent;
 
 export interface PiRpcProcessOptions {
   readonly binaryPath: string;
-  readonly cwd?: string;
+  readonly providerRuntimeTarget: ProviderRuntimeTarget;
+  readonly workspaceTarget: WorkspaceTarget;
   readonly sessionFile?: string;
   readonly env?: NodeJS.ProcessEnv;
 }

@@ -9,7 +9,7 @@ export const INSTALL_COMMANDS = {
 } as const;
 
 export const MACOS_QUARANTINE_COMMAND =
-  `xattr -dr com.apple.quarantine "/Applications/bigbud (Alpha).app"` as const;
+  `xattr -dr com.apple.quarantine "/Applications/bigbud (Beta).app"` as const;
 
 export const DOWNLOAD_BUTTON_LABELS = {
   mac: "Download for macOS",

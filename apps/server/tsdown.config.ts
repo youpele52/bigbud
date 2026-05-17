@@ -20,7 +20,7 @@ const EXTERNAL_PACKAGES = [
   "node-pty",
   "@github/copilot-sdk",
   "@github/copilot",
-  "@mariozechner/pi-coding-agent",
+  "@earendil-works/pi-coding-agent",
   "@effect/sql-sqlite-bun",
   "@effect/platform-bun",
 ];

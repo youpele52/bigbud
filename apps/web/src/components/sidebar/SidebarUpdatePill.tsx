@@ -1,6 +1,7 @@
 import { DownloadIcon, InfoIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { isElectron } from "../../config/env";
 import {
   setDesktopUpdateStateQueryData,
@@ -131,13 +132,17 @@ export function SidebarUpdatePill() {
                 >
                   {action === "install" ? (
                     <>
-                      <RotateCwIcon className="size-3.5" />
+                      <RotateCwIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                       <span>Restart to update</span>
-                      {unsignedBlocked && <InfoIcon className="size-3.5 text-primary/70" />}
+                      {unsignedBlocked && (
+                        <InfoIcon
+                          className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} text-primary/70`}
+                        />
+                      )}
                     </>
                   ) : state?.status === "downloading" ? (
                     <>
-                      <DownloadIcon className="size-3.5" />
+                      <DownloadIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                       <span>
                         Downloading
                         {typeof state.downloadPercent === "number"
@@ -147,7 +152,7 @@ export function SidebarUpdatePill() {
                     </>
                   ) : (
                     <>
-                      <DownloadIcon className="size-3.5" />
+                      <DownloadIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                       <span>Update available</span>
                     </>
                   )}
@@ -166,7 +171,7 @@ export function SidebarUpdatePill() {
                     className="mr-1 inline-flex size-5 items-center justify-center rounded-md text-primary/60 transition-colors hover:text-primary"
                     onClick={() => setDismissed(true)}
                   >
-                    <XIcon className="size-3.5" />
+                    <XIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                   </button>
                 }
               />

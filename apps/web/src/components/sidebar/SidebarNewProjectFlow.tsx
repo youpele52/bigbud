@@ -1,5 +1,6 @@
 import { type RefObject } from "react";
 import { FolderIcon } from "lucide-react";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 
 interface SidebarNewProjectFlowProps {
   isElectron: boolean;
@@ -32,17 +33,18 @@ export function SidebarNewProjectFlow({
 
   return (
     <div className="mb-2 px-1">
-      {isElectron && (
+      {isElectron ? (
         <button
           type="button"
           className="mb-1.5 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary py-1.5 text-xs text-foreground/80 transition-colors duration-150 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
           onClick={onPickFolder}
           disabled={isPickingFolder || isAddingProject}
         >
-          <FolderIcon className="size-3.5" />
+          <FolderIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
           {isPickingFolder ? "Picking folder..." : "Browse for folder"}
         </button>
-      )}
+      ) : null}
+
       <div className="flex gap-1.5">
         <input
           ref={addProjectInputRef}
@@ -58,10 +60,13 @@ export function SidebarNewProjectFlow({
             onClearError();
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter") onAdd();
-            if (event.key === "Escape") onCancel();
+            if (event.key === "Enter") {
+              onAdd();
+            }
+            if (event.key === "Escape") {
+              onCancel();
+            }
           }}
-          // biome-ignore lint/a11y/noAutofocus: intentional for new-project input
           autoFocus
         />
         <button
@@ -73,11 +78,12 @@ export function SidebarNewProjectFlow({
           {isAddingProject ? "Adding..." : "Add"}
         </button>
       </div>
-      {addProjectError && (
+
+      {addProjectError ? (
         <p className="mt-1 px-0.5 text-[11px] leading-tight text-destructive-foreground">
           {addProjectError}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

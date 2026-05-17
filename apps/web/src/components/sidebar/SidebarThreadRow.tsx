@@ -1,7 +1,7 @@
 import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 
-import { type ThreadId, type GitStatusResult } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import {
   useIsThreadCompacting,
   useIsThreadRunning,
@@ -10,6 +10,7 @@ import {
 import { useUiStateStore } from "../../stores/ui";
 import { selectThreadTerminalState } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { resolveThreadStatusPill, resolveThreadRowClassName } from "./Sidebar.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -17,68 +18,17 @@ import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
+import {
+  prStatusIndicator,
+  terminalStatusFromRunningIds,
+  type ThreadPr,
+} from "./SidebarThreadRow.status";
 
-export type ThreadPr = GitStatusResult["pr"];
-
-export interface TerminalStatusIndicator {
-  label: "Terminal process running";
-  colorClass: string;
-  pulse: boolean;
-}
-
-export interface PrStatusIndicator {
-  label: "PR open" | "PR closed" | "PR merged";
-  colorClass: string;
-  tooltip: string;
-  url: string;
-}
+export type { ThreadPr } from "./SidebarThreadRow.status";
 
 export type SidebarProjectSnapshot = {
   expanded: boolean;
 };
-
-export function terminalStatusFromRunningIds(
-  runningTerminalIds: string[],
-): TerminalStatusIndicator | null {
-  if (runningTerminalIds.length === 0) {
-    return null;
-  }
-  return {
-    label: "Terminal process running",
-    colorClass: "text-info-foreground",
-    pulse: true,
-  };
-}
-
-export function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
-  if (!pr) return null;
-
-  if (pr.state === "open") {
-    return {
-      label: "PR open",
-      colorClass: "text-success-foreground",
-      tooltip: `#${pr.number} PR open: ${pr.title}`,
-      url: pr.url,
-    };
-  }
-  if (pr.state === "closed") {
-    return {
-      label: "PR closed",
-      colorClass: "text-muted-foreground",
-      tooltip: `#${pr.number} PR closed: ${pr.title}`,
-      url: pr.url,
-    };
-  }
-  if (pr.state === "merged") {
-    return {
-      label: "PR merged",
-      colorClass: "text-primary",
-      tooltip: `#${pr.number} PR merged: ${pr.title}`,
-      url: pr.url,
-    };
-  }
-  return null;
-}
 
 export interface SidebarThreadRowProps {
   threadId: ThreadId;
@@ -219,7 +169,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             }}
             onClick={handleDeleteAction}
           >
-            <Trash2Icon className="size-3.5" />
+            <Trash2Icon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
           </button>
         </div>
         <SidebarMenuSubButton

@@ -17,7 +17,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Beta)";
 const APP_BUNDLE_ID = "ai.bigcode.desktop";
 const LAUNCHER_VERSION = 1;
 
@@ -106,6 +106,9 @@ function buildMacLauncher(electronBinaryPath) {
   const metadataPath = join(runtimeDir, "metadata.json");
 
   mkdirSync(runtimeDir, { recursive: true });
+  // Intentionally keep the legacy Alpha-era app bundle name here so local
+  // runtime launcher cleanup still removes older T3 Code app copies.
+  // Remove this once the legacy Alpha-to-Beta upgrade window is no longer needed.
   for (const legacyAppName of ["T3 Code (Dev).app", "T3 Code (Alpha).app"]) {
     rmSync(join(runtimeDir, legacyAppName), { recursive: true, force: true });
   }

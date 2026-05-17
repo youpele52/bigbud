@@ -54,14 +54,26 @@ export interface ActivePiSession {
   readonly pendingUserInputs: Map<string, PendingPiUserInputRequest>;
   readonly turns: Array<MutableTurnSnapshot>;
   unsubscribe: () => void;
+  providerRuntimeExecutionTargetId: ProviderSession["providerRuntimeExecutionTargetId"];
+  workspaceExecutionTargetId: ProviderSession["workspaceExecutionTargetId"];
+  executionTargetId: ProviderSession["executionTargetId"];
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;
   thinkingLevel: string | undefined;
   updatedAt: string;
   lastError: string | undefined;
+  agentRunning: boolean;
   activeTurnId: TurnId | undefined;
+  queuedTurnIds: Array<TurnId>;
   pendingTurnEnd:
+    | {
+        readonly stamp: PiEventStamp;
+        readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;
+        readonly message: { readonly message?: Record<string, unknown> };
+      }
+    | undefined;
+  completedTurnBoundary:
     | {
         readonly stamp: PiEventStamp;
         readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;

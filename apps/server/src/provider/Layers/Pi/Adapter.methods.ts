@@ -8,7 +8,10 @@ import {
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
+import { resolveProviderSessionExecutionTargets } from "../../providerSessionExecutionTargets.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
@@ -36,6 +39,7 @@ import {
   refreshSessionState,
 } from "./Adapter.session.helpers.ts";
 import { makePiSessionControlMethods } from "./Adapter.session.control.ts";
+import { makeRespondToUserInput } from "./Adapter.methods.respondToUserInput.ts";
 import { normalizeString, readResumeCursor, toMessage } from "./Adapter.utils.ts";
 
 export function makePiAdapterMethods(deps: {
@@ -80,11 +84,25 @@ export function makePiAdapterMethods(deps: {
 
     const resumeCursor = readResumeCursor(input.resumeCursor);
     const createdAt = new Date().toISOString();
+    const executionTargets = resolveProviderSessionExecutionTargets({
+      providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: input.workspaceExecutionTargetId,
+      executionTargetId: input.executionTargetId,
+      useLegacyExecutionTargetForProviderRuntime: false,
+    });
+    const providerRuntimeTarget = resolveProviderRuntimeTarget({
+      executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+    });
+    const workspaceTarget = resolveWorkspaceTarget({
+      executionTargetId: executionTargets.workspaceExecutionTargetId,
+      cwd: input.cwd,
+    });
     const rpcProcess = yield* Effect.tryPromise({
       try: () =>
         createPiRpcProcess({
           binaryPath: piSettings.binaryPath,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
+          providerRuntimeTarget,
+          workspaceTarget,
           ...(resumeCursor?.sessionFile ? { sessionFile: resumeCursor.sessionFile } : {}),
           env: process.env,
         }),
@@ -112,14 +130,20 @@ export function makePiAdapterMethods(deps: {
       pendingUserInputs: new Map(),
       turns: [],
       unsubscribe: () => undefined,
+      providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+      executionTargetId: executionTargets.executionTargetId,
       cwd: input.cwd,
       model: undefined,
       providerID: undefined,
       thinkingLevel: undefined,
       updatedAt: createdAt,
       lastError: undefined,
+      agentRunning: false,
       activeTurnId: undefined,
+      queuedTurnIds: [],
       pendingTurnEnd: undefined,
+      completedTurnBoundary: undefined,
       lastUsage: undefined,
       sessionId: resumeCursor?.sessionId,
       sessionFile: resumeCursor?.sessionFile,
@@ -192,6 +216,9 @@ export function makePiAdapterMethods(deps: {
       provider: PROVIDER,
       status: "ready",
       runtimeMode: input.runtimeMode,
+      providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+      executionTargetId: executionTargets.executionTargetId,
       threadId: input.threadId,
       ...(input.cwd ? { cwd: input.cwd } : {}),
       ...(session.model ? { model: session.model } : {}),
@@ -203,13 +230,6 @@ export function makePiAdapterMethods(deps: {
 
   const sendTurn: PiAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const session = yield* requireSession(input.threadId);
-    if (session.activeTurnId) {
-      return yield* new ProviderAdapterValidationError({
-        provider: PROVIDER,
-        operation: "sendTurn",
-        issue: "Pi session is already processing a turn.",
-      });
-    }
 
     if ((!input.input || input.input.trim().length === 0) && !input.attachments?.length) {
       return yield* new ProviderAdapterValidationError({
@@ -224,7 +244,12 @@ export function makePiAdapterMethods(deps: {
     }
 
     const turnId = TurnId.makeUnsafe(`pi-turn-${randomUUID()}`);
-    session.activeTurnId = turnId;
+    const queuedWhileRunning = session.activeTurnId !== undefined;
+    if (queuedWhileRunning) {
+      session.queuedTurnIds.push(turnId);
+    } else {
+      session.activeTurnId = turnId;
+    }
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
 
@@ -245,6 +270,7 @@ export function makePiAdapterMethods(deps: {
           type: "prompt",
           message: messageText,
           ...(images.length > 0 ? { images } : {}),
+          ...(queuedWhileRunning ? { streamingBehavior: "steer" as const } : {}),
         }),
       catch: (cause) =>
         new ProviderAdapterRequestError({
@@ -263,7 +289,24 @@ export function makePiAdapterMethods(deps: {
       ),
       Effect.tapError(() =>
         Effect.sync(() => {
+          if (queuedWhileRunning) {
+            const queuedTurnIndex = session.queuedTurnIds.findIndex(
+              (queuedTurnId) => queuedTurnId === turnId,
+            );
+            if (queuedTurnIndex !== -1) {
+              session.queuedTurnIds.splice(queuedTurnIndex, 1);
+            }
+            const turnIndex = session.turns.findIndex((turn) => turn.id === turnId);
+            if (turnIndex !== -1) {
+              session.turns.splice(turnIndex, 1);
+            }
+            return;
+          }
           session.activeTurnId = undefined;
+          const turnIndex = session.turns.findIndex((turn) => turn.id === turnId);
+          if (turnIndex !== -1) {
+            session.turns.splice(turnIndex, 1);
+          }
         }),
       ),
     );
@@ -301,83 +344,11 @@ export function makePiAdapterMethods(deps: {
       }),
     );
 
-  const respondToUserInput: PiAdapterShape["respondToUserInput"] = Effect.fn("respondToUserInput")(
-    function* (threadId, requestId, answers) {
-      const session = yield* requireSession(threadId);
-      const pending = session.pendingUserInputs.get(requestId);
-      if (!pending) {
-        return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
-          method: "extension_ui_response",
-          detail: `Unknown pending Pi user-input request '${requestId}'.`,
-        });
-      }
-      if (pending.responding) {
-        return;
-      }
-      pending.responding = true;
-
-      const answerForQuestion = answers[pending.question.id];
-      const firstAnswer = Object.values(answers)[0];
-      const resolvedValue = answerForQuestion ?? firstAnswer;
-      const request = yield* Effect.sync(() => {
-        if (pending.question.options.length > 0) {
-          const choice = Array.isArray(resolvedValue)
-            ? normalizeString(resolvedValue[0])
-            : normalizeString(resolvedValue);
-          if (!choice) {
-            return { type: "extension_ui_response", id: requestId, cancelled: true } as const;
-          }
-          if (
-            pending.question.options.some((option) => option.label === "Yes") &&
-            pending.question.options.some((option) => option.label === "No")
-          ) {
-            return {
-              type: "extension_ui_response",
-              id: requestId,
-              confirmed: choice === "Yes",
-            } as const;
-          }
-          return { type: "extension_ui_response", id: requestId, value: choice } as const;
-        }
-
-        const textValue = Array.isArray(resolvedValue)
-          ? normalizeString(resolvedValue[0])
-          : normalizeString(resolvedValue);
-        return textValue
-          ? ({ type: "extension_ui_response", id: requestId, value: textValue } as const)
-          : ({ type: "extension_ui_response", id: requestId, cancelled: true } as const);
-      });
-
-      yield* Effect.tryPromise({
-        try: () => session.process.write(request),
-        catch: (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "extension_ui_response",
-            detail: toMessage(cause, "Failed to respond to Pi user-input request."),
-            cause,
-          }),
-      });
-
-      session.pendingUserInputs.delete(requestId);
-      yield* deps.emit([
-        yield* deps.makeSyntheticEvent(
-          threadId,
-          "user-input.resolved",
-          { answers },
-          {
-            ...(pending.turnId ? { turnId: pending.turnId } : {}),
-            requestId,
-          },
-        ),
-        yield* deps.makeSyntheticEvent(threadId, "session.state.changed", {
-          state: session.activeTurnId ? "running" : "ready",
-          reason: "user-input.resolved",
-        }),
-      ]);
-    },
-  );
+  const respondToUserInput = makeRespondToUserInput({
+    requireSession: requireSession as never,
+    emit: deps.emit,
+    makeSyntheticEvent: deps.makeSyntheticEvent,
+  });
 
   const sessionControlMethods = makePiSessionControlMethods({
     emit: deps.emit,

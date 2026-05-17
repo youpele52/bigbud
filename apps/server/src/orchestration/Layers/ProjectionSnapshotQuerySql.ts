@@ -4,110 +4,46 @@
  * All SqlSchema-based query builders are defined here and consumed by
  * ProjectionSnapshotQueryAssembly to build the full read model.
  */
-import {
-  ChatAttachment,
-  IsoDateTime,
-  MessageId,
-  NonNegativeInt,
-  OrchestrationCheckpointFile,
-  OrchestrationMessageReply,
-  ParentThreadReference,
-  OrchestrationProposedPlanId,
-  ModelSelection,
-  ProjectId,
-  ProjectScript,
-  ThreadId,
-  TurnId,
-} from "@bigbud/contracts";
-import { Schema, Struct } from "effect";
+import { Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
-import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
-import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
-import { ProjectionState } from "../../persistence/Services/ProjectionState.ts";
-import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
-import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
-import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
-import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
-import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.ts";
-
-// ---------------------------------------------------------------------------
-// DB row schemas
-// ---------------------------------------------------------------------------
-
-export const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
-  Struct.assign({
-    defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
-    scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
-  }),
-);
-export const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
-  Struct.assign({
-    isStreaming: Schema.Number,
-    attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
-    replyTo: Schema.NullOr(Schema.fromJsonString(OrchestrationMessageReply)),
-  }),
-);
-export const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedPlan;
-export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
-  Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
-    parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
-  }),
-);
-export const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapFields(
-  Struct.assign({
-    payload: Schema.fromJsonString(Schema.Unknown),
-    sequence: Schema.NullOr(NonNegativeInt),
-  }),
-);
-export const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession;
-export const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
-  Struct.assign({
-    files: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
-  }),
-);
-export const ProjectionLatestTurnDbRowSchema = Schema.Struct({
-  threadId: ProjectionThread.fields.threadId,
-  turnId: TurnId,
-  state: Schema.String,
-  requestedAt: IsoDateTime,
-  startedAt: Schema.NullOr(IsoDateTime),
-  completedAt: Schema.NullOr(IsoDateTime),
-  assistantMessageId: Schema.NullOr(MessageId),
-  sourceProposedPlanThreadId: Schema.NullOr(ThreadId),
-  sourceProposedPlanId: Schema.NullOr(OrchestrationProposedPlanId),
-});
-export const ProjectionStateDbRowSchema = ProjectionState;
-export const ProjectionCountsRowSchema = Schema.Struct({
-  projectCount: Schema.Number,
-  threadCount: Schema.Number,
-});
-
-// ---------------------------------------------------------------------------
-// Lookup input schemas
-// ---------------------------------------------------------------------------
-
-export const WorkspaceRootLookupInput = Schema.Struct({
-  workspaceRoot: Schema.String,
-});
-export const ProjectIdLookupInput = Schema.Struct({
-  projectId: ProjectId,
-});
-export const ThreadIdLookupInput = Schema.Struct({
-  threadId: ThreadId,
-});
-export const ProjectionProjectLookupRowSchema = ProjectionProjectDbRowSchema;
-export const ProjectionThreadIdLookupRowSchema = Schema.Struct({
-  threadId: ThreadId,
-});
-export const ProjectionThreadCheckpointContextThreadRowSchema = Schema.Struct({
-  threadId: ThreadId,
-  projectId: ProjectId,
-  workspaceRoot: Schema.NullOr(Schema.String),
-  worktreePath: Schema.NullOr(Schema.String),
-});
+export {
+  ProjectionCheckpointDbRowSchema,
+  ProjectionCountsRowSchema,
+  ProjectionLatestTurnDbRowSchema,
+  ProjectionProjectDbRowSchema,
+  ProjectionProjectLookupRowSchema,
+  ProjectionStateDbRowSchema,
+  ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadCheckpointContextThreadRowSchema,
+  ProjectionThreadDbRowSchema,
+  ProjectionThreadIdLookupRowSchema,
+  ProjectionThreadMessageDbRowSchema,
+  ProjectionThreadProposedPlanDbRowSchema,
+  ProjectionThreadSessionDbRowSchema,
+  ProjectIdLookupInput,
+  ThreadIdLookupInput,
+  WorkspaceRootLookupInput,
+} from "./ProjectionSnapshotQuerySql.schemas.ts";
+import {
+  ProjectionCheckpointDbRowSchema,
+  ProjectionCountsRowSchema,
+  ProjectionLatestTurnDbRowSchema,
+  ProjectionProjectDbRowSchema,
+  ProjectionProjectLookupRowSchema,
+  ProjectionStateDbRowSchema,
+  ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadCheckpointContextThreadRowSchema,
+  ProjectionThreadDbRowSchema,
+  ProjectionThreadIdLookupRowSchema,
+  ProjectionThreadMessageDbRowSchema,
+  ProjectionThreadProposedPlanDbRowSchema,
+  ProjectionThreadSessionDbRowSchema,
+  ProjectIdLookupInput,
+  ThreadIdLookupInput,
+  WorkspaceRootLookupInput,
+} from "./ProjectionSnapshotQuerySql.schemas.ts";
 
 // ---------------------------------------------------------------------------
 // Query factories (require a SqlClient instance)
@@ -122,6 +58,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
@@ -143,6 +82,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           model_selection_json AS "modelSelection",
           runtime_mode AS "runtimeMode",
           interaction_mode AS "interactionMode",
@@ -322,6 +264,9 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
@@ -359,6 +304,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           threads.thread_id AS "threadId",
           threads.project_id AS "projectId",
+          threads.execution_target_id AS "executionTargetId",
           projects.workspace_root AS "workspaceRoot",
           threads.worktree_path AS "worktreePath"
         FROM projection_threads AS threads

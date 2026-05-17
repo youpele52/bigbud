@@ -6,6 +6,7 @@
  * @module ProviderSessionRuntimeRepository
  */
 import {
+  ExecutionTargetId,
   IsoDateTime,
   ProviderSessionRuntimeStatus,
   RuntimeMode,
@@ -20,6 +21,9 @@ export const ProviderSessionRuntime = Schema.Struct({
   threadId: ThreadId,
   providerName: Schema.String,
   adapterKey: Schema.String,
+  providerRuntimeExecutionTargetId: ExecutionTargetId,
+  workspaceExecutionTargetId: ExecutionTargetId,
+  executionTargetId: ExecutionTargetId,
   runtimeMode: RuntimeMode,
   status: ProviderSessionRuntimeStatus,
   lastSeenAt: IsoDateTime,

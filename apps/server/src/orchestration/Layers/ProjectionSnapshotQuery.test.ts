@@ -233,6 +233,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         {
           id: asProjectId("project-1"),
           title: "Project 1",
+          providerRuntimeExecutionTargetId: "local",
+          workspaceExecutionTargetId: "local",
+          executionTargetId: "local",
           workspaceRoot: "/tmp/project-1",
           defaultModelSelection: {
             provider: "codex",
@@ -258,6 +261,9 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           id: ThreadId.makeUnsafe("thread-1"),
           projectId: asProjectId("project-1"),
           title: "Thread 1",
+          providerRuntimeExecutionTargetId: "local",
+          workspaceExecutionTargetId: "local",
+          executionTargetId: "local",
           modelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -601,6 +607,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         assert.deepEqual(context.value, {
           threadId: ThreadId.makeUnsafe("thread-context"),
           projectId: asProjectId("project-context"),
+          executionTargetId: "local",
           workspaceRoot: "/tmp/context-workspace",
           worktreePath: "/tmp/context-worktree",
           checkpoints: [

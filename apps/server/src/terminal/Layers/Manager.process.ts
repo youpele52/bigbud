@@ -2,15 +2,9 @@ import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";
 
-import { TerminalCwdError, TerminalSessionLookupError } from "../Services/Manager";
 import { type PtyProcess } from "../Services/PTY";
 import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
-import {
-  deleteAllHistoryForThread as ioDeleteAllHistoryForThread,
-  deleteHistory as ioDeleteHistory,
-  historyPath,
-  readHistory as ioReadHistory,
-} from "./Manager.history-io";
+import { historyPath } from "./Manager.history-io";
 import {
   drainProcessEventsWith,
   pollSubprocessActivityWith,
@@ -38,6 +32,11 @@ import {
   type TerminalSessionState,
   type TerminalStartInput,
 } from "./Manager.types";
+import {
+  makeAssertValidCwd,
+  makeHistoryAccessors,
+  makeManagerStateAccessors,
+} from "./Manager.process.state.ts";
 
 // Re-export for external consumers (tests import this directly)
 export type { TerminalManagerOptions };
@@ -109,11 +108,8 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         }
       });
 
-    const readManagerState = SynchronizedRef.get(managerStateRef);
-
-    const modifyManagerState = <A>(
-      f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
-    ) => SynchronizedRef.modify(managerStateRef, f);
+    const { readManagerState, modifyManagerState, getSession, requireSession, sessionsForThread } =
+      makeManagerStateAccessors(managerStateRef);
 
     const getThreadSemaphore = (threadId: string) =>
       SynchronizedRef.modifyEffect(threadLocksRef, (current) => {
@@ -203,76 +199,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       yield* flushPersist(threadId, terminalId);
     });
 
-    const readHistory = (threadId: string, terminalId: string): Effect.Effect<string> =>
-      ioReadHistory(logsDir, historyLineLimit, threadId, terminalId).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-        Effect.orDie,
-      );
-
-    const deleteHistory = (threadId: string, terminalId: string): Effect.Effect<void> =>
-      ioDeleteHistory(logsDir, threadId, terminalId).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-      );
-
-    const deleteAllHistoryForThread = (threadId: string): Effect.Effect<void> =>
-      ioDeleteAllHistoryForThread(logsDir, threadId).pipe(
-        Effect.provideService(FileSystem.FileSystem, fileSystem),
-      );
-
-    const assertValidCwd = (cwd: string): Effect.Effect<void, TerminalCwdError> =>
-      Effect.gen(function* () {
-        const stats = yield* fileSystem.stat(cwd).pipe(
-          Effect.mapError(
-            (cause) =>
-              new TerminalCwdError({
-                cwd,
-                reason: cause.reason._tag === "NotFound" ? "notFound" : "statFailed",
-                cause,
-              }),
-          ),
-        );
-        if (stats.type !== "Directory") {
-          return yield* new TerminalCwdError({
-            cwd,
-            reason: "notDirectory",
-          });
-        }
-      }).pipe(Effect.withSpan("terminal.assertValidCwd"));
-
-    const getSession = Effect.fn("terminal.getSession")(function* (
-      threadId: string,
-      terminalId: string,
-    ): Effect.fn.Return<Option.Option<TerminalSessionState>> {
-      return yield* Effect.map(readManagerState, (state) =>
-        Option.fromNullishOr(state.sessions.get(toSessionKey(threadId, terminalId))),
-      );
+    const { readHistory, deleteHistory, deleteAllHistoryForThread } = makeHistoryAccessors({
+      logsDir,
+      historyLineLimit,
+      fileSystem,
     });
-
-    const requireSession = Effect.fn("terminal.requireSession")(function* (
-      threadId: string,
-      terminalId: string,
-    ): Effect.fn.Return<TerminalSessionState, TerminalSessionLookupError> {
-      return yield* Effect.flatMap(getSession(threadId, terminalId), (session) =>
-        Option.match(session, {
-          onNone: () =>
-            Effect.fail(
-              new TerminalSessionLookupError({
-                threadId,
-                terminalId,
-              }),
-            ),
-          onSome: Effect.succeed,
-        }),
-      );
-    });
-
-    const sessionsForThread = Effect.fn("terminal.sessionsForThread")(function* (threadId: string) {
-      return yield* readManagerState.pipe(
-        Effect.map((state) =>
-          [...state.sessions.values()].filter((session) => session.threadId === threadId),
-        ),
-      );
-    });
+    const assertValidCwd = makeAssertValidCwd(fileSystem);
 
     const evictInactiveSessionsIfNeeded = Effect.fn("terminal.evictInactiveSessionsIfNeeded")(
       function* () {

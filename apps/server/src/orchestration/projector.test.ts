@@ -8,7 +8,8 @@ import {
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { createEmptyReadModel, projectEvent } from "./projector.ts";
+import { projectEvent } from "./projector.ts";
+import { createEmptyReadModel } from "./projectorReadModel.ts";
 
 function makeEvent(input: {
   sequence: number;
@@ -76,6 +77,9 @@ describe("orchestration projector", () => {
         id: "thread-1",
         projectId: "project-1",
         title: "demo",
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "local",
+        executionTargetId: "local",
         modelSelection: {
           provider: "codex",
           model: "gpt-5-codex",

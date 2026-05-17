@@ -10,6 +10,7 @@ import ThreadTerminalDrawer from "../../terminal/ThreadTerminalDrawer";
 import type { TerminalContextSelection } from "../../../lib/terminalContext";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { useDefaultChatCwd } from "../../../rpc/serverState";
+import { resolveWorkspaceExecutionTargetId } from "../../../lib/providerExecutionTargets";
 
 interface PersistentThreadTerminalDrawerProps {
   threadId: ThreadId;
@@ -163,6 +164,7 @@ export function PersistentThreadTerminalDrawer({
     <div className={visible ? undefined : "hidden"}>
       <ThreadTerminalDrawer
         threadId={threadId}
+        executionTargetId={resolveWorkspaceExecutionTargetId(project)}
         cwd={cwd}
         worktreePath={effectiveWorktreePath}
         runtimeEnv={runtimeEnv}

@@ -27,6 +27,8 @@ function makeSession(): ActiveCopilotSession {
     threadId: threadId("thread-1"),
     createdAt: "2026-05-14T00:00:00.000Z",
     runtimeMode: "approval-required",
+    providerRuntimeExecutionTargetId: "local",
+    workspaceExecutionTargetId: "local",
     pendingApprovals: new Map(),
     pendingUserInputs: new Map(),
     turns: [],
@@ -151,5 +153,40 @@ describe("CopilotAdapter.mapEvent", () => {
       turnId: "turn-1",
       payload: { reason: "user_cancelled" },
     });
+  });
+
+  it("ignores native user_input.requested events because the callback path is authoritative", async () => {
+    const events = await Effect.runPromise(
+      mapEvent(makeDeps(), makeSession(), {
+        type: "user_input.requested",
+        id: "sdk-event-5",
+        parentId: null,
+        timestamp: "2026-05-14T00:00:05.000Z",
+        data: {
+          requestId: "sdk-request-1",
+          question: "Which remote do you mean?",
+          choices: ["origin", "upstream"],
+        },
+      } as SessionEvent),
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("ignores native user_input.completed events because the callback path resolves the request", async () => {
+    const events = await Effect.runPromise(
+      mapEvent(makeDeps(), makeSession(), {
+        type: "user_input.completed",
+        id: "sdk-event-6",
+        parentId: null,
+        timestamp: "2026-05-14T00:00:06.000Z",
+        data: {
+          requestId: "sdk-request-1",
+          answer: "origin",
+        },
+      } as SessionEvent),
+    );
+
+    expect(events).toEqual([]);
   });
 });

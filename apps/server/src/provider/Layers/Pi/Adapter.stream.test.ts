@@ -250,6 +250,9 @@ describe("PiAdapter stream ingestion", () => {
       threadId: asThreadId("thread-1"),
       createdAt,
       runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
       pendingUserInputs: new Map(),
       turns: [{ id: asTurnId("turn-pi"), items: [] }],
       unsubscribe: () => undefined,
@@ -259,8 +262,11 @@ describe("PiAdapter stream ingestion", () => {
       thinkingLevel: undefined,
       updatedAt: createdAt,
       lastError: undefined,
+      agentRunning: true,
       activeTurnId: asTurnId("turn-pi"),
+      queuedTurnIds: [],
       pendingTurnEnd: undefined,
+      completedTurnBoundary: undefined,
       lastUsage: undefined,
       sessionId: "pi-session-1",
       sessionFile: undefined,
@@ -369,6 +375,9 @@ describe("PiAdapter stream ingestion", () => {
       threadId: asThreadId("thread-1"),
       createdAt,
       runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
       pendingUserInputs: new Map(),
       turns: [{ id: asTurnId("turn-pi"), items: [] }],
       unsubscribe: () => undefined,
@@ -378,8 +387,11 @@ describe("PiAdapter stream ingestion", () => {
       thinkingLevel: undefined,
       updatedAt: createdAt,
       lastError: undefined,
+      agentRunning: true,
       activeTurnId: asTurnId("turn-pi"),
+      queuedTurnIds: [],
       pendingTurnEnd: undefined,
+      completedTurnBoundary: undefined,
       lastUsage: undefined,
       sessionId: "pi-session-1",
       sessionFile: undefined,
@@ -432,13 +444,149 @@ describe("PiAdapter stream ingestion", () => {
       }),
     );
 
-    expect(session.activeTurnId).toBeUndefined();
+    expect(session.activeTurnId).toBe(asTurnId("turn-pi"));
     expect(session.pendingTurnEnd).toBeUndefined();
+    expect(session.completedTurnBoundary).toBeDefined();
     expect(provider.emittedEvents.map((event) => event.type)).toContain("item.completed");
     expect(provider.emittedEvents.map((event) => event.type)).toContain("turn.completed");
     expect(
       provider.emittedEvents.some(
+        (event) =>
+          event.type === "session.state.changed" &&
+          event.payload.state === "running" &&
+          event.payload.reason === "turn.completed.awaiting_agent_end",
+      ),
+    ).toBe(true);
+
+    await Effect.runPromise(
+      handleStdoutEvent(session, {
+        type: "agent_end",
+      }),
+    );
+
+    expect(session.activeTurnId).toBeUndefined();
+    expect(session.completedTurnBoundary).toBeUndefined();
+    expect(
+      provider.emittedEvents.some(
         (event) => event.type === "session.state.changed" && event.payload.state === "ready",
+      ),
+    ).toBe(true);
+  });
+
+  it("promotes the next queued Pi turn after the current turn completes", async () => {
+    const createdAt = "2026-05-12T12:00:00.000Z";
+    const provider = createProviderServiceHarness();
+    let eventSequence = 0;
+    const sessions = new Map<ThreadId, ActivePiSession>();
+    const makeSyntheticEvent: PiSyntheticEventFn = (threadId, type, payload, extra) =>
+      Effect.succeed({
+        eventId: asEventId(`synthetic-${++eventSequence}`),
+        provider: "pi",
+        threadId,
+        createdAt,
+        ...(extra?.turnId ? { turnId: extra.turnId } : {}),
+        ...(extra?.itemId ? { itemId: extra.itemId as never } : {}),
+        ...(extra?.requestId ? { requestId: extra.requestId as never } : {}),
+        type,
+        payload,
+      } as unknown as Extract<ProviderRuntimeEvent, { type: typeof type }>);
+    const handleStdoutEvent = makeHandleStdoutEvent({
+      emit: provider.publish,
+      makeEventStamp: () =>
+        Effect.succeed({
+          eventId: asEventId(`pi-runtime-${++eventSequence}`),
+          createdAt,
+        }),
+      makeSyntheticEvent,
+      runPromise: Effect.runPromise,
+      sessions,
+      writeNativeEvent: () => Effect.void,
+    });
+    const session: ActivePiSession = {
+      process: {
+        child: {} as never,
+        command: "pi",
+        args: [],
+        stderrTail: () => "",
+        request: async () => {
+          throw new Error("unused");
+        },
+        write: async () => undefined,
+        subscribe: () => () => undefined,
+        stop: async () => undefined,
+      },
+      threadId: asThreadId("thread-queued"),
+      createdAt,
+      runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
+      pendingUserInputs: new Map(),
+      turns: [
+        { id: asTurnId("turn-current"), items: [] },
+        { id: asTurnId("turn-next"), items: [] },
+      ],
+      unsubscribe: () => undefined,
+      cwd: undefined,
+      model: "sonnet",
+      providerID: "anthropic",
+      thinkingLevel: undefined,
+      updatedAt: createdAt,
+      lastError: undefined,
+      agentRunning: true,
+      activeTurnId: asTurnId("turn-current"),
+      queuedTurnIds: [asTurnId("turn-next")],
+      pendingTurnEnd: undefined,
+      completedTurnBoundary: undefined,
+      lastUsage: undefined,
+      sessionId: "pi-session-1",
+      sessionFile: undefined,
+      currentAssistantMessageId: undefined,
+      currentToolOutputById: new Map(),
+      currentToolInfoById: new Map(),
+    };
+    sessions.set(session.threadId, session);
+
+    await Effect.runPromise(
+      handleStdoutEvent(session, {
+        type: "turn_end",
+        message: { stopReason: "completed" },
+      }),
+    );
+
+    expect(session.activeTurnId).toBe(asTurnId("turn-current"));
+    expect(session.queuedTurnIds).toEqual([asTurnId("turn-next")]);
+    expect(
+      provider.emittedEvents.some(
+        (event) =>
+          event.type === "turn.completed" &&
+          event.turnId === asTurnId("turn-current") &&
+          event.payload.state === "completed",
+      ),
+    ).toBe(true);
+    expect(
+      provider.emittedEvents.some(
+        (event) =>
+          event.type === "session.state.changed" &&
+          event.payload.state === "running" &&
+          event.payload.reason === "turn.completed.awaiting_agent_end",
+      ),
+    ).toBe(true);
+
+    await Effect.runPromise(
+      handleStdoutEvent(session, {
+        type: "agent_end",
+      }),
+    );
+
+    expect(session.activeTurnId).toBe(asTurnId("turn-next"));
+    expect(session.queuedTurnIds).toHaveLength(0);
+    expect(
+      provider.emittedEvents.some(
+        (event) =>
+          event.type === "session.state.changed" &&
+          event.payload.state === "running" &&
+          event.payload.reason === "turn.queued",
       ),
     ).toBe(true);
   });

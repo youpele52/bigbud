@@ -4,38 +4,76 @@ import {
   CommandId,
   EventId,
   IsoDateTime,
-  MessageId,
   NonNegativeInt,
   ProjectId,
   ProviderItemId,
   ThreadId,
   TrimmedNonEmptyString,
-  TurnId,
 } from "../core/baseSchemas";
+import { OrchestrationAggregateKind } from "./orchestration.provider";
 import {
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  OrchestrationAggregateKind,
-  ProviderApprovalDecision,
-  ProviderInteractionMode,
-  ProviderUserInputAnswers,
-  RuntimeMode,
-} from "./orchestration.provider";
-import { ChatAttachment } from "./orchestration.attachments";
-import { ModelSelection } from "./orchestration.provider";
-import { ProjectScript } from "./orchestration.project";
+  ProjectCreatedPayload,
+  ProjectDeletedPayload,
+  ProjectDeletionFailedPayload,
+  ProjectDeletionRequestedPayload,
+  ProjectMetaUpdatedPayload,
+} from "./orchestration.events.project";
 import {
-  OrchestrationCheckpointFile,
-  OrchestrationCheckpointStatus,
-  OrchestrationMessageReply,
-  OrchestrationMessageRole,
-  ParentThreadReference,
-  OrchestrationProposedPlan,
-  OrchestrationSession,
-  OrchestrationThreadActivity,
-  SourceProposedPlanReference,
-} from "./orchestration.thread";
-import { CheckpointRef } from "../core/baseSchemas";
+  ThreadActivityAppendedPayload,
+  ThreadApprovalResponseRequestedPayload,
+  ThreadArchivedPayload,
+  ThreadCheckpointRevertRequestedPayload,
+  ThreadCreatedPayload,
+  ThreadDeletedPayload,
+  ThreadDeletionFailedPayload,
+  ThreadDeletionRequestedPayload,
+  ThreadInteractionModeSetPayload,
+  ThreadMessageSentPayload,
+  ThreadMetaUpdatedPayload,
+  ThreadProposedPlanUpsertedPayload,
+  ThreadRevertedPayload,
+  ThreadRuntimeModeSetPayload,
+  ThreadSessionSetPayload,
+  ThreadSessionStopRequestedPayload,
+  ThreadShellRunRequestedPayload,
+  ThreadTurnDiffCompletedPayload,
+  ThreadTurnInterruptRequestedPayload,
+  ThreadTurnStartRequestedPayload,
+  ThreadUnarchivedPayload,
+  ThreadUserInputResponseRequestedPayload,
+} from "./orchestration.events.thread";
+
+export {
+  ProjectCreatedPayload,
+  ProjectDeletedPayload,
+  ProjectDeletionFailedPayload,
+  ProjectDeletionRequestedPayload,
+  ProjectMetaUpdatedPayload,
+} from "./orchestration.events.project";
+export {
+  ThreadActivityAppendedPayload,
+  ThreadApprovalResponseRequestedPayload,
+  ThreadArchivedPayload,
+  ThreadCheckpointRevertRequestedPayload,
+  ThreadCreatedPayload,
+  ThreadDeletedPayload,
+  ThreadDeletionFailedPayload,
+  ThreadDeletionRequestedPayload,
+  ThreadInteractionModeSetPayload,
+  ThreadMessageSentPayload,
+  ThreadMetaUpdatedPayload,
+  ThreadProposedPlanUpsertedPayload,
+  ThreadRevertedPayload,
+  ThreadRuntimeModeSetPayload,
+  ThreadSessionSetPayload,
+  ThreadSessionStopRequestedPayload,
+  ThreadShellRunRequestedPayload,
+  ThreadTurnDiffCompletedPayload,
+  ThreadTurnInterruptRequestedPayload,
+  ThreadTurnStartRequestedPayload,
+  ThreadUnarchivedPayload,
+  ThreadUserInputResponseRequestedPayload,
+} from "./orchestration.events.thread";
 
 export const OrchestrationEventType = Schema.Literals([
   "project.created",
@@ -69,203 +107,6 @@ export const OrchestrationEventType = Schema.Literals([
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
 export const OrchestrationActorKind = Schema.Literals(["client", "server", "provider"]);
-
-export const ProjectCreatedPayload = Schema.Struct({
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
-  defaultModelSelection: Schema.NullOr(ModelSelection),
-  scripts: Schema.Array(ProjectScript),
-  createdAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-});
-
-export const ProjectMetaUpdatedPayload = Schema.Struct({
-  projectId: ProjectId,
-  title: Schema.optional(TrimmedNonEmptyString),
-  workspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
-  defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
-  scripts: Schema.optional(Schema.Array(ProjectScript)),
-  updatedAt: IsoDateTime,
-});
-
-export const ProjectDeletedPayload = Schema.Struct({
-  projectId: ProjectId,
-  deletedAt: IsoDateTime,
-});
-
-export const ProjectDeletionRequestedPayload = Schema.Struct({
-  projectId: ProjectId,
-  deletingAt: IsoDateTime,
-});
-
-export const ProjectDeletionFailedPayload = Schema.Struct({
-  projectId: ProjectId,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadCreatedPayload = Schema.Struct({
-  threadId: ThreadId,
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  modelSelection: ModelSelection,
-  runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
-  interactionMode: ProviderInteractionMode.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
-  ),
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  parentThread: Schema.optional(ParentThreadReference),
-  createdAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadDeletedPayload = Schema.Struct({
-  threadId: ThreadId,
-  deletedAt: IsoDateTime,
-});
-
-export const ThreadDeletionRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  deletingAt: IsoDateTime,
-});
-
-export const ThreadDeletionFailedPayload = Schema.Struct({
-  threadId: ThreadId,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadArchivedPayload = Schema.Struct({
-  threadId: ThreadId,
-  archivedAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadUnarchivedPayload = Schema.Struct({
-  threadId: ThreadId,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadMetaUpdatedPayload = Schema.Struct({
-  threadId: ThreadId,
-  title: Schema.optional(TrimmedNonEmptyString),
-  modelSelection: Schema.optional(ModelSelection),
-  branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
-  worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadRuntimeModeSetPayload = Schema.Struct({
-  threadId: ThreadId,
-  runtimeMode: RuntimeMode,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadInteractionModeSetPayload = Schema.Struct({
-  threadId: ThreadId,
-  interactionMode: ProviderInteractionMode.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
-  ),
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadMessageSentPayload = Schema.Struct({
-  threadId: ThreadId,
-  messageId: MessageId,
-  role: OrchestrationMessageRole,
-  text: Schema.String,
-  attachments: Schema.optional(Schema.Array(ChatAttachment)),
-  replyTo: Schema.optional(OrchestrationMessageReply),
-  turnId: Schema.NullOr(TurnId),
-  replace: Schema.optional(Schema.Boolean),
-  streaming: Schema.Boolean,
-  createdAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-});
-
-export const ThreadTurnStartRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  messageId: MessageId,
-  replyTo: Schema.optional(OrchestrationMessageReply),
-  modelSelection: Schema.optional(ModelSelection),
-  titleSeed: Schema.optional(TrimmedNonEmptyString),
-  runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
-  interactionMode: ProviderInteractionMode.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
-  ),
-  bootstrapSourceThreadId: Schema.optional(ThreadId),
-  sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
-  createdAt: IsoDateTime,
-});
-
-export const ThreadShellRunRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  messageId: MessageId,
-  shellCommand: Schema.String,
-  createdAt: IsoDateTime,
-});
-
-export const ThreadTurnInterruptRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  turnId: Schema.optional(TurnId),
-  createdAt: IsoDateTime,
-});
-
-export const ThreadApprovalResponseRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  requestId: ApprovalRequestId,
-  decision: ProviderApprovalDecision,
-  createdAt: IsoDateTime,
-});
-
-const ThreadUserInputResponseRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  requestId: ApprovalRequestId,
-  answers: ProviderUserInputAnswers,
-  createdAt: IsoDateTime,
-});
-
-export const ThreadCheckpointRevertRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  turnCount: NonNegativeInt,
-  createdAt: IsoDateTime,
-});
-
-export const ThreadRevertedPayload = Schema.Struct({
-  threadId: ThreadId,
-  turnCount: NonNegativeInt,
-});
-
-export const ThreadSessionStopRequestedPayload = Schema.Struct({
-  threadId: ThreadId,
-  createdAt: IsoDateTime,
-});
-
-export const ThreadSessionSetPayload = Schema.Struct({
-  threadId: ThreadId,
-  session: OrchestrationSession,
-});
-
-export const ThreadProposedPlanUpsertedPayload = Schema.Struct({
-  threadId: ThreadId,
-  proposedPlan: OrchestrationProposedPlan,
-});
-
-export const ThreadTurnDiffCompletedPayload = Schema.Struct({
-  threadId: ThreadId,
-  turnId: TurnId,
-  checkpointTurnCount: NonNegativeInt,
-  checkpointRef: CheckpointRef,
-  status: OrchestrationCheckpointStatus,
-  files: Schema.Array(OrchestrationCheckpointFile),
-  assistantMessageId: Schema.NullOr(MessageId),
-  completedAt: IsoDateTime,
-});
-
-export const ThreadActivityAppendedPayload = Schema.Struct({
-  threadId: ThreadId,
-  activity: OrchestrationThreadActivity,
-});
 
 export const OrchestrationEventMetadata = Schema.Struct({
   providerTurnId: Schema.optional(TrimmedNonEmptyString),
