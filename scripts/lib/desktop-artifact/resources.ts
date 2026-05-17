@@ -189,7 +189,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: "ai.bigbud.desktop",
     productName,
-    artifactName: "bigbud-${version}-${arch}.${ext}",
+    artifactName: "bigbud-beta-${version}-${arch}.${ext}",
     directories: {
       buildResources: "apps/desktop/resources",
     },
