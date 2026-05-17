@@ -34,7 +34,7 @@ import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
   "node-pty",
   "@github/copilot-sdk",
-  "@mariozechner/pi-coding-agent",
+  "@earendil-works/pi-coding-agent",
 ]);
 
 /** Filter a dependency map to only include packages that are external at runtime. */

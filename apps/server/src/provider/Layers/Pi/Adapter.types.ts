@@ -63,8 +63,17 @@ export interface ActivePiSession {
   thinkingLevel: string | undefined;
   updatedAt: string;
   lastError: string | undefined;
+  agentRunning: boolean;
   activeTurnId: TurnId | undefined;
+  queuedTurnIds: Array<TurnId>;
   pendingTurnEnd:
+    | {
+        readonly stamp: PiEventStamp;
+        readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;
+        readonly message: { readonly message?: Record<string, unknown> };
+      }
+    | undefined;
+  completedTurnBoundary:
     | {
         readonly stamp: PiEventStamp;
         readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;

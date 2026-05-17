@@ -14,7 +14,7 @@ export function renderPiRemoteWorkspaceBridgeSource(input: RemoteWorkspaceBridge
   return [
     'import { spawn } from "node:child_process";',
     'import { Type } from "typebox";',
-    'import { defineTool } from "@mariozechner/pi-coding-agent";',
+    'import { defineTool } from "@earendil-works/pi-coding-agent";',
     "",
     `const CONFIG = ${config} as const;`,
     "const DEFAULT_READ_LIMIT = 250;",

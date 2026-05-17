@@ -42,7 +42,10 @@ export function makeHandleProcessExit(deps: {
 
     deps.sessions.delete(session.threadId);
     session.lastError = detail;
+    session.agentRunning = false;
     session.activeTurnId = undefined;
+    session.pendingTurnEnd = undefined;
+    session.completedTurnBoundary = undefined;
 
     yield* Effect.logWarning("Pi RPC process exited", {
       threadId: session.threadId,
@@ -113,7 +116,13 @@ export function makeHandleStdoutEvent(deps: {
     switch (message.type) {
       case "agent_start": {
         session.updatedAt = createdAt;
-        return;
+        session.agentRunning = true;
+        return yield* deps.emit([
+          yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
+            state: "running",
+            reason: "agent_start",
+          }),
+        ]);
       }
       case "turn_start": {
         session.updatedAt = createdAt;
@@ -319,7 +328,156 @@ export function makeHandleStdoutEvent(deps: {
         });
       case "agent_end": {
         session.updatedAt = createdAt;
-        return;
+        session.agentRunning = false;
+        const nextQueuedTurnId = session.queuedTurnIds.shift();
+        if (nextQueuedTurnId) {
+          session.activeTurnId = nextQueuedTurnId;
+          session.completedTurnBoundary = undefined;
+          return yield* deps.emit([
+            yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
+              state: "running",
+              reason: "turn.queued",
+            }),
+          ]);
+        }
+        session.activeTurnId = undefined;
+        session.completedTurnBoundary = undefined;
+        session.pendingTurnEnd = undefined;
+        return yield* deps.emit([
+          yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
+            state: "ready",
+            reason: "agent_end",
+          }),
+        ]);
+      }
+      case "queue_update": {
+        const steeringCount = Array.isArray(message.steering) ? message.steering.length : 0;
+        const followUpCount = Array.isArray(message.followUp) ? message.followUp.length : 0;
+        if (steeringCount === 0 && followUpCount === 0) {
+          return;
+        }
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: "runtime.warning",
+            payload: {
+              message: `Pi queue updated (${steeringCount} steering, ${followUpCount} follow-up).`,
+            },
+          },
+        ]);
+      }
+      case "compaction_start": {
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: "runtime.warning",
+            payload: {
+              message: `Pi compaction started${message.reason ? ` (${message.reason})` : ""}.`,
+            },
+          },
+        ]);
+      }
+      case "compaction_end": {
+        const aborted = message.aborted === true;
+        const willRetry = message.willRetry === true;
+        const errorMessage = normalizeString(message.errorMessage);
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: errorMessage ? "runtime.error" : "runtime.warning",
+            payload: {
+              message: errorMessage
+                ? `Pi compaction failed: ${errorMessage}`
+                : aborted
+                  ? "Pi compaction aborted."
+                  : willRetry
+                    ? "Pi compaction complete. Retrying..."
+                    : "Pi compaction complete.",
+              ...(errorMessage ? { class: "provider_error" as const } : {}),
+            },
+          },
+        ]);
+      }
+      case "auto_retry_start": {
+        const attempt = typeof message.attempt === "number" ? message.attempt : 1;
+        const maxAttempts = typeof message.maxAttempts === "number" ? message.maxAttempts : 3;
+        const errorMessage = normalizeString(message.errorMessage) ?? "transient error";
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: "runtime.warning",
+            payload: {
+              message: `Pi auto-retry ${attempt}/${maxAttempts} after ${errorMessage}.`,
+            },
+          },
+        ]);
+      }
+      case "auto_retry_end": {
+        const success = message.success === true;
+        const attempt = typeof message.attempt === "number" ? message.attempt : 1;
+        const finalError = normalizeString(message.finalError);
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: success ? "runtime.warning" : "runtime.error",
+            payload: {
+              message: success
+                ? `Pi auto-retry succeeded on attempt ${attempt}.`
+                : `Pi auto-retry failed on attempt ${attempt}${finalError ? `: ${finalError}` : ""}.`,
+              ...(success ? {} : { class: "provider_error" as const }),
+            },
+          },
+        ]);
+      }
+      case "extension_error": {
+        const extensionPath = normalizeString(message.extensionPath) ?? "unknown";
+        const error = normalizeString(message.error) ?? "Extension error";
+        return yield* deps.emit([
+          {
+            ...eventBase({
+              eventId: stamp.eventId,
+              createdAt,
+              threadId: session.threadId,
+              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              raw,
+            }),
+            type: "runtime.error",
+            payload: {
+              message: `Pi extension error in ${extensionPath}: ${error}`,
+              class: "provider_error" as const,
+            },
+          },
+        ]);
       }
       case "extension_ui_request":
         return yield* handleExtensionUiRequest({

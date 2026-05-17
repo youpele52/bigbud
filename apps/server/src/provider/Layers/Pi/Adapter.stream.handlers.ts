@@ -200,6 +200,28 @@ export const handleToolExecutionStart = Effect.fn("handleToolExecutionStart")(fu
   });
 });
 
+function extractToolResultText(partialResult: unknown): string | undefined {
+  if (typeof partialResult === "string") {
+    return partialResult.length > 0 ? partialResult : undefined;
+  }
+  if (!isRecord(partialResult)) {
+    return undefined;
+  }
+  const content = partialResult.content;
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+  const chunks = content
+    .flatMap((part): string[] => {
+      if (isRecord(part) && typeof part.text === "string") {
+        return [part.text];
+      }
+      return [];
+    })
+    .filter((part) => part.length > 0);
+  return chunks.length > 0 ? chunks.join("") : undefined;
+}
+
 export const handleToolExecutionUpdate = Effect.fn("handleToolExecutionUpdate")(function* (deps: {
   readonly emit: PiEmitEvents;
   readonly session: ActivePiSession;
@@ -207,10 +229,10 @@ export const handleToolExecutionUpdate = Effect.fn("handleToolExecutionUpdate")(
   readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;
   readonly message: {
     readonly toolCallId: string;
-    readonly partialResult?: string;
+    readonly partialResult?: import("./RpcProcess.ts").PiRpcToolResult;
   };
 }) {
-  const partialResult = normalizeString(deps.message.partialResult);
+  const partialResult = extractToolResultText(deps.message.partialResult);
   if (!partialResult) {
     return;
   }
@@ -306,7 +328,6 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
     return;
   }
 
-  deps.session.activeTurnId = undefined;
   const messageRecord = isRecord(deps.message.message) ? deps.message.message : undefined;
   const stopReason = normalizeString(messageRecord?.stopReason);
   const errorMessage = normalizeString(messageRecord?.errorMessage);
@@ -317,6 +338,12 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
   if (usage) {
     deps.session.lastUsage = usage;
   }
+
+  deps.session.completedTurnBoundary = {
+    stamp: deps.stamp,
+    raw: deps.raw,
+    message: deps.message,
+  };
 
   yield* emitWithTurnAppend({
     emit: deps.emit,
@@ -352,8 +379,10 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
         }),
         type: "session.state.changed",
         payload: {
-          state: "ready",
-          reason: "turn.completed",
+          state: deps.session.agentRunning ? "running" : "ready",
+          reason: deps.session.agentRunning
+            ? "turn.completed.awaiting_agent_end"
+            : "turn.completed",
         },
       },
     ],

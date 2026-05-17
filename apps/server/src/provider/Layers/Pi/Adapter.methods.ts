@@ -138,8 +138,11 @@ export function makePiAdapterMethods(deps: {
       thinkingLevel: undefined,
       updatedAt: createdAt,
       lastError: undefined,
+      agentRunning: false,
       activeTurnId: undefined,
+      queuedTurnIds: [],
       pendingTurnEnd: undefined,
+      completedTurnBoundary: undefined,
       lastUsage: undefined,
       sessionId: resumeCursor?.sessionId,
       sessionFile: resumeCursor?.sessionFile,
@@ -226,13 +229,6 @@ export function makePiAdapterMethods(deps: {
 
   const sendTurn: PiAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const session = yield* requireSession(input.threadId);
-    if (session.activeTurnId) {
-      return yield* new ProviderAdapterValidationError({
-        provider: PROVIDER,
-        operation: "sendTurn",
-        issue: "Pi session is already processing a turn.",
-      });
-    }
 
     if ((!input.input || input.input.trim().length === 0) && !input.attachments?.length) {
       return yield* new ProviderAdapterValidationError({
@@ -247,7 +243,12 @@ export function makePiAdapterMethods(deps: {
     }
 
     const turnId = TurnId.makeUnsafe(`pi-turn-${randomUUID()}`);
-    session.activeTurnId = turnId;
+    const queuedWhileRunning = session.activeTurnId !== undefined;
+    if (queuedWhileRunning) {
+      session.queuedTurnIds.push(turnId);
+    } else {
+      session.activeTurnId = turnId;
+    }
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
 
@@ -268,6 +269,7 @@ export function makePiAdapterMethods(deps: {
           type: "prompt",
           message: messageText,
           ...(images.length > 0 ? { images } : {}),
+          ...(queuedWhileRunning ? { streamingBehavior: "steer" as const } : {}),
         }),
       catch: (cause) =>
         new ProviderAdapterRequestError({
@@ -286,7 +288,24 @@ export function makePiAdapterMethods(deps: {
       ),
       Effect.tapError(() =>
         Effect.sync(() => {
+          if (queuedWhileRunning) {
+            const queuedTurnIndex = session.queuedTurnIds.findIndex(
+              (queuedTurnId) => queuedTurnId === turnId,
+            );
+            if (queuedTurnIndex !== -1) {
+              session.queuedTurnIds.splice(queuedTurnIndex, 1);
+            }
+            const turnIndex = session.turns.findIndex((turn) => turn.id === turnId);
+            if (turnIndex !== -1) {
+              session.turns.splice(turnIndex, 1);
+            }
+            return;
+          }
           session.activeTurnId = undefined;
+          const turnIndex = session.turns.findIndex((turn) => turn.id === turnId);
+          if (turnIndex !== -1) {
+            session.turns.splice(turnIndex, 1);
+          }
         }),
       ),
     );
