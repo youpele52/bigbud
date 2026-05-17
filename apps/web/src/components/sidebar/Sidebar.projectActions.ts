@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useRef,
   useState,
   type PointerEvent,
   type MouseEvent,
@@ -22,65 +21,18 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../ui/toast";
-import { useSettings } from "../../hooks/useSettings";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
 import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
-import type { Project } from "../../models/types";
-import type { SidebarProjectSnapshot } from "./Sidebar.types";
+import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
+import type {
+  SidebarProjectActionsInput,
+  SidebarProjectActionsOutput,
+} from "./Sidebar.projectActions.types";
 
-export interface SidebarProjectActionsInput {
-  /** Projects list from the main store. */
-  projects: Project[];
-  threadIdsByProjectId: Record<string, ThreadIdType[]>;
-  sidebarProjects: SidebarProjectSnapshot[];
-  appSettings: ReturnType<typeof useSettings>;
-  /** Shared drag refs — owned by the composition hook. */
-  dragInProgressRef: { current: boolean };
-  suppressProjectClickAfterDragRef: { current: boolean };
-  suppressProjectClickForContextMenuRef: { current: boolean };
-  selectedThreadIdsSize: number;
-  clearSelection: () => void;
-  copyPathToClipboard: (text: string, ctx: { path: string }) => void;
-  /** Called when a thread rename is in progress — cancels it so both can't be active at once. */
-  cancelThreadRename: () => void;
-}
-
-export interface SidebarProjectActionsOutput {
-  // Project rename
-  renamingProjectId: ProjectId | null;
-  renamingProjectTitle: string;
-  setRenamingProjectTitle: (title: string) => void;
-  /** Callback ref for the rename input element — handles focus/select on mount. */
-  onProjectRenamingInputMount: (element: HTMLInputElement | null) => void;
-  /** Returns whether the project rename has already been committed. */
-  hasProjectRenameCommitted: () => boolean;
-  /** Marks the project rename as committed to prevent double-commit on blur. */
-  markProjectRenameCommitted: () => void;
-  commitProjectRename: (
-    projectId: ProjectId,
-    newTitle: string,
-    originalTitle: string,
-  ) => Promise<void>;
-  cancelProjectRename: () => void;
-  pendingProjectDeleteConfirmation: {
-    projectId: ProjectId;
-    projectName: string;
-    threadCount: number;
-  } | null;
-  dismissPendingProjectDeleteConfirmation: () => void;
-  confirmPendingProjectDelete: () => Promise<void>;
-  requestProjectDelete: (projectId: ProjectId) => void;
-  handleProjectContextMenu: (projectId: ProjectId, position: { x: number; y: number }) => void;
-  handleProjectDragStart: (event: DragStartEvent) => void;
-  handleProjectDragEnd: (event: DragEndEvent) => void;
-  handleProjectDragCancel: (event: DragCancelEvent) => void;
-  handleProjectTitlePointerDownCapture: (event: PointerEvent<HTMLButtonElement>) => void;
-  handleProjectTitleClick: (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => void;
-  handleProjectTitleKeyDown: (
-    event: KeyboardEvent<HTMLButtonElement>,
-    projectId: ProjectId,
-  ) => void;
-}
+export type {
+  SidebarProjectActionsInput,
+  SidebarProjectActionsOutput,
+} from "./Sidebar.projectActions.types";
 
 /** Encapsulates all project-level actions for the sidebar. */
 export function useSidebarProjectActions({
@@ -109,85 +61,23 @@ export function useSidebarProjectActions({
   });
   const navigate = useNavigate();
 
-  const [renamingProjectId, setRenamingProjectId] = useState<ProjectId | null>(null);
-  const [renamingProjectTitle, setRenamingProjectTitle] = useState("");
   const [pendingProjectDeleteConfirmation, setPendingProjectDeleteConfirmation] = useState<{
     projectId: ProjectId;
     projectName: string;
     threadCount: number;
   } | null>(null);
-  const projectRenamingCommittedRef = useRef(false);
-  const projectRenamingInputRef = useRef<HTMLInputElement | null>(null);
-
-  const cancelProjectRename = useCallback(() => {
-    setRenamingProjectId(null);
-    projectRenamingInputRef.current = null;
-  }, []);
-
-  const onProjectRenamingInputMount = useCallback((element: HTMLInputElement | null) => {
-    if (element && projectRenamingInputRef.current !== element) {
-      projectRenamingInputRef.current = element;
-      element.focus();
-      element.select();
-      return;
-    }
-    if (element === null && projectRenamingInputRef.current !== null) {
-      projectRenamingInputRef.current = null;
-    }
-  }, []);
-
-  const hasProjectRenameCommitted = useCallback(() => projectRenamingCommittedRef.current, []);
-
-  const markProjectRenameCommitted = useCallback(() => {
-    projectRenamingCommittedRef.current = true;
-  }, []);
-
-  const commitProjectRename = useCallback(
-    async (projectId: ProjectId, newTitle: string, originalTitle: string) => {
-      const finishRename = () => {
-        setRenamingProjectId((current) => {
-          if (current !== projectId) return current;
-          projectRenamingInputRef.current = null;
-          return null;
-        });
-      };
-
-      const trimmed = newTitle.trim();
-      if (trimmed.length === 0) {
-        toastManager.add({
-          type: "warning",
-          title: "Project title cannot be empty",
-        });
-        finishRename();
-        return;
-      }
-      if (trimmed === originalTitle) {
-        finishRename();
-        return;
-      }
-      const api = readNativeApi();
-      if (!api) {
-        finishRename();
-        return;
-      }
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "project.meta.update",
-          commandId: newCommandId(),
-          projectId,
-          title: trimmed,
-        });
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to rename project",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-      }
-      finishRename();
-    },
-    [],
-  );
+  const {
+    renamingProjectId,
+    setRenamingProjectId,
+    renamingProjectTitle,
+    setRenamingProjectTitle,
+    projectRenamingCommittedRef,
+    cancelProjectRename,
+    onProjectRenamingInputMount,
+    hasProjectRenameCommitted,
+    markProjectRenameCommitted,
+    commitProjectRename,
+  } = useSidebarProjectRenameActions();
 
   const dismissPendingProjectDeleteConfirmation = useCallback(() => {
     setPendingProjectDeleteConfirmation(null);
@@ -306,7 +196,15 @@ export function useSidebarProjectActions({
 
       requestProjectDelete(projectId);
     },
-    [cancelThreadRename, copyPathToClipboard, projects, requestProjectDelete],
+    [
+      cancelThreadRename,
+      copyPathToClipboard,
+      projectRenamingCommittedRef,
+      projects,
+      requestProjectDelete,
+      setRenamingProjectId,
+      setRenamingProjectTitle,
+    ],
   );
 
   const handleProjectContextMenu = useCallback(

@@ -21,7 +21,8 @@ import { readNativeApi } from "../rpc/nativeApi";
 import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { useStore } from "../stores/main";
-import { EventRouter, ServerStateBootstrap } from "./__root.logic";
+import { ServerStateBootstrap } from "./__root.bootstrap";
+import { EventRouter } from "./__root.logic";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 

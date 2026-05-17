@@ -62,6 +62,7 @@ export function SidebarUnlockSshKeyDialog({
               autoFocus
               type="password"
               className={passphraseInputClassName}
+              aria-invalid={error ? true : undefined}
               placeholder={placeholder}
               spellCheck={false}
               value={secret}
@@ -73,13 +74,8 @@ export function SidebarUnlockSshKeyDialog({
                 }
               }}
             />
+            {error ? <p className="mt-1.5 text-destructive text-xs leading-4">{error}</p> : null}
           </label>
-
-          {error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-destructive text-xs leading-4">
-              {error}
-            </div>
-          ) : null}
         </DialogPanel>
 
         <DialogFooter>

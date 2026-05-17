@@ -1,254 +1,37 @@
 import { type ProviderKind, type ServerProvider } from "@bigbud/contracts";
 import { resolveSelectableModel } from "@bigbud/shared/model";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
-import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../../logic/session";
 import { ChevronDownIcon } from "lucide-react";
 import { Button, buttonVariants } from "../../ui/button";
 import {
   Menu,
-  MenuGroup,
   MenuItem,
   MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
   MenuSeparator as MenuDivider,
-  MenuGroupLabel,
   MenuSub,
   MenuSubPopup,
   MenuSubTrigger,
   MenuTrigger,
 } from "../../ui/menu";
-import { Searchbar } from "../../ui/Searchbar";
-import { ClaudeAI, CopilotIcon, CursorIcon, Icon, OpenAI, OpenCodeIcon, PiIcon } from "../../Icons";
 import { cn } from "~/lib/utils";
 import { getProviderSnapshot } from "../../../models/provider";
 import { useRecentlyUsedModels } from "../../../hooks/useRecentlyUsedModels";
 import { MAX_RECENT_MODELS_PER_PROVIDER } from "../../../models/recentlyUsedModels";
+import { ModelList } from "./ProviderModelPicker.modelList";
+import {
+  AVAILABLE_PROVIDER_OPTIONS,
+  formatSlugAsDisplayName,
+  modelOptionValue,
+  providerIconClassName,
+  providerSupportsSubProviderID,
+  PROVIDER_ICON_BY_PROVIDER,
+  type ModelOption,
+  UNAVAILABLE_PROVIDER_OPTIONS,
+} from "./ProviderModelPicker.models";
 
-function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
-  value: ProviderKind;
-  label: string;
-  available: true;
-} {
-  return option.available;
-}
-
-const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
-  codex: OpenAI,
-  claudeAgent: ClaudeAI,
-  copilot: CopilotIcon,
-  opencode: OpenCodeIcon,
-  pi: PiIcon,
-  cursor: CursorIcon,
-};
-
-export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
-const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
-
-/**
- * Converts a model slug like "gemini-3-flash-preview" to a human-readable name "Gemini 3 Flash Preview".
- * Used as a fallback when model options aren't loaded yet.
- */
-function formatSlugAsDisplayName(slug: string): string {
-  return slug
-    .split("-")
-    .map((word) => {
-      // Don't capitalize pure numbers or version-like strings
-      if (/^\d+(\.\d+)*$/.test(word)) return word;
-      // Capitalize first letter of each word
-      return word.charAt(0).toUpperCase() + word.slice(1);
-    })
-    .join(" ");
-}
-
-function providerIconClassName(
-  _provider: ProviderKind | ProviderPickerKind,
-  fallbackClassName: string,
-): string {
-  return fallbackClassName;
-}
-
-// exactOptionalPropertyTypes: group/subProviderID must be `string | undefined` so callers can
-// safely pass through server model mappings unchanged.
-type ModelOption = {
-  slug: string;
-  name: string;
-  group?: string | undefined;
-  subProviderID?: string | undefined;
-};
-
-function modelOptionValue(option: ModelOption): string {
-  return option.subProviderID ? `${option.slug}::${option.subProviderID}` : option.slug;
-}
-
-function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "pi";
-}
-
-export function visibleModelOptionsForPicker(
-  provider: ProviderKind,
-  options: ReadonlyArray<ModelOption>,
-  recentOptions: ReadonlyArray<ModelOption> | undefined,
-  query: string,
-): ReadonlyArray<ModelOption> {
-  if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
-    return options;
-  }
-
-  const recentValues = new Set(recentOptions.map(modelOptionValue));
-  return options.filter((option) => !recentValues.has(modelOptionValue(option)));
-}
-
-type GroupedSection =
-  | { kind: "named"; group: string; models: ModelOption[] }
-  | { kind: "ungrouped"; models: ModelOption[] };
-
-/** Groups a flat model list by their `group` field. Returns ordered sections. */
-function groupModelOptions(options: ReadonlyArray<ModelOption>): GroupedSection[] {
-  const namedMap = new Map<string, ModelOption[]>();
-  const ungrouped: ModelOption[] = [];
-  for (const option of options) {
-    if (option.group) {
-      if (!namedMap.has(option.group)) namedMap.set(option.group, []);
-      namedMap.get(option.group)!.push(option);
-    } else {
-      ungrouped.push(option);
-    }
-  }
-  const named: GroupedSection[] = [...namedMap.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([group, models]) => ({ kind: "named" as const, group, models }));
-  if (ungrouped.length > 0) named.push({ kind: "ungrouped" as const, models: ungrouped });
-  return named;
-}
-
-/** Renders a searchable, optionally-grouped model list. */
-function ModelList({
-  provider,
-  selectedValue,
-  options,
-  recentOptions,
-  onSelect,
-  onBack,
-}: {
-  provider: ProviderKind;
-  selectedValue: string;
-  options: ReadonlyArray<ModelOption>;
-  recentOptions?: ReadonlyArray<ModelOption> | undefined;
-  onSelect: (value: string) => void;
-  onBack?: () => void;
-}) {
-  const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const hasSearchQuery = query.trim().length > 0;
-
-  const visibleOptions = useMemo(
-    () => visibleModelOptionsForPicker(provider, options, recentOptions, query),
-    [options, provider, query, recentOptions],
-  );
-
-  const filtered = useMemo(() => {
-    if (!hasSearchQuery) return visibleOptions;
-    const q = query.trim().toLowerCase();
-    return visibleOptions.filter(
-      (o) =>
-        o.name.toLowerCase().includes(q) ||
-        o.slug.toLowerCase().includes(q) ||
-        o.group?.toLowerCase().includes(q),
-    );
-  }, [hasSearchQuery, query, visibleOptions]);
-
-  const showRecentOptions = Boolean(recentOptions && recentOptions.length > 0 && !hasSearchQuery);
-  const grouped = useMemo(() => groupModelOptions(filtered), [filtered]);
-  const hasVisibleModels = grouped.length > 0;
-  const hasNamedGroups = grouped.some((g) => g.kind === "named");
-  const showEmptyState = !hasVisibleModels && !showRecentOptions;
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  return (
-    <div className="flex flex-col">
-      <Searchbar
-        sticky
-        showSearchIcon={false}
-        backAriaLabel="Back to provider selection"
-        canClear={query.length > 0}
-        onClear={() => {
-          setQuery("");
-          inputRef.current?.focus();
-        }}
-        onClick={() => {
-          inputRef.current?.focus();
-        }}
-        {...(onBack ? { onBack } : {})}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
-          placeholder="Search models"
-          className="min-w-0 flex-1 bg-transparent py-0.5 text-[11px] tracking-tight text-foreground placeholder:text-[11px] placeholder:tracking-tight placeholder:text-muted-foreground/50 focus:outline-none"
-        />
-      </Searchbar>
-
-      {/* Model list — grouped or flat */}
-      <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
-        {showRecentOptions && recentOptions && (
-          <MenuGroup>
-            <MenuGroupLabel>Recently used</MenuGroupLabel>
-            {recentOptions.map((modelOption) => (
-              <MenuRadioItem
-                key={`recent:${provider}:${modelOptionValue(modelOption)}`}
-                value={modelOptionValue(modelOption)}
-              >
-                {modelOption.name}
-              </MenuRadioItem>
-            ))}
-          </MenuGroup>
-        )}
-        {showEmptyState ? (
-          <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
-            No models match &ldquo;{query}&rdquo;
-          </div>
-        ) : hasNamedGroups ? (
-          grouped.map((section) => (
-            <MenuGroup key={section.kind === "named" ? section.group : "__ungrouped"}>
-              {section.kind === "named" && <MenuGroupLabel>{section.group}</MenuGroupLabel>}
-              {section.models.map((modelOption) => (
-                <MenuRadioItem
-                  key={`${provider}:${modelOptionValue(modelOption)}`}
-                  value={modelOptionValue(modelOption)}
-                >
-                  {modelOption.name}
-                </MenuRadioItem>
-              ))}
-            </MenuGroup>
-          ))
-        ) : (
-          hasVisibleModels && (
-            <MenuGroup>
-              {filtered.map((modelOption) => (
-                <MenuRadioItem
-                  key={`${provider}:${modelOptionValue(modelOption)}`}
-                  value={modelOptionValue(modelOption)}
-                >
-                  {modelOption.name}
-                </MenuRadioItem>
-              ))}
-            </MenuGroup>
-          )
-        )}
-      </MenuRadioGroup>
-    </div>
-  );
-}
+export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
+export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
 
 export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   provider: ProviderKind;

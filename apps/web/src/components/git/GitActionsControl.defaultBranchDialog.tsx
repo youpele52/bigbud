@@ -7,7 +7,7 @@ import {
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
-import type { DefaultBranchActionDialogCopy } from "./GitActionsControl.logic";
+import type { DefaultBranchActionDialogCopy } from "./GitActionsControl.state";
 
 interface DefaultBranchDialogProps {
   open: boolean;

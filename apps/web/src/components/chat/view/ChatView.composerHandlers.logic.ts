@@ -2,23 +2,17 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
-  type ApprovalRequestId,
-  type ThreadId,
-  type UserInputQuestion,
 } from "@bigbud/contracts";
 import { useCallback } from "react";
 import {
-  type ComposerTrigger,
   collapseExpandedComposerCursor,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
   replaceTextRange,
 } from "../../../logic/composer";
 import {
-  derivePendingUserInputProgress,
   setPendingUserInputCustomAnswer,
   togglePendingUserInputOptionSelection,
-  type PendingUserInputDraftAnswer,
 } from "../../../logic/user-input";
 import { toastManager } from "../../ui/toast";
 import { randomUUID } from "~/lib/utils";
@@ -26,30 +20,24 @@ import {
   type ComposerImageAttachment,
   type ComposerFileAttachment,
 } from "../../../stores/composer";
-import type { ComposerPromptEditorHandle } from "../composer/ComposerPromptEditor";
+import type {
+  UseAddComposerFilesInput,
+  UseAddComposerImagesInput,
+  UseApplyPromptReplacementInput,
+  UsePendingUserInputHandlersInput,
+  UsePendingUserInputStateResult,
+} from "./ChatView.composerHandlers.types";
+
+export type {
+  UseAddComposerFilesInput,
+  UseAddComposerImagesInput,
+  UseApplyPromptReplacementInput,
+  UsePendingUserInputHandlersInput,
+  UsePendingUserInputStateResult,
+} from "./ChatView.composerHandlers.types";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 const FILE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_FILE_BYTES / (1024 * 1024))}MB`;
-
-export interface UsePendingUserInputStateResult {
-  pendingUserInputAnswersByRequestId: Record<string, Record<string, PendingUserInputDraftAnswer>>;
-  pendingUserInputQuestionIndexByRequestId: Record<string, number>;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
-  setPendingUserInputQuestionIndexByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, number>>
-  >;
-}
-
-export interface UseAddComposerImagesInput {
-  activeThreadId: ThreadId | null;
-  composerImagesRef: React.MutableRefObject<ComposerImageAttachment[]>;
-  pendingUserInputsLength: number;
-  addComposerImage: (image: ComposerImageAttachment) => void;
-  addComposerImagesToDraft: (images: ComposerImageAttachment[]) => void;
-  setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
-}
 
 /** Returns an `addComposerImages` handler bound to the current draft state. */
 export function useAddComposerImages(input: UseAddComposerImagesInput) {
@@ -120,17 +108,6 @@ export function useAddComposerImages(input: UseAddComposerImagesInput) {
       setThreadError,
     ],
   );
-}
-
-export interface UseAddComposerFilesInput {
-  activeThreadId: ThreadId | null;
-  composerFilesRef: React.MutableRefObject<ComposerFileAttachment[]>;
-  composerImagesLength: number;
-  pendingUserInputsLength: number;
-  addComposerFile: (file: ComposerFileAttachment) => void;
-  addComposerFilesToDraft: (files: ComposerFileAttachment[]) => void;
-  setThreadError: (targetThreadId: ThreadId | null, error: string | null) => void;
-  isElectron: boolean;
 }
 
 /** Returns an `addComposerFiles` handler bound to the current draft state. */
@@ -217,20 +194,6 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
   );
 }
 
-export interface UseApplyPromptReplacementInput {
-  promptRef: React.MutableRefObject<string>;
-  setPrompt: (prompt: string) => void;
-  setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
-  setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
-  activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingUserInput: { requestId: string } | null;
-  isOpencodePendingUserInputMode: boolean;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
-  composerEditorRef: React.RefObject<ComposerPromptEditorHandle | null>;
-}
-
 /** Returns an `applyPromptReplacement` helper that edits the composer text in-place. */
 export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput) {
   const {
@@ -300,28 +263,6 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       composerEditorRef,
     ],
   );
-}
-
-export interface UsePendingUserInputHandlersInput {
-  activePendingUserInput: {
-    requestId: ApprovalRequestId;
-    questions: ReadonlyArray<UserInputQuestion>;
-  } | null;
-  activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingResolvedAnswers: Record<string, string | string[]> | null;
-  promptRef: React.MutableRefObject<string>;
-  setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
-  setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
-  setPendingUserInputQuestionIndexByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, number>>
-  >;
-  onRespondToUserInput: (
-    requestId: ApprovalRequestId,
-    answers: Record<string, unknown>,
-  ) => Promise<void>;
 }
 
 /** Returns handlers for interacting with pending user-input prompts. */

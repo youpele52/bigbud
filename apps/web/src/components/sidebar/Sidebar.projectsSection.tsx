@@ -12,7 +12,8 @@ import { ProjectSortMenu, type SortableProjectHandleProps } from "./SidebarProje
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
-import { SidebarRenderedProjectItem, type RenderedProjectData } from "./SidebarRenderedProjectItem";
+import { SidebarRenderedProjectItem } from "./SidebarRenderedProjectItem";
+import { type RenderedProjectData } from "./SidebarRenderedProjectItem.types";
 import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import {

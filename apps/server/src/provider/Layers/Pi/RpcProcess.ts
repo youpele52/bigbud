@@ -39,6 +39,7 @@ export type {
   PiRpcSlashCommand,
   PiRpcStdoutEvent,
   PiRpcStdoutMessage,
+  PiRpcToolResult,
   PiRpcWriteOnlyCommand,
 } from "./RpcProcess.types.ts";
 

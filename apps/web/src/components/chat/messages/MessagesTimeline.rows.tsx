@@ -1,11 +1,5 @@
-import { type ExecutionTargetId, type MessageId, type TurnId } from "@bigbud/contracts";
-import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
-import {
-  type ExpandedImagePreview,
-  buildExpandedImagePreview,
-} from "../common/ExpandedImagePreview";
+import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { Button } from "../../ui/button";
-import { type TurnDiffSummary } from "../../../models/types";
 import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/types/app.types";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
@@ -21,40 +15,13 @@ import {
 import { ThinkingMessageBody } from "./MessagesTimeline.thinking";
 import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
-import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import { cn } from "~/lib/utils";
+import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 
-interface RenderRowContentProps {
-  row: MessagesTimelineRow;
-  expandedWorkGroups: Record<string, boolean>;
-  onToggleWorkGroup: (groupId: string) => void;
-  completionSummary: string | null;
-  turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  changedFilesExpandedByTurnId: Record<string, boolean>;
-  onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
-  onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-  revertTurnCountByUserMessageId: Map<MessageId, number>;
-  onRevertUserMessage: (messageId: MessageId) => void;
-  isRevertingCheckpoint: boolean;
-  onImageExpand: (preview: ExpandedImagePreview) => void;
-  markdownCwd: string | undefined;
-  resolvedTheme: "light" | "dark";
-  nowIso: string;
-  timestampFormat: TimestampFormat;
-  workspaceRoot: string | undefined;
-  workspaceExecutionTargetId?: ExecutionTargetId | undefined;
-  isWorking: boolean;
-  onTimelineImageLoad: () => void;
-  focusedMessageId: MessageId | null;
-  onReplyToMessage: (messageId: MessageId) => void;
-  onOpenReplySource: (messageId: MessageId) => void;
-  onForkThread?: () => void;
-}
-
-export function MessagesTimelineRowContent(props: RenderRowContentProps) {
+export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProps) {
   const {
     row,
     expandedWorkGroups,

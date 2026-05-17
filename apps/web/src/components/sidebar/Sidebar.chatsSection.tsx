@@ -21,7 +21,7 @@ import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
 
-export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 5;
+export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 4;
 
 interface SidebarChatsSectionProps {
   renderedChats: SidebarRenderedThreadEntry[];

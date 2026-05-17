@@ -6,9 +6,7 @@ import {
 } from "@bigbud/contracts";
 import { useCallback, useMemo } from "react";
 
-import { readNativeApi } from "../../../../rpc/nativeApi";
-import { modelSelectionsEqual } from "../ChatView.modelSelection.logic";
-import { newCommandId, newThreadId, randomUUID } from "~/lib/utils";
+import { newThreadId, randomUUID } from "~/lib/utils";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
 import {
   collapseExpandedComposerCursor,
@@ -40,6 +38,7 @@ import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
+import { persistThreadSettingsForNextTurn } from "./chat-view-runtime.persist";
 
 interface ChatViewRuntimeInput {
   base: ChatViewBaseState;
@@ -336,54 +335,18 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     });
   }, [base, thread.activePlan?.turnId, thread.sidebarProposedPlan?.turnId]);
 
-  const persistThreadSettingsForNextTurn = useCallback(
-    async (input: {
+  const persistThreadSettingsForNextTurnCallback = useCallback(
+    (input: {
       threadId: ThreadId;
       createdAt: string;
       modelSelection?: ModelSelection;
       runtimeMode: RuntimeMode;
       interactionMode: ProviderInteractionMode;
-    }) => {
-      if (!base.serverThread) {
-        return;
-      }
-      const api = readNativeApi();
-      if (!api) {
-        return;
-      }
-
-      if (
-        input.modelSelection !== undefined &&
-        !modelSelectionsEqual(input.modelSelection, base.serverThread.modelSelection)
-      ) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          modelSelection: input.modelSelection,
-        });
-      }
-
-      if (input.runtimeMode !== base.serverThread.runtimeMode) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.runtime-mode.set",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          runtimeMode: input.runtimeMode,
-          createdAt: input.createdAt,
-        });
-      }
-
-      if (input.interactionMode !== base.serverThread.interactionMode) {
-        await api.orchestration.dispatchCommand({
-          type: "thread.interaction-mode.set",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          interactionMode: input.interactionMode,
-          createdAt: input.createdAt,
-        });
-      }
-    },
+    }) =>
+      persistThreadSettingsForNextTurn({
+        ...input,
+        serverThread: base.serverThread,
+      }),
     [base.serverThread],
   );
 
@@ -424,7 +387,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     handleInteractionModeChange,
     toggleInteractionMode,
     togglePlanSidebar,
-    persistThreadSettingsForNextTurn,
+    persistThreadSettingsForNextTurn: persistThreadSettingsForNextTurnCallback,
     scrollBehavior,
     envLocked,
   };

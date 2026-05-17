@@ -1,6 +1,6 @@
-import { useCallback, useRef, useState, type MouseEvent } from "react";
+import { useCallback, type MouseEvent } from "react";
 import { FAVORITE_THREAD_LIMIT, type ThreadId } from "@bigbud/contracts";
-import { isMacPlatform, newCommandId } from "../../lib/utils";
+import { isMacPlatform } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
@@ -8,7 +8,9 @@ import { useUpdateSettings } from "../../hooks/useSettings";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
+import { useSidebarThreadDeleteActions } from "./Sidebar.threadActions.delete";
 import { useSidebarThreadClipboardActions } from "./Sidebar.threadActions.clipboard";
+import { useSidebarThreadRenameActions } from "./Sidebar.threadActions.rename";
 import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
@@ -35,88 +37,32 @@ export function useSidebarThreadActions({
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) setOpenMobile(false);
   }, [isMobile, setOpenMobile]);
-
-  const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
-  const [renamingTitle, setRenamingTitle] = useState("");
-  const [pendingDeleteConfirmation, setPendingDeleteConfirmation] = useState<{
-    title: string;
-    description: string;
-    threadIds: readonly ThreadId[];
-  } | null>(null);
-  const renamingCommittedRef = useRef(false);
-  const renamingInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    renamingThreadId,
+    setRenamingThreadId,
+    renamingTitle,
+    setRenamingTitle,
+    renamingCommittedRef,
+    cancelRename,
+    onRenamingInputMount,
+    hasRenameCommitted,
+    markRenameCommitted,
+    commitRename,
+  } = useSidebarThreadRenameActions();
+  const {
+    pendingDeleteConfirmation,
+    setPendingDeleteConfirmation,
+    dismissPendingDeleteConfirmation,
+    requestThreadDelete,
+    confirmPendingDeleteThreads,
+  } = useSidebarThreadDeleteActions({
+    confirmThreadDelete: appSettings.confirmThreadDelete,
+    sidebarThreadsById,
+    deleteThread,
+    removeFromSelection,
+  });
 
   const { copyThreadIdToClipboard, copyPathToClipboard } = useSidebarThreadClipboardActions();
-
-  const cancelRename = useCallback(() => {
-    setRenamingThreadId(null);
-    renamingInputRef.current = null;
-  }, []);
-
-  const onRenamingInputMount = useCallback((element: HTMLInputElement | null) => {
-    if (element && renamingInputRef.current !== element) {
-      renamingInputRef.current = element;
-      element.focus();
-      element.select();
-      return;
-    }
-    if (element === null && renamingInputRef.current !== null) {
-      renamingInputRef.current = null;
-    }
-  }, []);
-
-  const hasRenameCommitted = useCallback(() => renamingCommittedRef.current, []);
-
-  const markRenameCommitted = useCallback(() => {
-    renamingCommittedRef.current = true;
-  }, []);
-
-  const commitRename = useCallback(
-    async (threadId: ThreadId, newTitle: string, originalTitle: string) => {
-      const finishRename = () => {
-        setRenamingThreadId((current) => {
-          if (current !== threadId) return current;
-          renamingInputRef.current = null;
-          return null;
-        });
-      };
-
-      const trimmed = newTitle.trim();
-      if (trimmed.length === 0) {
-        toastManager.add({
-          type: "warning",
-          title: "Thread title cannot be empty",
-        });
-        finishRename();
-        return;
-      }
-      if (trimmed === originalTitle) {
-        finishRename();
-        return;
-      }
-      const api = readNativeApi();
-      if (!api) {
-        finishRename();
-        return;
-      }
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "thread.meta.update",
-          commandId: newCommandId(),
-          threadId,
-          title: trimmed,
-        });
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to rename thread",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-      }
-      finishRename();
-    },
-    [],
-  );
 
   const attemptArchiveThread = useCallback(
     async (threadId: ThreadId) => {
@@ -195,51 +141,6 @@ export function useSidebarThreadActions({
       });
     });
   }, []);
-
-  const dismissPendingDeleteConfirmation = useCallback(() => {
-    setPendingDeleteConfirmation(null);
-  }, []);
-
-  const requestThreadDelete = useCallback(
-    async (threadId: ThreadId) => {
-      const thread = sidebarThreadsById[threadId];
-      if (!thread) {
-        return;
-      }
-
-      if (appSettings.confirmThreadDelete) {
-        setPendingDeleteConfirmation({
-          title: `Delete thread "${thread.title}"?`,
-          description: "This permanently clears conversation history for this thread.",
-          threadIds: [threadId],
-        });
-        return;
-      }
-
-      await deleteThread(threadId);
-    },
-    [appSettings.confirmThreadDelete, deleteThread, sidebarThreadsById],
-  );
-
-  const confirmPendingDeleteThreads = useCallback(async () => {
-    if (!pendingDeleteConfirmation) {
-      return;
-    }
-
-    const ids = [...pendingDeleteConfirmation.threadIds];
-    setPendingDeleteConfirmation(null);
-
-    if (ids.length === 1) {
-      await deleteThread(ids[0]!);
-      return;
-    }
-
-    const deletedIds = new Set<ThreadId>(ids);
-    for (const id of ids) {
-      await deleteThread(id, { deletedThreadIds: deletedIds });
-    }
-    removeFromSelection(ids);
-  }, [deleteThread, pendingDeleteConfirmation, removeFromSelection]);
 
   const navigateToThread = useCallback(
     (threadId: ThreadId) => {
@@ -384,6 +285,9 @@ export function useSidebarThreadActions({
       markThreadUnread,
       projectCwdById,
       requestThreadDelete,
+      renamingCommittedRef,
+      setRenamingThreadId,
+      setRenamingTitle,
       sidebarThreadsById,
       toggleFavoriteThread,
     ],
@@ -438,6 +342,7 @@ export function useSidebarThreadActions({
       markThreadUnread,
       removeFromSelection,
       selectedThreadIds,
+      setPendingDeleteConfirmation,
       sidebarThreadsById,
     ],
   );

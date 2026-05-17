@@ -21,7 +21,7 @@ import { MessageCopyButton } from "../common/MessageCopyButton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
-import { getPassphraseProtectedSshKeyPath } from "../../../lib/ssh";
+import { getPassphraseProtectedSshKeyPath, getSshAuthFailureToastTitle } from "../../../lib/ssh";
 import { SidebarUnlockSshKeyDialog } from "../../sidebar/SidebarUnlockSshKeyDialog";
 import { toastManager } from "../../ui/toast";
 
@@ -202,9 +202,13 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
         description: "Retry the turn now that the remote SSH key is available.",
       });
     } catch (error) {
-      setSshKeyUnlockError(
-        error instanceof Error ? error.message : "Failed to unlock the SSH key.",
-      );
+      const errorMessage = error instanceof Error ? error.message : "Failed to unlock the SSH key.";
+      setSshKeyUnlockError(errorMessage);
+      toastManager.add({
+        type: "error",
+        title: getSshAuthFailureToastTitle("ssh-key-passphrase"),
+        description: errorMessage,
+      });
     } finally {
       setIsUnlockingSshKey(false);
     }

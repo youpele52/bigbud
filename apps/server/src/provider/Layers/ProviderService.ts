@@ -10,16 +10,14 @@
  * @module ProviderServiceLive
  */
 import {
-  LOCAL_EXECUTION_TARGET_ID,
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderSendTurnInput,
-  ProviderSessionStartInput,
   ProviderStopSessionInput,
   type ProviderRuntimeEvent,
 } from "@bigbud/contracts";
-import { Effect, Layer, Option, PubSub, Stream } from "effect";
+import { Effect, Layer, PubSub, Stream } from "effect";
 
 import {
   increment,
@@ -37,8 +35,9 @@ import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.t
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { toValidationError, decodeInputOrValidationError } from "./ProviderServiceHelpers.ts";
+import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
 import type { ProviderServiceError } from "../Errors.ts";
+import { makeStartSessionInternal } from "./ProviderService.startSession.ts";
 import {
   makeRecoverSessionForThread,
   makeResolveRoutableSession,
@@ -52,12 +51,6 @@ import {
   makeStopStaleSessionsForThread,
   makeUpsertSessionBinding,
 } from "./ProviderService.sessionLifecycle.ts";
-import {
-  formatUnsupportedProviderExecutionTargetDetail,
-  supportsProviderExecutionTarget,
-} from "../providerExecutionTargets.ts";
-import { getProviderCapabilities } from "../providerCapabilities.ts";
-import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -117,124 +110,22 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const stopStaleSessionsForThread = makeStopStaleSessionsForThread(adapters, analytics);
 
-  const startSessionInternal = (options?: {
-    readonly reusePersistedResumeCursor?: boolean;
-  }): ProviderServiceShape["startSession"] =>
-    Effect.fn("startSession")(function* (threadId, rawInput) {
-      const parsed = yield* decodeInputOrValidationError({
-        operation: "ProviderService.startSession",
-        schema: ProviderSessionStartInput,
-        payload: rawInput,
-      });
-      const persistedBinding = Option.getOrUndefined(yield* directory.getBinding(threadId));
-
-      const provider = parsed.provider ?? "codex";
-      const workspaceDefaultExecutionTargetId =
-        persistedBinding?.workspaceExecutionTargetId ??
-        persistedBinding?.executionTargetId ??
-        LOCAL_EXECUTION_TARGET_ID;
-      const input = {
-        ...parsed,
-        threadId,
-        provider,
-        ...resolveProviderSessionExecutionTargets({
-          providerRuntimeExecutionTargetId: parsed.providerRuntimeExecutionTargetId,
-          workspaceExecutionTargetId: parsed.workspaceExecutionTargetId,
-          executionTargetId: parsed.executionTargetId,
-          useLegacyExecutionTargetForProviderRuntime:
-            !getProviderCapabilities(provider).supportsLocalRuntimeRemoteWorkspace,
-          defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(provider)
-            .supportsLocalRuntimeRemoteWorkspace
-            ? LOCAL_EXECUTION_TARGET_ID
-            : (persistedBinding?.providerRuntimeExecutionTargetId ??
-              persistedBinding?.executionTargetId ??
-              workspaceDefaultExecutionTargetId),
-          defaultWorkspaceExecutionTargetId: workspaceDefaultExecutionTargetId,
-        }),
-      };
-      yield* Effect.annotateCurrentSpan({
-        "provider.operation": "start-session",
-        "provider.kind": input.provider,
-        "provider.thread_id": threadId,
-        "provider.runtime_mode": input.runtimeMode,
-      });
-      return yield* Effect.gen(function* () {
-        if (
-          !supportsProviderExecutionTarget({
-            provider: input.provider,
-            executionTargetId: input.providerRuntimeExecutionTargetId,
-          })
-        ) {
-          return yield* toValidationError(
-            "ProviderService.startSession",
-            formatUnsupportedProviderExecutionTargetDetail({
-              provider: input.provider,
-              executionTargetId: input.providerRuntimeExecutionTargetId,
-              surface: "Provider sessions",
-            }),
-          );
-        }
-        const settings = yield* serverSettings.getSettings.pipe(
-          Effect.mapError((error) =>
-            toValidationError(
-              "ProviderService.startSession",
-              `Failed to load provider settings: ${error.message}`,
-              error,
-            ),
-          ),
-        );
-        if (!settings.providers[input.provider].enabled) {
-          return yield* toValidationError(
-            "ProviderService.startSession",
-            `Provider '${input.provider}' is disabled in bigbud settings.`,
-          );
-        }
-        const effectiveResumeCursor =
-          input.resumeCursor ??
-          (options?.reusePersistedResumeCursor !== false &&
-          persistedBinding?.provider === input.provider
-            ? persistedBinding.resumeCursor
-            : undefined);
-        const adapter = yield* registry.getByProvider(input.provider);
-        const session = yield* adapter.startSession({
-          ...input,
-          ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
-        });
-
-        if (session.provider !== adapter.provider) {
-          return yield* toValidationError(
-            "ProviderService.startSession",
-            `Adapter/provider mismatch: requested '${adapter.provider}', received '${session.provider}'.`,
-          );
-        }
-
-        yield* stopStaleSessionsForThread({
-          threadId,
-          currentProvider: adapter.provider,
-        });
-        yield* upsertSessionBinding(session, threadId, { modelSelection: input.modelSelection });
-        yield* analytics.record("provider.session.started", {
-          provider: session.provider,
-          runtimeMode: input.runtimeMode,
-          hasResumeCursor: session.resumeCursor !== undefined,
-          hasCwd: typeof input.cwd === "string" && input.cwd.trim().length > 0,
-          hasModel:
-            typeof input.modelSelection?.model === "string" &&
-            input.modelSelection.model.trim().length > 0,
-        });
-
-        return session;
-      }).pipe(
-        withMetrics({
-          counter: providerSessionsTotal,
-          attributes: providerMetricAttributes(input.provider, { operation: "start" }),
-        }),
-      );
-    });
-
-  const startSession: ProviderServiceShape["startSession"] = startSessionInternal();
-  const startSessionFresh: ProviderServiceShape["startSessionFresh"] = startSessionInternal({
-    reusePersistedResumeCursor: false,
+  const startSession: ProviderServiceShape["startSession"] = makeStartSessionInternal({
+    registry,
+    directory,
+    upsertSessionBinding,
+    analytics,
+    serverSettings,
+    stopStaleSessionsForThread,
+  });
+  const startSessionFresh: ProviderServiceShape["startSessionFresh"] = makeStartSessionInternal({
+    registry,
+    directory,
+    upsertSessionBinding,
+    analytics,
+    serverSettings,
+    stopStaleSessionsForThread,
+    options: { reusePersistedResumeCursor: false },
   });
 
   const sendTurn: ProviderServiceShape["sendTurn"] = Effect.fn("sendTurn")(function* (rawInput) {

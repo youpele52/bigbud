@@ -24,7 +24,7 @@ import {
   ClaudeCodeEffort,
 } from "@bigbud/contracts";
 import { resolveApiModelId, resolveEffort } from "@bigbud/shared/model";
-import { Cause, Effect, FileSystem, Fiber, Queue, Random, Ref, Stream } from "effect";
+import { Cause, Effect, FileSystem, Queue, Random, Ref, Stream } from "effect";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
@@ -44,13 +44,13 @@ import { PROVIDER } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import { makeApprovalHandlers } from "./Adapter.approval.ts";
 import { createClaudeRemoteWorkspaceBridge } from "./ClaudeRemoteWorkspaceBridge.ts";
+import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
 import {
   asCanonicalTurnId,
   getEffectiveClaudeCodeEffort,
   readClaudeResumeState,
   sdkNativeItemId,
   sdkNativeMethod,
-  toError,
   toMessage,
   CLAUDE_SETTING_SOURCES,
 } from "./Adapter.utils.ts";
@@ -143,6 +143,12 @@ export const makeStartSession = (deps: SessionStartDeps) => {
   } = deps;
 
   const logNativeSdkMessage = makeLogNativeSdkMessage(deps);
+  const emitRuntimeEvents = emitSessionRuntimeEvents({ makeEventStamp, offerRuntimeEvent });
+  const startRuntimeStream = startSessionRuntimeStream({
+    makeEventStamp,
+    offerRuntimeEvent,
+    streamHandlers,
+  });
 
   return Effect.fn("startSession")(function* (input: ProviderSessionStartInput) {
     if (input.provider !== undefined && input.provider !== PROVIDER) {
@@ -346,83 +352,17 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     yield* Ref.set(contextRef, context);
     sessions.set(threadId, context);
 
-    const sessionStartedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
-      type: "session.started",
-      eventId: sessionStartedStamp.eventId,
-      provider: PROVIDER,
-      createdAt: sessionStartedStamp.createdAt,
+    yield* emitRuntimeEvents({
       threadId,
-      payload: input.resumeCursor !== undefined ? { resume: input.resumeCursor } : {},
-      providerRefs: {},
+      resumeCursor: input.resumeCursor,
+      apiModelId,
+      cwd: input.cwd,
+      effectiveEffort: effectiveEffort ?? undefined,
+      permissionMode,
+      fastMode,
     });
 
-    const configuredStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
-      type: "session.configured",
-      eventId: configuredStamp.eventId,
-      provider: PROVIDER,
-      createdAt: configuredStamp.createdAt,
-      threadId,
-      payload: {
-        config: {
-          ...(apiModelId ? { model: apiModelId } : {}),
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          ...(effectiveEffort ? { effort: effectiveEffort } : {}),
-          ...(permissionMode ? { permissionMode } : {}),
-          ...(fastMode ? { fastMode: true } : {}),
-        },
-      },
-      providerRefs: {},
-    });
-
-    const readyStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
-      type: "session.state.changed",
-      eventId: readyStamp.eventId,
-      provider: PROVIDER,
-      createdAt: readyStamp.createdAt,
-      threadId,
-      payload: {
-        state: "ready",
-      },
-      providerRefs: {},
-    });
-
-    const wrappedHandleSdkMessage = Effect.fn("wrappedHandleSdkMessage")(function* (
-      message: SDKMessage,
-    ) {
-      yield* logNativeSdkMessage(context, message);
-      yield* streamHandlers.handleSdkMessage(context, message);
-    });
-
-    let streamFiber: Fiber.Fiber<void, never>;
-    const sdkStream = Stream.fromAsyncIterable(context.query, (cause) =>
-      toError(cause, "Claude runtime stream failed."),
-    ).pipe(
-      Stream.takeWhile(() => !context.stopped),
-      Stream.runForEach((message) => wrappedHandleSdkMessage(message)),
-    );
-
-    streamFiber = runFork(
-      Effect.exit(sdkStream).pipe(
-        Effect.flatMap((exit) => {
-          if (context.stopped) {
-            return Effect.void;
-          }
-          if (context.streamFiber === streamFiber) {
-            context.streamFiber = undefined;
-          }
-          return streamHandlers.handleStreamExit(context, exit);
-        }),
-      ),
-    );
-    context.streamFiber = streamFiber;
-    streamFiber.addObserver(() => {
-      if (context.streamFiber === streamFiber) {
-        context.streamFiber = undefined;
-      }
-    });
+    yield* startRuntimeStream({ context, logNativeSdkMessage, runFork });
 
     return {
       ...session,

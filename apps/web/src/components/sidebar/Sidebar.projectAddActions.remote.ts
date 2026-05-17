@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
 
+import { toastManager } from "../ui/toast";
 import { readNativeApi } from "../../rpc/nativeApi";
 import {
   getPassphraseProtectedSshKeyPath,
   getPasswordProtectedSshTargetLabel,
+  getSshAuthFailureToastTitle,
 } from "../../lib/ssh";
 import {
   createDefaultRemoteProjectDraft,
@@ -299,13 +301,20 @@ export function useSidebarRemoteProjectAddActions({
 
       await submitRemoteProject();
     } catch (error) {
-      setRemoteProjectUnlockError(
+      const errorMessage =
         error instanceof Error
           ? error.message
           : remoteProjectUnlockMode === "password"
             ? "Failed to unlock the SSH password session."
-            : "Failed to unlock the SSH key.",
-      );
+            : "Failed to unlock the SSH key.";
+      setRemoteProjectUnlockError(errorMessage);
+      if (remoteProjectUnlockMode) {
+        toastManager.add({
+          type: "error",
+          title: getSshAuthFailureToastTitle(remoteProjectUnlockMode),
+          description: errorMessage,
+        });
+      }
     } finally {
       setIsUnlockingRemoteProjectKey(false);
     }

@@ -6,21 +6,13 @@
  *
  * @module CodexAdapter.session
  */
-import {
-  LOCAL_EXECUTION_TARGET_ID,
-  type ProviderEvent,
-  type ProviderSendTurnInput,
-  ThreadId,
-} from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
 import { Effect, FileSystem, Queue, Stream } from "effect";
 
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
-  ProviderAdapterSessionClosedError,
-  ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
-  type ProviderAdapterError,
 } from "../../Errors.ts";
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
 import {
@@ -41,42 +33,8 @@ import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLog
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
+import { makeResolveAttachment, toRequestError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
-
-function toSessionError(
-  threadId: ThreadId,
-  cause: unknown,
-): ProviderAdapterSessionNotFoundError | ProviderAdapterSessionClosedError | undefined {
-  const normalized = toMessage(cause, "").toLowerCase();
-  if (normalized.includes("unknown session") || normalized.includes("unknown provider session")) {
-    return new ProviderAdapterSessionNotFoundError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  if (normalized.includes("session is closed")) {
-    return new ProviderAdapterSessionClosedError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  return undefined;
-}
-
-function toRequestError(threadId: ThreadId, method: string, cause: unknown): ProviderAdapterError {
-  const sessionError = toSessionError(threadId, cause);
-  if (sessionError) {
-    return sessionError;
-  }
-  return new ProviderAdapterRequestError({
-    provider: PROVIDER,
-    method,
-    detail: toMessage(cause, `${method} failed`),
-    cause,
-  });
-}
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
@@ -110,6 +68,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
+  const resolveAttachment = makeResolveAttachment({
+    fileSystem,
+    attachmentsDir: serverConfig.attachmentsDir,
+  });
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -211,44 +173,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       );
     },
   );
-
-  const resolveAttachment = Effect.fn("resolveAttachment")(function* (
-    input: ProviderSendTurnInput,
-    attachment: NonNullable<ProviderSendTurnInput["attachments"]>[number],
-  ) {
-    const attachmentPath = resolveAttachmentPath({
-      attachmentsDir: serverConfig.attachmentsDir,
-      attachment,
-    });
-    if (!attachmentPath) {
-      return yield* toRequestError(
-        input.threadId,
-        "turn/start",
-        new Error(`Invalid attachment id '${attachment.id}'.`),
-      );
-    }
-    const bytes = yield* fileSystem.readFile(attachmentPath).pipe(
-      Effect.mapError(
-        (cause) =>
-          new ProviderAdapterRequestError({
-            provider: PROVIDER,
-            method: "turn/start",
-            detail: toMessage(cause, "Failed to read attachment file."),
-            cause,
-          }),
-      ),
-    );
-    if (attachment.type === "file") {
-      return {
-        type: "file" as const,
-        url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
-      };
-    }
-    return {
-      type: "image" as const,
-      url: `data:${attachment.mimeType};base64,${Buffer.from(bytes).toString("base64")}`,
-    };
-  });
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];

@@ -21,3 +21,7 @@ export function getPasswordProtectedSshTargetLabel(
   );
   return match?.[1] ?? null;
 }
+
+export function getSshAuthFailureToastTitle(authMode: "password" | "ssh-key-passphrase"): string {
+  return authMode === "password" ? "SSH login failed" : "SSH key unlock failed";
+}

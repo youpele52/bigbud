@@ -2,7 +2,11 @@ import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { readNativeApi } from "../rpc/nativeApi";
-import { getPassphraseProtectedSshKeyPath, getPasswordProtectedSshTargetLabel } from "../lib/ssh";
+import {
+  getPassphraseProtectedSshKeyPath,
+  getPasswordProtectedSshTargetLabel,
+  getSshAuthFailureToastTitle,
+} from "../lib/ssh";
 import { toastManager } from "../components/ui/toast";
 import {
   type RemoteExecutionAuthMode,
@@ -220,6 +224,11 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       const requirement = resolveRemoteExecutionAuthRequirement(errorMessage);
       if (requirement && requirement.authMode === remoteExecutionAuthMode) {
         setRemoteExecutionAuthError(errorMessage);
+        toastManager.add({
+          type: "error",
+          title: getSshAuthFailureToastTitle(remoteExecutionAuthMode),
+          description: errorMessage,
+        });
         return;
       }
 

@@ -11,9 +11,9 @@ import {
   buildGitActionProgressStages,
   type DefaultBranchConfirmableAction,
   requiresDefaultBranchConfirmation,
-  resolveProgressDescription,
   resolveThreadBranchUpdate,
 } from "./GitActionsControl.logic";
+import { resolveProgressDescription } from "./GitActionsControl.progress";
 import { toastManager, type ThreadToastData } from "~/components/ui/toast";
 import { gitMutationKeys, gitRunStackedActionMutationOptions } from "~/lib/gitReactQuery";
 import { newCommandId, randomUUID } from "~/lib/utils";

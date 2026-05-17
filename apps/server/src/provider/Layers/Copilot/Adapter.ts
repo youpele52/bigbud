@@ -9,45 +9,24 @@
  *
  * @module CopilotAdapter
  */
-import {
-  EventId,
-  ThreadId,
-  TurnId,
-  type ProviderRuntimeEvent,
-  type ProviderSendTurnInput,
-  type ProviderSession,
-  type UserInputQuestion,
-} from "@bigbud/contracts";
-import {
-  type PermissionRequestResult,
-  type SessionConfig,
-  type SessionEvent,
-} from "@github/copilot-sdk";
+import { EventId, ThreadId, TurnId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { type SessionEvent } from "@github/copilot-sdk";
 import { Effect, Layer, Queue, Random, Stream } from "effect";
-import { randomUUID } from "node:crypto";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { ProviderAdapterRequestError, ProviderAdapterSessionNotFoundError } from "../../Errors.ts";
 import { CopilotAdapter, type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
-import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
+import { buildSessionConfig } from "./Adapter.session.config.ts";
 import {
   PROVIDER,
   USER_INPUT_QUESTION_ID,
   type ActiveCopilotSession,
   type CopilotAdapterLiveOptions,
-  type CopilotUserInputRequest,
-  type CopilotUserInputResponse,
-  type PendingApprovalRequest,
-  type PendingUserInputRequest,
   approvalDecisionToPermissionResult,
   eventBase,
-  getCopilotSessionApprovalMetadata,
-  isCopilotModelSelection,
   normalizeUsage,
-  requestDetailFromPermissionRequest,
-  requestTypeFromPermissionRequest,
 } from "./Adapter.types.ts";
 import { mapEvent, type MapEventDeps } from "./Adapter.mapEvent.ts";
 import {
@@ -200,161 +179,6 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     }
   });
 
-  const buildSessionConfig = (
-    input: {
-      threadId: ThreadId;
-      runtimeMode: ProviderSession["runtimeMode"];
-      cwd?: string;
-      modelSelection?: ProviderSendTurnInput["modelSelection"] | ProviderSession["resumeCursor"];
-      sessionConfigOverrides?: Partial<SessionConfig>;
-    },
-    pendingApprovals: Map<string, PendingApprovalRequest>,
-    pendingUserInputs: Map<string, PendingUserInputRequest>,
-    activeTurnId: () => TurnId | undefined,
-    stoppedRef: { stopped: boolean },
-  ): SessionConfig => {
-    const systemMessage = input.sessionConfigOverrides?.systemMessage;
-
-    return {
-      ...(isCopilotModelSelection(input.modelSelection)
-        ? {
-            model: input.modelSelection.model,
-            ...(input.modelSelection.options?.reasoningEffort
-              ? { reasoningEffort: input.modelSelection.options.reasoningEffort }
-              : {}),
-          }
-        : {}),
-      ...(input.cwd ? { workingDirectory: input.cwd } : {}),
-      streaming: true,
-      systemMessage: {
-        mode: "append",
-        content:
-          "You have access to a Chromium browser in this environment. " +
-          "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
-          "Prefer codebase inspection first when the task is local-only. " +
-          "Summarize what was verified, including URL and important observations. " +
-          "Avoid unnecessary browser use when terminal or file tools are sufficient." +
-          (systemMessage?.content ? ` ${systemMessage.content}` : ""),
-      },
-      ...(input.sessionConfigOverrides?.excludedTools
-        ? { excludedTools: input.sessionConfigOverrides.excludedTools }
-        : {}),
-      ...(input.sessionConfigOverrides?.tools ? { tools: input.sessionConfigOverrides.tools } : {}),
-      ...(input.sessionConfigOverrides?.mcpServers
-        ? { mcpServers: input.sessionConfigOverrides.mcpServers }
-        : {}),
-      ...(input.sessionConfigOverrides?.createSessionFsHandler
-        ? { createSessionFsHandler: input.sessionConfigOverrides.createSessionFsHandler }
-        : {}),
-      onPermissionRequest: (request) => {
-        return new Promise<PermissionRequestResult>((resolve) => {
-          const requestId = randomUUID();
-          const currentTurnId = activeTurnId();
-          const requestType = requestTypeFromPermissionRequest(request);
-          const requestDetail = requestDetailFromPermissionRequest(request);
-          const sessionApproval = getCopilotSessionApprovalMetadata(request);
-          pendingApprovals.set(requestId, {
-            request,
-            requestType,
-            turnId: currentTurnId,
-            resolve,
-          });
-
-          void makeSyntheticEvent(
-            input.threadId,
-            "request.opened",
-            {
-              requestType,
-              ...(requestDetail ? { detail: requestDetail } : {}),
-              args: request,
-              sessionApprovalAvailable: sessionApproval.available,
-              ...(sessionApproval.label ? { sessionApprovalLabel: sessionApproval.label } : {}),
-              ...(input.runtimeMode === "full-access"
-                ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
-                : {}),
-            },
-            {
-              ...(currentTurnId ? { turnId: currentTurnId } : {}),
-              requestId,
-            },
-          )
-            .pipe(
-              Effect.flatMap((event) => emit([event])),
-              Effect.runPromise,
-            )
-            .catch(() => undefined);
-
-          if (input.runtimeMode === "full-access") {
-            void Effect.gen(function* () {
-              yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
-              if (stoppedRef.stopped) {
-                return;
-              }
-              const pending = pendingApprovals.get(requestId);
-              if (!pending) {
-                return;
-              }
-
-              pendingApprovals.delete(requestId);
-              pending.resolve({ kind: "approve-once" });
-
-              const event = yield* makeSyntheticEvent(
-                input.threadId,
-                "request.resolved",
-                {
-                  requestType,
-                  decision: "accept",
-                },
-                {
-                  ...(currentTurnId ? { turnId: currentTurnId } : {}),
-                  requestId,
-                },
-              );
-              yield* emit([event]);
-            })
-              .pipe(Effect.runPromise)
-              .catch(() => undefined);
-          }
-        });
-      },
-      onUserInputRequest: (request: CopilotUserInputRequest, _invocation) =>
-        new Promise<CopilotUserInputResponse>((resolve) => {
-          const requestId = randomUUID();
-          const currentTurnId = activeTurnId();
-          pendingUserInputs.set(requestId, {
-            turnId: currentTurnId,
-            choices: request.choices ?? [],
-            resolve,
-          });
-
-          const question: UserInputQuestion = {
-            id: USER_INPUT_QUESTION_ID,
-            header: "Question",
-            question: request.question,
-            options: (request.choices ?? []).map((choice: string) => ({
-              label: choice,
-              description: choice,
-            })),
-          };
-
-          void makeSyntheticEvent(
-            input.threadId,
-            "user-input.requested",
-            { questions: [question] },
-            {
-              ...(currentTurnId ? { turnId: currentTurnId } : {}),
-              requestId,
-            },
-          )
-            .pipe(
-              Effect.flatMap((event) => emit([event])),
-              Effect.runPromise,
-            )
-            .catch(() => undefined);
-        }),
-    };
-  };
-
   const sessionDeps: SessionOpsDeps = {
     sessions,
     serverConfig: { attachmentsDir: serverConfig.attachmentsDir },
@@ -364,7 +188,16 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     // Cast: the generic overload is compatible at runtime; TS can't verify generic → non-generic assignment.
     // biome-ignore lint/suspicious/noExplicitAny: generic→non-generic function covariance
     makeSyntheticEvent: makeSyntheticEvent as any,
-    buildSessionConfig,
+    buildSessionConfig: (input, pendingApprovals, pendingUserInputs, activeTurnId, stoppedRef) =>
+      buildSessionConfig({
+        ...input,
+        pendingApprovals,
+        pendingUserInputs,
+        activeTurnId,
+        stoppedRef,
+        emit,
+        makeSyntheticEvent: makeSyntheticEvent as SessionOpsDeps["makeSyntheticEvent"],
+      }),
     handleEvent,
     requireSession,
   };

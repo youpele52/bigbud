@@ -5,222 +5,47 @@ import {
   EventId,
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
+  type ProviderSession,
   RuntimeSessionId,
-  ProviderSession,
   ProviderTurnStartResult,
   ThreadId,
   TurnId,
-  ProviderKind,
 } from "@bigbud/contracts";
 import { Effect, Queue, Stream } from "effect";
 
 import {
-  ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
   type ProviderAdapterError,
 } from "../src/provider/Errors.ts";
 import type {
   ProviderAdapterShape,
-  ProviderThreadSnapshot,
   ProviderThreadTurnSnapshot,
 } from "../src/provider/Services/ProviderAdapter.ts";
+import {
+  normalizeFixtureEvent,
+  type FixtureProviderRuntimeEvent,
+  type LegacyProviderRuntimeEvent,
+} from "./TestProviderAdapter.integration.fixtureEvents.ts";
+import {
+  missingSessionEffect,
+  nowIso,
+  sessionNotFound,
+} from "./TestProviderAdapter.integration.session.ts";
+import type {
+  MakeTestProviderAdapterHarnessOptions,
+  SessionState,
+  TestProviderAdapterHarness,
+  TestTurnResponse,
+} from "./TestProviderAdapter.integration.types.ts";
 
-export interface TestTurnResponse {
-  readonly events: ReadonlyArray<FixtureProviderRuntimeEvent>;
-  readonly mutateWorkspace?: (input: {
-    readonly cwd: string;
-    readonly turnCount: number;
-  }) => Effect.Effect<void, never>;
-}
-
-export type FixtureProviderRuntimeEvent = {
-  readonly type: string;
-  readonly eventId: EventId;
-  readonly provider: ProviderKind;
-  readonly createdAt: string;
-  readonly threadId: string;
-  readonly turnId?: string | undefined;
-  readonly itemId?: string | undefined;
-  readonly requestId?: string | undefined;
-  readonly payload?: unknown | undefined;
-  readonly [key: string]: unknown;
-};
-
-// Temporary alias while fixtures migrate to the new name.
-export type LegacyProviderRuntimeEvent = FixtureProviderRuntimeEvent;
-
-interface SessionState {
-  readonly session: ProviderSession;
-  snapshot: ProviderThreadSnapshot;
-  turnCount: number;
-  readonly queuedResponses: Array<TestTurnResponse>;
-  readonly rollbackCalls: Array<number>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function normalizeTurnState(value: unknown): "completed" | "failed" | "interrupted" | "cancelled" {
-  if (
-    value === "completed" ||
-    value === "failed" ||
-    value === "interrupted" ||
-    value === "cancelled"
-  ) {
-    return value;
-  }
-  return "completed";
-}
-
-function mapRequestType(
-  requestKind: unknown,
-): "command_execution_approval" | "file_change_approval" | "unknown" {
-  if (requestKind === "command") {
-    return "command_execution_approval";
-  }
-  if (requestKind === "file-change") {
-    return "file_change_approval";
-  }
-  return "unknown";
-}
-
-function mapItemType(toolKind: unknown): "command_execution" | "file_change" | "unknown" {
-  if (toolKind === "command") {
-    return "command_execution";
-  }
-  if (toolKind === "file-change") {
-    return "file_change";
-  }
-  return "unknown";
-}
-
-function normalizeFixtureEvent(rawEvent: Record<string, unknown>): ProviderRuntimeEvent {
-  const type = typeof rawEvent.type === "string" ? rawEvent.type : "";
-  switch (type) {
-    case "turn.started":
-      return {
-        ...rawEvent,
-        type: "turn.started",
-        payload: isRecord(rawEvent.payload) ? rawEvent.payload : {},
-      } as ProviderRuntimeEvent;
-    case "turn.completed":
-      return {
-        ...rawEvent,
-        type: "turn.completed",
-        payload: isRecord(rawEvent.payload)
-          ? rawEvent.payload
-          : {
-              state: normalizeTurnState(rawEvent.status),
-            },
-      } as ProviderRuntimeEvent;
-    case "message.delta":
-      return {
-        ...rawEvent,
-        type: "content.delta",
-        payload: {
-          streamKind: "assistant_text",
-          delta: typeof rawEvent.delta === "string" ? rawEvent.delta : "",
-        },
-      } as ProviderRuntimeEvent;
-    case "message.completed":
-      return {
-        ...rawEvent,
-        type: "item.completed",
-        payload: {
-          itemType: "assistant_message",
-          ...(typeof rawEvent.detail === "string" ? { detail: rawEvent.detail } : {}),
-        },
-      } as ProviderRuntimeEvent;
-    case "tool.started":
-      return {
-        ...rawEvent,
-        type: "item.started",
-        payload: {
-          itemType: mapItemType(rawEvent.toolKind),
-          ...(typeof rawEvent.title === "string" ? { title: rawEvent.title } : {}),
-          ...(typeof rawEvent.detail === "string" ? { detail: rawEvent.detail } : {}),
-        },
-      } as ProviderRuntimeEvent;
-    case "tool.completed":
-      return {
-        ...rawEvent,
-        type: "item.completed",
-        payload: {
-          itemType: mapItemType(rawEvent.toolKind),
-          status: "completed",
-          ...(typeof rawEvent.title === "string" ? { title: rawEvent.title } : {}),
-          ...(typeof rawEvent.detail === "string" ? { detail: rawEvent.detail } : {}),
-        },
-      } as ProviderRuntimeEvent;
-    case "approval.requested":
-      return {
-        ...rawEvent,
-        type: "request.opened",
-        payload: {
-          requestType: mapRequestType(rawEvent.requestKind),
-          ...(typeof rawEvent.detail === "string" ? { detail: rawEvent.detail } : {}),
-        },
-      } as ProviderRuntimeEvent;
-    case "approval.resolved":
-      return {
-        ...rawEvent,
-        type: "request.resolved",
-        payload: {
-          requestType: mapRequestType(rawEvent.requestKind),
-          ...(typeof rawEvent.decision === "string" ? { decision: rawEvent.decision } : {}),
-        },
-      } as ProviderRuntimeEvent;
-    default:
-      return rawEvent as ProviderRuntimeEvent;
-  }
-}
-
-export interface TestProviderAdapterHarness {
-  readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
-  readonly provider: ProviderKind;
-  readonly queueTurnResponse: (
-    threadId: ThreadId,
-    response: TestTurnResponse,
-  ) => Effect.Effect<void, ProviderAdapterSessionNotFoundError>;
-  readonly queueTurnResponseForNextSession: (
-    response: TestTurnResponse,
-  ) => Effect.Effect<void, never>;
-  readonly getStartCount: () => number;
-  readonly getRollbackCalls: (threadId: ThreadId) => ReadonlyArray<number>;
-  readonly getInterruptCalls: (threadId: ThreadId) => ReadonlyArray<TurnId | undefined>;
-  readonly listActiveSessionIds: () => ReadonlyArray<ThreadId>;
-  readonly getApprovalResponses: (threadId: ThreadId) => ReadonlyArray<{
-    readonly threadId: ThreadId;
-    readonly requestId: ApprovalRequestId;
-    readonly decision: ProviderApprovalDecision;
-  }>;
-}
-
-interface MakeTestProviderAdapterHarnessOptions {
-  readonly provider?: ProviderKind;
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function sessionNotFound(
-  provider: ProviderKind,
-  threadId: ThreadId,
-): ProviderAdapterSessionNotFoundError {
-  return new ProviderAdapterSessionNotFoundError({
-    provider,
-    threadId: String(threadId),
-  });
-}
-
-function missingSessionEffect(
-  provider: ProviderKind,
-  threadId: ThreadId,
-): Effect.Effect<never, ProviderAdapterError> {
-  return Effect.fail(sessionNotFound(provider, threadId));
-}
+export type {
+  FixtureProviderRuntimeEvent,
+  LegacyProviderRuntimeEvent,
+} from "./TestProviderAdapter.integration.fixtureEvents.ts";
+export type {
+  TestProviderAdapterHarness,
+  TestTurnResponse,
+} from "./TestProviderAdapter.integration.types.ts";
 
 export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapterHarnessOptions) =>
   Effect.gen(function* () {
@@ -494,7 +319,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
     const queueTurnResponse = (
       threadId: ThreadId,
       response: TestTurnResponse,
-    ): Effect.Effect<void, ProviderAdapterSessionNotFoundError> =>
+    ): ReturnType<TestProviderAdapterHarness["queueTurnResponse"]> =>
       Effect.sync(() => sessions.get(threadId)).pipe(
         Effect.flatMap((state) =>
           state

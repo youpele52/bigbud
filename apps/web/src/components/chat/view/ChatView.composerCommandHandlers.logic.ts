@@ -1,4 +1,3 @@
-import { type ProviderInteractionMode, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useCallback } from "react";
 import {
   collapseExpandedComposerCursor,
@@ -6,85 +5,16 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
 } from "../../../logic/composer";
-import {
-  derivePendingUserInputProgress,
-  type PendingUserInputDraftAnswer,
-} from "../../../logic/user-input";
-import { type TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ComposerCommandItem } from "../composer/ComposerCommandMenu";
-import type { ComposerPromptEditorHandle } from "../composer/ComposerPromptEditor";
 import { readBangShellInput } from "./ChatView.logic";
+import {
+  extendReplacementRangeForTrailingSpace,
+  syncTerminalContextsByIds,
+  terminalContextIdListsEqual,
+} from "./ChatView.composerCommandHandlers.helpers";
+import type { UseComposerCommandHandlersInput } from "./ChatView.composerCommandHandlers.types";
 
-export interface UseComposerCommandHandlersInput {
-  composerMenuOpenRef: React.MutableRefObject<boolean>;
-  composerMenuItemsRef: React.MutableRefObject<ComposerCommandItem[]>;
-  activeComposerMenuItemRef: React.MutableRefObject<ComposerCommandItem | null>;
-  composerSelectLockRef: React.MutableRefObject<boolean>;
-  composerEditorRef: React.RefObject<ComposerPromptEditorHandle | null>;
-  promptRef: React.MutableRefObject<string>;
-  composerCursor: number;
-  composerTerminalContexts: TerminalContextDraft[];
-  composerMenuItems: ComposerCommandItem[];
-  composerHighlightedItemId: string | null;
-  isComposerShellMode: boolean;
-  interactionMode: ProviderInteractionMode;
-  activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingUserInput: { requestId: string } | null;
-  isOpencodePendingUserInputMode: boolean;
-  setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
-  setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
-  setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
-  setComposerShellMode: (shellMode: boolean) => void;
-  setComposerDraftTerminalContexts: (threadId: ThreadId, contexts: TerminalContextDraft[]) => void;
-  threadId: ThreadId;
-  setPrompt: (prompt: string) => void;
-  setPendingUserInputAnswersByRequestId: React.Dispatch<
-    React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
-  >;
-  applyPromptReplacement: (
-    rangeStart: number,
-    rangeEnd: number,
-    replacement: string,
-    options?: { expectedText?: string },
-  ) => boolean;
-  onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
-  handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
-  toggleInteractionMode: () => void;
-  onSend: (e?: { preventDefault: () => void }) => void;
-  onChangeActivePendingUserInputCustomAnswer: (
-    questionId: string,
-    value: string,
-    nextCursor: number,
-    expandedCursor: number,
-    cursorAdjacentToMention: boolean,
-  ) => void;
-}
-
-const extendReplacementRangeForTrailingSpace = (
-  text: string,
-  rangeEnd: number,
-  replacement: string,
-): number => {
-  if (!replacement.endsWith(" ")) return rangeEnd;
-  return text[rangeEnd] === " " ? rangeEnd + 1 : rangeEnd;
-};
-
-const syncTerminalContextsByIds = (
-  contexts: ReadonlyArray<TerminalContextDraft>,
-  ids: ReadonlyArray<string>,
-): TerminalContextDraft[] => {
-  const contextsById = new Map(contexts.map((context) => [context.id, context]));
-  return ids.flatMap((id) => {
-    const context = contextsById.get(id);
-    return context ? [context] : [];
-  });
-};
-
-const terminalContextIdListsEqual = (
-  contexts: ReadonlyArray<TerminalContextDraft>,
-  ids: ReadonlyArray<string>,
-): boolean =>
-  contexts.length === ids.length && contexts.every((context, index) => context.id === ids[index]);
+export type { UseComposerCommandHandlersInput } from "./ChatView.composerCommandHandlers.types";
 
 /** Returns handlers for composer command menu navigation and prompt changes. */
 export function useComposerCommandHandlers(input: UseComposerCommandHandlersInput) {

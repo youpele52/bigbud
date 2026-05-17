@@ -8,7 +8,6 @@ import {
   DEFAULT_SERVER_SETTINGS,
   EventId,
   type ModelSelection,
-  type OrchestrationMessage,
   type OrchestrationSession,
   ThreadId,
   type TurnId,
@@ -27,18 +26,16 @@ import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSet
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
   canReplaceThreadTitle,
-  DEFAULT_RUNTIME_MODE,
   formatProviderServiceCauseDetail,
   HANDLED_TURN_START_KEY_MAX,
   HANDLED_TURN_START_KEY_TTL_MINUTES,
-  isUnknownPendingApprovalRequestError,
-  isUnknownPendingUserInputRequestError,
   resolveThreadTitleSeed,
   serverCommandId,
-  stalePendingRequestDetail,
 } from "./ProviderCommandReactorHelpers.ts";
+import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
+import { makeProcessSessionHandlers } from "./ProviderCommandReactorHandlers.session.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
   ensureSessionForThread,
@@ -50,28 +47,6 @@ import {
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-
-/**
- * Appends an `<attached_files>` XML block to the provider input text so the agent
- * immediately knows which files are attached. The block intentionally omits
- * source paths: adapters handle file bytes/text extraction, and exposing paths
- * can prompt agents without document APIs to read opaque binary files directly.
- *
- * Example output:
- *   <attached_files>
- *   - report.pdf (application/pdf, 120000 bytes)
- *   </attached_files>
- */
-function appendFileAttachmentsToProviderInput(
-  text: string,
-  attachments: NonNullable<OrchestrationMessage["attachments"]>,
-): string {
-  const fileAttachments = attachments.filter((a) => a.type === "file");
-  if (fileAttachments.length === 0) return text;
-  const lines = fileAttachments.map((f) => `- ${f.name} (${f.mimeType}, ${f.sizeBytes} bytes)`);
-  const block = `<attached_files>\n${lines.join("\n")}\n</attached_files>`;
-  return text.length > 0 ? `${text}\n\n${block}` : block;
-}
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -199,6 +174,12 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   };
   const processDeletionRequested = yield* makeProcessDeletionRequested;
   const processProjectDeletionRequested = yield* makeProcessProjectDeletionRequested;
+  const processSessionHandlers = makeProcessSessionHandlers({
+    providerService,
+    appendProviderFailureActivity,
+    resolveThread,
+    setThreadSession,
+  });
 
   const expandTurnMessageText = expandProviderInputMentions({
     discoveryRegistry,
@@ -329,147 +310,12 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     );
   });
 
-  const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (
-    event: Extract<ProviderIntentEvent, { type: "thread.turn-interrupt-requested" }>,
-  ) {
-    const thread = yield* resolveThread(event.payload.threadId);
-    if (!thread) {
-      return;
-    }
-    const hasSession = thread.session && thread.session.status !== "stopped";
-    if (!hasSession) {
-      return yield* appendProviderFailureActivity({
-        threadId: event.payload.threadId,
-        kind: "provider.turn.interrupt.failed",
-        summary: "Provider turn interrupt failed",
-        detail: "No active provider session is bound to this thread.",
-        turnId: event.payload.turnId ?? null,
-        createdAt: event.payload.createdAt,
-      });
-    }
-
-    yield* providerService.interruptTurn({ threadId: event.payload.threadId });
-  });
-
-  const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (
-    event: Extract<ProviderIntentEvent, { type: "thread.approval-response-requested" }>,
-  ) {
-    const thread = yield* resolveThread(event.payload.threadId);
-    if (!thread) {
-      return;
-    }
-    const hasSession = thread.session && thread.session.status !== "stopped";
-    if (!hasSession) {
-      return yield* appendProviderFailureActivity({
-        threadId: event.payload.threadId,
-        kind: "provider.approval.respond.failed",
-        summary: "Provider approval response failed",
-        detail: "No active provider session is bound to this thread.",
-        turnId: null,
-        createdAt: event.payload.createdAt,
-        requestId: event.payload.requestId,
-      });
-    }
-
-    yield* providerService
-      .respondToRequest({
-        threadId: event.payload.threadId,
-        requestId: event.payload.requestId,
-        decision: event.payload.decision,
-      })
-      .pipe(
-        Effect.catchCause((cause) =>
-          Effect.gen(function* () {
-            yield* appendProviderFailureActivity({
-              threadId: event.payload.threadId,
-              kind: "provider.approval.respond.failed",
-              summary: "Provider approval response failed",
-              detail: isUnknownPendingApprovalRequestError(cause)
-                ? stalePendingRequestDetail("approval", event.payload.requestId)
-                : formatProviderServiceCauseDetail(cause),
-              turnId: null,
-              createdAt: event.payload.createdAt,
-              requestId: event.payload.requestId,
-            });
-
-            if (!isUnknownPendingApprovalRequestError(cause)) return;
-          }),
-        ),
-      );
-  });
-
-  const processUserInputResponseRequested = Effect.fn("processUserInputResponseRequested")(
-    function* (
-      event: Extract<ProviderIntentEvent, { type: "thread.user-input-response-requested" }>,
-    ) {
-      const thread = yield* resolveThread(event.payload.threadId);
-      if (!thread) {
-        return;
-      }
-      const hasSession = thread.session && thread.session.status !== "stopped";
-      if (!hasSession) {
-        return yield* appendProviderFailureActivity({
-          threadId: event.payload.threadId,
-          kind: "provider.user-input.respond.failed",
-          summary: "Provider user input response failed",
-          detail: "No active provider session is bound to this thread.",
-          turnId: null,
-          createdAt: event.payload.createdAt,
-          requestId: event.payload.requestId,
-        });
-      }
-
-      yield* providerService
-        .respondToUserInput({
-          threadId: event.payload.threadId,
-          requestId: event.payload.requestId,
-          answers: event.payload.answers,
-        })
-        .pipe(
-          Effect.catchCause((cause) =>
-            appendProviderFailureActivity({
-              threadId: event.payload.threadId,
-              kind: "provider.user-input.respond.failed",
-              summary: "Provider user input response failed",
-              detail: isUnknownPendingUserInputRequestError(cause)
-                ? stalePendingRequestDetail("user-input", event.payload.requestId)
-                : formatProviderServiceCauseDetail(cause),
-              turnId: null,
-              createdAt: event.payload.createdAt,
-              requestId: event.payload.requestId,
-            }),
-          ),
-        );
-    },
-  );
-
-  const processSessionStopRequested = Effect.fn("processSessionStopRequested")(function* (
-    event: Extract<ProviderIntentEvent, { type: "thread.session-stop-requested" }>,
-  ) {
-    const thread = yield* resolveThread(event.payload.threadId);
-    if (!thread) {
-      return;
-    }
-
-    const now = event.payload.createdAt;
-    if (thread.session && thread.session.status !== "stopped") {
-      yield* providerService.stopSession({ threadId: thread.id });
-    }
-
-    yield* setThreadSession({
-      threadId: thread.id,
-      session: {
-        threadId: thread.id,
-        status: "stopped",
-        providerName: thread.session?.providerName ?? null,
-        runtimeMode: thread.session?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-        activeTurnId: null,
-        lastError: thread.session?.lastError ?? null,
-        updatedAt: now,
-      },
-      createdAt: now,
-    });
-  });
+  const {
+    processApprovalResponseRequested,
+    processSessionStopRequested,
+    processTurnInterruptRequested,
+    processUserInputResponseRequested,
+  } = processSessionHandlers;
 
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,

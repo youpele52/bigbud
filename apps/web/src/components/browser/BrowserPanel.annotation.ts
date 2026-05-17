@@ -207,10 +207,10 @@ export function browserAnnotationPickerScript(
     const box = make("div", { style: STYLE.box });
     const target = make("div", { style: STYLE.target });
     const textarea = make("textarea", { style: STYLE.textarea }) as HTMLTextAreaElement;
-    textarea.placeholder = "What should the agent change here?";
+    textarea.placeholder = "What should happen here?";
     const cancel = make("button", { text: "Cancel", style: STYLE.cancel }) as HTMLButtonElement;
     const submit = make("button", {
-      text: "Add to composer",
+      text: "Add comment",
       style: STYLE.submit,
     }) as HTMLButtonElement;
     cancel.type = "button";

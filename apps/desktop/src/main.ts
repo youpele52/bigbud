@@ -1,9 +1,8 @@
 import * as Crypto from "node:crypto";
-import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
 
-import { app, BrowserWindow, dialog, protocol } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 
 import type { RotatingFileSink } from "@bigbud/shared/logging";
 import {
@@ -35,16 +34,12 @@ import {
   getSafeExternalUrl,
   makeResolveIconPath,
 } from "./window/menuManager";
-import {
-  isStaticAssetRequest,
-  resolveAboutCommitHash,
-  resolveDesktopStaticDir,
-  resolveDesktopStaticPath,
-} from "./env/pathResolver";
 import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
 import { syncShellEnvironment } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
+import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
+import { registerDesktopProtocol, registerDesktopSchemeAsPrivileged } from "./main.protocol";
 
 syncShellEnvironment();
 
@@ -96,14 +91,6 @@ const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 const SERVER_SETTINGS_PATH = Path.join(STATE_DIR, "settings.json");
 
 // ---------------------------------------------------------------------------
-// App-level types
-// ---------------------------------------------------------------------------
-
-type LinuxDesktopNamedApp = Electron.App & {
-  setDesktopName?: (desktopName: string) => void;
-};
-
-// ---------------------------------------------------------------------------
 // App-lifecycle state
 // ---------------------------------------------------------------------------
 
@@ -122,6 +109,15 @@ const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
 
 // Resolved once after logging init.
 const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "");
+const desktopAppIdentity = {
+  appDisplayName: APP_DISPLAY_NAME,
+  appUserModelId: APP_USER_MODEL_ID,
+  legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+  linuxDesktopEntryName: LINUX_DESKTOP_ENTRY_NAME,
+  resolveIconPath,
+  rootDir: ROOT_DIR,
+  userDataDirName: USER_DATA_DIR_NAME,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Logging convenience wrapper
@@ -131,25 +127,7 @@ function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
 }
 
-// ---------------------------------------------------------------------------
-// Desktop protocol (custom t3:// scheme for packaged builds)
-// ---------------------------------------------------------------------------
-
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: DESKTOP_SCHEME,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-      // Required for navigator.mediaDevices.getUserMedia to work on the custom
-      // protocol origin in production builds (otherwise Chrome treats the origin
-      // as non-streaming and rejects media device requests).
-      stream: true,
-    },
-  },
-]);
+registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
 function handleFatalStartupError(stage: string, error: unknown): void {
   const message = formatErrorMessage(error);
@@ -164,103 +142,6 @@ function handleFatalStartupError(stage: string, error: unknown): void {
   stopBackend();
   restoreStdIoCapture?.();
   app.quit();
-}
-
-function registerDesktopProtocol(): void {
-  if (isDevelopment || desktopProtocolRegistered) return;
-
-  const staticRoot = resolveDesktopStaticDir(ROOT_DIR);
-  if (!staticRoot) {
-    throw new Error(
-      "Desktop static bundle missing. Build apps/server (with bundled client) first.",
-    );
-  }
-
-  const staticRootResolved = Path.resolve(staticRoot);
-  const staticRootPrefix = `${staticRootResolved}${Path.sep}`;
-  const fallbackIndex = Path.join(staticRootResolved, "index.html");
-
-  protocol.registerFileProtocol(DESKTOP_SCHEME, (request, callback) => {
-    try {
-      const candidate = resolveDesktopStaticPath(staticRootResolved, request.url);
-      const resolvedCandidate = Path.resolve(candidate);
-      const isInRoot =
-        resolvedCandidate === fallbackIndex || resolvedCandidate.startsWith(staticRootPrefix);
-      const isAssetRequest = isStaticAssetRequest(request.url);
-
-      if (!isInRoot || !FS.existsSync(resolvedCandidate)) {
-        if (isAssetRequest) {
-          callback({ error: -6 });
-          return;
-        }
-        callback({ path: fallbackIndex });
-        return;
-      }
-
-      callback({ path: resolvedCandidate });
-    } catch {
-      callback({ path: fallbackIndex });
-    }
-  });
-
-  desktopProtocolRegistered = true;
-}
-
-// ---------------------------------------------------------------------------
-// App identity
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the Electron userData directory path.
- *
- * Electron derives the default userData path from `productName` in
- * package.json, which would produce directories with spaces and parentheses
- * (e.g. `~/.config/bigbud (Beta)` on Linux). This is
- * unfriendly for shell usage and violates Linux naming conventions.
- *
- * We override it to a clean lowercase name (`bigbud`). If the legacy
- * `T3 Code (...)` directory already exists we keep using it so existing users don't
- * lose their Chromium profile data (localStorage, cookies, sessions).
- */
-function resolveUserDataPath(): string {
-  const appDataBase =
-    process.platform === "win32"
-      ? process.env.APPDATA || Path.join(OS.homedir(), "AppData", "Roaming")
-      : process.platform === "darwin"
-        ? Path.join(OS.homedir(), "Library", "Application Support")
-        : process.env.XDG_CONFIG_HOME || Path.join(OS.homedir(), ".config");
-
-  const legacyPath = Path.join(appDataBase, LEGACY_USER_DATA_DIR_NAME);
-  if (FS.existsSync(legacyPath)) {
-    return legacyPath;
-  }
-
-  return Path.join(appDataBase, USER_DATA_DIR_NAME);
-}
-
-function configureAppIdentity(): void {
-  app.setName(APP_DISPLAY_NAME);
-  const commitHash = resolveAboutCommitHash(ROOT_DIR);
-  app.setAboutPanelOptions({
-    applicationName: APP_DISPLAY_NAME,
-    applicationVersion: app.getVersion(),
-    version: commitHash ?? "unknown",
-  });
-
-  if (process.platform === "win32") {
-    app.setAppUserModelId(APP_USER_MODEL_ID);
-  }
-
-  if (process.platform === "linux") {
-    (app as LinuxDesktopNamedApp).setDesktopName?.(LINUX_DESKTOP_ENTRY_NAME);
-  }
-
-  if (process.platform === "darwin" && app.dock) {
-    const iconPath = resolveIconPath("png");
-    if (iconPath) {
-      app.dock.setIcon(iconPath);
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -284,9 +165,17 @@ if (process.platform === "linux") {
 // Override Electron's userData path before the `ready` event so that
 // Chromium session data uses a filesystem-friendly directory name.
 // Must be called synchronously at the top level — before `app.whenReady()`.
-app.setPath("userData", resolveUserDataPath());
+app.setPath(
+  "userData",
+  resolveUserDataPath({
+    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+    userDataDirName: USER_DATA_DIR_NAME,
+  }),
+);
 
-configureAppIdentity();
+configureAppIdentity({
+  ...desktopAppIdentity,
+});
 
 // ---------------------------------------------------------------------------
 // Window factory (thin wrapper that closes over main.ts state)
@@ -393,8 +282,13 @@ app
       runId: APP_RUN_ID,
     });
 
-    configureAppIdentity();
-    registerDesktopProtocol();
+    configureAppIdentity(desktopAppIdentity);
+    desktopProtocolRegistered = registerDesktopProtocol({
+      desktopScheme: DESKTOP_SCHEME,
+      isDevelopment,
+      isRegistered: desktopProtocolRegistered,
+      rootDir: ROOT_DIR,
+    });
     configureApplicationMenu({
       menuActionChannel: MENU_ACTION_CHANNEL,
       getMainWindow: () => mainWindow,

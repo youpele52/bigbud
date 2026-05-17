@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getPassphraseProtectedSshKeyPath, getPasswordProtectedSshTargetLabel } from "./ssh";
+import {
+  getPassphraseProtectedSshKeyPath,
+  getPasswordProtectedSshTargetLabel,
+  getSshAuthFailureToastTitle,
+} from "./ssh";
 
 describe("ssh error parsing", () => {
   it("extracts passphrase-protected key paths", () => {
@@ -17,5 +21,10 @@ describe("ssh error parsing", () => {
         "SSH password is required for root@46.225.127.53:22. Re-enter it before using this target.",
       ),
     ).toBe("root@46.225.127.53:22");
+  });
+
+  it("returns auth-specific toast titles", () => {
+    expect(getSshAuthFailureToastTitle("password")).toBe("SSH login failed");
+    expect(getSshAuthFailureToastTitle("ssh-key-passphrase")).toBe("SSH key unlock failed");
   });
 });

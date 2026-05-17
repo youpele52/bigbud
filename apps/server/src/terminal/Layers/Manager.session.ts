@@ -24,10 +24,7 @@ import {
 } from "./Manager.types";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { assertSshExecutionTargetReady } from "../../ssh/sshVerification.ts";
-
-// ---------------------------------------------------------------------------
-// Context passed in from the factory closure
-// ---------------------------------------------------------------------------
+import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state.ts";
 
 export interface SessionApiContext {
   publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
@@ -89,27 +86,38 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     terminalEventListeners,
   } = ctx;
 
+  const assertExecutionTargetReady = (input: {
+    readonly threadId: string;
+    readonly terminalId: string;
+    readonly executionTargetId: string;
+    readonly cwd: string;
+  }) =>
+    isLocalExecutionTarget(input.executionTargetId)
+      ? assertValidCwd(input.cwd)
+      : Effect.try({
+          try: () => assertSshExecutionTargetReady(input.executionTargetId),
+          catch: (cause) =>
+            new TerminalExecutionTargetError({
+              threadId: input.threadId,
+              terminalId: input.terminalId,
+              executionTargetId: input.executionTargetId,
+              detail: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        });
+
   const open: TerminalManagerShape["open"] = (input) =>
     withThreadLock(
       input.threadId,
       Effect.gen(function* () {
         const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
         const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-        if (isLocalExecutionTarget(executionTargetId)) {
-          yield* assertValidCwd(input.cwd);
-        } else {
-          yield* Effect.try({
-            try: () => assertSshExecutionTargetReady(executionTargetId),
-            catch: (cause) =>
-              new TerminalExecutionTargetError({
-                threadId: input.threadId,
-                terminalId,
-                executionTargetId,
-                detail: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-          });
-        }
+        yield* assertExecutionTargetReady({
+          threadId: input.threadId,
+          terminalId,
+          executionTargetId,
+          cwd: input.cwd,
+        });
 
         const sessionKey = toSessionKey(input.threadId, terminalId);
         const existing = yield* getSession(input.threadId, terminalId);
@@ -118,30 +126,17 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           const history = yield* readHistory(input.threadId, terminalId);
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
-          const session: TerminalSessionState = {
+          const session = createTerminalSessionState({
             threadId: input.threadId,
             terminalId,
             executionTargetId,
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
-            status: "starting",
-            pid: null,
             history,
-            pendingHistoryControlSequence: "",
-            pendingProcessEvents: [],
-            pendingProcessEventIndex: 0,
-            processEventDrainRunning: false,
-            exitCode: null,
-            exitSignal: null,
-            updatedAt: new Date().toISOString(),
             cols,
             rows,
-            process: null,
-            unsubscribeData: null,
-            unsubscribeExit: null,
-            hasRunningSubprocess: false,
             runtimeEnv: normalizedRuntimeEnv(input.env),
-          };
+          });
 
           const createdSession = session;
           yield* modifyManagerState((state) => {
@@ -181,21 +176,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           liveSession.cwd = input.cwd;
           liveSession.worktreePath = input.worktreePath ?? null;
           liveSession.runtimeEnv = nextRuntimeEnv;
-          liveSession.history = "";
-          liveSession.pendingHistoryControlSequence = "";
-          liveSession.pendingProcessEvents = [];
-          liveSession.pendingProcessEventIndex = 0;
-          liveSession.processEventDrainRunning = false;
+          resetSessionRuntimeState(liveSession);
           yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         } else if (liveSession.status === "exited" || liveSession.status === "error") {
           liveSession.executionTargetId = executionTargetId;
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.worktreePath = input.worktreePath ?? null;
-          liveSession.history = "";
-          liveSession.pendingHistoryControlSequence = "";
-          liveSession.pendingProcessEvents = [];
-          liveSession.pendingProcessEventIndex = 0;
-          liveSession.processEventDrainRunning = false;
+          resetSessionRuntimeState(liveSession);
           yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         }
 
@@ -258,11 +245,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       Effect.gen(function* () {
         const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
         const session = yield* requireSession(input.threadId, terminalId);
-        session.history = "";
-        session.pendingHistoryControlSequence = "";
-        session.pendingProcessEvents = [];
-        session.pendingProcessEventIndex = 0;
-        session.processEventDrainRunning = false;
+        resetSessionRuntimeState(session);
         session.updatedAt = new Date().toISOString();
         yield* persistHistory(input.threadId, terminalId, session.history);
         yield* publishEvent({
@@ -281,21 +264,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         yield* increment(terminalRestartsTotal, { scope: "thread" });
         const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
         const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-        if (isLocalExecutionTarget(executionTargetId)) {
-          yield* assertValidCwd(input.cwd);
-        } else {
-          yield* Effect.try({
-            try: () => assertSshExecutionTargetReady(executionTargetId),
-            catch: (cause) =>
-              new TerminalExecutionTargetError({
-                threadId: input.threadId,
-                terminalId,
-                executionTargetId,
-                detail: cause instanceof Error ? cause.message : String(cause),
-                cause,
-              }),
-          });
-        }
+        yield* assertExecutionTargetReady({
+          threadId: input.threadId,
+          terminalId,
+          executionTargetId,
+          cwd: input.cwd,
+        });
 
         const sessionKey = toSessionKey(input.threadId, terminalId);
         const existingSession = yield* getSession(input.threadId, terminalId);
@@ -303,30 +277,17 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         if (Option.isNone(existingSession)) {
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
-          session = {
+          session = createTerminalSessionState({
             threadId: input.threadId,
             terminalId,
             executionTargetId,
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
-            status: "starting",
-            pid: null,
             history: "",
-            pendingHistoryControlSequence: "",
-            pendingProcessEvents: [],
-            pendingProcessEventIndex: 0,
-            processEventDrainRunning: false,
-            exitCode: null,
-            exitSignal: null,
-            updatedAt: new Date().toISOString(),
             cols,
             rows,
-            process: null,
-            unsubscribeData: null,
-            unsubscribeExit: null,
-            hasRunningSubprocess: false,
             runtimeEnv: normalizedRuntimeEnv(input.env),
-          };
+          });
           const createdSession = session;
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
@@ -346,11 +307,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const cols = input.cols ?? session.cols;
         const rows = input.rows ?? session.rows;
 
-        session.history = "";
-        session.pendingHistoryControlSequence = "";
-        session.pendingProcessEvents = [];
-        session.pendingProcessEventIndex = 0;
-        session.processEventDrainRunning = false;
+        resetSessionRuntimeState(session);
         yield* persistHistory(input.threadId, terminalId, session.history);
         yield* startSession(
           session,

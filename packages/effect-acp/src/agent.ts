@@ -10,15 +10,11 @@ import * as RpcServer from "effect/unstable/rpc/RpcServer";
 
 import * as AcpSchema from "./_generated/schema.gen.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./_generated/meta.gen.ts";
+import { makeAgentHandlerRuntime, type AcpAgentCoreRequestHandlers } from "./agent.handlers.ts";
 import * as AcpError from "./errors.ts";
 import * as AcpProtocol from "./protocol.ts";
 import * as AcpRpcs from "./rpc.ts";
-import {
-  callRpc,
-  decodeExtNotificationRegistration,
-  decodeExtRequestRegistration,
-  runHandler,
-} from "./_internal/shared.ts";
+import { callRpc, runHandler } from "./_internal/shared.ts";
 import * as AcpTerminal from "./terminal.ts";
 
 export interface AcpAgentOptions {
@@ -152,69 +148,12 @@ export class AcpAgent extends ServiceMap.Service<AcpAgent, AcpAgentShape>()(
   "effect-acp/AcpAgent",
 ) {}
 
-interface AcpCoreAgentRequestHandlers {
-  initialize?: (
-    request: AcpSchema.InitializeRequest,
-  ) => Effect.Effect<AcpSchema.InitializeResponse, AcpError.AcpError>;
-  authenticate?: (
-    request: AcpSchema.AuthenticateRequest,
-  ) => Effect.Effect<AcpSchema.AuthenticateResponse, AcpError.AcpError>;
-  logout?: (
-    request: AcpSchema.LogoutRequest,
-  ) => Effect.Effect<AcpSchema.LogoutResponse, AcpError.AcpError>;
-  createSession?: (
-    request: AcpSchema.NewSessionRequest,
-  ) => Effect.Effect<AcpSchema.NewSessionResponse, AcpError.AcpError>;
-  loadSession?: (
-    request: AcpSchema.LoadSessionRequest,
-  ) => Effect.Effect<AcpSchema.LoadSessionResponse, AcpError.AcpError>;
-  listSessions?: (
-    request: AcpSchema.ListSessionsRequest,
-  ) => Effect.Effect<AcpSchema.ListSessionsResponse, AcpError.AcpError>;
-  forkSession?: (
-    request: AcpSchema.ForkSessionRequest,
-  ) => Effect.Effect<AcpSchema.ForkSessionResponse, AcpError.AcpError>;
-  resumeSession?: (
-    request: AcpSchema.ResumeSessionRequest,
-  ) => Effect.Effect<AcpSchema.ResumeSessionResponse, AcpError.AcpError>;
-  closeSession?: (
-    request: AcpSchema.CloseSessionRequest,
-  ) => Effect.Effect<AcpSchema.CloseSessionResponse, AcpError.AcpError>;
-  setSessionModel?: (
-    request: AcpSchema.SetSessionModelRequest,
-  ) => Effect.Effect<AcpSchema.SetSessionModelResponse, AcpError.AcpError>;
-  setSessionConfigOption?: (
-    request: AcpSchema.SetSessionConfigOptionRequest,
-  ) => Effect.Effect<AcpSchema.SetSessionConfigOptionResponse, AcpError.AcpError>;
-  prompt?: (
-    request: AcpSchema.PromptRequest,
-  ) => Effect.Effect<AcpSchema.PromptResponse, AcpError.AcpError>;
-}
-
-const decodeCancelNotification = Schema.decodeUnknownEffect(AcpSchema.CancelNotification);
-
 export const make = Effect.fn("effect-acp/AcpAgent.make")(function* (
   stdio: Stdio.Stdio,
   options: AcpAgentOptions = {},
 ): Effect.fn.Return<AcpAgentShape, never, Scope.Scope> {
-  const coreHandlers: AcpCoreAgentRequestHandlers = {};
-  const cancelHandlers: Array<
-    (notification: AcpSchema.CancelNotification) => Effect.Effect<void, AcpError.AcpError>
-  > = [];
-  const extRequestHandlers = new Map<
-    string,
-    (params: unknown) => Effect.Effect<unknown, AcpError.AcpError>
-  >();
-  const extNotificationHandlers = new Map<
-    string,
-    (params: unknown) => Effect.Effect<void, AcpError.AcpError>
-  >();
-  let unknownExtRequestHandler:
-    | ((method: string, params: unknown) => Effect.Effect<unknown, AcpError.AcpError>)
-    | undefined;
-  let unknownExtNotificationHandler:
-    | ((method: string, params: unknown) => Effect.Effect<void, AcpError.AcpError>)
-    | undefined;
+  const handlerRuntime = makeAgentHandlerRuntime();
+  const coreHandlers: AcpAgentCoreRequestHandlers = handlerRuntime.coreHandlers;
 
   const transport = yield* AcpProtocol.makeAcpPatchedProtocol({
     stdio,
@@ -222,46 +161,8 @@ export const make = Effect.fn("effect-acp/AcpAgent.make")(function* (
     ...(options.logIncoming !== undefined ? { logIncoming: options.logIncoming } : {}),
     ...(options.logOutgoing !== undefined ? { logOutgoing: options.logOutgoing } : {}),
     ...(options.logger ? { logger: options.logger } : {}),
-    onNotification: (notification) => {
-      if (
-        notification._tag === "ExtNotification" &&
-        notification.method === AGENT_METHODS.session_cancel
-      ) {
-        return decodeCancelNotification(notification.params).pipe(
-          Effect.mapError(
-            (error) =>
-              new AcpError.AcpProtocolParseError({
-                detail: `Invalid ${AGENT_METHODS.session_cancel} notification payload`,
-                cause: error,
-              }),
-          ),
-          Effect.flatMap((decoded) =>
-            Effect.forEach(cancelHandlers, (handler) => handler(decoded), { discard: true }),
-          ),
-        );
-      }
-
-      if (notification._tag !== "ExtNotification") {
-        return Effect.void;
-      }
-
-      const handler = extNotificationHandlers.get(notification.method);
-      if (handler) {
-        return handler(notification.params);
-      }
-      return unknownExtNotificationHandler
-        ? unknownExtNotificationHandler(notification.method, notification.params)
-        : Effect.void;
-    },
-    onExtRequest: (method, params) => {
-      const handler = extRequestHandlers.get(method);
-      if (handler) {
-        return handler(params);
-      }
-      return unknownExtRequestHandler
-        ? unknownExtRequestHandler(method, params)
-        : Effect.fail(AcpError.AcpRequestError.methodNotFound(method));
-    },
+    onNotification: handlerRuntime.dispatchNotification,
+    onExtRequest: handlerRuntime.dispatchExtRequest,
   });
 
   const agentHandlerLayer = AcpRpcs.AgentRpcs.toLayer(
@@ -359,94 +260,7 @@ export const make = Effect.fn("effect-acp/AcpAgent.make")(function* (
       extRequest: transport.request,
       extNotification: transport.notify,
     },
-    handleInitialize: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.initialize = handler;
-        return Effect.void;
-      }),
-    handleAuthenticate: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.authenticate = handler;
-        return Effect.void;
-      }),
-    handleLogout: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.logout = handler;
-        return Effect.void;
-      }),
-    handleCreateSession: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.createSession = handler;
-        return Effect.void;
-      }),
-    handleLoadSession: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.loadSession = handler;
-        return Effect.void;
-      }),
-    handleListSessions: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.listSessions = handler;
-        return Effect.void;
-      }),
-    handleForkSession: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.forkSession = handler;
-        return Effect.void;
-      }),
-    handleResumeSession: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.resumeSession = handler;
-        return Effect.void;
-      }),
-    handleCloseSession: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.closeSession = handler;
-        return Effect.void;
-      }),
-    handleSetSessionModel: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.setSessionModel = handler;
-        return Effect.void;
-      }),
-    handleSetSessionConfigOption: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.setSessionConfigOption = handler;
-        return Effect.void;
-      }),
-    handlePrompt: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.prompt = handler;
-        return Effect.void;
-      }),
-    handleCancel: (handler) =>
-      Effect.suspend(() => {
-        cancelHandlers.push(handler);
-        return Effect.void;
-      }),
-    handleUnknownExtRequest: (handler) =>
-      Effect.suspend(() => {
-        unknownExtRequestHandler = handler;
-        return Effect.void;
-      }),
-    handleUnknownExtNotification: (handler) =>
-      Effect.suspend(() => {
-        unknownExtNotificationHandler = handler;
-        return Effect.void;
-      }),
-    handleExtRequest: (method, payload, handler) =>
-      Effect.suspend(() => {
-        extRequestHandlers.set(method, decodeExtRequestRegistration(method, payload, handler));
-        return Effect.void;
-      }),
-    handleExtNotification: (method, payload, handler) =>
-      Effect.suspend(() => {
-        extNotificationHandlers.set(
-          method,
-          decodeExtNotificationRegistration(method, payload, handler),
-        );
-        return Effect.void;
-      }),
+    ...handlerRuntime.registration,
   } satisfies AcpAgentShape;
 });
 
