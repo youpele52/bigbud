@@ -39,18 +39,24 @@ export function $setComposerEditorPrompt(
   const paragraph = $createParagraphNode();
   root.append(paragraph);
   const discoveredSkillsByName = new Map(discoveredSkills.map((skill) => [skill.name, skill]));
+  const discoveredSkillsByDisplayName = new Map(
+    discoveredSkills.flatMap((skill) =>
+      skill.displayName ? [[skill.displayName, skill] as const] : [],
+    ),
+  );
 
   for (const segment of splitPromptIntoComposerSegments(prompt, terminalContexts)) {
     if (segment.type === "mention") {
       const resolvedSkill =
         segment.mentionKind === "skill"
           ? (discoveredSkillsByName.get(segment.displayLabel) ??
+            discoveredSkillsByDisplayName.get(segment.displayLabel) ??
             discoveredSkillsByName.get(segment.rawValue.replace(/^skill::?/, "")))
           : undefined;
       paragraph.append(
         $createComposerMentionNode({
           rawValue: segment.rawValue,
-          displayLabel: resolvedSkill?.name ?? segment.displayLabel,
+          displayLabel: resolvedSkill?.displayName ?? resolvedSkill?.name ?? segment.displayLabel,
           mentionKind: segment.mentionKind,
         }),
       );

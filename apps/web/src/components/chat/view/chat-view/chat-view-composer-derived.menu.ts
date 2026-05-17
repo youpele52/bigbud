@@ -38,6 +38,14 @@ interface ComposerDerivedMenuInput {
     | undefined;
 }
 
+function skillDisplayLabel(skill: ServerDiscoveredSkill): string {
+  return skill.displayName ?? skill.name;
+}
+
+function matchesDiscoveryCommand(query: string, command: "skills" | "agents"): boolean {
+  return command.startsWith(query) || query === command || query.startsWith(`${command} `);
+}
+
 export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
   return useMemo<ComposerCommandItem[]>(() => {
     const composerTrigger = input.base.composerTrigger;
@@ -57,6 +65,7 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
             if (!query) return true;
             return (
               skill.name.toLowerCase().includes(query) ||
+              skillDisplayLabel(skill).toLowerCase().includes(query) ||
               skill.provider.toLowerCase().includes(query) ||
               (skill.description?.toLowerCase().includes(query) ?? false)
             );
@@ -65,8 +74,8 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
             id: `provider-skill:${skill.provider}:${skill.id}`,
             type: "skill",
             skill,
-            label: `$${skill.name}`,
-            description: `${skill.provider}${skill.description ? ` · ${skill.description}` : ""}`,
+            label: `$${skillDisplayLabel(skill)}`,
+            description: skill.description ?? "",
           })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "skill" }>>;
 
       return [...rankAndFilter(providerFirstSkills), ...rankAndFilter(fallbackSkills)];
@@ -88,7 +97,7 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           type: "agent",
           agent,
           label: `@${agent.name}`,
-          description: `${agent.provider}${agent.description ? ` · ${agent.description}` : ""}`,
+          description: agent.description ?? "",
         })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "agent" }>>;
       const pathItems = input.workspaceEntries.map((entry) => ({
         id: `path:${entry.kind}:${entry.path}`,
@@ -169,13 +178,14 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
       const query = composerTrigger.query.trim().toLowerCase();
       const skillItems = input.discoveredSkills
         .filter((skill) => {
-          if (!(query === "skills" || query.startsWith("skills "))) {
+          if (!matchesDiscoveryCommand(query, "skills")) {
             return false;
           }
           const skillQuery = query.replace(/^skills\s*/, "");
           if (!skillQuery) return true;
           return (
             skill.name.toLowerCase().includes(skillQuery) ||
+            skillDisplayLabel(skill).toLowerCase().includes(skillQuery) ||
             skill.provider.toLowerCase().includes(skillQuery) ||
             (skill.description?.toLowerCase().includes(skillQuery) ?? false)
           );
@@ -184,12 +194,12 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           id: `skill:${skill.provider}:${skill.id}`,
           type: "skill",
           skill,
-          label: skill.name,
-          description: `${skill.provider}${skill.description ? ` · ${skill.description}` : ""}`,
+          label: skillDisplayLabel(skill),
+          description: skill.description ?? "",
         })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "skill" }>>;
       const agentItems = input.discoveredAgents
         .filter((agent) => {
-          if (!(query === "agents" || query.startsWith("agents "))) {
+          if (!matchesDiscoveryCommand(query, "agents")) {
             return false;
           }
           const agentQuery = query.replace(/^agents\s*/, "");
@@ -205,15 +215,15 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           type: "agent",
           agent,
           label: agent.name,
-          description: `${agent.provider}${agent.description ? ` · ${agent.description}` : ""}`,
+          description: agent.description ?? "",
         })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "agent" }>>;
       if (!query) {
         return [...slashCommandItems];
       }
-      if (query === "agents" || query.startsWith("agents ")) {
+      if (matchesDiscoveryCommand(query, "agents")) {
         return [...agentItems];
       }
-      if (query === "skills" || query.startsWith("skills ")) {
+      if (matchesDiscoveryCommand(query, "skills")) {
         return [...skillItems];
       }
       return slashCommandItems.filter(

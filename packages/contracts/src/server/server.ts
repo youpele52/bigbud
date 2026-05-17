@@ -132,7 +132,15 @@ export type ServerDiscoveredAgent = typeof ServerDiscoveredAgent.Type;
 export const ServerDiscoveredAgents = Schema.Array(ServerDiscoveredAgent);
 export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 
-export const ServerDiscoveredSkill = ServerDiscoveredEntryBase;
+export const ServerDiscoveredSkill = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  provider: ProviderKind,
+  name: TrimmedNonEmptyString,
+  source: ServerDiscoverySource,
+  description: Schema.optional(TrimmedNonEmptyString),
+  sourcePath: Schema.optional(TrimmedNonEmptyString),
+  displayName: Schema.optional(TrimmedNonEmptyString),
+});
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
 
 export const ServerDiscoveredSkills = Schema.Array(ServerDiscoveredSkill);

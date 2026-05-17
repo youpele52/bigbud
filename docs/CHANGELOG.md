@@ -4,7 +4,7 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
-## v0.1.626 (16 May, 2026)
+## v0.1.626 (17 May, 2026)
 
 ### Remote Projects and Reconnects
 
@@ -26,6 +26,13 @@ Entries below are grouped by release tag and date.
 - Fixed a GitHub Copilot prompt bug where clarification requests could get stuck waiting for input instead of resuming the active turn.
 - Completed the remaining Copilot remote-workspace wiring so Copilot can follow the same local-runtime remote-project model as the other supported providers.
 - Replaced the old startup shell loading treatment with a dedicated splash screen and short fade-out transition so launch feels cleaner and less visually noisy.
+
+### Skill and Agent Discovery
+
+- Expanded discovered-skill support so the app now respects friendly skill titles from `SKILL.md` while preserving canonical skill names for invocation, which makes Pi, OpenCode, and other shared skill directories render much more cleanly in the UI.
+- Added Cursor skill discovery using the documented `.cursor/skills` roots alongside the existing shared and provider-specific skill locations, and kept recursive `SKILL.md` scanning so nested skill directories continue to work.
+- Improved `/skills` browsing so partial command input like `/sk` now enters the skill discovery flow earlier instead of staying in the generic slash-command list.
+- Refined the `/skills` and `@agent` suggestion menus to show name, provider, and a short inline description more clearly, with a top-positioned tooltip for the full details on hover.
 
 ### Validation
 

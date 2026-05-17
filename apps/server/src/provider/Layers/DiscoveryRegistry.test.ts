@@ -139,6 +139,36 @@ describe("DiscoveryRegistry — skill discovery", () => {
       }),
     );
 
+    it.effect("uses H1 heading as displayName while keeping frontmatter name canonical", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
+
+        yield* writeFile(
+          path.join(cwd, ".pi/skills/browser-tools/SKILL.md"),
+          [
+            "---",
+            "name: browser-tools",
+            "description: Browser automation helpers",
+            "---",
+            "",
+            "# Browser Tools",
+            "",
+            "Skill body.",
+          ].join("\n"),
+        );
+
+        const catalog = yield* getCatalog(cwd);
+        const skill = catalog.skills.find(
+          (s) => s.sourcePath?.startsWith(cwd) && s.name === "browser-tools",
+        );
+
+        assert.isDefined(skill, "skill should be discovered");
+        assert.strictEqual(skill?.displayName, "Browser Tools");
+      }),
+    );
+
     it.effect("falls back to parent directory name when SKILL.md has no frontmatter", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -159,7 +189,7 @@ describe("DiscoveryRegistry — skill discovery", () => {
       }),
     );
 
-    it.effect("uses H1 heading as name when no frontmatter is present", () =>
+    it.effect("uses H1 heading as displayName and folder name as fallback name", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -173,9 +203,40 @@ describe("DiscoveryRegistry — skill discovery", () => {
         const catalog = yield* getCatalog(cwd);
 
         const skill = catalog.skills.find(
-          (s) => s.sourcePath?.startsWith(cwd) && s.name === "Heading Skill Name",
+          (s) => s.sourcePath?.startsWith(cwd) && s.name === "heading-skill",
         );
-        assert.isDefined(skill, "should use H1 heading as name");
+        assert.isDefined(skill, "should fall back to folder name");
+        assert.strictEqual(skill?.displayName, "Heading Skill Name");
+      }),
+    );
+
+    it.effect("discovers nested Cursor skills from .cursor/skills", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
+
+        yield* writeFile(
+          path.join(cwd, ".cursor/skills/workflow/create-skill/skill.md"),
+          [
+            "---",
+            "name: create-skill",
+            "description: Create a new skill",
+            "---",
+            "",
+            "# Creating Skills in Cursor",
+          ].join("\n"),
+        );
+
+        const catalog = yield* getCatalog(cwd);
+        const skill = catalog.skills.find(
+          (s) =>
+            s.provider === "cursor" && s.sourcePath?.startsWith(cwd) && s.name === "create-skill",
+        );
+
+        assert.isDefined(skill, "Cursor skill should be discovered");
+        assert.strictEqual(skill?.displayName, "Creating Skills in Cursor");
+        assert.strictEqual(skill?.source, "project");
       }),
     );
 
