@@ -36,7 +36,8 @@ import {
   type OrchestrationDispatchError,
 } from "../Errors.ts";
 import { decideOrchestrationCommand } from "../decider.ts";
-import { createEmptyReadModel, projectEvent } from "../projector.ts";
+import { projectEvent } from "../projector.ts";
+import { createEmptyReadModel } from "../projectorReadModel.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {

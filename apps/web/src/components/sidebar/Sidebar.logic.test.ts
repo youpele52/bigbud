@@ -655,7 +655,7 @@ describe("getVisibleThreadsForProject", () => {
       threads,
       activeThreadId: ThreadId.makeUnsafe("thread-8"),
       isThreadListExpanded: false,
-      previewLimit: 6,
+      previewLimit: 4,
     });
 
     expect(result.hasHiddenThreads).toBe(true);
@@ -664,11 +664,11 @@ describe("getVisibleThreadsForProject", () => {
       ThreadId.makeUnsafe("thread-2"),
       ThreadId.makeUnsafe("thread-3"),
       ThreadId.makeUnsafe("thread-4"),
-      ThreadId.makeUnsafe("thread-5"),
-      ThreadId.makeUnsafe("thread-6"),
       ThreadId.makeUnsafe("thread-8"),
     ]);
     expect(result.hiddenThreads.map((thread) => thread.id)).toEqual([
+      ThreadId.makeUnsafe("thread-5"),
+      ThreadId.makeUnsafe("thread-6"),
       ThreadId.makeUnsafe("thread-7"),
     ]);
   });
@@ -684,7 +684,7 @@ describe("getVisibleThreadsForProject", () => {
       threads,
       activeThreadId: ThreadId.makeUnsafe("thread-8"),
       isThreadListExpanded: true,
-      previewLimit: 6,
+      previewLimit: 4,
     });
 
     expect(result.hasHiddenThreads).toBe(true);
@@ -716,7 +716,7 @@ describe("getHiddenSidebarThreadCount", () => {
       threads,
       activeThreadId: ThreadId.makeUnsafe("thread-8"),
       isThreadListExpanded: false,
-      previewLimit: 6,
+      previewLimit: 4,
     });
 
     expect(

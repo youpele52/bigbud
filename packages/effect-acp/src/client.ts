@@ -10,16 +10,12 @@ import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import * as AcpError from "./errors.ts";
+import { makeClientHandlerRuntime, type AcpClientCoreRequestHandlers } from "./client.handlers.ts";
 import * as AcpProtocol from "./protocol.ts";
 import * as AcpRpcs from "./rpc.ts";
 import * as AcpSchema from "./_generated/schema.gen.ts";
 import { AGENT_METHODS, CLIENT_METHODS } from "./_generated/meta.gen.ts";
-import {
-  callRpc,
-  decodeExtNotificationRegistration,
-  decodeExtRequestRegistration,
-  runHandler,
-} from "./_internal/shared.ts";
+import { callRpc, runHandler } from "./_internal/shared.ts";
 import { makeChildStdio, makeTerminationError } from "./_internal/stdio.ts";
 
 export interface AcpClientOptions {
@@ -154,136 +150,13 @@ export class AcpClient extends ServiceMap.Service<AcpClient, AcpClientShape>()(
   "effect-acp/AcpClient",
 ) {}
 
-interface AcpCoreRequestHandlers {
-  requestPermission?: (
-    request: AcpSchema.RequestPermissionRequest,
-  ) => Effect.Effect<AcpSchema.RequestPermissionResponse, AcpError.AcpError>;
-  elicitation?: (
-    request: AcpSchema.ElicitationRequest,
-  ) => Effect.Effect<AcpSchema.ElicitationResponse, AcpError.AcpError>;
-  readTextFile?: (
-    request: AcpSchema.ReadTextFileRequest,
-  ) => Effect.Effect<AcpSchema.ReadTextFileResponse, AcpError.AcpError>;
-  writeTextFile?: (
-    request: AcpSchema.WriteTextFileRequest,
-  ) => Effect.Effect<AcpSchema.WriteTextFileResponse | void, AcpError.AcpError>;
-  createTerminal?: (
-    request: AcpSchema.CreateTerminalRequest,
-  ) => Effect.Effect<AcpSchema.CreateTerminalResponse, AcpError.AcpError>;
-  terminalOutput?: (
-    request: AcpSchema.TerminalOutputRequest,
-  ) => Effect.Effect<AcpSchema.TerminalOutputResponse, AcpError.AcpError>;
-  terminalWaitForExit?: (
-    request: AcpSchema.WaitForTerminalExitRequest,
-  ) => Effect.Effect<AcpSchema.WaitForTerminalExitResponse, AcpError.AcpError>;
-  terminalKill?: (
-    request: AcpSchema.KillTerminalRequest,
-  ) => Effect.Effect<AcpSchema.KillTerminalResponse | void, AcpError.AcpError>;
-  terminalRelease?: (
-    request: AcpSchema.ReleaseTerminalRequest,
-  ) => Effect.Effect<AcpSchema.ReleaseTerminalResponse | void, AcpError.AcpError>;
-}
-
-interface AcpNotificationHandlers {
-  readonly sessionUpdate: BufferedNotificationHandler<AcpSchema.SessionNotification>;
-  readonly elicitationComplete: BufferedNotificationHandler<AcpSchema.ElicitationCompleteNotification>;
-}
-
-interface BufferedNotificationHandler<A> {
-  readonly handlers: Array<(notification: A) => Effect.Effect<void, AcpError.AcpError>>;
-  readonly pending: Array<A>;
-}
-
 export const make = Effect.fn("effect-acp/AcpClient.make")(function* (
   stdio: Stdio.Stdio,
   options: AcpClientOptions = {},
   terminationError?: Effect.Effect<AcpError.AcpError>,
 ): Effect.fn.Return<AcpClientShape, never, Scope.Scope> {
-  const coreHandlers: AcpCoreRequestHandlers = {};
-  const notificationHandlers: AcpNotificationHandlers = {
-    sessionUpdate: { handlers: [], pending: [] },
-    elicitationComplete: { handlers: [], pending: [] },
-  };
-  const extRequestHandlers = new Map<
-    string,
-    (params: unknown) => Effect.Effect<unknown, AcpError.AcpError>
-  >();
-  const extNotificationHandlers = new Map<
-    string,
-    (params: unknown) => Effect.Effect<void, AcpError.AcpError>
-  >();
-  let unknownExtRequestHandler:
-    | ((method: string, params: unknown) => Effect.Effect<unknown, AcpError.AcpError>)
-    | undefined;
-  let unknownExtNotificationHandler:
-    | ((method: string, params: unknown) => Effect.Effect<void, AcpError.AcpError>)
-    | undefined;
-
-  const runNotificationHandlers = <A>(
-    registration: BufferedNotificationHandler<A>,
-    notification: A,
-  ) =>
-    Effect.forEach(
-      registration.handlers,
-      (handler) => handler(notification).pipe(Effect.catch(() => Effect.void)),
-      { discard: true },
-    );
-
-  const flushBufferedNotifications = <A>(registration: BufferedNotificationHandler<A>) =>
-    Effect.suspend(() => {
-      if (registration.handlers.length === 0 || registration.pending.length === 0) {
-        return Effect.void;
-      }
-      const pending = registration.pending.splice(0, registration.pending.length);
-      return Effect.forEach(
-        pending,
-        (notification) => runNotificationHandlers(registration, notification),
-        {
-          discard: true,
-        },
-      );
-    });
-
-  const dispatchNotification = (notification: AcpProtocol.AcpIncomingNotification) => {
-    switch (notification._tag) {
-      case "SessionUpdate": {
-        if (notificationHandlers.sessionUpdate.handlers.length === 0) {
-          notificationHandlers.sessionUpdate.pending.push(notification.params);
-          return Effect.void;
-        }
-        return runNotificationHandlers(notificationHandlers.sessionUpdate, notification.params);
-      }
-      case "ElicitationComplete": {
-        if (notificationHandlers.elicitationComplete.handlers.length === 0) {
-          notificationHandlers.elicitationComplete.pending.push(notification.params);
-          return Effect.void;
-        }
-        return runNotificationHandlers(
-          notificationHandlers.elicitationComplete,
-          notification.params,
-        );
-      }
-      case "ExtNotification": {
-        const handler = extNotificationHandlers.get(notification.method);
-        if (handler) {
-          return handler(notification.params);
-        }
-        return unknownExtNotificationHandler
-          ? unknownExtNotificationHandler(notification.method, notification.params)
-          : Effect.void;
-      }
-    }
-  };
-
-  const dispatchExtRequest = (method: string, params: unknown) => {
-    const handler = extRequestHandlers.get(method);
-    if (handler) {
-      return handler(params);
-    }
-    return unknownExtRequestHandler
-      ? unknownExtRequestHandler(method, params)
-      : Effect.fail(AcpError.AcpRequestError.methodNotFound(method));
-  };
+  const handlerRuntime = makeClientHandlerRuntime();
+  const coreHandlers: AcpClientCoreRequestHandlers = handlerRuntime.coreHandlers;
 
   const transport = yield* AcpProtocol.makeAcpPatchedProtocol({
     stdio: stdio,
@@ -292,8 +165,8 @@ export const make = Effect.fn("effect-acp/AcpClient.make")(function* (
     ...(options.logIncoming !== undefined ? { logIncoming: options.logIncoming } : {}),
     ...(options.logOutgoing !== undefined ? { logOutgoing: options.logOutgoing } : {}),
     ...(options.logger ? { logger: options.logger } : {}),
-    onNotification: dispatchNotification,
-    onExtRequest: dispatchExtRequest,
+    onNotification: handlerRuntime.dispatchNotification,
+    onExtRequest: handlerRuntime.dispatchExtRequest,
   });
 
   const clientHandlerLayer = AcpRpcs.ClientRpcs.toLayer(
@@ -366,84 +239,7 @@ export const make = Effect.fn("effect-acp/AcpClient.make")(function* (
       prompt: (payload) => callRpc(rpc[AGENT_METHODS.session_prompt](payload)),
       cancel: (payload) => transport.notify(AGENT_METHODS.session_cancel, payload),
     },
-    handleRequestPermission: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.requestPermission = handler;
-        return Effect.void;
-      }),
-    handleElicitation: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.elicitation = handler;
-        return Effect.void;
-      }),
-    handleReadTextFile: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.readTextFile = handler;
-        return Effect.void;
-      }),
-    handleWriteTextFile: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.writeTextFile = handler;
-        return Effect.void;
-      }),
-    handleCreateTerminal: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.createTerminal = handler;
-        return Effect.void;
-      }),
-    handleTerminalOutput: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.terminalOutput = handler;
-        return Effect.void;
-      }),
-    handleTerminalWaitForExit: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.terminalWaitForExit = handler;
-        return Effect.void;
-      }),
-    handleTerminalKill: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.terminalKill = handler;
-        return Effect.void;
-      }),
-    handleTerminalRelease: (handler) =>
-      Effect.suspend(() => {
-        coreHandlers.terminalRelease = handler;
-        return Effect.void;
-      }),
-    handleSessionUpdate: (handler) =>
-      Effect.suspend(() => {
-        notificationHandlers.sessionUpdate.handlers.push(handler);
-        return flushBufferedNotifications(notificationHandlers.sessionUpdate);
-      }),
-    handleElicitationComplete: (handler) =>
-      Effect.suspend(() => {
-        notificationHandlers.elicitationComplete.handlers.push(handler);
-        return flushBufferedNotifications(notificationHandlers.elicitationComplete);
-      }),
-    handleUnknownExtRequest: (handler) =>
-      Effect.suspend(() => {
-        unknownExtRequestHandler = handler;
-        return Effect.void;
-      }),
-    handleUnknownExtNotification: (handler) =>
-      Effect.suspend(() => {
-        unknownExtNotificationHandler = handler;
-        return Effect.void;
-      }),
-    handleExtRequest: (method, payload, handler) =>
-      Effect.suspend(() => {
-        extRequestHandlers.set(method, decodeExtRequestRegistration(method, payload, handler));
-        return Effect.void;
-      }),
-    handleExtNotification: (method, payload, handler) =>
-      Effect.suspend(() => {
-        extNotificationHandlers.set(
-          method,
-          decodeExtNotificationRegistration(method, payload, handler),
-        );
-        return Effect.void;
-      }),
+    ...handlerRuntime.registration,
   } satisfies AcpClientShape;
 });
 

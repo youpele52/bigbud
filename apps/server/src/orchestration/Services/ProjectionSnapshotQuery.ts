@@ -7,6 +7,7 @@
  * @module ProjectionSnapshotQuery
  */
 import type {
+  ExecutionTargetId,
   OrchestrationCheckpointSummary,
   OrchestrationProject,
   OrchestrationReadModel,
@@ -27,6 +28,7 @@ export interface ProjectionSnapshotCounts {
 export interface ProjectionThreadCheckpointContext {
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
+  readonly executionTargetId: ExecutionTargetId;
   readonly workspaceRoot: string | null;
   readonly worktreePath: string | null;
   readonly checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>;

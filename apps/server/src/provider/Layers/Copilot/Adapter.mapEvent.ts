@@ -6,21 +6,11 @@
  *
  * @module CopilotAdapter.mapEvent
  */
-import {
-  type EventId,
-  type ProviderRuntimeEvent,
-  TurnId,
-  type UserInputQuestion,
-} from "@bigbud/contracts";
+import { type EventId, type ProviderRuntimeEvent, TurnId } from "@bigbud/contracts";
 import { type SessionEvent } from "@github/copilot-sdk";
 import { Effect } from "effect";
 
-import {
-  USER_INPUT_QUESTION_ID,
-  type ActiveCopilotSession,
-  eventBase,
-  normalizeUsage,
-} from "./Adapter.types.ts";
+import { type ActiveCopilotSession, eventBase, normalizeUsage } from "./Adapter.types.ts";
 
 /** Dependencies threaded into mapEvent as plain values. */
 export interface MapEventDeps {
@@ -265,46 +255,15 @@ export const mapEvent = (
             },
           },
         ];
-      case "user_input.requested": {
-        const question: UserInputQuestion = {
-          id: USER_INPUT_QUESTION_ID,
-          header: "Question",
-          question: event.data.question,
-          options: (event.data.choices ?? []).map((choice: string) => ({
-            label: choice,
-            description: choice,
-          })),
-        };
-        return [
-          {
-            ...eventBase({
-              eventId: stamp.eventId,
-              createdAt: event.timestamp,
-              threadId: session.threadId,
-              ...(turnId ? { turnId } : {}),
-              requestId: event.data.requestId,
-              raw,
-            }),
-            type: "user-input.requested",
-            payload: { questions: [question] },
-          },
-        ];
-      }
+      case "user_input.requested":
       case "user_input.completed":
-        return [
-          {
-            ...eventBase({
-              eventId: stamp.eventId,
-              createdAt: event.timestamp,
-              threadId: session.threadId,
-              ...(turnId ? { turnId } : {}),
-              requestId: event.data.requestId,
-              raw,
-            }),
-            type: "user-input.resolved",
-            payload: { answers: {} },
-          },
-        ];
+        // Copilot question prompts are already surfaced via the authoritative
+        // onUserInputRequest callback in Adapter.ts, which creates the pending
+        // request record and synthetic canonical events under the same requestId.
+        // Re-emitting the SDK session events here introduces a second requestId
+        // for the same prompt, which leaves the visible UI prompt disconnected
+        // from the actual pending callback.
+        return [];
       default:
         return [];
     }

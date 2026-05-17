@@ -53,6 +53,7 @@ const makeReadModel = (threadId: ThreadId | null, projectWorkspaceRoot: string |
       {
         id: projectId,
         title: "Chats",
+        executionTargetId: "local",
         workspaceRoot: projectWorkspaceRoot,
         defaultModelSelection: modelSelection,
         scripts: [],
@@ -70,6 +71,7 @@ const makeReadModel = (threadId: ThreadId | null, projectWorkspaceRoot: string |
               id: threadId,
               projectId,
               title: "Shell thread",
+              executionTargetId: "local",
               modelSelection,
               interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
               runtimeMode: "full-access" as const,
@@ -275,5 +277,78 @@ describe("makeDispatchShellCommand", () => {
     expect(replacement?.text).toContain("[live tail mode: showing latest output only]");
     expect(replacement?.text).not.toContain("\nline-1\n");
     expect(replacement?.text).toContain("line-360");
+  });
+
+  it("rejects remote execution targets before running a local shell command", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-shell-remote");
+    let shellRunCalled = false;
+
+    const dispatchShellCommand = makeDispatchShellCommand({
+      enqueueCommand: (effect) => effect,
+      dispatchInitialShellCommand: () => Effect.succeed({ sequence: 1 }),
+      orchestrationEngine: {
+        dispatch: () => Effect.succeed({ sequence: 1 }),
+        getReadModel: () =>
+          Effect.succeed({
+            ...makeReadModel(threadId, "~/workspace/bigbud"),
+            projects: [
+              {
+                ...makeReadModel(threadId, "~/workspace/bigbud").projects[0]!,
+                providerRuntimeExecutionTargetId: "local",
+                workspaceExecutionTargetId: "ssh:devbox",
+                executionTargetId: "local",
+              },
+            ],
+            threads: [
+              {
+                ...makeReadModel(threadId, "~/workspace/bigbud").threads[0]!,
+                providerRuntimeExecutionTargetId: "local",
+                workspaceExecutionTargetId: "ssh:devbox",
+                executionTargetId: "local",
+              },
+            ],
+          } satisfies OrchestrationReadModel),
+      },
+      serverSettings: {
+        getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+      },
+      threadShellRunner: {
+        run: () =>
+          Effect.sync(() => {
+            shellRunCalled = true;
+            return {
+              output: "",
+              exitCode: 0,
+            };
+          }),
+        closeThread: () => Effect.void,
+      },
+      serverCommandId: (tag) => CommandId.makeUnsafe(`server:${tag}`),
+      toDispatchCommandError: (cause, fallbackMessage) =>
+        new OrchestrationDispatchCommandError({
+          message: fallbackMessage,
+          cause,
+        }),
+    });
+
+    await expect(
+      Effect.runPromise(
+        dispatchShellCommand({
+          type: "thread.shell.run",
+          commandId: CommandId.makeUnsafe("cmd-shell-remote"),
+          threadId,
+          message: {
+            messageId: MessageId.makeUnsafe("msg-shell-remote"),
+            role: "user",
+            text: "!pwd",
+            attachments: [],
+          },
+          shellCommand: "pwd",
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+    ).rejects.toThrow("Shell commands is not implemented for execution target 'ssh:devbox' yet.");
+
+    expect(shellRunCalled).toBe(false);
   });
 });

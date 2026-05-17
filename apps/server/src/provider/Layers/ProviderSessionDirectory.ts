@@ -1,8 +1,9 @@
-import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import type { ProviderKind, ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { ProviderSessionDirectoryPersistenceError, ProviderValidationError } from "../Errors.ts";
+import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import {
   ProviderSessionDirectory,
   type ProviderRuntimeBinding,
@@ -69,15 +70,28 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
           onSome: (value) =>
             decodeProviderKind(value.providerName, "ProviderSessionDirectory.getBinding").pipe(
               Effect.map((provider) =>
-                Option.some({
-                  threadId: value.threadId,
-                  provider,
-                  adapterKey: value.adapterKey,
-                  runtimeMode: value.runtimeMode,
-                  status: value.status,
-                  resumeCursor: value.resumeCursor,
-                  runtimePayload: value.runtimePayload,
-                }),
+                Option.some(
+                  (() => {
+                    const executionTargets = resolveProviderSessionExecutionTargets({
+                      providerRuntimeExecutionTargetId: value.providerRuntimeExecutionTargetId,
+                      workspaceExecutionTargetId: value.workspaceExecutionTargetId,
+                      executionTargetId: value.executionTargetId,
+                    });
+                    return {
+                      threadId: value.threadId,
+                      provider,
+                      providerRuntimeExecutionTargetId:
+                        executionTargets.providerRuntimeExecutionTargetId,
+                      workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+                      executionTargetId: executionTargets.executionTargetId,
+                      adapterKey: value.adapterKey,
+                      runtimeMode: value.runtimeMode,
+                      status: value.status,
+                      resumeCursor: value.resumeCursor,
+                      runtimePayload: value.runtimePayload,
+                    };
+                  })(),
+                ),
               ),
             ),
         }),
@@ -101,6 +115,14 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     const now = new Date().toISOString();
     const providerChanged =
       existingRuntime !== undefined && existingRuntime.providerName !== binding.provider;
+    const executionTargets = resolveProviderSessionExecutionTargets({
+      providerRuntimeExecutionTargetId:
+        binding.providerRuntimeExecutionTargetId ??
+        existingRuntime?.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId:
+        binding.workspaceExecutionTargetId ?? existingRuntime?.workspaceExecutionTargetId,
+      executionTargetId: binding.executionTargetId ?? existingRuntime?.executionTargetId,
+    });
     yield* repository
       .upsert({
         threadId: resolvedThreadId,
@@ -108,6 +130,9 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
         adapterKey:
           binding.adapterKey ??
           (providerChanged ? binding.provider : (existingRuntime?.adapterKey ?? binding.provider)),
+        providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
+        executionTargetId: executionTargets.executionTargetId,
         runtimeMode: binding.runtimeMode ?? existingRuntime?.runtimeMode ?? "full-access",
         status: binding.status ?? existingRuntime?.status ?? "running",
         lastSeenAt: now,

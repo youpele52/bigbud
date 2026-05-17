@@ -36,6 +36,7 @@ export {
 export interface TerminalSessionState {
   threadId: string;
   terminalId: string;
+  executionTargetId: string;
   cwd: string;
   worktreePath: string | null;
   status: TerminalSessionStatus;

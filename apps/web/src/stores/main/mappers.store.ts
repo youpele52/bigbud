@@ -1,4 +1,5 @@
 import {
+  LOCAL_EXECUTION_TARGET_ID,
   type OrchestrationCheckpointSummary,
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
@@ -191,6 +192,13 @@ export function mapThread(thread: OrchestrationThread): Thread {
     id: thread.id,
     codexThreadId: null,
     projectId: thread.projectId,
+    providerRuntimeExecutionTargetId:
+      thread.providerRuntimeExecutionTargetId ??
+      thread.executionTargetId ??
+      LOCAL_EXECUTION_TARGET_ID,
+    workspaceExecutionTargetId:
+      thread.workspaceExecutionTargetId ?? thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+    executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
     modelSelection: normalizeModelSlug(thread.modelSelection),
@@ -217,6 +225,13 @@ export function mapProject(project: OrchestrationReadModel["projects"][number]):
   return {
     id: project.id,
     name: project.title,
+    providerRuntimeExecutionTargetId:
+      project.providerRuntimeExecutionTargetId ??
+      project.executionTargetId ??
+      LOCAL_EXECUTION_TARGET_ID,
+    workspaceExecutionTargetId:
+      project.workspaceExecutionTargetId ?? project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+    executionTargetId: project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     cwd: project.workspaceRoot,
     defaultModelSelection: project.defaultModelSelection
       ? normalizeModelSlug(project.defaultModelSelection)
@@ -250,6 +265,13 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
   return {
     id: thread.id,
     projectId: thread.projectId,
+    providerRuntimeExecutionTargetId:
+      thread.providerRuntimeExecutionTargetId ??
+      thread.executionTargetId ??
+      LOCAL_EXECUTION_TARGET_ID,
+    workspaceExecutionTargetId:
+      thread.workspaceExecutionTargetId ?? thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+    executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
     interactionMode: thread.interactionMode,
@@ -278,6 +300,9 @@ export function sidebarThreadSummariesEqual(
     left !== undefined &&
     left.id === right.id &&
     left.projectId === right.projectId &&
+    left.providerRuntimeExecutionTargetId === right.providerRuntimeExecutionTargetId &&
+    left.workspaceExecutionTargetId === right.workspaceExecutionTargetId &&
+    left.executionTargetId === right.executionTargetId &&
     left.title === right.title &&
     left.interactionMode === right.interactionMode &&
     left.session === right.session &&

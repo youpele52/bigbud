@@ -515,6 +515,55 @@ describe("incremental orchestration updates", () => {
     expect(next.projects[0]?.name).toBe("Project Recreated");
   });
 
+  it("keeps local and remote projects distinct when they share the same cwd", () => {
+    const localProjectId = ProjectId.makeUnsafe("project-local");
+    const remoteProjectId = ProjectId.makeUnsafe("project-remote");
+    const state: AppState = {
+      projects: [
+        {
+          id: localProjectId,
+          name: "Project",
+          executionTargetId: "local",
+          cwd: "/tmp/project",
+          defaultModelSelection: {
+            provider: "codex",
+            model: DEFAULT_MODEL_BY_PROVIDER.codex,
+          },
+          scripts: [],
+        },
+      ],
+      threads: [],
+      sidebarThreadsById: {},
+      threadIdsByProjectId: {},
+      bootstrapComplete: true,
+    };
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("project.created", {
+        projectId: remoteProjectId,
+        title: "Project Remote",
+        executionTargetId: "ssh:devbox",
+        workspaceRoot: "/tmp/project",
+        defaultModelSelection: {
+          provider: "codex",
+          model: DEFAULT_MODEL_BY_PROVIDER.codex,
+        },
+        scripts: [],
+        createdAt: "2026-02-27T00:00:01.000Z",
+        updatedAt: "2026-02-27T00:00:01.000Z",
+      }),
+    );
+
+    expect(next.projects).toHaveLength(2);
+    expect(next.projects.find((project) => project.id === localProjectId)?.executionTargetId).toBe(
+      "local",
+    );
+    expect(next.projects.find((project) => project.id === remoteProjectId)?.executionTargetId).toBe(
+      "ssh:devbox",
+    );
+  });
+
   it("removes stale project index entries when thread.created recreates a thread under a new project", () => {
     const originalProjectId = ProjectId.makeUnsafe("project-1");
     const recreatedProjectId = ProjectId.makeUnsafe("project-2");

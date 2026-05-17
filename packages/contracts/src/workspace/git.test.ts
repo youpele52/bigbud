@@ -3,6 +3,7 @@ import { Schema } from "effect";
 
 import {
   GitCreateWorktreeInput,
+  LOCAL_EXECUTION_TARGET_ID,
   GitPreparePullRequestThreadInput,
   GitRunStackedActionResult,
   GitRunStackedActionInput,
@@ -27,6 +28,17 @@ describe("GitCreateWorktreeInput", () => {
 
     expect(parsed.newBranch).toBeUndefined();
     expect(parsed.branch).toBe("feature/existing");
+  });
+
+  it("accepts execution target ids", () => {
+    const parsed = decodeCreateWorktreeInput({
+      executionTargetId: "ssh:prod",
+      cwd: "/repo",
+      branch: "feature/existing",
+      path: "/tmp/worktree",
+    });
+
+    expect(parsed.executionTargetId).toBe("ssh:prod");
   });
 });
 
@@ -71,6 +83,16 @@ describe("GitRunStackedActionInput", () => {
 
     expect(parsed.actionId).toBe("action-1");
     expect(parsed.action).toBe("create_pr");
+  });
+
+  it("defaults local execution target to omission at decode-time callers", () => {
+    const parsed = decodeRunStackedActionInput({
+      actionId: "action-1",
+      cwd: "/repo",
+      action: "create_pr",
+    });
+
+    expect(parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID).toBe(LOCAL_EXECUTION_TARGET_ID);
   });
 });
 

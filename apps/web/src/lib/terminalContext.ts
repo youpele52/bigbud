@@ -1,4 +1,10 @@
 import { type ThreadId } from "@bigbud/contracts";
+import {
+  extractTrailingBrowserAnnotations,
+  type ParsedBrowserAnnotationEntry,
+} from "./terminalContext.browserAnnotations";
+
+export type { ParsedBrowserAnnotationEntry } from "./terminalContext.browserAnnotations";
 
 export interface TerminalContextSelection {
   terminalId: string;
@@ -33,15 +39,6 @@ export interface DisplayedUserMessageState {
 export interface ParsedTerminalContextEntry {
   header: string;
   body: string;
-}
-
-export interface ParsedBrowserAnnotationEntry {
-  text: string;
-  comment: string;
-  pageTitle: string;
-  pageUrl: string;
-  selector: string;
-  tag: string;
 }
 
 export const INLINE_TERMINAL_CONTEXT_PLACEHOLDER = "\uFFFC";
@@ -280,39 +277,6 @@ function parseBrowserAnnotationEntry(text: string): ParsedBrowserAnnotationEntry
     pageUrl: readAnnotationField(lines, "URL: "),
     selector: readAnnotationField(lines, "Selector: "),
     tag: readAnnotationField(lines, "Tag: "),
-  };
-}
-
-function extractTrailingBrowserAnnotations(prompt: string): {
-  promptText: string;
-  annotations: ParsedBrowserAnnotationEntry[];
-} {
-  const normalizedPrompt = prompt.replace(/\s+$/, "");
-  if (!normalizedPrompt.endsWith(BROWSER_ANNOTATION_FOOTER)) {
-    return { promptText: prompt, annotations: [] };
-  }
-
-  let annotationStartIndex = normalizedPrompt.indexOf(BROWSER_ANNOTATION_HEADER);
-  while (annotationStartIndex !== -1) {
-    const suffix = normalizedPrompt.slice(annotationStartIndex);
-    const parts = suffix.split(BROWSER_ANNOTATION_SEPARATOR);
-    if (parts.every(isBrowserAnnotationBlock)) {
-      const promptText = normalizedPrompt.slice(0, annotationStartIndex);
-      return {
-        promptText: promptText.replace(/\n+$/, ""),
-        annotations: parts.map(parseBrowserAnnotationEntry),
-      };
-    }
-
-    annotationStartIndex = normalizedPrompt.indexOf(
-      BROWSER_ANNOTATION_HEADER,
-      annotationStartIndex + BROWSER_ANNOTATION_HEADER.length,
-    );
-  }
-
-  return {
-    promptText: prompt,
-    annotations: [],
   };
 }
 

@@ -5,8 +5,12 @@
  * thread.deleted, thread.archived, thread.unarchived,
  * thread.meta-updated, thread.runtime-mode-set, thread.interaction-mode-set
  */
-import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contracts";
-import { OrchestrationThread } from "@bigbud/contracts";
+import {
+  LOCAL_EXECUTION_TARGET_ID,
+  type OrchestrationEvent,
+  type OrchestrationReadModel,
+  OrchestrationThread,
+} from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
@@ -40,6 +44,15 @@ export function projectThreadCreated(
         id: payload.threadId,
         projectId: payload.projectId,
         title: payload.title,
+        providerRuntimeExecutionTargetId:
+          payload.providerRuntimeExecutionTargetId ??
+          payload.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId:
+          payload.workspaceExecutionTargetId ??
+          payload.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
         modelSelection: payload.modelSelection,
         runtimeMode: payload.runtimeMode,
         interactionMode: payload.interactionMode,
@@ -155,6 +168,15 @@ export function projectThreadMetaUpdated(
       ...nextBase,
       threads: updateThread(nextBase.threads, payload.threadId, {
         ...(payload.title !== undefined ? { title: payload.title } : {}),
+        ...(payload.providerRuntimeExecutionTargetId !== undefined
+          ? { providerRuntimeExecutionTargetId: payload.providerRuntimeExecutionTargetId }
+          : {}),
+        ...(payload.workspaceExecutionTargetId !== undefined
+          ? { workspaceExecutionTargetId: payload.workspaceExecutionTargetId }
+          : {}),
+        ...(payload.executionTargetId !== undefined
+          ? { executionTargetId: payload.executionTargetId }
+          : {}),
         ...(payload.modelSelection !== undefined ? { modelSelection: payload.modelSelection } : {}),
         ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
         ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),

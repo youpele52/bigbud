@@ -181,10 +181,21 @@ body::after {
 }
 
 pre,
-code,
-textarea,
-input {
+code {
   font-family: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+input::placeholder,
+textarea::placeholder {
+  font-family:
+    "DM Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 0.92em;
+  letter-spacing: normal;
 }
 
 @supports (-webkit-touch-callout: none) {

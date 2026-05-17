@@ -12,6 +12,7 @@ import type {
 import {
   type CanonicalItemType,
   type CanonicalRequestType,
+  ApprovalRequestId,
   ClaudeCodeEffort,
   RuntimeRequestId,
   type RuntimePlanStepStatus,
@@ -19,21 +20,10 @@ import {
   type ThreadTokenUsageSnapshot,
   ThreadId,
   type TurnId,
-  ApprovalRequestId,
-  type ProviderSendTurnInput,
 } from "@bigbud/contracts";
-import { applyClaudePromptEffortPrefix, trimOrNull } from "@bigbud/shared/model";
 import { Cause } from "effect";
 
-import { getClaudeModelCapabilities } from "./Provider.ts";
-import {
-  ProviderAdapterRequestError,
-  ProviderAdapterSessionClosedError,
-  ProviderAdapterSessionNotFoundError,
-  type ProviderAdapterError,
-} from "../../Errors.ts";
 import type { ClaudeResumeState } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 
 export function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -383,92 +373,12 @@ export const CLAUDE_SETTING_SOURCES = [
   "project",
   "local",
 ] as const satisfies ReadonlyArray<SettingSource>;
-
-export function buildPromptText(input: ProviderSendTurnInput): string {
-  const rawEffort =
-    input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.options?.effort : null;
-  const claudeModel =
-    input.modelSelection?.provider === "claudeAgent" ? input.modelSelection.model : undefined;
-  const caps = getClaudeModelCapabilities(claudeModel);
-
-  // For prompt injection, we check if the raw effort is a prompt-injected level (e.g. "ultrathink").
-  // resolveEffort strips prompt-injected values (returning the default instead), so we check the raw value directly.
-  const trimmedEffort = trimOrNull(rawEffort);
-  const promptEffort =
-    trimmedEffort && caps.promptInjectedEffortLevels.includes(trimmedEffort) ? trimmedEffort : null;
-  return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
-}
-
-export function buildUserMessage(input: {
-  readonly sdkContent: Array<Record<string, unknown>>;
-}): import("@anthropic-ai/claude-agent-sdk").SDKUserMessage {
-  return {
-    type: "user",
-    session_id: "",
-    parent_tool_use_id: null,
-    message: {
-      role: "user",
-      content:
-        input.sdkContent as unknown as import("@anthropic-ai/claude-agent-sdk").SDKUserMessage["message"]["content"],
-    },
-  } as import("@anthropic-ai/claude-agent-sdk").SDKUserMessage;
-}
-
-export function buildClaudeImageContentBlock(input: {
-  readonly mimeType: string;
-  readonly bytes: Uint8Array;
-}): Record<string, unknown> {
-  return {
-    type: "image",
-    source: {
-      type: "base64",
-      media_type: input.mimeType,
-      data: Buffer.from(input.bytes).toString("base64"),
-    },
-  };
-}
-
-export function toSessionError(
-  threadId: ThreadId,
-  cause: unknown,
-): ProviderAdapterSessionNotFoundError | ProviderAdapterSessionClosedError | undefined {
-  const normalized = toMessage(cause, "").toLowerCase();
-  if (normalized.includes("unknown session") || normalized.includes("not found")) {
-    return new ProviderAdapterSessionNotFoundError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  if (normalized.includes("closed")) {
-    return new ProviderAdapterSessionClosedError({
-      provider: PROVIDER,
-      threadId,
-      cause,
-    });
-  }
-  return undefined;
-}
-
-export function toRequestError(
-  threadId: ThreadId,
-  method: string,
-  cause: unknown,
-): ProviderAdapterError {
-  const sessionError = toSessionError(threadId, cause);
-  if (sessionError) {
-    return sessionError;
-  }
-  return new ProviderAdapterRequestError({
-    provider: PROVIDER,
-    method,
-    detail: toMessage(cause, `${method} failed`),
-    cause,
-  });
-}
-
-// Re-export SDK message parsing utilities for backward compatibility.
-// These are defined in ClaudeAdapter.utils.sdk.ts.
+export {
+  buildClaudeImageContentBlock,
+  buildPromptText,
+  buildUserMessage,
+} from "./Adapter.utils.message.ts";
+export { toRequestError, toSessionError } from "./Adapter.utils.errors.ts";
 export {
   asRuntimeItemId,
   turnStatusFromResult,

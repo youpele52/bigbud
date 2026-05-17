@@ -2,10 +2,11 @@
  * Decider cases for thread lifecycle commands:
  * create, delete, archive, unarchive, meta.update, runtime-mode.set, interaction-mode.set
  */
-import type {
-  OrchestrationCommand,
-  OrchestrationEvent,
-  OrchestrationReadModel,
+import {
+  LOCAL_EXECUTION_TARGET_ID,
+  type OrchestrationCommand,
+  type OrchestrationEvent,
+  type OrchestrationReadModel,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -20,6 +21,7 @@ import {
 } from "./commandInvariants.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
+import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 
 /** Maximum number of seed messages accepted on `thread.create` to prevent write amplification. */
 const MAX_SEED_MESSAGES = 200;
@@ -57,6 +59,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         command,
         projectId: command.projectId,
       });
+      const project = readModel.projects.find((entry) => entry.id === command.projectId);
       yield* requireThreadAbsent({
         readModel,
         command,
@@ -75,6 +78,19 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           });
         }
       }
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+        defaultProviderRuntimeExecutionTargetId:
+          project?.providerRuntimeExecutionTargetId ??
+          project?.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+        defaultWorkspaceExecutionTargetId:
+          project?.workspaceExecutionTargetId ??
+          project?.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+      });
       const createdEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...withEventBase({
           aggregateKind: "thread",
@@ -87,6 +103,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           threadId: command.threadId,
           projectId: command.projectId,
           title: command.title,
+          ...executionTargets,
           modelSelection: command.modelSelection,
           runtimeMode: command.runtimeMode,
           interactionMode: command.interactionMode,
@@ -260,6 +277,11 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         threadId: command.threadId,
       });
       const occurredAt = nowIso();
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+      });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -271,6 +293,11 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         payload: {
           threadId: command.threadId,
           ...(command.title !== undefined ? { title: command.title } : {}),
+          ...(command.providerRuntimeExecutionTargetId !== undefined ||
+          command.workspaceExecutionTargetId !== undefined ||
+          command.executionTargetId !== undefined
+            ? executionTargets
+            : {}),
           ...(command.modelSelection !== undefined
             ? { modelSelection: command.modelSelection }
             : {}),

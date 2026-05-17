@@ -1,26 +1,5 @@
-import { execFileSync } from "node:child_process";
-
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import {
-  ApprovalRequestId,
-  ProviderKind,
-  type OrchestrationEvent,
-  type OrchestrationThread,
-} from "@bigbud/contracts";
-import {
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  ManagedRuntime,
-  Option,
-  Path,
-  Ref,
-  Schedule,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
+import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Path, Ref, Scope, Stream } from "effect";
 
 import { CheckpointStoreLive } from "../src/checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../src/checkpointing/Services/CheckpointStore.ts";
@@ -54,10 +33,7 @@ import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceip
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionLive } from "../src/orchestration/Layers/ProviderRuntimeIngestion.ts";
-import {
-  OrchestrationEngineService,
-  type OrchestrationEngineShape,
-} from "../src/orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationEngineService } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
@@ -65,159 +41,25 @@ import {
   type OrchestrationRuntimeReceipt,
 } from "../src/orchestration/Services/RuntimeReceiptBus.ts";
 
-import {
-  makeTestProviderAdapterHarness,
-  type TestProviderAdapterHarness,
-} from "./TestProviderAdapter.integration.ts";
+import { makeTestProviderAdapterHarness } from "./TestProviderAdapter.integration.ts";
 import { deriveServerPaths, ServerConfig } from "../src/startup/config.ts";
 import { WorkspaceEntriesLive } from "../src/workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../src/workspace/Layers/WorkspacePaths.ts";
 import { BrowserManager } from "../src/browser/Services/BrowserManager.ts";
 import { TerminalManager } from "../src/terminal/Services/Manager.ts";
 
-function runGit(cwd: string, args: ReadonlyArray<string>) {
-  return execFileSync("git", args, {
-    cwd,
-    stdio: ["ignore", "pipe", "pipe"],
-    encoding: "utf8",
-  });
-}
+import {
+  initializeGitWorkspace,
+  tryRuntimePromise,
+} from "./OrchestrationEngineHarness.integration.shared.ts";
+import type {
+  MakeOrchestrationIntegrationHarnessOptions,
+  OrchestrationIntegrationHarness,
+} from "./OrchestrationEngineHarness.integration.types.ts";
+import { createHarnessRuntimeControls } from "./OrchestrationEngineHarness.integration.waiters.ts";
 
-const initializeGitWorkspace = Effect.fn(function* (cwd: string) {
-  runGit(cwd, ["init", "--initial-branch=main"]);
-  runGit(cwd, ["config", "user.email", "test@example.com"]);
-  runGit(cwd, ["config", "user.name", "Test User"]);
-  const fileSystem = yield* FileSystem.FileSystem;
-  const { join } = yield* Path.Path;
-  yield* fileSystem.writeFileString(join(cwd, "README.md"), "v1\n");
-  runGit(cwd, ["add", "."]);
-  runGit(cwd, ["commit", "-m", "Initial"]);
-});
-
-export function gitRefExists(cwd: string, ref: string): boolean {
-  try {
-    runGit(cwd, ["show-ref", "--verify", "--quiet", ref]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function gitShowFileAtRef(cwd: string, ref: string, filePath: string): string {
-  return runGit(cwd, ["show", `${ref}:${filePath}`]);
-}
-
-class WaitForTimeoutError extends Schema.TaggedErrorClass<WaitForTimeoutError>()(
-  "WaitForTimeoutError",
-  {
-    description: Schema.String,
-  },
-) {}
-
-function waitFor<A, E>(
-  read: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  description: string,
-  timeoutMs?: number,
-): Effect.Effect<A, never>;
-function waitFor<A, B extends A, E>(
-  read: Effect.Effect<A, E>,
-  predicate: (value: A) => value is B,
-  description: string,
-  timeoutMs?: number,
-): Effect.Effect<B, never>;
-function waitFor<A, E>(
-  read: Effect.Effect<A, E>,
-  predicate: (value: A) => boolean,
-  description: string,
-  timeoutMs = 40_000,
-): Effect.Effect<A, never> {
-  const RETRY_SIGNAL = "wait_for_retry";
-  const retryIntervalMs = 10;
-  const maxRetries = Math.max(0, Math.floor(timeoutMs / retryIntervalMs));
-  const retrySchedule = Schedule.spaced(`${retryIntervalMs} millis`);
-
-  return read.pipe(
-    Effect.filterOrFail(predicate, () => RETRY_SIGNAL),
-    Effect.retry({
-      schedule: retrySchedule,
-      times: maxRetries,
-      while: (error) => error === RETRY_SIGNAL,
-    }),
-    Effect.mapError((error) =>
-      error === RETRY_SIGNAL ? new WaitForTimeoutError({ description }) : error,
-    ),
-    Effect.orDie,
-  );
-}
-
-class OrchestrationHarnessRuntimeError extends Schema.TaggedErrorClass<OrchestrationHarnessRuntimeError>()(
-  "OrchestrationHarnessRuntimeError",
-  {
-    operation: Schema.String,
-    cause: Schema.optional(Schema.Defect),
-  },
-) {}
-
-const tryRuntimePromise = <A>(operation: string, run: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: run,
-    catch: (cause) => new OrchestrationHarnessRuntimeError({ operation, cause }),
-  });
-
-export interface OrchestrationIntegrationHarness {
-  readonly rootDir: string;
-  readonly workspaceDir: string;
-  readonly dbPath: string;
-  readonly adapterHarness: TestProviderAdapterHarness | null;
-  readonly engine: OrchestrationEngineShape;
-  readonly snapshotQuery: ProjectionSnapshotQuery["Service"];
-  readonly providerService: ProviderService["Service"];
-  readonly checkpointStore: CheckpointStore["Service"];
-  readonly checkpointRepository: ProjectionCheckpointRepository["Service"];
-  readonly pendingApprovalRepository: ProjectionPendingApprovalRepository["Service"];
-  readonly waitForThread: (
-    threadId: string,
-    predicate: (thread: OrchestrationThread) => boolean,
-    timeoutMs?: number,
-  ) => Effect.Effect<OrchestrationThread, never>;
-  readonly waitForDomainEvent: (
-    predicate: (event: OrchestrationEvent) => boolean,
-    timeoutMs?: number,
-  ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, never>;
-  readonly waitForPendingApproval: (
-    requestId: string,
-    predicate: (row: {
-      readonly status: "pending" | "resolved";
-      readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
-      readonly resolvedAt: string | null;
-    }) => boolean,
-    timeoutMs?: number,
-  ) => Effect.Effect<
-    {
-      readonly status: "pending" | "resolved";
-      readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
-      readonly resolvedAt: string | null;
-    },
-    never
-  >;
-  readonly waitForReceipt: {
-    (
-      predicate: (receipt: OrchestrationRuntimeReceipt) => boolean,
-      timeoutMs?: number,
-    ): Effect.Effect<OrchestrationRuntimeReceipt, never>;
-    <Receipt extends OrchestrationRuntimeReceipt>(
-      predicate: (receipt: OrchestrationRuntimeReceipt) => receipt is Receipt,
-      timeoutMs?: number,
-    ): Effect.Effect<Receipt, never>;
-  };
-  readonly dispose: Effect.Effect<void, never>;
-}
-
-interface MakeOrchestrationIntegrationHarnessOptions {
-  readonly provider?: ProviderKind;
-  readonly realCodex?: boolean;
-}
+export { gitRefExists, gitShowFileAtRef } from "./OrchestrationEngineHarness.integration.shared.ts";
+export type { OrchestrationIntegrationHarness } from "./OrchestrationEngineHarness.integration.types.ts";
 
 export const makeOrchestrationIntegrationHarness = (
   options?: MakeOrchestrationIntegrationHarnessOptions,
@@ -429,123 +271,15 @@ export const makeOrchestrationIntegrationHarness = (
     ).pipe(Effect.forkIn(scope));
     yield* Effect.sleep(10);
 
-    const waitForThread: OrchestrationIntegrationHarness["waitForThread"] = (
-      threadId,
-      predicate,
-      timeoutMs,
-    ) =>
-      waitFor(
-        snapshotQuery
-          .getSnapshot()
-          .pipe(
-            Effect.map(
-              (snapshot) => snapshot.threads.find((thread) => thread.id === threadId) ?? null,
-            ),
-          ),
-        (thread): thread is OrchestrationThread => thread !== null && predicate(thread),
-        `projected thread '${threadId}'`,
-        timeoutMs,
-      ) as Effect.Effect<OrchestrationThread, never>;
-
-    const waitForDomainEvent: OrchestrationIntegrationHarness["waitForDomainEvent"] = (
-      predicate,
-      timeoutMs,
-    ) =>
-      waitFor(
-        Stream.runCollect(engine.readEvents(0)).pipe(
-          Effect.map((chunk): ReadonlyArray<OrchestrationEvent> => Array.from(chunk)),
-        ),
-        (events) => events.some(predicate),
-        "domain event",
-        timeoutMs,
-      );
-
-    const waitForPendingApproval: OrchestrationIntegrationHarness["waitForPendingApproval"] = (
-      requestId,
-      predicate,
-      timeoutMs,
-    ) =>
-      waitFor(
-        pendingApprovalRepository
-          .getByRequestId({ requestId: ApprovalRequestId.makeUnsafe(requestId) })
-          .pipe(
-            Effect.map((row) =>
-              Option.match(row, {
-                onNone: () => null,
-                onSome: (value) => ({
-                  status: value.status,
-                  decision: value.decision,
-                  resolvedAt: value.resolvedAt,
-                }),
-              }),
-            ),
-          ),
-        (
-          row,
-        ): row is {
-          readonly status: "pending" | "resolved";
-          readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
-          readonly resolvedAt: string | null;
-        } => row !== null && predicate(row),
-        `pending approval '${requestId}'`,
-        timeoutMs,
-      ) as Effect.Effect<
-        {
-          readonly status: "pending" | "resolved";
-          readonly decision: "accept" | "acceptForSession" | "decline" | "cancel" | null;
-          readonly resolvedAt: string | null;
-        },
-        never
-      >;
-
-    function waitForReceipt(
-      predicate: (receipt: OrchestrationRuntimeReceipt) => boolean,
-      timeoutMs?: number,
-    ): Effect.Effect<OrchestrationRuntimeReceipt, never>;
-    function waitForReceipt<Receipt extends OrchestrationRuntimeReceipt>(
-      predicate: (receipt: OrchestrationRuntimeReceipt) => receipt is Receipt,
-      timeoutMs?: number,
-    ): Effect.Effect<Receipt, never>;
-    function waitForReceipt(
-      predicate: (receipt: OrchestrationRuntimeReceipt) => boolean,
-      timeoutMs?: number,
-    ) {
-      const readMatchingReceipt = Ref.get(receiptHistory).pipe(
-        Effect.map((history) => history.find(predicate)),
-      );
-
-      return waitFor(
-        readMatchingReceipt,
-        (receipt): receipt is OrchestrationRuntimeReceipt => receipt !== undefined,
-        "runtime receipt",
-        timeoutMs,
-      );
-    }
-
-    let disposed = false;
-    const dispose = Effect.gen(function* () {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-
-      const shutdown = Effect.gen(function* () {
-        const closeScopeExit = yield* Effect.exit(Scope.close(scope, Exit.void));
-        const disposeRuntimeExit = yield* Effect.exit(Effect.promise(() => runtime.dispose()));
-
-        const failureCause = Exit.isFailure(closeScopeExit)
-          ? closeScopeExit.cause
-          : Exit.isFailure(disposeRuntimeExit)
-            ? disposeRuntimeExit.cause
-            : null;
-
-        if (failureCause) {
-          return yield* Effect.failCause(failureCause);
-        }
+    const { waitForThread, waitForDomainEvent, waitForPendingApproval, waitForReceipt, dispose } =
+      createHarnessRuntimeControls({
+        engine,
+        snapshotQuery,
+        pendingApprovalRepository,
+        receiptHistory,
+        closeScope: Scope.close(scope, Exit.void),
+        disposeRuntime: () => runtime.dispose(),
       });
-
-      yield* shutdown;
-    });
 
     return {
       rootDir,

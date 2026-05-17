@@ -9,6 +9,7 @@ export default Effect.gen(function* () {
       thread_id TEXT PRIMARY KEY,
       provider_name TEXT NOT NULL,
       adapter_key TEXT NOT NULL,
+      execution_target_id TEXT NOT NULL DEFAULT 'local',
       runtime_mode TEXT NOT NULL DEFAULT 'full-access',
       status TEXT NOT NULL,
       last_seen_at TEXT NOT NULL,
