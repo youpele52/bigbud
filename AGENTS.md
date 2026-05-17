@@ -124,7 +124,7 @@ Default keybindings (defined in `apps/server/src/keybindings/keybindings.ts`):
 | `mod+shift+g`                 | Toggle diff bar (when terminal is not focused)                         |
 | `mod+shift+g`                 | Split terminal (when terminal is focused)                              |
 | `mod+shift+b`                 | Toggle browser panel (when terminal is not focused)                    |
-| `mod+k`                       | Toggle command palette                                                 |
+| `mod+p`                       | Toggle command palette                                                 |
 | `mod+n`                       | New chat (when terminal not focused) / new terminal tab (when focused) |
 | `mod+shift+n`                 | New local chat                                                         |
 | `mod+o`                       | Open in favorite editor                                                |

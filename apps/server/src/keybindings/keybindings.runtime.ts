@@ -16,6 +16,18 @@ import { Duration, Effect, FileSystem, Path, Scope, Stream } from "effect";
 
 import { hasSameShortcutContext, isSameKeybindingRule } from "./keybindings.compiler";
 
+const LEGACY_COMMAND_PALETTE_RULE: KeybindingRule = {
+  key: "mod+k",
+  command: "commandPalette.toggle",
+  when: "!terminalFocus",
+};
+
+const DEFAULT_COMMAND_PALETTE_RULE: KeybindingRule = {
+  key: "mod+p",
+  command: "commandPalette.toggle",
+  when: "!terminalFocus",
+};
+
 type SerializeWrite = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 
 interface RuntimeCustomKeybindingsConfig {
@@ -59,7 +71,14 @@ export function makeSyncDefaultKeybindingsOnStartup(input: {
         return;
       }
 
-      const customConfig = runtimeConfig.keybindings;
+      const customConfig = runtimeConfig.keybindings.map((entry) =>
+        isSameKeybindingRule(entry, LEGACY_COMMAND_PALETTE_RULE)
+          ? DEFAULT_COMMAND_PALETTE_RULE
+          : entry,
+      );
+      const didMigrateLegacyCommandPaletteShortcut = runtimeConfig.keybindings.some(
+        (entry, index) => !isSameKeybindingRule(entry, customConfig[index] ?? entry),
+      );
       const existingCommands = new Set(customConfig.map((entry) => entry.command));
       const missingDefaults: KeybindingRule[] = [];
       const shortcutConflictWarnings: Array<{
@@ -99,7 +118,7 @@ export function makeSyncDefaultKeybindingsOnStartup(input: {
         });
       }
 
-      if (missingDefaults.length === 0) {
+      if (missingDefaults.length === 0 && !didMigrateLegacyCommandPaletteShortcut) {
         yield* input.invalidateResolvedConfigCache;
         return;
       }
