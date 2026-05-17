@@ -61,6 +61,9 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     threadId,
   } = base;
   const { composerMenuItems, composerMenuOpen, gitCwd } = composer;
+  const composerMenuItemsRef = useRef(composerMenuItems);
+  composerMenuItemsRef.current = composerMenuItems;
+  const composerMenuItemIds = composerMenuItems.map((item) => item.id).join("|");
   const {
     activePendingProgress,
     activePendingUserInput,
@@ -139,12 +142,13 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
       setComposerHighlightedItemId(null);
       return;
     }
+    const currentComposerMenuItems = composerMenuItemsRef.current;
     setComposerHighlightedItemId((existing) =>
-      existing && composerMenuItems.some((item) => item.id === existing)
+      existing && currentComposerMenuItems.some((item) => item.id === existing)
         ? existing
-        : (composerMenuItems[0]?.id ?? null),
+        : (currentComposerMenuItems[0]?.id ?? null),
     );
-  }, [composerMenuItems, composerMenuOpen, setComposerHighlightedItemId]);
+  }, [composerMenuItemIds, composerMenuOpen, setComposerHighlightedItemId]);
 
   useEffect(() => {
     setIsRevertingCheckpoint(false);

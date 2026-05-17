@@ -1,12 +1,10 @@
 import {
   useCallback,
-  useRef,
   useState,
   type PointerEvent,
   type MouseEvent,
   type KeyboardEvent,
 } from "react";
-import type React from "react";
 import { type DragCancelEvent, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import {
   isBuiltInChatsProject,
@@ -15,91 +13,26 @@ import {
   type ThreadId as ThreadIdType,
 } from "@bigbud/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { isNonEmpty as isNonEmptyString } from "effect/String";
-import { isMacPlatform, newCommandId, newProjectId } from "../../lib/utils";
-import { useUiStateStore } from "../../stores/ui";
+import { isMacPlatform, newCommandId } from "../../lib/utils";
 import { useStore } from "../../stores/main";
+import { useUiStateStore } from "../../stores/ui";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../ui/toast";
-import { useHandleNewThread } from "../../hooks/useHandleNewThread";
-import { useSettings } from "../../hooks/useSettings";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
-import type { Project } from "../../models/types";
-import type { SidebarProjectSnapshot } from "./Sidebar.types";
-import { useServerProviders } from "../../rpc/serverState";
-import { getDefaultModelSelection } from "../../models/provider/provider.models";
+import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
+import type {
+  SidebarProjectActionsInput,
+  SidebarProjectActionsOutput,
+} from "./Sidebar.projectActions.types";
 
-export interface SidebarProjectActionsInput {
-  /** Projects list from the main store. */
-  projects: Project[];
-  threadIdsByProjectId: Record<string, ThreadIdType[]>;
-  sidebarProjects: SidebarProjectSnapshot[];
-  appSettings: ReturnType<typeof useSettings>;
-  isAddingProject: boolean;
-  setIsAddingProject: (v: boolean) => void;
-  newCwd: string;
-  setNewCwd: (v: string) => void;
-  setAddProjectError: (v: string | null) => void;
-  setAddingProject: (updater: (prev: boolean) => boolean) => void;
-  isPickingFolder: boolean;
-  setIsPickingFolder: (v: boolean) => void;
-  addProjectInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  shouldBrowseForProjectImmediately: boolean;
-  /** Shared drag refs — owned by the composition hook. */
-  dragInProgressRef: React.MutableRefObject<boolean>;
-  suppressProjectClickAfterDragRef: React.MutableRefObject<boolean>;
-  suppressProjectClickForContextMenuRef: React.MutableRefObject<boolean>;
-  selectedThreadIdsSize: number;
-  clearSelection: () => void;
-  copyPathToClipboard: (text: string, ctx: { path: string }) => void;
-  focusMostRecentThreadForProject: (projectId: ProjectId) => void;
-  handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
-  /** Called when a thread rename is in progress — cancels it so both can't be active at once. */
-  cancelThreadRename: () => void;
-}
-
-export interface SidebarProjectActionsOutput {
-  // Project rename
-  renamingProjectId: ProjectId | null;
-  renamingProjectTitle: string;
-  setRenamingProjectTitle: (title: string) => void;
-  /** Callback ref for the rename input element — handles focus/select on mount. */
-  onProjectRenamingInputMount: (element: HTMLInputElement | null) => void;
-  /** Returns whether the project rename has already been committed. */
-  hasProjectRenameCommitted: () => boolean;
-  /** Marks the project rename as committed to prevent double-commit on blur. */
-  markProjectRenameCommitted: () => void;
-  commitProjectRename: (
-    projectId: ProjectId,
-    newTitle: string,
-    originalTitle: string,
-  ) => Promise<void>;
-  cancelProjectRename: () => void;
-  pendingProjectDeleteConfirmation: {
-    projectId: ProjectId;
-    projectName: string;
-    threadCount: number;
-  } | null;
-  dismissPendingProjectDeleteConfirmation: () => void;
-  confirmPendingProjectDelete: () => Promise<void>;
-  requestProjectDelete: (projectId: ProjectId) => void;
-  // Other actions
-  addProjectFromPath: (rawCwd: string) => Promise<void>;
-  handleAddProject: () => void;
-  handlePickFolder: () => Promise<void>;
-  handleStartAddProject: () => void;
-  cancelAddProject: () => void;
-  handleProjectContextMenu: (projectId: ProjectId, position: { x: number; y: number }) => void;
-  handleProjectDragStart: (event: DragStartEvent) => void;
-  handleProjectDragEnd: (event: DragEndEvent) => void;
-  handleProjectDragCancel: (event: DragCancelEvent) => void;
-  handleProjectTitlePointerDownCapture: (event: PointerEvent<HTMLButtonElement>) => void;
-  handleProjectTitleClick: (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => void;
-  handleProjectTitleKeyDown: (
-    event: KeyboardEvent<HTMLButtonElement>,
-    projectId: ProjectId,
-  ) => void;
-}
+export type {
+  SidebarProjectActionsInput,
+  SidebarProjectActionsOutput,
+} from "./Sidebar.projectActions.types";
 
 /** Encapsulates all project-level actions for the sidebar. */
 export function useSidebarProjectActions({
@@ -107,114 +40,44 @@ export function useSidebarProjectActions({
   threadIdsByProjectId,
   sidebarProjects,
   appSettings,
-  isAddingProject,
-  setIsAddingProject,
-  newCwd,
-  setNewCwd,
-  setAddProjectError,
-  setAddingProject,
-  isPickingFolder,
-  setIsPickingFolder,
-  addProjectInputRef,
-  shouldBrowseForProjectImmediately,
   dragInProgressRef,
   suppressProjectClickAfterDragRef,
   suppressProjectClickForContextMenuRef,
   selectedThreadIdsSize,
   clearSelection,
   copyPathToClipboard,
-  focusMostRecentThreadForProject,
-  handleNewThread,
   cancelThreadRename,
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
+  const verifiedExecutionTargetIds = useRemoteAccessStore(
+    (store) => store.verifiedExecutionTargetIds,
+  );
+  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
   });
   const navigate = useNavigate();
-  const serverProviders = useServerProviders();
 
-  const [renamingProjectId, setRenamingProjectId] = useState<ProjectId | null>(null);
-  const [renamingProjectTitle, setRenamingProjectTitle] = useState("");
   const [pendingProjectDeleteConfirmation, setPendingProjectDeleteConfirmation] = useState<{
     projectId: ProjectId;
     projectName: string;
     threadCount: number;
   } | null>(null);
-  const projectRenamingCommittedRef = useRef(false);
-  const projectRenamingInputRef = useRef<HTMLInputElement | null>(null);
-
-  const cancelProjectRename = useCallback(() => {
-    setRenamingProjectId(null);
-    projectRenamingInputRef.current = null;
-  }, []);
-
-  const onProjectRenamingInputMount = useCallback((element: HTMLInputElement | null) => {
-    if (element && projectRenamingInputRef.current !== element) {
-      projectRenamingInputRef.current = element;
-      element.focus();
-      element.select();
-      return;
-    }
-    if (element === null && projectRenamingInputRef.current !== null) {
-      projectRenamingInputRef.current = null;
-    }
-  }, []);
-
-  const hasProjectRenameCommitted = useCallback(() => projectRenamingCommittedRef.current, []);
-
-  const markProjectRenameCommitted = useCallback(() => {
-    projectRenamingCommittedRef.current = true;
-  }, []);
-
-  const commitProjectRename = useCallback(
-    async (projectId: ProjectId, newTitle: string, originalTitle: string) => {
-      const finishRename = () => {
-        setRenamingProjectId((current) => {
-          if (current !== projectId) return current;
-          projectRenamingInputRef.current = null;
-          return null;
-        });
-      };
-
-      const trimmed = newTitle.trim();
-      if (trimmed.length === 0) {
-        toastManager.add({
-          type: "warning",
-          title: "Project title cannot be empty",
-        });
-        finishRename();
-        return;
-      }
-      if (trimmed === originalTitle) {
-        finishRename();
-        return;
-      }
-      const api = readNativeApi();
-      if (!api) {
-        finishRename();
-        return;
-      }
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "project.meta.update",
-          commandId: newCommandId(),
-          projectId,
-          title: trimmed,
-        });
-      } catch (error) {
-        toastManager.add({
-          type: "error",
-          title: "Failed to rename project",
-          description: error instanceof Error ? error.message : "An error occurred.",
-        });
-      }
-      finishRename();
-    },
-    [],
-  );
+  const {
+    renamingProjectId,
+    setRenamingProjectId,
+    renamingProjectTitle,
+    setRenamingProjectTitle,
+    projectRenamingCommittedRef,
+    cancelProjectRename,
+    onProjectRenamingInputMount,
+    hasProjectRenameCommitted,
+    markProjectRenameCommitted,
+    commitProjectRename,
+  } = useSidebarProjectRenameActions();
 
   const dismissPendingProjectDeleteConfirmation = useCallback(() => {
     setPendingProjectDeleteConfirmation(null);
@@ -299,118 +162,6 @@ export function useSidebarProjectActions({
     threadIdsByProjectId,
   ]);
 
-  const addProjectFromPath = useCallback(
-    async (rawCwd: string) => {
-      const cwd = rawCwd.trim();
-      if (!cwd || isAddingProject) return;
-      const api = readNativeApi();
-      if (!api) return;
-
-      setIsAddingProject(true);
-      const finishAddingProject = () => {
-        setIsAddingProject(false);
-        setNewCwd("");
-        setAddProjectError(null);
-        setAddingProject(() => false);
-      };
-
-      const existing = projects.find((project) => project.cwd === cwd);
-      if (existing) {
-        focusMostRecentThreadForProject(existing.id);
-        finishAddingProject();
-        return;
-      }
-
-      const projectId = newProjectId();
-      const createdAt = new Date().toISOString();
-      const title = cwd.split(/[/\\]/).findLast(isNonEmptyString) ?? cwd;
-      try {
-        await api.orchestration.dispatchCommand({
-          type: "project.create",
-          commandId: newCommandId(),
-          projectId,
-          title,
-          workspaceRoot: cwd,
-          defaultModelSelection: getDefaultModelSelection(serverProviders),
-          createdAt,
-        });
-        await handleNewThread(projectId, {
-          envMode: appSettings.defaultThreadEnvMode,
-        }).catch(() => undefined);
-      } catch (error) {
-        const description =
-          error instanceof Error ? error.message : "An error occurred while adding the project.";
-        setIsAddingProject(false);
-        if (shouldBrowseForProjectImmediately) {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description,
-          });
-        } else {
-          setAddProjectError(description);
-        }
-        return;
-      }
-      finishAddingProject();
-    },
-    [
-      focusMostRecentThreadForProject,
-      handleNewThread,
-      isAddingProject,
-      projects,
-      serverProviders,
-      shouldBrowseForProjectImmediately,
-      appSettings.defaultThreadEnvMode,
-      setIsAddingProject,
-      setNewCwd,
-      setAddProjectError,
-      setAddingProject,
-    ],
-  );
-
-  const handleAddProject = () => {
-    void addProjectFromPath(newCwd);
-  };
-
-  const handlePickFolder = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api || isPickingFolder) return;
-    setIsPickingFolder(true);
-    let pickedPath: string | null = null;
-    try {
-      pickedPath = await api.dialogs.pickFolder();
-    } catch {
-      // Ignore picker failures and leave the current thread selection unchanged.
-    }
-    if (pickedPath) {
-      await addProjectFromPath(pickedPath);
-    } else if (!shouldBrowseForProjectImmediately) {
-      addProjectInputRef.current?.focus();
-    }
-    setIsPickingFolder(false);
-  }, [
-    addProjectFromPath,
-    isPickingFolder,
-    shouldBrowseForProjectImmediately,
-    setIsPickingFolder,
-    addProjectInputRef,
-  ]);
-
-  const handleStartAddProject = useCallback(() => {
-    setAddProjectError(null);
-    if (shouldBrowseForProjectImmediately) {
-      void handlePickFolder();
-      return;
-    }
-    setAddingProject((prev) => !prev);
-  }, [handlePickFolder, setAddProjectError, setAddingProject, shouldBrowseForProjectImmediately]);
-
-  const cancelAddProject = useCallback(() => {
-    setAddingProject(() => false);
-    setAddProjectError(null);
-  }, [setAddingProject, setAddProjectError]);
-
   const handleProjectContextMenuAsync = useCallback(
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
@@ -445,7 +196,15 @@ export function useSidebarProjectActions({
 
       requestProjectDelete(projectId);
     },
-    [cancelThreadRename, copyPathToClipboard, projects, requestProjectDelete],
+    [
+      cancelThreadRename,
+      copyPathToClipboard,
+      projectRenamingCommittedRef,
+      projects,
+      requestProjectDelete,
+      setRenamingProjectId,
+      setRenamingProjectTitle,
+    ],
   );
 
   const handleProjectContextMenu = useCallback(
@@ -530,15 +289,38 @@ export function useSidebarProjectActions({
       if (selectedThreadIdsSize > 0) {
         clearSelection();
       }
-      toggleProject(projectId);
+
+      const project = projects.find((entry) => entry.id === projectId);
+      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
+      const isRemoteProject =
+        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
+      const isVerifiedRemoteTarget =
+        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+
+      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        toggleProject(projectId);
+        return;
+      }
+
+      void ensureRemoteExecutionTargetAccess({
+        executionTargetId,
+        ...(project.cwd ? { cwd: project.cwd } : {}),
+        onVerified: () => {
+          setProjectExpanded(projectId, true);
+        },
+      });
     },
     [
       clearSelection,
       dragInProgressRef,
+      ensureRemoteExecutionTargetAccess,
+      projects,
       selectedThreadIdsSize,
+      setProjectExpanded,
       suppressProjectClickAfterDragRef,
       suppressProjectClickForContextMenuRef,
       toggleProject,
+      verifiedExecutionTargetIds,
     ],
   );
 
@@ -549,9 +331,34 @@ export function useSidebarProjectActions({
       if (dragInProgressRef.current) {
         return;
       }
-      toggleProject(projectId);
+      const project = projects.find((entry) => entry.id === projectId);
+      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
+      const isRemoteProject =
+        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
+      const isVerifiedRemoteTarget =
+        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+
+      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        toggleProject(projectId);
+        return;
+      }
+
+      void ensureRemoteExecutionTargetAccess({
+        executionTargetId,
+        ...(project.cwd ? { cwd: project.cwd } : {}),
+        onVerified: () => {
+          setProjectExpanded(projectId, true);
+        },
+      });
     },
-    [dragInProgressRef, toggleProject],
+    [
+      dragInProgressRef,
+      ensureRemoteExecutionTargetAccess,
+      projects,
+      setProjectExpanded,
+      toggleProject,
+      verifiedExecutionTargetIds,
+    ],
   );
 
   return {
@@ -567,11 +374,6 @@ export function useSidebarProjectActions({
     dismissPendingProjectDeleteConfirmation,
     confirmPendingProjectDelete,
     requestProjectDelete,
-    addProjectFromPath,
-    handleAddProject,
-    handlePickFolder,
-    handleStartAddProject,
-    cancelAddProject,
     handleProjectContextMenu,
     handleProjectDragStart,
     handleProjectDragEnd,

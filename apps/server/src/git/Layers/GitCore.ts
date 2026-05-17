@@ -12,6 +12,10 @@ import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCor
 import { makeGitStatusOps } from "./GitStatus.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps } from "./GitWorktree.ts";
+import {
+  formatRemoteExecutionTargetDetail,
+  isLocalExecutionTarget,
+} from "../../executionTargets.ts";
 
 export { makeGitCore };
 
@@ -39,9 +43,31 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
 
   const worktreeOps = makeGitWorktreeOps(helpers, statusOps, path, worktreesDir);
 
+  const assertLocalExecutionTarget = (
+    operation: string,
+    cwd: string,
+    executionTargetId: string | null | undefined,
+  ) =>
+    isLocalExecutionTarget(executionTargetId)
+      ? Effect.void
+      : Effect.fail(
+          new GitCommandError({
+            operation,
+            command: "execution-target",
+            cwd,
+            detail: formatRemoteExecutionTargetDetail({
+              executionTargetId,
+              surface: "Git execution",
+            }),
+          }),
+        );
+
   return {
     execute,
-    status: statusOps.status,
+    status: (input) =>
+      assertLocalExecutionTarget("git.status", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(statusOps.status(input)),
+      ),
     statusDetails: statusOps.statusDetails,
     statusDetailsLocal: statusOps.statusDetailsLocal,
     prepareCommitContext: statusOps.prepareCommitContext,
@@ -50,16 +76,34 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     pullCurrentBranch: statusOps.pullCurrentBranch,
     readRangeContext: statusOps.readRangeContext,
     readConfigValue: statusOps.readConfigValue,
-    listBranches: branchOps.listBranches,
-    checkoutBranch: branchOps.checkoutBranch,
-    createBranch: branchOps.createBranch,
+    listBranches: (input) =>
+      assertLocalExecutionTarget("git.listBranches", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.listBranches(input)),
+      ),
+    checkoutBranch: (input) =>
+      assertLocalExecutionTarget("git.checkout", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.checkoutBranch(input)),
+      ),
+    createBranch: (input) =>
+      assertLocalExecutionTarget("git.createBranch", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.createBranch(input)),
+      ),
     renameBranch: branchOps.renameBranch,
     setBranchUpstream: branchOps.setBranchUpstream,
     listLocalBranchNames: branchOps.listLocalBranchNames,
-    initRepo: branchOps.initRepo,
+    initRepo: (input) =>
+      assertLocalExecutionTarget("git.init", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.initRepo(input)),
+      ),
     ensureRemote: branchOps.ensureRemote,
-    createWorktree: worktreeOps.createWorktree,
-    removeWorktree: worktreeOps.removeWorktree,
+    createWorktree: (input) =>
+      assertLocalExecutionTarget("git.createWorktree", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(worktreeOps.createWorktree(input)),
+      ),
+    removeWorktree: (input) =>
+      assertLocalExecutionTarget("git.removeWorktree", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(worktreeOps.removeWorktree(input)),
+      ),
     fetchPullRequestBranch: worktreeOps.fetchPullRequestBranch,
     fetchRemoteBranch: worktreeOps.fetchRemoteBranch,
     isInsideWorkTree: worktreeOps.isInsideWorkTree,

@@ -28,7 +28,7 @@ See the full schema for more details: [`packages/contracts/src/server/keybinding
   { "key": "mod+shift+g", "command": "diff.toggle", "when": "!terminalFocus" },
   { "key": "mod+shift+g", "command": "terminal.split", "when": "terminalFocus" },
   { "key": "mod+shift+b", "command": "browser.toggle", "when": "!terminalFocus" },
-  { "key": "mod+k", "command": "commandPalette.toggle", "when": "!terminalFocus" },
+  { "key": "mod+p", "command": "commandPalette.toggle", "when": "!terminalFocus" },
   { "key": "mod+n", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+o", "command": "chat.new", "when": "!terminalFocus" },
   { "key": "mod+shift+n", "command": "chat.newLocal", "when": "!terminalFocus" },
@@ -96,7 +96,7 @@ Examples:
 - `mod+j`
 - `mod+shift+d`
 - `ctrl+l`
-- `cmd+k`
+- `cmd+p`
 
 ### `when` Conditions
 

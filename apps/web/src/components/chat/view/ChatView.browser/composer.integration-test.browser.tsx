@@ -392,6 +392,7 @@ describe("ChatView composer integration", () => {
                 id: "codex:skill:review",
                 provider: "codex",
                 name: "review",
+                displayName: "Code Review",
                 source: "project",
                 description: "Review the current change before sending it.",
                 sourcePath: "/repo/project/.agents/skills/review/SKILL.md",
@@ -407,11 +408,14 @@ describe("ChatView composer integration", () => {
       await page.getByTestId("composer-editor").fill("$rev");
 
       const menuItem = await waitForComposerMenuItem("provider-skill:codex:codex:skill:review");
+      await vi.waitFor(() => {
+        expect(menuItem.textContent).toContain("Code Review");
+      });
       menuItem.click();
 
       await vi.waitFor(() => {
         const composer = document.querySelector('[data-testid="composer-editor"]');
-        expect(composer?.textContent).toContain("review");
+        expect(composer?.textContent).toContain("Code Review");
         expect(useComposerDraftStore.getState().draftsByThreadId[THREAD_ID]?.prompt).toBe(
           "@skill::review ",
         );

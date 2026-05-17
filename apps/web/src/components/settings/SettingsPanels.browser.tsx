@@ -8,7 +8,7 @@ import { render } from "vitest-browser-react";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
-import { AboutSettingsPanel } from "./SettingsPanels";
+import { AboutSettingsPanel, AiSettingsPanel } from "./SettingsPanels";
 
 function createBaseServerConfig(): ServerConfig {
   return {
@@ -16,7 +16,33 @@ function createBaseServerConfig(): ServerConfig {
     keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
     keybindings: [],
     issues: [],
-    providers: [],
+    providers: [
+      {
+        provider: "codex",
+        enabled: true,
+        installed: true,
+        version: "0.116.0",
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-01-01T00:00:00.000Z",
+        models: [
+          {
+            slug: "gpt-5.4-mini",
+            name: "GPT-5.4 Mini",
+            isCustom: false,
+            capabilities: {
+              reasoningEffortLevels: [],
+              supportsFastMode: true,
+              supportsThinkingToggle: false,
+              contextWindowOptions: [],
+              promptInjectedEffortLevels: [],
+            },
+          },
+        ],
+        slashCommands: [],
+        skills: [],
+      },
+    ],
     discovery: {
       agents: [],
       skills: [],
@@ -91,5 +117,37 @@ describe("AboutSettingsPanel observability", () => {
     await openLogsButton.click();
 
     expect(openInEditor).toHaveBeenCalledWith("/repo/project/.t3/logs", "cursor");
+  });
+});
+
+describe("AiSettingsPanel defaults", () => {
+  beforeEach(() => {
+    resetServerStateForTests();
+    __resetNativeApiForTests();
+    localStorage.clear();
+    document.body.innerHTML = "";
+  });
+
+  afterEach(() => {
+    resetServerStateForTests();
+    __resetNativeApiForTests();
+    document.body.innerHTML = "";
+  });
+
+  it("renders stream replies and stream thinking enabled by default", async () => {
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    await render(
+      <AppAtomRegistryProvider>
+        <AiSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await expect
+      .element(page.getByLabelText("Stream replies"))
+      .toHaveAttribute("aria-checked", "true");
+    await expect
+      .element(page.getByLabelText("Stream thinking"))
+      .toHaveAttribute("aria-checked", "true");
   });
 });

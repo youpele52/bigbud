@@ -143,6 +143,7 @@ export default function BranchToolbar({
       {activeProject && isGitRepo ? (
         <BranchToolbarBranchSelector
           activeProjectCwd={activeProject.cwd}
+          executionTargetId={activeProject.executionTargetId}
           activeThreadBranch={activeThreadBranch}
           activeWorktreePath={activeWorktreePath}
           branchCwd={branchCwd}

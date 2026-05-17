@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import {
+  ExecutionTargetId,
   IsoDateTime,
   NonNegativeInt,
   ProjectId,
@@ -131,7 +132,15 @@ export type ServerDiscoveredAgent = typeof ServerDiscoveredAgent.Type;
 export const ServerDiscoveredAgents = Schema.Array(ServerDiscoveredAgent);
 export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 
-export const ServerDiscoveredSkill = ServerDiscoveredEntryBase;
+export const ServerDiscoveredSkill = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  provider: ProviderKind,
+  name: TrimmedNonEmptyString,
+  source: ServerDiscoverySource,
+  description: Schema.optional(TrimmedNonEmptyString),
+  sourcePath: Schema.optional(TrimmedNonEmptyString),
+  displayName: Schema.optional(TrimmedNonEmptyString),
+});
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
 
 export const ServerDiscoveredSkills = Schema.Array(ServerDiscoveredSkill);
@@ -174,6 +183,65 @@ export const ServerUpsertKeybindingResult = Schema.Struct({
   issues: ServerConfigIssues,
 });
 export type ServerUpsertKeybindingResult = typeof ServerUpsertKeybindingResult.Type;
+
+export const ServerVerifyExecutionTargetInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  cwd: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerVerifyExecutionTargetInput = typeof ServerVerifyExecutionTargetInput.Type;
+
+export const ServerVerifyExecutionTargetResult = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  message: TrimmedNonEmptyString,
+  cwd: Schema.optional(TrimmedNonEmptyString),
+});
+export type ServerVerifyExecutionTargetResult = typeof ServerVerifyExecutionTargetResult.Type;
+
+export class ServerVerifyExecutionTargetError extends Schema.TaggedErrorClass<ServerVerifyExecutionTargetError>()(
+  "ServerVerifyExecutionTargetError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ServerUnlockSshKeyInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  passphrase: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshKeyInput = typeof ServerUnlockSshKeyInput.Type;
+
+export const ServerUnlockSshKeyResult = Schema.Struct({
+  message: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshKeyResult = typeof ServerUnlockSshKeyResult.Type;
+
+export class ServerUnlockSshKeyError extends Schema.TaggedErrorClass<ServerUnlockSshKeyError>()(
+  "ServerUnlockSshKeyError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ServerUnlockSshPasswordInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  password: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshPasswordInput = typeof ServerUnlockSshPasswordInput.Type;
+
+export const ServerUnlockSshPasswordResult = Schema.Struct({
+  message: TrimmedNonEmptyString,
+});
+export type ServerUnlockSshPasswordResult = typeof ServerUnlockSshPasswordResult.Type;
+
+export class ServerUnlockSshPasswordError extends Schema.TaggedErrorClass<ServerUnlockSshPasswordError>()(
+  "ServerUnlockSshPasswordError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
 
 export const ServerConfigUpdatedPayload = Schema.Struct({
   issues: ServerConfigIssues,

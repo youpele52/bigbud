@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 
+import { LOCAL_EXECUTION_TARGET_ID } from "../core/baseSchemas";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
@@ -100,6 +101,10 @@ it.effect("trims branded ids and command string fields at decode boundaries", ()
     assert.strictEqual(parsed.commandId, "cmd-1");
     assert.strictEqual(parsed.projectId, "project-1");
     assert.strictEqual(parsed.title, "Project Title");
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
     assert.strictEqual(parsed.workspaceRoot, "/tmp/workspace");
     assert.deepStrictEqual(parsed.defaultModelSelection, {
       provider: "codex",
@@ -123,6 +128,31 @@ it.effect("decodes historical project.created payloads with a default provider",
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.defaultModelSelection?.provider, "codex");
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
+  }),
+);
+
+it.effect("decodes separate project runtime and workspace execution targets", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeProjectCreateCommand({
+      type: "project.create",
+      commandId: "cmd-1",
+      projectId: "project-1",
+      title: "Project Title",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      workspaceRoot: "/workspace/project",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.providerRuntimeExecutionTargetId, "local");
+    assert.strictEqual(
+      parsed.workspaceExecutionTargetId,
+      "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+    );
+    assert.strictEqual(parsed.executionTargetId, undefined);
   }),
 );
 
@@ -137,6 +167,10 @@ it.effect("decodes project.meta-updated payloads with explicit default provider"
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.defaultModelSelection?.provider, "claudeAgent");
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
   }),
 );
 
@@ -237,6 +271,10 @@ it.effect("accepts bootstrap metadata in thread.turn.start", () =>
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.bootstrap?.createThread?.projectId, "project-1");
+    assert.strictEqual(
+      parsed.bootstrap?.createThread?.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
     assert.strictEqual(parsed.bootstrap?.prepareWorktree?.baseBranch, "main");
     assert.strictEqual(parsed.bootstrap?.runSetupScript, true);
   }),
@@ -315,6 +353,10 @@ it.effect("decodes thread.created runtime mode for historical events", () =>
 
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
     assert.strictEqual(parsed.modelSelection.provider, "codex");
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
   }),
 );
 
@@ -343,6 +385,38 @@ it.effect("decodes thread.created parent thread metadata when present", () =>
       threadId: "thread-1",
       title: "Parent thread",
     });
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
+  }),
+);
+
+it.effect("decodes separate thread runtime and workspace execution targets", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadCreatedPayload({
+      threadId: "thread-3",
+      projectId: "project-1",
+      title: "Thread title",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+      modelSelection: {
+        provider: "pi",
+        model: "sonnet",
+      },
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    assert.strictEqual(parsed.providerRuntimeExecutionTargetId, "local");
+    assert.strictEqual(
+      parsed.workspaceExecutionTargetId,
+      "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+    );
+    assert.strictEqual(parsed.executionTargetId, undefined);
   }),
 );
 
@@ -357,6 +431,10 @@ it.effect("decodes thread.meta-updated payloads with explicit provider", () =>
       updatedAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.modelSelection?.provider, "claudeAgent");
+    assert.strictEqual(
+      parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      LOCAL_EXECUTION_TARGET_ID,
+    );
   }),
 );
 

@@ -15,6 +15,7 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { type ProjectId } from "@bigbud/contracts";
+import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { Spinner } from "../ui/spinner";
 import { SidebarMenu, SidebarMenuItem } from "../ui/sidebar";
 import { SortableProjectItem } from "./SidebarProjectItem";
@@ -111,7 +112,7 @@ export function SidebarProjectList({
 
       {!bootstrapComplete ? (
         <div className="flex justify-center px-2 pt-6">
-          <Spinner className="size-4 text-muted-foreground/40" />
+          <Spinner className={`${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/40`} />
         </div>
       ) : !hasProjects && showEmptyState ? (
         <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">

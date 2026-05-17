@@ -43,6 +43,7 @@ export function makeStopSessionRecord(
 
         // Release the shared server handle (decrements ref-count; shuts down server when last session stops)
         record.releaseServer();
+        await record.cleanupBridge?.();
         sessions.delete(record.threadId);
       },
       catch: (cause) =>
@@ -99,6 +100,12 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
             provider: PROVIDER,
             status: record.activeTurnId ? ("running" as const) : ("ready" as const),
             runtimeMode: record.runtimeMode,
+            ...(record.providerRuntimeExecutionTargetId
+              ? { providerRuntimeExecutionTargetId: record.providerRuntimeExecutionTargetId }
+              : {}),
+            ...(record.workspaceExecutionTargetId
+              ? { workspaceExecutionTargetId: record.workspaceExecutionTargetId }
+              : {}),
             threadId: record.threadId,
             resumeCursor: { sessionId: record.opencodeSessionId },
             createdAt: record.createdAt,

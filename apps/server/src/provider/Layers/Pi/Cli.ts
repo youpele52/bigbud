@@ -11,15 +11,22 @@ export interface PiInvocation {
 }
 
 export function resolveBundledPiCliPath(): string | undefined {
-  try {
-    const req = createRequire(import.meta.url);
-    const packageJsonPath = req.resolve("@mariozechner/pi-coding-agent/package.json");
-    const packageDir = dirname(packageJsonPath);
-    const cliPath = join(packageDir, "dist", "cli.js");
-    return existsSync(cliPath) ? cliPath : undefined;
-  } catch {
-    return undefined;
-  }
+  const req = createRequire(import.meta.url);
+
+  const tryResolve = (packageName: string): string | undefined => {
+    try {
+      const packageJsonPath = req.resolve(`${packageName}/package.json`);
+      const packageDir = dirname(packageJsonPath);
+      const cliPath = join(packageDir, "dist", "cli.js");
+      return existsSync(cliPath) ? cliPath : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  return (
+    tryResolve("@earendil-works/pi-coding-agent") ?? tryResolve("@mariozechner/pi-coding-agent")
+  );
 }
 
 function resolveNodeCommand(): string {

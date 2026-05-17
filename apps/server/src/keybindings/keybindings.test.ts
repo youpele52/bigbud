@@ -172,7 +172,7 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       );
 
       assert.equal(defaultsByCommand.get("diff.toggle"), "mod+shift+g");
-      assert.equal(defaultsByCommand.get("commandPalette.toggle"), "mod+k");
+      assert.equal(defaultsByCommand.get("commandPalette.toggle"), "mod+p");
       assert.equal(defaultsByCommand.get("thread.previous"), "mod+shift+[");
       assert.equal(defaultsByCommand.get("thread.next"), "mod+shift+]");
       assert.equal(defaultsByCommand.get("thread.jump.1"), "mod+1");
@@ -272,6 +272,61 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         }
         assert.isTrue(byCommand.has("script.run-tests.run"));
       }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("migrates the legacy command palette shortcut to mod+p on startup", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "mod+k", command: "commandPalette.toggle", when: "!terminalFocus" },
+      ]);
+
+      yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        yield* keybindings.syncDefaultKeybindingsOnStartup;
+      });
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      const commandPaletteRule = persisted.find(
+        (entry) => entry.command === "commandPalette.toggle",
+      );
+
+      assert.deepEqual(commandPaletteRule, {
+        key: "mod+p",
+        command: "commandPalette.toggle",
+        when: "!terminalFocus",
+      });
+      assert.isFalse(
+        persisted.some(
+          (entry) => entry.command === "commandPalette.toggle" && entry.key === "mod+k",
+        ),
+      );
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("preserves custom command palette shortcuts on startup", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "mod+shift+p", command: "commandPalette.toggle", when: "!terminalFocus" },
+      ]);
+
+      yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        yield* keybindings.syncDefaultKeybindingsOnStartup;
+      });
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      const commandPaletteRule = persisted.find(
+        (entry) => entry.command === "commandPalette.toggle",
+      );
+
+      assert.deepEqual(commandPaletteRule, {
+        key: "mod+shift+p",
+        command: "commandPalette.toggle",
+        when: "!terminalFocus",
+      });
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
   );
 
   it.effect("skips conflicting default keybindings on startup and logs a detailed warning", () => {

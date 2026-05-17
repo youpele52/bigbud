@@ -7,6 +7,7 @@ import { getFallbackThreadIdAfterDelete } from "../components/sidebar/Sidebar.lo
 import { useComposerDraftStore } from "../stores/composer";
 import { useHandleNewThread } from "./useHandleNewThread";
 import { gitRemoveWorktreeMutationOptions } from "../lib/gitReactQuery";
+import { buildExplicitExecutionTargets } from "../lib/providerExecutionTargets";
 import { newCommandId, newThreadId } from "../lib/utils";
 import { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
@@ -248,12 +249,17 @@ export function useThreadActions() {
       );
 
       try {
+        const executionTargets = buildExplicitExecutionTargets({
+          providerRuntimeExecutionTargetId: sourceThread.providerRuntimeExecutionTargetId,
+          workspaceExecutionTargetId: sourceThread.workspaceExecutionTargetId,
+        });
         await api.orchestration.dispatchCommand({
           type: "thread.create",
           commandId: newCommandId(),
           threadId: forkedThreadId,
           projectId: sourceThread.projectId,
           title: forkedThreadTitle,
+          ...executionTargets,
           modelSelection: options?.modelSelection ?? sourceThread.modelSelection,
           runtimeMode: sourceThread.runtimeMode,
           interactionMode: sourceThread.interactionMode,

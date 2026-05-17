@@ -1,44 +1,14 @@
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  BUILT_IN_CHATS_PROJECT_TITLE,
-  CommandId,
-  DEFAULT_MODEL_BY_PROVIDER,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  type ModelSelection,
-  PROVIDER_KINDS,
-  ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
-import {
-  Data,
-  Deferred,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Path,
-  Queue,
-  Ref,
-  Scope,
-  ServiceMap,
-} from "effect";
+import { Data, Deferred, Effect, Exit, Layer, Queue, Ref, Scope, ServiceMap } from "effect";
 
 import { ServerConfig } from "./config";
 import { Keybindings } from "../keybindings/keybindings";
-import { Open } from "../utils/open";
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
 import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
-import { resolveDefaultChatCwd, ServerSettingsService } from "../ws/serverSettings";
+import { ServerSettingsService } from "../ws/serverSettings";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
-import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
-
-const isWildcardHost = (host: string | undefined): boolean =>
-  host === "0.0.0.0" || host === "::" || host === "[::]";
-
-const formatHostForUrl = (host: string): string =>
-  host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
+import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -152,159 +122,6 @@ export const launchStartupHeartbeat = recordStartupHeartbeat.pipe(
   Effect.forkScoped,
   Effect.asVoid,
 );
-
-/**
- * Resolve the default model selection for a newly bootstrapped project.
- *
- * Uses the first provider that is already ready in the current snapshot.
- * Falls back immediately to the first provider in PROVIDER_KINDS with its
- * static default model so startup never waits on optional provider probes.
- */
-const resolveBootstrapModelSelection = Effect.gen(function* () {
-  const providerRegistry = yield* ProviderRegistry;
-  const providers = yield* providerRegistry.getProviders;
-  const provider = providers.find((candidate) => candidate.enabled && candidate.status === "ready");
-  if (provider) {
-    const model = provider.models[0]?.slug ?? DEFAULT_MODEL_BY_PROVIDER[provider.provider];
-    return { provider: provider.provider, model } satisfies ModelSelection;
-  }
-  // No provider ready — fall back to static default for first provider kind.
-  const fallbackProvider = PROVIDER_KINDS[0];
-  return {
-    provider: fallbackProvider,
-    model: DEFAULT_MODEL_BY_PROVIDER[fallbackProvider],
-  } satisfies ModelSelection;
-});
-
-const autoBootstrapWelcome = Effect.gen(function* () {
-  const serverConfig = yield* ServerConfig;
-  const projectionReadModelQuery = yield* ProjectionSnapshotQuery;
-  const orchestrationEngine = yield* OrchestrationEngineService;
-  const path = yield* Path.Path;
-
-  let bootstrapProjectId: ProjectId | undefined;
-  let bootstrapThreadId: ThreadId | undefined;
-
-  const chatsProject = yield* orchestrationEngine
-    .getReadModel()
-    .pipe(
-      Effect.map((readModel) =>
-        readModel.projects.find((project) => project.id === BUILT_IN_CHATS_PROJECT_ID),
-      ),
-    );
-  if (!chatsProject) {
-    const createdAt = new Date(0).toISOString();
-    yield* orchestrationEngine.dispatch({
-      type: "project.create",
-      commandId: CommandId.makeUnsafe(crypto.randomUUID()),
-      projectId: BUILT_IN_CHATS_PROJECT_ID,
-      title: BUILT_IN_CHATS_PROJECT_TITLE,
-      workspaceRoot: null,
-      defaultModelSelection: null,
-      createdAt,
-    });
-  }
-
-  if (serverConfig.autoBootstrapProjectFromCwd) {
-    yield* Effect.gen(function* () {
-      const existingProject = yield* projectionReadModelQuery.getActiveProjectByWorkspaceRoot(
-        serverConfig.cwd,
-      );
-      let nextProjectId: ProjectId;
-      let nextProjectDefaultModelSelection: ModelSelection;
-
-      if (Option.isNone(existingProject)) {
-        const createdAt = new Date().toISOString();
-        nextProjectId = ProjectId.makeUnsafe(crypto.randomUUID());
-        const bootstrapProjectTitle = path.basename(serverConfig.cwd) || "project";
-        nextProjectDefaultModelSelection = yield* resolveBootstrapModelSelection;
-        yield* orchestrationEngine.dispatch({
-          type: "project.create",
-          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
-          projectId: nextProjectId,
-          title: bootstrapProjectTitle,
-          workspaceRoot: serverConfig.cwd,
-          defaultModelSelection: nextProjectDefaultModelSelection,
-          createdAt,
-        });
-      } else {
-        nextProjectId = existingProject.value.id;
-        // Existing project — preserve its stored selection; only resolve a
-        // dynamic default if no selection was ever persisted.
-        nextProjectDefaultModelSelection =
-          existingProject.value.defaultModelSelection ?? (yield* resolveBootstrapModelSelection);
-      }
-
-      const existingThreadId =
-        yield* projectionReadModelQuery.getFirstActiveThreadIdByProjectId(nextProjectId);
-      if (Option.isNone(existingThreadId)) {
-        const createdAt = new Date().toISOString();
-        const createdThreadId = ThreadId.makeUnsafe(crypto.randomUUID());
-        yield* orchestrationEngine.dispatch({
-          type: "thread.create",
-          commandId: CommandId.makeUnsafe(crypto.randomUUID()),
-          threadId: createdThreadId,
-          projectId: nextProjectId,
-          title: "New thread",
-          modelSelection: nextProjectDefaultModelSelection,
-          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-          runtimeMode: "full-access",
-          branch: null,
-          worktreePath: null,
-          createdAt,
-        });
-        bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = createdThreadId;
-      } else {
-        bootstrapProjectId = nextProjectId;
-        bootstrapThreadId = existingThreadId.value;
-      }
-    });
-  }
-
-  const segments = serverConfig.cwd.split(/[/\\]/).filter(Boolean);
-  const projectName = segments[segments.length - 1] ?? "project";
-
-  const serverSettings = yield* ServerSettingsService;
-  const settings = yield* serverSettings.getSettings;
-  const defaultChatCwd = resolveDefaultChatCwd(settings);
-
-  return {
-    cwd: serverConfig.cwd,
-    projectName,
-    defaultChatCwd,
-    ...(bootstrapProjectId ? { bootstrapProjectId } : {}),
-    ...(bootstrapThreadId ? { bootstrapThreadId } : {}),
-  } as const;
-});
-
-const maybeOpenBrowser = Effect.gen(function* () {
-  const serverConfig = yield* ServerConfig;
-  if (serverConfig.noBrowser) {
-    return;
-  }
-  const { openBrowser } = yield* Open;
-  const localUrl = `http://localhost:${serverConfig.port}`;
-  const bindUrl =
-    serverConfig.host && !isWildcardHost(serverConfig.host)
-      ? `http://${formatHostForUrl(serverConfig.host)}:${serverConfig.port}`
-      : localUrl;
-  const target = serverConfig.devUrl?.toString() ?? bindUrl;
-
-  yield* openBrowser(target).pipe(
-    Effect.catch(() =>
-      Effect.logInfo("browser auto-open unavailable", {
-        hint: `Open ${target} in your browser.`,
-      }),
-    ),
-  );
-});
-
-const runStartupPhase = <A, E, R>(phase: string, effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(
-    Effect.annotateSpans({ "startup.phase": phase }),
-    Effect.withSpan(`server.startup.${phase}`),
-  );
 
 const makeServerRuntimeStartup = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;

@@ -1,23 +1,5 @@
-import {
-  type ClaudeModelOptions,
-  type CopilotModelOptions,
-  type CodexModelOptions,
-  type OpencodeModelOptions,
-  type PiModelOptions,
-  type ProviderKind,
-  type ProviderModelOptions,
-  type ServerProviderModel,
-  type ThreadId,
-} from "@bigbud/contracts";
-import {
-  applyClaudePromptEffortPrefix,
-  isClaudeUltrathinkPrompt,
-  trimOrNull,
-  getDefaultEffort,
-  getDefaultContextWindow,
-  hasContextWindowOption,
-  resolveEffort,
-} from "@bigbud/shared/model";
+import { type ProviderKind, type ServerProviderModel, type ThreadId } from "@bigbud/contracts";
+import { applyClaudePromptEffortPrefix, getDefaultEffort } from "@bigbud/shared/model";
 import { memo, useCallback, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";
@@ -33,10 +15,14 @@ import {
   MenuTrigger,
 } from "../../ui/menu";
 import { useComposerDraftStore } from "../../../stores/composer";
-import { getProviderModelCapabilities } from "../../../models/provider";
 import { cn } from "~/lib/utils";
+import {
+  buildNextOptions,
+  getSelectedTraits,
+  ULTRATHINK_PROMPT_PREFIX,
+  type TraitsPickerProviderOptions as ProviderOptions,
+} from "./TraitsPicker.logic";
 
-type ProviderOptions = ProviderModelOptions[ProviderKind];
 type TraitsPersistence =
   | {
       threadId: ThreadId;
@@ -46,126 +32,6 @@ type TraitsPersistence =
       threadId?: undefined;
       onModelOptionsChange: (nextOptions: ProviderOptions | undefined) => void;
     };
-
-const ULTRATHINK_PROMPT_PREFIX = "Ultrathink:\n";
-
-function getRawEffort(
-  provider: ProviderKind,
-  modelOptions: ProviderOptions | null | undefined,
-): string | null {
-  if (provider === "codex") {
-    return trimOrNull((modelOptions as CodexModelOptions | undefined)?.reasoningEffort);
-  }
-  if (provider === "copilot") {
-    return trimOrNull((modelOptions as CopilotModelOptions | undefined)?.reasoningEffort);
-  }
-  if (provider === "opencode") {
-    return trimOrNull((modelOptions as OpencodeModelOptions | undefined)?.reasoningEffort);
-  }
-  return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.effort);
-}
-
-function getRawContextWindow(
-  provider: ProviderKind,
-  modelOptions: ProviderOptions | null | undefined,
-): string | null {
-  if (provider === "claudeAgent") {
-    return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.contextWindow);
-  }
-  return null;
-}
-
-function getRawThinkingLevel(modelOptions: ProviderOptions | null | undefined): string | null {
-  return trimOrNull((modelOptions as PiModelOptions | undefined)?.thinkingLevel);
-}
-
-function buildNextOptions(
-  provider: ProviderKind,
-  modelOptions: ProviderOptions | null | undefined,
-  patch: Record<string, unknown>,
-): ProviderOptions {
-  if (provider === "codex") {
-    return { ...(modelOptions as CodexModelOptions | undefined), ...patch } as CodexModelOptions;
-  }
-  if (provider === "copilot") {
-    return {
-      ...(modelOptions as CopilotModelOptions | undefined),
-      ...patch,
-    } as CopilotModelOptions;
-  }
-  if (provider === "opencode") {
-    return {
-      ...(modelOptions as OpencodeModelOptions | undefined),
-      ...patch,
-    } as OpencodeModelOptions;
-  }
-  return { ...(modelOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
-}
-
-function getSelectedTraits(
-  provider: ProviderKind,
-  models: ReadonlyArray<ServerProviderModel>,
-  model: string | null | undefined,
-  prompt: string,
-  modelOptions: ProviderOptions | null | undefined,
-  allowPromptInjectedEffort: boolean,
-) {
-  const caps = getProviderModelCapabilities(models, model, provider);
-  const effortLevels = allowPromptInjectedEffort
-    ? caps.reasoningEffortLevels
-    : caps.reasoningEffortLevels.filter(
-        (option) => !caps.promptInjectedEffortLevels.includes(option.value),
-      );
-
-  // Resolve effort from options (provider-specific key)
-  const rawEffort = getRawEffort(provider, modelOptions);
-  const effort = resolveEffort(caps, rawEffort) ?? null;
-  const thinkingLevel = provider === "pi" ? getRawThinkingLevel(modelOptions) : null;
-
-  // Thinking toggle (only for models that support it)
-  const thinkingEnabled = caps.supportsThinkingToggle
-    ? ((modelOptions as ClaudeModelOptions | undefined)?.thinking ?? true)
-    : null;
-
-  // Fast mode
-  const fastModeEnabled =
-    caps.supportsFastMode &&
-    (modelOptions as { fastMode?: boolean } | undefined)?.fastMode === true;
-
-  // Context window
-  const contextWindowOptions = caps.contextWindowOptions;
-  const rawContextWindow = getRawContextWindow(provider, modelOptions);
-  const defaultContextWindow = getDefaultContextWindow(caps);
-  const contextWindow =
-    rawContextWindow && hasContextWindowOption(caps, rawContextWindow)
-      ? rawContextWindow
-      : defaultContextWindow;
-
-  // Prompt-controlled effort (e.g. ultrathink in prompt text)
-  const ultrathinkPromptControlled =
-    allowPromptInjectedEffort &&
-    caps.promptInjectedEffortLevels.length > 0 &&
-    isClaudeUltrathinkPrompt(prompt);
-
-  // Check if "ultrathink" appears in the body text (not just our prefix)
-  const ultrathinkInBodyText =
-    ultrathinkPromptControlled && isClaudeUltrathinkPrompt(prompt.replace(/^Ultrathink:\s*/i, ""));
-
-  return {
-    caps,
-    effort,
-    thinkingLevel,
-    effortLevels,
-    thinkingEnabled,
-    fastModeEnabled,
-    contextWindowOptions,
-    contextWindow,
-    defaultContextWindow,
-    ultrathinkPromptControlled,
-    ultrathinkInBodyText,
-  };
-}
-
 export interface TraitsMenuContentProps {
   provider: ProviderKind;
   models: ReadonlyArray<ServerProviderModel>;

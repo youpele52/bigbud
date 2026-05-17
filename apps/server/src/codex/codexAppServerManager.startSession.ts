@@ -2,18 +2,18 @@
  * Session startup logic for CodexAppServerManager — extracted to keep the
  * manager class focused on session lifecycle bookkeeping.
  */
-import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import readline from "node:readline";
 
 import { EventId, ThreadId, type ProviderEvent, type ProviderSession } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { readCodexAccountSnapshot, resolveCodexModelForAccount } from "../provider/codexAccount";
 import { buildCodexInitializeParams } from "../provider/codexAppServer";
 import { normalizeCodexModelSlug } from "./codexModeInstructions";
 import { isRecoverableThreadResumeError } from "./codexStderrClassifier";
-import { assertSupportedCodexCliVersion } from "./codexVersionCheck";
+import { startCodexAppServerProcess } from "./codexAppServerManager.process";
 import {
   type CodexAppServerStartSessionInput,
   type CodexSessionContext,
@@ -47,35 +47,32 @@ export async function startSession(
   let context: CodexSessionContext | undefined;
 
   try {
-    const resolvedCwd = input.cwd ?? process.cwd();
+    const resolvedCwd =
+      input.cwd ??
+      (isLocalExecutionTarget(input.workspaceExecutionTargetId ?? input.executionTargetId)
+        ? process.cwd()
+        : (() => {
+            throw new Error("Remote Codex sessions require a remote workspace path.");
+          })());
 
     const session: ProviderSession = {
       provider: "codex",
       status: "connecting",
       runtimeMode: input.runtimeMode,
+      ...(input.providerRuntimeExecutionTargetId
+        ? { providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId }
+        : {}),
+      ...(input.workspaceExecutionTargetId
+        ? { workspaceExecutionTargetId: input.workspaceExecutionTargetId }
+        : {}),
+      ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
       model: normalizeCodexModelSlug(input.model),
       cwd: resolvedCwd,
       threadId,
       createdAt: now,
       updatedAt: now,
     };
-
-    const codexBinaryPath = input.binaryPath;
-    const codexHomePath = input.homePath;
-    assertSupportedCodexCliVersion({
-      binaryPath: codexBinaryPath,
-      cwd: resolvedCwd,
-      ...(codexHomePath ? { homePath: codexHomePath } : {}),
-    });
-    const child = spawn(codexBinaryPath, ["app-server"], {
-      cwd: resolvedCwd,
-      env: {
-        ...process.env,
-        ...(codexHomePath ? { CODEX_HOME: codexHomePath } : {}),
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    });
+    const child = startCodexAppServerProcess(input, resolvedCwd);
     const output = readline.createInterface({ input: child.stdout });
 
     context = {
@@ -92,6 +89,9 @@ export async function startSession(
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
       nextRequestId: 1,
+      ...(input.cleanupRemoteWorkspaceBridge
+        ? { cleanupRemoteWorkspaceBridge: input.cleanupRemoteWorkspaceBridge }
+        : {}),
       stopping: false,
     };
 
@@ -130,6 +130,9 @@ export async function startSession(
       model: normalizedModel ?? null,
       ...(input.serviceTier !== undefined ? { serviceTier: input.serviceTier } : {}),
       cwd: input.cwd ?? null,
+      ...(input.developerInstructions
+        ? { developerInstructions: input.developerInstructions }
+        : {}),
       ...mapCodexRuntimeMode(input.runtimeMode ?? "full-access"),
     };
 

@@ -10,6 +10,7 @@ import { BotIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Badge } from "../../ui/badge";
 import { Command, CommandItem, CommandList } from "../../ui/command";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 
 export type ComposerCommandItem =
@@ -120,24 +121,8 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
   onHighlight: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
-  return (
-    <CommandItem
-      value={props.item.id}
-      data-composer-item-id={props.item.id}
-      className={cn(
-        "cursor-pointer select-none gap-2 hover:bg-transparent hover:text-inherit data-highlighted:bg-transparent data-highlighted:text-inherit",
-        props.isActive && "bg-accent! text-accent-foreground!",
-      )}
-      onMouseMove={() => {
-        if (!props.isActive) props.onHighlight(props.item.id);
-      }}
-      onMouseDown={(event) => {
-        event.preventDefault();
-      }}
-      onClick={() => {
-        props.onSelect(props.item);
-      }}
-    >
+  const itemBody = (
+    <>
       {props.item.type === "path" ? (
         <VscodeEntryIcon
           pathValue={props.item.path}
@@ -163,10 +148,73 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           skill
         </Badge>
       ) : null}
-      <span className="flex min-w-0 items-center gap-1.5 truncate">
-        <span className="truncate">{props.item.label}</span>
-      </span>
-      <span className="truncate text-muted-foreground/70 text-xs">{props.item.description}</span>
+      {props.item.type === "skill" || props.item.type === "agent" ? (
+        <>
+          <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <span className="truncate font-medium">{props.item.label}</span>
+            <span className="shrink-0 text-muted-foreground/70 text-xs">
+              {props.item.type === "skill" ? props.item.skill.provider : props.item.agent.provider}
+            </span>
+          </span>
+          <span className="max-w-[36%] min-w-0 truncate text-muted-foreground/70 text-xs">
+            {props.item.description}
+          </span>
+        </>
+      ) : (
+        <>
+          <span className="flex min-w-0 items-center gap-1.5 truncate">
+            <span className="truncate">{props.item.label}</span>
+          </span>
+          <span className="truncate text-muted-foreground/70 text-xs">
+            {props.item.description}
+          </span>
+        </>
+      )}
+    </>
+  );
+
+  const row = (
+    <CommandItem
+      value={props.item.id}
+      data-composer-item-id={props.item.id}
+      className={cn(
+        "cursor-pointer select-none gap-2 hover:bg-transparent hover:text-inherit data-highlighted:bg-transparent data-highlighted:text-inherit",
+        props.isActive && "bg-accent! text-accent-foreground!",
+      )}
+      onMouseMove={() => {
+        if (!props.isActive) props.onHighlight(props.item.id);
+      }}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={() => {
+        props.onSelect(props.item);
+      }}
+    >
+      {itemBody}
     </CommandItem>
+  );
+
+  if (props.item.type !== "skill" && props.item.type !== "agent") {
+    return row;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipPopup side="top" className="max-w-80 whitespace-normal leading-tight">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground">{props.item.label}</span>
+            <span className="text-muted-foreground text-xs">
+              {props.item.type === "skill" ? props.item.skill.provider : props.item.agent.provider}
+            </span>
+          </div>
+          <div className="text-muted-foreground/90 text-xs">
+            {props.item.description || "No description available."}
+          </div>
+        </div>
+      </TooltipPopup>
+    </Tooltip>
   );
 });

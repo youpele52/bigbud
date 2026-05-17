@@ -8,7 +8,6 @@
  */
 import {
   KeybindingRule,
-  KeybindingsConfig,
   KeybindingsConfigError,
   MAX_KEYBINDINGS_COUNT,
   ResolvedKeybindingsConfig,
@@ -17,17 +16,13 @@ import {
 } from "@bigbud/contracts";
 import {
   Cache,
-  Cause,
   Deferred,
   Effect,
   Exit,
   FileSystem,
-  Path,
   Layer,
-  Predicate,
+  Path,
   PubSub,
-  Schema,
-  SchemaGetter,
   Ref,
   ServiceMap,
   Scope,
@@ -35,13 +30,19 @@ import {
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerConfig } from "../startup/config";
-import { fromLenientJson } from "@bigbud/shared/schemaJson";
 import {
   compileResolvedKeybindingRule,
   compileResolvedKeybindingsConfig,
   mergeWithDefaultKeybindings,
   ResolvedKeybindingFromConfig,
 } from "./keybindings.compiler";
+import {
+  makeLoadRuntimeCustomKeybindingsConfig,
+  makeLoadWritableCustomKeybindingsConfig,
+  makeReadConfigExists,
+  makeReadRawConfig,
+  makeWriteConfigAtomically,
+} from "./keybindings.persistence";
 import { makeStartWatcher, makeSyncDefaultKeybindingsOnStartup } from "./keybindings.runtime";
 
 export {
@@ -62,7 +63,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
   { key: "mod+shift+g", command: "diff.toggle", when: "!terminalFocus" },
   { key: "mod+shift+b", command: "browser.toggle", when: "!terminalFocus" },
-  { key: "mod+k", command: "commandPalette.toggle", when: "!terminalFocus" },
+  { key: "mod+p", command: "commandPalette.toggle", when: "!terminalFocus" },
   { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
   { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" },
   { key: "mod+shift+n", command: "chat.newLocal", when: "!terminalFocus" },
@@ -77,18 +78,6 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
 
 const DEFAULT_RESOLVED_KEYBINDINGS = compileResolvedKeybindingsConfig(DEFAULT_KEYBINDINGS);
 
-const RawKeybindingsEntries = fromLenientJson(Schema.Array(Schema.Unknown));
-const KeybindingsConfigJson = Schema.fromJsonString(KeybindingsConfig);
-const PrettyJsonString = SchemaGetter.parseJson<string>().compose(
-  SchemaGetter.stringifyJson({ space: 2 }),
-);
-const KeybindingsConfigPrettyJson = KeybindingsConfigJson.pipe(
-  Schema.encode({
-    decode: PrettyJsonString,
-    encode: PrettyJsonString,
-  }),
-);
-
 export interface KeybindingsConfigState {
   readonly keybindings: ResolvedKeybindingsConfig;
   readonly issues: readonly ServerConfigIssue[];
@@ -97,26 +86,6 @@ export interface KeybindingsConfigState {
 export interface KeybindingsChangeEvent {
   readonly keybindings: ResolvedKeybindingsConfig;
   readonly issues: readonly ServerConfigIssue[];
-}
-
-function trimIssueMessage(message: string): string {
-  const trimmed = message.trim();
-  return trimmed.length > 0 ? trimmed : "Invalid keybindings configuration.";
-}
-
-function malformedConfigIssue(detail: string): ServerConfigIssue {
-  return {
-    kind: "keybindings.malformed-config",
-    message: trimIssueMessage(detail),
-  };
-}
-
-function invalidEntryIssue(index: number, detail: string): ServerConfigIssue {
-  return {
-    kind: "keybindings.invalid-entry",
-    index,
-    message: trimIssueMessage(detail),
-  };
 }
 
 /**
@@ -192,147 +161,23 @@ const makeKeybindings = Effect.gen(function* () {
   const emitChange = (configState: KeybindingsConfigState) =>
     PubSub.publish(changesPubSub, configState).pipe(Effect.asVoid);
 
-  const readConfigExists = fs.exists(keybindingsConfigPath).pipe(
-    Effect.mapError(
-      (cause) =>
-        new KeybindingsConfigError({
-          configPath: keybindingsConfigPath,
-          detail: "failed to access keybindings config",
-          cause,
-        }),
-    ),
-  );
-
-  const readRawConfig = fs.readFileString(keybindingsConfigPath).pipe(
-    Effect.mapError(
-      (cause) =>
-        new KeybindingsConfigError({
-          configPath: keybindingsConfigPath,
-          detail: "failed to read keybindings config",
-          cause,
-        }),
-    ),
-  );
-
-  const loadWritableCustomKeybindingsConfig = Effect.fn(function* (): Effect.fn.Return<
-    readonly KeybindingRule[],
-    KeybindingsConfigError
-  > {
-    if (!(yield* readConfigExists)) {
-      return [];
-    }
-
-    const rawConfig = yield* readRawConfig.pipe(
-      Effect.flatMap(Schema.decodeEffect(RawKeybindingsEntries)),
-      Effect.mapError(
-        (cause) =>
-          new KeybindingsConfigError({
-            configPath: keybindingsConfigPath,
-            detail: "expected JSON array",
-            cause,
-          }),
-      ),
-    );
-
-    return yield* Effect.forEach(rawConfig, (entry) =>
-      Effect.gen(function* () {
-        const decodedRule = Schema.decodeUnknownExit(KeybindingRule)(entry);
-        if (decodedRule._tag === "Failure") {
-          yield* Effect.logWarning("ignoring invalid keybinding entry", {
-            path: keybindingsConfigPath,
-            entry,
-            error: Cause.pretty(decodedRule.cause),
-          });
-          return null;
-        }
-        const resolved = Schema.decodeExit(ResolvedKeybindingFromConfig)(decodedRule.value);
-        if (resolved._tag === "Failure") {
-          yield* Effect.logWarning("ignoring invalid keybinding entry", {
-            path: keybindingsConfigPath,
-            entry,
-            error: Cause.pretty(resolved.cause),
-          });
-          return null;
-        }
-        return decodedRule.value;
-      }),
-    ).pipe(Effect.map((values) => values.filter(Predicate.isNotNull)));
+  const readConfigExists = makeReadConfigExists(fs, keybindingsConfigPath);
+  const readRawConfig = makeReadRawConfig(fs, keybindingsConfigPath);
+  const loadWritableCustomKeybindingsConfig = makeLoadWritableCustomKeybindingsConfig({
+    keybindingsConfigPath,
+    readConfigExists,
+    readRawConfig,
   });
-
-  const loadRuntimeCustomKeybindingsConfig = Effect.fn(function* (): Effect.fn.Return<
-    {
-      readonly keybindings: readonly KeybindingRule[];
-      readonly issues: readonly ServerConfigIssue[];
-    },
-    KeybindingsConfigError
-  > {
-    if (!(yield* readConfigExists)) {
-      return { keybindings: [], issues: [] };
-    }
-
-    const rawConfig = yield* readRawConfig;
-    const decodedEntries = Schema.decodeUnknownExit(RawKeybindingsEntries)(rawConfig);
-    if (decodedEntries._tag === "Failure") {
-      const detail = `expected JSON array (${Cause.pretty(decodedEntries.cause)})`;
-      return {
-        keybindings: [],
-        issues: [malformedConfigIssue(detail)],
-      };
-    }
-
-    const keybindings: KeybindingRule[] = [];
-    const issues: ServerConfigIssue[] = [];
-    for (const [index, entry] of decodedEntries.value.entries()) {
-      const decodedRule = Schema.decodeUnknownExit(KeybindingRule)(entry);
-      if (decodedRule._tag === "Failure") {
-        const detail = Cause.pretty(decodedRule.cause);
-        issues.push(invalidEntryIssue(index, detail));
-        yield* Effect.logWarning("ignoring invalid keybinding entry", {
-          path: keybindingsConfigPath,
-          index,
-          entry,
-          error: detail,
-        });
-        continue;
-      }
-
-      const resolvedRule = Schema.decodeExit(ResolvedKeybindingFromConfig)(decodedRule.value);
-      if (resolvedRule._tag === "Failure") {
-        const detail = Cause.pretty(resolvedRule.cause);
-        issues.push(invalidEntryIssue(index, detail));
-        yield* Effect.logWarning("ignoring invalid keybinding entry", {
-          path: keybindingsConfigPath,
-          index,
-          entry,
-          error: detail,
-        });
-        continue;
-      }
-      keybindings.push(decodedRule.value);
-    }
-
-    return { keybindings, issues };
+  const loadRuntimeCustomKeybindingsConfig = makeLoadRuntimeCustomKeybindingsConfig({
+    keybindingsConfigPath,
+    readConfigExists,
+    readRawConfig,
   });
-
-  const writeConfigAtomically = (rules: readonly KeybindingRule[]) => {
-    const tempPath = `${keybindingsConfigPath}.${process.pid}.${Date.now()}.tmp`;
-
-    return Schema.encodeEffect(KeybindingsConfigPrettyJson)(rules).pipe(
-      Effect.map((encoded) => `${encoded}\n`),
-      Effect.tap(() => fs.makeDirectory(path.dirname(keybindingsConfigPath), { recursive: true })),
-      Effect.tap((encoded) => fs.writeFileString(tempPath, encoded)),
-      Effect.flatMap(() => fs.rename(tempPath, keybindingsConfigPath)),
-      Effect.ensuring(fs.remove(tempPath, { force: true }).pipe(Effect.ignore({ log: true }))),
-      Effect.mapError(
-        (cause) =>
-          new KeybindingsConfigError({
-            configPath: keybindingsConfigPath,
-            detail: "failed to write keybindings config",
-            cause,
-          }),
-      ),
-    );
-  };
+  const writeConfigAtomically = makeWriteConfigAtomically({
+    keybindingsConfigPath,
+    fileSystem: fs,
+    path,
+  });
 
   const loadConfigStateFromDisk = loadRuntimeCustomKeybindingsConfig().pipe(
     Effect.map(({ keybindings, issues }) => ({

@@ -15,11 +15,13 @@ import { dataUrlToFile } from "./BrowserPanel.annotation";
 import {
   BrowserViewport,
   type BrowserPageMetadata,
+  type BrowserViewportProps,
   type BrowserViewportRef,
 } from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
 import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
+import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 
 const BROWSER_PANEL_WIDTH_STORAGE_KEY = "browser_panel_width";
 const BROWSER_PANEL_MIN_WIDTH = 320;
@@ -46,8 +48,8 @@ export const BrowserPanel = memo(function BrowserPanel({
   const { open, url, setOpen, setUrl } = useBrowserPanelStore();
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
   const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
-  const [inputUrl, setInputUrl] = useState(url || "https://example.com");
-  const [activeUrl, setActiveUrl] = useState(url || "https://example.com");
+  const [inputUrl, setInputUrl] = useState(url || "https://search.brave.com");
+  const [activeUrl, setActiveUrl] = useState(url || "https://search.brave.com");
   const [panelWidth, setPanelWidth] = useState(() => {
     const stored = getLocalStorageItem(BROWSER_PANEL_WIDTH_STORAGE_KEY, Schema.Finite);
     const max = getBrowserPanelMaxWidth();
@@ -292,31 +294,13 @@ export const BrowserPanel = memo(function BrowserPanel({
 
   if (!open) return null;
 
-  const contextMenuItems: ContextMenuItem[] = [
+  const contextMenuItems: ContextMenuItem[] = createBrowserContextMenuItems(
     {
-      id: "back",
-      label: "Back",
-      disabled: !canGoBack,
-      onClick: () => viewportRef.current?.goBack(),
+      canGoBack,
+      canGoForward,
     },
-    {
-      id: "forward",
-      label: "Forward",
-      disabled: !canGoForward,
-      onClick: () => viewportRef.current?.goForward(),
-    },
-    {
-      id: "reload",
-      label: "Reload",
-      onClick: () => viewportRef.current?.reload(),
-    },
-    { id: "sep1", label: "", separator: true, onClick: () => undefined },
-    {
-      id: "inspect",
-      label: "Inspect",
-      onClick: () => viewportRef.current?.openDevTools(),
-    },
-  ];
+    viewportRef,
+  );
 
   return (
     <>
@@ -361,7 +345,10 @@ export const BrowserPanel = memo(function BrowserPanel({
             ref={viewportRef}
             url={activeUrl}
             onUrlChange={handleUrlChange}
-            onNavigationStateChange={({ canGoBack: back, canGoForward: forward }) => {
+            onNavigationStateChange={({
+              canGoBack: back,
+              canGoForward: forward,
+            }: Parameters<NonNullable<BrowserViewportProps["onNavigationStateChange"]>>[0]) => {
               setCanGoBack(back);
               setCanGoForward(forward);
               if (back || forward) {
@@ -372,7 +359,7 @@ export const BrowserPanel = memo(function BrowserPanel({
             onPageMetadataChange={setPageMetadata}
             onContextMenu={
               isElectron
-                ? ({ x, y }) => {
+                ? ({ x, y }: Parameters<NonNullable<BrowserViewportProps["onContextMenu"]>>[0]) => {
                     setContextMenu({ open: true, x, y });
                   }
                 : undefined
