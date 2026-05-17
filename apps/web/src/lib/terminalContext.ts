@@ -49,11 +49,6 @@ const TRAILING_TERMINAL_CONTEXT_BLOCK_PATTERN =
 const TRAILING_ATTACHED_FILES_BLOCK_PATTERN =
   /\n*<attached_files>\n[\s\S]*?\n<\/attached_files>\s*$/;
 
-const BROWSER_ANNOTATION_HEADER = "Browser annotation\n\nUser instruction:\n";
-const BROWSER_ANNOTATION_FOOTER =
-  "Use the attached screenshot and selected element metadata to make the appropriate code change.";
-const BROWSER_ANNOTATION_SEPARATOR = "\n\n---\n\n";
-
 export function normalizeTerminalContextText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
 }
@@ -246,37 +241,6 @@ export function extractTrailingTerminalContexts(prompt: string): ExtractedTermin
             .join("\n\n")
         : null,
     contexts: parsedContexts,
-  };
-}
-
-function isBrowserAnnotationBlock(text: string): boolean {
-  return text.startsWith(BROWSER_ANNOTATION_HEADER) && text.endsWith(BROWSER_ANNOTATION_FOOTER);
-}
-
-function readAnnotationField(lines: ReadonlyArray<string>, prefix: string): string {
-  const line = lines.find((candidate) => candidate.startsWith(prefix));
-  return line ? line.slice(prefix.length).trim() : "";
-}
-
-function parseBrowserAnnotationEntry(text: string): ParsedBrowserAnnotationEntry {
-  const lines = text.split("\n");
-  const userInstructionIndex = lines.indexOf("User instruction:");
-  const pageIndex = lines.indexOf("Page:");
-  const comment =
-    userInstructionIndex >= 0 && pageIndex > userInstructionIndex
-      ? lines
-          .slice(userInstructionIndex + 1, pageIndex)
-          .join("\n")
-          .trim()
-      : "";
-
-  return {
-    text,
-    comment,
-    pageTitle: readAnnotationField(lines, "Title: "),
-    pageUrl: readAnnotationField(lines, "URL: "),
-    selector: readAnnotationField(lines, "Selector: "),
-    tag: readAnnotationField(lines, "Tag: "),
   };
 }
 
