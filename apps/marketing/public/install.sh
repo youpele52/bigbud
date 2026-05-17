@@ -101,7 +101,7 @@ make_temp_dir() {
     return 0
   fi
 
-  mktemp -d -t bigcode-install
+  mktemp -d -t bigbud-install
 }
 
 install_macos() {
@@ -110,7 +110,7 @@ install_macos() {
 
   asset_url="$1"
   tmp_dir="$2"
-  dmg_path="$tmp_dir/bigcode.dmg"
+  dmg_path="$tmp_dir/bigbud.dmg"
   mount_dir="$tmp_dir/mount"
 
   mkdir -p "$mount_dir"
@@ -127,10 +127,9 @@ install_macos() {
   fi
 
   app_bundle="$1"
-  app_name="$(basename "$app_bundle")"
-  destination="/Applications/$app_name"
+  destination="/Applications/bigbud.app"
 
-  log "Installing $app_name to /Applications..."
+  log "Installing bigbud to /Applications..."
   if [ -w /Applications ]; then
     ditto "$app_bundle" "$destination"
   elif command -v sudo >/dev/null 2>&1; then
@@ -139,7 +138,16 @@ install_macos() {
     fail "Administrator access is required to install into /Applications."
   fi
 
-  log "Installed $app_name to $destination"
+  if command -v xattr >/dev/null 2>&1; then
+    log "Removing quarantine attributes..."
+    if [ -w "$destination" ]; then
+      xattr -dr com.apple.quarantine "$destination" 2>/dev/null || true
+    elif command -v sudo >/dev/null 2>&1; then
+      sudo xattr -dr com.apple.quarantine "$destination" 2>/dev/null || true
+    fi
+  fi
+
+  log "Installed bigbud to $destination"
 }
 
 install_linux() {
@@ -147,9 +155,9 @@ install_linux() {
   tmp_dir="$2"
   install_dir="${BIGBUD_INSTALL_DIR:-$HOME/.local/bin}"
   desktop_dir="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-  app_path="$install_dir/bigcode.AppImage"
-  desktop_path="$desktop_dir/bigcode.desktop"
-  download_path="$tmp_dir/bigcode.AppImage"
+  app_path="$install_dir/bigbud.AppImage"
+  desktop_path="$desktop_dir/bigbud.desktop"
+  download_path="$tmp_dir/bigbud.AppImage"
 
   mkdir -p "$install_dir" "$desktop_dir"
 
@@ -165,7 +173,7 @@ Exec="$app_path"
 TryExec="$app_path"
 Terminal=false
 Categories=Development;
-StartupWMClass=bigcode
+StartupWMClass=bigbud
 EOF
 
   if command -v update-desktop-database >/dev/null 2>&1; then
@@ -197,12 +205,12 @@ main() {
 
   case "$os/$arch" in
     mac/arm64)
-      asset_url="$(pick_asset_url "$payload" '/bigbud-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
+      asset_url="$(pick_asset_url "$payload" '/bigbud-beta-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
         fail "Could not find a macOS arm64 DMG in the GitHub release. Visit $RELEASES_PAGE_URL"
       install_macos "$asset_url" "$tmp_dir"
       ;;
     mac/x64)
-      asset_url="$(pick_asset_url "$payload" '/bigbud-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
+      asset_url="$(pick_asset_url "$payload" '/bigbud-beta-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
         fail "Could not find a macOS x64 DMG in the GitHub release. Visit $RELEASES_PAGE_URL"
       install_macos "$asset_url" "$tmp_dir"
       ;;

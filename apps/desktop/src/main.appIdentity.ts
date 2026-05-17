@@ -24,8 +24,8 @@ export interface DesktopAppIdentity {
  * Resolve the Electron userData directory path.
  *
  * Electron derives the default userData path from `productName` in
- * package.json, which would produce directories with spaces and parentheses
- * (e.g. `~/.config/bigbud (Beta)` on Linux). This is
+ * package.json, which would produce directories with spaces and parentheses.
+ * This is
  * unfriendly for shell usage and violates Linux naming conventions.
  *
  * We override it to a clean lowercase name (`bigbud`). If the legacy

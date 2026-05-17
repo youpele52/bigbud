@@ -1,5 +1,3 @@
-// This file mostly exists because we want dev mode to say "bigbud (Dev)" instead of "electron"
-
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
@@ -16,10 +14,9 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Beta)";
-const APP_BUNDLE_ID = "ai.bigcode.desktop";
-const LAUNCHER_VERSION = 1;
+const APP_DISPLAY_NAME = "bigbud";
+const APP_BUNDLE_ID = "ai.bigbud.desktop";
+const LAUNCHER_VERSION = 2;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const desktopDir = resolve(__dirname, "..");
@@ -106,10 +103,13 @@ function buildMacLauncher(electronBinaryPath) {
   const metadataPath = join(runtimeDir, "metadata.json");
 
   mkdirSync(runtimeDir, { recursive: true });
-  // Intentionally keep the legacy Alpha-era app bundle name here so local
-  // runtime launcher cleanup still removes older T3 Code app copies.
-  // Remove this once the legacy Alpha-to-Beta upgrade window is no longer needed.
-  for (const legacyAppName of ["T3 Code (Dev).app", "T3 Code (Alpha).app"]) {
+  // Remove legacy app bundles from previous naming schemes.
+  for (const legacyAppName of [
+    "T3 Code (Dev).app",
+    "T3 Code (Alpha).app",
+    "bigbud (Dev).app",
+    "bigbud (Beta).app",
+  ]) {
     rmSync(join(runtimeDir, legacyAppName), { recursive: true, force: true });
   }
 
