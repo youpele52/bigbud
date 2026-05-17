@@ -1,66 +1,9 @@
-/**
- * Tests for DiscoveryRegistry — skill/agent discovery, path filtering,
- * node_modules exclusion, and catalog merging.
- *
- * Strategy: use NodeServices (real filesystem via temp dirs) to exercise
- * DiscoveryRegistryLive end-to-end. Pure helpers (inferNameFromPath etc.) are
- * indirectly exercised through the catalog output.
- *
- * Important: descriptors include both project-scoped paths (under `cwd`) and
- * user-scoped paths (under OS.homedir()). Tests that need isolation must filter
- * results by `sourcePath` to only inspect entries discovered from the temp cwd.
- */
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import { Effect, FileSystem, Path } from "effect";
 
-import { ServerConfig } from "../../startup/config";
-import { ServerSettingsService } from "../../ws/serverSettings";
-import { DiscoveryRegistry } from "../Services/DiscoveryRegistry";
-import { DiscoveryRegistryLive, haveDiscoveryChanged } from "./DiscoveryRegistry";
-
-// ── Test layer helpers ───────────────────────────────────────────────
-
-/** Stub ServerSettingsService that returns default settings and never streams. */
-const makeStubSettingsLayer = () =>
-  Layer.succeed(ServerSettingsService, {
-    start: Effect.void,
-    ready: Effect.void,
-    getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
-    updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
-    streamChanges: Stream.empty,
-  });
-
-/**
- * Build a DiscoveryRegistryLive layer with a given temp directory as cwd.
- */
-const makeRegistryLayer = (cwd: string) =>
-  DiscoveryRegistryLive.pipe(
-    Layer.provideMerge(makeStubSettingsLayer()),
-    Layer.provideMerge(ServerConfig.layerTest(cwd, { prefix: "discovery-registry-test-" })),
-    Layer.provideMerge(NodeServices.layer),
-  );
-
-/**
- * Get the catalog from the registry.
- */
-const getCatalog = (cwd: string) =>
-  Effect.gen(function* () {
-    const registry = yield* DiscoveryRegistry;
-    return yield* registry.getCatalog;
-  }).pipe(Effect.provide(makeRegistryLayer(cwd)));
-
-/**
- * Write a file at `filePath`, creating all parent directories first.
- */
-const writeFile = (filePath: string, content: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
-    yield* fs.writeFileString(filePath, content);
-  });
+import { haveDiscoveryChanged } from "./DiscoveryRegistry";
+import { getCatalog, writeFile } from "./DiscoveryRegistry.test.shared";
 
 // ── haveDiscoveryChanged ─────────────────────────────────────────────
 
@@ -471,52 +414,6 @@ describe("DiscoveryRegistry — agent discovery", () => {
           (a) => a.provider === "codex" && a.sourcePath?.startsWith(cwd),
         );
         assert.strictEqual(cwdCodexAgents.length, 0);
-      }),
-    );
-  });
-});
-
-// ── Opencode config agent parsing ────────────────────────────────────
-
-describe("DiscoveryRegistry — opencode config agents", () => {
-  it.layer(NodeServices.layer)("parses opencode config JSON agent blocks", (it) => {
-    it.effect("discovers agents defined in .opencode/opencode.json", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const path = yield* Path.Path;
-        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
-
-        // The config descriptor scans .opencode/opencode.json for
-        // `agent = { name = "..." description = "..." }` TOML-style blocks
-        yield* writeFile(
-          path.join(cwd, ".opencode/opencode.json"),
-          `agent = {\n  name = "My Reviewer"\n  description = "Reviews code"\n}\n`,
-        );
-
-        const catalog = yield* getCatalog(cwd);
-
-        const agent = catalog.agents.find(
-          (a) => a.provider === "opencode" && a.name === "My Reviewer",
-        );
-        assert.isDefined(agent, "should discover opencode config agent");
-        assert.strictEqual(agent?.description, "Reviews code");
-        assert.strictEqual(agent?.source, "project");
-      }),
-    );
-
-    it.effect("returns no project-scoped opencode agents when config does not exist", () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
-
-        const catalog = yield* getCatalog(cwd);
-
-        // Only check project-scoped entries (source === "project") to avoid
-        // the user's real ~/.config/opencode/opencode.json affecting results
-        const projectOpencode = catalog.agents.filter(
-          (a) => a.provider === "opencode" && a.source === "project",
-        );
-        assert.strictEqual(projectOpencode.length, 0);
       }),
     );
   });
