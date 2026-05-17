@@ -1,6 +1,5 @@
 import {
   DEFAULT_SERVER_SETTINGS,
-  type ThreadId,
   LOCAL_EXECUTION_TARGET_ID,
   OrchestrationDispatchCommandError,
   type OrchestrationCommand,
@@ -19,6 +18,11 @@ import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../ex
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget";
 import { resolveDefaultChatCwd } from "./serverSettings";
 import {
+  consumeShellOutputEvents,
+  dispatchShellAssistantDelta,
+  type ShellOutputEvent,
+} from "./wsShellDispatch.events";
+import {
   ShellOutputAccumulator,
   SHELL_OUTPUT_BATCH_FLUSH_MS,
   SHELL_OUTPUT_BATCH_MAX_BYTES,
@@ -28,19 +32,6 @@ class ShellCommandExecutionError extends Data.TaggedError("ShellCommandExecution
   readonly message: string;
   readonly cause?: unknown;
 }> {}
-
-type ShellOutputEvent =
-  | {
-      readonly type: "append";
-      readonly text: string;
-    }
-  | {
-      readonly type: "replace";
-      readonly text: string;
-    }
-  | {
-      readonly type: "complete";
-    };
 
 interface DispatchShellCommandServices {
   readonly enqueueCommand: <A, E>(
@@ -68,111 +59,6 @@ interface DispatchShellCommandServices {
 
 const THREAD_READ_MODEL_WAIT_ATTEMPTS = 50;
 const THREAD_READ_MODEL_WAIT_INTERVAL = "10 millis";
-
-const dispatchShellAssistantDelta = (input: {
-  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
-  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
-  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
-  readonly threadId: ThreadId;
-  readonly messageId: MessageId;
-  readonly delta: string;
-}) =>
-  input.orchestrationEngine
-    .dispatch({
-      type: "thread.message.assistant.delta",
-      commandId: input.serverCommandId("shell-output-delta"),
-      threadId: input.threadId,
-      messageId: input.messageId,
-      delta: input.delta,
-      createdAt: new Date().toISOString(),
-    })
-    .pipe(
-      Effect.mapError((cause) =>
-        input.toDispatchCommandError(cause, "Failed to append shell output."),
-      ),
-    );
-
-const dispatchShellAssistantComplete = (input: {
-  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
-  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
-  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
-  readonly threadId: ThreadId;
-  readonly messageId: MessageId;
-}) =>
-  input.orchestrationEngine
-    .dispatch({
-      type: "thread.message.assistant.complete",
-      commandId: input.serverCommandId("shell-output-complete"),
-      threadId: input.threadId,
-      messageId: input.messageId,
-      createdAt: new Date().toISOString(),
-    })
-    .pipe(
-      Effect.mapError((cause) =>
-        input.toDispatchCommandError(cause, "Failed to complete shell output message."),
-      ),
-    );
-
-const dispatchShellAssistantReplace = (input: {
-  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
-  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
-  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
-  readonly threadId: ThreadId;
-  readonly messageId: MessageId;
-  readonly text: string;
-}) =>
-  input.orchestrationEngine
-    .dispatch({
-      type: "thread.message.assistant.replace",
-      commandId: input.serverCommandId("shell-output-replace"),
-      threadId: input.threadId,
-      messageId: input.messageId,
-      text: input.text,
-      createdAt: new Date().toISOString(),
-    })
-    .pipe(
-      Effect.mapError((cause) =>
-        input.toDispatchCommandError(cause, "Failed to replace shell output message."),
-      ),
-    );
-
-const consumeShellOutputEvents = (input: {
-  readonly outputQueue: Queue.Queue<ShellOutputEvent>;
-  readonly orchestrationEngine: DispatchShellCommandServices["orchestrationEngine"];
-  readonly serverCommandId: DispatchShellCommandServices["serverCommandId"];
-  readonly toDispatchCommandError: DispatchShellCommandServices["toDispatchCommandError"];
-  readonly threadId: ThreadId;
-  readonly messageId: MessageId;
-}) =>
-  Effect.gen(function* () {
-    let hasWrittenBody = false;
-
-    while (true) {
-      const event = yield* Queue.take(input.outputQueue);
-
-      if (event.type === "complete") {
-        yield* dispatchShellAssistantComplete(input);
-        return;
-      }
-
-      if (event.text.length === 0) {
-        continue;
-      }
-
-      if (event.type === "replace") {
-        hasWrittenBody = event.text.length > 0;
-        yield* dispatchShellAssistantReplace({
-          ...input,
-          text: event.text,
-        });
-        continue;
-      }
-
-      const delta = hasWrittenBody ? event.text : `\n\n${event.text}`;
-      hasWrittenBody = true;
-      yield* dispatchShellAssistantDelta({ ...input, delta });
-    }
-  });
 
 export const makeDispatchShellCommand =
   ({
