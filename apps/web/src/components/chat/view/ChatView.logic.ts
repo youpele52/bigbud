@@ -18,12 +18,24 @@ import { getProviderModelCapabilities } from "../../../models/provider";
 import { type ComposerImageAttachment, type DraftThreadState } from "../../../stores/composer";
 import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 import { Schema } from "effect";
-import { useStore } from "../../../stores/main";
 import {
   filterTerminalContextsWithText,
   stripInlineTerminalContextPlaceholders,
   type TerminalContextDraft,
 } from "../../../lib/terminalContext";
+import {
+  threadHasStarted,
+  waitForStartedServerThread,
+  waitForThreadToDisappear,
+  waitForThreadToExist,
+} from "./ChatView.threadWait.logic";
+
+export {
+  threadHasStarted,
+  waitForStartedServerThread,
+  waitForThreadToDisappear,
+  waitForThreadToExist,
+} from "./ChatView.threadWait.logic";
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "bigbud:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 
@@ -258,140 +270,6 @@ export function buildExpiredTerminalContextToastCopy(
     title: `${noun} omitted from message`,
     description: "Re-add it if you want that terminal output included.",
   };
-}
-
-export function threadHasStarted(thread: Thread | null | undefined): boolean {
-  return Boolean(
-    thread && (thread.latestTurn !== null || thread.messages.length > 0 || thread.session !== null),
-  );
-}
-
-export async function waitForThreadToExist(
-  threadId: ThreadId,
-  timeoutMs = 3_000,
-): Promise<boolean> {
-  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
-  if (getThread()) {
-    return true;
-  }
-
-  return await new Promise<boolean>((resolve) => {
-    let settled = false;
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-    const finish = (result: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timeoutId !== null) {
-        globalThis.clearTimeout(timeoutId);
-      }
-      unsubscribe();
-      resolve(result);
-    };
-
-    const unsubscribe = useStore.subscribe((state) => {
-      if (!state.threads.some((thread) => thread.id === threadId)) {
-        return;
-      }
-      finish(true);
-    });
-
-    if (getThread()) {
-      finish(true);
-      return;
-    }
-
-    timeoutId = globalThis.setTimeout(() => {
-      finish(false);
-    }, timeoutMs);
-  });
-}
-
-export async function waitForStartedServerThread(
-  threadId: ThreadId,
-  timeoutMs = 1_000,
-): Promise<boolean> {
-  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
-  const thread = getThread();
-
-  if (threadHasStarted(thread)) {
-    return true;
-  }
-
-  return await new Promise<boolean>((resolve) => {
-    let settled = false;
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-    const finish = (result: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timeoutId !== null) {
-        globalThis.clearTimeout(timeoutId);
-      }
-      unsubscribe();
-      resolve(result);
-    };
-
-    const unsubscribe = useStore.subscribe((state) => {
-      if (!threadHasStarted(state.threads.find((thread) => thread.id === threadId))) {
-        return;
-      }
-      finish(true);
-    });
-
-    if (threadHasStarted(getThread())) {
-      finish(true);
-      return;
-    }
-
-    timeoutId = globalThis.setTimeout(() => {
-      finish(false);
-    }, timeoutMs);
-  });
-}
-
-export async function waitForThreadToDisappear(
-  threadId: ThreadId,
-  timeoutMs = 15_000,
-): Promise<boolean> {
-  const getThread = () => useStore.getState().threads.find((thread) => thread.id === threadId);
-  if (!getThread()) {
-    return true;
-  }
-
-  return await new Promise<boolean>((resolve) => {
-    let settled = false;
-    let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
-    const finish = (result: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timeoutId !== null) {
-        globalThis.clearTimeout(timeoutId);
-      }
-      unsubscribe();
-      resolve(result);
-    };
-
-    const unsubscribe = useStore.subscribe((state) => {
-      if (state.threads.some((thread) => thread.id === threadId)) {
-        return;
-      }
-      finish(true);
-    });
-
-    if (!getThread()) {
-      finish(true);
-      return;
-    }
-
-    timeoutId = globalThis.setTimeout(() => {
-      finish(false);
-    }, timeoutMs);
-  });
 }
 
 export interface LocalDispatchSnapshot {

@@ -23,6 +23,7 @@ export const DEFAULT_OPEN_ROWS = 30;
 export interface TerminalSessionState {
   threadId: string;
   terminalId: string;
+  executionTargetId: string;
   cwd: string;
   worktreePath: string | null;
   status: TerminalSessionStatus;
@@ -79,6 +80,7 @@ export interface TerminalManagerState {
 export interface TerminalStartInput {
   threadId: string;
   terminalId: string;
+  executionTargetId?: string;
   cwd: string;
   worktreePath?: string | null;
   cols: number;

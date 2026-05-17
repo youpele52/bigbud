@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -26,6 +26,9 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       yield* projects.upsert({
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Null options project",
+        providerRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: LOCAL_EXECUTION_TARGET_ID,
         workspaceRoot: "/tmp/project-null-options",
         defaultModelSelection: {
           provider: "codex",
@@ -77,6 +80,9 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         threadId: ThreadId.makeUnsafe("thread-null-options"),
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Null options thread",
+        providerRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: LOCAL_EXECUTION_TARGET_ID,
         modelSelection: {
           provider: "claudeAgent",
           model: "claude-opus-4-6",

@@ -59,6 +59,7 @@ export interface CodexSessionContext {
   pendingUserInputs: Map<ApprovalRequestId, PendingUserInputRequest>;
   collabReceiverTurns: Map<string, TurnId>;
   nextRequestId: number;
+  cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   stopping: boolean;
 }
 
@@ -99,12 +100,18 @@ export interface CodexAppServerSendTurnInput {
 export interface CodexAppServerStartSessionInput {
   readonly threadId: ThreadId;
   readonly provider?: "codex";
+  readonly providerRuntimeExecutionTargetId?: string;
+  readonly workspaceExecutionTargetId?: string;
+  readonly executionTargetId?: string;
   readonly cwd?: string;
   readonly model?: string;
   readonly serviceTier?: string;
   readonly resumeCursor?: unknown;
   readonly binaryPath: string;
   readonly homePath?: string;
+  readonly configArgs?: ReadonlyArray<string>;
+  readonly cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
+  readonly developerInstructions?: string;
   readonly runtimeMode: RuntimeMode;
 }
 

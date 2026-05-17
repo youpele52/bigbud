@@ -14,13 +14,15 @@ import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts
 import {
   makeAppendRevertFailureActivity,
   makeAppendCaptureFailureActivity,
-  makeResolveSessionRuntimeForThread,
-  makeResolveCheckpointCwd,
   makeCaptureAndDispatchCheckpoint,
-  makeCaptureCheckpointFromTurnCompletion,
-  makeCaptureCheckpointFromPlaceholder,
+  makeResolveCheckpointCwd,
+  makeResolveSessionRuntimeForThread,
   toTurnId,
 } from "./CheckpointReactorCapture.ts";
+import {
+  makeCaptureCheckpointFromPlaceholder,
+  makeCaptureCheckpointFromTurnCompletion,
+} from "./CheckpointReactorCapture.handlers.ts";
 import { makeHandleRevertRequested } from "./CheckpointReactorRevert.ts";
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 

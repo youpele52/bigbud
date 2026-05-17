@@ -1,7 +1,6 @@
 import type { OpencodeClient, OutputFormat } from "@opencode-ai/sdk/v2";
 
 const OPENCODE_PROMPT_REQUEST_TIMEOUT_MS = 15_000;
-const OPENCODE_PROMPT_COMPLETION_TIMEOUT_MS = 10 * 60_000;
 const OPENCODE_PROMPT_POLL_INTERVAL_MS = 1_000;
 
 export type PromptResultInfo = {
@@ -247,7 +246,6 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
     throw promptAsyncResponse.error;
   }
 
-  const startedAt = Date.now();
   while (input.turnStillActive()) {
     const messages = await fetchSessionMessages(input.client, input.sessionID);
     const latestAssistantReply = findLatestAssistantReply(messages);
@@ -267,12 +265,6 @@ export async function sendPromptAsyncAndWaitForCompletion(input: {
       if (latestAssistantReply.info.time?.completed) {
         return latestAssistantReply;
       }
-    }
-
-    if (Date.now() - startedAt >= OPENCODE_PROMPT_COMPLETION_TIMEOUT_MS) {
-      throw new Error(
-        `OpenCode prompt did not complete within ${OPENCODE_PROMPT_COMPLETION_TIMEOUT_MS}ms.`,
-      );
     }
 
     await new Promise((resolve) => setTimeout(resolve, OPENCODE_PROMPT_POLL_INTERVAL_MS));

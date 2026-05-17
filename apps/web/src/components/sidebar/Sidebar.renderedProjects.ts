@@ -20,7 +20,7 @@ import { useSidebarKeyboardNav } from "./Sidebar.keyboardNav.logic";
 import type { SidebarThreadSummary } from "../../models/types";
 import type { RenderedProjectEntry, SidebarProjectSnapshot } from "./Sidebar.types";
 
-const THREAD_PREVIEW_LIMIT = 6;
+const THREAD_PREVIEW_LIMIT = 4;
 
 export interface SidebarRenderedProjectsInput {
   sortedProjects: SidebarProjectSnapshot[];

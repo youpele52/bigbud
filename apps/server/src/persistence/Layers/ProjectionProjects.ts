@@ -30,6 +30,9 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
         INSERT INTO projection_projects (
           project_id,
           title,
+          provider_runtime_execution_target_id,
+          workspace_execution_target_id,
+          execution_target_id,
           workspace_root,
           default_model_selection_json,
           scripts_json,
@@ -41,6 +44,9 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
         VALUES (
           ${row.projectId},
           ${row.title},
+          ${row.providerRuntimeExecutionTargetId},
+          ${row.workspaceExecutionTargetId},
+          ${row.executionTargetId},
           ${row.workspaceRoot},
           ${row.defaultModelSelection !== null ? JSON.stringify(row.defaultModelSelection) : null},
           ${JSON.stringify(row.scripts)},
@@ -52,6 +58,9 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
         ON CONFLICT (project_id)
         DO UPDATE SET
           title = excluded.title,
+          provider_runtime_execution_target_id = excluded.provider_runtime_execution_target_id,
+          workspace_execution_target_id = excluded.workspace_execution_target_id,
+          execution_target_id = excluded.execution_target_id,
           workspace_root = excluded.workspace_root,
           default_model_selection_json = excluded.default_model_selection_json,
           scripts_json = excluded.scripts_json,
@@ -70,6 +79,9 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",
@@ -90,6 +102,9 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
         SELECT
           project_id AS "projectId",
           title,
+          provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+          workspace_execution_target_id AS "workspaceExecutionTargetId",
+          execution_target_id AS "executionTargetId",
           workspace_root AS "workspaceRoot",
           default_model_selection_json AS "defaultModelSelection",
           scripts_json AS "scripts",

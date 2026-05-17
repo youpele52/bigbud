@@ -1,65 +1,21 @@
-import { type MessageId, type TurnId } from "@bigbud/contracts";
+import { type MessageId } from "@bigbud/contracts";
 import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  measureElement as measureVirtualElement,
-  type VirtualItem,
-  useVirtualizer,
-} from "@tanstack/react-virtual";
-import { deriveTimelineEntries } from "../../../logic/session";
+import { measureElement as measureVirtualElement, useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
-import { type TurnDiffSummary } from "../../../models/types";
-import { clamp } from "effect/Number";
-import { type ExpandedImagePreview } from "../common/ExpandedImagePreview";
 import {
   deriveMessagesTimelineRows,
   estimateMessagesTimelineRowHeight,
-  type MessagesTimelineRow,
 } from "./MessagesTimeline.logic";
-import { MessagesTimelineRowContent } from "./MessagesTimeline.rows";
-import { type TimestampFormat } from "@bigbud/contracts/settings";
-
-const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
-
-interface MessagesTimelineProps {
-  isWorking: boolean;
-  activeTurnInProgress: boolean;
-  activeTurnStartedAt: string | null;
-  scrollContainer: HTMLDivElement | null;
-  timelineEntries: ReturnType<typeof deriveTimelineEntries>;
-  completionDividerBeforeEntryId: string | null;
-  completionSummary: string | null;
-  turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  nowIso: string;
-  expandedWorkGroups: Record<string, boolean>;
-  onToggleWorkGroup: (groupId: string) => void;
-  changedFilesExpandedByTurnId: Record<string, boolean>;
-  onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
-  onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-  revertTurnCountByUserMessageId: Map<MessageId, number>;
-  onRevertUserMessage: (messageId: MessageId) => void;
-  isRevertingCheckpoint: boolean;
-  onImageExpand: (preview: ExpandedImagePreview) => void;
-  markdownCwd: string | undefined;
-  resolvedTheme: "light" | "dark";
-  timestampFormat: TimestampFormat;
-  workspaceRoot: string | undefined;
-  focusMessageId?: MessageId | null;
-  onReplyToMessage?: (messageId: MessageId) => void;
-  onOpenReplySource?: (messageId: MessageId) => void;
-  onForkThread?: () => void;
-  onVirtualizerSnapshot?: (snapshot: {
-    totalSize: number;
-    measurements: ReadonlyArray<{
-      id: string;
-      kind: MessagesTimelineRow["kind"];
-      index: number;
-      size: number;
-      start: number;
-      end: number;
-    }>;
-  }) => void;
-}
+import {
+  NonVirtualizedMessagesTimelineRows,
+  VirtualizedMessagesTimelineRows,
+} from "./MessagesTimeline.render";
+import {
+  clampVirtualizedRowCount,
+  resolveFirstUnvirtualizedRowIndex,
+} from "./MessagesTimeline.virtualization";
+import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
   isWorking,
@@ -84,6 +40,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
+  workspaceExecutionTargetId,
   focusMessageId = null,
   onReplyToMessage = () => {},
   onOpenReplySource = () => {},
@@ -131,47 +88,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
-    const firstTailRowIndex = Math.max(rows.length - ALWAYS_UNVIRTUALIZED_TAIL_ROWS, 0);
-    if (!activeTurnInProgress) return firstTailRowIndex;
-
-    const turnStartedAtMs =
-      typeof activeTurnStartedAt === "string" ? Date.parse(activeTurnStartedAt) : Number.NaN;
-    let firstCurrentTurnRowIndex = -1;
-    if (!Number.isNaN(turnStartedAtMs)) {
-      firstCurrentTurnRowIndex = rows.findIndex((row) => {
-        if (row.kind === "working") return true;
-        if (!row.createdAt) return false;
-        const rowCreatedAtMs = Date.parse(row.createdAt);
-        return !Number.isNaN(rowCreatedAtMs) && rowCreatedAtMs >= turnStartedAtMs;
-      });
-    }
-
-    if (firstCurrentTurnRowIndex < 0) {
-      firstCurrentTurnRowIndex = rows.findIndex(
-        (row) => row.kind === "message" && row.message.streaming,
-      );
-    }
-
-    if (firstCurrentTurnRowIndex < 0) return firstTailRowIndex;
-
-    for (let index = firstCurrentTurnRowIndex - 1; index >= 0; index -= 1) {
-      const previousRow = rows[index];
-      if (!previousRow || previousRow.kind !== "message") continue;
-      if (previousRow.message.role === "user") {
-        return Math.min(index, firstTailRowIndex);
-      }
-      if (previousRow.message.role === "assistant" && !previousRow.message.streaming) {
-        break;
-      }
-    }
-
-    return Math.min(firstCurrentTurnRowIndex, firstTailRowIndex);
+    return resolveFirstUnvirtualizedRowIndex({
+      activeTurnInProgress,
+      activeTurnStartedAt,
+      rows,
+    });
   }, [activeTurnInProgress, activeTurnStartedAt, rows]);
 
-  const virtualizedRowCount = clamp(firstUnvirtualizedRowIndex, {
-    minimum: 0,
-    maximum: rows.length,
-  });
+  const virtualizedRowCount = clampVirtualizedRowCount(firstUnvirtualizedRowIndex, rows.length);
 
   // Snap to the bottom when the first rows appear after an initially empty render.
   // This handles the case where the thread loads with no messages but then receives
@@ -279,7 +203,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       setFocusedMessageId(focusMessageId);
     });
     const timeoutId = window.setTimeout(() => {
-      setFocusedMessageId((current) => (current === focusMessageId ? null : current));
+      setFocusedMessageId((current: MessageId | null) =>
+        current === focusMessageId ? null : current,
+      );
     }, 2_000);
 
     return () => {
@@ -333,57 +259,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     >
       {virtualizedRowCount > 0 && (
         <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
-          {virtualRows.map((virtualRow: VirtualItem) => {
-            const row = rows[virtualRow.index];
-            if (!row) return null;
-
-            return (
-              <div
-                key={`virtual-row:${row.id}`}
-                data-index={virtualRow.index}
-                data-virtual-row-id={row.id}
-                data-virtual-row-kind={row.kind}
-                data-virtual-row-size={virtualRow.size}
-                data-virtual-row-start={virtualRow.start}
-                ref={rowVirtualizer.measureElement}
-                className="absolute left-0 top-0 w-full"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-              >
-                <MessagesTimelineRowContent
-                  row={row}
-                  expandedWorkGroups={expandedWorkGroups}
-                  onToggleWorkGroup={onToggleWorkGroup}
-                  completionSummary={completionSummary}
-                  turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-                  changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
-                  onSetChangedFilesExpanded={onSetChangedFilesExpanded}
-                  onOpenTurnDiff={onOpenTurnDiff}
-                  revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
-                  onRevertUserMessage={onRevertUserMessage}
-                  isRevertingCheckpoint={isRevertingCheckpoint}
-                  onImageExpand={onImageExpand}
-                  markdownCwd={markdownCwd}
-                  resolvedTheme={resolvedTheme}
-                  nowIso={nowIso}
-                  timestampFormat={timestampFormat}
-                  workspaceRoot={workspaceRoot}
-                  focusedMessageId={focusedMessageId}
-                  onReplyToMessage={onReplyToMessage}
-                  onOpenReplySource={onOpenReplySource}
-                  {...(onForkThread ? { onForkThread } : {})}
-                  isWorking={isWorking}
-                  onTimelineImageLoad={onTimelineImageLoad}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {nonVirtualizedRows.map((row) => (
-        <div key={`non-virtual-row:${row.id}`}>
-          <MessagesTimelineRowContent
-            row={row}
+          <VirtualizedMessagesTimelineRows
+            rows={rows}
+            virtualRows={virtualRows}
+            measureElement={rowVirtualizer.measureElement}
             expandedWorkGroups={expandedWorkGroups}
             onToggleWorkGroup={onToggleWorkGroup}
             completionSummary={completionSummary}
@@ -400,6 +279,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             nowIso={nowIso}
             timestampFormat={timestampFormat}
             workspaceRoot={workspaceRoot}
+            workspaceExecutionTargetId={workspaceExecutionTargetId}
             focusedMessageId={focusedMessageId}
             onReplyToMessage={onReplyToMessage}
             onOpenReplySource={onOpenReplySource}
@@ -408,7 +288,34 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             onTimelineImageLoad={onTimelineImageLoad}
           />
         </div>
-      ))}
+      )}
+
+      <NonVirtualizedMessagesTimelineRows
+        rows={nonVirtualizedRows}
+        expandedWorkGroups={expandedWorkGroups}
+        onToggleWorkGroup={onToggleWorkGroup}
+        completionSummary={completionSummary}
+        turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+        changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
+        onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+        onOpenTurnDiff={onOpenTurnDiff}
+        revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
+        onRevertUserMessage={onRevertUserMessage}
+        isRevertingCheckpoint={isRevertingCheckpoint}
+        onImageExpand={onImageExpand}
+        markdownCwd={markdownCwd}
+        resolvedTheme={resolvedTheme}
+        nowIso={nowIso}
+        timestampFormat={timestampFormat}
+        workspaceRoot={workspaceRoot}
+        workspaceExecutionTargetId={workspaceExecutionTargetId}
+        focusedMessageId={focusedMessageId}
+        onReplyToMessage={onReplyToMessage}
+        onOpenReplySource={onOpenReplySource}
+        {...(onForkThread ? { onForkThread } : {})}
+        isWorking={isWorking}
+        onTimelineImageLoad={onTimelineImageLoad}
+      />
     </div>
   );
 });

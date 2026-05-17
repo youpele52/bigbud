@@ -1,5 +1,5 @@
 import type { MessageId, TurnId } from "@bigbud/contracts";
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
@@ -8,11 +8,8 @@ import {
   closeBrowserPanel,
   requestRightPanel,
 } from "../../../../stores/browser/browserPanel.coordinator";
-import { isElectron } from "~/config/env/env.config";
 
 import {
-  useAddComposerImages,
-  useAddComposerFiles,
   useApplyPromptReplacement,
   usePendingUserInputHandlers,
 } from "../ChatView.composerHandlers.logic";
@@ -31,6 +28,7 @@ import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hook
 import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { useChatViewExpandedImage } from "./chat-view-expanded-image.hooks";
+import { useChatViewInteractionFiles } from "./chat-view-interactions.files.hooks";
 import { useChatViewProviderSwitch } from "./chat-view-provider-switch.hooks";
 
 interface ChatViewInteractionsInput {
@@ -214,111 +212,20 @@ export function useChatViewInteractions({
     onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
   });
 
-  const addComposerImages = useAddComposerImages({
-    activeThreadId: base.activeThreadId,
-    composerImagesRef: base.composerImagesRef,
-    pendingUserInputsLength: thread.pendingUserInputs.length,
-    addComposerImage: base.addComposerImage,
-    addComposerImagesToDraft: base.addComposerImagesToDraft,
-    setThreadError: runtime.setThreadError,
+  const {
+    onComposerPaste,
+    onComposerDragEnter,
+    onComposerDragOver,
+    onComposerDragLeave,
+    onComposerDrop,
+    onAttachFiles,
+    fileInputRef,
+    onFileInputChange,
+  } = useChatViewInteractionFiles({
+    base,
+    thread,
+    runtime,
   });
-
-  const addComposerFiles = useAddComposerFiles({
-    activeThreadId: base.activeThreadId,
-    composerFilesRef: base.composerFilesRef,
-    composerImagesLength: base.composerImages.length,
-    pendingUserInputsLength: thread.pendingUserInputs.length,
-    addComposerFile: base.addComposerFile,
-    addComposerFilesToDraft: base.addComposerFilesToDraft,
-    setThreadError: runtime.setThreadError,
-    isElectron,
-  });
-  const onComposerPaste = useCallback(
-    (event: React.ClipboardEvent<HTMLElement>) => {
-      const allFiles = Array.from(event.clipboardData.files);
-      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
-      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
-      if (imageFiles.length > 0) {
-        event.preventDefault();
-        addComposerImages(imageFiles);
-      }
-      if (nonImageFiles.length > 0) {
-        event.preventDefault();
-        addComposerFiles(nonImageFiles);
-      }
-    },
-    [addComposerImages, addComposerFiles],
-  );
-
-  const onComposerDragEnter = useCallback(
-    (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
-      event.preventDefault();
-      base.dragDepthRef.current += 1;
-      base.setIsDragOverComposer(true);
-    },
-    [base],
-  );
-
-  const onComposerDragOver = useCallback(
-    (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      base.setIsDragOverComposer(true);
-    },
-    [base],
-  );
-
-  const onComposerDragLeave = useCallback(
-    (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
-      event.preventDefault();
-      const nextTarget = event.relatedTarget;
-      if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-      base.dragDepthRef.current = Math.max(0, base.dragDepthRef.current - 1);
-      if (base.dragDepthRef.current === 0) {
-        base.setIsDragOverComposer(false);
-      }
-    },
-    [base],
-  );
-
-  const onComposerDrop = useCallback(
-    (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
-      event.preventDefault();
-      base.dragDepthRef.current = 0;
-      base.setIsDragOverComposer(false);
-      const allFiles = Array.from(event.dataTransfer.files);
-      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
-      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
-      if (imageFiles.length > 0) addComposerImages(imageFiles);
-      if (nonImageFiles.length > 0) addComposerFiles(nonImageFiles);
-      runtime.focusComposer();
-    },
-    [addComposerImages, addComposerFiles, base, runtime],
-  );
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const onAttachFiles = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const onFileInputChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const allFiles = Array.from(event.target.files ?? []);
-      const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
-      const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
-      if (imageFiles.length > 0) addComposerImages(imageFiles);
-      if (nonImageFiles.length > 0) addComposerFiles(nonImageFiles);
-      // Reset input so the same file can be selected again
-      event.target.value = "";
-      runtime.focusComposer();
-    },
-    [addComposerImages, addComposerFiles, runtime],
-  );
 
   const composerCommandHandlers = useComposerCommandHandlers({
     composerMenuOpenRef: base.composerMenuOpenRef,

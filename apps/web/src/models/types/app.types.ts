@@ -1,4 +1,5 @@
 import type {
+  ExecutionTargetId,
   ModelSelection,
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
@@ -111,6 +112,9 @@ export interface TurnDiffSummary {
 export interface Project {
   id: ProjectId;
   name: string;
+  providerRuntimeExecutionTargetId?: ExecutionTargetId;
+  workspaceExecutionTargetId?: ExecutionTargetId;
+  executionTargetId?: ExecutionTargetId;
   cwd: string | null;
   defaultModelSelection: ModelSelection | null;
   createdAt?: string | undefined;
@@ -122,6 +126,9 @@ export interface Thread {
   id: ThreadId;
   codexThreadId: string | null;
   projectId: ProjectId;
+  providerRuntimeExecutionTargetId?: ExecutionTargetId;
+  workspaceExecutionTargetId?: ExecutionTargetId;
+  executionTargetId?: ExecutionTargetId;
   parentThread?: {
     threadId: ThreadId;
     title: string;
@@ -149,6 +156,9 @@ export interface Thread {
 export interface SidebarThreadSummary {
   id: ThreadId;
   projectId: ProjectId;
+  providerRuntimeExecutionTargetId?: ExecutionTargetId;
+  workspaceExecutionTargetId?: ExecutionTargetId;
+  executionTargetId?: ExecutionTargetId;
   parentThread?: {
     threadId: ThreadId;
     title: string;

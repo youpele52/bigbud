@@ -7,7 +7,14 @@ import { CommandId } from "@bigbud/contracts";
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { Cause, Schema } from "effect";
 
-import { ProviderAdapterRequestError, ProviderServiceError } from "../../provider/Errors.ts";
+import {
+  ProviderAdapterProcessError,
+  ProviderAdapterRequestError,
+  ProviderAdapterValidationError,
+  ProviderServiceError,
+  ProviderSessionDirectoryPersistenceError,
+  ProviderValidationError,
+} from "../../provider/Errors.ts";
 
 export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 export const WORKTREE_BRANCH_PREFIX = "bigbud";
@@ -117,6 +124,34 @@ export function isUnknownPendingUserInputRequestError(
     return error.detail.toLowerCase().includes("unknown pending user-input request");
   }
   return Cause.pretty(cause).toLowerCase().includes("unknown pending user-input request");
+}
+
+export function formatProviderServiceCauseDetail(cause: Cause.Cause<unknown>): string {
+  const error = Cause.squash(cause);
+
+  if (
+    Schema.is(ProviderAdapterRequestError)(error) ||
+    Schema.is(ProviderAdapterProcessError)(error) ||
+    Schema.is(ProviderSessionDirectoryPersistenceError)(error)
+  ) {
+    return error.detail;
+  }
+
+  if (
+    Schema.is(ProviderAdapterValidationError)(error) ||
+    Schema.is(ProviderValidationError)(error)
+  ) {
+    return error.issue;
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message.length > 0) {
+      return message;
+    }
+  }
+
+  return Cause.pretty(cause);
 }
 
 export function stalePendingRequestDetail(

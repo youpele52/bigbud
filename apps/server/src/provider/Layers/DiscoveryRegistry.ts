@@ -27,7 +27,8 @@ const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
 };
 
 const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/;
-const FRONTMATTER_NAME_REGEX = /^(?:name|title):\s*(.+)$/im;
+const FRONTMATTER_NAME_REGEX = /^name:\s*(.+)$/im;
+const FRONTMATTER_DISPLAY_NAME_REGEX = /^(?:displayName|title):\s*(.+)$/im;
 const FRONTMATTER_DESCRIPTION_REGEX = /^(?:description|summary):\s*(.+)$/im;
 const HEADER_NAME_REGEX = /^#\s+(.+)$/m;
 const OPENCODE_AGENT_SECTION_REGEX = /^agent\s*=\s*\{([\s\S]*?)\}/gm;
@@ -48,7 +49,7 @@ function trimToUndefined(value: string | undefined): string | undefined {
 function inferNameFromPath(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
   const lastSegment = normalized.split("/").at(-1) ?? normalized;
-  if (lastSegment === "SKILL.md") {
+  if (/^(?:SKILL|skill)\.md$/u.test(lastSegment)) {
     return normalized.split("/").at(-2) ?? "skill";
   }
   return lastSegment.replace(/\.(md|markdown|ya?ml|toml|json)$/i, "");
@@ -58,15 +59,21 @@ function buildDiscoveryId(provider: ProviderKind, kind: "agent" | "skill", name:
   return `${provider}:${kind}:${name.trim().toLowerCase()}`;
 }
 
-function parseFrontmatter(content: string): { name?: string; description?: string } {
+function parseFrontmatter(content: string): {
+  name?: string;
+  displayName?: string;
+  description?: string;
+} {
   const frontmatter = FRONTMATTER_REGEX.exec(content)?.[1];
   if (!frontmatter) {
     return {};
   }
   const name = trimToUndefined(FRONTMATTER_NAME_REGEX.exec(frontmatter)?.[1]);
+  const displayName = trimToUndefined(FRONTMATTER_DISPLAY_NAME_REGEX.exec(frontmatter)?.[1]);
   const description = trimToUndefined(FRONTMATTER_DESCRIPTION_REGEX.exec(frontmatter)?.[1]);
   return {
     ...(name ? { name } : {}),
+    ...(displayName ? { displayName } : {}),
     ...(description ? { description } : {}),
   };
 }
@@ -76,16 +83,19 @@ function parseMarkdownDiscovery(
   fallbackName: string,
 ): {
   name: string;
+  displayName?: string;
   description?: string;
 } {
   const frontmatter = parseFrontmatter(content);
   const headingName = trimToUndefined(HEADER_NAME_REGEX.exec(content)?.[1]);
   const simpleName = trimToUndefined(SIMPLE_NAME_REGEX.exec(content)?.[1]);
   const simpleDescription = trimToUndefined(SIMPLE_DESCRIPTION_REGEX.exec(content)?.[1]);
-  const name = frontmatter.name ?? headingName ?? simpleName ?? fallbackName;
+  const name = frontmatter.name ?? simpleName ?? fallbackName;
+  const displayName = frontmatter.displayName ?? headingName;
   const description = frontmatter.description ?? simpleDescription;
   return {
     name,
+    ...(displayName ? { displayName } : {}),
     ...(description ? { description } : {}),
   };
 }
@@ -138,6 +148,9 @@ function parseDiscoveryFile(
     provider: input.provider,
     name,
     source: input.source,
+    ...(input.kind === "skill" && "displayName" in parsed && parsed.displayName
+      ? { displayName: String(parsed.displayName) }
+      : {}),
     ...(parsed.description ? { description: parsed.description } : {}),
     sourcePath: input.path,
   };
@@ -261,7 +274,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         (descriptor) =>
           collectPathsRecursive(fs, descriptor.path, (absolutePath) => {
             if (descriptor.kind === "skill") {
-              return absolutePath.endsWith("/SKILL.md");
+              return /\/(?:SKILL|skill)\.md$/u.test(absolutePath);
             }
             return /\.(md|markdown|json|toml|ya?ml)$/i.test(absolutePath);
           }).pipe(

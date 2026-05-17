@@ -21,6 +21,7 @@ import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
+import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -60,6 +61,9 @@ export function ChatViewContent({
   const { forkThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
+  const projectWorkspaceExecutionTargetId = base.activeProject
+    ? resolveWorkspaceExecutionTargetId(base.activeProject)
+    : undefined;
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
@@ -140,6 +144,7 @@ export function ChatViewContent({
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
           gitCwd={composer.gitCwd}
+          executionTargetId={projectWorkspaceExecutionTargetId}
           diffOpen={base.diffOpen}
           browserOpen={browserOpen}
           onRunProjectScript={(script) => {
@@ -222,6 +227,7 @@ export function ChatViewContent({
                 resolvedTheme={base.resolvedTheme}
                 timestampFormat={base.timestampFormat}
                 workspaceRoot={workspaceRoot}
+                workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
                 focusMessageId={focusMessageId}
                 onReplyToMessage={handleReplyToMessage}
                 onOpenReplySource={handleOpenReplySource}
@@ -310,6 +316,7 @@ export function ChatViewContent({
               open
               threadId={base.activeThread!.id}
               cwd={base.activeProject?.cwd ?? null}
+              executionTargetId={projectWorkspaceExecutionTargetId}
               initialReference={base.pullRequestDialogState.initialReference}
               onOpenChange={(open) => {
                 if (!open) {
@@ -328,6 +335,7 @@ export function ChatViewContent({
             label={thread.planSidebarLabel}
             markdownCwd={composer.gitCwd ?? undefined}
             workspaceRoot={workspaceRoot}
+            workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
             timestampFormat={base.timestampFormat}
             onClose={() => {
               base.setPlanSidebarOpen(false);

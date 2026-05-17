@@ -15,6 +15,8 @@ import {
 } from "../../providerSnapshot";
 import { ProviderValidationError } from "../../Errors.ts";
 import { PiProvider } from "../../Services/Pi/Provider";
+import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
+import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import {
   createPiRpcProcess,
@@ -56,7 +58,11 @@ export const probePiRpc = Effect.fn("probePiRpc")(function* (binaryPath: string)
     try: () =>
       createPiRpcProcess({
         binaryPath,
-        cwd: process.cwd(),
+        providerRuntimeTarget: resolveProviderRuntimeTarget({ executionTargetId: "local" }),
+        workspaceTarget: resolveWorkspaceTarget({
+          executionTargetId: "local",
+          cwd: process.cwd(),
+        }),
         env: process.env,
       }),
     catch: (cause) =>

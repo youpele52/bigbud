@@ -26,6 +26,11 @@ import {
   readPersistedCwd,
   readPersistedModelSelection,
 } from "./ProviderServiceHelpers.ts";
+import {
+  formatUnsupportedProviderExecutionTargetDetail,
+  supportsProviderExecutionTarget,
+} from "../providerExecutionTargets.ts";
+import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 
 export function makeRecoverSessionForThread(
   registry: ProviderAdapterRegistryShape,
@@ -87,10 +92,31 @@ export function makeRecoverSessionForThread(
 
       const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
       const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: input.binding.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: input.binding.workspaceExecutionTargetId,
+        executionTargetId: input.binding.executionTargetId,
+      });
+      if (
+        !supportsProviderExecutionTarget({
+          provider: input.binding.provider,
+          executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+        })
+      ) {
+        return yield* toValidationError(
+          input.operation,
+          formatUnsupportedProviderExecutionTargetDetail({
+            provider: input.binding.provider,
+            executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+            surface: "Provider sessions",
+          }),
+        );
+      }
 
       const resumed = yield* adapter.startSession({
         threadId: input.binding.threadId,
         provider: input.binding.provider,
+        ...executionTargets,
         ...(persistedCwd ? { cwd: persistedCwd } : {}),
         ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
         ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),

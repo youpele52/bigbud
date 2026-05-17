@@ -5,7 +5,12 @@
  * the `project.created`, `project.meta-updated`, and `project.deleted`
  * event handlers.
  */
-import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
+import {
+  LOCAL_EXECUTION_TARGET_ID,
+  type OrchestrationEvent,
+  type OrchestrationReadModel,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { OrchestrationThread } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 
@@ -60,6 +65,15 @@ export function projectProjectCreated(
       const nextProject = {
         id: payload.projectId,
         title: payload.title,
+        providerRuntimeExecutionTargetId:
+          payload.providerRuntimeExecutionTargetId ??
+          payload.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId:
+          payload.workspaceExecutionTargetId ??
+          payload.executionTargetId ??
+          LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
         workspaceRoot: payload.workspaceRoot,
         defaultModelSelection: payload.defaultModelSelection,
         scripts: payload.scripts,
@@ -91,6 +105,15 @@ export function projectProjectMetaUpdated(
           ? {
               ...project,
               ...(payload.title !== undefined ? { title: payload.title } : {}),
+              ...(payload.providerRuntimeExecutionTargetId !== undefined
+                ? { providerRuntimeExecutionTargetId: payload.providerRuntimeExecutionTargetId }
+                : {}),
+              ...(payload.workspaceExecutionTargetId !== undefined
+                ? { workspaceExecutionTargetId: payload.workspaceExecutionTargetId }
+                : {}),
+              ...(payload.executionTargetId !== undefined
+                ? { executionTargetId: payload.executionTargetId }
+                : {}),
               ...(payload.workspaceRoot !== undefined
                 ? { workspaceRoot: payload.workspaceRoot }
                 : {}),

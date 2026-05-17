@@ -1,4 +1,5 @@
 import { memo, useState, useCallback } from "react";
+import type { ExecutionTargetId } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
@@ -57,6 +58,7 @@ interface PlanSidebarProps {
   label?: string;
   markdownCwd: string | undefined;
   workspaceRoot: string | undefined;
+  workspaceExecutionTargetId?: ExecutionTargetId | undefined;
   timestampFormat: TimestampFormat;
   onClose: () => void;
 }
@@ -67,6 +69,7 @@ const PlanSidebar = memo(function PlanSidebar({
   label = "Plan",
   markdownCwd,
   workspaceRoot,
+  workspaceExecutionTargetId,
   timestampFormat,
   onClose,
 }: PlanSidebarProps) {
@@ -97,6 +100,7 @@ const PlanSidebar = memo(function PlanSidebar({
     void api.projects
       .writeFile({
         cwd: workspaceRoot,
+        ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
         relativePath: filename,
         contents: normalizePlanMarkdownForExport(planMarkdown),
       })
@@ -118,7 +122,7 @@ const PlanSidebar = memo(function PlanSidebar({
         () => setIsSavingToWorkspace(false),
         () => setIsSavingToWorkspace(false),
       );
-  }, [planMarkdown, workspaceRoot]);
+  }, [planMarkdown, workspaceExecutionTargetId, workspaceRoot]);
 
   return (
     <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-card/50">

@@ -109,6 +109,11 @@ export interface CursorSessionContext {
   stopped: boolean;
 }
 
+export interface CursorEventStamp {
+  readonly eventId: ReturnType<typeof EventId.makeUnsafe>;
+  readonly createdAt: string;
+}
+
 export function settlePendingApprovalsAsCancelled(
   pendingApprovals: ReadonlyMap<ApprovalRequestId, PendingApproval>,
 ): Effect.Effect<void> {

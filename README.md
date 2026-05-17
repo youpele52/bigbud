@@ -13,13 +13,15 @@ An AI companion workspace for getting things done — whether you're coding, wri
 ## Features
 
 - **Multi-provider support** — Switch between Codex, Claude, Copilot, OpenCode, Pi, Cursor, and more
+- **Remote projects over SSH** — Work against remote folders without moving the full AI runtime onto the remote machine
 - **Desktop & Web** — Native Electron desktop app or lightweight web UI
-- **Real-time streaming** — Live output with file changes, terminal commands, and reasoning
-- **Full access mode** — Auto-approve commands and file edits for autonomous coding
-- **Built-in terminal** — Integrated shell access alongside your agent conversations
-- **Chat threads** — Have normal conversations with any agent without starting a new project
+- **Embedded browser** — Open links in-app, keep browser history, and attach annotated page context to chats
+- **Real-time streaming** — Live output with file changes, terminal commands, shell logs, and reasoning updates
+- **Built-in terminal and chat shell mode** — Use the integrated terminal or run quick composer commands like `!ls`
+- **Replies, pinning, and thread organization** — Reply to any message, pin important chats, and keep context intact across reconnects
+- **Approvals and full access mode** — Review approval requests with better thread context, or auto-approve commands and edits for autonomous runs
 - **System control** — Tell agents to execute commands and perform tasks on your PC/Mac
-- **Thread forking** — Switch providers or harnesses mid-conversation to compare responses
+- **Thread forking** — Branch a conversation from any point to explore alternatives
 
 <p align="center">
   <img src="docs/images/screenshot-chat.png" alt="bigbud Chat Interface" width="100%" />
@@ -40,7 +42,7 @@ curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketin
 If you downloaded the macOS DMG in your browser and macOS says the app is damaged, copy bigbud to `/Applications`, then run:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/bigbud (Alpha).app"
+xattr -dr com.apple.quarantine "/Applications/bigbud (Beta).app"
 ```
 
 #### Windows
@@ -83,6 +85,14 @@ bigbud supports multiple AI coding agents. Configure at least one in **Settings 
 
 Provider status is checked in real-time and displayed in Settings. Each provider can be toggled on or off independently.
 
+## Remote Projects
+
+bigbud can connect to remote projects over SSH while keeping the app experience local.
+
+- **Remote workspace support** — Open and work in remote projects across Codex, Claude, Copilot, OpenCode, and Pi where supported
+- **Safer reconnects** — After restart, saved remote workspaces stay disconnected until SSH access is verified again
+- **Flexible unlock flow** — Reconnect with SSH keys or temporary password-based SSH unlock without saving secrets
+
 ## Speech to Text
 
 Voice dictation powered by OpenAI's Realtime Transcription API. Add an API key in **Settings → Speech to Text** to enable it.
@@ -96,15 +106,14 @@ The feature uses your own OpenAI API key — you must have one configured to use
 - **Audio capture:** Uses the Web Audio API with an `AudioWorkletNode` to capture microphone input as PCM16 at 24 kHz
 - **Streaming:** Audio streams directly from your browser to OpenAI via WebSocket — it never touches the bigbud server
 - **Turn detection:** Manual control — press and hold to record, release to send. Partial transcription appears in real-time as you speak
-- **Models:** Choose between `gpt-4o-mini-transcribe` ($0.003/min) or `gpt-4o-transcribe` ($0.006/min)
+- **Model:** Uses OpenAI's realtime transcription session flow with `gpt-realtime-whisper`
 
 ### Usage
 
 1. Go to **Settings → Speech to Text**
 2. Enter your OpenAI API key (starts with `sk-`)
 3. Click **Save & Verify** to validate the key
-4. Select your preferred model
-5. In the composer, hold the microphone button and speak
+4. In the composer, hold the microphone button and speak
 
 > **macOS:** The first time you use voice input, macOS will prompt you to grant microphone access. If you previously denied it, go to **System Settings → Privacy & Security → Microphone** and re-enable it for the app.
 
@@ -158,6 +167,6 @@ bun dist:desktop:win         # Windows NSIS installer
 
 ## Status
 
-Early alpha — expect breaking changes.
+Beta — expect rough edges and some breaking changes.
 
 We're not accepting contributions yet. See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.

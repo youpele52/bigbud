@@ -12,6 +12,7 @@ export default Effect.gen(function* () {
     CREATE TABLE projection_projects_next (
       project_id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
+      execution_target_id TEXT NOT NULL DEFAULT 'local',
       workspace_root TEXT,
       scripts_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -25,6 +26,7 @@ export default Effect.gen(function* () {
     INSERT INTO projection_projects_next (
       project_id,
       title,
+      execution_target_id,
       workspace_root,
       scripts_json,
       created_at,
@@ -35,6 +37,7 @@ export default Effect.gen(function* () {
     SELECT
       project_id,
       title,
+      execution_target_id,
       workspace_root,
       scripts_json,
       created_at,
@@ -61,6 +64,7 @@ export default Effect.gen(function* () {
     INSERT OR IGNORE INTO projection_projects (
       project_id,
       title,
+      execution_target_id,
       workspace_root,
       scripts_json,
       created_at,
@@ -70,6 +74,7 @@ export default Effect.gen(function* () {
     ) VALUES (
       ${BUILT_IN_CHATS_PROJECT_ID},
       ${BUILT_IN_CHATS_PROJECT_TITLE},
+      'local',
       NULL,
       ${JSON.stringify([])},
       ${now},

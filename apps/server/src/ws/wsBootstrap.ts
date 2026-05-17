@@ -9,27 +9,30 @@ import {
   CommandId,
   ThreadId,
   type OrchestrationCommand,
+  type OrchestrationReadModel,
   OrchestrationDispatchCommandError,
   type GitCreateWorktreeInput,
   type GitCreateWorktreeResult,
-  type GitCommandError,
+  type GitServiceError,
 } from "@bigbud/contracts";
 import type { OrchestrationDispatchError } from "../orchestration/Errors.ts";
 import type {
   ProjectSetupScriptRunnerInput,
   ProjectSetupScriptRunnerResult,
 } from "../project/Services/ProjectSetupScriptRunner.ts";
+import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget.ts";
 
 export type BootstrapServices = {
   readonly orchestrationEngine: {
     dispatch: (
       cmd: OrchestrationCommand,
     ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
+    getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
   };
   readonly git: {
     createWorktree: (
       input: GitCreateWorktreeInput,
-    ) => Effect.Effect<GitCreateWorktreeResult, GitCommandError>;
+    ) => Effect.Effect<GitCreateWorktreeResult, GitServiceError>;
   };
   readonly projectSetupScriptRunner: {
     runForThread: (
@@ -64,6 +67,32 @@ export function makeDispatchBootstrapThreadCommand(
       let targetProjectId = bootstrap?.createThread?.projectId;
       let targetProjectCwd = bootstrap?.prepareWorktree?.projectCwd;
       let targetWorktreePath = bootstrap?.createThread?.worktreePath ?? null;
+
+      const resolveTargetProject = () =>
+        orchestrationEngine.getReadModel().pipe(
+          Effect.map((readModel) => {
+            const readModelThread =
+              targetProjectId === undefined && targetProjectCwd === undefined
+                ? (readModel.threads.find((entry) => entry.id === command.threadId) ?? null)
+                : null;
+            const nextProjectId = targetProjectId ?? readModelThread?.projectId ?? null;
+            const project =
+              (nextProjectId
+                ? readModel.projects.find((entry) => entry.id === nextProjectId)
+                : null) ??
+              (targetProjectCwd
+                ? readModel.projects.find((entry) => entry.workspaceRoot === targetProjectCwd)
+                : null) ??
+              null;
+
+            if (project) {
+              targetProjectId = project.id;
+              targetProjectCwd = project.workspaceRoot ?? undefined;
+            }
+
+            return project;
+          }),
+        );
 
       const cleanupCreatedThread = () =>
         createdThread
@@ -174,6 +203,20 @@ export function makeDispatchBootstrapThreadCommand(
             threadId: command.threadId,
             projectId: bootstrap.createThread.projectId,
             title: bootstrap.createThread.title,
+            ...(bootstrap.createThread.providerRuntimeExecutionTargetId
+              ? {
+                  providerRuntimeExecutionTargetId:
+                    bootstrap.createThread.providerRuntimeExecutionTargetId,
+                }
+              : {}),
+            ...(bootstrap.createThread.workspaceExecutionTargetId
+              ? {
+                  workspaceExecutionTargetId: bootstrap.createThread.workspaceExecutionTargetId,
+                }
+              : {}),
+            ...(bootstrap.createThread.executionTargetId
+              ? { executionTargetId: bootstrap.createThread.executionTargetId }
+              : {}),
             modelSelection: bootstrap.createThread.modelSelection,
             runtimeMode: bootstrap.createThread.runtimeMode,
             interactionMode: bootstrap.createThread.interactionMode,
@@ -185,8 +228,10 @@ export function makeDispatchBootstrapThreadCommand(
         }
 
         if (bootstrap?.prepareWorktree) {
+          const project = yield* resolveTargetProject();
           const worktree = yield* git.createWorktree({
             cwd: bootstrap.prepareWorktree.projectCwd,
+            ...(project ? { executionTargetId: resolveWorkspaceExecutionTargetId(project) } : {}),
             branch: bootstrap.prepareWorktree.baseBranch,
             newBranch: bootstrap.prepareWorktree.branch,
             path: null,

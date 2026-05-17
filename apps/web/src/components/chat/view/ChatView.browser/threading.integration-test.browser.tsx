@@ -167,7 +167,7 @@ describe("ChatView threading integration", () => {
     });
 
     try {
-      await expect.element(page.getByText("See more (2)")).toBeInTheDocument();
+      await expect.element(page.getByText("See more (4)")).toBeInTheDocument();
 
       useStore
         .getState()
@@ -175,12 +175,28 @@ describe("ChatView threading integration", () => {
           makeThreadDeletedEvent("thread-project-overflow-8" as ThreadId, 2),
         );
 
-      await expect.element(page.getByText("See more (1)")).toBeInTheDocument();
+      await expect.element(page.getByText("See more (3)")).toBeInTheDocument();
 
       useStore
         .getState()
         .applyOrchestrationEvent(
           makeThreadDeletedEvent("thread-project-overflow-7" as ThreadId, 3),
+        );
+
+      await expect.element(page.getByText("See more (2)")).toBeInTheDocument();
+
+      useStore
+        .getState()
+        .applyOrchestrationEvent(
+          makeThreadDeletedEvent("thread-project-overflow-6" as ThreadId, 4),
+        );
+
+      await expect.element(page.getByText("See more (1)")).toBeInTheDocument();
+
+      useStore
+        .getState()
+        .applyOrchestrationEvent(
+          makeThreadDeletedEvent("thread-project-overflow-5" as ThreadId, 5),
         );
 
       await vi.waitFor(() => {
@@ -690,7 +706,7 @@ describe("ChatView threading integration", () => {
     }
   });
 
-  it("opens the command palette from mod+k while the composer is focused", async () => {
+  it("opens the command palette from mod+p while the composer is focused", async () => {
     const mounted = await ctx.mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -704,7 +720,7 @@ describe("ChatView threading integration", () => {
             {
               command: "commandPalette.toggle",
               shortcut: {
-                key: "k",
+                key: "p",
                 metaKey: false,
                 ctrlKey: false,
                 shiftKey: false,

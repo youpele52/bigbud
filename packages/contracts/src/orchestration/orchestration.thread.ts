@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   CheckpointRef,
+  ExecutionTargetId,
   EventId,
   IsoDateTime,
   MessageId,
@@ -161,6 +162,9 @@ export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(

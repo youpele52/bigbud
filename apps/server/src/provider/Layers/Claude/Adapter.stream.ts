@@ -10,6 +10,7 @@
 import { type EventId, type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 import { Cause, Deferred, Effect, Exit, Fiber, Queue, Stream } from "effect";
 
+import { ProviderAdapterProcessError } from "../../Errors.ts";
 import {
   asCanonicalTurnId,
   asRuntimeRequestId,
@@ -101,6 +102,31 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       context.query.close();
     } catch (cause) {
       yield* turn.emitRuntimeError(context, "Failed to close Claude runtime query.", cause);
+    }
+    if (context.cleanupRemoteWorkspaceBridge) {
+      const cleanupBridge = Effect.tryPromise({
+        try: () => context.cleanupRemoteWorkspaceBridge?.() ?? Promise.resolve(),
+        catch: (cause) =>
+          new ProviderAdapterProcessError({
+            provider: PROVIDER,
+            threadId: context.session.threadId,
+            detail:
+              cause instanceof Error && cause.message.length > 0
+                ? cause.message
+                : "Failed to clean up Claude remote workspace bridge.",
+            cause,
+          }),
+      }).pipe(
+        Effect.catch((cause) =>
+          turn.emitRuntimeError(
+            context,
+            "Failed to clean up Claude remote workspace bridge.",
+            cause.cause ?? cause,
+          ),
+        ),
+        Effect.ignore,
+      );
+      yield* cleanupBridge;
     }
 
     const updatedAt = yield* nowIso;

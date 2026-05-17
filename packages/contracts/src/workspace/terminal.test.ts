@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_TERMINAL_ID,
+  LOCAL_EXECUTION_TARGET_ID,
   TerminalClearInput,
   TerminalCloseInput,
   TerminalEvent,
@@ -89,6 +90,17 @@ describe("TerminalOpenInput", () => {
     expect(parsed.worktreePath).toBe("/tmp/project/.t3/worktrees/feature-a");
   });
 
+  it("accepts execution target ids", () => {
+    const parsed = decodeSync(TerminalOpenInput, {
+      threadId: "thread-1",
+      executionTargetId: "ssh:prod",
+      cwd: "/tmp/project",
+      cols: 100,
+      rows: 24,
+    });
+    expect(parsed.executionTargetId).toBe("ssh:prod");
+  });
+
   it("rejects invalid env keys", () => {
     expect(
       decodes(TerminalOpenInput, {
@@ -169,6 +181,7 @@ describe("TerminalSessionSnapshot", () => {
       decodes(TerminalSessionSnapshot, {
         threadId: "thread-1",
         terminalId: DEFAULT_TERMINAL_ID,
+        executionTargetId: LOCAL_EXECUTION_TARGET_ID,
         cwd: "/tmp/project",
         worktreePath: null,
         status: "running",

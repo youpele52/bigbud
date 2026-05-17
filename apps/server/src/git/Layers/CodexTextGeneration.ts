@@ -1,16 +1,11 @@
-import { randomUUID } from "node:crypto";
-
-import { Effect, FileSystem, Layer, Option, Path, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-import { CodexModelSelection } from "@bigbud/contracts";
+import { CodexModelSelection, TextGenerationError } from "@bigbud/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/shared/git";
 
-import { resolveAttachmentPath } from "../../attachments/attachmentStore.ts";
 import { ServerConfig } from "../../startup/config.ts";
-import { TextGenerationError } from "@bigbud/contracts";
 import {
-  type BranchNameGenerationInput,
   type ThreadTitleGenerationResult,
   type TextGenerationShape,
   TextGeneration,
@@ -28,6 +23,13 @@ import {
   sanitizeThreadTitle,
   toJsonSchemaObject,
 } from "../Utils.ts";
+import {
+  materializeImageAttachments,
+  readStreamAsString,
+  safeUnlink,
+  type CodexTextGenerationOperation,
+  writeTempFile,
+} from "./CodexTextGeneration.helpers.ts";
 import { getCodexModelCapabilities } from "../../provider/Layers/Codex/Provider.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { normalizeCodexModelOptionsWithCapabilities } from "@bigbud/shared/model";
@@ -41,86 +43,6 @@ const makeCodexTextGeneration = Effect.gen(function* () {
   const serverConfig = yield* Effect.service(ServerConfig);
   const serverSettingsService = yield* Effect.service(ServerSettingsService);
 
-  type MaterializedImageAttachments = {
-    readonly imagePaths: ReadonlyArray<string>;
-  };
-
-  const readStreamAsString = <E>(
-    operation: string,
-    stream: Stream.Stream<Uint8Array, E>,
-  ): Effect.Effect<string, TextGenerationError> =>
-    stream.pipe(
-      Stream.decodeText(),
-      Stream.runFold(
-        () => "",
-        (acc, chunk) => acc + chunk,
-      ),
-      Effect.mapError((cause) =>
-        normalizeCliError("codex", operation, cause, "Failed to collect process output"),
-      ),
-    );
-
-  const writeTempFile = (
-    operation: string,
-    prefix: string,
-    content: string,
-  ): Effect.Effect<string, TextGenerationError, Scope.Scope> => {
-    return fileSystem
-      .makeTempFileScoped({
-        prefix: `t3code-${prefix}-${process.pid}-${randomUUID()}.tmp`,
-      })
-      .pipe(
-        Effect.tap((filePath) => fileSystem.writeFileString(filePath, content)),
-        Effect.mapError(
-          (cause) =>
-            new TextGenerationError({
-              operation,
-              detail: `Failed to write temp file`,
-              cause,
-            }),
-        ),
-      );
-  };
-
-  const safeUnlink = (filePath: string): Effect.Effect<void, never> =>
-    fileSystem.remove(filePath).pipe(Effect.catch(() => Effect.void));
-
-  const materializeImageAttachments = Effect.fn("materializeImageAttachments")(function* (
-    _operation:
-      | "generateCommitMessage"
-      | "generatePrContent"
-      | "generateBranchName"
-      | "generateThreadTitle",
-    attachments: BranchNameGenerationInput["attachments"],
-  ): Effect.fn.Return<MaterializedImageAttachments, TextGenerationError> {
-    if (!attachments || attachments.length === 0) {
-      return { imagePaths: [] };
-    }
-
-    const imagePaths: string[] = [];
-    for (const attachment of attachments) {
-      if (attachment.type !== "image") {
-        continue;
-      }
-
-      const resolvedPath = resolveAttachmentPath({
-        attachmentsDir: serverConfig.attachmentsDir,
-        attachment,
-      });
-      if (!resolvedPath || !path.isAbsolute(resolvedPath)) {
-        continue;
-      }
-      const fileInfo = yield* fileSystem
-        .stat(resolvedPath)
-        .pipe(Effect.catch(() => Effect.succeed(null)));
-      if (!fileInfo || fileInfo.type !== "File") {
-        continue;
-      }
-      imagePaths.push(resolvedPath);
-    }
-    return { imagePaths };
-  });
-
   const runCodexJson = Effect.fn("runCodexJson")(function* <S extends Schema.Top>({
     operation,
     cwd,
@@ -130,11 +52,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     cleanupPaths = [],
     modelSelection,
   }: {
-    operation:
-      | "generateCommitMessage"
-      | "generatePrContent"
-      | "generateBranchName"
-      | "generateThreadTitle";
+    operation: CodexTextGenerationOperation;
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -143,11 +61,12 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     modelSelection: CodexModelSelection;
   }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
     const schemaPath = yield* writeTempFile(
+      fileSystem,
       operation,
       "codex-schema",
       JSON.stringify(toJsonSchemaObject(outputSchemaJson)),
     );
-    const outputPath = yield* writeTempFile(operation, "codex-output", "");
+    const outputPath = yield* writeTempFile(fileSystem, operation, "codex-output", "");
 
     const codexSettings = yield* Effect.map(
       serverSettingsService.getSettings,
@@ -229,7 +148,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     });
 
     const cleanup = Effect.all(
-      [schemaPath, outputPath, ...cleanupPaths].map((filePath) => safeUnlink(filePath)),
+      [schemaPath, outputPath, ...cleanupPaths].map((filePath) => safeUnlink(fileSystem, filePath)),
       {
         concurrency: "unbounded",
       },
@@ -343,7 +262,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     "CodexTextGeneration.generateBranchName",
   )(function* (input) {
     const { imagePaths } = yield* materializeImageAttachments(
-      "generateBranchName",
+      path,
+      serverConfig,
+      fileSystem,
       input.attachments,
     );
     const { prompt, outputSchema } = buildBranchNamePrompt({
@@ -376,7 +297,9 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     "CodexTextGeneration.generateThreadTitle",
   )(function* (input) {
     const { imagePaths } = yield* materializeImageAttachments(
-      "generateThreadTitle",
+      path,
+      serverConfig,
+      fileSystem,
       input.attachments,
     );
     const { prompt, outputSchema } = buildThreadTitlePrompt({

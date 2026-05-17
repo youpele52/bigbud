@@ -1,4 +1,10 @@
-import { CheckpointRef, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
+import {
+  CheckpointRef,
+  LOCAL_EXECUTION_TARGET_ID,
+  ProjectId,
+  ThreadId,
+  TurnId,
+} from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +28,7 @@ function makeThreadCheckpointContext(input: {
   return {
     threadId: input.threadId,
     projectId: input.projectId,
+    executionTargetId: LOCAL_EXECUTION_TARGET_ID,
     workspaceRoot: input.workspaceRoot,
     worktreePath: input.worktreePath,
     checkpoints: [

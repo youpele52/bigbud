@@ -5,6 +5,7 @@
  */
 import {
   BUILT_IN_CHATS_PROJECT_ID,
+  LOCAL_EXECUTION_TARGET_ID,
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationReadModel,
@@ -12,6 +13,7 @@ import {
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import {
   listThreadsByProjectId,
   requireProjectAbsent,
@@ -47,6 +49,13 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         command,
         projectId: command.projectId,
       });
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+        defaultProviderRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        defaultWorkspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+      });
 
       return {
         ...withEventBase({
@@ -59,6 +68,7 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         payload: {
           projectId: command.projectId,
           title: command.title,
+          ...executionTargets,
           workspaceRoot: command.workspaceRoot,
           defaultModelSelection: command.defaultModelSelection ?? null,
           scripts: [],
@@ -75,6 +85,11 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         projectId: command.projectId,
       });
       const occurredAt = nowIso();
+      const executionTargets = resolveProviderSessionExecutionTargets({
+        providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+        executionTargetId: command.executionTargetId,
+      });
       return {
         ...withEventBase({
           aggregateKind: "project",
@@ -86,6 +101,11 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
         payload: {
           projectId: command.projectId,
           ...(command.title !== undefined ? { title: command.title } : {}),
+          ...(command.providerRuntimeExecutionTargetId !== undefined ||
+          command.workspaceExecutionTargetId !== undefined ||
+          command.executionTargetId !== undefined
+            ? executionTargets
+            : {}),
           ...(command.workspaceRoot !== undefined ? { workspaceRoot: command.workspaceRoot } : {}),
           ...(command.defaultModelSelection !== undefined
             ? { defaultModelSelection: command.defaultModelSelection }

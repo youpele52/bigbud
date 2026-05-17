@@ -1,3 +1,4 @@
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type resolveThreadStatusPill } from "./Sidebar.logic";
 
 export function SidebarThreadStatusLabel({
@@ -11,10 +12,10 @@ export function SidebarThreadStatusLabel({
     return (
       <span
         title={status.label}
-        className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
+        className={`inline-flex ${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 items-center justify-center ${status.colorClass}`}
       >
         <span
-          className={`size-[9px] rounded-full ${status.dotClass} ${
+          className={`size-2 rounded-full ${status.dotClass} ${
             status.pulse ? "animate-pulse" : ""
           }`}
         />
