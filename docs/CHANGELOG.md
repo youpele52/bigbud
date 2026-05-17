@@ -26,6 +26,17 @@ Entries below are grouped by release tag and date.
 - Fixed a GitHub Copilot prompt bug where clarification requests could get stuck waiting for input instead of resuming the active turn.
 - Completed the remaining Copilot remote-workspace wiring so Copilot can follow the same local-runtime remote-project model as the other supported providers.
 - Replaced the old startup shell loading treatment with a dedicated splash screen and short fade-out transition so launch feels cleaner and less visually noisy.
+- Fixed a provider settings model row key collision that caused duplicate React key warnings when a provider like Pi or OpenCode exposed the same model slug from multiple sub-providers.
+- Stabilized Pi RPC lifecycle and chat streaming to reduce session drops and improve turn reliability.
+
+### Branding
+
+- Updated the product identity from Alpha to Beta across the entire application surface, matching the current maturity of the runtime.
+
+### UI Polish
+
+- Changed the command palette shortcut from `mod+k` to `mod+p` and centered its dialog layout for better discoverability and focus.
+- Reduced sidebar icon sizes and switched to diagonal pin icons for a cleaner, more compact sidebar appearance.
 
 ### Skill and Agent Discovery
 
@@ -38,6 +49,10 @@ Entries below are grouped by release tag and date.
 
 - Added focused server, unit, and browser coverage for remote project routing, SSH reconnect and verification flows, Copilot prompt recovery, and the new realtime voice transcription handshake and error handling paths.
 - Revalidated recent work in this window with `bun fmt`, `bun lint`, targeted Vitest and browser runs, and `bun typecheck`.
+
+### Maintainability
+
+- Refactored multiple oversized TypeScript modules across the server to stay at or under 400 lines per file, including the WebSocket RPC router, GitManager pull-request and stacked-action flows, GitStatus detail readers, thread-turn start decider, UI store, OpenCode event mapping and version checks, shell WebSocket dispatch, and dev-runner orchestration projector.
 
 ## v0.1.625 (14 May, 2026)
 
