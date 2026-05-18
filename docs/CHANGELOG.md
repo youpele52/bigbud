@@ -4,7 +4,7 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
-## v0.1.627 (18 May, 2026)
+## v0.1.628 (18 May, 2026)
 
 ### Remote Projects and Reconnects
 
