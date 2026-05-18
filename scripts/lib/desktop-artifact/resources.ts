@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Path } from "effect";
+import { join } from "node:path";
 import { ChildProcess } from "effect/unstable/process";
 
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
@@ -235,9 +236,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     // signing secrets are missing) fails on non-Mach-O files inside the
     // bundle (e.g. .wasm in node_modules) when entitlements are specified.
     if (signed) {
-      // Resolved relative to buildResources: "apps/desktop/resources"
-      macConfig.entitlements = "entitlements.mac.plist";
-      macConfig.entitlementsInherit = "entitlements.mac.plist";
+      // Absolute path required: codesign changes CWD when signing nested
+      // binaries (e.g. .node files), so a relative path fails to resolve.
+      macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
+      macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
     } else {
       // Explicitly disable code signing for unsigned builds. Otherwise
       // electron-builder falls back to ad-hoc signing, which fails at
