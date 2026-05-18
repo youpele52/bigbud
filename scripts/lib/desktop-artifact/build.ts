@@ -258,6 +258,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       options.signed,
       options.mockUpdates,
       options.mockUpdateServerPort,
+      stageResourcesDir,
     ),
     dependencies: {
       ...serverExternalDependencies,
