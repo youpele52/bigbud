@@ -1,6 +1,8 @@
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import desktopPackageJson from "../../../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../../../apps/server/package.json" with { type: "json" };
+import { readdir, rm } from "node:fs/promises";
+import { join } from "node:path";
 
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
@@ -95,6 +97,38 @@ const stagePackagedOpencodeWindowsBinary = Effect.fn("stagePackagedOpencodeWindo
     yield* fs.copyFile(binaryPath, path.join(targetDir, "opencode.exe"));
   },
 );
+
+const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(function* (
+  serverNodeModulesDir: string,
+) {
+  yield* Effect.tryPromise({
+    try: async () => {
+      const removableDirectoryNames = new Set(["linux", "win32", "windows"]);
+
+      const visit = async (currentDir: string): Promise<void> => {
+        const entries = await readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+
+          const entryPath = join(currentDir, entry.name);
+          if (removableDirectoryNames.has(entry.name.toLowerCase())) {
+            await rm(entryPath, { recursive: true, force: true });
+            continue;
+          }
+
+          await visit(entryPath);
+        }
+      };
+
+      await visit(serverNodeModulesDir);
+    },
+    catch: (cause) =>
+      new BuildScriptError({
+        message: `Failed to prune non-mac native runtime artifacts from ${serverNodeModulesDir}.`,
+        cause,
+      }),
+  });
+});
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -275,6 +309,11 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     })`npm install --production`,
   );
 
+  if (options.platform === "mac") {
+    yield* Effect.log("[desktop-artifact] Pruning non-mac native runtime artifacts...");
+    yield* pruneMacServerRuntimeArtifacts(path.join(stageServerDir, "node_modules"));
+  }
+
   // electron-builder silently strips node_modules from extraResources copies.
   // Rename to _modules so the directory survives into the packaged app.
   // The desktop main process sets NODE_PATH to _modules when spawning the
@@ -291,6 +330,17 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       delete buildEnv[key];
     }
   }
+
+  const preferExistingCodesignIdentity =
+    options.platform === "mac" &&
+    typeof buildEnv.CSC_NAME === "string" &&
+    buildEnv.CSC_NAME.length > 0;
+
+  if (preferExistingCodesignIdentity) {
+    delete buildEnv.CSC_LINK;
+    delete buildEnv.CSC_KEY_PASSWORD;
+  }
+
   if (!options.signed) {
     buildEnv.CSC_IDENTITY_AUTO_DISCOVERY = "false";
     delete buildEnv.CSC_LINK;

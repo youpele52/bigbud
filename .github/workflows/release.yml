@@ -134,41 +134,17 @@ jobs:
       - name: Align package versions to release version
         run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
 
-      - name: Debug macOS signing secrets
+      - name: Import code signing certificates
         if: matrix.platform == 'mac'
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          cert_path="$RUNNER_TEMP/debug-cert.p12"
-
-          python3 - <<'PY'
-          import base64
-          import os
-          import pathlib
-
-          output = pathlib.Path(os.environ["RUNNER_TEMP"]) / "debug-cert.p12"
-          output.write_bytes(base64.b64decode(os.environ["CSC_LINK"].strip()))
-          PY
-
-          echo "CSC_LINK decoded size: $(wc -c < "$cert_path") bytes"
-          echo "CSC_LINK decoded sha256: $(shasum -a 256 "$cert_path" | awk '{print $1}')"
-
-          if openssl pkcs12 -in "$cert_path" -passin "pass:$CSC_KEY_PASSWORD" -noout >/dev/null 2>&1; then
-            echo "PKCS12 password verification: ok"
-          else
-            echo "PKCS12 password verification: failed"
-            exit 1
-          fi
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.CSC_LINK }}
+          p12-password: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Build desktop artifact
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -198,7 +174,7 @@ jobs:
           }
 
           if [[ "${{ matrix.platform }}" == "mac" ]]; then
-            if has_all "$CSC_LINK" "$CSC_KEY_PASSWORD" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
+            if has_all "$CSC_NAME" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
               echo "macOS signing enabled."
               args+=(--signed)
             else
