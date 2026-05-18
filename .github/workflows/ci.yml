@@ -9,7 +9,7 @@ on:
 jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Build
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -59,7 +59,7 @@ jobs:
 
   release_smoke:
     name: Release Smoke
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -82,7 +82,7 @@ jobs:
 
   bootstrap_installer_smoke:
     name: Bootstrap Installer Smoke
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -106,7 +106,7 @@ jobs:
             target: dmg
             arch: arm64
           - label: macOS x64
-            runner: macos-15-intel
+            runner: blacksmith-6vcpu-macos-15
             platform: mac
             target: dmg
             arch: x64
@@ -187,7 +187,7 @@ jobs:
     name: Release Asset Assembly
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [desktop_release_build, release_smoke]
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout
         uses: actions/checkout@v6
