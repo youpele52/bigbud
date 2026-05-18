@@ -185,13 +185,14 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   signed: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: string | undefined,
+  buildResourcesDir: string,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: "ai.bigbud.desktop",
     productName,
     artifactName: "bigbud-beta-${version}-${arch}.${ext}",
     directories: {
-      buildResources: "apps/desktop/resources",
+      buildResources: buildResourcesDir,
     },
     // Native .node addons cannot be loaded from inside an asar archive.
     // These packages must be unpacked to app.asar.unpacked/ at build time.
