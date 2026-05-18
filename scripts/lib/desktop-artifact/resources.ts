@@ -240,6 +240,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // binaries (e.g. .node files), so a relative path fails to resolve.
       macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
       macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
+      // Explicitly enable notarization. electron-builder v26+ requires env vars
+      // APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID to be set.
+      // hardenedRuntime and gatekeeperAssess already default to the correct
+      // values (true and false respectively) in v26.
+      macConfig.notarize = true;
     } else {
       // Explicitly disable code signing for unsigned builds. Otherwise
       // electron-builder falls back to ad-hoc signing, which fails at
