@@ -148,12 +148,20 @@ export interface DesktopBridge {
     show: (input: DesktopNotificationInput) => Promise<boolean>;
   };
   copyToClipboard: (text: string) => Promise<void>;
+  requestFileAccess: (
+    level: "unrestricted" | "common-folders",
+  ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
 }
 
 export interface NativeApi {
   dialogs: {
     pickFolder: () => Promise<string | null>;
     confirm: (message: string) => Promise<boolean>;
+  };
+  fileAccess: {
+    request: (
+      level: "unrestricted" | "common-folders",
+    ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
     open: (input: typeof TerminalOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;

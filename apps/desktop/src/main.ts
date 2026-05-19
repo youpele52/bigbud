@@ -62,6 +62,7 @@ const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
+const REQUEST_FILE_ACCESS_CHANNEL = "desktop:request-file-access";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -225,6 +226,7 @@ async function bootstrap(): Promise<void> {
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
+    REQUEST_FILE_ACCESS_CHANNEL,
     UPDATE_GET_STATE_CHANNEL,
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,
