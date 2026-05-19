@@ -4,6 +4,30 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.634 (19 May, 2026)
+
+### Desktop Signing and Distribution
+
+- Added full macOS code signing and notarization to the CI release workflow via certificate-based import and an explicit `@electron/notarize` hook, disabled the app-sandbox entitlement, and fixed entitlements path resolution so packaged `.dmg` builds are properly signed, notarized, and launch without sandbox restrictions.
+- Added beta download links with a dynamic release-source selector on the marketing site and made the home page download button platform-aware so visitors receive the correct artifact for their OS.
+
+### Browser Panel
+
+- Fixed a double-click link navigation bug in the browser panel so rapid clicks reliably navigate to the intended URL instead of dropping the second navigation request.
+
+### File Access Permission System
+
+- Added a first-launch file access permission dialog and a dedicated Settings section that let macOS users choose between unrestricted access or scoped common-folder access, with per-folder status indicators, reset controls, and a direct link to macOS System Settings.
+- Added persistable client settings (`fileAccessPermissionLevel`, `hasSeenFileAccessPrompt`) and a DesktopBridge IPC channel for requesting and reporting folder-level access from the Electron main process.
+
+### Developer Tooling
+
+- Removed the deprecated `--parallel` flag from the dev-runner's `MODE_ARGS` for `dev` and `dev:desktop` modes, since `persistent: true` in `turbo.json` already handles concurrent task execution and `--parallel` has been deprecated upstream.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused checks on the macOS signing and notarization workflow, dev-runner unit tests, and file access permission dialog behaviour.
+
 ## v0.1.628 (18 May, 2026)
 
 ### Remote Projects and Reconnects

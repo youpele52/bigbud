@@ -37,6 +37,14 @@ export function createWsNativeApi(): NativeApi {
         return window.confirm(message);
       },
     },
+    fileAccess: {
+      request: async (level) => {
+        if (!window.desktopBridge) {
+          return { success: false, granted: [], denied: [] };
+        }
+        return window.desktopBridge.requestFileAccess(level);
+      },
+    },
     terminal: {
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),
