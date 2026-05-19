@@ -334,10 +334,13 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   }
 
   // The afterSign hook lives in the monorepo and requires @electron/notarize,
-  // which is only present in the monorepo's node_modules (the staged directory
+  // which is only present in apps/desktop/node_modules (the staged directory
   // installs --production). Point NODE_PATH back so the hook can resolve it.
   const monorepoNodeModules = path.join(repoRoot, "node_modules");
-  buildEnv.NODE_PATH = [buildEnv.NODE_PATH, monorepoNodeModules].filter(Boolean).join(delimiter);
+  const desktopNodeModules = path.join(repoRoot, "apps/desktop/node_modules");
+  buildEnv.NODE_PATH = [buildEnv.NODE_PATH, monorepoNodeModules, desktopNodeModules]
+    .filter(Boolean)
+    .join(delimiter);
 
   const preferExistingCodesignIdentity =
     options.platform === "mac" &&
