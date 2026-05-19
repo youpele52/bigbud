@@ -241,10 +241,8 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // binaries (e.g. .node files), so a relative path fails to resolve.
       macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
       macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
-      // Use an explicit afterSign hook for notarization so we can validate the
-      // staple before the DMG/ZIP is created. The hook lives in the monorepo and
-      // resolves @electron/notarize via NODE_PATH.
-      macConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
+      // afterSign is a root-level electron-builder property, not mac-specific.
+      buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
     } else {
       // Explicitly disable code signing for unsigned builds. Otherwise
       // electron-builder falls back to ad-hoc signing, which fails at
