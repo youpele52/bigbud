@@ -10,6 +10,24 @@ An AI companion workspace for getting things done — whether you're coding, wri
 >
 > _Note:_ The original bigCode repository was either hacked or DMCA'd — while the page returns a 404, its Actions and Settings pages are still accessible.
 
+## Table of Contents
+
+- [Features](#features)
+- [Quick Install](#quick-install)
+  - [Desktop App](#desktop-app)
+  - [From Source](#from-source)
+- [Provider Setup](#provider-setup)
+- [Remote Projects](#remote-projects)
+- [Speech to Text](#speech-to-text)
+  - [Bring Your Own Key](#bring-your-own-key)
+  - [How It Works](#how-it-works)
+  - [Usage](#usage)
+- [Desktop vs Web](#desktop-vs-web)
+- [Documentation](#documentation)
+- [Development](#development)
+  - [Desktop Packaging](#desktop-packaging)
+- [Status](#status)
+
 ## Features
 
 - **Multi-provider support** — Switch between Codex, Claude, Copilot, OpenCode, Pi, Cursor, and more
@@ -17,6 +35,7 @@ An AI companion workspace for getting things done — whether you're coding, wri
 - **Desktop & Web** — Native Electron desktop app or lightweight web UI
 - **Embedded browser** — Open links in-app, keep browser history, and attach annotated page context to chats
 - **Real-time streaming** — Live output with file changes, terminal commands, shell logs, and reasoning updates
+- **Live speech-to-text** — Speak to your agent with real-time transcription powered by OpenAI
 - **Built-in terminal and chat shell mode** — Use the integrated terminal or run quick composer commands like `!ls`
 - **Replies, pinning, and thread organization** — Reply to any message, pin important chats, and keep context intact across reconnects
 - **Approvals and full access mode** — Review approval requests with better thread context, or auto-approve commands and edits for autonomous runs
@@ -31,27 +50,21 @@ An AI companion workspace for getting things done — whether you're coding, wri
 
 ### Desktop App
 
-#### macOS / Linux
+Download the latest version for your platform at **[bigbud.app/download](https://bigbud.app/download/)**.
 
-Recommended macOS install path for unsigned builds:
+Alternatively, install via terminal:
+
+**macOS / Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh
 ```
 
-If you downloaded the macOS DMG in your browser and macOS says the app is damaged, copy bigbud to `/Applications`, then run:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/bigbud (Beta).app"
-```
-
-#### Windows
+**Windows:**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"
 ```
-
-Or download directly from [GitHub Releases](https://github.com/youpele52/bigbud/releases).
 
 ### From Source
 
@@ -110,10 +123,10 @@ The feature uses your own OpenAI API key — you must have one configured to use
 
 ### Usage
 
-1. Go to **Settings → Speech to Text**
+1. Go to **Settings → AI → Speech to Text**
 2. Enter your OpenAI API key (starts with `sk-`)
 3. Click **Save & Verify** to validate the key
-4. In the composer, hold the microphone button and speak
+4. In the composer, click the microphone button and speak.
 
 > **macOS:** The first time you use voice input, macOS will prompt you to grant microphone access. If you previously denied it, go to **System Settings → Privacy & Security → Microphone** and re-enable it for the app.
 
@@ -167,6 +180,7 @@ bun dist:desktop:win         # Windows NSIS installer
 
 ## Status
 
-Beta — expect rough edges and some breaking changes.
+This is currently in beta. Expect rough edges and some breaking changes.
+Bugs are few and fixed quickly because bigbud is actively used and maintained. See the [changelog](https://bigbud.app/changelog/) for recent updates.
 
 We're not accepting contributions yet. See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.
