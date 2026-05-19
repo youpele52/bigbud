@@ -96,9 +96,9 @@ Required secrets used by the workflow:
 
 - `CSC_LINK`
 - `CSC_KEY_PASSWORD`
-- `APPLE_API_KEY`
-- `APPLE_API_KEY_ID`
-- `APPLE_API_ISSUER`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
 
 Checklist:
 
@@ -108,17 +108,19 @@ Checklist:
 3. Export certificate + private key as `.p12` from Keychain.
 4. Base64-encode the `.p12` and store as `CSC_LINK`.
 5. Store the `.p12` export password as `CSC_KEY_PASSWORD`.
-6. In App Store Connect, create an API key (Team key).
-7. Add API key values:
-   - `APPLE_API_KEY`: contents of the downloaded `.p8`
-   - `APPLE_API_KEY_ID`: Key ID
-   - `APPLE_API_ISSUER`: Issuer ID
+6. Generate an [app-specific password](https://support.apple.com/en-us/102654) for your Apple ID.
+7. Add Apple ID values:
+   - `APPLE_ID`: your Apple Developer account email
+   - `APPLE_APP_SPECIFIC_PASSWORD`: the app-specific password
+   - `APPLE_TEAM_ID`: your Developer Team ID
 8. Re-run a tag release and confirm macOS artifacts are signed/notarized.
 
 Notes:
 
-- `APPLE_API_KEY` is stored as raw key text in secrets.
-- The workflow writes it to a temporary `AuthKey_<id>.p8` file at runtime.
+- Notarization is performed by an explicit `afterSign` hook (`apps/desktop/scripts/notarize.cjs`) using `@electron/notarize`.
+- The hook staples the notarization ticket to the `.app` and runs `stapler validate` as a **hard build failure** before the DMG/ZIP is created. If validation fails, the release build aborts.
+- The hardened runtime entitlement `com.apple.security.cs.allow-unsigned-executable-memory` has been removed because it is unnecessary on Electron 12+ and weakens security.
+- Future migration: the hook can be updated to use an App Store Connect API key (`--key` / `--key-id` / `--issuer`) instead of an app-specific password if desired.
 
 ## 3) Azure Trusted Signing setup (Windows)
 
