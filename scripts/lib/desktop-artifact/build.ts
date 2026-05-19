@@ -2,7 +2,7 @@ import rootPackageJson from "../../../package.json" with { type: "json" };
 import desktopPackageJson from "../../../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../../../apps/server/package.json" with { type: "json" };
 import { readdir, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
@@ -259,6 +259,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       options.mockUpdates,
       options.mockUpdateServerPort,
       stageResourcesDir,
+      repoRoot,
     ),
     dependencies: {
       ...serverExternalDependencies,
@@ -331,6 +332,12 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       delete buildEnv[key];
     }
   }
+
+  // The afterSign hook lives in the monorepo and requires @electron/notarize,
+  // which is only present in the monorepo's node_modules (the staged directory
+  // installs --production). Point NODE_PATH back so the hook can resolve it.
+  const monorepoNodeModules = path.join(repoRoot, "node_modules");
+  buildEnv.NODE_PATH = [buildEnv.NODE_PATH, monorepoNodeModules].filter(Boolean).join(delimiter);
 
   const preferExistingCodesignIdentity =
     options.platform === "mac" &&

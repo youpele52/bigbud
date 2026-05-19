@@ -187,6 +187,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdates: boolean,
   mockUpdateServerPort: string | undefined,
   buildResourcesDir: string,
+  repoRoot: string,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: "ai.bigbud.desktop",
@@ -240,11 +241,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // binaries (e.g. .node files), so a relative path fails to resolve.
       macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
       macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
-      // Explicitly enable notarization. electron-builder v26+ requires env vars
-      // APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID to be set.
-      // hardenedRuntime and gatekeeperAssess already default to the correct
-      // values (true and false respectively) in v26.
-      macConfig.notarize = true;
+      // Use an explicit afterSign hook for notarization so we can validate the
+      // staple before the DMG/ZIP is created. The hook lives in the monorepo and
+      // resolves @electron/notarize via NODE_PATH.
+      macConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
     } else {
       // Explicitly disable code signing for unsigned builds. Otherwise
       // electron-builder falls back to ad-hoc signing, which fails at
@@ -252,6 +252,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       macConfig.identity = null;
     }
     buildConfig.mac = macConfig;
+
+    // Work around electron-builder/dmgbuild bug where DMG size is underestimated
+    // for large apps, causing ditto to silently skip files during DMG creation.
+    // The final DMG is still shrunk to the minimum size after copying, so the
+    // compressed artifact size does not increase.
+    // https://github.com/electron-userland/electron-builder/issues/9706
+    if (target === "dmg") {
+      buildConfig.dmg = {
+        size: "3g",
+      };
+    }
   }
 
   if (platform === "linux") {
