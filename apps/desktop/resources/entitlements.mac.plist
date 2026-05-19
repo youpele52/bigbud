@@ -2,20 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
-    <!-- Required for App Sandbox -->
-    <key>com.apple.security.app-sandbox</key>
+    <!-- Allow JIT compilation (required by Electron's V8 engine) -->
+    <key>com.apple.security.cs.allow-jit</key>
     <true/>
-    <!-- Allow outbound network connections (WebSocket to OpenAI, update checks, etc.) -->
-    <key>com.apple.security.network.client</key>
+    <!-- Allow loading third-party libraries not signed by the same team.
+         Required for native Node.js modules (node-pty, msgpackr, etc.). -->
+    <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
     <!-- Allow microphone access for STT voice transcription -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
-    <!-- Allow JIT compilation (required by Electron's V8 engine) -->
-    <key>com.apple.security.cs.allow-jit</key>
-    <true/>
-    <!-- Allow dyld environment variables (required by Electron) -->
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <!-- Allow unsigned executable memory for native addon compatibility.
+         Required by some native Node.js modules loaded at runtime. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
   </dict>
 </plist>

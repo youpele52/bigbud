@@ -12,7 +12,6 @@ import {
 } from "../../../constants/downloads";
 import CopyCommandButton from "../../shared/CopyCommandButton.astro";
 import DownloadPlatformSection from "../../shared/DownloadPlatformSection.astro";
-import MacUnsignedInstallNote from "../../shared/MacUnsignedInstallNote.astro";
 import "./DownloadExperience.css";
 
 const installCommandBlocks = [
@@ -97,12 +96,29 @@ const [macosSection, windowsSection, linuxSection] = platformSections;
 
         <div class="platforms" id="platforms">
             <DownloadPlatformSection {...macosSection}>
-                <div slot="afterCards" class="download-mac-note download-mac-note--after-cards">
-                    <MacUnsignedInstallNote />
+                <div slot="betaLinks" class="download-beta-links">
+                    <a class="download-beta-link" data-asset={RELEASE_ASSET_SUFFIXES.macArm64} href="#" style="display:none">
+                        Download beta for Apple Silicon
+                    </a>
+                    <a class="download-beta-link" data-asset={RELEASE_ASSET_SUFFIXES.macX64} href="#" style="display:none">
+                        Download beta for Intel
+                    </a>
                 </div>
             </DownloadPlatformSection>
-            <DownloadPlatformSection {...windowsSection} />
-            <DownloadPlatformSection {...linuxSection} />
+            <DownloadPlatformSection {...windowsSection}>
+                <div slot="betaLinks" class="download-beta-links">
+                    <a class="download-beta-link" data-asset={RELEASE_ASSET_SUFFIXES.windowsX64} href="#" style="display:none">
+                        Download beta for Windows
+                    </a>
+                </div>
+            </DownloadPlatformSection>
+            <DownloadPlatformSection {...linuxSection}>
+                <div slot="betaLinks" class="download-beta-links">
+                    <a class="download-beta-link" data-asset={RELEASE_ASSET_SUFFIXES.linuxAppImage} href="#" style="display:none">
+                        Download beta for Linux
+                    </a>
+                </div>
+            </DownloadPlatformSection>
         </div>
 
         <p class="releases-link">

@@ -66,3 +66,18 @@ export async function fetchLatestRelease(): Promise<Release> {
 
   return fallbackRelease;
 }
+
+function pickLatestPrerelease(value: unknown): Release | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const releases = value.filter(isRelease).filter((release) => !release.draft);
+  return releases.find((release) => release.prerelease && release.assets.length > 0) ?? null;
+}
+
+export async function fetchLatestPrerelease(): Promise<Release | null> {
+  const releases = await fetchReleaseCandidate(RELEASES_API_URL);
+  const prerelease = pickLatestPrerelease(releases);
+  return prerelease;
+}
