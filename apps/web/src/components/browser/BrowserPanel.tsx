@@ -22,6 +22,7 @@ import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
 import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
+import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 
 const BROWSER_PANEL_WIDTH_STORAGE_KEY = "browser_panel_width";
 const BROWSER_PANEL_MIN_WIDTH = 320;
@@ -48,8 +49,7 @@ export const BrowserPanel = memo(function BrowserPanel({
   const { open, url, setOpen, setUrl } = useBrowserPanelStore();
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
   const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
-  const [inputUrl, setInputUrl] = useState(url || "https://search.brave.com");
-  const [activeUrl, setActiveUrl] = useState(url || "https://search.brave.com");
+  const [inputUrl, setInputUrl] = useState(url);
   const [panelWidth, setPanelWidth] = useState(() => {
     const stored = getLocalStorageItem(BROWSER_PANEL_WIDTH_STORAGE_KEY, Schema.Finite);
     const max = getBrowserPanelMaxWidth();
@@ -83,7 +83,6 @@ export const BrowserPanel = memo(function BrowserPanel({
       nextUrl = `https://${nextUrl}`;
     }
     setInputUrl(nextUrl);
-    setActiveUrl(nextUrl);
     setUrl(nextUrl);
     setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
   }, [inputUrl, setUrl]);
@@ -91,7 +90,6 @@ export const BrowserPanel = memo(function BrowserPanel({
   const handleSelectHistoryUrl = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
-      setActiveUrl(nextUrl);
       setUrl(nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
@@ -99,13 +97,12 @@ export const BrowserPanel = memo(function BrowserPanel({
   );
 
   const handleCancelEmptyUrlEdit = useCallback(() => {
-    setInputUrl(activeUrl);
-  }, [activeUrl]);
+    setInputUrl(url);
+  }, [url]);
 
   const handleUrlChange = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
-      setActiveUrl(nextUrl);
       setUrl(nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
@@ -121,7 +118,7 @@ export const BrowserPanel = memo(function BrowserPanel({
   }, [annotationActive, setOpen]);
 
   const handleOpenInExternalBrowser = useCallback(() => {
-    const externalUrl = activeUrl.trim();
+    const externalUrl = url.trim();
     if (!externalUrl) return;
 
     if (window.desktopBridge) {
@@ -130,7 +127,7 @@ export const BrowserPanel = memo(function BrowserPanel({
     }
 
     window.open(externalUrl, "_blank", "noopener,noreferrer");
-  }, [activeUrl]);
+  }, [url]);
 
   const handleLoadFail = useCallback(
     (info: { errorCode: number; errorDescription: string; validatedURL: string }) => {
@@ -263,7 +260,6 @@ export const BrowserPanel = memo(function BrowserPanel({
     const nextUrl = url.trim();
     if (!nextUrl) return;
     setInputUrl(nextUrl);
-    setActiveUrl((currentUrl) => (currentUrl === nextUrl ? currentUrl : nextUrl));
   }, [url]);
 
   useEffect(() => {
@@ -333,7 +329,7 @@ export const BrowserPanel = memo(function BrowserPanel({
           annotationActive={annotationActive}
           pageMetadata={pageMetadata}
           historyUrls={browserHistory}
-          annotationDisabled={!isElectron}
+          annotationDisabled={!isElectron || !url.trim()}
         />
         {loadError && (
           <div className="shrink-0 border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -341,37 +337,48 @@ export const BrowserPanel = memo(function BrowserPanel({
           </div>
         )}
         <div className="relative min-h-0 flex-1">
-          <BrowserViewport
-            ref={viewportRef}
-            url={activeUrl}
-            onUrlChange={handleUrlChange}
-            onNavigationStateChange={({
-              canGoBack: back,
-              canGoForward: forward,
-            }: Parameters<NonNullable<BrowserViewportProps["onNavigationStateChange"]>>[0]) => {
-              setCanGoBack(back);
-              setCanGoForward(forward);
-              if (back || forward) {
-                setLoadError(null);
-              }
-            }}
-            onLoadFail={handleLoadFail}
-            onPageMetadataChange={setPageMetadata}
-            onContextMenu={
-              isElectron
-                ? ({ x, y }: Parameters<NonNullable<BrowserViewportProps["onContextMenu"]>>[0]) => {
-                    setContextMenu({ open: true, x, y });
+          {!url.trim() ? (
+            <div className="flex h-full items-center justify-center">
+              <BigbudLogo className="h-8 text-muted-foreground/30" />
+            </div>
+          ) : (
+            <>
+              <BrowserViewport
+                ref={viewportRef}
+                url={url}
+                onUrlChange={handleUrlChange}
+                onNavigationStateChange={({
+                  canGoBack: back,
+                  canGoForward: forward,
+                }: Parameters<NonNullable<BrowserViewportProps["onNavigationStateChange"]>>[0]) => {
+                  setCanGoBack(back);
+                  setCanGoForward(forward);
+                  if (back || forward) {
+                    setLoadError(null);
                   }
-                : undefined
-            }
-          />
-          <BrowserContextMenu
-            open={contextMenu.open}
-            x={contextMenu.x}
-            y={contextMenu.y}
-            items={contextMenuItems}
-            onClose={() => setContextMenu((prev) => ({ ...prev, open: false }))}
-          />
+                }}
+                onLoadFail={handleLoadFail}
+                onPageMetadataChange={setPageMetadata}
+                onContextMenu={
+                  isElectron
+                    ? ({
+                        x,
+                        y,
+                      }: Parameters<NonNullable<BrowserViewportProps["onContextMenu"]>>[0]) => {
+                        setContextMenu({ open: true, x, y });
+                      }
+                    : undefined
+                }
+              />
+              <BrowserContextMenu
+                open={contextMenu.open}
+                x={contextMenu.x}
+                y={contextMenu.y}
+                items={contextMenuItems}
+                onClose={() => setContextMenu((prev) => ({ ...prev, open: false }))}
+              />
+            </>
+          )}
         </div>
         <div
           className="absolute inset-y-0 left-0 z-50 hidden w-4 cursor-col-resize md:block"
