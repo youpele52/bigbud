@@ -80,6 +80,12 @@ export const ClientSettingsSchema = Schema.Struct({
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(
     Schema.withDecodingDefault(() => true),
   ),
+  fileAccessPermissionLevel: Schema.Literals([
+    "none",
+    "common-folders",
+    "unrestricted",
+  ] as const).pipe(Schema.withDecodingDefault(() => "none")),
+  hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
