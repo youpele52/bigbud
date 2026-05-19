@@ -8,6 +8,9 @@ import {
   Notification,
   shell,
 } from "electron";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { MenuItemConstructorOptions } from "electron";
 import type {
   ContextMenuItem,
@@ -90,6 +93,7 @@ export interface IpcHandlerDeps {
   readonly NOTIFICATIONS_IS_SUPPORTED_CHANNEL: string;
   readonly NOTIFICATIONS_SHOW_CHANNEL: string;
   readonly COPY_TO_CLIPBOARD_CHANNEL: string;
+  readonly REQUEST_FILE_ACCESS_CHANNEL: string;
   readonly UPDATE_GET_STATE_CHANNEL: string;
   readonly UPDATE_DOWNLOAD_CHANNEL: string;
   readonly UPDATE_INSTALL_CHANNEL: string;
@@ -122,6 +126,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
+    REQUEST_FILE_ACCESS_CHANNEL,
     UPDATE_GET_STATE_CHANNEL,
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,
@@ -314,5 +319,36 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.handle(COPY_TO_CLIPBOARD_CHANNEL, async (_event, text: unknown) => {
     if (typeof text !== "string") return;
     clipboard.writeText(text);
+  });
+
+  ipcMain.removeHandler(REQUEST_FILE_ACCESS_CHANNEL);
+  ipcMain.handle(REQUEST_FILE_ACCESS_CHANNEL, async (_event, level: unknown) => {
+    const home = os.homedir();
+    const folders =
+      level === "unrestricted"
+        ? ["/", "/Users", home]
+        : level === "common-folders"
+          ? ["Desktop", "Documents", "Downloads", "Music", "Pictures"].map((f) =>
+              path.join(home, f),
+            )
+          : [];
+
+    const granted: string[] = [];
+    const denied: string[] = [];
+
+    for (const folder of folders) {
+      try {
+        fs.accessSync(folder, fs.constants.R_OK);
+        granted.push(folder);
+      } catch {
+        denied.push(folder);
+      }
+    }
+
+    return {
+      success: granted.length > 0,
+      granted,
+      denied,
+    };
   });
 }

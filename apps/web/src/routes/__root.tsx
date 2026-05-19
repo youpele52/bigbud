@@ -23,6 +23,8 @@ import { TaskCompletionNotifications } from "../notifications/taskCompletion";
 import { useStore } from "../stores/main";
 import { ServerStateBootstrap } from "./__root.bootstrap";
 import { EventRouter } from "./__root.logic";
+import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
+import { useSettings } from "../hooks/useSettings";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -40,6 +42,17 @@ function RootRouteView() {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const [showStartupSplash, setShowStartupSplash] = useState(() => !bootstrapComplete);
   const [startupSplashVisible, setStartupSplashVisible] = useState(() => !bootstrapComplete);
+  const settings = useSettings();
+  const [showFileAccessDialog, setShowFileAccessDialog] = useState(false);
+
+  useEffect(() => {
+    if (bootstrapComplete && !settings.hasSeenFileAccessPrompt) {
+      const timer = setTimeout(() => {
+        setShowFileAccessDialog(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [bootstrapComplete, settings.hasSeenFileAccessPrompt]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -77,21 +90,28 @@ function RootRouteView() {
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
           {bootstrapComplete ? (
-            <div className="relative h-screen overflow-hidden">
-              <CommandPalette>
-                <AppSidebarLayout>
-                  <Outlet />
-                </AppSidebarLayout>
-              </CommandPalette>
+            <>
+              <div className="relative h-screen overflow-hidden">
+                <CommandPalette>
+                  <AppSidebarLayout>
+                    <Outlet />
+                  </AppSidebarLayout>
+                </CommandPalette>
 
-              {showStartupSplash ? (
-                <StartupSplash
-                  className={`pointer-events-none absolute inset-0 z-50 transition-opacity duration-[220ms] ease-out ${
-                    startupSplashVisible ? "opacity-100" : "opacity-0"
-                  }`}
-                />
-              ) : null}
-            </div>
+                {showStartupSplash ? (
+                  <StartupSplash
+                    className={`pointer-events-none absolute inset-0 z-50 transition-opacity duration-[220ms] ease-out ${
+                      startupSplashVisible ? "opacity-100" : "opacity-0"
+                    }`}
+                  />
+                ) : null}
+              </div>
+
+              <FileAccessPermissionDialog
+                open={showFileAccessDialog}
+                onOpenChange={setShowFileAccessDialog}
+              />
+            </>
           ) : (
             <StartupSplash />
           )}

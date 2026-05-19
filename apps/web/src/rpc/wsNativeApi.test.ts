@@ -144,6 +144,7 @@ function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridg
       show: async () => false,
     },
     copyToClipboard: async () => undefined,
+    requestFileAccess: async () => ({ success: false, granted: [], denied: [] }),
     ...overrides,
   };
 }

@@ -20,11 +20,10 @@ export const MODE_ARGS = {
     "--filter=@bigbud/contracts",
     "--filter=@bigbud/web",
     "--filter=@bigbud/server",
-    "--parallel",
   ],
   "dev:server": ["run", "dev", "--filter=@bigbud/server"],
   "dev:web": ["run", "dev", "--filter=@bigbud/web"],
-  "dev:desktop": ["run", "dev", "--filter=@bigbud/desktop", "--filter=@bigbud/web", "--parallel"],
+  "dev:desktop": ["run", "dev", "--filter=@bigbud/desktop", "--filter=@bigbud/web"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 export type DevMode = keyof typeof MODE_ARGS;

@@ -16,6 +16,7 @@ const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
+const REQUEST_FILE_ACCESS_CHANNEL = "desktop:request-file-access";
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getWsUrl: () => {
@@ -59,4 +60,5 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     show: (input) => ipcRenderer.invoke(NOTIFICATIONS_SHOW_CHANNEL, input) as Promise<boolean>,
   },
   copyToClipboard: (text: string) => ipcRenderer.invoke(COPY_TO_CLIPBOARD_CHANNEL, text),
+  requestFileAccess: (level) => ipcRenderer.invoke(REQUEST_FILE_ACCESS_CHANNEL, level),
 } satisfies DesktopBridge);
