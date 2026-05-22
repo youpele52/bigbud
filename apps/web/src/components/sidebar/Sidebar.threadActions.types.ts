@@ -27,7 +27,7 @@ export interface SidebarThreadActionsOutput {
   cancelRename: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   pendingDeleteConfirmation: {
     title: string;

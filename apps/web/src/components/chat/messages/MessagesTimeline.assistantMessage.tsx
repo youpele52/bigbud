@@ -1,5 +1,5 @@
 import type { MessageId, TurnId } from "@bigbud/contracts";
-import { SplitIcon, TerminalIcon } from "lucide-react";
+import { TerminalIcon } from "lucide-react";
 import { stableVerbFromId } from "../../../utils/copy";
 import { formatElapsed } from "../../../logic/session";
 import { type TurnDiffSummary } from "../../../models/types";
@@ -7,6 +7,7 @@ import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
 import ChatMarkdown from "../common/ChatMarkdown";
 import { Button } from "../../ui/button";
 import { MessageCopyButton } from "../common/MessageCopyButton";
+import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { DiffStatLabel, hasNonZeroStat } from "../diff-display/DiffStatLabel";
@@ -45,7 +46,7 @@ interface AssistantMessageBodyProps {
   focusedMessageId: MessageId | null;
   onReplyToMessage: (messageId: MessageId) => void;
   onOpenReplySource: (messageId: MessageId) => void;
-  onForkThread: (() => void) | undefined;
+  onBranchThread: ((messageId: MessageId) => void) | undefined;
 }
 
 function ShellOutputCard(props: {
@@ -102,7 +103,7 @@ export function AssistantMessageBody({
   focusedMessageId,
   onReplyToMessage,
   onOpenReplySource,
-  onForkThread,
+  onBranchThread,
 }: AssistantMessageBodyProps) {
   const messageText =
     row.message.text || (row.message.streaming ? "" : `(${stableVerbFromId(row.message.id)}...)`);
@@ -167,17 +168,8 @@ export function AssistantMessageBody({
             {row.showAssistantCopyButton ? (
               <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
             ) : null}
-            {row.showAssistantCopyButton && onForkThread ? (
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                onClick={onForkThread}
-                title="Fork thread"
-                aria-label="Fork thread"
-              >
-                <SplitIcon className="size-3" />
-              </Button>
+            {onBranchThread ? (
+              <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
             ) : null}
             <p className="shrink-0 text-[10px] text-muted-foreground/30">
               {formatMessageMeta(

@@ -198,7 +198,7 @@ export function SidebarRemoteProjectDialog({
             <div className="grid gap-2 sm:grid-cols-2">
               <AuthModeButton
                 active={draft.authMode === "ssh-key"}
-                description="Use your default SSH agent or an optional key path."
+                description="Leave the key path blank to use your SSH agent or default identities."
                 label="SSH key"
                 onClick={() => onFieldChange("authMode", "ssh-key")}
               />
@@ -217,11 +217,14 @@ export function SidebarRemoteProjectDialog({
               <Input
                 id="remote-project-key"
                 className={remoteProjectInputClassName}
-                placeholder="Optional, e.g. ~/.ssh/id_ed25519"
+                placeholder="Leave blank to use your SSH agent or defaults or e.g. ~/.ssh/id_ed25519"
                 spellCheck={false}
                 value={draft.sshKeyPath}
                 onChange={(event) => onFieldChange("sshKeyPath", event.target.value)}
               />
+              <p className="mt-1.5 text-muted-foreground text-xs leading-4">
+                Optional. When set, BigBud uses only this key for the connection.
+              </p>
             </label>
           ) : null}
 

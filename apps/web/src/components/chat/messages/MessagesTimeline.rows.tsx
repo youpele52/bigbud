@@ -3,6 +3,7 @@ import { Button } from "../../ui/button";
 import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/types/app.types";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
+import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
@@ -46,7 +47,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
     focusedMessageId,
     onReplyToMessage,
     onOpenReplySource,
-    onForkThread,
+    onBranchThread,
   } = props;
 
   return (
@@ -261,6 +262,9 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   <MessageCopyButton text={displayedUserMessage.copyText} />
                 )}
                 <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
+                {onBranchThread ? (
+                  <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
+                ) : null}
                 {canRevertAgentWork && (
                   <Button
                     type="button"
@@ -293,7 +297,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           focusedMessageId={focusedMessageId}
           onReplyToMessage={onReplyToMessage}
           onOpenReplySource={onOpenReplySource}
-          onForkThread={onForkThread}
+          onBranchThread={onBranchThread}
         />
       )}
 

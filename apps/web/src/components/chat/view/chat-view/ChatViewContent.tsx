@@ -58,7 +58,7 @@ export function ChatViewContent({
   runtime,
   interactions,
 }: ChatViewContentProps) {
-  const { forkThread } = useThreadActions();
+  const { branchThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
   const projectWorkspaceExecutionTargetId = base.activeProject
@@ -231,8 +231,11 @@ export function ChatViewContent({
                 focusMessageId={focusMessageId}
                 onReplyToMessage={handleReplyToMessage}
                 onOpenReplySource={handleOpenReplySource}
-                onForkThread={() => {
-                  void forkThread(base.activeThread!.id, { navigateToFork: true });
+                onBranchThread={(messageId) => {
+                  void branchThread(base.activeThread!.id, {
+                    upToMessageId: messageId,
+                    navigateToBranch: true,
+                  });
                 }}
               />
             </div>

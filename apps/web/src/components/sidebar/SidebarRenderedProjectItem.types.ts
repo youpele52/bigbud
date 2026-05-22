@@ -88,7 +88,7 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   prByThreadId: Map<ThreadId, ThreadPr>;

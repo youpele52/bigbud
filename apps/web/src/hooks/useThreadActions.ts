@@ -1,4 +1,4 @@
-import { ThreadId, type ModelSelection } from "@bigbud/contracts";
+import { ThreadId, type MessageId, type ModelSelection } from "@bigbud/contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
@@ -14,13 +14,13 @@ import { useStore } from "../stores/main";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../utils/worktree";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
-import { prepareSeedMessages } from "../lib/threadFork";
+import { prepareSeedMessagesForBranch, ThreadBranchError } from "../lib/threadBranch";
 import {
   waitForThreadToDisappear,
   waitForThreadToExist,
 } from "../components/chat/view/ChatView.logic";
 
-const FORK_TITLE_SUFFIX_PATTERN = /\s+\(([A-Z]+)\)$/;
+const BRANCH_TITLE_SUFFIX_PATTERN = /\s+\(([A-Z]+)\)$/;
 
 function decodeAlphaSuffix(value: string): number {
   let result = 0;
@@ -41,12 +41,12 @@ function encodeAlphaSuffix(value: number): string {
   return result;
 }
 
-export function buildForkThreadTitle(
+export function buildBranchThreadTitle(
   sourceTitle: string,
   siblingTitles: ReadonlyArray<string>,
 ): string {
   const trimmedSourceTitle = sourceTitle.trim();
-  const match = FORK_TITLE_SUFFIX_PATTERN.exec(trimmedSourceTitle);
+  const match = BRANCH_TITLE_SUFFIX_PATTERN.exec(trimmedSourceTitle);
   const baseTitle = (match ? trimmedSourceTitle.slice(0, match.index) : trimmedSourceTitle).trim();
   const normalizedBaseTitle = baseTitle.length > 0 ? baseTitle : "New thread";
 
@@ -57,7 +57,7 @@ export function buildForkThreadTitle(
       highestSuffixIndex = Math.max(highestSuffixIndex, 0);
       continue;
     }
-    const siblingMatch = FORK_TITLE_SUFFIX_PATTERN.exec(trimmedTitle);
+    const siblingMatch = BRANCH_TITLE_SUFFIX_PATTERN.exec(trimmedTitle);
     if (!siblingMatch) {
       continue;
     }
@@ -216,12 +216,13 @@ export function useThreadActions() {
     [appSettings.sidebarThreadSortOrder, navigate, removeWorktreeMutation, routeThreadId],
   );
 
-  const forkThread = useCallback(
+  const branchThread = useCallback(
     async (
       sourceThreadId: ThreadId,
       options?: {
+        upToMessageId?: MessageId;
         modelSelection?: ModelSelection;
-        navigateToFork?: boolean;
+        navigateToBranch?: boolean;
       },
     ) => {
       const api = readNativeApi();
@@ -232,16 +233,46 @@ export function useThreadActions() {
       if (!sourceThread) {
         toastManager.add({
           type: "error",
-          title: "Cannot fork thread",
+          title: "Cannot branch thread",
           description: "Source thread not found.",
         });
         return null;
       }
 
-      const forkedThreadId = newThreadId();
+      const branchedThreadId = newThreadId();
       const createdAt = new Date().toISOString();
-      const seedMessages = prepareSeedMessages(sourceThread.messages);
-      const forkedThreadTitle = buildForkThreadTitle(
+      let seedMessages;
+      try {
+        seedMessages = prepareSeedMessagesForBranch(
+          sourceThread.messages,
+          options?.upToMessageId !== undefined
+            ? { upToMessageId: options.upToMessageId }
+            : undefined,
+        );
+      } catch (err) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot branch thread",
+          description:
+            err instanceof ThreadBranchError
+              ? err.message
+              : err instanceof Error
+                ? err.message
+                : "Could not prepare branched messages.",
+        });
+        return null;
+      }
+
+      if (seedMessages.length === 0) {
+        toastManager.add({
+          type: "error",
+          title: "Cannot branch thread",
+          description: "No messages to copy into the branched thread.",
+        });
+        return null;
+      }
+
+      const branchedThreadTitle = buildBranchThreadTitle(
         sourceThread.title,
         threads
           .filter((entry) => entry.projectId === sourceThread.projectId)
@@ -256,9 +287,9 @@ export function useThreadActions() {
         await api.orchestration.dispatchCommand({
           type: "thread.create",
           commandId: newCommandId(),
-          threadId: forkedThreadId,
+          threadId: branchedThreadId,
           projectId: sourceThread.projectId,
-          title: forkedThreadTitle,
+          title: branchedThreadTitle,
           ...executionTargets,
           modelSelection: options?.modelSelection ?? sourceThread.modelSelection,
           runtimeMode: sourceThread.runtimeMode,
@@ -275,69 +306,76 @@ export function useThreadActions() {
       } catch (err) {
         toastManager.add({
           type: "error",
-          title: "Failed to fork thread",
-          description: err instanceof Error ? err.message : "Could not create forked thread.",
+          title: "Failed to branch thread",
+          description: err instanceof Error ? err.message : "Could not create branched thread.",
         });
         return null;
       }
 
       const store = useComposerDraftStore.getState();
       const sourceDraft = store.draftsByThreadId[sourceThreadId];
-      if (sourceDraft) {
-        store.setPrompt(forkedThreadId, sourceDraft.prompt);
+      const copyComposerDraft = options?.upToMessageId === undefined;
+      if (sourceDraft && copyComposerDraft) {
+        store.setPrompt(branchedThreadId, sourceDraft.prompt);
 
         for (const [_provider, selection] of Object.entries(sourceDraft.modelSelectionByProvider)) {
           if (selection) {
-            store.setModelSelection(forkedThreadId, selection);
+            store.setModelSelection(branchedThreadId, selection);
           }
         }
 
         if (options?.modelSelection) {
-          store.setModelSelection(forkedThreadId, options.modelSelection);
+          store.setModelSelection(branchedThreadId, options.modelSelection);
         }
 
-        store.setRuntimeMode(forkedThreadId, sourceDraft.runtimeMode);
-        store.setInteractionMode(forkedThreadId, sourceDraft.interactionMode);
+        store.setRuntimeMode(branchedThreadId, sourceDraft.runtimeMode);
+        store.setInteractionMode(branchedThreadId, sourceDraft.interactionMode);
 
         if (sourceDraft.images.length > 0) {
-          store.addImages(forkedThreadId, sourceDraft.images);
+          store.addImages(branchedThreadId, sourceDraft.images);
         }
 
         if (sourceDraft.terminalContexts.length > 0) {
           const updatedContexts = sourceDraft.terminalContexts.map((context) => {
             const updated = context;
-            updated.threadId = forkedThreadId;
+            updated.threadId = branchedThreadId;
             return updated;
           });
-          store.setTerminalContexts(forkedThreadId, updatedContexts);
+          store.setTerminalContexts(branchedThreadId, updatedContexts);
         }
       }
 
-      useComposerDraftStore.getState().setBootstrapSourceThreadId(forkedThreadId, sourceThreadId);
+      useComposerDraftStore.getState().setBootstrapSourceThreadId(branchedThreadId, sourceThreadId);
 
-      const threadExists = await waitForThreadToExist(forkedThreadId);
+      const threadExists = await waitForThreadToExist(branchedThreadId);
       if (!threadExists) {
         toastManager.add({
           type: "error",
-          title: "Fork created but not visible",
-          description: "The forked thread was created but did not appear in time.",
+          title: "Branch created but not visible",
+          description: "The branched thread was created but did not appear in time.",
         });
-        return forkedThreadId;
+        return branchedThreadId;
       }
 
-      if (options?.navigateToFork !== false) {
+      if (options?.navigateToBranch !== false) {
         await navigate({
           to: "/$threadId",
-          params: { threadId: forkedThreadId },
+          params: { threadId: branchedThreadId },
         });
       }
 
+      const branchedFromMessage = options?.upToMessageId !== undefined;
       toastManager.add({
         type: "success",
-        title: "Thread forked",
+        title: "Thread branched",
+        ...(branchedFromMessage
+          ? {
+              description: `${seedMessages.length} message${seedMessages.length === 1 ? "" : "s"} copied.`,
+            }
+          : {}),
       });
 
-      return forkedThreadId;
+      return branchedThreadId;
     },
     [navigate],
   );
@@ -346,6 +384,6 @@ export function useThreadActions() {
     archiveThread,
     unarchiveThread,
     deleteThread,
-    forkThread,
+    branchThread,
   };
 }
