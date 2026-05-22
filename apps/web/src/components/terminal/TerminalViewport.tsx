@@ -7,6 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { useEffect, useEffectEvent, useRef } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
+import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useSettings } from "../../hooks/useSettings";
 import { terminalFontFamilyFromSettings } from "./terminalTypography";
@@ -116,8 +117,9 @@ export function TerminalViewport({
     if (!autoFocus) return;
     void focusRequestId;
     const terminal = terminalRef.current;
-    if (!terminal) return;
+    if (!terminal || !canTerminalAutoFocus()) return;
     const frame = window.requestAnimationFrame(() => {
+      if (!canTerminalAutoFocus()) return;
       terminal.focus();
     });
     return () => {

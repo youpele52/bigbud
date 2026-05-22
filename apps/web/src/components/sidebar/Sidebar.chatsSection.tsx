@@ -167,7 +167,7 @@ export function SidebarChatsSection({
                       clearSelection={sharedProjectItemProps.clearSelection}
                       commitRename={sharedProjectItemProps.commitRename}
                       cancelRename={sharedProjectItemProps.cancelRename}
-                      forkThread={sharedProjectItemProps.forkThread}
+                      branchThread={sharedProjectItemProps.branchThread}
                       favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
                       toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
                       requestThreadDelete={sharedProjectItemProps.requestThreadDelete}

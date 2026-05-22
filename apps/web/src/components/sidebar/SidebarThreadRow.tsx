@@ -60,7 +60,7 @@ export interface SidebarThreadRowProps {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   favoriteThreadIds: ReadonlySet<ThreadId>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
@@ -122,11 +122,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     [effectiveThreadId, props, swipeReveal],
   );
 
-  const handleForkAction = useCallback(
+  const handleBranchAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      void props.forkThread(effectiveThreadId);
+      void props.branchThread(effectiveThreadId);
     },
     [effectiveThreadId, props],
   );
@@ -317,7 +317,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 threadTitle={thread.title}
                 swipeRevealIsRevealed={swipeReveal.isRevealed}
                 isFavorite={isFavorite}
-                handleForkAction={handleForkAction}
+                handleBranchAction={handleBranchAction}
                 handleFavoriteAction={handleFavoriteAction}
               />
               <span className={threadMetaClassName}>

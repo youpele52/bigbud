@@ -347,6 +347,7 @@ export default function ThreadTerminalDrawer({
               cwd={cwd}
               worktreePath={worktreePath}
               runtimeEnv={runtimeEnv}
+              visible={visible}
               visibleTerminalIds={visibleTerminalIds}
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               terminalLabelById={terminalLabelById}

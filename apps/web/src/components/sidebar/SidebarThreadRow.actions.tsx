@@ -9,20 +9,20 @@ export interface SidebarThreadRowActionsProps {
   threadTitle: string;
   swipeRevealIsRevealed: boolean;
   isFavorite: boolean;
-  handleForkAction: (event: MouseEvent<HTMLButtonElement>) => void;
+  handleBranchAction: (event: MouseEvent<HTMLButtonElement>) => void;
   handleFavoriteAction: (event: MouseEvent<HTMLButtonElement>) => void;
 }
 
 /**
  * Action buttons displayed on hover/focus for a sidebar thread row.
- * Contains fork and pin buttons with appropriate tooltips.
+ * Contains branch and pin buttons with appropriate tooltips.
  */
 export function SidebarThreadRowActions({
   threadId,
   threadTitle,
   swipeRevealIsRevealed,
   isFavorite,
-  handleForkAction,
+  handleBranchAction,
   handleFavoriteAction,
 }: SidebarThreadRowActionsProps) {
   return (
@@ -39,19 +39,19 @@ export function SidebarThreadRowActions({
             <button
               type="button"
               data-thread-selection-safe
-              data-testid={`thread-fork-${threadId}`}
-              aria-label={`Fork ${threadTitle}`}
+              data-testid={`thread-branch-${threadId}`}
+              aria-label={`Branch ${threadTitle}`}
               className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
-              onClick={handleForkAction}
+              onClick={handleBranchAction}
             >
               <SplitIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
             </button>
           }
         />
-        <TooltipPopup side="top">Fork thread</TooltipPopup>
+        <TooltipPopup side="top">Branch thread</TooltipPopup>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger

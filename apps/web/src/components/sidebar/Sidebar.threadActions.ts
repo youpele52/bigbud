@@ -32,7 +32,7 @@ export function useSidebarThreadActions({
   const clearSelection = useThreadSelectionStore((s) => s.clearSelection);
   const removeFromSelection = useThreadSelectionStore((s) => s.removeFromSelection);
   const setSelectionAnchor = useThreadSelectionStore((s) => s.setAnchor);
-  const { archiveThread, deleteThread, forkThread } = useThreadActions();
+  const { archiveThread, deleteThread, branchThread } = useThreadActions();
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) setOpenMobile(false);
@@ -105,19 +105,19 @@ export function useSidebarThreadActions({
     [appSettings.favoriteThreadIds, updateSettings],
   );
 
-  const handleForkThread = useCallback(
+  const handleBranchThread = useCallback(
     async (threadId: ThreadId) => {
       try {
-        await forkThread(threadId, { navigateToFork: true });
+        await branchThread(threadId, { navigateToBranch: true });
       } catch (error) {
         toastManager.add({
           type: "error",
-          title: "Failed to fork thread",
+          title: "Failed to branch thread",
           description: error instanceof Error ? error.message : "An error occurred.",
         });
       }
     },
-    [forkThread],
+    [branchThread],
   );
 
   const openPrLink = useCallback((event: MouseEvent<HTMLElement>, prUrl: string) => {
@@ -208,7 +208,7 @@ export function useSidebarThreadActions({
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
-          { id: "fork", label: "Fork thread" },
+          { id: "branch", label: "Branch thread" },
           {
             id: "favorite",
             label: isFavorite ? "Unpin thread" : "Pin thread",
@@ -230,8 +230,8 @@ export function useSidebarThreadActions({
         return;
       }
 
-      if (clicked === "fork") {
-        await handleForkThread(threadId);
+      if (clicked === "branch") {
+        await handleBranchThread(threadId);
         return;
       }
 
@@ -281,7 +281,7 @@ export function useSidebarThreadActions({
       attemptArchiveThread,
       copyPathToClipboard,
       copyThreadIdToClipboard,
-      handleForkThread,
+      handleBranchThread,
       markThreadUnread,
       projectCwdById,
       requestThreadDelete,
@@ -357,7 +357,7 @@ export function useSidebarThreadActions({
     cancelRename,
     commitRename,
     attemptArchiveThread,
-    forkThread: handleForkThread,
+    branchThread: handleBranchThread,
     toggleFavoriteThread,
     pendingDeleteConfirmation,
     dismissPendingDeleteConfirmation,
