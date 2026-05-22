@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import {
   type SshExecutionTarget,
 } from "./sshExecutionTarget.ts";
 
-const SSH_PASSWORD_SESSION_DIR_PREFIX = "bigbud-ssh-session-";
+const SSH_PASSWORD_SESSION_DIR_PREFIX = "bbs-";
 const SSH_PASSWORD_ASKPASS_DIR_PREFIX = "bigbud-ssh-password-askpass-";
 const sessionRootDirectory = fs.mkdtempSync(
   path.join(os.tmpdir(), SSH_PASSWORD_SESSION_DIR_PREFIX),
@@ -44,6 +45,11 @@ function buildPasswordSessionDestination(target: SshExecutionTarget): string {
     : formatSshDestination(target);
 }
 
+export function buildPasswordSessionControlPath(executionTargetId: string): string {
+  const digest = createHash("sha256").update(executionTargetId).digest("hex").slice(0, 20);
+  return path.join(sessionRootDirectory, `s-${digest}`);
+}
+
 function getPasswordSessionRecord(target: SshExecutionTarget): {
   readonly controlPath: string;
   readonly destination: string;
@@ -53,10 +59,7 @@ function getPasswordSessionRecord(target: SshExecutionTarget): {
     return existing;
   }
 
-  const controlPath = path.join(
-    sessionRootDirectory,
-    `ssh-${Buffer.from(target.executionTargetId).toString("base64url")}.sock`,
-  );
+  const controlPath = buildPasswordSessionControlPath(target.executionTargetId);
   const record = {
     controlPath,
     destination: formatSshDestination(target),

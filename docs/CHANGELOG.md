@@ -4,6 +4,26 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.635 (22 May, 2026)
+
+### Thread Branching
+
+- Added the ability to fork a thread from any user or assistant message, so you can branch a conversation at a specific point instead of only copying the full history.
+- Renamed all thread forking terminology to branching across the UI for consistent language, including sidebar actions, context menus, toasts, and tooltips.
+- Extracted a shared `MessageBranchButton` component and added focused test coverage for branch button display and edge cases.
+
+### Terminal Stability
+
+- Fixed a terminal flickering bug that caused the xterm instance to remount on every composer keystroke, and added autofocus guards so the terminal no longer steals focus while you are typing in the composer.
+
+### Marketing and Social
+
+- Refreshed the Open Graph image and Twitter card preview with a dedicated social preview graphic, and updated the download page screenshot to a light-theme workspace view.
+
+### Remote SSH
+
+- Improved remote SSH authentication handling by shortening password-auth control socket paths to fit within macOS socket limits, added a regression test for long SSH execution target IDs, and clarified in the remote project dialog that leaving the key path blank uses agent or default identities.
+
 ## v0.1.634 (19 May, 2026)
 
 ### Desktop Signing and Distribution

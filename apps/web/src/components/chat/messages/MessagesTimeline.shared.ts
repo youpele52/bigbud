@@ -35,7 +35,7 @@ export interface MessagesTimelineProps {
   focusMessageId?: MessageId | null;
   onReplyToMessage?: (messageId: MessageId) => void;
   onOpenReplySource?: (messageId: MessageId) => void;
-  onForkThread?: () => void;
+  onBranchThread?: (messageId: MessageId) => void;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
@@ -73,5 +73,5 @@ export interface MessagesTimelineRowContentProps {
   focusedMessageId: MessageId | null;
   onReplyToMessage: (messageId: MessageId) => void;
   onOpenReplySource: (messageId: MessageId) => void;
-  onForkThread?: () => void;
+  onBranchThread?: (messageId: MessageId) => void;
 }

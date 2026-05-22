@@ -174,7 +174,7 @@ export function PersistentThreadTerminalDrawer({
         activeTerminalId={terminalState.activeTerminalId}
         terminalGroups={terminalState.terminalGroups}
         activeTerminalGroupId={terminalState.activeTerminalGroupId}
-        focusRequestId={focusRequestId + localFocusRequestId + (visible ? 1 : 0)}
+        focusRequestId={focusRequestId + localFocusRequestId}
         onSplitTerminal={splitTerminal}
         onNewTerminal={createNewTerminal}
         splitShortcutLabel={visible ? splitShortcutLabel : undefined}

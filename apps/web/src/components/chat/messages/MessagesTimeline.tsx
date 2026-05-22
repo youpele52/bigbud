@@ -44,7 +44,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   focusMessageId = null,
   onReplyToMessage = () => {},
   onOpenReplySource = () => {},
-  onForkThread,
+  onBranchThread,
   onVirtualizerSnapshot,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
@@ -283,7 +283,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             focusedMessageId={focusedMessageId}
             onReplyToMessage={onReplyToMessage}
             onOpenReplySource={onOpenReplySource}
-            {...(onForkThread ? { onForkThread } : {})}
+            {...(onBranchThread ? { onBranchThread } : {})}
             isWorking={isWorking}
             onTimelineImageLoad={onTimelineImageLoad}
           />
@@ -312,7 +312,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         focusedMessageId={focusedMessageId}
         onReplyToMessage={onReplyToMessage}
         onOpenReplySource={onOpenReplySource}
-        {...(onForkThread ? { onForkThread } : {})}
+        {...(onBranchThread ? { onBranchThread } : {})}
         isWorking={isWorking}
         onTimelineImageLoad={onTimelineImageLoad}
       />

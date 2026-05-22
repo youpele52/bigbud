@@ -94,7 +94,7 @@ export interface SharedProjectItemProps {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   prByThreadId: Map<ThreadId, ThreadPr>;
@@ -211,7 +211,7 @@ export interface SidebarState {
   cancelRename: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   attemptArchiveThread: (threadId: ThreadId) => Promise<void>;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   pendingDeleteConfirmation: {
     title: string;

@@ -88,7 +88,7 @@ export function SidebarFavoritesSection({
                     clearSelection={sharedProjectItemProps.clearSelection}
                     commitRename={sharedProjectItemProps.commitRename}
                     cancelRename={sharedProjectItemProps.cancelRename}
-                    forkThread={sharedProjectItemProps.forkThread}
+                    branchThread={sharedProjectItemProps.branchThread}
                     requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
                     openPrLink={sharedProjectItemProps.openPrLink}
                     pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}

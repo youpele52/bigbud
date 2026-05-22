@@ -76,7 +76,7 @@ export function SidebarRenderedProjectItem({
   clearSelection,
   commitRename,
   cancelRename,
-  forkThread,
+  branchThread,
   requestThreadDelete,
   openPrLink,
   prByThreadId,
@@ -374,7 +374,7 @@ export function SidebarRenderedProjectItem({
         clearSelection={clearSelection}
         commitRename={commitRename}
         cancelRename={cancelRename}
-        forkThread={forkThread}
+        branchThread={branchThread}
         favoriteThreadIds={favoriteThreadIds}
         toggleFavoriteThread={toggleFavoriteThread}
         requestThreadDelete={requestThreadDelete}
