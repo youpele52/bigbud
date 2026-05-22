@@ -81,19 +81,6 @@ const [macosSection, windowsSection, linuxSection] = platformSections;
             </a>
         </p>
 
-        <section class="install-commands" aria-label="Command line installers">
-            {
-                installCommandBlocks.map((block) => (
-                    <CopyCommandButton
-                        class="install-command-block"
-                        command={block.command}
-                        label={block.title}
-                        ariaLabel={block.ariaLabel}
-                    />
-                ))
-            }
-        </section>
-
         <div class="platforms" id="platforms">
             <DownloadPlatformSection {...macosSection}>
                 <div slot="betaLinks" class="download-beta-links">
@@ -120,6 +107,19 @@ const [macosSection, windowsSection, linuxSection] = platformSections;
                 </div>
             </DownloadPlatformSection>
         </div>
+
+        <section class="install-commands" aria-label="Command line installers">
+            {
+                installCommandBlocks.map((block) => (
+                    <CopyCommandButton
+                        class="install-command-block"
+                        command={block.command}
+                        label={block.title}
+                        ariaLabel={block.ariaLabel}
+                    />
+                ))
+            }
+        </section>
 
         <p class="releases-link">
             Looking for older versions? <span class="">
