@@ -41,7 +41,7 @@ export function useChatViewProviderSwitch({
 }: UseChatViewProviderSwitchInput) {
   const [pendingProviderSwitchConfirmation, setPendingProviderSwitchConfirmation] =
     useState<PendingProviderSwitchConfirmation | null>(null);
-  const { forkThread } = useThreadActions();
+  const { branchThread } = useThreadActions();
 
   const branchThreadForProviderChange = useCallback(
     async (nextModelSelection: ModelSelection) => {
@@ -50,18 +50,18 @@ export function useChatViewProviderSwitch({
         return;
       }
 
-      const forkedThreadId = await forkThread(base.activeThread.id, {
+      const branchedThreadId = await branchThread(base.activeThread.id, {
         modelSelection: nextModelSelection,
-        navigateToFork: true,
+        navigateToBranch: true,
       });
 
-      if (forkedThreadId) {
+      if (branchedThreadId) {
         base.setStickyComposerModelSelection(nextModelSelection);
       }
 
       runtime.scheduleComposerFocus();
     },
-    [base, forkThread, runtime],
+    [base, branchThread, runtime],
   );
 
   const onProviderModelSelect = useCallback(

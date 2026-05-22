@@ -1,7 +1,7 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { type ExecutionTargetId, type ThreadId } from "@bigbud/contracts";
-import { useEffect, type MutableRefObject, type RefObject } from "react";
+import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { selectTerminalEventEntries } from "../../stores/terminal";
@@ -18,6 +18,7 @@ import {
 } from "./ThreadTerminalDrawer.logic";
 import { applyPendingTerminalEvents, makeApplyTerminalEvent } from "./TerminalViewport.events";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
+import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 
 interface UseTerminalViewportSessionInput {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -47,12 +48,22 @@ interface UseTerminalViewportSessionInput {
 }
 
 export function useTerminalViewportSession(input: UseTerminalViewportSessionInput) {
+  // Keep callbacks in refs so the session effect does not re-run (and
+  // remount the terminal) when upstream function identities change.
+  const readTerminalLabelRef = useRef(input.readTerminalLabel);
+  readTerminalLabelRef.current = input.readTerminalLabel;
+  const onAddTerminalContextRef = useRef(input.onAddTerminalContext);
+  onAddTerminalContextRef.current = input.onAddTerminalContext;
+  const onSessionExitedRef = useRef(input.onSessionExited);
+  onSessionExitedRef.current = input.onSessionExited;
+
   useEffect(() => {
     const mount = input.containerRef.current;
     if (!mount) return;
 
-    const readTerminalLabel = input.readTerminalLabel;
-    const onAddTerminalContext = input.onAddTerminalContext;
+    const readTerminalLabel = () => readTerminalLabelRef.current();
+    const onAddTerminalContext = (selection: TerminalContextSelection) =>
+      onAddTerminalContextRef.current(selection);
     const terminalHydratedRef = input.terminalHydratedRef;
     const lastAppliedTerminalEventIdRef = input.lastAppliedTerminalEventIdRef;
     const selectionActionTimerRef = input.selectionActionTimerRef;
@@ -213,7 +224,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       terminalRef: input.terminalRef,
       hasHandledExitRef: input.hasHandledExitRef,
       clearSelectionAction,
-      handleSessionExited: input.onSessionExited,
+      handleSessionExited: () => onSessionExitedRef.current(),
     });
     const unsubscribeTerminalEvents = useTerminalStateStore.subscribe((state, previousState) => {
       if (!terminalHydratedRef.current) {
@@ -328,9 +339,11 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         }
         input.lastAppliedTerminalEventIdRef.current = bufferedEntries.at(-1)?.id ?? 0;
         input.terminalHydratedRef.current = true;
-        if (input.autoFocusRef.current) {
+        if (input.autoFocusRef.current && canTerminalAutoFocus()) {
           window.requestAnimationFrame(() => {
-            activeTerminal.focus();
+            if (canTerminalAutoFocus()) {
+              activeTerminal.focus();
+            }
           });
         }
       } catch (err) {
@@ -382,10 +395,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     input.fitAddonRef,
     input.hasHandledExitRef,
     input.lastAppliedTerminalEventIdRef,
-    input.onAddTerminalContext,
-    input.onSessionExited,
     input.runtimeEnv,
-    input.readTerminalLabel,
     input.selectionActionOpenRef,
     input.selectionActionRequestIdRef,
     input.selectionActionTimerRef,

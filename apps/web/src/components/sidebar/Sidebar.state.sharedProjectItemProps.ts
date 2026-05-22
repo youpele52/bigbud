@@ -68,7 +68,7 @@ export function buildSharedProjectItemProps(
     clearSelection: input.threadActions.clearSelection,
     commitRename: input.threadActions.commitRename,
     cancelRename: input.threadActions.cancelRename,
-    forkThread: input.threadActions.forkThread,
+    branchThread: input.threadActions.branchThread,
     requestThreadDelete: input.threadActions.requestThreadDelete,
     openPrLink: input.threadActions.openPrLink,
     prByThreadId: input.prByThreadId,

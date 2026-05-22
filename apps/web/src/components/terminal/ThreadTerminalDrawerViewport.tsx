@@ -12,6 +12,7 @@ interface ThreadTerminalDrawerViewportProps {
   cwd: string;
   worktreePath: string | null | undefined;
   runtimeEnv: Record<string, string> | undefined;
+  visible: boolean;
   visibleTerminalIds: string[];
   resolvedActiveTerminalId: string;
   terminalLabelById: Map<string, string>;
@@ -30,6 +31,7 @@ export function ThreadTerminalDrawerViewport({
   cwd,
   worktreePath,
   runtimeEnv,
+  visible,
   visibleTerminalIds,
   resolvedActiveTerminalId,
   terminalLabelById,
@@ -77,7 +79,7 @@ export function ThreadTerminalDrawerViewport({
                 terminalId={terminalId}
                 terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
                 onSessionExited={() => onCloseTerminal(terminalId)}
-                autoFocus={terminalId === resolvedActiveTerminalId}
+                autoFocus={visible && terminalId === resolvedActiveTerminalId}
                 {...sharedProps}
               />
             </div>
@@ -94,7 +96,7 @@ export function ThreadTerminalDrawerViewport({
         terminalId={resolvedActiveTerminalId}
         terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
         onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
-        autoFocus
+        autoFocus={visible}
         {...sharedProps}
       />
     </div>

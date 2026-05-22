@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { buildForkThreadTitle } from "./useThreadActions";
+import { buildBranchThreadTitle } from "./useThreadActions";
 
-describe("buildForkThreadTitle", () => {
-  it("adds A for the first fork of an unsuffixed title", () => {
-    expect(buildForkThreadTitle("Old thread name", ["Old thread name"])).toBe(
+describe("buildBranchThreadTitle", () => {
+  it("adds A for the first branch of an unsuffixed title", () => {
+    expect(buildBranchThreadTitle("Old thread name", ["Old thread name"])).toBe(
       "Old thread name (A)",
     );
   });
 
-  it("advances to the next suffix when forking an already suffixed thread", () => {
+  it("advances to the next suffix when branching an already suffixed thread", () => {
     expect(
-      buildForkThreadTitle("Old thread name (A)", ["Old thread name", "Old thread name (A)"]),
+      buildBranchThreadTitle("Old thread name (A)", ["Old thread name", "Old thread name (A)"]),
     ).toBe("Old thread name (B)");
   });
 
   it("uses the highest existing sibling suffix for the shared base title", () => {
     expect(
-      buildForkThreadTitle("Old thread name (A)", [
+      buildBranchThreadTitle("Old thread name (A)", [
         "Old thread name",
         "Old thread name (A)",
         "Old thread name (C)",
@@ -27,7 +27,7 @@ describe("buildForkThreadTitle", () => {
 
   it("continues past Z with spreadsheet-style suffixes", () => {
     expect(
-      buildForkThreadTitle("Old thread name (Z)", ["Old thread name", "Old thread name (Z)"]),
+      buildBranchThreadTitle("Old thread name (Z)", ["Old thread name", "Old thread name (Z)"]),
     ).toBe("Old thread name (AA)");
   });
 });

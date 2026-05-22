@@ -32,7 +32,7 @@ interface SidebarRenderedProjectItemThreadListProps {
   clearSelection: () => void;
   commitRename: (threadId: ThreadId, newTitle: string, originalTitle: string) => Promise<void>;
   cancelRename: () => void;
-  forkThread: (threadId: ThreadId) => Promise<void>;
+  branchThread: (threadId: ThreadId) => Promise<void>;
   favoriteThreadIds: ReadonlySet<ThreadId>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
@@ -70,7 +70,7 @@ export function SidebarRenderedProjectItemThreadList({
   clearSelection,
   commitRename,
   cancelRename,
-  forkThread,
+  branchThread,
   favoriteThreadIds,
   toggleFavoriteThread,
   requestThreadDelete,
@@ -124,7 +124,7 @@ export function SidebarRenderedProjectItemThreadList({
             clearSelection={clearSelection}
             commitRename={commitRename}
             cancelRename={cancelRename}
-            forkThread={forkThread}
+            branchThread={branchThread}
             favoriteThreadIds={favoriteThreadIds}
             toggleFavoriteThread={toggleFavoriteThread}
             requestThreadDelete={requestThreadDelete}
