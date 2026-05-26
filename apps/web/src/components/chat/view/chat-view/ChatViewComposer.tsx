@@ -1,13 +1,16 @@
 import { type MessageId } from "@bigbud/contracts";
-import { PaperclipIcon } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  collapseExpandedComposerCursor,
+  detectComposerTrigger,
+  expandCollapsedComposerCursor,
+} from "~/logic/composer";
 import { cn } from "~/lib/utils";
 
-import { Button } from "../../../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../../../ui/tooltip";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
-import { ComposerCommandMenu } from "../../composer/ComposerCommandMenu";
+import { ComposerAttachmentMenu } from "../../composer/ComposerAttachmentMenu";
+import { ComposerCommandMenu, type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
@@ -75,6 +78,122 @@ export function ChatViewComposer({
     [base, runtime],
   );
 
+  // Synthetic composer menu (opened from the + button, not from typed triggers)
+  const [syntheticMenuKind, setSyntheticMenuKind] = useState<"agent" | "skill" | null>(null);
+  const [syntheticMenuHighlightId, setSyntheticMenuHighlightId] = useState<string | null>(null);
+  const syntheticMenuRef = useRef<HTMLDivElement>(null);
+
+  // Dismiss synthetic menu on Escape
+  useEffect(() => {
+    if (!syntheticMenuKind) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSyntheticMenuKind(null);
+        setSyntheticMenuHighlightId(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [syntheticMenuKind]);
+
+  // Dismiss synthetic menu on click outside
+  useEffect(() => {
+    if (!syntheticMenuKind) return;
+    const handler = (e: MouseEvent) => {
+      if (syntheticMenuRef.current && !syntheticMenuRef.current.contains(e.target as Node)) {
+        setSyntheticMenuKind(null);
+        setSyntheticMenuHighlightId(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [syntheticMenuKind]);
+
+  /** Insert a mention (agent or skill) at the current cursor position. */
+  const insertMention = useCallback(
+    (mention: string) => {
+      const snapshot = base.composerEditorRef.current?.readSnapshot();
+      const value = snapshot?.value ?? base.promptRef.current;
+      const expandedCursor =
+        snapshot?.expandedCursor ?? expandCollapsedComposerCursor(value, base.composerCursor);
+
+      if (base.composerDraft.shellMode) {
+        base.setComposerShellMode(false);
+      }
+
+      const prefix = expandedCursor > 0 && !/\s/.test(value[expandedCursor - 1] ?? "") ? " " : "";
+      const insertion = prefix + mention;
+      const newValue = value.slice(0, expandedCursor) + insertion + value.slice(expandedCursor);
+      const newExpandedCursor = expandedCursor + insertion.length;
+      const newCursor = collapseExpandedComposerCursor(newValue, newExpandedCursor);
+
+      base.promptRef.current = newValue;
+      base.setPrompt(newValue);
+      base.setComposerCursor(newCursor);
+      base.setComposerTrigger(detectComposerTrigger(newValue, newExpandedCursor));
+      runtime.scheduleComposerFocus();
+    },
+    [base, runtime],
+  );
+
+  const syntheticAgentItems = useMemo<ComposerCommandItem[]>(
+    () =>
+      composer.discoveredAgents.map((agent) => ({
+        id: `agent:${agent.provider}:${agent.id}`,
+        type: "agent" as const,
+        agent,
+        label: `@${agent.name}`,
+        description: agent.description ?? "",
+      })),
+    [composer.discoveredAgents],
+  );
+
+  const syntheticSkillItems = useMemo<ComposerCommandItem[]>(
+    () =>
+      composer.discoveredSkills.map((skill) => ({
+        id: `provider-skill:${skill.provider}:${skill.id}`,
+        type: "skill" as const,
+        skill,
+        label: `$${skill.displayName ?? skill.name}`,
+        description: skill.description ?? "",
+      })),
+    [composer.discoveredSkills],
+  );
+
+  const syntheticMenuItems =
+    syntheticMenuKind === "agent"
+      ? syntheticAgentItems
+      : syntheticMenuKind === "skill"
+        ? syntheticSkillItems
+        : [];
+
+  const onSyntheticMenuSelect = useCallback(
+    (item: ComposerCommandItem) => {
+      if (item.type === "agent") {
+        insertMention(`@agent::${item.agent.name} `);
+      } else if (item.type === "skill") {
+        insertMention(`@skill::${item.skill.name} `);
+      }
+      setSyntheticMenuKind(null);
+      setSyntheticMenuHighlightId(null);
+    },
+    [insertMention],
+  );
+
+  const onSyntheticMenuHighlight = useCallback((itemId: string | null) => {
+    setSyntheticMenuHighlightId(itemId);
+  }, []);
+
+  const onCallAgent = useCallback(() => {
+    setSyntheticMenuKind("agent");
+    setSyntheticMenuHighlightId(null);
+  }, []);
+
+  const onUseSkill = useCallback(() => {
+    setSyntheticMenuKind("skill");
+    setSyntheticMenuHighlightId(null);
+  }, []);
+
   return (
     <form
       ref={base.composerFormRef}
@@ -121,7 +240,19 @@ export function ChatViewComposer({
               thread.hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
             )}
           >
-            {composer.composerMenuOpen && !thread.isComposerApprovalState ? (
+            {syntheticMenuKind && !thread.isComposerApprovalState ? (
+              <div ref={syntheticMenuRef} className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
+                <ComposerCommandMenu
+                  items={syntheticMenuItems}
+                  resolvedTheme={base.resolvedTheme}
+                  isLoading={false}
+                  triggerKind={syntheticMenuKind === "skill" ? "skill" : "path"}
+                  activeItemId={syntheticMenuHighlightId}
+                  onHighlightedItemChange={onSyntheticMenuHighlight}
+                  onSelect={onSyntheticMenuSelect}
+                />
+              </div>
+            ) : composer.composerMenuOpen && !thread.isComposerApprovalState ? (
               <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
                 <ComposerCommandMenu
                   items={composer.composerMenuItems}
@@ -229,7 +360,6 @@ export function ChatViewComposer({
               )}
             >
               <ComposerFooterLeading
-                isComposerFooterCompact={runtime.scrollBehavior.isComposerFooterCompact}
                 selectedProvider={composer.selectedProvider}
                 selectedModelForPickerWithCustomFallback={
                   composer.selectedModelForPickerWithCustomFallback
@@ -245,7 +375,6 @@ export function ChatViewComposer({
                 planSidebarLabel={thread.planSidebarLabel}
                 interactionMode={base.interactionMode}
                 runtimeMode={base.runtimeMode}
-                providerTraitsPicker={interactions.providerTraitsPicker}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
                 onProviderModelSelect={interactions.onProviderModelSelect}
                 onProviderUnlock={() => base.setProviderUnlocked(true)}
@@ -290,24 +419,12 @@ export function ChatViewComposer({
                       tabIndex={-1}
                       onChange={interactions.onFileInputChange}
                     />
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            type="button"
-                            className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
-                            onClick={interactions.onAttachFiles}
-                            disabled={base.isConnecting || thread.isComposerApprovalState}
-                          >
-                            <PaperclipIcon className="size-4" />
-                            <span className="sr-only">Attach files</span>
-                          </Button>
-                        }
-                      />
-                      <TooltipPopup>Attach files</TooltipPopup>
-                    </Tooltip>
+                    <ComposerAttachmentMenu
+                      onAttachFiles={interactions.onAttachFiles}
+                      onCallAgent={onCallAgent}
+                      onUseSkill={onUseSkill}
+                      disabled={base.isConnecting || thread.isComposerApprovalState}
+                    />
                   </>
                 )}
                 {/* Always mounted outside the ternary so micRef is never null

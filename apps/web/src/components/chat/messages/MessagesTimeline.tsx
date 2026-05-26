@@ -50,6 +50,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
   const [focusedMessageId, setFocusedMessageId] = useState<MessageId | null>(null);
+  const lastProcessedFocusMessageIdRef = useRef<MessageId | null>(null);
 
   useLayoutEffect(() => {
     const timelineRoot = timelineRootRef.current;
@@ -181,6 +182,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   }, []);
   useEffect(() => {
     if (!focusMessageId) {
+      lastProcessedFocusMessageIdRef.current = null;
+      return;
+    }
+    if (lastProcessedFocusMessageIdRef.current === focusMessageId) {
       return;
     }
 
@@ -190,6 +195,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     if (rowIndex < 0) {
       return;
     }
+
+    lastProcessedFocusMessageIdRef.current = focusMessageId;
 
     if (rowIndex < virtualizedRowCount) {
       rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });

@@ -341,7 +341,7 @@ export function BranchToolbarBranchSelector({
       >
         <GitBranchIcon className="size-3" />
         <span className="max-w-[240px] truncate">{triggerLabel}</span>
-        <ChevronDownIcon />
+        <ChevronDownIcon className="size-3" />
       </ComboboxTrigger>
       <ComboboxPopup align="end" side="top" className="w-80">
         <Searchbar

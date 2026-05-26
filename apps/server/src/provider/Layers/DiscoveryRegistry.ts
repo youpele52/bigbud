@@ -34,6 +34,9 @@ const HEADER_NAME_REGEX = /^#\s+(.+)$/m;
 const OPENCODE_AGENT_SECTION_REGEX = /^agent\s*=\s*\{([\s\S]*?)\}/gm;
 const OPENCODE_AGENT_NAME_REGEX = /name\s*=\s*"([^"]+)"/;
 const OPENCODE_AGENT_DESCRIPTION_REGEX = /description\s*=\s*"([^"]+)"/;
+const OPENCODE_JSON_AGENT_KEY_REGEX = /"agent"\s*:\s*\{/g;
+const OPENCODE_JSON_AGENT_ENTRY_START_REGEX = /"([^"]+)"\s*:\s*\{/g;
+const OPENCODE_JSON_AGENT_DESC_REGEX = /"description"\s*:\s*"([^"]*)"/;
 const CODEX_TOML_NAME_REGEX = /^name\s*=\s*(["'])(.*?)\1/m;
 const CODEX_TOML_DESCRIPTION_REGEX = /^description\s*=\s*(["'])(.*?)\1/m;
 const CLAUDE_JSON_NAME_REGEX = /"name"\s*:\s*"([^"]+)"/;
@@ -165,6 +168,77 @@ function parseDiscoveryFile(
       };
 }
 
+function parseOpencodeJsonConfigAgents(
+  configPath: string,
+  content: string,
+): ReadonlyArray<ServerDiscoveredAgent> {
+  OPENCODE_JSON_AGENT_KEY_REGEX.lastIndex = 0;
+  const keyMatch = OPENCODE_JSON_AGENT_KEY_REGEX.exec(content);
+  if (!keyMatch) {
+    return [];
+  }
+
+  // Brace-count to find the matching closing brace of "agent": { ... }
+  const blockStart = keyMatch.index + keyMatch[0].length - 1;
+  let depth = 1;
+  let blockEnd = blockStart;
+  for (let i = blockStart + 1; i < content.length && depth > 0; i++) {
+    if (content[i] === "{") {
+      depth++;
+    } else if (content[i] === "}") {
+      depth--;
+    }
+    if (depth === 0) {
+      blockEnd = i;
+    }
+  }
+
+  const agentBlock = content.slice(blockStart + 1, blockEnd);
+  const source: ServerDiscoveredAgent["source"] = configPath.includes(`${OS.homedir()}/`)
+    ? ("user" as const)
+    : ("project" as const);
+
+  const entries: Array<ServerDiscoveredAgent> = [];
+  OPENCODE_JSON_AGENT_ENTRY_START_REGEX.lastIndex = 0;
+  let startMatch: RegExpExecArray | null;
+  while ((startMatch = OPENCODE_JSON_AGENT_ENTRY_START_REGEX.exec(agentBlock)) !== null) {
+    const name = trimToUndefined(startMatch[1]);
+    if (!name) {
+      continue;
+    }
+
+    // Brace-count to find the matching closing brace of this agent entry
+    const entryBracePos = startMatch.index + startMatch[0].length - 1;
+    let depth = 1;
+    let entryEnd = entryBracePos;
+    for (let i = entryBracePos + 1; i < agentBlock.length && depth > 0; i++) {
+      if (agentBlock[i] === "{") {
+        depth++;
+      } else if (agentBlock[i] === "}") {
+        depth--;
+      }
+      if (depth === 0) {
+        entryEnd = i;
+      }
+    }
+
+    // Skip past this full entry so nested "key": { ... } blocks are not matched
+    OPENCODE_JSON_AGENT_ENTRY_START_REGEX.lastIndex = entryEnd + 1;
+
+    const entryBody = agentBlock.slice(entryBracePos + 1, entryEnd);
+    const description = trimToUndefined(OPENCODE_JSON_AGENT_DESC_REGEX.exec(entryBody)?.[1]);
+    entries.push({
+      id: buildDiscoveryId("opencode", "agent", name),
+      provider: "opencode" as const,
+      name,
+      source,
+      ...(description ? { description } : {}),
+      sourcePath: configPath,
+    } satisfies ServerDiscoveredAgent);
+  }
+  return entries;
+}
+
 function parseOpencodeConfigAgents(
   configPath: string,
   content: string,
@@ -187,6 +261,10 @@ function parseOpencodeConfigAgents(
       } satisfies ServerDiscoveredAgent,
     ];
   });
+  // Fall back to JSON-format config ("agent": { "name": { "description": "..." } })
+  if (entries.length === 0) {
+    return parseOpencodeJsonConfigAgents(configPath, content);
+  }
   return entries;
 }
 
@@ -220,13 +298,27 @@ const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive
   rootPath: string,
   predicate: (path: string) => boolean,
 ) {
-  const exists = yield* fs.exists(rootPath).pipe(Effect.orElseSucceed(() => false));
+  const exists = yield* fs.exists(rootPath).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning("DiscoveryRegistry: exists check failed", {
+        rootPath,
+        error: String(error),
+      }),
+    ),
+    Effect.orElseSucceed(() => false),
+  );
   if (!exists) {
     return [] as Array<string>;
   }
-  const entries = yield* fs
-    .readDirectory(rootPath, { recursive: true })
-    .pipe(Effect.orElseSucceed(() => [] as Array<string>));
+  const entries = yield* fs.readDirectory(rootPath, { recursive: true }).pipe(
+    Effect.tapError((error) =>
+      Effect.logWarning("DiscoveryRegistry: readDirectory failed", {
+        rootPath,
+        error: String(error),
+      }),
+    ),
+    Effect.orElseSucceed(() => [] as Array<string>),
+  );
   return entries
     .map((entry) => `${rootPath}/${entry}`.replace(/\/+/g, "/"))
     .filter((p) => !p.split("/").includes("node_modules"))
@@ -284,7 +376,11 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
           ),
         { concurrency: "unbounded" },
       );
-      return resolvedPaths.flat();
+      const flat = resolvedPaths.flat();
+      yield* Effect.logInfo(
+        `[DiscoveryRegistry] scanDiscoveryFiles: ${flat.length} files found from ${descriptors.length} descriptors`,
+      );
+      return flat;
     });
 
   const loadDiscoveryCatalog = () =>
@@ -332,10 +428,16 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         agentEntries.push(...entries);
       }
 
-      return {
+      const catalog = {
         agents: mergeEntries(agentEntries),
         skills: mergeEntries(skillEntries),
       } satisfies ServerDiscoveryCatalog;
+
+      yield* Effect.logInfo(
+        `[DiscoveryRegistry] loadDiscoveryCatalog: ${catalog.skills.length} skills, ${catalog.agents.length} agents`,
+      );
+
+      return catalog;
     });
 
   const catalogRef = yield* Ref.make<ServerDiscoveryCatalog>(yield* loadDiscoveryCatalog());
@@ -344,6 +446,11 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
     Effect.gen(function* () {
       const previousCatalog = yield* Ref.get(catalogRef);
       const nextCatalog = yield* loadDiscoveryCatalog().pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: syncCatalog load failed", {
+            error: String(error),
+          }),
+        ),
         Effect.catch(() => Effect.succeed(EMPTY_DISCOVERY)),
       );
       yield* Ref.set(catalogRef, nextCatalog);
