@@ -1,18 +1,12 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { useCallback } from "react";
-import { FolderPlusIcon } from "lucide-react";
+
+import BranchToolbarProjectMenu from "./BranchToolbarProjectMenu";
 
 import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { useSidebar } from "../ui/sidebar";
-import {
-  startSidebarAddProjectFlow,
-  useSidebarAddProjectFlowVisible,
-} from "../sidebar/SidebarAddProjectBridge";
 import {
   resolveDraftEnvModeAfterBranchChange,
   resolveEffectiveEnvMode,
@@ -48,19 +42,12 @@ export default function BranchToolbar({
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const branchCwd = activeWorktreePath ?? activeProject?.cwd ?? null;
   const hasServerThread = serverThread !== undefined;
-  const { setOpen } = useSidebar();
   const effectiveEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath,
     hasServerThread,
     draftThreadEnvMode: draftThread?.envMode,
   });
   const envModeLocked = envLocked || (serverThread !== undefined && activeWorktreePath !== null);
-  const addProjectFlowVisible = useSidebarAddProjectFlowVisible();
-
-  const handleStartAddProject = useCallback(() => {
-    void setOpen(true);
-    startSidebarAddProjectFlow();
-  }, [setOpen]);
 
   const setThreadBranch = useCallback(
     (branch: string | null, worktreePath: string | null) => {
@@ -117,28 +104,8 @@ export default function BranchToolbar({
   if (!activeThreadId) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[calc(52rem+theme(spacing.6))] items-center justify-between px-3 pb-3 pt-1 sm:max-w-[calc(52rem+theme(spacing.10))] sm:px-5">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              aria-label={addProjectFlowVisible ? "Cancel new project" : "New project"}
-              aria-pressed={addProjectFlowVisible}
-              className="gap-1.5 text-muted-foreground/70 hover:text-foreground/80"
-              onClick={handleStartAddProject}
-            >
-              <FolderPlusIcon className="size-3.5" />
-              <span>New project</span>
-            </Button>
-          }
-        />
-        <TooltipPopup side="top">
-          {addProjectFlowVisible ? "Cancel new project" : "New project"}
-        </TooltipPopup>
-      </Tooltip>
+    <div className="mx-auto flex w-full max-w-[calc(52rem+theme(spacing.6))] items-center justify-between px-8 pb-3 pt-1 sm:max-w-[calc(52rem+theme(spacing.10))] sm:px-12">
+      {activeProject && <BranchToolbarProjectMenu activeProject={activeProject} />}
 
       {activeProject && isGitRepo ? (
         <BranchToolbarBranchSelector

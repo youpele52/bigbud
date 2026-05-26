@@ -119,6 +119,12 @@ export function buildDiscoveryFileDescriptors(input: {
       provider: "cursor",
       kind: "skill",
       source: "project",
+      path: input.path.join(input.cwd, ".cursor/skills-cursor"),
+    },
+    {
+      provider: "cursor",
+      kind: "skill",
+      source: "project",
       path: input.path.join(input.cwd, ".agents/skills"),
     },
     {
@@ -138,6 +144,12 @@ export function buildDiscoveryFileDescriptors(input: {
       kind: "skill",
       source: "user",
       path: input.path.join(OS.homedir(), ".cursor/skills"),
+    },
+    {
+      provider: "cursor",
+      kind: "skill",
+      source: "user",
+      path: input.path.join(OS.homedir(), ".cursor/skills-cursor"),
     },
     {
       provider: "cursor",
