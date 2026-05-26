@@ -41,5 +41,46 @@ describe("DiscoveryRegistry — opencode config agents", () => {
         assert.strictEqual(projectOpencode.length, 0);
       }),
     );
+
+    it.effect("discovers agents from JSON-format opencode.json", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
+
+        yield* writeFile(
+          path.join(cwd, ".opencode/opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            agent: {
+              "my-reviewer": {
+                description: "Reviews code changes",
+                mode: "subagent",
+              },
+              "security-engineer": {
+                description: "Security review",
+                mode: "subagent",
+                tools: { write: true, edit: false },
+              },
+            },
+          }),
+        );
+
+        const catalog = yield* getCatalog(cwd);
+
+        const reviewer = catalog.agents.find(
+          (entry) => entry.provider === "opencode" && entry.name === "my-reviewer",
+        );
+        assert.isDefined(reviewer, "should discover my-reviewer agent from JSON config");
+        assert.strictEqual(reviewer?.description, "Reviews code changes");
+        assert.strictEqual(reviewer?.source, "project");
+
+        const security = catalog.agents.find(
+          (entry) => entry.provider === "opencode" && entry.name === "security-engineer",
+        );
+        assert.isDefined(security, "should discover security-engineer agent with nested tools");
+        assert.strictEqual(security?.description, "Security review");
+      }),
+    );
   });
 });

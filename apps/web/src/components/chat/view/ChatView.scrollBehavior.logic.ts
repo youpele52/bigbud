@@ -224,6 +224,7 @@ export function useScrollBehavior({
   useLayoutEffect(() => {
     if (!activeThreadId) return;
     shouldAutoScrollRef.current = true;
+    setShowScrollToBottom(false);
     scheduleStickToBottom();
     const timeout = window.setTimeout(() => {
       const scrollContainer = messagesScrollRef.current;

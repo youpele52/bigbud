@@ -46,6 +46,23 @@ function matchesDiscoveryCommand(query: string, command: "skills" | "agents"): b
   return command.startsWith(query) || query === command || query.startsWith(`${command} `);
 }
 
+/**
+ * Extracts the user's search term from a discovery query.
+ * Returns "" when the query is a command name or prefix (no search term).
+ *
+ * Examples:
+ *   extractDiscoverySearchTerm("skills", "skills")   → ""
+ *   extractDiscoverySearchTerm("skill", "skills")    → ""
+ *   extractDiscoverySearchTerm("sk", "skills")      → ""
+ *   extractDiscoverySearchTerm("skills api", "skills") → "api"
+ */
+function extractDiscoverySearchTerm(query: string, command: string): string {
+  if (query === command || command.startsWith(query)) {
+    return "";
+  }
+  return query.slice(command.length + 1);
+}
+
 export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
   return useMemo<ComposerCommandItem[]>(() => {
     const composerTrigger = input.base.composerTrigger;
@@ -59,15 +76,16 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
       const fallbackSkills = input.discoveredSkills.filter(
         (skill) => skill.provider !== input.selectedProvider,
       );
+      const skillQuery = query.replace(/^(?:skill|skills)\s*/, "");
       const rankAndFilter = (skills: ReadonlyArray<ServerDiscoveredSkill>) =>
         skills
           .filter((skill) => {
-            if (!query) return true;
+            if (!skillQuery) return true;
             return (
-              skill.name.toLowerCase().includes(query) ||
-              skillDisplayLabel(skill).toLowerCase().includes(query) ||
-              skill.provider.toLowerCase().includes(query) ||
-              (skill.description?.toLowerCase().includes(query) ?? false)
+              skill.name.toLowerCase().includes(skillQuery) ||
+              skillDisplayLabel(skill).toLowerCase().includes(skillQuery) ||
+              skill.provider.toLowerCase().includes(skillQuery) ||
+              (skill.description?.toLowerCase().includes(skillQuery) ?? false)
             );
           })
           .map((skill) => ({
@@ -153,14 +171,14 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           type: "slash-command",
           command: "agents",
           label: "/agents",
-          description: "Browse discovered agents across providers",
+          description: `Browse discovered agents (${input.discoveredAgents.length} total)`,
         },
         {
           id: "slash:skills",
           type: "slash-command",
           command: "skills",
           label: "/skills",
-          description: "Browse discovered skills across providers",
+          description: `Browse discovered skills (${input.discoveredSkills.length} total)`,
         },
         ...(input.supportsCompact
           ? [
@@ -181,7 +199,7 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           if (!matchesDiscoveryCommand(query, "skills")) {
             return false;
           }
-          const skillQuery = query.replace(/^skills\s*/, "");
+          const skillQuery = extractDiscoverySearchTerm(query, "skills");
           if (!skillQuery) return true;
           return (
             skill.name.toLowerCase().includes(skillQuery) ||
@@ -202,7 +220,7 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           if (!matchesDiscoveryCommand(query, "agents")) {
             return false;
           }
-          const agentQuery = query.replace(/^agents\s*/, "");
+          const agentQuery = extractDiscoverySearchTerm(query, "agents");
           if (!agentQuery) return true;
           return (
             agent.name.toLowerCase().includes(agentQuery) ||

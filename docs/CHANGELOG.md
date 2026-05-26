@@ -4,6 +4,34 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.636 (26 May, 2026)
+
+### Composer Redesign
+
+- Replaced the standalone attach paperclip button with a compact `+` menu that bundles file uploads, agent calls, and skill usage into one clean entry point, so you can add files, summon an agent, or browse skills from the same spot without hunting for separate buttons.
+- The `+` menu lets you add an agent or skill anywhere in the middle of what you are typing, not just at the very start of a message like the old `/` commands required.
+- Simplified the composer footer to always stay compact — Build, Access, and Plan mode controls are now tucked behind a `...` overflow menu instead of taking up space when they are not needed.
+- Increased the slash-command menu height so large skill lists are easier to browse without scrolling.
+
+### Skill and Agent Discovery
+
+- Fixed the composer skill menu so `/skill` and `/skills` now show the same results instead of different counts, and added live skill and agent totals (e.g. "Browse discovered skills (78 total)") to slash-command descriptions so you know what is available before opening the menu.
+- Fixed skill discovery for Cursor's dedicated `.cursor/skills-cursor/` folder and OpenCode's JSON-format agent config files, so those skills and agents appear reliably in the picker.
+- Added diagnostic logging to catch silent discovery failures, making it easier to troubleshoot when expected skills do not show up.
+
+### Streaming and Scrolling
+
+- Fixed a bug where a focused message could keep flashing and scrolling into view during active AI streaming, making it hard to keep reading new content while a specific message was highlighted.
+
+### Git Branch Toolbar
+
+- Replaced the standalone "New project" button in the branch toolbar with a full project dropdown menu that shows the current project name, recent threads for quick navigation, a full project switcher, and an "Add new project" option — so you can switch projects or jump to a recent thread without leaving the toolbar.
+- Tightened the branch selector chevron icon sizing for a more consistent toolbar look.
+
+### Validation
+
+- Validated this release with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused integration test coverage for multi-provider skill discovery, Cursor and OpenCode agent parsing, and JSON nested config scenarios.
+
 ## v0.1.635 (22 May, 2026)
 
 ### Thread Branching
