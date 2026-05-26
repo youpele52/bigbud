@@ -174,6 +174,14 @@ export const makeWsRpcContext = Effect.gen(function* () {
     const rawSettings = yield* serverSettings.getSettings;
     const settings = resolveTextGenByProbeStatus(rawSettings, providers);
 
+    const skillBreakdown = new Map<string, number>();
+    for (const skill of discovery.skills) {
+      skillBreakdown.set(skill.provider, (skillBreakdown.get(skill.provider) ?? 0) + 1);
+    }
+    yield* Effect.logInfo(
+      `[RPC] loadServerConfig → ${discovery.skills.length} skills, ${discovery.agents.length} agents. Provider breakdown: ${JSON.stringify([...skillBreakdown.entries()])}`,
+    );
+
     return {
       cwd: config.cwd,
       keybindingsConfigPath: config.keybindingsConfigPath,

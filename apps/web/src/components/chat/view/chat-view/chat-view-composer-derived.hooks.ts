@@ -190,6 +190,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     gitStatusQuery,
     keybindings,
     availableEditors,
+    discoveredAgents,
     discoveredSkills,
     modelOptionsByProvider,
     selectedModelForPickerWithCustomFallback,
