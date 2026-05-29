@@ -12,8 +12,13 @@ import {
 
 const SSH_PASSWORD_SESSION_DIR_PREFIX = "bbs-";
 const SSH_PASSWORD_ASKPASS_DIR_PREFIX = "bigbud-ssh-password-askpass-";
+// Keep the SSH ControlPath short to avoid hitting Unix socket path limits.
+// `os.tmpdir()` can be very long on macOS (e.g. `/var/folders/...`), so prefer
+// `/tmp` when available.
+const sessionRootBaseDirectory =
+  process.platform === "win32" ? os.tmpdir() : fs.existsSync("/tmp") ? "/tmp" : os.tmpdir();
 const sessionRootDirectory = fs.mkdtempSync(
-  path.join(os.tmpdir(), SSH_PASSWORD_SESSION_DIR_PREFIX),
+  path.join(sessionRootBaseDirectory, SSH_PASSWORD_SESSION_DIR_PREFIX),
 );
 const passwordSessionByExecutionTargetId = new Map<
   string,

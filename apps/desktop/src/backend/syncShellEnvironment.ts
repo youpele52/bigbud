@@ -1,7 +1,9 @@
 import {
   readEnvironmentFromLoginShell,
+  readEnvironmentFromLoginShellAsync,
   resolveLoginShell,
   ShellEnvironmentReader,
+  ShellEnvironmentReaderAsync,
 } from "@bigbud/shared/shell";
 
 export function syncShellEnvironment(
@@ -22,6 +24,37 @@ export function syncShellEnvironment(
       "PATH",
       "SSH_AUTH_SOCK",
     ]);
+
+    if (shellEnvironment.PATH) {
+      env.PATH = shellEnvironment.PATH;
+    }
+
+    if (!env.SSH_AUTH_SOCK && shellEnvironment.SSH_AUTH_SOCK) {
+      env.SSH_AUTH_SOCK = shellEnvironment.SSH_AUTH_SOCK;
+    }
+  } catch {
+    // Keep inherited environment if shell lookup fails.
+  }
+}
+
+export async function syncShellEnvironmentAsync(
+  env: NodeJS.ProcessEnv = process.env,
+  options: {
+    platform?: NodeJS.Platform;
+    readEnvironment?: ShellEnvironmentReaderAsync;
+  } = {},
+): Promise<void> {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "darwin" && platform !== "linux") return;
+
+  try {
+    const shell = resolveLoginShell(platform, env.SHELL);
+    if (!shell) return;
+
+    const shellEnvironment = await (options.readEnvironment ?? readEnvironmentFromLoginShellAsync)(
+      shell,
+      ["PATH", "SSH_AUTH_SOCK"],
+    );
 
     if (shellEnvironment.PATH) {
       env.PATH = shellEnvironment.PATH;

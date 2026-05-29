@@ -76,6 +76,11 @@ export interface PackagedOpencodeBinaryPlan {
   readonly binaryPath: string;
 }
 
+export interface PackagedBackendLauncherPlan {
+  readonly launcherPath: string;
+  readonly source: "processExecPath" | "appDirExecutable";
+}
+
 // ---------------------------------------------------------------------------
 // Pure resolver (no I/O, fully testable)
 // ---------------------------------------------------------------------------
@@ -131,5 +136,25 @@ export function resolvePackagedOpencodeBinaryPlan(
     binDir,
     binaryName,
     binaryPath: Path.join(binDir, binaryName),
+  };
+}
+
+export function resolvePackagedBackendLauncherPlan(
+  platform: string,
+  processExecPath: string,
+  appDir: string | undefined,
+  executableName: string,
+): PackagedBackendLauncherPlan {
+  const normalizedAppDir = appDir?.trim();
+  if (platform === "linux" && normalizedAppDir) {
+    return {
+      launcherPath: Path.join(normalizedAppDir, executableName),
+      source: "appDirExecutable",
+    };
+  }
+
+  return {
+    launcherPath: processExecPath,
+    source: "processExecPath",
   };
 }

@@ -10,6 +10,7 @@ import {
   ensureBackendModulesPath,
   resolveBackendCwd,
   resolveBackendEntry,
+  resolveBackendLauncherPath,
   resolvePackagedOpencodeBinaryDir,
 } from "../env/pathResolver";
 import type { RotatingFileSink } from "@bigbud/shared/logging";
@@ -59,6 +60,10 @@ export let restartTimer: ReturnType<typeof setTimeout> | null = null;
 
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
 
+/** No-op handler for pipe errors from a dying backend child.
+ *  Keeps these errors from becoming uncaught exceptions in the main process. */
+const swallowPipeError = () => {};
+
 // ---------------------------------------------------------------------------
 // Dependencies (injected once via init)
 // ---------------------------------------------------------------------------
@@ -66,6 +71,7 @@ const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
 interface BackendManagerDeps {
   readonly rootDir: string;
   readonly baseDir: string;
+  readonly backendMaxOldSpaceMb: number | null;
   readonly serverSettingsPath: string;
   readonly getIsQuitting: () => boolean;
   readonly getBackendLogSink: () => RotatingFileSink | null;
@@ -90,6 +96,27 @@ export function initBackendManager(deps: BackendManagerDeps): void {
 function logBackendBoundary(phase: "START" | "END", details: string): void {
   if (!_deps) return;
   writeBackendSessionBoundary(phase, details, _deps.getBackendLogSink(), _deps.runId);
+}
+
+function withBackendNodeOptions(
+  env: NodeJS.ProcessEnv,
+  backendMaxOldSpaceMb: number | null,
+): NodeJS.ProcessEnv {
+  if (!backendMaxOldSpaceMb) {
+    return env;
+  }
+
+  const nextFlag = `--max-old-space-size=${backendMaxOldSpaceMb}`;
+  const existingNodeOptions = env.NODE_OPTIONS?.trim();
+
+  if (existingNodeOptions?.includes("--max-old-space-size=")) {
+    return env;
+  }
+
+  return {
+    ...env,
+    NODE_OPTIONS: existingNodeOptions ? `${existingNodeOptions} ${nextFlag}` : nextFlag,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +166,7 @@ export function startBackend(): void {
   const backendLogSink = _deps.getBackendLogSink();
   const captureBackendLogs = backendLogSink !== null;
   const packagedOpencodeBinDir = resolvePackagedOpencodeBinaryDir();
+  const backendLauncherPath = resolveBackendLauncherPath();
 
   // Ensure _modules → node_modules link exists for ESM resolution of
   // external native packages (e.g. @github/copilot-sdk, node-pty).
@@ -146,25 +174,41 @@ export function startBackend(): void {
 
   // Always pipe stderr so we can capture crash output for diagnostics,
   // regardless of whether a log sink is configured.
-  const child = ChildProcess.spawn(process.execPath, [backendEntry, "--bootstrap-fd", "3"], {
+  const child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
     cwd: resolveBackendCwd(_deps.rootDir),
-    // In Electron main, process.execPath points to the Electron binary.
-    // Run the child in Node mode so this backend process does not become a GUI app instance.
-    env: {
-      ...backendChildEnv(),
-      ...(packagedOpencodeBinDir
-        ? {
-            PATH: [packagedOpencodeBinDir, process.env.PATH]
-              .filter((entry): entry is string => Boolean(entry && entry.length > 0))
-              .join(process.platform === "win32" ? ";" : ":"),
-          }
-        : {}),
-      ELECTRON_RUN_AS_NODE: "1",
-    },
+    // In packaged Linux AppImages, process.execPath can point at the outer
+    // AppImage launcher. Prefer the mounted in-image executable when available
+    // so backend restarts do not re-enter the AppImage runtime.
+    env: withBackendNodeOptions(
+      {
+        ...backendChildEnv(),
+        ...(packagedOpencodeBinDir
+          ? {
+              PATH: [packagedOpencodeBinDir, process.env.PATH]
+                .filter((entry): entry is string => Boolean(entry && entry.length > 0))
+                .join(process.platform === "win32" ? ";" : ":"),
+            }
+          : {}),
+        ELECTRON_RUN_AS_NODE: "1",
+      },
+      _deps.backendMaxOldSpaceMb,
+    ),
     stdio: captureBackendLogs
       ? ["ignore", "pipe", "pipe", "pipe"]
       : ["ignore", "inherit", "pipe", "pipe"],
   });
+
+  // Swallow pipe errors on stdio streams. When the backend child exits
+  // abruptly (e.g. permission denied, immediate crash) the pipe endpoints
+  // emit 'error' with ECONNRESET / EPIPE. Without handlers these become
+  // uncaught exceptions in the main process. The 'exit' / 'error' handlers
+  // on the child process capture the real reason and schedule a restart.
+  if (child.stdout) {
+    child.stdout.on("error", swallowPipeError);
+  }
+  if (child.stderr) {
+    child.stderr.on("error", swallowPipeError);
+  }
 
   // Buffer the last 2 KB of stderr for crash diagnostics.
   const stderrTail: string[] = [];
@@ -184,6 +228,7 @@ export function startBackend(): void {
   }
   const bootstrapStream = child.stdio[3];
   if (bootstrapStream && "write" in bootstrapStream) {
+    bootstrapStream.on("error", swallowPipeError);
     bootstrapStream.write(
       `${JSON.stringify({
         mode: "desktop",
@@ -214,7 +259,7 @@ export function startBackend(): void {
   };
   logBackendBoundary(
     "START",
-    `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)}`,
+    `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)} exec=${backendLauncherPath}`,
   );
   captureBackendOutput(child, backendLogSink);
 

@@ -7,6 +7,23 @@ import type { ModelCapabilities, ServerProviderModel } from "@bigbud/contracts";
 
 export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
+    slug: "gpt-5.5",
+    name: "GPT-5.5",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "xhigh", label: "Extra High" },
+        { value: "high", label: "High", isDefault: true },
+        { value: "medium", label: "Medium" },
+        { value: "low", label: "Low" },
+      ],
+      supportsFastMode: true,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [],
+      promptInjectedEffortLevels: [],
+    },
+  },
+  {
     slug: "gpt-5.4",
     name: "GPT-5.4",
     isCustom: false,

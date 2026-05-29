@@ -17,6 +17,10 @@ type MenuTemplateEntry = {
 
 vi.mock("electron", () => {
   class MockBrowserWindow {
+    constructor(public options?: Record<string, unknown>) {
+      mockWindowInstances.push(this);
+    }
+
     webContents = {
       session: {
         setPermissionRequestHandler: vi.fn(),
@@ -40,10 +44,6 @@ vi.mock("electron", () => {
     loadURL = vi.fn();
     contextMenuHandler: ((event: { preventDefault: () => void }, params: any) => void) | null =
       null;
-
-    constructor() {
-      mockWindowInstances.push(this);
-    }
   }
 
   return {
@@ -63,6 +63,7 @@ function createWindowUnderTest() {
     desktopScheme: "bigbud",
     isDevelopment: false,
     desktopDir: "/desktop",
+    spellcheckEnabled: true,
     resolveIconPath: () => null,
     getSafeExternalUrl: () => null,
     emitUpdateState: () => undefined,
@@ -73,6 +74,29 @@ function createWindowUnderTest() {
 }
 
 describe("windowManager context menu", () => {
+  it("passes spellcheck through to webPreferences", () => {
+    mockWindowInstances.length = 0;
+
+    createWindow({
+      appDisplayName: "bigbud",
+      desktopScheme: "bigbud",
+      isDevelopment: false,
+      desktopDir: "/desktop",
+      spellcheckEnabled: false,
+      resolveIconPath: () => null,
+      getSafeExternalUrl: () => null,
+      emitUpdateState: () => undefined,
+      onWindowClosed: () => undefined,
+    });
+
+    const window = mockWindowInstances.at(-1);
+    expect(window?.options).toMatchObject({
+      webPreferences: expect.objectContaining({
+        spellcheck: false,
+      }),
+    });
+  });
+
   it("adds Copy Image for image context menus", () => {
     mockWindowInstances.length = 0;
     buildFromTemplateMock.mockClear();
