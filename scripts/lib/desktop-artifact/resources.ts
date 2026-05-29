@@ -198,10 +198,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       buildResources: buildResourcesDir,
     },
     extraMetadata: {
-      homepage: "https://github.com/youpele52/bigbud",
+      homepage: "https://bigbud.app",
       author: {
         name: "bigbud",
-        email: "dev@bigbud.ai",
+        email: "dev@bigbud.app",
       },
     },
     // Native .node addons cannot be loaded from inside an asar archive.
@@ -278,7 +278,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       executableName: BIGBUD_LINUX_EXECUTABLE_NAME,
       icon: "icon.png",
       category: "Development",
-      maintainer: "bigbud <dev@bigbud.ai>",
+      maintainer: "bigbud <dev@bigbud.app>",
       desktop: {
         entry: {
           StartupWMClass: "bigbud",
