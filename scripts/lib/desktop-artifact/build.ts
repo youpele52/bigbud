@@ -131,13 +131,13 @@ const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(f
   });
 
   if (localBinary) {
-    return localBinary;
+    return { binary: localBinary, args: "" } as const;
   }
 
   yield* Effect.logWarning(
     "[desktop-artifact] Could not resolve local electron-builder; falling back to bunx. Add 'electron-builder' to apps/desktop devDependencies for reproducible builds.",
   );
-  return "electron-builder";
+  return { binary: "bunx", args: "electron-builder " } as const;
 });
 
 const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(function* (
@@ -413,7 +413,8 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  const electronBuilderBinary = yield* resolveElectronBuilderBinary();
+  const { binary: electronBuilderBinary, args: electronBuilderPrefix } =
+    yield* resolveElectronBuilderBinary();
   yield* Effect.log(
     `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderBinary}...`,
   );
@@ -423,7 +424,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       env: buildEnv,
       ...commandOutputOptions(options.verbose),
       shell: shellOptionForPlatform(options.platform),
-    })`${electronBuilderBinary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    })`${electronBuilderBinary} ${electronBuilderPrefix}${platformConfig.cliFlag} --${options.arch} --publish never`,
   );
 
   const stageDistDir = path.join(stageAppDir, "dist");
