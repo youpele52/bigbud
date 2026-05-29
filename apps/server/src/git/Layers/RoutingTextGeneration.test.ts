@@ -26,7 +26,7 @@ describe("normalizeGitTextGenerationModelSelection", () => {
       }),
     ).toEqual({
       provider: "claudeAgent",
-      model: "claude-haiku-4-5",
+      model: "haiku",
     });
   });
 

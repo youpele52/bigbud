@@ -24,87 +24,61 @@ const CODEX_MODELS: ReadonlyArray<ServerProviderModel> = [
 
 const CLAUDE_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
-    slug: "claude-opus-4-6",
-    name: "Claude Opus 4.6",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "max", label: "Max" },
-        { value: "ultrathink", label: "Ultrathink" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: ["ultrathink"],
-    },
-  },
-  {
-    slug: "claude-sonnet-4-6",
-    name: "Claude Sonnet 4.6",
+    slug: "default",
+    name: "Default (recommended)",
     isCustom: false,
     capabilities: {
       reasoningEffortLevels: [
         { value: "low", label: "Low" },
         { value: "medium", label: "Medium" },
         { value: "high", label: "High", isDefault: true },
-        { value: "ultrathink", label: "Ultrathink" },
+        { value: "max", label: "Max" },
       ],
       supportsFastMode: false,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: ["ultrathink"],
+      supportsThinkingToggle: true,
+      contextWindowOptions: [
+        { value: "200k", label: "200k", isDefault: true },
+        { value: "1m", label: "1M" },
+      ],
+      promptInjectedEffortLevels: [],
     },
   },
   {
-    slug: "claude-haiku-4-5",
-    name: "Claude Haiku 4.5",
+    slug: "opus",
+    name: "Opus",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+        { value: "xhigh", label: "Extra High" },
+        { value: "max", label: "Max" },
+      ],
+      supportsFastMode: true,
+      supportsThinkingToggle: true,
+      contextWindowOptions: [
+        { value: "200k", label: "200k", isDefault: true },
+        { value: "1m", label: "1M" },
+      ],
+      promptInjectedEffortLevels: [],
+    },
+  },
+  {
+    slug: "haiku",
+    name: "Haiku",
     isCustom: false,
     capabilities: {
       reasoningEffortLevels: [],
       supportsFastMode: false,
-      supportsThinkingToggle: true,
+      supportsThinkingToggle: false,
       contextWindowOptions: [],
       promptInjectedEffortLevels: [],
     },
   },
 ];
 
-const CLAUDE_MODELS_WITH_CONTEXT_WINDOW: ReadonlyArray<ServerProviderModel> = [
-  {
-    slug: "claude-opus-4-6",
-    name: "Claude Opus 4.6",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "max", label: "Max" },
-        { value: "ultrathink", label: "Ultrathink" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [
-        { value: "200k", label: "200k", isDefault: true },
-        { value: "1m", label: "1M" },
-      ],
-      promptInjectedEffortLevels: ["ultrathink"],
-    },
-  },
-  {
-    slug: "claude-haiku-4-5",
-    name: "Claude Haiku 4.5",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [],
-      supportsFastMode: false,
-      supportsThinkingToggle: true,
-      contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    },
-  },
-];
+const CLAUDE_MODELS_WITH_CONTEXT_WINDOW: ReadonlyArray<ServerProviderModel> = CLAUDE_MODELS;
 
 describe("getComposerProviderState", () => {
   it("returns codex defaults when no codex draft options exist", () => {
@@ -199,7 +173,7 @@ describe("getComposerProviderState", () => {
   it("returns Claude defaults for effort-capable models", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-sonnet-4-6",
+      model: "default",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: undefined,
@@ -210,14 +184,15 @@ describe("getComposerProviderState", () => {
       promptEffort: "high",
       modelOptionsForDispatch: {
         effort: "high",
+        contextWindow: "200k",
       },
     });
   });
 
-  it("tracks Claude ultrathink from the prompt without changing dispatch effort", () => {
+  it("does not apply ultrathink styling for Claude Code models", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-sonnet-4-6",
+      model: "default",
       models: CLAUDE_MODELS,
       prompt: "Ultrathink:\nInvestigate this failure",
       modelOptions: {
@@ -232,17 +207,15 @@ describe("getComposerProviderState", () => {
       promptEffort: "medium",
       modelOptionsForDispatch: {
         effort: "medium",
+        contextWindow: "200k",
       },
-      composerFrameClassName: "ultrathink-frame",
-      composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset]",
-      modelPickerIconClassName: "ultrathink-chroma",
     });
   });
 
   it("drops unsupported Claude effort options for models without effort controls", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-haiku-4-5",
+      model: "haiku",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
@@ -256,16 +229,14 @@ describe("getComposerProviderState", () => {
     expect(state).toEqual({
       provider: "claudeAgent",
       promptEffort: null,
-      modelOptionsForDispatch: {
-        thinking: false,
-      },
+      modelOptionsForDispatch: undefined,
     });
   });
 
   it("preserves Claude fast mode when it is the only active option", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-opus-4-6",
+      model: "opus",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
@@ -281,6 +252,7 @@ describe("getComposerProviderState", () => {
       modelOptionsForDispatch: {
         effort: "high",
         fastMode: true,
+        contextWindow: "200k",
       },
     });
   });
@@ -288,7 +260,7 @@ describe("getComposerProviderState", () => {
   it("preserves Claude default effort explicitly in dispatch options", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-opus-4-6",
+      model: "opus",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
@@ -305,6 +277,7 @@ describe("getComposerProviderState", () => {
       modelOptionsForDispatch: {
         effort: "high",
         fastMode: false,
+        contextWindow: "200k",
       },
     });
   });
@@ -314,7 +287,7 @@ describe("getComposerProviderState", () => {
     // fastMode: false, which meant deepMerge could never clear a previous true.
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-opus-4-6",
+      model: "opus",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
@@ -333,7 +306,7 @@ describe("getComposerProviderState", () => {
     // meant deepMerge could never clear a previous thinking: false.
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-haiku-4-5",
+      model: "default",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
@@ -349,7 +322,7 @@ describe("getComposerProviderState", () => {
   it("preserves Claude default context window explicitly in dispatch options", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-opus-4-6",
+      model: "opus",
       models: CLAUDE_MODELS_WITH_CONTEXT_WINDOW,
       prompt: "",
       modelOptions: {
@@ -371,7 +344,7 @@ describe("getComposerProviderState", () => {
     // deepMerge can clear an older non-default 1m selection.
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-opus-4-6",
+      model: "opus",
       models: CLAUDE_MODELS_WITH_CONTEXT_WINDOW,
       prompt: "",
       modelOptions: {
@@ -387,7 +360,7 @@ describe("getComposerProviderState", () => {
   it("omits contextWindow when the model does not support it", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-haiku-4-5",
+      model: "haiku",
       models: CLAUDE_MODELS_WITH_CONTEXT_WINDOW,
       prompt: "",
       modelOptions: {
@@ -403,7 +376,7 @@ describe("getComposerProviderState", () => {
   it("omits fastMode when the model does not support it", () => {
     const state = getComposerProviderState({
       provider: "claudeAgent",
-      model: "claude-sonnet-4-6",
+      model: "default",
       models: CLAUDE_MODELS,
       prompt: "",
       modelOptions: {
