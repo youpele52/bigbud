@@ -5,6 +5,7 @@ import {
   listLoginShellCandidates,
   mergePathEntries,
   readEnvironmentFromLoginShell,
+  readEnvironmentFromLoginShellAsync,
   readPathFromLaunchctl,
   readPathFromLoginShell,
 } from "./shell";
@@ -126,6 +127,37 @@ describe("readEnvironmentFromLoginShell", () => {
 
     expect(readEnvironmentFromLoginShell("/bin/zsh", ["CUSTOM_VAR"], execFile)).toEqual({
       CUSTOM_VAR: "  padded value  ",
+    });
+  });
+
+  it("extracts environment variables asynchronously", async () => {
+    const execFile = vi.fn<
+      (
+        file: string,
+        args: ReadonlyArray<string>,
+        options: { encoding: "utf8"; timeout: number },
+        callback: (error: Error | null, stdout: string, stderr: string) => void,
+      ) => void
+    >((_file, _args, _options, callback) =>
+      callback(
+        null,
+        [
+          "__T3CODE_ENV_PATH_START__",
+          "/async:/path",
+          "__T3CODE_ENV_PATH_END__",
+          "__T3CODE_ENV_SSH_AUTH_SOCK_START__",
+          "/tmp/async.sock",
+          "__T3CODE_ENV_SSH_AUTH_SOCK_END__",
+        ].join("\n"),
+        "",
+      ),
+    );
+
+    await expect(
+      readEnvironmentFromLoginShellAsync("/bin/zsh", ["PATH", "SSH_AUTH_SOCK"], execFile),
+    ).resolves.toEqual({
+      PATH: "/async:/path",
+      SSH_AUTH_SOCK: "/tmp/async.sock",
     });
   });
 });

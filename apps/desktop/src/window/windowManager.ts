@@ -29,6 +29,7 @@ export interface CreateWindowDeps {
   readonly desktopScheme: string;
   readonly isDevelopment: boolean;
   readonly desktopDir: string;
+  readonly spellcheckEnabled: boolean;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly getSafeExternalUrl: (url: unknown) => string | null;
   readonly emitUpdateState: () => void;
@@ -52,6 +53,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      spellcheck: deps.spellcheckEnabled,
       webviewTag: true,
     },
   });

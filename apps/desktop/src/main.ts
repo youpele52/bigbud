@@ -35,13 +35,21 @@ import {
   makeResolveIconPath,
 } from "./window/menuManager";
 import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
-import { syncShellEnvironment } from "./backend/syncShellEnvironment";
+import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
+import {
+  readLinuxGpuFallbackMarker,
+  resolveLinuxDesktopRuntimeConfig,
+  resolveLinuxGpuFallbackMarkerPath,
+} from "./main.linuxRuntime";
 import { registerDesktopProtocol, registerDesktopSchemeAsPrivileged } from "./main.protocol";
-
-syncShellEnvironment();
+import {
+  applyLinuxRuntimeSwitches,
+  installDesktopSingleInstanceLock,
+  registerDesktopRuntimeMonitoring,
+} from "./main.runtime";
 
 // ---------------------------------------------------------------------------
 // IPC channel names (kept in main.ts per spec)
@@ -90,6 +98,7 @@ const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 const LOG_FILE_MAX_FILES = 10;
 const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
 const SERVER_SETTINGS_PATH = Path.join(STATE_DIR, "settings.json");
+const LINUX_GPU_FALLBACK_MARKER_PATH = resolveLinuxGpuFallbackMarkerPath(STATE_DIR);
 
 // ---------------------------------------------------------------------------
 // App-lifecycle state
@@ -106,6 +115,9 @@ const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
   platform: process.platform,
   processArch: process.arch,
   runningUnderArm64Translation: app.runningUnderARM64Translation === true,
+});
+const desktopLinuxRuntimeConfig = resolveLinuxDesktopRuntimeConfig({
+  gpuFallbackMarkerArmed: readLinuxGpuFallbackMarker(LINUX_GPU_FALLBACK_MARKER_PATH),
 });
 
 // Resolved once after logging init.
@@ -127,6 +139,8 @@ const desktopAppIdentity = {
 function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
 }
+
+installDesktopSingleInstanceLock(app, () => mainWindow);
 
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
@@ -159,9 +173,33 @@ desktopLogSink = loggingResult.desktopLogSink;
 backendLogSink = loggingResult.backendLogSink;
 restoreStdIoCapture = loggingResult.restoreStdIoCapture;
 
-if (process.platform === "linux") {
-  app.commandLine.appendSwitch("class", LINUX_WM_CLASS);
-}
+// Global safety net: pipe/connection errors from a dying backend child
+// must not bring down the main process with a raw crash dialog.
+process.on("uncaughtException", (error) => {
+  const code = (error as NodeJS.ErrnoException).code;
+  if (code === "ECONNRESET" || code === "EPIPE" || code === "ENOTCONN") {
+    logHeader(`swallowed uncaught ${code}: ${formatErrorMessage(error)}`);
+    console.error(`[desktop] swallowed uncaught ${code}`, error);
+    return;
+  }
+
+  logHeader(`uncaughtException: ${formatErrorMessage(error)}`);
+  console.error("[desktop] uncaughtException", error);
+  if (!isQuitting) {
+    isQuitting = true;
+    dialog.showErrorBox("bigbud encountered an unexpected error", formatErrorMessage(error));
+    stopBackend();
+    restoreStdIoCapture?.();
+    app.quit();
+  }
+});
+
+process.on("unhandledRejection", (reason) => {
+  logHeader(`unhandledRejection: ${formatErrorMessage(reason)}`);
+  console.error("[desktop] unhandledRejection", reason);
+});
+
+applyLinuxRuntimeSwitches(app, LINUX_WM_CLASS, desktopLinuxRuntimeConfig);
 
 // Override Electron's userData path before the `ready` event so that
 // Chromium session data uses a filesystem-friendly directory name.
@@ -188,6 +226,7 @@ function makeWindow(): BrowserWindow {
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
     desktopDir: __dirname,
+    spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
     resolveIconPath,
     getSafeExternalUrl,
     emitUpdateState,
@@ -242,10 +281,27 @@ async function bootstrap(): Promise<void> {
     resolveIconPath,
   });
   logHeader("bootstrap ipc handlers registered");
-  startBackend();
-  logHeader("bootstrap backend start requested");
   mainWindow = makeWindow();
   logHeader("bootstrap main window created");
+  configureAutoUpdater({
+    updateStateChannel: UPDATE_STATE_CHANNEL,
+    runtimeInfo: desktopRuntimeInfo,
+    isDevelopment,
+    getIsQuitting: () => isQuitting,
+    setIsQuitting: (v) => {
+      isQuitting = v;
+    },
+    stopBackendAndWaitForExit,
+    onBeforeQuitForUpdate: () => {
+      prepareForAppQuit("before-quit-for-update");
+    },
+  });
+  logHeader("bootstrap auto updater configured");
+  logHeader("bootstrap login shell hydration started");
+  await syncShellEnvironmentAsync();
+  logHeader("bootstrap login shell hydration completed");
+  startBackend();
+  logHeader("bootstrap backend start requested");
 }
 
 // ---------------------------------------------------------------------------
@@ -274,10 +330,17 @@ app
   .whenReady()
   .then(() => {
     logHeader("app ready");
+    registerDesktopRuntimeMonitoring({
+      appInstance: app,
+      runtimeConfig: desktopLinuxRuntimeConfig,
+      linuxGpuFallbackMarkerPath: LINUX_GPU_FALLBACK_MARKER_PATH,
+      log: logHeader,
+    });
 
     initBackendManager({
       rootDir: ROOT_DIR,
       baseDir: BASE_DIR,
+      backendMaxOldSpaceMb: desktopLinuxRuntimeConfig.backendMaxOldSpaceMb,
       serverSettingsPath: SERVER_SETTINGS_PATH,
       getIsQuitting: () => isQuitting,
       getBackendLogSink: () => backendLogSink,
@@ -301,19 +364,6 @@ app
       checkForUpdates,
       getUpdateState,
       isDevelopment,
-    });
-    configureAutoUpdater({
-      updateStateChannel: UPDATE_STATE_CHANNEL,
-      runtimeInfo: desktopRuntimeInfo,
-      isDevelopment,
-      getIsQuitting: () => isQuitting,
-      setIsQuitting: (v) => {
-        isQuitting = v;
-      },
-      stopBackendAndWaitForExit,
-      onBeforeQuitForUpdate: () => {
-        prepareForAppQuit("before-quit-for-update");
-      },
     });
     void bootstrap().catch((error) => {
       handleFatalStartupError("bootstrap", error);

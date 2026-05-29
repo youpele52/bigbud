@@ -1,9 +1,11 @@
 import * as Path from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
 
 import {
   resolveBackendModulesLinkPlan,
+  resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
 } from "./pathResolver.platform";
 
@@ -100,5 +102,45 @@ describe("resolvePackagedOpencodeBinaryPlan", () => {
     const plan = resolvePackagedOpencodeBinaryPlan("darwin", resourcesPath);
     expect(plan.binaryName).toBe("opencode");
     expect(plan.binaryPath).toBe(Path.join(resourcesPath, "server", "opencode", "bin", "opencode"));
+  });
+});
+
+describe("resolvePackagedBackendLauncherPlan", () => {
+  it("uses the mounted AppDir executable for Linux AppImage launches", () => {
+    const plan = resolvePackagedBackendLauncherPlan(
+      "linux",
+      "/home/alice/Applications/bigbud.AppImage",
+      "/tmp/.mount_bigbud123",
+      BIGBUD_LINUX_EXECUTABLE_NAME,
+    );
+
+    expect(plan.source).toBe("appDirExecutable");
+    expect(plan.launcherPath).toBe(
+      Path.join("/tmp/.mount_bigbud123", BIGBUD_LINUX_EXECUTABLE_NAME),
+    );
+  });
+
+  it("falls back to process.execPath when APPDIR is unavailable", () => {
+    const plan = resolvePackagedBackendLauncherPlan(
+      "linux",
+      "/opt/bigbud/bigbud",
+      undefined,
+      BIGBUD_LINUX_EXECUTABLE_NAME,
+    );
+
+    expect(plan.source).toBe("processExecPath");
+    expect(plan.launcherPath).toBe("/opt/bigbud/bigbud");
+  });
+
+  it("keeps process.execPath on non-Linux platforms", () => {
+    const plan = resolvePackagedBackendLauncherPlan(
+      "darwin",
+      "/Applications/bigbud.app/Contents/MacOS/bigbud",
+      "/tmp/.mount_bigbud123",
+      BIGBUD_LINUX_EXECUTABLE_NAME,
+    );
+
+    expect(plan.source).toBe("processExecPath");
+    expect(plan.launcherPath).toBe("/Applications/bigbud.app/Contents/MacOS/bigbud");
   });
 });

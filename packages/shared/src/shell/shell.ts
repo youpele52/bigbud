@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 
 const PATH_CAPTURE_START = "__T3CODE_PATH_START__";
 const PATH_CAPTURE_END = "__T3CODE_PATH_END__";
@@ -9,6 +9,13 @@ type ExecFileSyncLike = (
   args: ReadonlyArray<string>,
   options: { encoding: "utf8"; timeout: number },
 ) => string;
+
+type ExecFileAsyncLike = (
+  file: string,
+  args: ReadonlyArray<string>,
+  options: { encoding: "utf8"; timeout: number },
+  callback: (error: Error | null, stdout: string, stderr: string) => void,
+) => void;
 
 export function resolveLoginShell(
   platform: NodeJS.Platform,
@@ -100,6 +107,12 @@ export type ShellEnvironmentReader = (
   execFile?: ExecFileSyncLike,
 ) => Partial<Record<string, string>>;
 
+export type ShellEnvironmentReaderAsync = (
+  shell: string,
+  names: ReadonlyArray<string>,
+  execFile?: ExecFileAsyncLike,
+) => Promise<Partial<Record<string, string>>>;
+
 export const readEnvironmentFromLoginShell: ShellEnvironmentReader = (
   shell,
   names,
@@ -123,4 +136,40 @@ export const readEnvironmentFromLoginShell: ShellEnvironmentReader = (
   }
 
   return environment;
+};
+
+export const readEnvironmentFromLoginShellAsync: ShellEnvironmentReaderAsync = (
+  shell,
+  names,
+  execFileImpl = execFile,
+) => {
+  if (names.length === 0) {
+    return Promise.resolve({});
+  }
+
+  return new Promise((resolve, reject) => {
+    execFileImpl(
+      shell,
+      ["-ilc", buildEnvironmentCaptureCommand(names)],
+      {
+        encoding: "utf8",
+        timeout: 5000,
+      },
+      (error, output) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        const environment: Partial<Record<string, string>> = {};
+        for (const name of names) {
+          const value = extractEnvironmentValue(output, name);
+          if (value !== undefined) {
+            environment[name] = value;
+          }
+        }
+        resolve(environment);
+      },
+    );
+  });
 };

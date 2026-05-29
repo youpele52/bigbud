@@ -31,6 +31,7 @@ import {
 import {
   findAppImageArtifact,
   findLinuxUnpackedApp,
+  smokeTestLinuxAppImageBackendStartup,
   smokeTestLinuxAppImage,
   verifyLinuxAppImageArtifact,
   verifyLinuxUnpackedArtifact,
@@ -439,11 +440,16 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   for (const entry of stageEntries) {
     const from = path.join(stageDistDir, entry);
     const stat = yield* fs.stat(from).pipe(Effect.catch(() => Effect.succeed(null)));
-    if (!stat || stat.type !== "File") continue;
+    if (!stat) continue;
 
     const to = path.join(options.outputDir, entry);
-    yield* fs.copyFile(from, to);
-    copiedArtifacts.push(to);
+    if (stat.type === "File") {
+      yield* fs.copyFile(from, to);
+      copiedArtifacts.push(to);
+    } else if (stat.type === "Directory") {
+      yield* fs.copy(from, to);
+      copiedArtifacts.push(to);
+    }
   }
 
   if (copiedArtifacts.length === 0) {
@@ -460,6 +466,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       const appImagePath = yield* findAppImageArtifact(options.outputDir);
       yield* verifyLinuxAppImageArtifact(appImagePath, options.verbose);
       yield* smokeTestLinuxAppImage(appImagePath, options.verbose);
+      yield* smokeTestLinuxAppImageBackendStartup(appImagePath, options.verbose);
     }
   }
 
