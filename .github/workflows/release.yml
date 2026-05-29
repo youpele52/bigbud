@@ -73,8 +73,8 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      # - name: Typecheck
-      #   run: bun run typecheck
+      - name: Typecheck
+        run: bun run typecheck
 
       - name: Test
         run: bun run test
@@ -97,8 +97,10 @@ jobs:
             platform: mac
             target: dmg
             arch: x64
+          # ubuntu-22.04 is the oldest still-supported LTS and produces AppImages
+          # with broader compatibility than building on the latest release.
           - label: Linux x64
-            runner: ubuntu-24.04
+            runner: ubuntu-22.04
             platform: linux
             target: AppImage
             arch: x64
@@ -226,26 +228,7 @@ jobs:
           fi
           echo "Found AppImage: $appimage_path"
           chmod +x "$appimage_path"
-          # Extract and verify required runtime files are present
-          temp_dir=$(mktemp -d)
-          "$appimage_path" --appimage-extract > /dev/null 2>&1
-          required_files=(
-            "snapshot_blob.bin"
-            "v8_context_snapshot.bin"
-            "icudtl.dat"
-          )
-          missing=()
-          for file in "${required_files[@]}"; do
-            if [[ ! -f "squashfs-root/$file" ]]; then
-              missing+=("$file")
-            fi
-          done
-          rm -rf "$temp_dir" squashfs-root
-          if [[ ${#missing[@]} -gt 0 ]]; then
-            echo "Missing required Electron runtime files in AppImage: ${missing[*]}" >&2
-            exit 1
-          fi
-          echo "AppImage verification passed."
+          bun run verify:desktop:linux-artifact -- "$appimage_path" --verbose
 
       - name: Collect release assets
         shell: bash

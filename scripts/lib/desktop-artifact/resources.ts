@@ -2,6 +2,7 @@ import { Effect, FileSystem, Path } from "effect";
 import { join } from "node:path";
 import { ChildProcess } from "effect/unstable/process";
 
+import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import {
   AzureTrustedSigningOptionsConfig,
@@ -267,7 +268,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "linux") {
     buildConfig.linux = {
       target: [target],
-      executableName: "bigbud",
+      executableName: BIGBUD_LINUX_EXECUTABLE_NAME,
       icon: "icon.png",
       category: "Development",
       desktop: {

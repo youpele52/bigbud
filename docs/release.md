@@ -64,7 +64,7 @@ This document covers how to run desktop releases from one tag, first without sig
 - Pushes to `main` run `.github/workflows/ci.yml`.
 - The `quality` job currently runs format check, lint, tests, and the desktop pipeline build.
 - Browser tests are not part of CI.
-- The typecheck step is currently present in workflow comments but not enabled.
+- The typecheck step runs in the preflight job before any artifacts are built.
 - After `quality` passes, `desktop_release_build` builds unsigned desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
@@ -154,6 +154,7 @@ Checklist:
 The Linux build is hardened to avoid the class of AppImage breakages caused by floating `electron-builder` versions and missing Electron runtime files.
 
 - `electron-builder` is pinned in `apps/desktop/package.json` (not resolved via `bunx`).
+- Linux release builds run on `ubuntu-22.04` (the oldest still-supported LTS) for broader AppImage compatibility.
 - After every Linux build, the script verifies that required Electron runtime files (`snapshot_blob.bin`, `v8_context_snapshot.bin`, `icudtl.dat`) are present in both unpacked `dir` and final AppImage outputs.
 - The AppImage undergoes a headless smoke test (`--appimage-extract-and-run --no-sandbox --version`) before release assets are collected.
 - An `afterExtract` hook copies missing runtime files from the Electron distribution if electron-builder omits them.
