@@ -193,6 +193,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: "ai.bigbud.desktop",
     productName,
+    homepage: "https://github.com/youpele52/bigbud",
     artifactName: "bigbud-beta-${version}-${arch}.${ext}",
     directories: {
       buildResources: buildResourcesDir,
@@ -271,6 +272,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       executableName: BIGBUD_LINUX_EXECUTABLE_NAME,
       icon: "icon.png",
       category: "Development",
+      maintainer: "bigbud <dev@bigbud.ai>",
       desktop: {
         entry: {
           StartupWMClass: "bigbud",
