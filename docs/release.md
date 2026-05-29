@@ -6,10 +6,11 @@ This document covers how to run desktop releases from one tag, first without sig
 
 - Trigger: push tag matching `v*.*.*`.
 - Runs quality gates first: lint, typecheck, test.
-- Builds four artifacts in parallel:
+- Builds five artifacts in parallel:
   - macOS `arm64` DMG
   - macOS `x64` DMG
   - Linux `x64` AppImage
+  - Linux `x64` .deb
   - Windows `x64` NSIS installer
 - Publishes one GitHub Release with all produced files.
   - Versions with a suffix after `X.Y.Z` (for example `1.2.3-beta.1`) are published as GitHub prereleases.
@@ -67,7 +68,7 @@ This document covers how to run desktop releases from one tag, first without sig
 - After `quality` passes, `desktop_release_build` builds unsigned desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
-  - Linux `x64`
+  - Linux `x64` AppImage + `.deb`
   - Windows `x64`
 - `release_asset_assembly` then merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
 - Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release.
@@ -147,6 +148,32 @@ Checklist:
 5. Create a client secret for the service principal.
 6. Add Azure secrets listed above in GitHub Actions secrets.
 7. Re-run a tag release and confirm Windows installer is signed.
+
+## Linux release guarantees
+
+The Linux build is hardened to avoid the class of AppImage breakages caused by floating `electron-builder` versions and missing Electron runtime files.
+
+- `electron-builder` is pinned in `apps/desktop/package.json` (not resolved via `bunx`).
+- After every Linux build, the script verifies that required Electron runtime files (`snapshot_blob.bin`, `v8_context_snapshot.bin`, `icudtl.dat`) are present in both unpacked `dir` and final AppImage outputs.
+- The AppImage undergoes a headless smoke test (`--appimage-extract-and-run --no-sandbox --version`) before release assets are collected.
+- An `afterExtract` hook copies missing runtime files from the Electron distribution if electron-builder omits them.
+- A `.deb` package is also built as a fallback for users whose system cannot run AppImages.
+
+### Local Linux debugging
+
+Build an unpacked Linux app for inspection:
+
+```bash
+bun run dist:desktop:linux:dir
+```
+
+This produces `release/linux-unpacked/` where you can inspect the file layout directly without dealing with AppImage extraction.
+
+Build only the `.deb` fallback:
+
+```bash
+bun run dist:desktop:linux:deb
+```
 
 ## 4) Ongoing release checklist
 

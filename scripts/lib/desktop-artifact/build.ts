@@ -1,8 +1,10 @@
 import rootPackageJson from "../../../package.json" with { type: "json" };
 import desktopPackageJson from "../../../apps/desktop/package.json" with { type: "json" };
 import serverPackageJson from "../../../apps/server/package.json" with { type: "json" };
+import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
@@ -26,6 +28,13 @@ import {
   resolveDesktopRuntimeDependencies,
   validateBundledClientAssets,
 } from "./resources.ts";
+import {
+  findAppImageArtifact,
+  findLinuxUnpackedApp,
+  smokeTestLinuxAppImage,
+  verifyLinuxAppImageArtifact,
+  verifyLinuxUnpackedArtifact,
+} from "./linuxArtifactVerify.ts";
 import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 
@@ -97,6 +106,38 @@ const stagePackagedOpencodeWindowsBinary = Effect.fn("stagePackagedOpencodeWindo
     yield* fs.copyFile(binaryPath, path.join(targetDir, "opencode.exe"));
   },
 );
+
+const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(function* () {
+  const repoRoot = yield* RepoRoot;
+  const path = yield* Path.Path;
+
+  const localBinary = yield* Effect.try({
+    try: () => {
+      const require = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
+      const entry = require.resolve("electron-builder");
+      const pkgDir = dirname(entry);
+      const cliPath = path.join(pkgDir, "cli.js");
+      if (existsSync(cliPath)) {
+        return cliPath;
+      }
+      const altCliPath = path.join(pkgDir, "out", "cli", "cli.js");
+      if (existsSync(altCliPath)) {
+        return altCliPath;
+      }
+      return null;
+    },
+    catch: () => null,
+  });
+
+  if (localBinary) {
+    return localBinary;
+  }
+
+  yield* Effect.logWarning(
+    "[desktop-artifact] Could not resolve local electron-builder; falling back to bunx. Add 'electron-builder' to apps/desktop devDependencies for reproducible builds.",
+  );
+  return "electron-builder";
+});
 
 const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(function* (
   serverNodeModulesDir: string,
@@ -371,8 +412,9 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
+  const electronBuilderBinary = yield* resolveElectronBuilderBinary();
   yield* Effect.log(
-    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion})...`,
+    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderBinary}...`,
   );
   yield* runCommand(
     ChildProcess.make({
@@ -380,7 +422,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       env: buildEnv,
       ...commandOutputOptions(options.verbose),
       shell: shellOptionForPlatform(options.platform),
-    })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    })`${electronBuilderBinary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
   );
 
   const stageDistDir = path.join(stageAppDir, "dist");
@@ -408,6 +450,17 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     return yield* new BuildScriptError({
       message: `Build completed but no files were produced in ${stageDistDir}`,
     });
+  }
+
+  if (options.platform === "linux") {
+    if (options.target === "dir") {
+      const unpackedDir = yield* findLinuxUnpackedApp(stageDistDir);
+      yield* verifyLinuxUnpackedArtifact(unpackedDir);
+    } else if (options.target === "AppImage") {
+      const appImagePath = yield* findAppImageArtifact(options.outputDir);
+      yield* verifyLinuxAppImageArtifact(appImagePath, options.verbose);
+      yield* smokeTestLinuxAppImage(appImagePath, options.verbose);
+    }
   }
 
   yield* Effect.log("[desktop-artifact] Done. Artifacts:").pipe(
