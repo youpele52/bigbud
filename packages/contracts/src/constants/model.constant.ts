@@ -31,8 +31,8 @@ export const CLAUDE_CODE_EFFORT_OPTIONS = ["low", "medium", "high", "max", "ultr
  * - Resetting to defaults
  */
 export const DEFAULT_MODEL_BY_PROVIDER = {
-  codex: "gpt-5.4",
-  claudeAgent: "claude-sonnet-4-6",
+  codex: "gpt-5.5",
+  claudeAgent: "default",
   copilot: "gpt-5",
   opencode: "claude-sonnet-4-6",
   pi: "claude-sonnet-4.6",
@@ -47,7 +47,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
  */
 export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   codex: "gpt-5.4-mini",
-  claudeAgent: "claude-haiku-4-5",
+  claudeAgent: "haiku",
   copilot: "gpt-5-mini",
   opencode: "claude-haiku-4-5",
   pi: "claude-haiku-4.5",
@@ -62,6 +62,7 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
  */
 export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
   codex: {
+    "5.5": "gpt-5.5",
     "5.4": "gpt-5.4",
     "5.3": "gpt-5.3-codex",
     "gpt-5.3": "gpt-5.3-codex",
@@ -69,20 +70,26 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
     "gpt-5.3-spark": "gpt-5.3-codex-spark",
   },
   claudeAgent: {
-    opus: "claude-opus-4-6",
-    "opus-4.6": "claude-opus-4-6",
-    "claude-opus-4.6": "claude-opus-4-6",
-    "claude-opus-4-6-20251117": "claude-opus-4-6",
-    sonnet: "claude-sonnet-4-6",
-    "sonnet-4.6": "claude-sonnet-4-6",
-    "claude-sonnet-4.6": "claude-sonnet-4-6",
-    "claude-sonnet-4-6-20251117": "claude-sonnet-4-6",
-    haiku: "claude-haiku-4-5",
-    "haiku-4.5": "claude-haiku-4-5",
-    "claude-haiku-4.5": "claude-haiku-4-5",
-    "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+    default: "default",
+    sonnet: "default",
+    "sonnet-4.6": "default",
+    "claude-sonnet-4.6": "default",
+    "claude-sonnet-4-6": "default",
+    "claude-sonnet-4-6-20251117": "default",
+    opus: "opus",
+    "opus-4.6": "opus",
+    "claude-opus-4.6": "opus",
+    "claude-opus-4-6": "opus",
+    "claude-opus-4-6-20251117": "opus",
+    "claude-opus-4-5": "opus",
+    haiku: "haiku",
+    "haiku-4.5": "haiku",
+    "claude-haiku-4.5": "haiku",
+    "claude-haiku-4-5": "haiku",
+    "claude-haiku-4-5-20251001": "haiku",
   },
   copilot: {
+    "gpt-5.5": "gpt-5",
     "gpt-5.4": "gpt-5",
     "gpt-5.4-mini": "gpt-5-mini",
     "gpt-5.3": "gpt-5",

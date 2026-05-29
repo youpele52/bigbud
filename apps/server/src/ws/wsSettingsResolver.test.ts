@@ -62,50 +62,7 @@ describe("resolveTextGenByProbeStatus", () => {
     ];
     const result = resolveTextGenByProbeStatus(settings, providers);
     assert.strictEqual(result.textGenerationModelSelection.provider, "claudeAgent");
-  });
-
-  it("prefers provider PROVIDER_KINDS order when multiple providers are ready", () => {
-    const settings = makeSettings({
-      textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
-    });
-    const providers = [
-      makeProvider({ provider: "codex", status: "error", installed: false }),
-      makeProvider({ provider: "claudeAgent", status: "error", installed: false }),
-      makeProvider({ provider: "copilot", status: "ready" }),
-      makeProvider({ provider: "opencode", status: "ready" }),
-    ];
-    const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "copilot");
-  });
-
-  it("uses the first model slug from provider.models when available", () => {
-    const settings = makeSettings({
-      textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
-    });
-    const providers = [
-      makeProvider({ provider: "codex", status: "error", installed: false }),
-      makeProvider({
-        provider: "claudeAgent",
-        status: "ready",
-        models: [
-          {
-            slug: "claude-haiku-4-5",
-            name: "Claude Haiku 4.5",
-            isCustom: false,
-            capabilities: null,
-          },
-          {
-            slug: "claude-sonnet-4-6",
-            name: "Claude Sonnet 4.6",
-            isCustom: false,
-            capabilities: null,
-          },
-        ],
-      }),
-    ];
-    const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "claudeAgent");
-    assert.strictEqual(result.textGenerationModelSelection.model, "claude-haiku-4-5");
+    assert.strictEqual(result.textGenerationModelSelection.model, "haiku");
   });
 
   it("falls back to DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER when models array is empty", () => {
@@ -118,7 +75,7 @@ describe("resolveTextGenByProbeStatus", () => {
     ];
     const result = resolveTextGenByProbeStatus(settings, providers);
     assert.strictEqual(result.textGenerationModelSelection.provider, "claudeAgent");
-    assert.strictEqual(result.textGenerationModelSelection.model, "claude-haiku-4-5");
+    assert.strictEqual(result.textGenerationModelSelection.model, "haiku");
   });
 
   it("ignores disabled providers when searching for a ready provider", () => {

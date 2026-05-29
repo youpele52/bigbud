@@ -1,6 +1,10 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import readline from "node:readline";
-import type { ServerProviderSkill } from "@bigbud/contracts";
+import type {
+  ModelCapabilities,
+  ServerProviderModel,
+  ServerProviderSkill,
+} from "@bigbud/contracts";
 import { readCodexAccountSnapshot, type CodexAccountSnapshot } from "./codexAccount";
 
 interface JsonRpcProbeResponse {
@@ -14,6 +18,7 @@ interface JsonRpcProbeResponse {
 export interface CodexDiscoverySnapshot {
   readonly account: CodexAccountSnapshot;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
+  readonly models: ReadonlyArray<ServerProviderModel>;
 }
 
 function readErrorMessage(response: JsonRpcProbeResponse): string | undefined {
@@ -32,9 +37,80 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function nonEmptyTrimmed(value: unknown): string | undefined {
   const trimmed = readString(value)?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
+  reasoningEffortLevels: [],
+  supportsFastMode: false,
+  supportsThinkingToggle: false,
+  contextWindowOptions: [],
+  promptInjectedEffortLevels: [],
+};
+
+function titleCaseReasoningEffort(value: string): string {
+  return value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function parseCodexModelCapabilities(model: Record<string, unknown>): ModelCapabilities {
+  const effortEntries = readArray(model.supportedReasoningEfforts) ?? [];
+  const defaultEffort = nonEmptyTrimmed(model.defaultReasoningEffort);
+  const reasoningEffortLevels = effortEntries.flatMap((entry) => {
+    const effort = nonEmptyTrimmed(readObject(entry)?.reasoningEffort) ?? nonEmptyTrimmed(entry);
+    if (!effort) {
+      return [];
+    }
+
+    return [
+      {
+        value: effort,
+        label: titleCaseReasoningEffort(effort),
+        ...(effort === defaultEffort ? { isDefault: true } : {}),
+      },
+    ];
+  });
+
+  const additionalSpeedTiers = readArray(model.additionalSpeedTiers) ?? [];
+  const serviceTiers = readArray(model.serviceTiers) ?? [];
+  return {
+    ...EMPTY_MODEL_CAPABILITIES,
+    reasoningEffortLevels,
+    supportsFastMode:
+      additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast") ||
+      serviceTiers.length > 0,
+  };
+}
+
+function parseCodexModelsResult(result: unknown): ReadonlyArray<ServerProviderModel> {
+  const resultRecord = readObject(result);
+  const rawModels = readArray(resultRecord?.data) ?? [];
+
+  return rawModels.flatMap((value) => {
+    const model = readObject(value);
+    if (!model || readBoolean(model.hidden) === true) {
+      return [];
+    }
+
+    const slug = nonEmptyTrimmed(model.model) ?? nonEmptyTrimmed(model.id);
+    if (!slug) {
+      return [];
+    }
+
+    return [
+      {
+        slug,
+        name: nonEmptyTrimmed(model.displayName) ?? slug,
+        isCustom: false,
+        capabilities: parseCodexModelCapabilities(model),
+      } satisfies ServerProviderModel,
+    ];
+  });
 }
 
 function parseCodexSkillsResult(result: unknown, cwd: string): ReadonlyArray<ServerProviderSkill> {
@@ -125,6 +201,7 @@ export async function probeCodexDiscovery(input: {
     let completed = false;
     let account: CodexAccountSnapshot | undefined;
     let skills: ReadonlyArray<ServerProviderSkill> | undefined;
+    let models: ReadonlyArray<ServerProviderModel> | undefined;
 
     const cleanup = () => {
       output.removeAllListeners();
@@ -152,12 +229,15 @@ export async function probeCodexDiscovery(input: {
       );
 
     const maybeResolve = () => {
-      if (!account || skills === undefined) {
+      if (!account || skills === undefined || models === undefined) {
         return;
       }
       const resolvedAccount = account;
       const resolvedSkills = skills;
-      finish(() => resolve({ account: resolvedAccount, skills: resolvedSkills }));
+      const resolvedModels = models;
+      finish(() =>
+        resolve({ account: resolvedAccount, skills: resolvedSkills, models: resolvedModels }),
+      );
     };
 
     if (input.signal?.aborted) {
@@ -199,19 +279,27 @@ export async function probeCodexDiscovery(input: {
         }
 
         writeMessage({ method: "initialized" });
-        writeMessage({ id: 2, method: "skills/list", params: { cwds: [input.cwd] } });
-        writeMessage({ id: 3, method: "account/read", params: {} });
+        writeMessage({ id: 2, method: "model/list", params: {} });
+        writeMessage({ id: 3, method: "skills/list", params: { cwds: [input.cwd] } });
+        writeMessage({ id: 4, method: "account/read", params: {} });
         return;
       }
 
       if (response.id === 2) {
+        const errorMessage = readErrorMessage(response);
+        models = errorMessage ? [] : parseCodexModelsResult(response.result);
+        maybeResolve();
+        return;
+      }
+
+      if (response.id === 3) {
         const errorMessage = readErrorMessage(response);
         skills = errorMessage ? [] : parseCodexSkillsResult(response.result, input.cwd);
         maybeResolve();
         return;
       }
 
-      if (response.id === 3) {
+      if (response.id === 4) {
         const errorMessage = readErrorMessage(response);
         if (errorMessage) {
           fail(new Error(`account/read failed: ${errorMessage}`));

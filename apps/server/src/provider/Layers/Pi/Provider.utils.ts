@@ -6,33 +6,10 @@ import type {
 } from "@bigbud/contracts";
 
 import { providerModelsFromSettings } from "../../providerSnapshot";
+import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
 import type { PiRpcModel, PiRpcSlashCommand } from "./RpcProcess.ts";
 
 const PROVIDER = "pi" as const;
-
-/** Maps raw Pi provider IDs to user-friendly display names for model grouping. */
-export const PI_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  "github-copilot": "GitHub Copilot",
-  anthropic: "Anthropic",
-  openai: "OpenAI",
-  google: "Google",
-  gemini: "Google",
-  groq: "Groq",
-  openrouter: "OpenRouter",
-  xai: "xAI",
-  "x.ai": "xAI",
-  deepseek: "DeepSeek",
-  cohere: "Cohere",
-  ai21: "AI21",
-  perplexity: "Perplexity",
-  mistral: "Mistral",
-  opencode: "OpenCode",
-  "opencode-go": "OpenCode Go",
-};
-
-export function getPiProviderDisplayName(rawProvider: string): string {
-  return PI_PROVIDER_DISPLAY_NAMES[rawProvider] ?? rawProvider;
-}
 
 export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
@@ -41,7 +18,6 @@ export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   contextWindowOptions: [],
   promptInjectedEffortLevels: [],
 };
-
 export function buildPiModels(
   models: ReadonlyArray<PiRpcModel>,
   customModels: ReadonlyArray<string>,
@@ -52,7 +28,7 @@ export function buildPiModels(
         slug: model.id,
         name: model.name.trim().length > 0 ? model.name : model.id,
         isCustom: false,
-        group: getPiProviderDisplayName(model.provider),
+        group: getSubProviderDisplayName(model.provider),
         subProviderID: model.provider,
         capabilities: EMPTY_MODEL_CAPABILITIES,
       }) satisfies ServerProviderModel,

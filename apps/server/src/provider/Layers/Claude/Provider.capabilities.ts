@@ -4,6 +4,7 @@ import type {
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
 import {
+  type ModelInfo as ClaudeModelInfo,
   query as claudeQuery,
   type SDKUserMessage,
   type SlashCommand as ClaudeSlashCommand,
@@ -15,12 +16,59 @@ export const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
   supportsFastMode: false,
   supportsThinkingToggle: false,
   contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
+  // Claude "ultrathink" is a prompt keyword rather than a runtime effort option.
+  // Keep this enabled even for unknown models so `/effort ultrathink` still works.
+  promptInjectedEffortLevels: ["ultrathink"],
 };
+
+const CLAUDE_LEGACY_MODEL_ALIASES = new Map<string, string>([
+  ["default", "default"],
+  ["sonnet", "default"],
+  ["claude-sonnet-4.6", "default"],
+  ["claude-sonnet-4-6", "default"],
+  ["claude-sonnet-4-6-20251117", "default"],
+  ["opus", "opus"],
+  ["claude-opus-4.6", "opus"],
+  ["claude-opus-4-6", "opus"],
+  ["claude-opus-4-6-20251117", "opus"],
+  ["claude-opus-4-5", "opus"],
+  ["haiku", "haiku"],
+  ["claude-haiku-4.5", "haiku"],
+  ["claude-haiku-4-5", "haiku"],
+  ["claude-haiku-4-5-20251001", "haiku"],
+]);
+
+function resolveClaudeCapabilitySlug(model: string | null | undefined): string | null {
+  const trimmed = model?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return CLAUDE_LEGACY_MODEL_ALIASES.get(trimmed) ?? trimmed;
+}
 
 export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
-    slug: "claude-opus-4-6",
+    slug: "default",
+    name: "Claude Sonnet 4.6",
+    isCustom: false,
+    capabilities: {
+      reasoningEffortLevels: [
+        { value: "low", label: "Low" },
+        { value: "medium", label: "Medium" },
+        { value: "high", label: "High", isDefault: true },
+      ],
+      supportsFastMode: false,
+      supportsThinkingToggle: false,
+      contextWindowOptions: [
+        { value: "200k", label: "200k", isDefault: true },
+        { value: "1m", label: "1M" },
+      ],
+      promptInjectedEffortLevels: ["ultrathink"],
+    },
+  },
+  {
+    slug: "opus",
     name: "Claude Opus 4.6",
     isCustom: false,
     capabilities: {
@@ -29,7 +77,6 @@ export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
         { value: "medium", label: "Medium" },
         { value: "high", label: "High", isDefault: true },
         { value: "max", label: "Max" },
-        { value: "ultrathink", label: "Ultrathink" },
       ],
       supportsFastMode: true,
       supportsThinkingToggle: false,
@@ -38,51 +85,10 @@ export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
         { value: "1m", label: "1M" },
       ],
       promptInjectedEffortLevels: ["ultrathink"],
-    } satisfies ModelCapabilities,
+    },
   },
   {
-    slug: "claude-sonnet-4-6",
-    name: "Claude Sonnet 4.6",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "ultrathink", label: "Ultrathink" },
-      ],
-      supportsFastMode: false,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [
-        { value: "200k", label: "200k", isDefault: true },
-        { value: "1m", label: "1M" },
-      ],
-      promptInjectedEffortLevels: ["ultrathink"],
-    } satisfies ModelCapabilities,
-  },
-  {
-    slug: "claude-opus-4-5",
-    name: "Claude Opus 4.5",
-    isCustom: false,
-    capabilities: {
-      reasoningEffortLevels: [
-        { value: "low", label: "Low" },
-        { value: "medium", label: "Medium" },
-        { value: "high", label: "High", isDefault: true },
-        { value: "max", label: "Max" },
-        { value: "ultrathink", label: "Ultrathink" },
-      ],
-      supportsFastMode: true,
-      supportsThinkingToggle: false,
-      contextWindowOptions: [
-        { value: "200k", label: "200k", isDefault: true },
-        { value: "1m", label: "1M" },
-      ],
-      promptInjectedEffortLevels: ["ultrathink"],
-    } satisfies ModelCapabilities,
-  },
-  {
-    slug: "claude-haiku-4-5",
+    slug: "haiku",
     name: "Claude Haiku 4.5",
     isCustom: false,
     capabilities: {
@@ -90,17 +96,66 @@ export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
       supportsFastMode: false,
       supportsThinkingToggle: true,
       contextWindowOptions: [],
-      promptInjectedEffortLevels: [],
-    } satisfies ModelCapabilities,
+      promptInjectedEffortLevels: ["ultrathink"],
+    },
   },
 ];
 
 export function getClaudeModelCapabilities(model: string | null | undefined): ModelCapabilities {
-  const slug = model?.trim();
+  const slug = resolveClaudeCapabilitySlug(model);
   return (
     BUILT_IN_MODELS.find((candidate) => candidate.slug === slug)?.capabilities ??
     DEFAULT_CLAUDE_MODEL_CAPABILITIES
   );
+}
+
+function getClaudeDefaultEffort(
+  modelSlug: string,
+  levels: ReadonlyArray<NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[number]>,
+): string | undefined {
+  if ((modelSlug === "default" || modelSlug === "opus") && levels.includes("high")) {
+    return "high";
+  }
+  if (levels.includes("medium")) {
+    return "medium";
+  }
+  return levels[0];
+}
+
+function mapClaudeModelCapabilities(model: ClaudeModelInfo): ModelCapabilities {
+  const baseCapabilities = getClaudeModelCapabilities(model.value);
+  const supportedEffortLevels = model.supportsEffort ? (model.supportedEffortLevels ?? []) : [];
+  const defaultEffort = getClaudeDefaultEffort(model.value, supportedEffortLevels);
+  return {
+    reasoningEffortLevels: supportedEffortLevels.map((value) => {
+      const option: {
+        value: string;
+        label: string;
+        isDefault?: true;
+      } = {
+        value,
+        label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
+      };
+      if (value === defaultEffort) {
+        option.isDefault = true;
+      }
+      return option;
+    }),
+    supportsFastMode: model.supportsFastMode ?? baseCapabilities.supportsFastMode,
+    supportsThinkingToggle:
+      model.supportsAdaptiveThinking ?? baseCapabilities.supportsThinkingToggle,
+    contextWindowOptions: baseCapabilities.contextWindowOptions,
+    promptInjectedEffortLevels: baseCapabilities.promptInjectedEffortLevels,
+  };
+}
+
+export function mapClaudeModel(model: ClaudeModelInfo): ServerProviderModel {
+  return {
+    slug: model.value,
+    name: model.displayName,
+    isCustom: false,
+    capabilities: mapClaudeModelCapabilities(model),
+  };
 }
 
 const CAPABILITIES_PROBE_TIMEOUT_MS = 8_000;
@@ -201,6 +256,7 @@ export const probeClaudeCapabilities = (binaryPath: string) =>
       return {
         subscriptionType: init.account?.subscriptionType,
         slashCommands: parseClaudeInitializationCommands(init.commands),
+        models: (init.models ?? []).map(mapClaudeModel),
       };
     } finally {
       abortController.abort();
