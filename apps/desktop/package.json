@@ -2,6 +2,11 @@
   "name": "@bigbud/desktop",
   "version": "0.1.613",
   "private": true,
+  "homepage": "https://github.com/youpele52/bigbud",
+  "author": {
+    "name": "bigbud",
+    "email": "dev@bigbud.ai"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "bun run --parallel dev:server-bundle dev:bundle dev:electron",
