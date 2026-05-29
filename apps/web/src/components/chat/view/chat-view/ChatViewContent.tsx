@@ -263,7 +263,7 @@ export function ChatViewContent({
 
             {runtime.scrollBehavior.showScrollToBottom ? (
               <ScrollToBottomPill
-                onScrollToBottom={() => runtime.scrollBehavior.scrollMessagesToBottom("smooth")}
+                onScrollToBottom={() => runtime.scrollBehavior.scrollMessagesToBottom("auto")}
               />
             ) : null}
 
