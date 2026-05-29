@@ -1,6 +1,7 @@
 {
   "name": "@bigbud/monorepo",
   "private": true,
+  "homepage": "https://github.com/youpele52/bigbud",
   "workspaces": {
     "packages": [
       "apps/*",
