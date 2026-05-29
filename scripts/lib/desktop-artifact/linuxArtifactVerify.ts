@@ -124,11 +124,20 @@ export const verifyLinuxAppImageArtifact = Effect.fn("verifyLinuxAppImageArtifac
 /**
  * Smoke test a Linux AppImage by running it headlessly with --version.
  * This ensures the AppImage can actually start on the host system.
+ *
+ * Skipped in headless/CI environments where no X11/Wayland display is available.
  */
 export const smokeTestLinuxAppImage = Effect.fn("smokeTestLinuxAppImage")(function* (
   appImagePath: string,
   verbose: boolean,
 ) {
+  if (!process.env.DISPLAY) {
+    yield* Effect.log(
+      "[desktop-artifact] Skipping AppImage smoke test: no DISPLAY detected (headless environment).",
+    );
+    return;
+  }
+
   yield* Effect.log(`[desktop-artifact] Smoke testing AppImage: ${appImagePath}`);
 
   yield* runCommand(
@@ -314,6 +323,13 @@ async function smokeTestExtractedLinuxBackendStartup(options: {
 export const smokeTestLinuxAppImageBackendStartup = Effect.fn(
   "smokeTestLinuxAppImageBackendStartup",
 )(function* (appImagePath: string, verbose: boolean) {
+  if (!process.env.DISPLAY) {
+    yield* Effect.log(
+      "[desktop-artifact] Skipping packaged backend startup smoke test: no DISPLAY detected (headless environment).",
+    );
+    return;
+  }
+
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
 
