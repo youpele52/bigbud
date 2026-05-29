@@ -3,9 +3,11 @@ import * as OS from "node:os";
 import * as Path from "node:path";
 
 import { app, nativeImage } from "electron";
+import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
 
 import {
   resolveBackendModulesLinkPlan,
+  resolvePackagedBackendLauncherPlan,
   resolvePackagedOpencodeBinaryPlan,
 } from "./pathResolver.platform";
 
@@ -171,6 +173,25 @@ export function resolveBackendCwd(rootDir: string): string {
     return resolveAppRoot(rootDir);
   }
   return OS.homedir();
+}
+
+export function resolveBackendLauncherPath(): string {
+  if (!app.isPackaged) {
+    return process.execPath;
+  }
+
+  const plan = resolvePackagedBackendLauncherPlan(
+    process.platform,
+    process.execPath,
+    process.env.APPDIR,
+    BIGBUD_LINUX_EXECUTABLE_NAME,
+  );
+
+  if (plan.source === "appDirExecutable" && FS.existsSync(plan.launcherPath)) {
+    return plan.launcherPath;
+  }
+
+  return process.execPath;
 }
 
 export function resolvePackagedOpencodeBinaryDir(): string | null {

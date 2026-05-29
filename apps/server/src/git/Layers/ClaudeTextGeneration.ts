@@ -105,6 +105,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         claudeSettings?.binaryPath || "claude",
         [
           "-p",
+          prompt,
           "--output-format",
           "json",
           "--json-schema",

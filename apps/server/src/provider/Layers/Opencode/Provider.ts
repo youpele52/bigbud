@@ -14,6 +14,7 @@ import { OpencodeProvider } from "../../Services/Opencode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../../Errors";
+import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
 import { isVersionAtLeast } from "./Provider.version";
 
 const PROVIDER = "opencode" as const;
@@ -89,7 +90,7 @@ function mapOpencodeModel(
     slug: model.id,
     name: modelName.length > 0 ? modelName : model.id,
     isCustom: false,
-    group: providerName,
+    group: getSubProviderDisplayName(providerName),
     subProviderID: model.providerID,
     capabilities: {
       ...EMPTY_MODEL_CAPABILITIES,

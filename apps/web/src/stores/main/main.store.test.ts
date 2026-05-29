@@ -190,7 +190,7 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.modelSelection.model).toBe("claude-opus-4-6");
+    expect(next.threads[0]?.modelSelection.model).toBe("opus");
   });
 
   it("resolves claude aliases when session provider is claudeAgent", () => {
@@ -215,7 +215,7 @@ describe("store read model sync", () => {
 
     const next = syncServerReadModel(initialState, readModel);
 
-    expect(next.threads[0]?.modelSelection.model).toBe("claude-sonnet-4-6");
+    expect(next.threads[0]?.modelSelection.model).toBe("default");
   });
 
   it("preserves cursor as the active session provider", () => {

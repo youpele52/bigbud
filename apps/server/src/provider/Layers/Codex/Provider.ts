@@ -34,7 +34,7 @@ import {
   codexAuthSubType,
   type CodexAccountSnapshot,
 } from "../../codexAccount";
-import { probeCodexDiscovery } from "../../codexAppServer";
+import { probeCodexDiscovery, type CodexDiscoverySnapshot } from "../../codexAppServer";
 import { CodexProvider } from "../../Services/Codex/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerSettingsError } from "@bigbud/contracts";
@@ -81,11 +81,18 @@ const runCodexCommand = Effect.fn("runCodexCommand")(function* (args: ReadonlyAr
   return yield* spawnAndCollect(codexSettings.binaryPath, command);
 });
 
+function isCodexDiscoverySnapshot(
+  value: CodexDiscoverySnapshot | CodexAccountSnapshot | undefined,
+): value is CodexDiscoverySnapshot {
+  return !!value && typeof value === "object" && "account" in value && "skills" in value;
+}
+
 export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(function* (
-  resolveAccount?: (input: {
+  resolveDiscoveryOrAccount?: (input: {
     readonly binaryPath: string;
     readonly homePath?: string;
-  }) => Effect.Effect<CodexAccountSnapshot | undefined>,
+    readonly cwd: string;
+  }) => Effect.Effect<CodexDiscoverySnapshot | CodexAccountSnapshot | undefined>,
   resolveSkills?: (input: {
     readonly binaryPath: string;
     readonly homePath?: string;
@@ -104,7 +111,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     Effect.map((settings) => settings.providers.codex),
   );
   const checkedAt = new Date().toISOString();
-  const models = providerModelsFromSettings(
+  const fallbackModels = providerModelsFromSettings(
     BUILT_IN_MODELS,
     PROVIDER,
     codexSettings.customModels,
@@ -116,7 +123,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       provider: PROVIDER,
       enabled: false,
       checkedAt,
-      models,
+      models: fallbackModels,
       probe: {
         installed: false,
         version: null,
@@ -138,7 +145,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       provider: PROVIDER,
       enabled: codexSettings.enabled,
       checkedAt,
-      models,
+      models: fallbackModels,
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -156,7 +163,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       provider: PROVIDER,
       enabled: codexSettings.enabled,
       checkedAt,
-      models,
+      models: fallbackModels,
       probe: {
         installed: true,
         version: null,
@@ -177,7 +184,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       provider: PROVIDER,
       enabled: codexSettings.enabled,
       checkedAt,
-      models,
+      models: fallbackModels,
       probe: {
         installed: true,
         version: parsedVersion,
@@ -195,7 +202,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       provider: PROVIDER,
       enabled: codexSettings.enabled,
       checkedAt,
-      models,
+      models: fallbackModels,
       probe: {
         installed: true,
         version: parsedVersion,
@@ -206,21 +213,47 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     });
   }
 
+  const discoveryOrAccount = resolveDiscoveryOrAccount
+    ? yield* resolveDiscoveryOrAccount({
+        binaryPath: codexSettings.binaryPath,
+        homePath: codexSettings.homePath,
+        cwd: process.cwd(),
+      }).pipe(Effect.orElseSucceed(() => undefined))
+    : undefined;
+  const discovery = isCodexDiscoverySnapshot(discoveryOrAccount) ? discoveryOrAccount : undefined;
+  const account =
+    discovery?.account ??
+    (discoveryOrAccount && !isCodexDiscoverySnapshot(discoveryOrAccount)
+      ? discoveryOrAccount
+      : undefined);
   const skills =
+    discovery?.skills ??
     (resolveSkills
       ? yield* resolveSkills({
           binaryPath: codexSettings.binaryPath,
           homePath: codexSettings.homePath,
           cwd: process.cwd(),
         }).pipe(Effect.orElseSucceed(() => undefined))
-      : undefined) ?? [];
+      : undefined) ??
+    [];
+  const resolvedModels = discovery?.models.length
+    ? [
+        ...discovery.models,
+        ...providerModelsFromSettings(
+          [],
+          PROVIDER,
+          codexSettings.customModels,
+          DEFAULT_CODEX_MODEL_CAPABILITIES,
+        ),
+      ]
+    : adjustCodexModelsForAccount(fallbackModels, account);
 
   if (yield* hasCustomModelProvider) {
     return buildServerProvider({
       provider: PROVIDER,
       enabled: codexSettings.enabled,
       checkedAt,
-      models,
+      models: resolvedModels,
       skills,
       probe: {
         installed: true,
@@ -236,13 +269,6 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     Effect.timeoutOption(DEFAULT_TIMEOUT_MS),
     Effect.result,
   );
-  const account = resolveAccount
-    ? yield* resolveAccount({
-        binaryPath: codexSettings.binaryPath,
-        homePath: codexSettings.homePath,
-      })
-    : undefined;
-  const resolvedModels = adjustCodexModelsForAccount(models, account);
 
   if (Result.isFailure(authProbe)) {
     const error = authProbe.failure;
@@ -332,14 +358,7 @@ export const CodexProviderLive = Layer.effect(
     }) =>
       Cache.get(accountProbeCache, JSON.stringify([input.binaryPath, input.homePath, input.cwd]));
 
-    const checkProvider = checkCodexProviderStatus(
-      (input) =>
-        getDiscovery({
-          ...input,
-          cwd: process.cwd(),
-        }).pipe(Effect.map((discovery) => discovery?.account)),
-      (input) => getDiscovery(input).pipe(Effect.map((discovery) => discovery?.skills)),
-    ).pipe(
+    const checkProvider = checkCodexProviderStatus((input) => getDiscovery(input)).pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
