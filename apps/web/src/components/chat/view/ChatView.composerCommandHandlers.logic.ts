@@ -44,6 +44,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     onProviderModelSelect,
     handleInteractionModeChange,
     toggleInteractionMode,
+    onOpenReadDialog,
     onSend,
     onChangeActivePendingUserInputCustomAnswer,
   } = input;
@@ -162,6 +163,17 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
           return;
         }
 
+        if (item.command === "read") {
+          const applied = applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, "", {
+            expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+          });
+          if (applied) {
+            setComposerHighlightedItemId(null);
+            onOpenReadDialog();
+          }
+          return;
+        }
+
         if (item.command === "agents" || item.command === "skills" || item.command === "compact") {
           const replacement = `/${item.command} `;
           const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
@@ -208,6 +220,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       applyPromptReplacement,
       composerSelectLockRef,
       handleInteractionModeChange,
+      onOpenReadDialog,
       onProviderModelSelect,
       resolveActiveComposerTrigger,
       setComposerHighlightedItemId,

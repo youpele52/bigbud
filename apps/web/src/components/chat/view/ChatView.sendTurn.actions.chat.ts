@@ -26,6 +26,7 @@ import {
   persistThreadSettingsForNextTurnIfServer,
   prepareSendContext,
 } from "./ChatView.sendTurn.actions.shared";
+import { formatReadDocumentPrompt, parseReadDocumentCommand } from "./ChatView.sendTurn.read";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 interface SendTurnActionInput {
@@ -101,6 +102,8 @@ export async function sendChatTurn({
     return;
   }
 
+  const readDocumentCommand = parseReadDocumentCommand(trimmedPrompt);
+
   if (!hasSendableContent) {
     if (expiredTerminalContextCount > 0) {
       const toastCopy = buildExpiredTerminalContextToastCopy(expiredTerminalContextCount, "empty");
@@ -113,6 +116,23 @@ export async function sendChatTurn({
     return;
   }
   if (!project) return;
+
+  const promptTextForSend = readDocumentCommand
+    ? await api.server
+        .readDocumentUrl({ url: readDocumentCommand.url })
+        .then(formatReadDocumentPrompt)
+        .catch((error: unknown) => {
+          toastManager.add({
+            type: "error",
+            title: "Could not read document URL",
+            description: error instanceof Error ? error.message : "Check the URL and try again.",
+          });
+          return null;
+        })
+    : promptForSend;
+  if (!promptTextForSend) {
+    return;
+  }
 
   const sendContext = await prepareSendContext({
     input,
@@ -132,7 +152,7 @@ export async function sendChatTurn({
   const composerAnnotationsSnapshot = [...composerAnnotations];
   const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
   const messageTextWithTerminalContexts = appendTerminalContextsToPrompt(
-    promptForSend,
+    promptTextForSend,
     composerTerminalContextsSnapshot,
   );
   const messageTextForSend = appendBrowserAnnotationsToPrompt(
@@ -206,7 +226,7 @@ export async function sendChatTurn({
       project,
       isDraft,
       isFirstMessage,
-      promptText: promptForSend,
+      promptText: promptTextForSend,
       modelSelection: selectedModelSelection,
       runtimeMode,
       interactionMode,
