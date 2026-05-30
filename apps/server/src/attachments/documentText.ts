@@ -1,28 +1,54 @@
 import { exec } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
-import { inflateRawSync } from "node:zlib";
 
 import { isTextReadable } from "./fileMime.ts";
+import {
+  extractOcrTextFromBuffer,
+  extractOcrTextFromFile,
+  supportsOcrTextExtraction,
+} from "./documentText.ocr.ts";
+import {
+  extractDocxTextFromBuffer,
+  extractPptxTextFromBuffer,
+  extractXlsxTextFromBuffer,
+} from "./documentText.office.ts";
+import {
+  EXTRACTED_DOCUMENT_MAX_CHARS,
+  normalizeExtractedText,
+  truncateExtractedText,
+} from "./documentText.shared.ts";
+
+export { extractDocxTextFromBuffer } from "./documentText.office.ts";
+export { EXTRACTED_DOCUMENT_MAX_CHARS } from "./documentText.shared.ts";
 
 const execAsync = promisify(exec);
 
-export const EXTRACTED_DOCUMENT_MAX_CHARS = 32_000;
-
 const PDF_MIME_TYPE = "application/pdf";
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PPTX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const TEXT_FILE_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".csv",
+  ".json",
+  ".xml",
+  ".yaml",
+  ".yml",
+  ".ts",
+  ".js",
+  ".py",
+  ".rs",
+  ".go",
+  ".css",
+  ".html",
+];
 
-function normalizeExtractedText(value: string): string {
-  return value
-    .replace(/\r\n?/g, "\n")
-    .replace(/[\t ]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function truncateExtractedText(value: string): string {
-  if (value.length <= EXTRACTED_DOCUMENT_MAX_CHARS) return value;
-  return `${value.slice(0, EXTRACTED_DOCUMENT_MAX_CHARS).trimEnd()}\n\n[Document text truncated]`;
+function isTextReadableFileName(fileName: string): boolean {
+  return TEXT_FILE_EXTENSIONS.some((extension) => fileName.endsWith(extension));
 }
 
 // ── PDF ───────────────────────────────────────────────────────────────────────
@@ -50,80 +76,18 @@ async function extractPdfTextWithPdftotext(filePath: string): Promise<string | n
   }
 }
 
+async function extractPdfTextFromBuffer(bytes: Uint8Array): Promise<string | null> {
+  const tempDir = await mkdtemp(join(tmpdir(), "bigbud-pdf-buffer-"));
+  const tempPath = join(tempDir, "document.pdf");
+  try {
+    await writeFile(tempPath, bytes);
+    return await extractPdfTextWithPdftotext(tempPath);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 // ── DOCX ──────────────────────────────────────────────────────────────────────
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
-}
-
-function extractDocxEntry(bytes: Buffer, entryName: string): Buffer | null {
-  const eocdSignature = 0x06054b50;
-  const centralSignature = 0x02014b50;
-  const localSignature = 0x04034b50;
-  const maxCommentLength = 0xffff;
-  const searchStart = Math.max(0, bytes.length - (maxCommentLength + 22));
-  let eocdOffset = -1;
-
-  for (let offset = bytes.length - 22; offset >= searchStart; offset -= 1) {
-    if (bytes.readUInt32LE(offset) === eocdSignature) {
-      eocdOffset = offset;
-      break;
-    }
-  }
-  if (eocdOffset < 0) return null;
-
-  const entryCount = bytes.readUInt16LE(eocdOffset + 10);
-  let centralOffset = bytes.readUInt32LE(eocdOffset + 16);
-
-  for (let index = 0; index < entryCount; index += 1) {
-    if (bytes.readUInt32LE(centralOffset) !== centralSignature) return null;
-    const compressionMethod = bytes.readUInt16LE(centralOffset + 10);
-    const compressedSize = bytes.readUInt32LE(centralOffset + 20);
-    const fileNameLength = bytes.readUInt16LE(centralOffset + 28);
-    const extraLength = bytes.readUInt16LE(centralOffset + 30);
-    const commentLength = bytes.readUInt16LE(centralOffset + 32);
-    const localHeaderOffset = bytes.readUInt32LE(centralOffset + 42);
-    const fileName = bytes.toString(
-      "utf8",
-      centralOffset + 46,
-      centralOffset + 46 + fileNameLength,
-    );
-
-    if (fileName === entryName) {
-      if (bytes.readUInt32LE(localHeaderOffset) !== localSignature) return null;
-      const localNameLength = bytes.readUInt16LE(localHeaderOffset + 26);
-      const localExtraLength = bytes.readUInt16LE(localHeaderOffset + 28);
-      const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
-      const data = bytes.subarray(dataStart, dataStart + compressedSize);
-      if (compressionMethod === 0) return data;
-      if (compressionMethod === 8) return inflateRawSync(data);
-      return null;
-    }
-
-    centralOffset += 46 + fileNameLength + extraLength + commentLength;
-  }
-
-  return null;
-}
-
-export function extractDocxTextFromBuffer(bytes: Uint8Array): string {
-  const documentXml = extractDocxEntry(Buffer.from(bytes), "word/document.xml");
-  if (!documentXml) return "";
-
-  const xml = documentXml.toString("utf8");
-  const text = xml
-    .replace(/<w:tab\b[^>]*\/>/g, "\t")
-    .replace(/<w:br\b[^>]*\/>/g, "\n")
-    .replace(/<\/w:p>/g, "\n")
-    .replace(/<\/w:tc>/g, "\t")
-    .replace(/<[^>]+>/g, "");
-  return normalizeExtractedText(decodeXmlEntities(text));
-}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -135,11 +99,61 @@ export function supportsPromptTextExtraction(input: {
   const fileName = input.fileName.toLowerCase();
   return (
     isTextReadable(mimeType) ||
+    isTextReadableFileName(fileName) ||
     mimeType === PDF_MIME_TYPE ||
     mimeType === DOCX_MIME_TYPE ||
+    mimeType === PPTX_MIME_TYPE ||
+    mimeType === XLSX_MIME_TYPE ||
+    supportsOcrTextExtraction({ mimeType, fileName }) ||
     fileName.endsWith(".pdf") ||
-    fileName.endsWith(".docx")
+    fileName.endsWith(".docx") ||
+    fileName.endsWith(".pptx") ||
+    fileName.endsWith(".xlsx")
   );
+}
+
+export async function extractPromptTextFromBuffer(input: {
+  readonly bytes: Uint8Array;
+  readonly mimeType: string;
+  readonly fileName: string;
+}): Promise<string | null> {
+  const mimeType = input.mimeType.toLowerCase();
+  const fileName = input.fileName.toLowerCase();
+
+  if (isTextReadable(mimeType) || isTextReadableFileName(fileName)) {
+    const text = normalizeExtractedText(new TextDecoder().decode(input.bytes));
+    return text.length > 0 ? truncateExtractedText(text) : null;
+  }
+
+  if (mimeType === PDF_MIME_TYPE || fileName.endsWith(".pdf")) {
+    const text = await extractPdfTextFromBuffer(input.bytes);
+    if (text !== null) return truncateExtractedText(text);
+
+    const ocrText = await extractOcrTextFromBuffer(input);
+    return ocrText !== null ? truncateExtractedText(ocrText) : null;
+  }
+
+  if (mimeType === DOCX_MIME_TYPE || fileName.endsWith(".docx")) {
+    const text = extractDocxTextFromBuffer(input.bytes);
+    return text.length > 0 ? truncateExtractedText(text) : null;
+  }
+
+  if (mimeType === PPTX_MIME_TYPE || fileName.endsWith(".pptx")) {
+    const text = extractPptxTextFromBuffer(input.bytes);
+    return text.length > 0 ? truncateExtractedText(text) : null;
+  }
+
+  if (mimeType === XLSX_MIME_TYPE || fileName.endsWith(".xlsx")) {
+    const text = extractXlsxTextFromBuffer(input.bytes);
+    return text.length > 0 ? truncateExtractedText(text) : null;
+  }
+
+  if (supportsOcrTextExtraction({ mimeType, fileName })) {
+    const text = await extractOcrTextFromBuffer(input);
+    return text !== null ? truncateExtractedText(text) : null;
+  }
+
+  return null;
 }
 
 export async function extractPromptTextFromFile(input: {
@@ -150,21 +164,30 @@ export async function extractPromptTextFromFile(input: {
   const mimeType = input.mimeType.toLowerCase();
   const fileName = input.fileName.toLowerCase();
 
-  if (isTextReadable(mimeType)) {
+  if (isTextReadable(mimeType) || isTextReadableFileName(fileName)) {
     return normalizeExtractedText(await readFile(input.filePath, "utf8"));
   }
 
   if (mimeType === PDF_MIME_TYPE || fileName.endsWith(".pdf")) {
     const text = await extractPdfTextWithPdftotext(input.filePath);
-    return text !== null ? truncateExtractedText(text) : null;
+    if (text !== null) return truncateExtractedText(text);
+
+    const ocrText = await extractOcrTextFromFile(input);
+    return ocrText !== null ? truncateExtractedText(ocrText) : null;
   }
 
-  if (mimeType === DOCX_MIME_TYPE || fileName.endsWith(".docx")) {
-    const text = extractDocxTextFromBuffer(await readFile(input.filePath));
-    return text.length > 0 ? truncateExtractedText(text) : null;
+  if (!supportsPromptTextExtraction({ mimeType, fileName })) return null;
+
+  if (supportsOcrTextExtraction({ mimeType, fileName })) {
+    const ocrText = await extractOcrTextFromFile(input);
+    if (ocrText !== null) return truncateExtractedText(ocrText);
   }
 
-  return null;
+  return extractPromptTextFromBuffer({
+    bytes: await readFile(input.filePath),
+    mimeType,
+    fileName,
+  });
 }
 
 export function formatAttachedFileContents(
@@ -182,6 +205,26 @@ export function appendAttachedFileContents(
   if (blocks.length === 0) return prompt;
   const attachedFiles = formatAttachedFileContents(blocks);
   return prompt.length > 0 ? `${prompt}\n\n${attachedFiles}` : attachedFiles;
+}
+
+export function formatAttachedImageOcrContents(
+  blocks: ReadonlyArray<{ readonly fileName: string; readonly text: string }>,
+): string {
+  return `<attached_image_ocr>\n${blocks
+    .map(
+      (block) =>
+        `<image name="${block.fileName}">\nOCR text extracted from this image. May contain errors.\n${block.text}\n</image>`,
+    )
+    .join("\n")}\n</attached_image_ocr>`;
+}
+
+export function appendAttachedImageOcrContents(
+  prompt: string,
+  blocks: ReadonlyArray<{ readonly fileName: string; readonly text: string }>,
+): string {
+  if (blocks.length === 0) return prompt;
+  const attachedImageOcr = formatAttachedImageOcrContents(blocks);
+  return prompt.length > 0 ? `${prompt}\n\n${attachedImageOcr}` : attachedImageOcr;
 }
 
 export function formatUnextractableFileNotice(
