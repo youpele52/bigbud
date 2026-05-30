@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
@@ -181,11 +181,14 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
         : undefined);
 
     let child: ChildProcessWithoutNullStreams;
+    const useWindowsShell =
+      process.platform === "win32" && isLocalProviderRuntimeTarget(options.providerRuntimeTarget);
     try {
       child = spawn(invocation.command, invocation.args, {
         ...(localSpawnCwd ? { cwd: localSpawnCwd } : {}),
         env: options.env,
         stdio: ["pipe", "pipe", "pipe"],
+        shell: useWindowsShell,
       });
     } catch (error) {
       void bridge?.cleanup().catch(() => undefined);
@@ -350,6 +353,18 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       };
     };
 
+    const killPiChild = (signal: NodeJS.Signals) => {
+      if (process.platform === "win32" && child.pid !== undefined) {
+        try {
+          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+          return;
+        } catch {
+          // Fall through to direct kill when taskkill is unavailable.
+        }
+      }
+      child.kill(signal);
+    };
+
     const stop = async () => {
       if (exitPromise) {
         return exitPromise;
@@ -369,12 +384,12 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
 
         const sigkillTimer = setTimeout(() => {
           if (child.exitCode === null) {
-            child.kill("SIGKILL");
+            killPiChild("SIGKILL");
           }
         }, 1_000);
         child.once("exit", () => clearTimeout(sigkillTimer));
 
-        child.kill("SIGTERM");
+        killPiChild("SIGTERM");
       });
 
       return exitPromise;
