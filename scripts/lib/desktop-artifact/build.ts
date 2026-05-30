@@ -131,13 +131,13 @@ const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(f
   });
 
   if (localBinary) {
-    return localBinary;
+    return { binary: localBinary, fallback: false } as const;
   }
 
   yield* Effect.logWarning(
     "[desktop-artifact] Could not resolve local electron-builder; falling back to bunx. Add 'electron-builder' to apps/desktop devDependencies for reproducible builds.",
   );
-  return "electron-builder";
+  return { binary: "bunx", fallback: true } as const;
 });
 
 const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(function* (
@@ -413,18 +413,29 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  const electronBuilderBinary = yield* resolveElectronBuilderBinary();
+  const electronBuilderResult = yield* resolveElectronBuilderBinary();
   yield* Effect.log(
-    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderBinary}...`,
+    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
   );
-  yield* runCommand(
-    ChildProcess.make({
-      cwd: stageAppDir,
-      env: buildEnv,
-      ...commandOutputOptions(options.verbose),
-      shell: shellOptionForPlatform(options.platform),
-    })`${electronBuilderBinary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
-  );
+  if (electronBuilderResult.fallback) {
+    yield* runCommand(
+      ChildProcess.make({
+        cwd: stageAppDir,
+        env: buildEnv,
+        ...commandOutputOptions(options.verbose),
+        shell: shellOptionForPlatform(options.platform),
+      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    );
+  } else {
+    yield* runCommand(
+      ChildProcess.make({
+        cwd: stageAppDir,
+        env: buildEnv,
+        ...commandOutputOptions(options.verbose),
+        shell: shellOptionForPlatform(options.platform),
+      })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    );
+  }
 
   const stageDistDir = path.join(stageAppDir, "dist");
   if (!(yield* fs.exists(stageDistDir))) {
