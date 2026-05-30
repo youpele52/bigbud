@@ -4,6 +4,32 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.637 (29 May, 2026)
+
+### Linux Desktop Reliability
+
+- Overhauled the desktop runtime to survive GPU crashes, missing Electron files, and rough startup conditions without going silent. The app tracks GPU process failures and automatically disables hardware acceleration on the next launch so you are not stuck in a crash loop.
+- Fixed a launch deadlock where AppImage backend restarts could re-enter the outer AppImage runtime instead of the in-image executable, and added an after-extract hook that copies critical Electron binaries into the packaged app when electron-builder drops them.
+- Locked Linux builds to `ubuntu-22.04` for broader AppImage compatibility, added a `.deb` package as a fallback, and wired up a verification pipeline that checks runtime files and smoke-tests the packaged backend before release.
+
+### Desktop Crash Safety
+
+- Added uncaught exception and rejection handlers so the main process logs what went wrong and shows a dialog instead of disappearing. Pipe errors from a dying backend child (ECONNRESET, EPIPE) are now swallowed gracefully instead of taking down the whole app.
+
+### Provider Model Discovery
+
+- Switched Claude and Codex from hardcoded model lists to live discovery from `claude query` and `codex app-server` at startup, so new models appear without waiting for a client update. Bumped the Codex default from `gpt-5.3-codex` to `gpt-5.5`.
+- Replaced PIs inline provider name map with a shared normaliser that resolves aliases like `open-ai` → OpenAI and `google_gemini` → Google consistently across all providers.
+
+### CI and Build Tooling
+
+- Pinned `electron-builder` resolution to the local package before falling back to bunx for reproducible CI builds. Re-enabled the typecheck step in the release workflow.
+- Skipped AppImage smoke tests in headless CI environments and fixed an `afterExtract.cjs` type check that broke on electron-builder versions that pass platform as a string.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for Linux runtime startup, provider model discovery, and shell environment hydration.
+
 ## v0.1.636 (26 May, 2026)
 
 ### Composer Redesign

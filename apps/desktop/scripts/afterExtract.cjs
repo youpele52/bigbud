@@ -24,7 +24,8 @@ const REQUIRED_FILES = ["snapshot_blob.bin", "v8_context_snapshot.bin", "icudtl.
 module.exports = async function afterExtract(context) {
   const { appOutDir, platform } = context;
 
-  if (platform.name !== "linux") {
+  const platformName = typeof platform === "string" ? platform : platform?.name;
+  if (platformName !== "linux") {
     return;
   }
 
