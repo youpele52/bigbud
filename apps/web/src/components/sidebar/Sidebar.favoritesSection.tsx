@@ -42,23 +42,23 @@ export function SidebarFavoritesSection({
                 type="button"
                 className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
               >
-                <ChevronRightIcon
-                  className={`-ml-0.5 ${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                    isExpanded ? "rotate-90" : ""
-                  }`}
-                />
                 <PinIcon
                   className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 rotate-45 text-muted-foreground/70`}
                 />
-                <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                  Pinned
-                </span>
+                <span className="truncate text-xs font-medium text-foreground/90">Pinned</span>
+                <ChevronRightIcon
+                  className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-all duration-150 ${
+                    isExpanded
+                      ? "translate-x-0 rotate-90 opacity-100"
+                      : "translate-x-1 opacity-0 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100"
+                  }`}
+                />
               </button>
             </SidebarMenuButton>
           </div>
 
           {isExpanded ? (
-            <SidebarMenuSub className="my-0 ml-3 mr-1 translate-x-px gap-0.5 overflow-hidden border-l border-sidebar-border pl-6 pr-1 py-0">
+            <SidebarMenuSub className="my-0 ml-2 mr-1 gap-0.5 overflow-hidden pl-3 pr-1 py-0">
               {renderedFavorites.length === 0 ? (
                 <div className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60">
                   <span>No pinned threads yet</span>
