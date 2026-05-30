@@ -70,6 +70,7 @@ export function useChatViewBaseEphemeralState(input: {
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
+  const [readDocumentDialogOpen, setReadDocumentDialogOpen] = useState(false);
   const [terminalLaunchContext, setTerminalLaunchContext] = useState<TerminalLaunchContext | null>(
     null,
   );
@@ -165,6 +166,8 @@ export function useChatViewBaseEphemeralState(input: {
     setComposerHighlightedItemId,
     pullRequestDialogState,
     setPullRequestDialogState,
+    readDocumentDialogOpen,
+    setReadDocumentDialogOpen,
     terminalLaunchContext,
     setTerminalLaunchContext,
     attachmentPreviewHandoffByMessageId,

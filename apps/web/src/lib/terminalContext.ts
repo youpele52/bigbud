@@ -34,11 +34,19 @@ export interface DisplayedUserMessageState {
   previewTitle: string | null;
   contexts: ParsedTerminalContextEntry[];
   browserAnnotations: ParsedBrowserAnnotationEntry[];
+  readDocument: ParsedReadDocumentEntry | null;
 }
 
 export interface ParsedTerminalContextEntry {
   header: string;
   body: string;
+}
+
+export interface ParsedReadDocumentEntry {
+  sourceUrl: string;
+  resolvedUrl: string;
+  title: string | null;
+  text: string;
 }
 
 export const INLINE_TERMINAL_CONTEXT_PLACEHOLDER = "\uFFFC";
@@ -48,6 +56,12 @@ const TRAILING_TERMINAL_CONTEXT_BLOCK_PATTERN =
 
 const TRAILING_ATTACHED_FILES_BLOCK_PATTERN =
   /\n*<attached_files>\n[\s\S]*?\n<\/attached_files>\s*$/;
+const TRAILING_READ_DOCUMENT_BLOCK_PATTERN =
+  /\n*<read_document_result>\n([\s\S]*?)\n<\/read_document_result>\s*$/;
+const READ_DOCUMENT_SOURCE_URL_PATTERN = /^Source URL:\s*(.+)$/m;
+const READ_DOCUMENT_RESOLVED_URL_PATTERN = /^Resolved URL:\s*(.+)$/m;
+const READ_DOCUMENT_TITLE_PATTERN = /^Title:\s*(.+)$/m;
+const READ_DOCUMENT_TEXT_PATTERN = /<document_contents>\n([\s\S]*?)\n<\/document_contents>/;
 
 export function normalizeTerminalContextText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
@@ -247,7 +261,8 @@ export function extractTrailingTerminalContexts(prompt: string): ExtractedTermin
 export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMessageState {
   const extractedAnnotations = extractTrailingBrowserAnnotations(prompt);
   const extractedContexts = extractTrailingTerminalContexts(extractedAnnotations.promptText);
-  const visibleText = extractedContexts.promptText.replace(
+  const extractedReadDocument = extractTrailingReadDocument(extractedContexts.promptText);
+  const visibleText = extractedReadDocument.promptText.replace(
     TRAILING_ATTACHED_FILES_BLOCK_PATTERN,
     "",
   );
@@ -258,6 +273,38 @@ export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMe
     previewTitle: extractedContexts.previewTitle,
     contexts: extractedContexts.contexts,
     browserAnnotations: extractedAnnotations.annotations,
+    readDocument: extractedReadDocument.document,
+  };
+}
+
+export function extractTrailingReadDocument(prompt: string): {
+  promptText: string;
+  document: ParsedReadDocumentEntry | null;
+} {
+  const match = TRAILING_READ_DOCUMENT_BLOCK_PATTERN.exec(prompt);
+  if (!match) {
+    return { promptText: prompt, document: null };
+  }
+
+  const block = match[1] ?? "";
+  const promptText = prompt.slice(0, match.index).replace(/\n+$/, "");
+  const sourceUrl = READ_DOCUMENT_SOURCE_URL_PATTERN.exec(block)?.[1]?.trim() ?? "";
+  const resolvedUrl = READ_DOCUMENT_RESOLVED_URL_PATTERN.exec(block)?.[1]?.trim() ?? "";
+  const title = READ_DOCUMENT_TITLE_PATTERN.exec(block)?.[1]?.trim() ?? "";
+  const text = READ_DOCUMENT_TEXT_PATTERN.exec(block)?.[1]?.trim() ?? "";
+
+  if (!sourceUrl || !resolvedUrl || !text) {
+    return { promptText: prompt, document: null };
+  }
+
+  return {
+    promptText,
+    document: {
+      sourceUrl,
+      resolvedUrl,
+      title: title.length > 0 ? title : null,
+      text,
+    },
   };
 }
 

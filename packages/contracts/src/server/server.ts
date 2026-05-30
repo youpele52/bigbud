@@ -184,6 +184,27 @@ export const ServerUpsertKeybindingResult = Schema.Struct({
 });
 export type ServerUpsertKeybindingResult = typeof ServerUpsertKeybindingResult.Type;
 
+export const ServerReadDocumentUrlInput = Schema.Struct({
+  url: TrimmedNonEmptyString,
+});
+export type ServerReadDocumentUrlInput = typeof ServerReadDocumentUrlInput.Type;
+
+export const ServerReadDocumentUrlResult = Schema.Struct({
+  sourceUrl: TrimmedNonEmptyString,
+  resolvedUrl: TrimmedNonEmptyString,
+  title: Schema.NullOr(TrimmedNonEmptyString),
+  text: TrimmedNonEmptyString,
+});
+export type ServerReadDocumentUrlResult = typeof ServerReadDocumentUrlResult.Type;
+
+export class ServerReadDocumentUrlError extends Schema.TaggedErrorClass<ServerReadDocumentUrlError>()(
+  "ServerReadDocumentUrlError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ServerVerifyExecutionTargetInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,
   cwd: Schema.optional(TrimmedNonEmptyString),

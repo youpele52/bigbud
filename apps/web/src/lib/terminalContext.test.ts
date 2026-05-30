@@ -123,6 +123,7 @@ describe("terminalContext", () => {
         },
       ],
       browserAnnotations: [],
+      readDocument: null,
     });
   });
 
@@ -177,6 +178,39 @@ describe("terminalContext", () => {
       visibleText: "Please inspect",
       copyText: prompt,
       browserAnnotations: [{ text: annotation }, { text: annotation }],
+      readDocument: null,
+    });
+  });
+
+  it("hides trailing read-document payloads from the visible user message text", () => {
+    const prompt = [
+      "Read this document URL and use the extracted contents below.",
+      "",
+      "<read_document_result>",
+      "Source URL: https://example.com/report",
+      "Resolved URL: https://cdn.example.com/report.pdf",
+      "Title: Report",
+      "<document_contents>",
+      "First line",
+      "",
+      "Second line",
+      "</document_contents>",
+      "</read_document_result>",
+    ].join("\n");
+
+    expect(deriveDisplayedUserMessageState(prompt)).toEqual({
+      visibleText: "Read this document URL and use the extracted contents below.",
+      copyText: prompt,
+      contextCount: 0,
+      previewTitle: null,
+      contexts: [],
+      browserAnnotations: [],
+      readDocument: {
+        sourceUrl: "https://example.com/report",
+        resolvedUrl: "https://cdn.example.com/report.pdf",
+        title: "Report",
+        text: "First line\n\nSecond line",
+      },
     });
   });
 

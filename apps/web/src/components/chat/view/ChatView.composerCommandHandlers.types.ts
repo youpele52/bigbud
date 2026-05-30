@@ -43,6 +43,7 @@ export interface UseComposerCommandHandlersInput {
   onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
   toggleInteractionMode: () => void;
+  onOpenReadDialog: () => void;
   onSend: (e?: { preventDefault: () => void }) => void;
   onChangeActivePendingUserInputCustomAnswer: (
     questionId: string,

@@ -6,7 +6,7 @@ import {
 } from "@bigbud/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerTriggerKind } from "../../../logic/composer";
-import { BotIcon } from "lucide-react";
+import { BookOpenIcon, BotIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Badge } from "../../ui/badge";
 import { Command, CommandItem, CommandList } from "../../ui/command";
@@ -131,7 +131,11 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         />
       ) : null}
       {props.item.type === "slash-command" ? (
-        <BotIcon className="size-4 text-muted-foreground/80" />
+        props.item.command === "read" ? (
+          <BookOpenIcon className="size-4 text-muted-foreground/80" />
+        ) : (
+          <BotIcon className="size-4 text-muted-foreground/80" />
+        )
       ) : null}
       {props.item.type === "model" ? (
         <Badge variant="outline" className="px-1.5 py-0 text-[10px]">

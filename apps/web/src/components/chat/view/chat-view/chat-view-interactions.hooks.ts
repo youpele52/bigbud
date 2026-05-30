@@ -213,6 +213,7 @@ export function useChatViewInteractions({
   });
 
   const {
+    addComposerFiles,
     onComposerPaste,
     onComposerDragEnter,
     onComposerDragOver,
@@ -255,6 +256,7 @@ export function useChatViewInteractions({
     onProviderModelSelect,
     handleInteractionModeChange: runtime.handleInteractionModeChange,
     toggleInteractionMode: runtime.toggleInteractionMode,
+    onOpenReadDialog: () => base.setReadDocumentDialogOpen(true),
     onSend,
     onChangeActivePendingUserInputCustomAnswer:
       pendingUserInputHandlers.onChangeActivePendingUserInputCustomAnswer,
@@ -338,6 +340,7 @@ export function useChatViewInteractions({
     composerCommandHandlers,
     onSend,
     onProviderModelSelect,
+    addComposerFiles,
     onComposerPaste,
     onComposerDragEnter,
     onComposerDragOver,

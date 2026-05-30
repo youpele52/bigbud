@@ -27,6 +27,8 @@ import type {
 } from "../workspace/project";
 import type {
   ServerConfig,
+  ServerReadDocumentUrlInput,
+  ServerReadDocumentUrlResult,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyInput,
   ServerUnlockSshKeyResult,
@@ -219,6 +221,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
