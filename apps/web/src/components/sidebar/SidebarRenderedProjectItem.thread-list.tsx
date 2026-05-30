@@ -89,7 +89,7 @@ export function SidebarRenderedProjectItemThreadList({
   return (
     <SidebarMenuSub
       ref={attachThreadListAutoAnimateRef}
-      className="my-0 ml-3 mr-1 translate-x-px gap-0.5 overflow-hidden border-l border-sidebar-border pl-6 pr-1 py-0"
+      className="my-0 ml-2 mr-1 gap-0.5 overflow-hidden pl-3 pr-1 py-0"
     >
       {shouldShowThreadPanel && showEmptyThreadState ? (
         <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
