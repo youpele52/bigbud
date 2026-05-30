@@ -17,6 +17,7 @@ import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
+  appendAttachedImageOcrContents,
   appendAttachedFileContents,
   extractPromptTextFromFile,
 } from "../../../attachments/documentText.ts";
@@ -39,6 +40,7 @@ export const makeSendTurn =
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
       const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+      const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       const attachments: MessageOptions["attachments"] = yield* Effect.forEach(
         input.attachments ?? [],
         (attachment) =>
@@ -54,7 +56,7 @@ export const makeSendTurn =
                 detail: `Invalid attachment id '${attachment.id}'.`,
               });
             }
-            if (attachment.type === "file") {
+            if (attachment.type === "file" || attachment.type === "image") {
               const extractedText = yield* Effect.tryPromise({
                 try: () =>
                   extractPromptTextFromFile({
@@ -71,7 +73,11 @@ export const makeSendTurn =
                   }),
               });
               if (extractedText !== null) {
-                extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+                if (attachment.type === "file") {
+                  extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+                } else {
+                  imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
+                }
               }
             }
             const bytes = yield* Effect.tryPromise({
@@ -138,7 +144,10 @@ export const makeSendTurn =
       record.updatedAt = new Date().toISOString();
 
       const sendPayload: Parameters<typeof record.session.send>[0] = {
-        prompt: appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
+        prompt: appendAttachedImageOcrContents(
+          appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
+          imageOcrBlocks,
+        ),
         ...(attachments.length > 0 ? { attachments } : {}),
         mode: "immediate",
       };
