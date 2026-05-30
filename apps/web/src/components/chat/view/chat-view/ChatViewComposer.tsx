@@ -21,6 +21,7 @@ import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingAppr
 import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
+import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { useSttStore } from "../../../../stores/stt/stt.store";
@@ -193,6 +194,40 @@ export function ChatViewComposer({
     setSyntheticMenuKind("skill");
     setSyntheticMenuHighlightId(null);
   }, []);
+
+  const onOpenReadDialog = useCallback(() => {
+    base.setReadDocumentDialogOpen(true);
+  }, [base]);
+
+  const onSubmitReadUrl = useCallback(
+    async (url: string) => {
+      const nextPrompt = `/read ${url}`;
+      base.promptRef.current = nextPrompt;
+      base.setPrompt(nextPrompt);
+      base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+      base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+      interactions.onSend();
+    },
+    [base, interactions],
+  );
+
+  const onSubmitReadFiles = useCallback(
+    async (files: File[]) => {
+      interactions.addComposerFiles(files);
+      const nextPrompt =
+        base.promptRef.current.trim().length > 0
+          ? base.promptRef.current
+          : "Read the attached documents and use them as context.";
+      base.promptRef.current = nextPrompt;
+      base.setPrompt(nextPrompt);
+      base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+      base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+      window.requestAnimationFrame(() => {
+        interactions.onSend();
+      });
+    },
+    [base, interactions],
+  );
 
   return (
     <form
@@ -421,6 +456,7 @@ export function ChatViewComposer({
                     />
                     <ComposerAttachmentMenu
                       onAttachFiles={interactions.onAttachFiles}
+                      onOpenReadDialog={onOpenReadDialog}
                       onCallAgent={onCallAgent}
                       onUseSkill={onUseSkill}
                       disabled={base.isConnecting || thread.isComposerApprovalState}
@@ -466,6 +502,12 @@ export function ChatViewComposer({
           )}
         </div>
       </div>
+      <ComposerReadDialog
+        open={base.readDocumentDialogOpen}
+        onOpenChange={base.setReadDocumentDialogOpen}
+        onSubmitUrl={onSubmitReadUrl}
+        onSubmitFiles={onSubmitReadFiles}
+      />
     </form>
   );
 }

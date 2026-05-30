@@ -13,6 +13,7 @@ const USER_BASE_HEIGHT_PX = 96;
 const ATTACHMENTS_PER_ROW = 2;
 // Attachment thumbnails render with `max-h-[220px]` plus ~8px row gap.
 const USER_ATTACHMENT_ROW_HEIGHT_PX = 228;
+const USER_READ_DOCUMENT_SUMMARY_HEIGHT_PX = 84;
 const USER_BUBBLE_WIDTH_RATIO = 0.8;
 const USER_BUBBLE_HORIZONTAL_PADDING_PX = 32;
 const ASSISTANT_MESSAGE_HORIZONTAL_PADDING_PX = 8;
@@ -96,7 +97,15 @@ export function estimateTimelineMessageHeight(
     const attachmentCount = message.attachments?.length ?? 0;
     const attachmentRows = Math.ceil(attachmentCount / ATTACHMENTS_PER_ROW);
     const attachmentHeight = attachmentRows * USER_ATTACHMENT_ROW_HEIGHT_PX;
-    return USER_BASE_HEIGHT_PX + estimatedLines * USER_LINE_HEIGHT_PX + attachmentHeight;
+    const readDocumentHeight = displayedUserMessage.readDocument
+      ? USER_READ_DOCUMENT_SUMMARY_HEIGHT_PX
+      : 0;
+    return (
+      USER_BASE_HEIGHT_PX +
+      estimatedLines * USER_LINE_HEIGHT_PX +
+      attachmentHeight +
+      readDocumentHeight
+    );
   }
 
   // `system` messages are not rendered in the chat timeline, but keep a stable

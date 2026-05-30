@@ -2,7 +2,14 @@ import { splitPromptIntoComposerSegments } from "./editor-mentions.logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "slash-model" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default" | "agents" | "skills" | "compact";
+export type ComposerSlashCommand =
+  | "model"
+  | "plan"
+  | "default"
+  | "agents"
+  | "skills"
+  | "compact"
+  | "read";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -18,6 +25,7 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "agents",
   "skills",
   "compact",
+  "read",
 ];
 const isInlineTokenSegment = (
   segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },

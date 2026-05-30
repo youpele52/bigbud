@@ -180,6 +180,13 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           label: "/skills",
           description: `Browse discovered skills (${input.discoveredSkills.length} total)`,
         },
+        {
+          id: "slash:read",
+          type: "slash-command",
+          command: "read",
+          label: "/read",
+          description: "Read a remote document or web page URL into the thread",
+        },
         ...(input.supportsCompact
           ? [
               {

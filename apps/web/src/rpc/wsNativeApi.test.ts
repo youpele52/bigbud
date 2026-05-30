@@ -74,6 +74,7 @@ const rpcClientMock = {
     upsertKeybinding: vi.fn(),
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
+    readDocumentUrl: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
   },
@@ -346,6 +347,26 @@ describe("wsNativeApi", () => {
     );
     expect(rpcClientMock.server.updateSettings).toHaveBeenCalledWith({
       enableAssistantStreaming: true,
+    });
+  });
+
+  it("forwards document URL reads directly to the RPC client", async () => {
+    const result = {
+      sourceUrl: "https://example.com/report",
+      resolvedUrl: "https://example.com/report.pdf",
+      title: "Report",
+      text: "Body",
+    };
+    rpcClientMock.server.readDocumentUrl.mockResolvedValue(result);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(
+      api.server.readDocumentUrl({ url: "https://example.com/report" }),
+    ).resolves.toEqual(result);
+    expect(rpcClientMock.server.readDocumentUrl).toHaveBeenCalledWith({
+      url: "https://example.com/report",
     });
   });
 
