@@ -5,6 +5,7 @@ import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
+  appendAttachedImageOcrContents,
   appendAttachedFileContents,
   appendUnextractableFileNotice,
   extractPromptTextFromFile,
@@ -53,6 +54,7 @@ export function appendPiAttachmentInstructions(input: {
   const instruction =
     "<attachment_handling_instructions>\n" +
     "Use attached document content only when it appears in <attached_file_contents>. " +
+    "Use image OCR content only when it appears in <attached_image_ocr>, and treat it as approximate text that may contain recognition errors. " +
     "Do not call file-reading tools on attachment paths or try to inspect raw PDF/DOCX bytes. " +
     "If a document appears in <unreadable_attached_files>, tell the user that text extraction failed and ask for OCR or a text-readable version if the document contents are required.\n" +
     "</attachment_handling_instructions>";
@@ -183,10 +185,11 @@ export const makeAppendTextFileAttachments = (attachmentsDir: string) =>
     prompt: string,
   ) {
     const textBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
     const unextractableFiles: Array<{ readonly fileName: string; readonly mimeType: string }> = [];
 
     for (const attachment of attachments) {
-      if (attachment.type !== "file") continue;
+      if (attachment.type !== "file" && attachment.type !== "image") continue;
 
       const attachmentPath = resolveAttachmentPath({ attachmentsDir, attachment });
       if (!attachmentPath) continue;
@@ -207,15 +210,24 @@ export const makeAppendTextFileAttachments = (attachmentsDir: string) =>
           }),
       });
       if (extractedText === null) {
-        unextractableFiles.push({ fileName: attachment.name, mimeType: attachment.mimeType });
+        if (attachment.type === "file") {
+          unextractableFiles.push({ fileName: attachment.name, mimeType: attachment.mimeType });
+        }
         continue;
       }
 
-      textBlocks.push({ fileName: attachment.name, text: extractedText });
+      if (attachment.type === "file") {
+        textBlocks.push({ fileName: attachment.name, text: extractedText });
+      } else {
+        imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
+      }
     }
 
     return appendUnextractableFileNotice(
-      appendAttachedFileContents(prompt, textBlocks),
+      appendAttachedImageOcrContents(
+        appendAttachedFileContents(prompt, textBlocks),
+        imageOcrBlocks,
+      ),
       unextractableFiles,
     );
   });

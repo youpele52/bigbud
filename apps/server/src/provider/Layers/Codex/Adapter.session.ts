@@ -22,6 +22,7 @@ import {
 import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
+  appendAttachedImageOcrContents,
   appendAttachedFileContents,
   extractPromptTextFromFile,
 } from "../../../attachments/documentText.ts";
@@ -176,13 +177,14 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
     const codexAttachments = yield* Effect.forEach(
       input.attachments ?? [],
       (attachment) =>
         Effect.gen(function* () {
-          if (attachment.type === "file") {
+          if (attachment.type === "file" || attachment.type === "image") {
             const sourcePath =
-              attachment.sourcePath ??
+              (attachment.type === "file" ? attachment.sourcePath : undefined) ??
               resolveAttachmentPath({ attachmentsDir: serverConfig.attachmentsDir, attachment });
             if (sourcePath) {
               const extractedText = yield* Effect.tryPromise({
@@ -201,7 +203,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                   }),
               });
               if (extractedText !== null) {
-                extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+                if (attachment.type === "file") {
+                  extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
+                } else {
+                  imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
+                }
               }
             }
           }
@@ -214,7 +220,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       try: () => {
         const managerInput = {
           threadId: input.threadId,
-          input: appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
+          input: appendAttachedImageOcrContents(
+            appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
+            imageOcrBlocks,
+          ),
           ...(input.modelSelection?.provider === "codex"
             ? { model: input.modelSelection.model }
             : {}),
