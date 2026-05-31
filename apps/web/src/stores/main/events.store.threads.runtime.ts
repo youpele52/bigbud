@@ -80,7 +80,7 @@ export function applyThreadRuntimeEvent(
           (thread.latestTurn.completedAt !== null || hasNonStreamingAssistantMessageForTurn);
 
         const normalizedSession = isStaleRunningSession
-          ? { ...incomingSession, status: "ready" as const, reason: null }
+          ? { ...incomingSession, status: "ready" as const, activeTurnId: null, reason: null }
           : incomingSession;
 
         const session = mapSession(normalizedSession);
