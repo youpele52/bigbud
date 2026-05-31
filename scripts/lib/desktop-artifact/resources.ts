@@ -222,6 +222,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
     ],
     afterExtract: join(repoRoot, "apps/desktop/scripts/afterExtract.cjs"),
+    afterPack: join(repoRoot, "apps/desktop/scripts/afterPack.cjs"),
   };
 
   const publishConfig = resolveGitHubPublishConfig();
