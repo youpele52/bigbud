@@ -10,6 +10,8 @@ export interface PiInvocation {
   readonly bundledCliPath?: string;
 }
 
+const WINDOWS_COMMAND_SCRIPT_PATTERN = /\.(?:bat|cmd)$/i;
+
 export function resolveBundledPiCliPath(): string | undefined {
   const req = createRequire(import.meta.url);
 
@@ -69,4 +71,23 @@ export function buildPiRpcInvocation(
     ...invocation,
     args: [...invocation.args, "--mode", "rpc", ...extraArgs],
   };
+}
+
+function stripWindowsShellQuotes(command: string): string {
+  return command.startsWith('"') && command.endsWith('"') ? command.slice(1, -1) : command;
+}
+
+export function shouldUseWindowsPiShell(command: string): boolean {
+  if (process.platform !== "win32") return false;
+
+  const unquoted = stripWindowsShellQuotes(command);
+  return unquoted === DEFAULT_PI_BINARY_PATH || WINDOWS_COMMAND_SCRIPT_PATTERN.test(unquoted);
+}
+
+export function quoteWindowsPiShellCommand(command: string): string {
+  if (process.platform !== "win32") return command;
+  if (!/\s/.test(command)) return command;
+  if (command.startsWith('"') && command.endsWith('"')) return command;
+
+  return `"${command}"`;
 }
