@@ -80,6 +80,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
           const screenshot = await webview.capturePage();
           return {
             comment: selection.comment,
+            intent: selection.intent,
             page: {
               url: webview.getURL(),
               title: webview.getTitle(),

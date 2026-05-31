@@ -26,6 +26,7 @@ export function useOnSend(input: UseOnSendInput) {
         isSendBusy: sendBusy,
         isConnecting: connecting,
         shouldQueuePrompt,
+        isForceSend,
         sendInFlightRef: inFlightRef,
         promptRef: pRef,
         composerImages,
@@ -85,7 +86,7 @@ export function useOnSend(input: UseOnSendInput) {
         }
         return;
       }
-      if (sendBusy || connecting || inFlightRef.current) return;
+      if ((sendBusy && !isForceSend()) || connecting || inFlightRef.current) return;
       if (planFollowUp && proposedPlan) {
         await submitPlanFollowUp({
           proposedPlan,

@@ -77,7 +77,31 @@ export const makeProcessSessionHandlers = ({
       });
     }
 
-    yield* providerService.interruptTurn({ threadId: event.payload.threadId });
+    if (
+      event.payload.turnId !== undefined &&
+      event.payload.turnId !== (thread.session?.activeTurnId ?? null)
+    ) {
+      return;
+    }
+
+    yield* providerService.interruptTurn({
+      threadId: event.payload.threadId,
+      ...(event.payload.turnId !== undefined ? { turnId: event.payload.turnId } : {}),
+    });
+    yield* setThreadSession({
+      threadId: thread.id,
+      session: {
+        threadId: thread.id,
+        status: "ready",
+        providerName: thread.session?.providerName ?? null,
+        runtimeMode: thread.session?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+        activeTurnId: null,
+        reason: null,
+        lastError: thread.session?.lastError ?? null,
+        updatedAt: event.payload.createdAt,
+      },
+      createdAt: event.payload.createdAt,
+    });
   });
 
   const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (

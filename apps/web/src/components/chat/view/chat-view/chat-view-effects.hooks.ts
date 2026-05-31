@@ -353,6 +353,15 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
 
     if (!previous && current) {
       terminalOpenByThreadRef.current[activeThreadId] = current;
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLElement && activeElement.isConnected) {
+        const isTerminalElement =
+          activeElement.classList.contains("xterm-helper-textarea") ||
+          activeElement.closest(".thread-terminal-drawer .xterm") !== null;
+        if (!isTerminalElement) {
+          activeElement.blur();
+        }
+      }
       setTerminalFocusRequestId((value) => value + 1);
       return;
     }

@@ -197,7 +197,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain(">skill<");
+    expect(markup).toContain("lucide-dumbbell");
     expect(markup).toContain("review");
     expect(markup).not.toContain("@skill::review");
   });

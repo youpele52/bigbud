@@ -1356,6 +1356,16 @@ describe("isLatestTurnSettled", () => {
       ),
     ).toBe(false);
   });
+
+  it("returns true when there is no latest turn (thread is idle)", () => {
+    expect(isLatestTurnSettled(null, null)).toBe(true);
+    expect(
+      isLatestTurnSettled(null, {
+        orchestrationStatus: "ready",
+        activeTurnId: undefined,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("deriveActiveWorkStartedAt", () => {
