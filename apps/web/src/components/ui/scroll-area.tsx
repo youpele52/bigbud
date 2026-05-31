@@ -7,6 +7,7 @@ import { cn } from "~/lib/utils";
 function ScrollArea({
   className,
   children,
+  viewportClassName,
   scrollFade = false,
   scrollbarGutter = false,
   hideScrollbars = false,
@@ -17,6 +18,7 @@ function ScrollArea({
   scrollbarGutter?: boolean;
   hideScrollbars?: boolean;
   fillContainer?: boolean;
+  viewportClassName?: string | undefined;
 }) {
   return (
     <ScrollAreaPrimitive.Root
@@ -31,6 +33,7 @@ function ScrollArea({
           scrollbarGutter && "data-has-overflow-y:pe-2.5 data-has-overflow-x:pb-2.5",
           hideScrollbars &&
             "[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          viewportClassName,
         )}
         data-slot="scroll-area-viewport"
       >

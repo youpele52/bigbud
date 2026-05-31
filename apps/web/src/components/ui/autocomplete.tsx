@@ -189,9 +189,24 @@ function AutocompleteValue({ ...props }: AutocompletePrimitive.Value.Props) {
   return <AutocompletePrimitive.Value data-slot="autocomplete-value" {...props} />;
 }
 
-function AutocompleteList({ className, ...props }: AutocompletePrimitive.List.Props) {
+function AutocompleteList({
+  className,
+  scrollAreaClassName,
+  ...props
+}: AutocompletePrimitive.List.Props & {
+  scrollAreaClassName?: string | undefined;
+}) {
   return (
-    <ScrollArea scrollbarGutter scrollFade>
+    <ScrollArea
+      scrollbarGutter
+      scrollFade
+      fillContainer={false}
+      className={cn(
+        "max-h-[min(var(--available-height),23rem)] min-h-0 overflow-hidden",
+        scrollAreaClassName,
+      )}
+      viewportClassName={scrollAreaClassName}
+    >
       <AutocompletePrimitive.List
         className={cn("not-empty:scroll-py-1 not-empty:p-1 in-data-has-overflow-y:pe-3", className)}
         data-slot="autocomplete-list"
