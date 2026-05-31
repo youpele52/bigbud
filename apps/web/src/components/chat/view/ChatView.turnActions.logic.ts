@@ -51,10 +51,12 @@ export function useTurnActions({
   const onInterrupt = useCallback(async () => {
     const api = readNativeApi();
     if (!api || !activeThread) return;
+    const activeTurnId = activeThread.session?.activeTurnId ?? activeThread.latestTurn?.turnId;
     await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
       commandId: newCommandId(),
       threadId: activeThread.id,
+      ...(activeTurnId !== undefined ? { turnId: activeTurnId } : {}),
       createdAt: new Date().toISOString(),
     });
   }, [activeThread]);

@@ -109,6 +109,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     input.setComposerCursor(input.collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
     input.setComposerTrigger(input.detectComposerTrigger(nextPrompt, nextPrompt.length));
     input.scheduleComposerFocus();
+    input.setForceSendQueuedPrompt(true);
     window.requestAnimationFrame(() => {
       void input.onSend().finally(() => {
         input.setForceSendQueuedPrompt(false);
@@ -123,10 +124,12 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     }
     setFlushAfterInterrupt(true);
     if (input.activeTurnInProgress) {
-      input.setForceSendQueuedPrompt(true);
-      await input.onInterrupt().finally(() => {
-        void flushQueuedPrompts();
-      });
+      try {
+        await input.onInterrupt();
+      } catch (err) {
+        setFlushAfterInterrupt(false);
+        throw err;
+      }
       return;
     }
     await flushQueuedPrompts();

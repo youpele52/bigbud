@@ -26,6 +26,7 @@ export interface UseOnSendInput {
   isSendBusy: boolean;
   isConnecting: boolean;
   shouldQueuePrompt: () => boolean;
+  isForceSend: () => boolean;
   sendInFlightRef: React.MutableRefObject<boolean>;
   promptRef: React.MutableRefObject<string>;
   composerImages: ComposerImageAttachment[];

@@ -9,6 +9,7 @@ Entries below are grouped by release tag and date.
 ### Prompt Queue
 
 - Added a prompt queue system that queues up to 5 follow-up prompts while the AI is still processing, with per-item remove, auto-flush when the turn completes, and a "Send now" button that interrupts the current turn.
+- Fixed prompt queue edge cases so the first message in a new thread sends immediately, follow-up prompts queue consistently during active turns, "Send now" interrupts the exact active turn before flushing queued prompts, and stale running session updates no longer leave the red stop button visible after completion.
 - Extracted the composer header (pending approvals, plan follow-up banner, prompt queue) and menu layer into dedicated components for maintainability.
 
 ### Search Palette Overhaul
@@ -30,6 +31,10 @@ Entries below are grouped by release tag and date.
 
 - Refined sidebar accordion layout and spacing for a more consistent, less cramped appearance.
 - Tuned shared Input and Textarea focus styling to remove the overly shiny halo.
+
+### Desktop Resize Rendering
+
+- Reduced resize-time “white bar” flashes by explicitly setting renderer root backgrounds and syncing the Electron `BrowserWindow` background color with the active light/dark theme.
 
 ### Validation
 

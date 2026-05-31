@@ -26,6 +26,20 @@ export function shouldQueuePromptWhileWorking(input: {
   return input.isWorking && !input.forceSendQueuedPrompt;
 }
 
+export function isPromptQueueTurnInProgress(input: {
+  activeSessionTurnRunning: boolean;
+  isSendBusy: boolean;
+  isRevertingCheckpoint: boolean;
+  latestTurnSettled: boolean;
+}) {
+  return (
+    input.activeSessionTurnRunning ||
+    input.isSendBusy ||
+    input.isRevertingCheckpoint ||
+    !input.latestTurnSettled
+  );
+}
+
 export function useChatViewPromptQueue({
   base,
   composer,
@@ -36,18 +50,14 @@ export function useChatViewPromptQueue({
 }: UseChatViewPromptQueueInput) {
   const queueComposerPromptRef = useRef<(prompt: string) => QueuePromptResult>(() => "full");
   const forceSendQueuedPromptRef = useRef(false);
-  const activeTurnInProgress = thread.isWorking || !thread.latestTurnSettled;
-  // Only queue when there is genuine local activity or the latest turn hasn't
-  // settled. `thread.isWorking` includes `phase === "running"`, which can be true
-  // for background operations (e.g. context compacting) even after the current
-  // turn has completed. We must not queue new prompts just because the server is
-  // doing background work.
+  const activeTurnInProgress = isPromptQueueTurnInProgress({
+    activeSessionTurnRunning: thread.activeSessionTurnRunning,
+    isSendBusy: thread.isSendBusy,
+    isRevertingCheckpoint: base.isRevertingCheckpoint,
+    latestTurnSettled: thread.latestTurnSettled,
+  });
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
-    isWorking:
-      thread.isSendBusy ||
-      base.isConnecting ||
-      base.isRevertingCheckpoint ||
-      !thread.latestTurnSettled,
+    isWorking: activeTurnInProgress,
     forceSendQueuedPrompt: forceSendQueuedPromptRef.current,
   });
 
@@ -60,6 +70,7 @@ export function useChatViewPromptQueue({
     isSendBusy: thread.isSendBusy,
     isConnecting: base.isConnecting,
     shouldQueuePrompt: () => shouldQueuePrompts && !forceSendQueuedPromptRef.current,
+    isForceSend: () => forceSendQueuedPromptRef.current,
     sendInFlightRef: base.sendInFlightRef,
     promptRef: base.promptRef,
     composerImages: base.composerImages,
@@ -115,7 +126,7 @@ export function useChatViewPromptQueue({
   const promptQueue = usePromptQueue({
     threadId: base.threadId,
     promptRef: base.promptRef,
-    activeTurnInProgress: shouldQueuePrompts,
+    activeTurnInProgress,
     canAutoFlush: !thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode,
     setPrompt: base.setPrompt,
     setComposerShellMode: base.setComposerShellMode,

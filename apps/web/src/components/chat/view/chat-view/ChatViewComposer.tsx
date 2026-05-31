@@ -53,7 +53,8 @@ export function ChatViewComposer({
   const promptHasText = base.prompt.trim().length > 0;
   const isDefaultComposerState =
     !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
-  const micReplacesSend = keyVerified === true && !promptHasText && isDefaultComposerState;
+  const micReplacesSend =
+    keyVerified === true && !base.composerSendState.hasSendableContent && isDefaultComposerState;
 
   // Track whether the mic is actively recording so we can show the listening
   // bar and hide the send button.
@@ -450,7 +451,7 @@ export function ChatViewComposer({
                   <ComposerPrimaryActions
                     compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                     pendingAction={interactions.pendingAction}
-                    isRunning={thread.phase === "running"}
+                    isRunning={thread.activeSessionTurnRunning}
                     showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
                     promptHasText={promptHasText}
                     isSendBusy={thread.isSendBusy}

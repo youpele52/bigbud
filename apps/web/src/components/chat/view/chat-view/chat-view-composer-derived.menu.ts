@@ -174,6 +174,13 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
           description: `Browse discovered agents (${input.discoveredAgents.length} total)`,
         },
         {
+          id: "slash:skill",
+          type: "slash-command",
+          command: "skill",
+          label: "/skill",
+          description: `Browse discovered skills (${input.discoveredSkills.length} total)`,
+        },
+        {
           id: "slash:skills",
           type: "slash-command",
           command: "skills",

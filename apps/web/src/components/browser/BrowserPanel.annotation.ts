@@ -1,3 +1,5 @@
+export type BrowserAnnotationIntent = "ask" | "context" | "fix";
+
 export interface BrowserAnnotationElement {
   readonly selector: string;
   readonly tag: string;
@@ -22,6 +24,7 @@ export interface BrowserAnnotationViewport {
 
 export interface BrowserAnnotationResult {
   readonly comment: string;
+  readonly intent: BrowserAnnotationIntent;
   readonly page: {
     readonly url: string;
     readonly title: string;
@@ -51,16 +54,24 @@ export type BrowserAnnotationSelection =
   | {
       readonly cancelled: false;
       readonly comment: string;
+      readonly intent: BrowserAnnotationIntent;
       readonly element: BrowserAnnotationElement;
       readonly viewport: BrowserAnnotationViewport;
     };
 
 export function buildBrowserAnnotationPrompt(annotation: BrowserAnnotationResult): string {
-  const { element, page, viewport } = annotation;
+  const { element, page, viewport, intent } = annotation;
   const rect = element.rect;
   const userInstruction = annotation.comment.trim() || "(no instruction provided)";
 
-  return [
+  const closingLine =
+    intent === "fix"
+      ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
+      : intent === "context"
+        ? "Refer to the attached screenshot and selected element metadata when responding."
+        : undefined;
+
+  const lines = [
     "Browser annotation",
     "",
     "User instruction:",
@@ -78,9 +89,13 @@ export function buildBrowserAnnotationPrompt(annotation: BrowserAnnotationResult
     `Text: ${element.text}`,
     `Aria label: ${element.ariaLabel ?? ""}`,
     `Rect: x=${rect.x} y=${rect.y} width=${rect.width} height=${rect.height}`,
-    "",
-    "Use the attached screenshot and selected element metadata to make the appropriate code change.",
-  ].join("\n");
+  ];
+
+  if (closingLine) {
+    lines.push("", closingLine);
+  }
+
+  return lines.join("\n");
 }
 
 export function dataUrlToFile(dataUrl: string, name: string, mimeType: string): File | null {
@@ -130,6 +145,9 @@ export function browserAnnotationPickerScript(
     root: "position:fixed;inset:0;z-index:2147483647;pointer-events:none;",
     box: `position:fixed;border:2px solid ${theme.infoForeground};background:${mix(theme.infoForeground, 12)};box-shadow:0 0 0 1px ${mix(theme.infoForeground, 32)};pointer-events:none;`,
     panel: `position:fixed;right:16px;bottom:16px;width:min(420px,calc(100vw - 32px));padding:14px;background:${theme.card};color:${theme.foreground};border:1px solid ${theme.border};border-radius:20px;box-shadow:0 18px 54px rgba(0,0,0,0.24);font:14px/1.4 ui-sans-serif,system-ui,sans-serif;pointer-events:auto;display:none;`,
+    modeBar: `display:flex;gap:2px;margin-bottom:10px;`,
+    modeButton: `width:64px;height:28px;padding:0;border-radius:6px;border:0;background:transparent;color:${theme.mutedForeground};cursor:pointer;font-size:12px;font-weight:500;letter-spacing:0.01em;text-transform:capitalize;`,
+    modeButtonActive: `width:64px;height:28px;padding:0;border-radius:6px;border:0;background:${mix(theme.foreground, 8)};color:${theme.foreground};cursor:pointer;font-size:12px;font-weight:600;letter-spacing:0.01em;text-transform:capitalize;`,
     title: `font-weight:500;margin-bottom:8px;color:${theme.foreground};letter-spacing:-0.01em;font-size:14px;`,
     target: `margin-bottom:10px;color:${theme.mutedForeground};word-break:break-word;font-size:12px;line-height:1.35;`,
     textarea: `width:100%;min-height:120px;resize:vertical;border-radius:16px;border:1px solid ${theme.border};background:${theme.card};color:${theme.foreground};padding:12px;box-sizing:border-box;outline:none;font:14px/1.45 ui-sans-serif,system-ui,sans-serif;box-shadow:inset 0 0 0 1px ${mix(theme.ring, 0)};`,
@@ -207,10 +225,9 @@ export function browserAnnotationPickerScript(
     const box = make("div", { style: STYLE.box });
     const target = make("div", { style: STYLE.target });
     const textarea = make("textarea", { style: STYLE.textarea }) as HTMLTextAreaElement;
-    textarea.placeholder = "What should happen here?";
     const cancel = make("button", { text: "Cancel", style: STYLE.cancel }) as HTMLButtonElement;
     const submit = make("button", {
-      text: "Add comment",
+      text: "Add to chat",
       style: STYLE.submit,
     }) as HTMLButtonElement;
     cancel.type = "button";
@@ -219,20 +236,76 @@ export function browserAnnotationPickerScript(
     actions.append(cancel, submit);
     const panel = make("div", { style: STYLE.panel });
     panel.id = "__bigbud_annotation_panel";
-    panel.append(
-      make("div", { text: "Annotate selection", style: STYLE.title }),
-      target,
-      textarea,
-      actions,
-    );
+
+    const modeBar = make("div", { style: STYLE.modeBar });
+    const modeAsk = make("button", {
+      text: "Ask",
+      style: STYLE.modeButtonActive,
+    }) as HTMLButtonElement;
+    const modeContext = make("button", {
+      text: "Context",
+      style: STYLE.modeButton,
+    }) as HTMLButtonElement;
+    const modeFix = make("button", { text: "Fix", style: STYLE.modeButton }) as HTMLButtonElement;
+    modeAsk.type = "button";
+    modeContext.type = "button";
+    modeFix.type = "button";
+    modeBar.append(modeAsk, modeContext, modeFix);
+
+    const titleEl = make("div", { text: "Ask about selection", style: STYLE.title });
+    panel.append(modeBar, titleEl, target, textarea, actions);
     root.append(box, panel);
     document.documentElement.appendChild(root);
 
-    const state: { selected: HTMLElement | null; locked: boolean; finished: boolean } = {
+    const state: {
+      selected: HTMLElement | null;
+      locked: boolean;
+      finished: boolean;
+      intent: "ask" | "context" | "fix";
+    } = {
       selected: null,
       locked: false,
       finished: false,
+      intent: "ask",
     };
+
+    const MODE_CONFIG: Record<
+      "ask" | "context" | "fix",
+      { title: string; placeholder: string; submit: string }
+    > = {
+      ask: {
+        title: "Ask about selection",
+        placeholder: "Ask a question or give an instruction...",
+        submit: "Add to chat",
+      },
+      context: {
+        title: "Add context",
+        placeholder: "Anything to add? (optional)",
+        submit: "Add as context",
+      },
+      fix: {
+        title: "Annotate selection",
+        placeholder: "What should happen here?",
+        submit: "Add task",
+      },
+    };
+
+    const setMode = (mode: "ask" | "context" | "fix") => {
+      state.intent = mode;
+      const config = MODE_CONFIG[mode];
+      titleEl.textContent = config.title;
+      textarea.placeholder = config.placeholder;
+      submit.textContent = config.submit;
+      const activeStyle = STYLE.modeButtonActive;
+      const inactiveStyle = STYLE.modeButton;
+      modeAsk.style.cssText = mode === "ask" ? activeStyle : inactiveStyle;
+      modeContext.style.cssText = mode === "context" ? activeStyle : inactiveStyle;
+      modeFix.style.cssText = mode === "fix" ? activeStyle : inactiveStyle;
+    };
+
+    modeAsk.addEventListener("click", () => setMode("ask"));
+    modeContext.addEventListener("click", () => setMode("context"));
+    modeFix.addEventListener("click", () => setMode("fix"));
     const updateHighlight = (el: HTMLElement | null) => {
       if (!el) {
         box.style.display = "none";
@@ -275,6 +348,7 @@ export function browserAnnotationPickerScript(
         {
           cancelled: false,
           comment: textarea.value.trim(),
+          intent: state.intent,
           element: describeElement(state.selected),
           viewport: {
             width: window.innerWidth,
