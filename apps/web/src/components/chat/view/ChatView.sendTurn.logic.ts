@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
+import { toastManager } from "../../ui/toast";
 import {
   respondToPendingUserInput,
   sendChatTurn,
@@ -24,8 +25,13 @@ export function useOnSend(input: UseOnSendInput) {
         activeThread: thread,
         isSendBusy: sendBusy,
         isConnecting: connecting,
+        shouldQueuePrompt,
         sendInFlightRef: inFlightRef,
         promptRef: pRef,
+        composerImages,
+        composerFiles,
+        composerAnnotations,
+        composerTerminalContexts,
         isComposerShellMode,
         showPlanFollowUpPrompt: planFollowUp,
         activeProposedPlan: proposedPlan,
@@ -51,6 +57,32 @@ export function useOnSend(input: UseOnSendInput) {
           resetComposerDraft,
           trimmed,
         });
+        return;
+      }
+      if (shouldQueuePrompt()) {
+        if (
+          composerImages.length > 0 ||
+          composerFiles.length > 0 ||
+          composerAnnotations.length > 0 ||
+          composerTerminalContexts.length > 0
+        ) {
+          toastManager.add({
+            type: "warning",
+            title: "Attachments cannot be queued",
+            description: "Wait for the current turn to finish before sending attachments.",
+          });
+          return;
+        }
+        const queueResult = inputRef.current.queueComposerPrompt(trimmed);
+        if (queueResult === "queued") {
+          resetComposerDraft();
+        } else if (queueResult === "full") {
+          toastManager.add({
+            type: "warning",
+            title: "Prompt queue is full",
+            description: "Send or remove a queued prompt before adding another.",
+          });
+        }
         return;
       }
       if (sendBusy || connecting || inFlightRef.current) return;
