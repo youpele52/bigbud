@@ -67,7 +67,11 @@ export function applyThreadRuntimeEvent(
             ? buildLatestTurn({
                 previous: thread.latestTurn,
                 turnId: event.payload.session.activeTurnId,
-                state: "running",
+                state:
+                  thread.latestTurn?.turnId === event.payload.session.activeTurnId &&
+                  thread.latestTurn?.completedAt
+                    ? thread.latestTurn.state
+                    : "running",
                 requestedAt:
                   thread.latestTurn?.turnId === event.payload.session.activeTurnId
                     ? thread.latestTurn.requestedAt
@@ -76,7 +80,10 @@ export function applyThreadRuntimeEvent(
                   thread.latestTurn?.turnId === event.payload.session.activeTurnId
                     ? (thread.latestTurn.startedAt ?? event.payload.session.updatedAt)
                     : event.payload.session.updatedAt,
-                completedAt: null,
+                completedAt:
+                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
+                    ? (thread.latestTurn.completedAt ?? null)
+                    : null,
                 assistantMessageId:
                   thread.latestTurn?.turnId === event.payload.session.activeTurnId
                     ? thread.latestTurn.assistantMessageId
