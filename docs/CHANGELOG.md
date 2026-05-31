@@ -25,6 +25,8 @@ Entries below are grouped by release tag and date.
 ### Pi Provider Windows Shell Safety
 
 - Added `shell: true` on Windows for local Pi RPC process spawns to resolve CVE-2024-27980 EINVAL errors, with a `killPiChild` helper using `taskkill /T /F` to avoid orphaned process trees, and expanded tests from 1 to 7 covering shell behavior and stop semantics.
+- Centralized the Windows shell logic into `Cli.ts` with reusable `shouldUseWindowsPiShell()` and `quoteWindowsPiShellCommand()` helpers, replaced duplicated inline `shell: process.platform === "win32"` checks, and added path-with-spaces quoting to prevent truncation when `.cmd` paths contain spaces.
+- Extracted `describePiExit()` and `isPiRpcResponse()` into companion modules (`RpcProcess.errors.ts`, `RpcProcess.message.ts`) to keep `RpcProcess.ts` under the 400-line limit, and added regression tests for quoted space-in-path `.cmd` and shell-free `.exe` paths on Windows.
 - Integrated upstream relay worker fixes from the codex relay-managed-tunnels-auth-infra branch, including secret binding preservation, HTTP trace export, and simplified observability configuration.
 
 ### Sidebar and Layout Polish
@@ -38,7 +40,7 @@ Entries below are grouped by release tag and date.
 
 ### Validation
 
-- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell handling, and sidebar layout tests.
+- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell and path-quoting regression tests, and sidebar layout tests.
 
 ## v0.1.637 (29 May, 2026)
 
