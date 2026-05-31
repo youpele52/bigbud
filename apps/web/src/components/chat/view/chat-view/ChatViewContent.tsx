@@ -10,8 +10,8 @@ import { ConfirmationPanel } from "../../../common/ConfirmationPanel";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
+import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
-import { formatWorkingTimer } from "../../messages/MessagesTimeline.assistantMessage.meta";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import PlanSidebar from "../../plan/PlanSidebar";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
@@ -284,24 +284,11 @@ export function ChatViewContent({
 
             {/* Working indicator — absolute overlay pinned to the bottom of the messages area */}
             {thread.isWorking ? (
-              <div className="pointer-events-none absolute bottom-1 left-0 right-0 flex justify-center px-5">
-                <div className="mx-auto w-full max-w-3xl px-1 py-0.5">
-                  <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70 px-7 ">
-                    <span className="leading-none">{thread.workingVerb}</span>
-                    <span className="inline-flex items-center gap-[3px] leading-none">
-                      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30" />
-                      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30 [animation-delay:200ms]" />
-                      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30 [animation-delay:400ms]" />
-                    </span>
-                    <span className="flex-1" />
-                    {thread.activeWorkStartedAt ? (
-                      <span className="leading-none">
-                        {formatWorkingTimer(thread.activeWorkStartedAt, thread.nowIso) ?? "0s"}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+              <WorkingIndicator
+                verb={thread.workingVerb}
+                activeWorkStartedAt={thread.activeWorkStartedAt}
+                nowIso={thread.nowIso}
+              />
             ) : null}
           </div>
 
