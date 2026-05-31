@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Thread } from "../../models/types";
 import type { Project } from "../../models/types";
+import { findMessageSearchMatches, findThreadSearchMatch } from "./SearchPalette.logic";
 
 /**
  * Integration tests for search functionality.
@@ -56,10 +57,7 @@ function filterThreadsByQuery(
 
   return threads
     .filter((thread) => thread.archivedAt === null)
-    .filter((thread) => {
-      const title = thread.title.toLowerCase();
-      return title.includes(normalizedQuery);
-    })
+    .filter((thread) => findThreadSearchMatch(thread, normalizedQuery).matches)
     .map((thread) => {
       const project = projects.find((p) => p.id === thread.projectId);
       const projectName = project?.name ?? (thread.projectId === "__chats__" ? "Chats" : "Project");
@@ -109,6 +107,24 @@ function searchMessagesInThread(
   return results;
 }
 
+function searchMessagesAcrossThreads(
+  threads: Thread[],
+  query: string,
+): Array<{ threadId: ThreadId; messageId: MessageId; text: string }> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return [];
+
+  return threads
+    .filter((thread) => thread.archivedAt === null)
+    .flatMap((thread) =>
+      findMessageSearchMatches(thread, normalizedQuery).map((match) => ({
+        threadId: thread.id,
+        messageId: match.messageId,
+        text: match.text,
+      })),
+    );
+}
+
 describe("Search integration", () => {
   describe("filterThreadsByQuery", () => {
     const projects = [
@@ -126,11 +142,39 @@ describe("Search integration", () => {
         id: "thread-2" as ThreadId,
         projectId: "project-1" as ProjectId,
         title: "Database Schema",
+        messages: [
+          {
+            id: "msg-2" as MessageId,
+            role: "assistant",
+            text: "Latest production run failed for order 48291",
+            createdAt: "2026-01-01T00:01:00Z",
+            attachments: [],
+            streaming: false,
+          },
+        ],
       }),
       createMockThread({
         id: "thread-3" as ThreadId,
         projectId: "project-2" as ProjectId,
         title: "Component Library Project",
+        messages: [
+          {
+            id: "msg-3" as MessageId,
+            role: "assistant",
+            text: "Legacy CSS token 731 remains in older comments",
+            createdAt: "2026-01-01T00:02:00Z",
+            attachments: [],
+            streaming: false,
+          },
+          {
+            id: "msg-4" as MessageId,
+            role: "assistant",
+            text: "Most recent update covers button spacing only",
+            createdAt: "2026-01-01T00:03:00Z",
+            attachments: [],
+            streaming: false,
+          },
+        ],
       }),
       createMockThread({
         id: "thread-4" as ThreadId,
@@ -148,6 +192,18 @@ describe("Search integration", () => {
     it("returns multiple matching threads", () => {
       const results = filterThreadsByQuery(threads, projects, "project");
       expect(results).toHaveLength(2);
+    });
+
+    it("matches threads by latest message text", () => {
+      const results = filterThreadsByQuery(threads, projects, "48291");
+      expect(results).toHaveLength(1);
+      expect(results[0]?.thread.id).toBe("thread-2");
+    });
+
+    it("matches threads by older message text, not only the latest message", () => {
+      const results = filterThreadsByQuery(threads, projects, "731");
+      expect(results).toHaveLength(1);
+      expect(results[0]?.thread.id).toBe("thread-3");
     });
 
     it("is case-insensitive", () => {
@@ -309,6 +365,56 @@ describe("Search integration", () => {
       expect(results).toHaveLength(1);
       expect(results[0]?.snippet.length).toBeLessThanOrEqual(80);
       expect(results[0]?.snippet).toContain("SEARCH_TARGET");
+    });
+  });
+
+  describe("searchMessagesAcrossThreads", () => {
+    const threads = [
+      createMockThread({
+        id: "thread-1" as ThreadId,
+        title: "Alpha",
+        messages: [
+          {
+            id: "msg-1" as MessageId,
+            role: "assistant",
+            text: "legacy token 731",
+            createdAt: "2026-01-01T00:00:00Z",
+            attachments: [],
+            streaming: false,
+          },
+        ],
+      }),
+      createMockThread({
+        id: "thread-2" as ThreadId,
+        title: "Beta",
+        messages: [
+          {
+            id: "msg-2" as MessageId,
+            role: "assistant",
+            text: "current order 48291",
+            createdAt: "2026-01-01T00:01:00Z",
+            attachments: [],
+            streaming: false,
+          },
+        ],
+      }),
+    ];
+
+    it("returns message hits from multiple threads", () => {
+      expect(searchMessagesAcrossThreads(threads, "731")).toEqual([
+        {
+          threadId: "thread-1" as ThreadId,
+          messageId: "msg-1" as MessageId,
+          text: "legacy token 731",
+        },
+      ]);
+      expect(searchMessagesAcrossThreads(threads, "48291")).toEqual([
+        {
+          threadId: "thread-2" as ThreadId,
+          messageId: "msg-2" as MessageId,
+          text: "current order 48291",
+        },
+      ]);
     });
   });
 });
