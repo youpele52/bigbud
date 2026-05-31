@@ -24,7 +24,7 @@ import {
   type PiRpcSessionState,
   type PiRpcSlashCommand,
 } from "./RpcProcess.ts";
-import { resolvePiInvocation } from "./Cli.ts";
+import { quoteWindowsPiShellCommand, resolvePiInvocation, shouldUseWindowsPiShell } from "./Cli.ts";
 import { toMessage } from "./Adapter.utils.ts";
 import {
   buildPiModels,
@@ -41,9 +41,14 @@ const runPiCommand = Effect.fn("runPiCommand")(function* (
   args: ReadonlyArray<string>,
 ) {
   const invocation = resolvePiInvocation(binaryPath);
-  const command = ChildProcess.make(invocation.command, [...invocation.args, ...args], {
-    shell: process.platform === "win32",
-  });
+  const useWindowsShell = shouldUseWindowsPiShell(invocation.command);
+  const command = ChildProcess.make(
+    useWindowsShell ? quoteWindowsPiShellCommand(invocation.command) : invocation.command,
+    [...invocation.args, ...args],
+    {
+      shell: useWindowsShell,
+    },
+  );
   return yield* spawnAndCollect(invocation.command, command);
 });
 
