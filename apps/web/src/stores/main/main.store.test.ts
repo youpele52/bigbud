@@ -1102,6 +1102,7 @@ describe("incremental orchestration updates", () => {
     });
     expect(next.threads[0]?.session?.status).toBe("ready");
     expect(next.threads[0]?.session?.orchestrationStatus).toBe("ready");
+    expect(next.threads[0]?.session?.activeTurnId).toBeUndefined();
   });
 
   it("preserves running session updates without an active turn id", () => {
