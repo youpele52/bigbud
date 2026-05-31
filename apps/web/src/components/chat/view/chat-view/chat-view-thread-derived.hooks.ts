@@ -239,10 +239,9 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
 
   const phase = derivePhase(activeThread?.session ?? null);
   const isCompacting = isSessionCompacting(activeThread?.session);
-  const activeSessionTurnRunning = isSessionActivelyRunningTurn(
-    activeLatestTurn,
-    activeThread?.session ?? null,
-  );
+  const activeSessionTurnRunning =
+    activeLatestTurn !== null &&
+    isSessionActivelyRunningTurn(activeLatestTurn, activeThread?.session ?? null);
 
   const {
     beginLocalDispatch,
