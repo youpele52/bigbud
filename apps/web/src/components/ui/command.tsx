@@ -116,10 +116,15 @@ function CommandInput({
   );
 }
 
-function CommandList({ className, ...props }: React.ComponentProps<typeof AutocompleteList>) {
+function CommandList({
+  className,
+  scrollAreaClassName,
+  ...props
+}: React.ComponentProps<typeof AutocompleteList>) {
   return (
     <AutocompleteList
       className={cn("not-empty:scroll-py-2 not-empty:p-2", className)}
+      scrollAreaClassName={scrollAreaClassName}
       data-slot="command-list"
       {...props}
     />

@@ -21,7 +21,6 @@ export interface UseChatKeybindingsInput {
   closeTerminal: (terminalId: string) => void;
   createNewTerminal: () => void;
   onToggleDiff: () => void;
-  onToggleSearch: () => void;
   runProjectScript: (script: Project["scripts"][number]) => void;
 }
 
@@ -37,7 +36,6 @@ export function useChatKeybindings({
   closeTerminal,
   createNewTerminal,
   onToggleDiff,
-  onToggleSearch,
   runProjectScript,
 }: UseChatKeybindingsInput): void {
   useEffect(() => {
@@ -95,13 +93,6 @@ export function useChatKeybindings({
         return;
       }
 
-      if (command === "search.toggle") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleSearch();
-        return;
-      }
-
       const scriptId = projectScriptIdFromCommand(command);
       if (!scriptId || !activeProject) return;
       const script = activeProject.scripts.find((entry) => entry.id === scriptId);
@@ -124,7 +115,6 @@ export function useChatKeybindings({
     splitTerminal,
     keybindings,
     onToggleDiff,
-    onToggleSearch,
     toggleTerminalVisibility,
   ]);
 }

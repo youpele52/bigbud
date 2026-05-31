@@ -1,4 +1,5 @@
-import { type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
+import { type MessageId, type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useNavigate } from "@tanstack/react-router";
 import { MessageSquareIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -18,7 +19,12 @@ import {
   CommandList,
   CommandPanel,
 } from "../ui/command";
-import { normalizeQuery, getSnippet, highlightMatch } from "./SearchPalette.logic";
+import {
+  normalizeQuery,
+  highlightMatch,
+  findThreadSearchMatch,
+  findMessageSearchMatches,
+} from "./SearchPalette.logic";
 
 interface SearchPaletteProps {
   activeThreadId: ThreadId | null;
@@ -29,23 +35,37 @@ interface ThreadSearchResult {
   threadId: ThreadId;
   title: string;
   projectName: string;
+  matchedMessageText: string;
   type: "thread";
 }
 
 interface MessageSearchResult {
   id: string;
   threadId: ThreadId;
-  messageId: string;
+  messageId: MessageId;
+  threadTitle: string;
+  projectName: string;
   text: string;
   snippet: string;
   matchIndex: number;
   type: "message";
 }
 
+const SEARCH_PALETTE_QUERY_DEBOUNCE_MS = 200;
+
+function getMessageItemValue(result: MessageSearchResult): string {
+  return `${result.text} ${result.snippet}`.toLowerCase();
+}
+
+function getThreadItemValue(result: ThreadSearchResult): string {
+  return `${result.title} ${result.projectName} ${result.matchedMessageText}`.toLowerCase();
+}
+
 function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
   const navigate = useNavigate();
   const open = useSearchStore((store) => store.searchOpen);
   const setOpen = useSearchStore((store) => store.setSearchOpen);
+  const requestMessageFocus = useSearchStore((store) => store.requestMessageFocus);
   const projects = useStore(useShallow((store) => store.projects));
   const threads = useStore(useShallow((store) => store.threads));
   const [query, setQuery] = useState("");
@@ -56,77 +76,81 @@ function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
     }
   }, [open]);
 
-  const activeThread = useMemo(() => {
-    return threads.find((t) => t.id === activeThreadId) ?? null;
-  }, [threads, activeThreadId]);
-
+  const [debouncedQuery, searchQueryDebouncer] = useDebouncedValue(
+    query,
+    { wait: SEARCH_PALETTE_QUERY_DEBOUNCE_MS },
+    (debouncerState) => ({ isPending: debouncerState.isPending }),
+  );
   const normalizedQuery = normalizeQuery(query);
+  const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
 
   const messageResults = useMemo<MessageSearchResult[]>(() => {
-    if (!normalizedQuery || !activeThread) return [];
+    if (!debouncedNormalizedQuery) return [];
 
-    const results: MessageSearchResult[] = [];
-    for (const message of activeThread.messages) {
-      const text = message.text ?? "";
-      const lowerText = text.toLowerCase();
-      const matchIndex = lowerText.indexOf(normalizedQuery);
-      if (matchIndex !== -1) {
-        results.push({
-          id: `message:${message.id}`,
-          threadId: activeThread.id,
-          messageId: message.id,
-          text,
-          snippet: getSnippet(text, matchIndex),
-          matchIndex,
-          type: "message",
-        });
-      }
-    }
-    return results;
-  }, [normalizedQuery, activeThread]);
+    return threads
+      .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
+      .flatMap((thread) => {
+        const project = projects.find((p) => p.id === thread.projectId);
+        const projectName =
+          project?.name ?? (isBuiltInChatsProject(thread.projectId) ? "Chats" : "Project");
+        return findMessageSearchMatches(thread, debouncedNormalizedQuery).map((match) => ({
+          id: `message:${thread.id}:${match.messageId}`,
+          threadId: thread.id,
+          messageId: match.messageId,
+          threadTitle: thread.title,
+          projectName,
+          text: match.text,
+          snippet: match.snippet,
+          matchIndex: match.matchIndex,
+          type: "message" as const,
+        }));
+      });
+  }, [debouncedNormalizedQuery, projects, threads]);
 
   const threadResults = useMemo<ThreadSearchResult[]>(() => {
-    if (!normalizedQuery) return [];
+    if (!debouncedNormalizedQuery) return [];
 
     return threads
       .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
       .filter((thread) => {
-        const title = thread.title.toLowerCase();
-        return title.includes(normalizedQuery);
+        return findThreadSearchMatch(thread, debouncedNormalizedQuery).matches;
       })
       .map((thread) => {
         const project = projects.find((p) => p.id === thread.projectId);
         const projectName =
           project?.name ?? (isBuiltInChatsProject(thread.projectId) ? "Chats" : "Project");
+        const { matchedMessageText } = findThreadSearchMatch(thread, debouncedNormalizedQuery);
         return {
           id: `thread:${thread.id}`,
           threadId: thread.id,
           title: thread.title,
           projectName,
+          matchedMessageText,
           type: "thread",
         };
       });
-  }, [normalizedQuery, threads, projects]);
+  }, [debouncedNormalizedQuery, threads, projects]);
 
   const handleSelectThread = (threadId: ThreadId) => {
     setOpen(false);
     void navigate({ to: "/$threadId", params: { threadId } });
   };
 
-  const handleSelectMessage = (messageId: string) => {
+  const handleSelectMessage = (threadId: ThreadId, messageId: MessageId) => {
     setOpen(false);
-    // Scroll to message - the message element should have a data attribute or id
-    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (messageElement) {
-      messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Add a brief highlight effect
-      messageElement.classList.add("bg-primary/10");
-      setTimeout(() => {
-        messageElement.classList.remove("bg-primary/10");
-      }, 1500);
+    requestMessageFocus(threadId, messageId);
+    if (threadId !== activeThreadId) {
+      void navigate({ to: "/$threadId", params: { threadId } });
     }
   };
 
+  const inThreadMessageResults = messageResults.filter(
+    (result) => result.threadId === activeThreadId,
+  );
+  const otherThreadMessageResults = messageResults.filter(
+    (result) => result.threadId !== activeThreadId,
+  );
+  const isSearchPending = searchQueryDebouncer.state.isPending;
   const hasMessageResults = messageResults.length > 0;
   const hasThreadResults = threadResults.length > 0;
   const hasResults = hasMessageResults || hasThreadResults;
@@ -157,25 +181,34 @@ function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
 
               {showResultsPanel ? (
                 <CommandPanel className="max-h-[min(22rem,50vh)] rounded-t-none border-0 bg-transparent shadow-none [clip-path:none] before:hidden">
-                  <CommandList className="px-2 pb-2 sm:px-3 sm:pb-3">
-                    {!hasResults && normalizedQuery && (
+                  <CommandList
+                    className="px-2 pb-2 sm:px-3 sm:pb-3"
+                    scrollAreaClassName="max-h-[min(22rem,50vh)]"
+                  >
+                    {isSearchPending && normalizedQuery && (
+                      <CommandEmpty className="px-4 py-8 text-center text-muted-foreground text-sm">
+                        Searching...
+                      </CommandEmpty>
+                    )}
+
+                    {!isSearchPending && !hasResults && normalizedQuery && (
                       <CommandEmpty className="px-4 py-8 text-center text-muted-foreground text-sm">
                         No matching results
                       </CommandEmpty>
                     )}
 
-                    {hasMessageResults && (
+                    {!isSearchPending && inThreadMessageResults.length > 0 && (
                       <CommandGroup>
                         <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
                           In this thread
                         </CommandGroupLabel>
-                        {messageResults.map((result) => (
+                        {inThreadMessageResults.map((result) => (
                           <CommandItem
                             key={result.id}
-                            value={result.id}
+                            value={getMessageItemValue(result)}
                             className="min-h-11 rounded-xl px-3 py-2"
-                            onSelect={() => handleSelectMessage(result.messageId)}
-                            onClick={() => handleSelectMessage(result.messageId)}
+                            onSelect={() => handleSelectMessage(result.threadId, result.messageId)}
+                            onClick={() => handleSelectMessage(result.threadId, result.messageId)}
                           >
                             <div className="mr-3 text-muted-foreground/70">
                               <MessageSquareIcon className="size-4" />
@@ -203,7 +236,51 @@ function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
                       </CommandGroup>
                     )}
 
-                    {hasThreadResults && (
+                    {!isSearchPending && otherThreadMessageResults.length > 0 && (
+                      <CommandGroup
+                        className={cn(inThreadMessageResults.length > 0 ? "mt-2" : undefined)}
+                      >
+                        <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
+                          Messages in other threads
+                        </CommandGroupLabel>
+                        {otherThreadMessageResults.map((result) => (
+                          <CommandItem
+                            key={result.id}
+                            value={getMessageItemValue(result)}
+                            className="min-h-11 rounded-xl px-3 py-2"
+                            onSelect={() => handleSelectMessage(result.threadId, result.messageId)}
+                            onClick={() => handleSelectMessage(result.threadId, result.messageId)}
+                          >
+                            <div className="mr-3 text-muted-foreground/70">
+                              <MessageSquareIcon className="size-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-muted-foreground text-sm leading-6">
+                                {(() => {
+                                  const highlight = highlightMatch(result.snippet, query);
+                                  return highlight.hasMatch ? (
+                                    <>
+                                      {highlight.before}
+                                      <mark className="rounded-sm bg-primary/20 px-0.5 font-medium text-foreground">
+                                        {highlight.match}
+                                      </mark>
+                                      {highlight.after}
+                                    </>
+                                  ) : (
+                                    result.snippet
+                                  );
+                                })()}
+                              </div>
+                              <div className="truncate text-muted-foreground text-xs leading-5">
+                                {result.projectName} &gt; {result.threadTitle}
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+
+                    {!isSearchPending && hasThreadResults && (
                       <CommandGroup className={cn(hasMessageResults ? "mt-2" : undefined)}>
                         <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
                           All threads
@@ -211,7 +288,7 @@ function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteProps) {
                         {threadResults.map((result) => (
                           <CommandItem
                             key={result.id}
-                            value={result.id}
+                            value={getThreadItemValue(result)}
                             className="min-h-11 rounded-xl px-3 py-2"
                             onSelect={() => handleSelectThread(result.threadId)}
                             onClick={() => handleSelectThread(result.threadId)}
