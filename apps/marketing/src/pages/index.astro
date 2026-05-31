@@ -1,9 +1,10 @@
 ---
 import HomeHero from "../components/page-specific/home/HomeHero.astro";
+import { MARKETING_ASSETS } from "../constants/app";
 import { HOME_METADATA } from "../constants/seo";
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout {...HOME_METADATA}>
+<Layout {...HOME_METADATA} preloadImage={MARKETING_ASSETS.homepageScreenshotPath}>
   <HomeHero />
 </Layout>

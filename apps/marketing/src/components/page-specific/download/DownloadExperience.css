@@ -167,6 +167,12 @@
   width: 100%;
   display: block;
   height: auto;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.download-screenshot.is-loaded {
+  opacity: 1;
 }
 
 @keyframes download-screenshot-in {

@@ -1,9 +1,10 @@
 ---
 import DownloadExperience from "../components/page-specific/download/DownloadExperience.astro";
+import { MARKETING_ASSETS } from "../constants/app";
 import { DOWNLOAD_METADATA } from "../constants/seo";
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout {...DOWNLOAD_METADATA}>
+<Layout {...DOWNLOAD_METADATA} preloadImage={MARKETING_ASSETS.downloadScreenshotPath}>
   <DownloadExperience />
 </Layout>
