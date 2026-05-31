@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
-import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
-
-import { buildPiRpcInvocation } from "./Cli.ts";
+import {
+  buildPiRpcInvocation,
+  quoteWindowsPiShellCommand,
+  shouldUseWindowsPiShell,
+} from "./Cli.ts";
 import {
   createPiRemoteWorkspaceBridge,
   type PiRemoteWorkspaceExtensionBridge,
@@ -16,6 +18,8 @@ import {
   isLocalWorkspaceTarget,
   isRemoteWorkspaceTarget,
 } from "../../../workspace-target/workspaceTarget.ts";
+import { describePiExit } from "./RpcProcess.errors.ts";
+import { isPiRpcResponse } from "./RpcProcess.message.ts";
 import type {
   PiRpcCommand,
   PiRpcProcess,
@@ -88,56 +92,6 @@ interface PendingResponse {
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const STDERR_TAIL_MAX_CHARS = 4_096;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isPiRpcResponse(message: unknown): message is PiRpcResponse {
-  return isRecord(message) && message.type === "response" && typeof message.command === "string";
-}
-
-function formatMissingRemotePiBinaryDetail(input: {
-  readonly binaryPath: string;
-  readonly stderrTail: string;
-}): string | null {
-  const stderr = input.stderrTail.trim();
-  if (!/exec:\s+.+:\s+not found/i.test(stderr)) {
-    return null;
-  }
-
-  if (input.binaryPath === "pi") {
-    return "Remote Pi CLI is not installed or not available on PATH. Install 'pi' on the remote host or set Providers > Pi > Binary path to the remote executable path.";
-  }
-
-  return `Remote Pi CLI was not found at '${input.binaryPath}'. Update Providers > Pi > Binary path to the correct remote executable path.`;
-}
-
-function describePiExit(input: {
-  readonly command: string;
-  readonly binaryPath: string;
-  readonly executionTargetId: string;
-  readonly code: number | null;
-  readonly signal: NodeJS.Signals | null;
-  readonly stderrTail: string;
-}): Error {
-  const missingRemoteBinaryDetail =
-    input.executionTargetId !== LOCAL_EXECUTION_TARGET_ID
-      ? formatMissingRemotePiBinaryDetail({
-          binaryPath: input.binaryPath,
-          stderrTail: input.stderrTail,
-        })
-      : null;
-  if (missingRemoteBinaryDetail) {
-    return new Error(missingRemoteBinaryDetail);
-  }
-
-  const stderr = input.stderrTail.trim();
-  const detail = stderr.length > 0 ? ` ${stderr}` : "";
-  return new Error(
-    `Pi RPC process '${input.command}' exited (code=${input.code ?? "null"}, signal=${input.signal ?? "null"}).${detail}`,
-  );
-}
-
 function nextStderrTail(previous: string, chunk: string): string {
   const next = `${previous}${chunk}`;
   return next.length > STDERR_TAIL_MAX_CHARS ? next.slice(-STDERR_TAIL_MAX_CHARS) : next;
@@ -182,9 +136,13 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
 
     let child: ChildProcessWithoutNullStreams;
     const useWindowsShell =
-      process.platform === "win32" && isLocalProviderRuntimeTarget(options.providerRuntimeTarget);
+      isLocalProviderRuntimeTarget(options.providerRuntimeTarget) &&
+      shouldUseWindowsPiShell(invocation.command);
+    const command = useWindowsShell
+      ? quoteWindowsPiShellCommand(invocation.command)
+      : invocation.command;
     try {
-      child = spawn(invocation.command, invocation.args, {
+      child = spawn(command, invocation.args, {
         ...(localSpawnCwd ? { cwd: localSpawnCwd } : {}),
         env: options.env,
         stdio: ["pipe", "pipe", "pipe"],

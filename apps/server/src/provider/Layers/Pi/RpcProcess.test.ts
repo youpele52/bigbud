@@ -207,6 +207,74 @@ describe("createPiRpcProcess", () => {
     });
   });
 
+  it("quotes Windows shell command paths with spaces", async () => {
+    await withMockedPlatform("win32", async () => {
+      const child = createFakeChildProcess();
+      spawnMock.mockReturnValueOnce(child);
+      createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce(undefined);
+
+      const rpcProcess = await createPiRpcProcess({
+        binaryPath: "C:\\Users\\Youpele PC\\AppData\\Roaming\\npm\\pi.cmd",
+        providerRuntimeTarget: {
+          location: "local",
+          executionTargetId: "local",
+        },
+        workspaceTarget: {
+          location: "local",
+          executionTargetId: "local",
+          cwd: "C:\\Users\\Youpele PC\\project",
+        },
+        env: globalThis.process.env,
+      });
+
+      expect(spawnMock).toHaveBeenCalledWith(
+        '"C:\\Users\\Youpele PC\\AppData\\Roaming\\npm\\pi.cmd"',
+        ["--mode", "rpc"],
+        {
+          cwd: "C:\\Users\\Youpele PC\\project",
+          env: globalThis.process.env,
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: true,
+        },
+      );
+
+      child.emit("exit", 0, null);
+      await expect(rpcProcess.stop()).resolves.toBeUndefined();
+    });
+  });
+
+  it("does not use a shell on Windows for executable Pi paths", async () => {
+    await withMockedPlatform("win32", async () => {
+      const child = createFakeChildProcess();
+      spawnMock.mockReturnValueOnce(child);
+      createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce(undefined);
+
+      const rpcProcess = await createPiRpcProcess({
+        binaryPath: "C:\\Program Files\\Pi\\pi.exe",
+        providerRuntimeTarget: {
+          location: "local",
+          executionTargetId: "local",
+        },
+        workspaceTarget: {
+          location: "local",
+          executionTargetId: "local",
+          cwd: "C:\\Users\\Youpele PC\\project",
+        },
+        env: globalThis.process.env,
+      });
+
+      expect(spawnMock).toHaveBeenCalledWith("C:\\Program Files\\Pi\\pi.exe", ["--mode", "rpc"], {
+        cwd: "C:\\Users\\Youpele PC\\project",
+        env: globalThis.process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+      });
+
+      child.emit("exit", 0, null);
+      await expect(rpcProcess.stop()).resolves.toBeUndefined();
+    });
+  });
+
   it("does not use a shell on Windows for remote provider runtime Pi sessions", async () => {
     await withMockedPlatform("win32", async () => {
       const child = createFakeChildProcess();
