@@ -48,6 +48,7 @@ export const WS_METHODS = {
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverReadDocumentUrl: "server.readDocumentUrl",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

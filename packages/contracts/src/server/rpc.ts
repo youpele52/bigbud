@@ -69,6 +69,9 @@ import {
 import {
   ServerConfigStreamEvent,
   ServerConfig,
+  ServerReadDocumentUrlError,
+  ServerReadDocumentUrlInput,
+  ServerReadDocumentUrlResult,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
@@ -133,6 +136,12 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: ServerSettingsError,
+});
+
+export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocumentUrl, {
+  payload: ServerReadDocumentUrlInput,
+  success: ServerReadDocumentUrlResult,
+  error: ServerReadDocumentUrlError,
 });
 
 export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
@@ -338,6 +347,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,

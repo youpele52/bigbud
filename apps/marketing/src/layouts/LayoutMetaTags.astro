@@ -15,6 +15,7 @@ interface Props {
   imageAlt?: string;
   noindex?: boolean;
   type?: "website";
+  preloadImage?: string;
 }
 
 const {
@@ -24,6 +25,7 @@ const {
   imageAlt = DEFAULT_METADATA.imageAlt,
   noindex = false,
   type = DEFAULT_METADATA.type,
+  preloadImage,
 } = Astro.props;
 
 const canonicalUrl = Astro.site
@@ -70,3 +72,4 @@ const robots = noindex ? ROBOTS_CONTENT.noindex : ROBOTS_CONTENT.index;
 <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
 <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+{preloadImage && <link rel="preload" as="image" href={preloadImage} />}

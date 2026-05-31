@@ -25,6 +25,8 @@ export interface UseOnSendInput {
   isLocalDraftThread: boolean;
   isSendBusy: boolean;
   isConnecting: boolean;
+  shouldQueuePrompt: () => boolean;
+  isForceSend: () => boolean;
   sendInFlightRef: React.MutableRefObject<boolean>;
   promptRef: React.MutableRefObject<string>;
   composerImages: ComposerImageAttachment[];
@@ -86,4 +88,5 @@ export interface UseOnSendInput {
     requestId: ApprovalRequestId,
     answers: Record<string, unknown>,
   ) => Promise<void>;
+  queueComposerPrompt: (prompt: string) => "queued" | "empty" | "full";
 }

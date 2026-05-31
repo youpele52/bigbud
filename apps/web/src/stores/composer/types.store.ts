@@ -64,10 +64,14 @@ export const ComposerAnnotationViewport = Schema.Struct({
   devicePixelRatio: Schema.Number,
 });
 
+export const AnnotationIntentSchema = Schema.Literals(["ask", "context", "fix"]);
+export type AnnotationIntent = typeof AnnotationIntentSchema.Type;
+
 export const ComposerAnnotationAttachment = Schema.Struct({
   id: Schema.String,
   imageId: Schema.String,
   comment: Schema.String,
+  intent: AnnotationIntentSchema,
   page: Schema.Struct({
     url: Schema.String,
     title: Schema.String,

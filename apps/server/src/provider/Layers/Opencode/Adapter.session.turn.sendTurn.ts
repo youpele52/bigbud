@@ -6,6 +6,7 @@ import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
+  appendAttachedImageOcrContents,
   appendAttachedFileContents,
   extractPromptTextFromFile,
 } from "../../../attachments/documentText.ts";
@@ -69,6 +70,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
         url: string;
       }> = [];
       const inlineTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+      const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       for (const attachment of input.attachments ?? []) {
         const sourcePath =
           attachment.type === "file" && attachment.sourcePath
@@ -85,7 +87,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
           });
         }
 
-        if (attachment.type === "file") {
+        if (attachment.type === "file" || attachment.type === "image") {
           const extractedText = yield* Effect.tryPromise({
             try: () =>
               extractPromptTextFromFile({
@@ -102,8 +104,12 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
               }),
           });
           if (extractedText !== null) {
-            inlineTextBlocks.push({ fileName: attachment.name, text: extractedText });
-            continue;
+            if (attachment.type === "file") {
+              inlineTextBlocks.push({ fileName: attachment.name, text: extractedText });
+              continue;
+            }
+
+            imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
           }
         }
 
@@ -115,7 +121,10 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
         });
       }
 
-      const promptText = appendAttachedFileContents(input.input ?? "", inlineTextBlocks);
+      const promptText = appendAttachedImageOcrContents(
+        appendAttachedFileContents(input.input ?? "", inlineTextBlocks),
+        imageOcrBlocks,
+      );
       const systemPrompt =
         "You have access to a Chromium browser in this environment. " +
         "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +

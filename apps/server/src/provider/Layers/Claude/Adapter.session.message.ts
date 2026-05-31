@@ -2,6 +2,10 @@ import type { ProviderSendTurnInput } from "@bigbud/contracts";
 import { Effect, type FileSystem } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
+import {
+  appendAttachedImageOcrContents,
+  extractPromptTextFromFile,
+} from "../../../attachments/documentText.ts";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import {
   buildClaudeImageContentBlock,
@@ -19,12 +23,8 @@ export interface BuildUserMessageDeps {
 export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
   const { fileSystem, serverConfig } = deps;
   return Effect.fn("buildUserMessageEffect")(function* (input: ProviderSendTurnInput) {
-    const text = buildPromptText(input);
+    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
     const sdkContent: Array<Record<string, unknown>> = [];
-
-    if (text.length > 0) {
-      sdkContent.push({ type: "text", text });
-    }
 
     for (const attachment of input.attachments ?? []) {
       if (attachment.type === "image") {
@@ -59,6 +59,25 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
               }),
           ),
         );
+
+        const extractedText = yield* Effect.tryPromise({
+          try: () =>
+            extractPromptTextFromFile({
+              filePath: attachmentPath,
+              mimeType: attachment.mimeType,
+              fileName: attachment.name,
+            }),
+          catch: (cause) =>
+            new ProviderAdapterRequestError({
+              provider: "claudeAgent",
+              method: "turn/start",
+              detail: toMessage(cause, "Failed to extract OCR text from image attachment."),
+              cause,
+            }),
+        });
+        if (extractedText !== null) {
+          imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
+        }
 
         sdkContent.push(
           buildClaudeImageContentBlock({
@@ -102,6 +121,11 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
         },
         title: attachment.name,
       });
+    }
+
+    const text = appendAttachedImageOcrContents(buildPromptText(input), imageOcrBlocks);
+    if (text.length > 0) {
+      sdkContent.unshift({ type: "text", text });
     }
 
     return buildUserMessage({ sdkContent });

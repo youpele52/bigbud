@@ -1,11 +1,12 @@
 import { memo } from "react";
-import { PaperclipIcon, PlusIcon, BotIcon, ZapIcon } from "lucide-react";
+import { PaperclipIcon, PlusIcon, BotIcon, DumbbellIcon, BookOpenIcon } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 
 export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props: {
   onAttachFiles: () => void;
+  onOpenReadDialog: () => void;
   onCallAgent: () => void;
   onUseSkill: () => void;
   disabled?: boolean;
@@ -38,12 +39,16 @@ export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props
           <PaperclipIcon className="size-4 shrink-0" />
           Add photos and files
         </MenuItem>
+        <MenuItem onClick={props.onOpenReadDialog}>
+          <BookOpenIcon className="size-4 shrink-0" />
+          Read document or URL
+        </MenuItem>
         <MenuItem onClick={props.onCallAgent}>
           <BotIcon className="size-4 shrink-0" />
           Call agent
         </MenuItem>
         <MenuItem onClick={props.onUseSkill}>
-          <ZapIcon className="size-4 shrink-0" />
+          <DumbbellIcon className="size-4 shrink-0" />
           Use skill
         </MenuItem>
       </MenuPopup>

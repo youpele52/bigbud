@@ -2,7 +2,15 @@ import { splitPromptIntoComposerSegments } from "./editor-mentions.logic";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "slash-model" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default" | "agents" | "skills" | "compact";
+export type ComposerSlashCommand =
+  | "model"
+  | "plan"
+  | "default"
+  | "agents"
+  | "skill"
+  | "skills"
+  | "compact"
+  | "read";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -16,8 +24,10 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "plan",
   "default",
   "agents",
+  "skill",
   "skills",
   "compact",
+  "read",
 ];
 const isInlineTokenSegment = (
   segment: { type: "text"; text: string } | { type: "mention" } | { type: "terminal-context" },
@@ -236,9 +246,10 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
       };
     }
 
-    const discoveryMatch = /^\/(agents|skills)(?:\s+(.*))?$/.exec(linePrefix);
+    const discoveryMatch = /^\/(agents|skills|skill)(?:\s+(.*))?$/.exec(linePrefix);
     if (discoveryMatch) {
-      const command = discoveryMatch[1]?.toLowerCase();
+      const rawCommand = discoveryMatch[1]?.toLowerCase();
+      const command = rawCommand === "skill" ? "skills" : rawCommand;
       if (command === "agents" || command === "skills") {
         const query = (discoveryMatch[2] ?? "").trim();
         return {

@@ -11,6 +11,7 @@ describe("PiAdapter.session.helpers", () => {
 
     expect(prompt).toContain("summarize this");
     expect(prompt).toContain("Use attached document content only when it appears");
+    expect(prompt).toContain("Use image OCR content only when it appears in <attached_image_ocr>");
     expect(prompt).toContain("Do not call file-reading tools on attachment paths");
   });
 

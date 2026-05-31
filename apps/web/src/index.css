@@ -57,6 +57,9 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply bg-background;
+  }
   body {
     @apply bg-background text-foreground relative;
   }
@@ -167,6 +170,10 @@ body,
   overflow-x: hidden;
   overflow-x: clip;
   overscroll-behavior-y: none;
+}
+
+#root {
+  background-color: var(--background);
 }
 
 body::after {

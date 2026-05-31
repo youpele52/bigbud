@@ -177,6 +177,7 @@ export const BrowserPanel = memo(function BrowserPanel({
         id: randomUUID(),
         imageId,
         comment: annotation.comment,
+        intent: annotation.intent,
         page: annotation.page,
         element: annotation.element,
         viewport: annotation.viewport,

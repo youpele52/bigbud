@@ -58,34 +58,69 @@ export function applyThreadRuntimeEvent(
     }
 
     case "thread.session-set": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
-        session: mapSession(event.payload.session),
-        error: sanitizeThreadErrorMessage(event.payload.session.lastError),
-        latestTurn:
-          event.payload.session.status === "running" && event.payload.session.activeTurnId !== null
-            ? buildLatestTurn({
-                previous: thread.latestTurn,
-                turnId: event.payload.session.activeTurnId,
-                state: "running",
-                requestedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.requestedAt
-                    : event.payload.session.updatedAt,
-                startedAt:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? (thread.latestTurn.startedAt ?? event.payload.session.updatedAt)
-                    : event.payload.session.updatedAt,
-                completedAt: null,
-                assistantMessageId:
-                  thread.latestTurn?.turnId === event.payload.session.activeTurnId
-                    ? thread.latestTurn.assistantMessageId
-                    : null,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
-              })
-            : thread.latestTurn,
-        updatedAt: event.occurredAt,
-      }));
+      return updateThreadState(state, event.payload.threadId, (thread) => {
+        const incomingSession = event.payload.session;
+        const incomingActiveTurnId = incomingSession.activeTurnId ?? null;
+
+        const hasNonStreamingAssistantMessageForTurn =
+          incomingActiveTurnId !== null &&
+          thread.messages.some(
+            (msg) =>
+              msg.turnId !== undefined &&
+              msg.turnId === incomingActiveTurnId &&
+              msg.role === "assistant" &&
+              msg.streaming === false,
+          );
+
+        const isStaleRunningSession =
+          incomingSession.status === "running" &&
+          incomingActiveTurnId !== null &&
+          thread.latestTurn !== null &&
+          thread.latestTurn.turnId === incomingActiveTurnId &&
+          (thread.latestTurn.completedAt !== null || hasNonStreamingAssistantMessageForTurn);
+
+        const normalizedSession = isStaleRunningSession
+          ? { ...incomingSession, status: "ready" as const, activeTurnId: null, reason: null }
+          : incomingSession;
+
+        const session = mapSession(normalizedSession);
+
+        return {
+          ...thread,
+          session,
+          error: sanitizeThreadErrorMessage(incomingSession.lastError),
+          latestTurn:
+            normalizedSession.status === "running" && incomingActiveTurnId !== null
+              ? buildLatestTurn({
+                  previous: thread.latestTurn,
+                  turnId: incomingActiveTurnId,
+                  state:
+                    thread.latestTurn?.turnId === incomingActiveTurnId &&
+                    thread.latestTurn?.completedAt
+                      ? thread.latestTurn.state
+                      : "running",
+                  requestedAt:
+                    thread.latestTurn?.turnId === incomingActiveTurnId
+                      ? thread.latestTurn.requestedAt
+                      : incomingSession.updatedAt,
+                  startedAt:
+                    thread.latestTurn?.turnId === incomingActiveTurnId
+                      ? (thread.latestTurn.startedAt ?? incomingSession.updatedAt)
+                      : incomingSession.updatedAt,
+                  completedAt:
+                    thread.latestTurn?.turnId === incomingActiveTurnId
+                      ? (thread.latestTurn.completedAt ?? null)
+                      : null,
+                  assistantMessageId:
+                    thread.latestTurn?.turnId === incomingActiveTurnId
+                      ? thread.latestTurn.assistantMessageId
+                      : null,
+                  sourceProposedPlan: thread.pendingSourceProposedPlan,
+                })
+              : thread.latestTurn,
+          updatedAt: event.occurredAt,
+        };
+      });
     }
 
     case "thread.session-stop-requested": {

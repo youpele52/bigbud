@@ -13,6 +13,7 @@ import {
 } from "./MessagesTimeline.render";
 import {
   clampVirtualizedRowCount,
+  getMessagesTimelineRowMeasurementKey,
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
@@ -128,8 +129,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     // Scope cached row measurements to the current timeline width so offscreen
     // rows do not keep stale heights after wrapping changes.
     getItemKey: (index: number) => {
-      const rowId = rows[index]?.id ?? String(index);
-      return `${virtualMeasurementScopeKey}:${rowId}`;
+      const row = rows[index];
+      if (!row) return `${virtualMeasurementScopeKey}:${index}`;
+      return `${virtualMeasurementScopeKey}:${getMessagesTimelineRowMeasurementKey(row)}`;
     },
     estimateSize: (index: number) => {
       const row = rows[index];
