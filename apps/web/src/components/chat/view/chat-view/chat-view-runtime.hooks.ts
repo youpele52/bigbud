@@ -203,7 +203,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     if (thread.activePendingProgress && !thread.isOpencodePendingUserInputMode) {
       return `pending:${thread.activePendingProgress.questionIndex}:${thread.activePendingProgress.isLastQuestion}:${activePendingIsResponding}`;
     }
-    if (thread.phase === "running") {
+    if (thread.activeSessionTurnRunning) {
       return "running";
     }
     if (thread.showPlanFollowUpPrompt) {
@@ -219,7 +219,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     thread.isOpencodePendingUserInputMode,
     thread.isPreparingWorktree,
     thread.isSendBusy,
-    thread.phase,
+    thread.activeSessionTurnRunning,
     thread.showPlanFollowUpPrompt,
   ]);
 

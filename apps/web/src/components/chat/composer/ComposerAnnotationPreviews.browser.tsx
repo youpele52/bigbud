@@ -12,6 +12,7 @@ const annotation: ComposerAnnotationAttachment = {
   id: "annotation-1",
   imageId: "image-1",
   comment: "Fix this button",
+  intent: "fix",
   page: {
     url: "https://example.com/dashboard",
     title: "Dashboard",

@@ -170,7 +170,8 @@ export function isLatestTurnSettled(
   latestTurn: LatestTurnTiming | null,
   session: SessionActivityState | null,
 ): boolean {
-  if (!latestTurn?.startedAt) return false;
+  if (latestTurn === null) return true;
+  if (!latestTurn.startedAt) return false;
   if (!latestTurn.completedAt) return false;
   return !isSessionActivelyRunningTurn(latestTurn, session);
 }

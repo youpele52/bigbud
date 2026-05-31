@@ -7,6 +7,7 @@ export type ComposerSlashCommand =
   | "plan"
   | "default"
   | "agents"
+  | "skill"
   | "skills"
   | "compact"
   | "read";
@@ -23,6 +24,7 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "plan",
   "default",
   "agents",
+  "skill",
   "skills",
   "compact",
   "read",
@@ -244,9 +246,10 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
       };
     }
 
-    const discoveryMatch = /^\/(agents|skills)(?:\s+(.*))?$/.exec(linePrefix);
+    const discoveryMatch = /^\/(agents|skills|skill)(?:\s+(.*))?$/.exec(linePrefix);
     if (discoveryMatch) {
-      const command = discoveryMatch[1]?.toLowerCase();
+      const rawCommand = discoveryMatch[1]?.toLowerCase();
+      const command = rawCommand === "skill" ? "skills" : rawCommand;
       if (command === "agents" || command === "skills") {
         const query = (discoveryMatch[2] ?? "").trim();
         return {

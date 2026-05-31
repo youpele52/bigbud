@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { PaperclipIcon, PlusIcon, BotIcon, ZapIcon, BookOpenIcon } from "lucide-react";
+import { PaperclipIcon, PlusIcon, BotIcon, DumbbellIcon, BookOpenIcon } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
@@ -48,7 +48,7 @@ export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props
           Call agent
         </MenuItem>
         <MenuItem onClick={props.onUseSkill}>
-          <ZapIcon className="size-4 shrink-0" />
+          <DumbbellIcon className="size-4 shrink-0" />
           Use skill
         </MenuItem>
       </MenuPopup>
