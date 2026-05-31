@@ -4,6 +4,44 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.638 (31 May, 2026)
+
+### Prompt Queue
+
+- Added a prompt queue system that queues up to 5 follow-up prompts while the AI is still processing, with per-item remove, auto-flush when the turn completes, and a "Send now" button that interrupts the current turn.
+- Fixed prompt queue edge cases so the first message in a new thread sends immediately, follow-up prompts queue consistently during active turns, "Send now" interrupts the exact active turn before flushing queued prompts, and stale running session updates no longer leave the red stop button visible after completion.
+- Extracted the composer header (pending approvals, plan follow-up banner, prompt queue) and menu layer into dedicated components for maintainability.
+
+### Search Palette Overhaul
+
+- Expanded search to match against all messages within a thread (not just titles), added cross-thread message search across every thread grouped by "In this thread" vs "Messages in other threads", with debounced input (200ms) and auto-scroll to the matching message on selection.
+- Extracted search matching logic into a testable module with focused unit coverage and removed the `mod+shift+f` search toggle from chat keybindings (search is now accessed exclusively through the command palette).
+
+### Document and URL Attachment Extraction
+
+- Added shared attachment extraction for PDF, DOCX, PPTX, and XLSX files with OCR fallbacks for images and scanned PDFs, and added a `server.readDocumentUrl` RPC backed by a remote URL reader with arXiv/IACR normalization — so uploaded documents and links are readable regardless of format.
+- Added a "Read document or URL" dialog in the composer with multi-file staging and per-file removal; provider prompt assembly now appends OCR text as supplemental context while keeping original images intact.
+
+### Pi Provider Windows Shell Safety
+
+- Added `shell: true` on Windows for local Pi RPC process spawns to resolve CVE-2024-27980 EINVAL errors, with a `killPiChild` helper using `taskkill /T /F` to avoid orphaned process trees, and expanded tests from 1 to 7 covering shell behavior and stop semantics.
+- Centralized the Windows shell logic into `Cli.ts` with reusable `shouldUseWindowsPiShell()` and `quoteWindowsPiShellCommand()` helpers, replaced duplicated inline `shell: process.platform === "win32"` checks, and added path-with-spaces quoting to prevent truncation when `.cmd` paths contain spaces.
+- Extracted `describePiExit()` and `isPiRpcResponse()` into companion modules (`RpcProcess.errors.ts`, `RpcProcess.message.ts`) to keep `RpcProcess.ts` under the 400-line limit, and added regression tests for quoted space-in-path `.cmd` and shell-free `.exe` paths on Windows.
+- Integrated upstream relay worker fixes from the codex relay-managed-tunnels-auth-infra branch, including secret binding preservation, HTTP trace export, and simplified observability configuration.
+
+### Sidebar and Layout Polish
+
+- Refined sidebar accordion layout and spacing for a more consistent, less cramped appearance.
+- Tuned shared Input and Textarea focus styling to remove the overly shiny halo.
+
+### Desktop Resize Rendering
+
+- Reduced resize-time “white bar” flashes by explicitly setting renderer root backgrounds and syncing the Electron `BrowserWindow` background color with the active light/dark theme.
+
+### Validation
+
+- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell and path-quoting regression tests, and sidebar layout tests.
+
 ## v0.1.637 (29 May, 2026)
 
 ### Linux Desktop Reliability

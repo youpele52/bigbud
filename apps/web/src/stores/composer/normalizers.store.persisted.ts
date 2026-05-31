@@ -106,10 +106,14 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
   }
   const ariaLabel = elementCandidate.ariaLabel;
   const elementId = elementCandidate.id;
+  const rawIntent = candidate.intent;
+  const intent: "ask" | "context" | "fix" =
+    rawIntent === "ask" || rawIntent === "context" || rawIntent === "fix" ? rawIntent : "fix";
   return {
     id,
     imageId,
     comment,
+    intent,
     page: { url, title },
     element: {
       selector,

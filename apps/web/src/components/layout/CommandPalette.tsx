@@ -296,7 +296,10 @@ function CommandPaletteDialogContent() {
 
               {showResultsPanel ? (
                 <CommandPanel className="max-h-[min(28rem,55vh)] rounded-t-none border-0 bg-transparent shadow-none [clip-path:none] before:hidden">
-                  <CommandList className="px-2 pb-2 sm:px-3 sm:pb-3">
+                  <CommandList
+                    className="px-2 pb-2 sm:px-3 sm:pb-3"
+                    scrollAreaClassName="max-h-[min(28rem,55vh)]"
+                  >
                     {groupedItems.actions.length > 0 ? (
                       <CommandGroup>
                         <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">

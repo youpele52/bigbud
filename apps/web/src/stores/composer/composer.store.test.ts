@@ -77,11 +77,13 @@ function makeAnnotation(input: {
   id: string;
   imageId: string;
   comment?: string;
+  intent?: "ask" | "context" | "fix";
 }): ComposerAnnotationAttachment {
   return {
     id: input.id,
     imageId: input.imageId,
     comment: input.comment ?? "Fix this",
+    intent: input.intent ?? "fix",
     page: { title: "Dashboard", url: "https://example.com/dashboard" },
     element: {
       selector: "#save",

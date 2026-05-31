@@ -1,4 +1,4 @@
-import { FileIcon } from "lucide-react";
+import { DumbbellIcon, FileIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { TerminalContextInlineChip } from "../terminal/TerminalContextInlineChip";
 import {
@@ -25,6 +25,8 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
     <span className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]")}>
       {props.mentionKind === "path" ? (
         <FileIcon className="size-3.5 shrink-0 opacity-85" />
+      ) : props.mentionKind === "skill" ? (
+        <DumbbellIcon className="size-3.5 shrink-0 opacity-85" />
       ) : (
         <span className={USER_MESSAGE_MENTION_BADGE_CLASS_NAME}>{props.mentionKind}</span>
       )}

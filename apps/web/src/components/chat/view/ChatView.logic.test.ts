@@ -82,6 +82,7 @@ describe("appendBrowserAnnotationsToPrompt", () => {
       id: "annotation-1",
       imageId: "image-1",
       comment: "Fix this button",
+      intent: "fix",
       page: { title: "Dashboard", url: "https://example.com/dashboard" },
       element: {
         selector: "#save",
@@ -103,6 +104,84 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(appendBrowserAnnotationsToPrompt("Please inspect", [annotation])).toContain(
       "Please inspect\n\nBrowser annotation",
     );
+  });
+
+  it("uses coding framing for fix intent", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "Fix this",
+      intent: "fix",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: null,
+        id: "save",
+        className: "primary",
+        rect: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).toContain("make the appropriate code change");
+  });
+
+  it("uses contextual framing for context intent", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "",
+      intent: "context",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: null,
+        id: "save",
+        className: "primary",
+        rect: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).toContain("Refer to the attached screenshot");
+    expect(prompt).not.toContain("code change");
+  });
+
+  it("omits framing for ask intent", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "What does this do?",
+      intent: "ask",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: null,
+        id: "save",
+        className: "primary",
+        rect: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).not.toContain("Refer to the attached screenshot");
+    expect(prompt).not.toContain("code change");
+    expect(prompt).toContain("What does this do?");
   });
 });
 

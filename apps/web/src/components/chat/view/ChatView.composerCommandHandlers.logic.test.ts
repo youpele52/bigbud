@@ -40,6 +40,7 @@ function makeInput(
     onProviderModelSelect: vi.fn(),
     handleInteractionModeChange: vi.fn(),
     toggleInteractionMode: vi.fn(),
+    onOpenReadDialog: vi.fn(),
     onSend: vi.fn(),
     onChangeActivePendingUserInputCustomAnswer: vi.fn(),
     ...overrides,
@@ -112,5 +113,23 @@ describe("useComposerCommandHandlers", () => {
     expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 3, "/review ", {
       expectedText: "/ag",
     });
+  });
+
+  it("opens the read dialog for the first-class /read command", () => {
+    const input = makeInput({ promptRef: { current: "/re" }, composerCursor: 3 });
+    const handlers = renderUseComposerCommandHandlers(input);
+
+    handlers.onSelectComposerItem({
+      id: "slash:read",
+      type: "slash-command",
+      command: "read",
+      label: "/read",
+      description: "Read a remote document or web page URL into the thread",
+    });
+
+    expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 3, "", {
+      expectedText: "/re",
+    });
+    expect(input.onOpenReadDialog).toHaveBeenCalled();
   });
 });

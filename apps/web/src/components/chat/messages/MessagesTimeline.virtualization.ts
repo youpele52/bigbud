@@ -52,3 +52,17 @@ export function clampVirtualizedRowCount(count: number, rowCount: number): numbe
     maximum: rowCount,
   });
 }
+
+export function getMessagesTimelineRowMeasurementKey(row: MessagesTimelineRow): string {
+  if (row.kind !== "message") {
+    return row.id;
+  }
+
+  if (row.message.role !== "user") {
+    return row.id;
+  }
+
+  const attachmentCount = row.message.attachments?.length ?? 0;
+  const replyKey = row.message.replyTo ? "reply" : "no-reply";
+  return [row.id, row.message.text.length, attachmentCount, replyKey].join(":");
+}

@@ -213,11 +213,18 @@ export function deriveComposerSendState(options: {
 }
 
 export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttachment): string {
-  const { element, page, viewport } = annotation;
+  const { element, page, viewport, intent } = annotation;
   const rect = element.rect;
   const userInstruction = annotation.comment.trim() || "(no instruction provided)";
 
-  return [
+  const closingLine =
+    intent === "fix"
+      ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
+      : intent === "context"
+        ? "Refer to the attached screenshot and selected element metadata when responding."
+        : undefined;
+
+  const lines = [
     "Browser annotation",
     "",
     "User instruction:",
@@ -235,9 +242,13 @@ export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttac
     `Text: ${element.text}`,
     `Aria label: ${element.ariaLabel ?? ""}`,
     `Rect: x=${rect.x} y=${rect.y} width=${rect.width} height=${rect.height}`,
-    "",
-    "Use the attached screenshot and selected element metadata to make the appropriate code change.",
-  ].join("\n");
+  ];
+
+  if (closingLine) {
+    lines.push("", closingLine);
+  }
+
+  return lines.join("\n");
 }
 
 export function appendBrowserAnnotationsToPrompt(

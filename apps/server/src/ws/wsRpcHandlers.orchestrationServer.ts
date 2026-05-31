@@ -8,10 +8,12 @@ import {
   ORCHESTRATION_WS_METHODS,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerReadDocumentUrlError,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { clamp } from "effect/Number";
 
+import { readPromptTextFromUrl } from "../attachments/documentUrl";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
@@ -168,6 +170,25 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverUpdateSettings,
         context.serverSettings.updateSettings(input.patch),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverReadDocumentUrl]: (input: { readonly url: string }) =>
+      observeRpcEffect(
+        WS_METHODS.serverReadDocumentUrl,
+        Effect.tryPromise({
+          try: async () => {
+            const result = await readPromptTextFromUrl({ url: input.url });
+            if (!result) {
+              throw new Error("No readable document content was found at that URL.");
+            }
+            return result;
+          },
+          catch: (cause) =>
+            new ServerReadDocumentUrlError({
+              message: "Failed to read document URL",
+              cause,
+            }),
+        }),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUpsertKeybinding]: (

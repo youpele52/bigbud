@@ -134,6 +134,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
           const browserAnnotations = displayedUserMessage.browserAnnotations;
+          const readDocument = displayedUserMessage.readDocument;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           const replyTarget = row.message.replyTo;
           return (
@@ -242,6 +243,34 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                       ))}
                     </div>
                   </details>
+                )}
+                {readDocument && (
+                  <div className="mb-2 rounded-lg border border-border/50 bg-background/35 px-3 py-2">
+                    <div className="space-y-1 text-xs text-muted-foreground/70">
+                      <div className="font-medium text-foreground/85">
+                        {readDocument.title ?? "Read document"}
+                      </div>
+                      <div className="break-all">
+                        <span className="text-muted-foreground/55">Source:</span>{" "}
+                        {readDocument.sourceUrl}
+                      </div>
+                      {readDocument.resolvedUrl !== readDocument.sourceUrl ? (
+                        <div className="break-all">
+                          <span className="text-muted-foreground/55">Resolved:</span>{" "}
+                          {readDocument.resolvedUrl}
+                        </div>
+                      ) : null}
+                    </div>
+                    <details className="mt-2 group/read-doc">
+                      <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/55 hover:text-muted-foreground/75">
+                        <ChevronDownIcon className="size-3 shrink-0 -rotate-90 transition-transform duration-150 group-open/read-doc:rotate-0" />
+                        Extracted contents
+                      </summary>
+                      <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
+                        {readDocument.text}
+                      </pre>
+                    </details>
+                  </div>
                 )}
                 <MessagesTimelineBrowserAnnotations annotations={browserAnnotations} />
                 {(displayedUserMessage.visibleText.trim().length > 0 ||

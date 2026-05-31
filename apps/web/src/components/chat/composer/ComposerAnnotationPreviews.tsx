@@ -66,8 +66,29 @@ export function ComposerAnnotationPreviews({
                     ) : null}
                   </div>
                   <div className="min-w-0 space-y-1">
-                    <div className="truncate text-xs font-medium text-foreground">
-                      {annotation.comment.trim() || "No instruction provided"}
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-xs font-medium text-foreground">
+                        {annotation.comment.trim() || "No instruction provided"}
+                      </span>
+                      <span
+                        className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                        style={{
+                          backgroundColor:
+                            annotation.intent === "fix"
+                              ? "rgb(254 226 226)"
+                              : annotation.intent === "context"
+                                ? "rgb(254 249 195)"
+                                : "rgb(219 234 254)",
+                          color:
+                            annotation.intent === "fix"
+                              ? "rgb(153 27 27)"
+                              : annotation.intent === "context"
+                                ? "rgb(161 98 7)"
+                                : "rgb(29 78 216)",
+                        }}
+                      >
+                        {annotation.intent}
+                      </span>
                     </div>
                     <div className="truncate text-xs text-muted-foreground">
                       {annotation.page.title || annotation.page.url}

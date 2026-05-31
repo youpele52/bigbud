@@ -9,6 +9,7 @@ import {
   derivePendingUserInputs,
   formatElapsed,
   hasActionableProposedPlan,
+  isSessionActivelyRunningTurn,
   hasToolActivityForTurn,
   isLatestTurnSettled,
 } from "../../../../logic/session";
@@ -238,6 +239,9 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
 
   const phase = derivePhase(activeThread?.session ?? null);
   const isCompacting = isSessionCompacting(activeThread?.session);
+  const activeSessionTurnRunning =
+    activeLatestTurn !== null &&
+    isSessionActivelyRunningTurn(activeLatestTurn, activeThread?.session ?? null);
 
   const {
     beginLocalDispatch,
@@ -254,7 +258,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     threadError: activeThread?.error,
   });
 
-  const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
+  const isWorking = activeSessionTurnRunning || isSendBusy || isConnecting || isRevertingCheckpoint;
   const nowIso = new Date(nowTick).toISOString();
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,
@@ -316,6 +320,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     localDispatchStartedAt,
     isPreparingWorktree,
     isSendBusy,
+    activeSessionTurnRunning,
     isWorking,
     nowIso,
     activeWorkStartedAt,

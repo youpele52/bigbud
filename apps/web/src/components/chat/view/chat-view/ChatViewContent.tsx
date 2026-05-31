@@ -19,6 +19,7 @@ import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
+import { useSearchStore } from "../../../../stores/ui";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
@@ -60,6 +61,8 @@ export function ChatViewContent({
 }: ChatViewContentProps) {
   const { branchThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
+  const searchFocusRequest = useSearchStore((state) => state.focusRequest);
+  const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
@@ -118,6 +121,18 @@ export function ChatViewContent({
       setFocusMessageId(messageId);
     });
   }, []);
+
+  useEffect(() => {
+    if (!searchFocusRequest) {
+      return;
+    }
+    if (searchFocusRequest.threadId !== base.activeThread?.id) {
+      return;
+    }
+
+    handleOpenReplySource(searchFocusRequest.messageId);
+    clearSearchFocusRequest(searchFocusRequest.requestId);
+  }, [base.activeThread?.id, clearSearchFocusRequest, handleOpenReplySource, searchFocusRequest]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">

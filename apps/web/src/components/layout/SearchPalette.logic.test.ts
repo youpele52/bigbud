@@ -1,6 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeQuery, getSnippet, highlightMatch } from "./SearchPalette.logic";
+import { MessageId, ThreadId, ProjectId } from "@bigbud/contracts";
+import type { Thread } from "../../models/types";
+import {
+  normalizeQuery,
+  getSnippet,
+  highlightMatch,
+  findThreadSearchMatch,
+  findMessageSearchMatches,
+} from "./SearchPalette.logic";
+
+function createMockThread(overrides: Partial<Thread> & { id: string }): Thread {
+  const baseThread: Thread = {
+    id: overrides.id as ThreadId,
+    codexThreadId: null,
+    projectId: (overrides.projectId ?? "project-1") as ProjectId,
+    title: overrides.title ?? "Untitled Thread",
+    modelSelection: { provider: "codex", model: "gpt-4o" },
+    runtimeMode: "auto-accept-edits",
+    interactionMode: "default",
+    session: null,
+    messages: [],
+    proposedPlans: [],
+    error: null,
+    createdAt: "2026-01-01T00:00:00Z",
+    archivedAt: null,
+    latestTurn: null,
+    branch: null,
+    worktreePath: null,
+    turnDiffSummaries: [],
+    activities: [],
+  };
+
+  return { ...baseThread, ...overrides };
+}
 
 describe("normalizeQuery", () => {
   it("trims whitespace from query", () => {
@@ -150,5 +183,102 @@ describe("highlightMatch", () => {
       after: "",
       hasMatch: true,
     });
+  });
+});
+
+describe("findThreadSearchMatch", () => {
+  const thread = createMockThread({
+    id: "thread-1" as ThreadId,
+    title: "Database Schema",
+    messages: [
+      {
+        id: "msg-1" as MessageId,
+        role: "user",
+        text: "First note",
+        createdAt: "2026-01-01T00:00:00Z",
+        attachments: [],
+        streaming: false,
+      },
+      {
+        id: "msg-2" as MessageId,
+        role: "assistant",
+        text: "Order number 48291 failed validation",
+        createdAt: "2026-01-01T00:01:00Z",
+        attachments: [],
+        streaming: false,
+      },
+    ],
+  });
+
+  it("matches thread titles", () => {
+    expect(findThreadSearchMatch(thread, "schema")).toEqual({
+      matches: true,
+      matchedMessageText: "",
+    });
+  });
+
+  it("matches message text anywhere in the thread", () => {
+    expect(findThreadSearchMatch(thread, "48291")).toEqual({
+      matches: true,
+      matchedMessageText: "Order number 48291 failed validation",
+    });
+  });
+
+  it("is case-insensitive for thread messages", () => {
+    expect(findThreadSearchMatch(thread, "VALIDATION")).toEqual({
+      matches: true,
+      matchedMessageText: "Order number 48291 failed validation",
+    });
+  });
+
+  it("returns no match when neither title nor messages contain the query", () => {
+    expect(findThreadSearchMatch(thread, "xyz123")).toEqual({
+      matches: false,
+      matchedMessageText: "",
+    });
+  });
+});
+
+describe("findMessageSearchMatches", () => {
+  const thread = createMockThread({
+    id: "thread-2" as ThreadId,
+    title: "Search Thread",
+    messages: [
+      {
+        id: "msg-1" as MessageId,
+        role: "user",
+        text: "alpha 123",
+        createdAt: "2026-01-01T00:00:00Z",
+        attachments: [],
+        streaming: false,
+      },
+      {
+        id: "msg-2" as MessageId,
+        role: "assistant",
+        text: "beta 456",
+        createdAt: "2026-01-01T00:01:00Z",
+        attachments: [],
+        streaming: false,
+      },
+    ],
+  });
+
+  it("returns every matching message in a thread", () => {
+    expect(findMessageSearchMatches(thread, "a")).toHaveLength(2);
+  });
+
+  it("finds numeric matches", () => {
+    expect(findMessageSearchMatches(thread, "456")).toEqual([
+      {
+        messageId: "msg-2" as MessageId,
+        text: "beta 456",
+        snippet: "beta 456",
+        matchIndex: 5,
+      },
+    ]);
+  });
+
+  it("returns empty array for null threads", () => {
+    expect(findMessageSearchMatches(null, "alpha")).toEqual([]);
   });
 });

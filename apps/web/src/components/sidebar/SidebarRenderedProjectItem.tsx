@@ -26,7 +26,6 @@ import {
   type SidebarRenderedProjectItemProps,
 } from "./SidebarRenderedProjectItem.types";
 
-/** Renders a single project entry (header + thread list) in the sidebar project list. */
 export function SidebarRenderedProjectItem({
   dragHandleProps,
   isManualProjectSorting,
@@ -214,30 +213,6 @@ export function SidebarRenderedProjectItem({
                 });
               }}
             >
-              {!project.expanded && projectStatus ? (
-                <span
-                  aria-hidden="true"
-                  title={projectStatus.label}
-                  className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                >
-                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                    <span
-                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                        projectStatus.pulse ? "animate-pulse" : ""
-                      }`}
-                    />
-                  </span>
-                  <ChevronRightIcon
-                    className={`absolute inset-0 m-auto ${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100`}
-                  />
-                </span>
-              ) : (
-                <ChevronRightIcon
-                  className={`-ml-0.5 ${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                    project.expanded ? "rotate-90" : ""
-                  }`}
-                />
-              )}
               {project.expanded ? (
                 <FolderOpenIcon
                   className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
@@ -288,6 +263,32 @@ export function SidebarRenderedProjectItem({
                       SSH
                     </span>
                   ) : null}
+                  {project.expanded ? (
+                    <ChevronRightIcon
+                      className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 rotate-90 text-muted-foreground/70 transition-all duration-150`}
+                    />
+                  ) : projectStatus ? (
+                    <span
+                      aria-hidden="true"
+                      title={projectStatus.label}
+                      className={`relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
+                    >
+                      <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
+                        <span
+                          className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
+                            projectStatus.pulse ? "animate-pulse" : ""
+                          }`}
+                        />
+                      </span>
+                      <ChevronRightIcon
+                        className={`absolute inset-0 m-auto ${SIDEBAR_ICON_SIZE_CLASS} translate-x-1 text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100`}
+                      />
+                    </span>
+                  ) : (
+                    <ChevronRightIcon
+                      className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 translate-x-1 text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100`}
+                    />
+                  )}
                 </span>
               )}
             </button>

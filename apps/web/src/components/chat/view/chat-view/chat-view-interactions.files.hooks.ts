@@ -125,6 +125,7 @@ export function useChatViewInteractionFiles({
   );
 
   return {
+    addComposerFiles,
     onComposerPaste,
     onComposerDragEnter,
     onComposerDragOver,
