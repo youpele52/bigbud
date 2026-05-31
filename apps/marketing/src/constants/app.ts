@@ -8,6 +8,6 @@ export const EXTERNAL_LINK_INDICATOR = "↗" as const;
 export const MARKETING_ASSETS = {
   navLogoPath: "/bigCode-white.svg",
   socialImagePath: "/bigbud-social-preview.png",
-  downloadScreenshotPath: "/download-workspace.png",
-  homepageScreenshotPath: "/bigbud.png",
+  downloadScreenshotPath: "/download-workspace.webp",
+  homepageScreenshotPath: "/bigbud.webp",
 } as const;
