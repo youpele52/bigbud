@@ -16,7 +16,6 @@ import {
 import { useComposerCommandHandlers } from "../ChatView.composerCommandHandlers.logic";
 import { useChatKeybindings } from "../ChatView.keybindings.logic";
 import { usePlanHandlers } from "../ChatView.planHandlers.logic";
-import { useOnSend } from "../ChatView.sendTurn.logic";
 import {
   renderProviderTraitsMenuContent,
   renderProviderTraitsPicker,
@@ -29,6 +28,7 @@ import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { useChatViewExpandedImage } from "./chat-view-expanded-image.hooks";
 import { useChatViewInteractionFiles } from "./chat-view-interactions.files.hooks";
+import { useChatViewPromptQueue } from "./chat-view-prompt-queue.hooks";
 import { useChatViewProviderSwitch } from "./chat-view-provider-switch.hooks";
 
 interface ChatViewInteractionsInput {
@@ -152,64 +152,13 @@ export function useChatViewInteractions({
     forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
     persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
   });
-
-  const onSend = useOnSend({
-    activeThread: base.activeThread,
-    activeProject: base.activeProject,
-    activeThreadId: base.activeThreadId,
-    isServerThread: base.isServerThread,
-    isLocalDraftThread: base.isLocalDraftThread,
-    isSendBusy: thread.isSendBusy,
-    isConnecting: base.isConnecting,
-    sendInFlightRef: base.sendInFlightRef,
-    promptRef: base.promptRef,
-    composerImages: base.composerImages,
-    composerImagesRef: base.composerImagesRef,
-    composerFiles: base.composerFiles,
-    composerFilesRef: base.composerFilesRef,
-    composerAnnotations: base.composerAnnotations,
-    composerAnnotationsRef: base.composerAnnotationsRef,
-    composerTerminalContexts: base.composerTerminalContexts,
-    composerTerminalContextsRef: base.composerTerminalContextsRef,
-    selectedProvider: composer.selectedProvider,
-    selectedModel: composer.selectedModel,
-    selectedProviderModels: composer.selectedProviderModels,
-    selectedPromptEffort: composer.selectedPromptEffort,
-    selectedModelSelection: composer.selectedModelSelection,
-    runtimeMode: base.runtimeMode,
-    interactionMode: base.interactionMode,
-    isComposerShellMode: base.composerDraft.shellMode,
+  const { onSend, promptQueue, activeTurnInProgress } = useChatViewPromptQueue({
+    base,
+    composer,
+    thread,
+    runtime,
     envMode,
-    showPlanFollowUpPrompt: thread.showPlanFollowUpPrompt,
-    activeProposedPlan: thread.activeProposedPlan,
-    isOpencodePendingUserInputMode: thread.isOpencodePendingUserInputMode,
-    activePendingUserInputRequestId: thread.activePendingUserInput?.requestId ?? null,
-    activePendingUserInput: thread.activePendingUserInput,
-    shouldAutoScrollRef: runtime.scrollBehavior.shouldAutoScrollRef,
-    setOptimisticUserMessages: base.setOptimisticUserMessages,
-    setPrompt: base.setPrompt,
-    setComposerShellMode: base.setComposerShellMode,
-    setComposerCursor: base.setComposerCursor,
-    setComposerTrigger: base.setComposerTrigger,
-    setComposerHighlightedItemId: base.setComposerHighlightedItemId,
-    setThreadError: runtime.setThreadError,
-    setStoreThreadError: base.setStoreThreadError,
-    addComposerImagesToDraft: base.addComposerImagesToDraft,
-    addComposerFilesToDraft: base.addComposerFilesToDraft,
-    addComposerAnnotationsToDraft: base.addComposerAnnotationsToDraft,
-    addComposerTerminalContextsToDraft: base.addComposerTerminalContextsToDraft,
-    clearComposerDraftContent: base.clearComposerDraftContent,
-    beginLocalDispatch: thread.beginLocalDispatch,
-    resetLocalDispatch: thread.resetLocalDispatch,
-    forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
-    bootstrapSourceThreadId: base.composerDraft.bootstrapSourceThreadId,
-    clearBootstrapSourceThreadId: (threadId) => base.setBootstrapSourceThreadId(threadId, null),
-    replyTarget: base.composerDraft.replyTarget,
-    setReplyTarget: base.setComposerReplyTarget,
-    persistThreadSettingsForNextTurn: runtime.persistThreadSettingsForNextTurn,
-    onSubmitPlanFollowUp: planHandlers.onSubmitPlanFollowUp,
-    handleInteractionModeChange: runtime.handleInteractionModeChange,
-    onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
+    planHandlers,
   });
 
   const {
@@ -273,7 +222,6 @@ export function useChatViewInteractions({
     closeTerminal: runtime.terminalActions.closeTerminal,
     createNewTerminal: runtime.terminalActions.createNewTerminal,
     onToggleDiff: runtime.onToggleDiff,
-    onToggleSearch: runtime.onToggleSearch,
     runProjectScript: runtime.terminalActions.runProjectScript,
   });
 
@@ -339,6 +287,7 @@ export function useChatViewInteractions({
     pendingUserInputHandlers,
     composerCommandHandlers,
     onSend,
+    promptQueue,
     onProviderModelSelect,
     addComposerFiles,
     onComposerPaste,
@@ -372,7 +321,7 @@ export function useChatViewInteractions({
     preferredScriptId: base.activeProject
       ? (base.lastInvokedScriptByProjectId[base.activeProject.id] ?? null)
       : null,
-    activeTurnInProgress: thread.isWorking || !thread.latestTurnSettled,
+    activeTurnInProgress,
     planTitle: thread.activeProposedPlan
       ? (proposedPlanTitle(thread.activeProposedPlan.planMarkdown) ?? null)
       : null,

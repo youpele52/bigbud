@@ -10,15 +10,13 @@ import { cn } from "~/lib/utils";
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
 import { ComposerAttachmentMenu } from "../../composer/ComposerAttachmentMenu";
-import { ComposerCommandMenu, type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
+import { type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
 import { ComposerListeningBar } from "../../composer/ComposerListeningBar";
 import { ComposerMicButton, type ComposerMicButtonHandle } from "../../composer/ComposerMicButton";
 import { ComposerPendingApprovalActions } from "../../composer/ComposerPendingApprovalActions";
-import { ComposerPendingApprovalPanel } from "../../composer/ComposerPendingApprovalPanel";
-import { ComposerPlanFollowUpBanner } from "../../composer/ComposerPlanFollowUpBanner";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
@@ -26,6 +24,8 @@ import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
+import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
+import { ChatViewComposerMenuLayer } from "./ChatViewComposerMenuLayer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
@@ -253,21 +253,7 @@ export function ChatViewComposer({
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
-          {thread.activePendingApproval ? (
-            <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-              <ComposerPendingApprovalPanel
-                approval={thread.activePendingApproval}
-                pendingCount={thread.pendingApprovals.length}
-              />
-            </div>
-          ) : thread.showPlanFollowUpPrompt && thread.activeProposedPlan ? (
-            <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-              <ComposerPlanFollowUpBanner
-                key={thread.activeProposedPlan.id}
-                planTitle={interactions.planTitle}
-              />
-            </div>
-          ) : null}
+          <ChatViewComposerHeader thread={thread} interactions={interactions} />
 
           <div
             className={cn(
@@ -275,33 +261,18 @@ export function ChatViewComposer({
               thread.hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
             )}
           >
-            {syntheticMenuKind && !thread.isComposerApprovalState ? (
-              <div ref={syntheticMenuRef} className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
-                <ComposerCommandMenu
-                  items={syntheticMenuItems}
-                  resolvedTheme={base.resolvedTheme}
-                  isLoading={false}
-                  triggerKind={syntheticMenuKind === "skill" ? "skill" : "path"}
-                  activeItemId={syntheticMenuHighlightId}
-                  onHighlightedItemChange={onSyntheticMenuHighlight}
-                  onSelect={onSyntheticMenuSelect}
-                />
-              </div>
-            ) : composer.composerMenuOpen && !thread.isComposerApprovalState ? (
-              <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
-                <ComposerCommandMenu
-                  items={composer.composerMenuItems}
-                  resolvedTheme={base.resolvedTheme}
-                  isLoading={interactions.isComposerMenuLoading}
-                  triggerKind={composer.composerTriggerKind}
-                  activeItemId={composer.activeComposerMenuItem?.id ?? null}
-                  onHighlightedItemChange={
-                    interactions.composerCommandHandlers.onComposerMenuItemHighlighted
-                  }
-                  onSelect={interactions.composerCommandHandlers.onSelectComposerItem}
-                />
-              </div>
-            ) : null}
+            <ChatViewComposerMenuLayer
+              syntheticMenuKind={syntheticMenuKind}
+              syntheticMenuRef={syntheticMenuRef}
+              syntheticMenuItems={syntheticMenuItems}
+              syntheticMenuHighlightId={syntheticMenuHighlightId}
+              composer={composer}
+              interactions={interactions}
+              resolvedTheme={base.resolvedTheme}
+              disabled={thread.isComposerApprovalState}
+              onSyntheticMenuHighlight={onSyntheticMenuHighlight}
+              onSyntheticMenuSelect={onSyntheticMenuSelect}
+            />
 
             {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (
               <>
