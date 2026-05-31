@@ -1,6 +1,6 @@
 import * as Path from "node:path";
 
-import { BrowserWindow, Menu, shell } from "electron";
+import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,9 @@ export interface CreateWindowDeps {
 }
 
 export function createWindow(deps: CreateWindowDeps): BrowserWindow {
+  const getBackgroundColor = (): string =>
+    nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
+
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -48,6 +51,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     title: deps.appDisplayName,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: getBackgroundColor(),
     webPreferences: {
       preload: Path.join(deps.desktopDir, "preload.js"),
       contextIsolation: true,
@@ -56,6 +60,14 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
       spellcheck: deps.spellcheckEnabled,
       webviewTag: true,
     },
+  });
+
+  const syncBackgroundColorWithTheme = (): void => {
+    window.setBackgroundColor(getBackgroundColor());
+  };
+  nativeTheme.on("updated", syncBackgroundColorWithTheme);
+  window.on("closed", () => {
+    nativeTheme.off("updated", syncBackgroundColorWithTheme);
   });
 
   // Grant microphone permission requests from the renderer so that
