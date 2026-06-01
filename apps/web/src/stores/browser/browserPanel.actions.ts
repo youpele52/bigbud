@@ -1,29 +1,6 @@
+import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { useFilesPanelStore } from "../files/filesPanel.store";
 import { useBrowserPanelStore } from "./browser.store";
-
-let closeDiffPanel: (() => void) | null = null;
-let requestedRightPanel: "browser" | "diff" | null = null;
-
-export function registerDiffPanelCloseAction(callback: (() => void) | null) {
-  closeDiffPanel = callback;
-
-  return () => {
-    if (closeDiffPanel === callback) {
-      closeDiffPanel = null;
-    }
-  };
-}
-
-export function closeDiffPanelIfOpen() {
-  closeDiffPanel?.();
-}
-
-export function requestRightPanel(panel: "browser" | "diff" | null) {
-  requestedRightPanel = panel;
-}
-
-export function getRequestedRightPanel() {
-  return requestedRightPanel;
-}
 
 export function openBrowserPanel(input: { url?: string } = {}) {
   const nextUrl = input.url?.trim();
@@ -35,6 +12,7 @@ export function openBrowserPanel(input: { url?: string } = {}) {
 
   requestRightPanel("browser");
   closeDiffPanelIfOpen();
+  useFilesPanelStore.getState().setOpen(false);
   setOpen(true);
 }
 
@@ -44,7 +22,8 @@ export function toggleBrowserPanel() {
   if (!open) {
     requestRightPanel("browser");
     closeDiffPanelIfOpen();
-  } else if (requestedRightPanel === "browser") {
+    useFilesPanelStore.getState().setOpen(false);
+  } else if (useBrowserPanelStore.getState().open) {
     requestRightPanel(null);
   }
 
@@ -52,7 +31,7 @@ export function toggleBrowserPanel() {
 }
 
 export function closeBrowserPanel() {
-  if (requestedRightPanel === "browser") {
+  if (useBrowserPanelStore.getState().open) {
     requestRightPanel(null);
   }
   useBrowserPanelStore.getState().setOpen(false);

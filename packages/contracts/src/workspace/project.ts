@@ -35,6 +35,26 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
   },
 ) {}
 
+export const ProjectListDirectoryInput = Schema.Struct({
+  executionTargetId: Schema.optional(ExecutionTargetId),
+  cwd: TrimmedNonEmptyString,
+  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+});
+export type ProjectListDirectoryInput = typeof ProjectListDirectoryInput.Type;
+
+export const ProjectListDirectoryResult = Schema.Struct({
+  entries: Schema.Array(ProjectEntry),
+});
+export type ProjectListDirectoryResult = typeof ProjectListDirectoryResult.Type;
+
+export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectListDirectoryError>()(
+  "ProjectListDirectoryError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ProjectWriteFileInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyString,

@@ -18,8 +18,10 @@ import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
-import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.coordinator";
+import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { closeFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import BrowserPanel from "~/components/browser/BrowserPanel";
+import { FilesPanel } from "~/components/files/FilesPanel";
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
@@ -117,6 +119,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         event.preventDefault();
         event.stopPropagation();
         closeBrowserPanel();
+        closeFilesPanel();
         void navigate({ to: "/settings" });
         return;
       }
@@ -155,6 +158,7 @@ function ChatRouteLayout() {
       <SearchPalette activeThreadId={routeThreadId ?? null} />
       <Outlet />
       <BrowserPanel activeThreadId={routeThreadId ?? null} />
+      <FilesPanel activeThreadId={routeThreadId ?? null} />
     </>
   );
 }

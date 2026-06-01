@@ -168,6 +168,8 @@ export function useAddComposerFiles(input: UseAddComposerFilesInput) {
           name: file.name || "file",
           mimeType: file.type || "application/octet-stream",
           sizeBytes: file.size,
+          entryKind: "file",
+          attachmentMode: "upload",
           filePath,
           file: isElectron ? null : file,
         });

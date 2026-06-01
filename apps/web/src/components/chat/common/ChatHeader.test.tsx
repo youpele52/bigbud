@@ -36,36 +36,40 @@ describe("ChatHeader", () => {
     });
   });
 
+  const baseProps = {
+    activeProjectScripts: undefined,
+    activeProjectName: undefined,
+    activeThreadTitle: "Thread",
+    availableEditors: [],
+    browserOpen: false,
+    browserToggleShortcutLabel: null,
+    diffOpen: false,
+    diffToggleShortcutLabel: null,
+    filesOpen: false,
+    filesToggleShortcutLabel: null,
+    gitCwd: null,
+    isGitRepo: true,
+    keybindings: DEFAULT_BINDINGS,
+    onAddProjectScript: async () => undefined,
+    onDeleteProjectScript: async () => undefined,
+    onRunProjectScript: () => undefined,
+    onToggleBrowser: () => undefined,
+    onToggleDiff: () => undefined,
+    onToggleFiles: () => undefined,
+    onToggleTerminal: () => undefined,
+    onUpdateProjectScript: async () => undefined,
+    openInCwd: null,
+    preferredScriptId: null,
+    sidebarToggleShortcutLabel: null,
+    terminalAvailable: true,
+    terminalOpen: false,
+    terminalToggleShortcutLabel: null,
+  } as const;
+
   it("renders the browser toggle immediately before the diff toggle", () => {
     const markup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-1" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} />
       </SidebarProvider>,
     );
 
@@ -82,33 +86,7 @@ describe("ChatHeader", () => {
 
     const runningMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-running" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-running" as never} {...baseProps} />
       </SidebarProvider>,
     );
 
@@ -117,33 +95,7 @@ describe("ChatHeader", () => {
 
     const compactingMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-compacting" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-compacting" as never} {...baseProps} />
       </SidebarProvider>,
     );
 

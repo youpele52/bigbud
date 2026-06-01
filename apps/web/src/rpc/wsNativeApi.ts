@@ -1,6 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
-import { openBrowserPanel } from "~/stores/browser/browserPanel.coordinator";
+import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -55,6 +55,7 @@ export function createWsNativeApi(): NativeApi {
       onEvent: (callback) => rpcClient.terminal.onEvent(callback),
     },
     projects: {
+      listDirectory: rpcClient.projects.listDirectory,
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },

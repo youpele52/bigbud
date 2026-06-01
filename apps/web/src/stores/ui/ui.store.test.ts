@@ -18,6 +18,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     favouritesExpanded: true,
     projectExpandedById: {},
     projectOrder: [],
+    selectedProjectId: null,
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     ...overrides,

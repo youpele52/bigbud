@@ -1,6 +1,10 @@
 import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { Button } from "../../ui/button";
-import type { ChatImageAttachment, ChatFileAttachment } from "../../../models/types/app.types";
+import type {
+  ChatFileAttachment,
+  ChatImageAttachment,
+  ChatPathAttachment,
+} from "../../../models/types/app.types";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
@@ -124,12 +128,15 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           const userImages = allAttachments.filter(
             (a): a is ChatImageAttachment => a.type === "image",
           );
-          const userFiles = allAttachments.filter(
-            (a): a is ChatFileAttachment => a.type === "file",
+          const userFileReferences = allAttachments.filter(
+            (a): a is ChatFileAttachment | ChatPathAttachment =>
+              a.type === "file" || a.type === "path",
           );
-          const userFilesWithSourcePath = userFiles.filter(
+          const userFilesWithSourcePath = userFileReferences.filter(
             (file): file is ChatFileAttachment & { sourcePath: string } =>
-              typeof file.sourcePath === "string" && file.sourcePath.length > 0,
+              file.type === "file" &&
+              typeof file.sourcePath === "string" &&
+              file.sourcePath.length > 0,
           );
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
@@ -189,27 +196,31 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     ))}
                   </div>
                 )}
-                {userFiles.length > 0 && (
+                {userFileReferences.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-1.5">
-                    {userFiles.map((file) => {
-                      const dotIndex = file.name.lastIndexOf(".");
-                      const baseName = dotIndex > 0 ? file.name.slice(0, dotIndex) : file.name;
+                    {userFileReferences.map((file) => {
                       return (
                         <div
                           key={file.id}
                           className="flex min-w-0 max-w-[180px] items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1"
                         >
                           <VscodeEntryIcon
-                            pathValue={file.name}
-                            kind="file"
+                            pathValue={
+                              file.type === "path" ? file.path : (file.sourcePath ?? file.name)
+                            }
+                            kind={
+                              file.type === "path" && file.entryKind === "directory"
+                                ? "directory"
+                                : "file"
+                            }
                             theme={resolvedTheme}
                             className="shrink-0 opacity-60"
                           />
                           <span
                             className="min-w-0 truncate text-[11px] text-muted-foreground/60"
-                            title={file.name}
+                            title={file.type === "path" ? file.path : file.name}
                           >
-                            {baseName}
+                            {file.name}
                           </span>
                         </div>
                       );
@@ -228,7 +239,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                       {userFilesWithSourcePath.map((file) => (
                         <div key={`path-${file.id}`} className="flex min-w-0 items-start gap-1.5">
                           <VscodeEntryIcon
-                            pathValue={file.name}
+                            pathValue={file.sourcePath}
                             kind="file"
                             theme={resolvedTheme}
                             className="mt-0.5 shrink-0 opacity-50"

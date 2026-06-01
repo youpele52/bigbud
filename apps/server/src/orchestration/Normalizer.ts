@@ -146,7 +146,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           }
 
           // ── File (path transport) ────────────────────────────────────────────
-          if (attachment.transport === "path") {
+          if (attachment.type === "file" && attachment.transport === "path") {
             const sourceFilePath = attachment.filePath;
 
             // Basic path safety check — must be absolute, no traversal
@@ -216,6 +216,25 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             );
 
             return persistedAttachment;
+          }
+
+          if (attachment.type === "path") {
+            const attachmentId = createAttachmentId(command.threadId);
+            if (!attachmentId) {
+              return yield* new OrchestrationDispatchCommandError({
+                message: "Failed to create a safe attachment id.",
+              });
+            }
+
+            return {
+              type: "path" as const,
+              id: attachmentId,
+              name: attachment.name,
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+              path: attachment.path,
+              entryKind: attachment.entryKind,
+            };
           }
 
           // ── File (base64 transport) ──────────────────────────────────────────

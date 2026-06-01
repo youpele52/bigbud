@@ -6,6 +6,7 @@ import {
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
+  ProjectListDirectoryError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ServerReadDocumentUrlError,
@@ -212,6 +213,22 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
             (cause) =>
               new ProjectSearchEntriesError({
                 message: `Failed to search workspace entries: ${cause.detail}`,
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
+    [WS_METHODS.projectsListDirectory]: (
+      input: Parameters<WsRpcContext["workspaceEntries"]["listDirectory"]>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.projectsListDirectory,
+        context.workspaceEntries.listDirectory(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProjectListDirectoryError({
+                message: `Failed to list workspace directory: ${cause.detail}`,
                 cause,
               }),
           ),

@@ -1,6 +1,13 @@
 import { useCallback, useRef } from "react";
+import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@bigbud/contracts";
+import { randomUUID } from "~/lib/utils";
 
 import { isElectron } from "~/config/env/env.config";
+import {
+  BIGBUD_FILES_PANEL_DRAG_MIME,
+  parseFilesPanelDragEntry,
+} from "../../../files/filesPanel.dnd";
+import { toastManager } from "../../../ui/toast";
 
 import { useAddComposerFiles, useAddComposerImages } from "../ChatView.composerHandlers.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -57,7 +64,12 @@ export function useChatViewInteractionFiles({
 
   const onComposerDragEnter = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
+      if (
+        !event.dataTransfer.types.includes("Files") &&
+        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
+      ) {
+        return;
+      }
       event.preventDefault();
       base.dragDepthRef.current += 1;
       base.setIsDragOverComposer(true);
@@ -67,7 +79,12 @@ export function useChatViewInteractionFiles({
 
   const onComposerDragOver = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
+      if (
+        !event.dataTransfer.types.includes("Files") &&
+        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
+      ) {
+        return;
+      }
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       base.setIsDragOverComposer(true);
@@ -77,7 +94,12 @@ export function useChatViewInteractionFiles({
 
   const onComposerDragLeave = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
+      if (
+        !event.dataTransfer.types.includes("Files") &&
+        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
+      ) {
+        return;
+      }
       event.preventDefault();
       const nextTarget = event.relatedTarget;
       if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
@@ -91,10 +113,42 @@ export function useChatViewInteractionFiles({
 
   const onComposerDrop = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("Files")) return;
+      const hasNativeFiles = event.dataTransfer.types.includes("Files");
+      const hasFilesPanelEntry = event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME);
+      if (!hasNativeFiles && !hasFilesPanelEntry) return;
       event.preventDefault();
       base.dragDepthRef.current = 0;
       base.setIsDragOverComposer(false);
+
+      if (hasFilesPanelEntry && base.activeThreadId) {
+        const payload = parseFilesPanelDragEntry(
+          event.dataTransfer.getData(BIGBUD_FILES_PANEL_DRAG_MIME),
+        );
+        if (payload) {
+          const nextCount = base.composerFilesRef.current.length + base.composerImages.length;
+          if (nextCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
+            toastManager.add({
+              type: "error",
+              title: `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} files per message.`,
+            });
+          } else {
+            base.addComposerFile({
+              type: "file",
+              id: randomUUID(),
+              name: payload.name,
+              mimeType: payload.entryKind === "directory" ? "inode/directory" : "text/plain",
+              sizeBytes: 0,
+              entryKind: payload.entryKind,
+              attachmentMode: "path-reference",
+              filePath: payload.path,
+              file: null,
+            });
+          }
+          runtime.focusComposer();
+          return;
+        }
+      }
+
       const allFiles = Array.from(event.dataTransfer.files);
       const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
       const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
