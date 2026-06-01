@@ -1,18 +1,10 @@
 import { memo, useState, useCallback } from "react";
 import type { ExecutionTargetId } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
-import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { ScrollArea } from "../../ui/scroll-area";
 import ChatMarkdown from "../common/ChatMarkdown";
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  EllipsisIcon,
-  LoaderIcon,
-  PanelRightCloseIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisIcon, XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import type { ActivePlanState } from "../../../logic/session";
 import type { LatestProposedPlanState } from "../../../logic/session";
@@ -28,25 +20,29 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { toastManager } from "../../ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { sidebarSectionLabelTextClassName } from "../../sidebar/SidebarSectionLabel";
 
 function stepStatusIcon(status: string): React.ReactNode {
   if (status === "completed") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-success/15 text-success-foreground">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-success/18 bg-muted/18 text-success-foreground">
         <CheckIcon className="size-3" />
       </span>
     );
   }
   if (status === "inProgress") {
     return (
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-info/15 text-info-foreground">
-        <LoaderIcon className="size-3 animate-spin" />
+      <span
+        aria-label="Current step"
+        className="inline-flex size-5 shrink-0 items-center justify-center"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-info-foreground" />
       </span>
     );
   }
   return (
-    <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-muted/30">
-      <span className="size-1.5 rounded-full bg-muted-foreground/30" />
+    <span className="inline-flex size-5 shrink-0 items-center justify-center">
+      <span className="h-1.5 w-1.5 rounded-full border border-border/60 bg-transparent" />
     </span>
   );
 }
@@ -125,18 +121,13 @@ const PlanSidebar = memo(function PlanSidebar({
   }, [planMarkdown, workspaceExecutionTargetId, workspaceRoot]);
 
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-card/50">
+    <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-background/72 supports-[backdrop-filter]:bg-background/60 supports-[backdrop-filter]:backdrop-blur-md">
       {/* Header */}
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div className="flex items-center gap-2">
-          <Badge
-            variant="secondary"
-            className="rounded-md bg-blue-500/10 px-1.5 py-0 text-[10px] font-semibold tracking-wide text-blue-400 uppercase"
-          >
-            {label}
-          </Badge>
+          <span className={sidebarSectionLabelTextClassName}>{label}</span>
           {activePlan ? (
-            <span className="text-[11px] text-muted-foreground/60">
+            <span className="text-[11px] text-muted-foreground/55">
               {formatTimestamp(activePlan.createdAt, timestampFormat)}
             </span>
           ) : null}
@@ -177,45 +168,46 @@ const PlanSidebar = memo(function PlanSidebar({
             aria-label={`Close ${label.toLowerCase()} sidebar`}
             className="text-muted-foreground/50 hover:text-foreground/70"
           >
-            <PanelRightCloseIcon className="size-3.5" />
+            <XIcon className="size-3.5" />
           </Button>
         </div>
       </div>
 
       {/* Content */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="p-3 space-y-4">
+        <div className="space-y-4 p-3">
           {/* Explanation */}
           {activePlan?.explanation ? (
-            <p className="text-[13px] leading-relaxed text-muted-foreground/80">
-              {activePlan.explanation}
-            </p>
+            <p className="text-sm leading-7 text-muted-foreground/78">{activePlan.explanation}</p>
           ) : null}
 
           {/* Plan Steps */}
           {activePlan && activePlan.steps.length > 0 ? (
-            <div className="space-y-1">
-              <p className="mb-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
-                Steps
-              </p>
+            <div className="space-y-1.5">
+              <p className={cn(sidebarSectionLabelTextClassName, "mb-2")}>Steps</p>
               {activePlan.steps.map((step) => (
                 <div
                   key={`${step.status}:${step.step}`}
                   className={cn(
-                    "flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-200",
-                    step.status === "inProgress" && "bg-blue-500/5",
-                    step.status === "completed" && "bg-emerald-500/5",
+                    "flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 transition-colors duration-200",
+                    step.status === "inProgress" &&
+                      "border-border/45 bg-accent/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+                    step.status === "completed" &&
+                      "border-success/14 bg-muted/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+                    step.status !== "inProgress" &&
+                      step.status !== "completed" &&
+                      "border-border/35 bg-transparent",
                   )}
                 >
-                  <div className="mt-0.5">{stepStatusIcon(step.status)}</div>
+                  {stepStatusIcon(step.status)}
                   <p
                     className={cn(
                       "text-[13px] leading-snug",
                       step.status === "completed"
-                        ? "text-muted-foreground/50 line-through decoration-muted-foreground/20"
+                        ? "text-muted-foreground/52 line-through decoration-muted-foreground/20"
                         : step.status === "inProgress"
-                          ? "text-foreground/90"
-                          : "text-muted-foreground/70",
+                          ? "text-foreground/92 font-medium"
+                          : "text-muted-foreground/68",
                     )}
                   >
                     {step.step}
@@ -238,12 +230,17 @@ const PlanSidebar = memo(function PlanSidebar({
                 ) : (
                   <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/40 transition-transform" />
                 )}
-                <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase group-hover:text-muted-foreground/60">
+                <span
+                  className={cn(
+                    sidebarSectionLabelTextClassName,
+                    "group-hover:text-muted-foreground/60",
+                  )}
+                >
                   {planTitle ?? "Full Plan"}
                 </span>
               </button>
               {proposedPlanExpanded ? (
-                <div className="rounded-lg border border-border/50 bg-background/50 p-3">
+                <div className="rounded-xl border border-border/50 bg-muted/12 p-3">
                   <ChatMarkdown
                     text={displayedPlanMarkdown ?? ""}
                     cwd={markdownCwd}
