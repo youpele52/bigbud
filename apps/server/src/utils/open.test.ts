@@ -6,6 +6,8 @@ import { FileSystem, Path, Effect } from "effect";
 import {
   isCommandAvailable,
   launchDetached,
+  Open,
+  OpenLive,
   resolveAvailableEditors,
   resolveEditorLaunch,
 } from "./open";
@@ -397,4 +399,20 @@ it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
     });
     assert.deepEqual(editors, []);
   });
+});
+
+it.layer(NodeServices.layer)("openPath", (it) => {
+  it.effect("resolves when opening an existing file", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-open-test-" });
+      const file = path.join(dir, "test.txt");
+      yield* fs.writeFileString(file, "hello");
+
+      const open = yield* Open;
+      const result = yield* open.openPath({ path: file }).pipe(Effect.result);
+      assertSuccess(result, undefined);
+    }).pipe(Effect.provide(OpenLive)),
+  );
 });

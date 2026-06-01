@@ -254,6 +254,10 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
       observeRpcEffect(WS_METHODS.shellOpenInEditor, context.open.openInEditor(input), {
         "rpc.aggregate": "workspace",
       }),
+    [WS_METHODS.shellOpenPath]: (input: Parameters<WsRpcContext["open"]["openPath"]>[0]) =>
+      observeRpcEffect(WS_METHODS.shellOpenPath, context.open.openPath(input), {
+        "rpc.aggregate": "workspace",
+      }),
     [WS_METHODS.subscribeServerConfig]: (_input: unknown) =>
       observeRpcStreamEffect(
         WS_METHODS.subscribeServerConfig,

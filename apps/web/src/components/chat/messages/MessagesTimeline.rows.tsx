@@ -22,9 +22,9 @@ import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
-import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
+import { UserFileReferenceChips, UserFileSourcePaths } from "./MessagesTimeline.userAttachments";
 
 export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProps) {
   const {
@@ -53,7 +53,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
     onOpenReplySource,
     onBranchThread,
   } = props;
-
   return (
     <div
       className="pb-4"
@@ -196,65 +195,16 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     ))}
                   </div>
                 )}
-                {userFileReferences.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {userFileReferences.map((file) => {
-                      return (
-                        <div
-                          key={file.id}
-                          className="flex min-w-0 max-w-[180px] items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1"
-                        >
-                          <VscodeEntryIcon
-                            pathValue={
-                              file.type === "path" ? file.path : (file.sourcePath ?? file.name)
-                            }
-                            kind={
-                              file.type === "path" && file.entryKind === "directory"
-                                ? "directory"
-                                : "file"
-                            }
-                            theme={resolvedTheme}
-                            className="shrink-0 opacity-60"
-                          />
-                          <span
-                            className="min-w-0 truncate text-[11px] text-muted-foreground/60"
-                            title={file.type === "path" ? file.path : file.name}
-                          >
-                            {file.name}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {userFilesWithSourcePath.length > 0 && (
-                  <details className="mb-2 group/files">
-                    <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70">
-                      <ChevronDownIcon className="size-3 shrink-0 transition-transform duration-150 group-open/files:rotate-0 -rotate-90" />
-                      {userFilesWithSourcePath.length === 1
-                        ? "1 attached file"
-                        : `${userFilesWithSourcePath.length} attached files`}
-                    </summary>
-                    <div className="mt-1.5 space-y-1 pl-1">
-                      {userFilesWithSourcePath.map((file) => (
-                        <div key={`path-${file.id}`} className="flex min-w-0 items-start gap-1.5">
-                          <VscodeEntryIcon
-                            pathValue={file.sourcePath}
-                            kind="file"
-                            theme={resolvedTheme}
-                            className="mt-0.5 shrink-0 opacity-50"
-                          />
-                          <div
-                            className="min-w-0 break-all text-[11px] text-muted-foreground/45"
-                            title={file.sourcePath}
-                          >
-                            {file.sourcePath}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
+                <UserFileReferenceChips
+                  files={userFileReferences}
+                  markdownCwd={markdownCwd}
+                  resolvedTheme={resolvedTheme}
+                />
+                <UserFileSourcePaths
+                  files={userFilesWithSourcePath}
+                  markdownCwd={markdownCwd}
+                  resolvedTheme={resolvedTheme}
+                />
                 {readDocument && (
                   <div className="mb-2 rounded-lg border border-border/50 bg-background/35 px-3 py-2">
                     <div className="space-y-1 text-xs text-muted-foreground/70">
@@ -289,6 +239,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   <UserMessageBody
                     text={displayedUserMessage.visibleText}
                     terminalContexts={terminalContexts}
+                    cwd={markdownCwd}
                   />
                 )}
                 <div className="mt-1.5 flex justify-end">
