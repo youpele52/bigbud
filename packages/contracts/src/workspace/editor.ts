@@ -33,11 +33,22 @@ export const EDITORS = [
 export const EditorId = Schema.Literals(EDITORS.map((e) => e.id));
 export type EditorId = typeof EditorId.Type;
 
+export type CodeEditorId = Exclude<EditorId, "file-manager">;
+
+export const CODE_EDITORS = EDITORS.filter(
+  (editor) => editor.id !== "file-manager",
+) as ReadonlyArray<Extract<(typeof EDITORS)[number], { readonly id: CodeEditorId }>>;
+
 export const OpenInEditorInput = Schema.Struct({
   cwd: TrimmedNonEmptyString,
   editor: EditorId,
 });
 export type OpenInEditorInput = typeof OpenInEditorInput.Type;
+
+export const OpenPathInput = Schema.Struct({
+  path: TrimmedNonEmptyString,
+});
+export type OpenPathInput = typeof OpenPathInput.Type;
 
 export class OpenError extends Schema.TaggedErrorClass<OpenError>()("OpenError", {
   message: Schema.String,

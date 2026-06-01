@@ -18,7 +18,7 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { openInPreferredEditor } from "../../../models/editor";
+import { openPathInPreferredApp } from "../../../models/editor";
 import { resolveDiffThemeName, type DiffThemeName } from "../../../lib/diffRendering";
 import { fnv1a32 } from "../../../lib/diffRendering";
 import { LRUCache } from "../../../lib/lruCache";
@@ -268,6 +268,15 @@ function RenderedHighlightedCode({ html }: { html: string }) {
   );
 }
 
+function openChatPath(targetPath: string): void {
+  const api = readNativeApi();
+  if (api) {
+    void openPathInPreferredApp(api, targetPath);
+  } else {
+    console.warn("Native API not found. Unable to open file.");
+  }
+}
+
 function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
@@ -302,14 +311,35 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              const api = readNativeApi();
-              if (api) {
-                void openInPreferredEditor(api, targetPath);
-              } else {
-                console.warn("Native API not found. Unable to open file in editor.");
-              }
+              openChatPath(targetPath);
             }}
           />
+        );
+      },
+      code({ node: _node, className: codeClassName, children, ...props }) {
+        const inlineText = nodeToPlainText(children).trim();
+        const targetPath = codeClassName ? null : resolveMarkdownFileLinkTarget(inlineText, cwd);
+        if (!targetPath) {
+          return (
+            <code className={codeClassName} {...props}>
+              {children}
+            </code>
+          );
+        }
+
+        return (
+          <code
+            className={cn(codeClassName, "cursor-pointer")}
+            title="Double-click to open"
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openChatPath(targetPath);
+            }}
+            {...props}
+          >
+            {children}
+          </code>
         );
       },
       pre({ node: _node, children, ...props }) {
