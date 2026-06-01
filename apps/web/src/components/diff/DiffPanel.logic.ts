@@ -23,7 +23,7 @@ import { useStore } from "../../stores/main";
 import {
   getRequestedRightPanel,
   requestRightPanel,
-} from "../../stores/browser/browserPanel.coordinator";
+} from "../../stores/rightPanel/rightPanel.coordinator";
 
 export type DiffRenderMode = "stacked" | "split";
 

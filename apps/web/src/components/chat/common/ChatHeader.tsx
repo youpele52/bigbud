@@ -6,7 +6,14 @@ import type {
 } from "@bigbud/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import { DiffIcon, GlobeIcon, PanelLeftCloseIcon, PanelLeftIcon, TerminalIcon } from "lucide-react";
+import {
+  DiffIcon,
+  FolderTreeIcon,
+  GlobeIcon,
+  PanelLeftCloseIcon,
+  PanelLeftIcon,
+  TerminalIcon,
+} from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -36,10 +43,12 @@ interface ChatHeaderProps {
   diffToggleShortcutLabel: string | null;
   sidebarToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
+  filesToggleShortcutLabel: string | null;
   gitCwd: string | null;
   executionTargetId?: string | undefined;
   diffOpen: boolean;
   browserOpen: boolean;
+  filesOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -47,6 +56,7 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
   onToggleBrowser: () => void;
+  onToggleFiles: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -65,10 +75,12 @@ export const ChatHeader = memo(function ChatHeader({
   diffToggleShortcutLabel,
   sidebarToggleShortcutLabel,
   browserToggleShortcutLabel,
+  filesToggleShortcutLabel,
   gitCwd,
   executionTargetId,
   diffOpen,
   browserOpen,
+  filesOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -76,6 +88,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleDiff,
   onToggleBrowser,
+  onToggleFiles,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const isThreadCompacting = useIsThreadCompacting(activeThreadId);
@@ -208,6 +221,30 @@ export const ChatHeader = memo(function ChatHeader({
             {browserToggleShortcutLabel
               ? `Toggle browser panel (${browserToggleShortcutLabel})`
               : "Toggle browser panel"}
+          </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={filesOpen}
+                onPressedChange={onToggleFiles}
+                aria-label="Toggle files panel"
+                variant="toolbar"
+                size="xs"
+                disabled={!activeProjectName}
+              >
+                <FolderTreeIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {!activeProjectName
+              ? "Files panel is unavailable until this thread has an active project."
+              : filesToggleShortcutLabel
+                ? `Toggle files panel (${filesToggleShortcutLabel})`
+                : "Toggle files panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>

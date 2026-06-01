@@ -12,6 +12,7 @@ export interface UiProjectState {
   favouritesExpanded: boolean;
   projectExpandedById: Record<string, boolean>;
   projectOrder: ProjectId[];
+  selectedProjectId: ProjectId | null;
 }
 
 export interface UiThreadState {
@@ -35,6 +36,7 @@ export const initialState: UiState = {
   favouritesExpanded: true,
   projectExpandedById: {},
   projectOrder: [],
+  selectedProjectId: null,
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
 };

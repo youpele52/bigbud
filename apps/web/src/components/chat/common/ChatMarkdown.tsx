@@ -23,7 +23,7 @@ import { resolveDiffThemeName, type DiffThemeName } from "../../../lib/diffRende
 import { fnv1a32 } from "../../../lib/diffRendering";
 import { LRUCache } from "../../../lib/lruCache";
 import { useTheme } from "../../../hooks/useTheme";
-import { openBrowserPanel } from "../../../stores/browser/browserPanel.coordinator";
+import { openBrowserPanel } from "../../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../../utils/markdown";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { cn } from "~/lib/utils";

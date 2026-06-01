@@ -41,8 +41,11 @@ export const makeSendTurn =
       const record = yield* deps.requireSession(input.threadId);
       const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
+      const persistableAttachments = (input.attachments ?? []).filter(
+        (attachment) => attachment.type !== "path",
+      );
       const attachments: MessageOptions["attachments"] = yield* Effect.forEach(
-        input.attachments ?? [],
+        persistableAttachments,
         (attachment) =>
           Effect.gen(function* () {
             const filePath = resolveAttachmentPath({

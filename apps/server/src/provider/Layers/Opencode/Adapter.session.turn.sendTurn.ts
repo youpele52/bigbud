@@ -72,6 +72,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       const inlineTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
       for (const attachment of input.attachments ?? []) {
+        if (attachment.type === "path") continue;
         const sourcePath =
           attachment.type === "file" && attachment.sourcePath
             ? attachment.sourcePath

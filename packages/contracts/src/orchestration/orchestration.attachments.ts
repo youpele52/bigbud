@@ -38,6 +38,17 @@ export const ChatFileAttachment = Schema.Struct({
 });
 export type ChatFileAttachment = typeof ChatFileAttachment.Type;
 
+export const ChatPathReferenceAttachment = Schema.Struct({
+  type: Schema.Literal("path"),
+  id: ChatAttachmentId,
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  mimeType: TrimmedNonEmptyString.check(Schema.isMaxLength(100)),
+  sizeBytes: Schema.Literal(0),
+  path: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  entryKind: Schema.Literals(["file", "directory"]),
+});
+export type ChatPathReferenceAttachment = typeof ChatPathReferenceAttachment.Type;
+
 const UploadChatImageAttachment = Schema.Struct({
   type: Schema.Literal("image"),
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
@@ -77,10 +88,25 @@ export const UploadChatFileAttachment = Schema.Union([
 ]);
 export type UploadChatFileAttachment = typeof UploadChatFileAttachment.Type;
 
-export const ChatAttachment = Schema.Union([ChatImageAttachment, ChatFileAttachment]);
+export const UploadChatPathReferenceAttachment = Schema.Struct({
+  type: Schema.Literal("path"),
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  mimeType: TrimmedNonEmptyString.check(Schema.isMaxLength(100)),
+  sizeBytes: Schema.Literal(0),
+  path: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  entryKind: Schema.Literals(["file", "directory"]),
+});
+export type UploadChatPathReferenceAttachment = typeof UploadChatPathReferenceAttachment.Type;
+
+export const ChatAttachment = Schema.Union([
+  ChatImageAttachment,
+  ChatFileAttachment,
+  ChatPathReferenceAttachment,
+]);
 export type ChatAttachment = typeof ChatAttachment.Type;
 export const UploadChatAttachment = Schema.Union([
   UploadChatImageAttachment,
   UploadChatFileAttachment,
+  UploadChatPathReferenceAttachment,
 ]);
 export type UploadChatAttachment = typeof UploadChatAttachment.Type;

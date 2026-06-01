@@ -322,6 +322,52 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     },
   );
 
+  const listDirectory: WorkspaceEntriesShape["listDirectory"] = Effect.fn(
+    "WorkspaceEntries.listDirectory",
+  )(function* (input) {
+    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceEntriesError({
+        cwd: input.cwd,
+        operation: "workspaceEntries.listDirectory",
+        detail: "Remote workspace directory listing is not supported yet.",
+      });
+    }
+
+    const normalizedCwd = yield* normalizeWorkspaceRoot(input.cwd);
+    const relativeDir = input.relativePath ?? "";
+    const { dirents } = yield* readDirectoryEntries(normalizedCwd, relativeDir);
+    const filteredEntries = (dirents ?? [])
+      .filter((dirent) => dirent.name && dirent.name !== "." && dirent.name !== "..")
+      .filter((dirent) => !IGNORED_DIRECTORY_NAMES.has(dirent.name))
+      .filter((dirent) => dirent.isDirectory() || dirent.isFile())
+      .map((dirent) => {
+        const entryPath = toPosixPath(
+          relativeDir ? path.join(relativeDir, dirent.name) : dirent.name,
+        );
+        const parentPath = parentPathOf(entryPath);
+        return parentPath === undefined
+          ? ({
+              path: entryPath,
+              kind: dirent.isDirectory() ? "directory" : "file",
+            } satisfies ProjectEntry)
+          : ({
+              path: entryPath,
+              kind: dirent.isDirectory() ? "directory" : "file",
+              parentPath,
+            } satisfies ProjectEntry);
+      })
+      .filter((entry) => !isPathInIgnoredDirectory(entry.path, IGNORED_DIRECTORY_NAMES))
+      .toSorted((left, right) => {
+        if (left.kind !== right.kind) {
+          return left.kind === "directory" ? -1 : 1;
+        }
+        return left.path.localeCompare(right.path);
+      });
+
+    return { entries: filteredEntries };
+  });
+
   const search: WorkspaceEntriesShape["search"] = Effect.fn("WorkspaceEntries.search")(
     function* (input) {
       const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
@@ -361,6 +407,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
   );
 
   return {
+    listDirectory,
     invalidate,
     search,
   } satisfies WorkspaceEntriesShape;

@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { closeBrowserPanel, openBrowserPanel, toggleBrowserPanel } from "./browserPanel.actions";
+import { useBrowserPanelStore } from "./browser.store";
+import { useFilesPanelStore } from "../files/filesPanel.store";
 import {
-  closeBrowserPanel,
   getRequestedRightPanel,
-  openBrowserPanel,
   registerDiffPanelCloseAction,
   requestRightPanel,
-  toggleBrowserPanel,
-} from "./browserPanel.coordinator";
-import { useBrowserPanelStore } from "./browser.store";
+} from "../rightPanel/rightPanel.coordinator";
 
-describe("browserPanel.coordinator", () => {
+describe("browserPanel.actions", () => {
   afterEach(() => {
     useBrowserPanelStore.setState({ open: false, url: "" });
+    useFilesPanelStore.setState({ open: false });
     registerDiffPanelCloseAction(null);
     requestRightPanel(null);
   });
@@ -28,6 +28,17 @@ describe("browserPanel.coordinator", () => {
       open: true,
       url: "https://example.com/path",
     });
+  });
+
+  it("closes the files panel when opening the browser", () => {
+    useFilesPanelStore.setState({ open: true });
+    requestRightPanel("files");
+
+    openBrowserPanel({ url: "https://example.com" });
+
+    expect(useFilesPanelStore.getState().open).toBe(false);
+    expect(useBrowserPanelStore.getState().open).toBe(true);
+    expect(getRequestedRightPanel()).toBe("browser");
   });
 
   it("only closes the diff panel when toggling the browser open", () => {

@@ -258,6 +258,8 @@ export function hydrateFilesFromPersisted(
     mimeType: attachment.mimeType,
     sizeBytes: attachment.sizeBytes,
     filePath: attachment.filePath,
+    entryKind: attachment.entryKind ?? "file",
+    attachmentMode: attachment.attachmentMode ?? "upload",
     file: null,
   }));
 }
