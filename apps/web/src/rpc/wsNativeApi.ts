@@ -61,6 +61,7 @@ export function createWsNativeApi(): NativeApi {
     },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
+      openPath: (path) => rpcClient.shell.openPath({ path }),
       openExternal: async (url) => {
         const nextUrl = url.trim();
         if (!nextUrl) {

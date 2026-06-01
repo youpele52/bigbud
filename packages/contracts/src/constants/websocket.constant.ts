@@ -18,6 +18,7 @@ export const WS_METHODS = {
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
+  shellOpenPath: "shell.openPath",
 
   // Git methods
   gitPull: "git.pull",

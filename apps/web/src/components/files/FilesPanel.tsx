@@ -3,7 +3,10 @@ import { ChevronRightIcon, FolderIcon, FolderOpenIcon, XIcon } from "lucide-reac
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "../ui/button";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { useDefaultChatCwd } from "../../rpc/serverState";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
@@ -46,7 +49,9 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
   const { resolvedTheme } = useTheme();
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? null;
+  const defaultChatCwd = useDefaultChatCwd();
+  const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
+  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const workspaceExecutionTargetId = project
     ? resolveWorkspaceExecutionTargetId(project)
     : undefined;
@@ -135,6 +140,19 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
     [directoryStateByPath, loadDirectory],
   );
 
+  const handleOpenFile = useCallback(
+    (entry: ProjectEntry) => {
+      if (!workspaceRoot) return;
+      const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
+      const api = readNativeApi();
+      if (!api) return;
+      void openPathInPreferredApp(api, absolutePath).catch((error) => {
+        console.error("Failed to open file:", error);
+      });
+    },
+    [workspaceRoot],
+  );
+
   const renderEntries = useCallback(
     (entries: ReadonlyArray<ProjectEntry>, depth: number): ReactNode =>
       entries.map((entry) => {
@@ -165,7 +183,28 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
                   handleToggleDirectory(entry);
                 }
               }}
-              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-accent/40"
+              onDoubleClick={() => {
+                if (isDirectory) return;
+                handleOpenFile(entry);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const api = readNativeApi();
+                if (!api || !workspaceRoot) return;
+                const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
+                void api.contextMenu
+                  .show([{ id: "copy-path", label: "Copy Path" }], {
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                  .then((action) => {
+                    if (action === "copy-path") {
+                      copyToClipboard(absolutePath, { path: absolutePath });
+                    }
+                  });
+              }}
+              className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-accent/40"
               style={{ paddingLeft: `${8 + depth * 16}px` }}
             >
               {isDirectory ? (
@@ -218,6 +257,8 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
     [
       directoryStateByPath,
       expandedDirectories,
+      copyToClipboard,
+      handleOpenFile,
       handleToggleDirectory,
       resolvedTheme,
       workspaceRoot,

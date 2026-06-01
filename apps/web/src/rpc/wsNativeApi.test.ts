@@ -52,6 +52,7 @@ const rpcClientMock = {
   },
   shell: {
     openInEditor: vi.fn(),
+    openPath: vi.fn(),
   },
   git: {
     pull: vi.fn(),

@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
-import { OpenError, OpenInEditorInput } from "../workspace/editor";
+import { OpenError, OpenInEditorInput, OpenPathInput } from "../workspace/editor";
 import {
   GitActionProgressEvent,
   GitCheckoutInput,
@@ -167,6 +167,11 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
+  error: OpenError,
+});
+
+export const WsShellOpenPathRpc = Rpc.make(WS_METHODS.shellOpenPath, {
+  payload: OpenPathInput,
   error: OpenError,
 });
 
@@ -361,6 +366,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsListDirectoryRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
+  WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,
   WsGitRefreshStatusRpc,

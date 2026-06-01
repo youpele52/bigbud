@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
-import { EDITORS, OpenError, type EditorId } from "@bigbud/contracts";
+import { EDITORS, OpenError, OpenPathInput, type EditorId } from "@bigbud/contracts";
 import { ServiceMap, Effect, Layer } from "effect";
 
 // ==============================
@@ -251,6 +251,14 @@ export interface OpenShape {
    * Launches the editor as a detached process so server startup is not blocked.
    */
   readonly openInEditor: (input: OpenInEditorInput) => Effect.Effect<void, OpenError>;
+
+  /**
+   * Open a file or directory with the system's default application.
+   *
+   * Uses the platform's file manager command (`open` on macOS, `xdg-open` on Linux,
+   * `explorer` on Windows) so the OS resolves the default app for the given path.
+   */
+  readonly openPath: (input: OpenPathInput) => Effect.Effect<void, OpenError>;
 }
 
 /**
@@ -343,6 +351,11 @@ const make = Effect.gen(function* () {
         catch: (cause) => new OpenError({ message: "Browser auto-open failed", cause }),
       }),
     openInEditor: (input) => Effect.flatMap(resolveEditorLaunch(input), launchDetached),
+    openPath: (input) =>
+      launchDetached({
+        command: fileManagerCommandForPlatform(process.platform),
+        args: [input.path],
+      }),
   } satisfies OpenShape;
 });
 
