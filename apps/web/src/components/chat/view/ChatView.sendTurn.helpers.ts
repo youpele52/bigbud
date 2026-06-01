@@ -131,14 +131,26 @@ export function buildOptimisticAttachments(
       sizeBytes: image.sizeBytes,
       previewUrl: image.previewUrl,
     })),
-    ...files.map((file) => ({
-      type: "file" as const,
-      id: file.id,
-      name: file.name,
-      mimeType: file.mimeType,
-      sizeBytes: file.sizeBytes,
-      ...(file.filePath ? { sourcePath: file.filePath } : {}),
-    })),
+    ...files.map((file) =>
+      file.attachmentMode === "path-reference"
+        ? {
+            type: "path" as const,
+            id: file.id,
+            name: file.name,
+            mimeType: file.mimeType,
+            sizeBytes: 0 as const,
+            path: file.filePath,
+            entryKind: file.entryKind ?? "file",
+          }
+        : {
+            type: "file" as const,
+            id: file.id,
+            name: file.name,
+            mimeType: file.mimeType,
+            sizeBytes: file.sizeBytes,
+            ...(file.filePath ? { sourcePath: file.filePath } : {}),
+          },
+    ),
   ];
 }
 
@@ -155,6 +167,16 @@ export function buildTurnAttachments(
       dataUrl: await readFileAsDataUrl(image.file),
     })),
     ...files.map(async (file) => {
+      if (file.attachmentMode === "path-reference") {
+        return {
+          type: "path" as const,
+          name: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: 0 as const,
+          path: file.filePath,
+          entryKind: file.entryKind ?? "file",
+        };
+      }
       if (isElectron && file.filePath) {
         return {
           type: "file" as const,

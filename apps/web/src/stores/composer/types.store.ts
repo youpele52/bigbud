@@ -84,6 +84,8 @@ export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.T
 
 /** In-memory representation of a non-image file attachment. Holds only the path — no bytes. */
 export interface ComposerFileAttachment extends ChatFileAttachment {
+  entryKind?: "file" | "directory";
+  attachmentMode?: "upload" | "path-reference";
   /** Absolute filesystem path — available on desktop (Electron). On web, this is empty string. */
   filePath: string;
   /** The original File object — used on web fallback (base64 transport). Null on desktop. */
@@ -96,6 +98,8 @@ export const PersistedComposerFileAttachment = Schema.Struct({
   mimeType: Schema.String,
   sizeBytes: Schema.Number,
   filePath: Schema.String,
+  entryKind: Schema.optional(Schema.Literals(["file", "directory"])),
+  attachmentMode: Schema.optional(Schema.Literals(["upload", "path-reference"])),
 });
 
 export const PersistedTerminalContextDraft = Schema.Struct({

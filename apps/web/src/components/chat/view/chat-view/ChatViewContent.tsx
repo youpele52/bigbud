@@ -19,6 +19,7 @@ import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
+import { useFilesPanelStore } from "../../../../stores/files/filesPanel.store";
 import { useSearchStore } from "../../../../stores/ui";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
@@ -61,6 +62,7 @@ export function ChatViewContent({
 }: ChatViewContentProps) {
   const { branchThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
+  const filesOpen = useFilesPanelStore((state) => state.open);
   const searchFocusRequest = useSearchStore((state) => state.focusRequest);
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
@@ -158,10 +160,12 @@ export function ChatViewContent({
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
+          filesToggleShortcutLabel={null}
           gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           diffOpen={base.diffOpen}
           browserOpen={browserOpen}
+          filesOpen={filesOpen}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
@@ -171,6 +175,7 @@ export function ChatViewContent({
           onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
           onToggleDiff={runtime.onToggleDiff}
           onToggleBrowser={runtime.onToggleBrowser}
+          onToggleFiles={runtime.onToggleFiles}
         />
       </header>
 

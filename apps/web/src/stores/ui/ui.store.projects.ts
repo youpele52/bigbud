@@ -280,9 +280,16 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
           })
           .map((project) => project.id);
 
+  const currentProjectIds = new Set(mappedProjects.map((project) => project.id));
+  const nextSelectedProjectId =
+    state.selectedProjectId && currentProjectIds.has(state.selectedProjectId)
+      ? state.selectedProjectId
+      : null;
+
   if (
     recordsEqual(state.projectExpandedById, nextExpandedById) &&
     projectOrdersEqual(state.projectOrder, nextProjectOrder) &&
+    state.selectedProjectId === nextSelectedProjectId &&
     !cwdMappingChanged
   ) {
     return state;
@@ -292,6 +299,7 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
     ...state,
     projectExpandedById: nextExpandedById,
     projectOrder: nextProjectOrder,
+    selectedProjectId: nextSelectedProjectId,
   };
 }
 
@@ -303,6 +311,7 @@ export function toggleProject(state: UiState, projectId: ProjectId): UiState {
       ...state.projectExpandedById,
       [projectId]: !expanded,
     },
+    selectedProjectId: projectId,
   };
 }
 
@@ -320,6 +329,16 @@ export function setProjectExpanded(
       ...state.projectExpandedById,
       [projectId]: expanded,
     },
+  };
+}
+
+export function setSelectedProject(state: UiState, projectId: ProjectId | null): UiState {
+  if (state.selectedProjectId === projectId) {
+    return state;
+  }
+  return {
+    ...state,
+    selectedProjectId: projectId,
   };
 }
 

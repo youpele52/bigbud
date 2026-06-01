@@ -229,10 +229,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       text: expandedProviderInput,
       replyTo: message.replyTo ?? event.payload.replyTo,
     });
-    const providerInputText =
-      thread.modelSelection.provider === "pi"
-        ? providerMessageText
-        : appendFileAttachmentsToProviderInput(providerMessageText, message.attachments ?? []);
+    const providerInputText = appendFileAttachmentsToProviderInput(
+      providerMessageText,
+      message.attachments ?? [],
+    );
 
     if (isFirstUserMessageTurn) {
       const serverSettings = yield* serverSettingsService.getSettings.pipe(

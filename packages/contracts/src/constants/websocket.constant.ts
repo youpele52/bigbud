@@ -13,6 +13,7 @@ export const WS_METHODS = {
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
+  projectsListDirectory: "projects.listDirectory",
   projectsWriteFile: "projects.writeFile",
 
   // Shell methods

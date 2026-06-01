@@ -4,10 +4,8 @@ import { useCallback } from "react";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
 import { openDiffRouteSearch } from "~/utils/diff";
-import {
-  closeBrowserPanel,
-  requestRightPanel,
-} from "../../../../stores/browser/browserPanel.coordinator";
+import { closeBrowserPanel } from "../../../../stores/browser/browserPanel.actions";
+import { requestRightPanel } from "../../../../stores/rightPanel/rightPanel.coordinator";
 
 import {
   useApplyPromptReplacement,
