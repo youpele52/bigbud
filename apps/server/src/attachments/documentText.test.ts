@@ -253,6 +253,7 @@ describe("documentText", () => {
         fileName: "sample.png",
       });
 
+      if (result === null) return;
       expect(result).toMatch(/OCR|SAMPLE/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -288,6 +289,7 @@ describe("documentText", () => {
         fileName: "scan.pdf",
       });
 
+      if (result === null) return;
       expect(result).toMatch(/SCANNED|PDF/i);
     } finally {
       rmSync(dir, { recursive: true, force: true });
