@@ -51,6 +51,9 @@ import {
   ProjectListDirectoryError,
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
+  ProjectReadFilePreviewError,
+  ProjectReadFilePreviewInput,
+  ProjectReadFilePreviewResult,
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -157,6 +160,12 @@ export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirect
   payload: ProjectListDirectoryInput,
   success: ProjectListDirectoryResult,
   error: ProjectListDirectoryError,
+});
+
+export const WsProjectsReadFilePreviewRpc = Rpc.make(WS_METHODS.projectsReadFilePreview, {
+  payload: ProjectReadFilePreviewInput,
+  success: ProjectReadFilePreviewResult,
+  error: ProjectReadFilePreviewError,
 });
 
 export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
@@ -364,6 +373,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsListDirectoryRpc,
+  WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
   WsShellOpenPathRpc,

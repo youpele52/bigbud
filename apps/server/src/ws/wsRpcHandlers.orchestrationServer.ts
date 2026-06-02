@@ -7,6 +7,7 @@ import {
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
   ProjectListDirectoryError,
+  ProjectReadFilePreviewError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ServerReadDocumentUrlError,
@@ -232,6 +233,21 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
                 cause,
               }),
           ),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
+    [WS_METHODS.projectsReadFilePreview]: (
+      input: Parameters<WsRpcContext["workspaceFileSystem"]["readFilePreview"]>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.projectsReadFilePreview,
+        context.workspaceFileSystem.readFilePreview(input).pipe(
+          Effect.mapError((cause) => {
+            const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+              ? "Workspace file path must stay within the project root."
+              : `Failed to read workspace file preview: ${cause.detail}`;
+            return new ProjectReadFilePreviewError({ message, cause });
+          }),
         ),
         { "rpc.aggregate": "workspace" },
       ),

@@ -56,6 +56,7 @@ export function createWsNativeApi(): NativeApi {
     },
     projects: {
       listDirectory: rpcClient.projects.listDirectory,
+      readFilePreview: rpcClient.projects.readFilePreview,
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },

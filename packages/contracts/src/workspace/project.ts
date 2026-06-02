@@ -3,6 +3,7 @@ import { ExecutionTargetId, PositiveInt, TrimmedNonEmptyString } from "../core/b
 
 const PROJECT_SEARCH_ENTRIES_MAX_LIMIT = 200;
 const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
+const PROJECT_READ_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
@@ -49,6 +50,32 @@ export type ProjectListDirectoryResult = typeof ProjectListDirectoryResult.Type;
 
 export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectListDirectoryError>()(
   "ProjectListDirectoryError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export const ProjectReadFilePreviewInput = Schema.Struct({
+  executionTargetId: Schema.optional(ExecutionTargetId),
+  cwd: TrimmedNonEmptyString,
+  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  maxBytes: Schema.optional(
+    PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_READ_FILE_PREVIEW_MAX_BYTES)),
+  ),
+});
+export type ProjectReadFilePreviewInput = typeof ProjectReadFilePreviewInput.Type;
+
+export const ProjectReadFilePreviewResult = Schema.Struct({
+  relativePath: TrimmedNonEmptyString,
+  contents: Schema.String,
+  sizeBytes: Schema.Number,
+  truncated: Schema.Boolean,
+});
+export type ProjectReadFilePreviewResult = typeof ProjectReadFilePreviewResult.Type;
+
+export class ProjectReadFilePreviewError extends Schema.TaggedErrorClass<ProjectReadFilePreviewError>()(
+  "ProjectReadFilePreviewError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),
