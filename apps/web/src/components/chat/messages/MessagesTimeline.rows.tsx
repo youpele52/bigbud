@@ -11,7 +11,7 @@ import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
-import { MessagesTimelineBrowserAnnotations } from "./MessagesTimeline.browserAnnotations";
+import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
@@ -139,7 +139,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           );
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
           const terminalContexts = displayedUserMessage.contexts;
-          const browserAnnotations = displayedUserMessage.browserAnnotations;
+          const annotations = displayedUserMessage.annotations;
           const readDocument = displayedUserMessage.readDocument;
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           const replyTarget = row.message.replyTo;
@@ -233,7 +233,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     </details>
                   </div>
                 )}
-                <MessagesTimelineBrowserAnnotations annotations={browserAnnotations} />
+                <MessagesTimelineAnnotations annotations={annotations} />
                 {(displayedUserMessage.visibleText.trim().length > 0 ||
                   terminalContexts.length > 0) && (
                   <UserMessageBody
