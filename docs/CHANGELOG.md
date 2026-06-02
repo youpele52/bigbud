@@ -59,6 +59,16 @@ Entries below are grouped by release tag and date.
 - Changed the desktop View menu reload shortcuts so they target the embedded browser panel instead of reloading the whole app window.
 - Added a cache-bypass reload path for the browser panel, and made background browser tabs activate first before they reload so the command still works when the panel is hidden.
 
+### Editor Detection and Windsurf Support
+
+- Added app-aware editor detection so bigbud can discover installed code editors (VS Code, Cursor, Windsurf, Zed, etc.) on your system instead of relying on a single configured editor path.
+- Added Windsurf to the editor picker with the real Windsurf app icon for easy identification.
+- When you open a file via double-click or chat path, the app now routes to the best available editor automatically.
+
+### Terminal Panel Independence
+
+- Split terminal panel sessions from the drawer terminal so the right-panel terminal now maintains its own session independent of the bottom drawer terminal, letting you run separate commands in each without interference.
+
 ## v0.1.638 (31 May, 2026)
 
 ### Prompt Queue
