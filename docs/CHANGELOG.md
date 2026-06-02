@@ -4,6 +4,39 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.639 (2 June, 2026)
+
+### Browse and Preview Files Without Leaving the App
+
+- Added a file browser panel so you can explore your project's folders and files right inside the app — just open it from the toolbar, click through directories, and drag any file directly into your message to share it with the AI.
+- When you click a file in the browser, its contents now appear in a preview pane with color-coded syntax highlighting, so you can quickly scan code without opening a separate editor.
+- Double-click any file to open it — code files (TypeScript, Rust, Python, Markdown, etc.) go straight to your preferred code editor, while PDFs, images, and documents open with your system's default app.
+- Dragging a file from the browser into your message now tells the AI where that file lives in your project, so it can read and work with the right file without you having to explain the path manually.
+
+### Annotations Beyond the Browser
+
+- Annotations are no longer limited to browser screenshots — you can now annotate code files too. Select a piece of code in the preview pane and add a note explaining what you want changed, and the AI will see both the code and your instruction when you send the message.
+- This works alongside the existing browser annotations, giving you one consistent way to point the AI at exactly what you mean, whether it's a visual element on a page or a line of code.
+
+### Visual Feedback for Ongoing Work
+
+- Added a subtle animated indicator that shows up when long-running operations are in progress, so you always know the app is busy working on something — no more wondering if your action went through.
+
+### Packaging and Distribution
+
+- Updated the project homepage across the board to `bigbud.app`.
+- Fixed Linux `.deb` package metadata so it installs cleanly on Debian-based distributions.
+- Improved the Linux packaging pipeline to handle edge cases in Electron's build process more gracefully.
+
+### Plan Sidebar and Chat Improvements
+
+- The plan sidebar now shows active tasks in a more compact layout, so you can see what the AI is implementing at a glance without scrolling.
+- Tuned the chat view so new content scrolling into view feels smoother and more natural as responses stream in.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, and editor routing.
+
 ## v0.1.638 (31 May, 2026)
 
 ### Prompt Queue

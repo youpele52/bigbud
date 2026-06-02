@@ -136,6 +136,10 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     () => shortcutLabelForCommand(keybindings, "terminal.toggle"),
     [keybindings],
   );
+  const terminalPanelToggleShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "terminalPanel.toggle"),
+    [keybindings],
+  );
   const splitTerminalShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "terminal.split", terminalShortcutLabelOptions),
     [keybindings, terminalShortcutLabelOptions],
@@ -154,6 +158,10 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   );
   const browserPanelShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "browser.toggle", nonTerminalShortcutLabelOptions),
+    [keybindings, nonTerminalShortcutLabelOptions],
+  );
+  const filesPanelShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "files.toggle", nonTerminalShortcutLabelOptions),
     [keybindings, nonTerminalShortcutLabelOptions],
   );
   const sidebarToggleShortcutLabel = useMemo(
@@ -203,11 +211,13 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     activeProviderStatus,
     isGitRepo,
     terminalToggleShortcutLabel,
+    terminalPanelToggleShortcutLabel,
     splitTerminalShortcutLabel,
     newTerminalShortcutLabel,
     closeTerminalShortcutLabel,
     diffPanelShortcutLabel,
     browserPanelShortcutLabel,
+    filesPanelShortcutLabel,
     sidebarToggleShortcutLabel,
     searchToggleShortcutLabel,
   };

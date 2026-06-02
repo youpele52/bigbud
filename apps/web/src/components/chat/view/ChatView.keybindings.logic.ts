@@ -16,6 +16,7 @@ export interface UseChatKeybindingsInput {
   terminalState: TerminalState;
   keybindings: ResolvedKeybindingsConfig;
   toggleTerminalVisibility: () => void;
+  toggleTerminalPanel: () => void;
   setTerminalOpen: (open: boolean) => void;
   splitTerminal: () => void;
   closeTerminal: (terminalId: string) => void;
@@ -31,6 +32,7 @@ export function useChatKeybindings({
   terminalState,
   keybindings,
   toggleTerminalVisibility,
+  toggleTerminalPanel,
   setTerminalOpen,
   splitTerminal,
   closeTerminal,
@@ -55,6 +57,13 @@ export function useChatKeybindings({
         event.preventDefault();
         event.stopPropagation();
         toggleTerminalVisibility();
+        return;
+      }
+
+      if (command === "terminalPanel.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleTerminalPanel();
         return;
       }
 
@@ -115,6 +124,7 @@ export function useChatKeybindings({
     splitTerminal,
     keybindings,
     onToggleDiff,
+    toggleTerminalPanel,
     toggleTerminalVisibility,
   ]);
 }

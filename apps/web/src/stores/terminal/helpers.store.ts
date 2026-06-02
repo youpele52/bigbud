@@ -221,6 +221,26 @@ export function createDefaultThreadTerminalState(): ThreadTerminalState {
   };
 }
 
+export function createSingleThreadTerminalState(terminalId: string): ThreadTerminalState {
+  const normalizedTerminalId = isValidTerminalId(terminalId)
+    ? terminalId.trim()
+    : DEFAULT_THREAD_TERMINAL_ID;
+  return {
+    terminalOpen: true,
+    terminalHeight: DEFAULT_THREAD_TERMINAL_HEIGHT,
+    terminalIds: [normalizedTerminalId],
+    runningTerminalIds: [],
+    activeTerminalId: normalizedTerminalId,
+    terminalGroups: [
+      {
+        id: fallbackGroupId(normalizedTerminalId),
+        terminalIds: [normalizedTerminalId],
+      },
+    ],
+    activeTerminalGroupId: fallbackGroupId(normalizedTerminalId),
+  };
+}
+
 export function getDefaultThreadTerminalState(): ThreadTerminalState {
   return DEFAULT_THREAD_TERMINAL_STATE;
 }

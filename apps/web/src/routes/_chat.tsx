@@ -19,9 +19,11 @@ import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
 import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
-import { closeFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import BrowserPanel from "~/components/browser/BrowserPanel";
 import { FilesPanel } from "~/components/files/FilesPanel";
+import TerminalPanel from "~/components/terminal/TerminalPanel";
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
@@ -115,11 +117,19 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         return;
       }
 
+      if (command === "files.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleFilesPanel();
+        return;
+      }
+
       if (command === "settings.toggle") {
         event.preventDefault();
         event.stopPropagation();
         closeBrowserPanel();
         closeFilesPanel();
+        closeTerminalPanel();
         void navigate({ to: "/settings" });
         return;
       }
@@ -159,6 +169,7 @@ function ChatRouteLayout() {
       <Outlet />
       <BrowserPanel activeThreadId={routeThreadId ?? null} />
       <FilesPanel activeThreadId={routeThreadId ?? null} />
+      <TerminalPanel activeThreadId={routeThreadId ?? null} />
     </>
   );
 }
