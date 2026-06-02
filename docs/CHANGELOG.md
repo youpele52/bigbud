@@ -51,7 +51,13 @@ Entries below are grouped by release tag and date.
 
 ### Validation
 
+- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
 - Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, editor routing, and chat file-path preview targeting.
+
+### Browser Reload Actions
+
+- Changed the desktop View menu reload shortcuts so they target the embedded browser panel instead of reloading the whole app window.
+- Added a cache-bypass reload path for the browser panel, and made background browser tabs activate first before they reload so the command still works when the panel is hidden.
 
 ## v0.1.638 (31 May, 2026)
 
