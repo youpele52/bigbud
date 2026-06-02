@@ -94,8 +94,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       activeTurnInProgress,
       activeTurnStartedAt,
       rows,
+      expandedWorkGroups,
+      changedFilesExpandedByTurnId,
     });
-  }, [activeTurnInProgress, activeTurnStartedAt, rows]);
+  }, [
+    activeTurnInProgress,
+    activeTurnStartedAt,
+    changedFilesExpandedByTurnId,
+    expandedWorkGroups,
+    rows,
+  ]);
 
   const virtualizedRowCount = clampVirtualizedRowCount(firstUnvirtualizedRowIndex, rows.length);
 

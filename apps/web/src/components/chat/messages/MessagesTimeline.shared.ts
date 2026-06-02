@@ -6,7 +6,8 @@ import { type ExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { type TurnDiffSummary } from "../../../models/types";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 
-export const ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
+export const MIN_ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
+export const RECENT_COMPLETED_TURNS_TO_KEEP_MOUNTED = 2;
 
 export interface MessagesTimelineProps {
   isWorking: boolean;
