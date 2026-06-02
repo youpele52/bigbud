@@ -12,6 +12,12 @@ import { extname, join } from "node:path";
 
 import { EDITORS, OpenError, OpenPathInput, type EditorId } from "@bigbud/contracts";
 import { ServiceMap, Effect, Layer } from "effect";
+import {
+  hasDarwinInstallationEvidence,
+  hasPlatformInstallationEvidence,
+  resolveDarwinEditorApp,
+  resolveWin32EditorExecutable,
+} from "./open.installation";
 
 // ==============================
 // Definitions
@@ -23,6 +29,8 @@ export interface OpenInEditorInput {
   readonly cwd: string;
   readonly editor: EditorId;
 }
+
+type EditorDefinition = (typeof EDITORS)[number];
 
 interface EditorLaunch {
   readonly command: string;
@@ -53,10 +61,7 @@ function parseTargetPathAndPosition(target: string): {
   };
 }
 
-function resolveCommandEditorArgs(
-  editor: (typeof EDITORS)[number],
-  target: string,
-): ReadonlyArray<string> {
+function resolveCommandEditorArgs(editor: EditorDefinition, target: string): ReadonlyArray<string> {
   const parsedTarget = parseTargetPathAndPosition(target);
 
   switch (editor.launchStyle) {
@@ -75,10 +80,7 @@ function resolveCommandEditorArgs(
   }
 }
 
-function resolveEditorArgs(
-  editor: (typeof EDITORS)[number],
-  target: string,
-): ReadonlyArray<string> {
+function resolveEditorArgs(editor: EditorDefinition, target: string): ReadonlyArray<string> {
   const baseArgs: ReadonlyArray<string> =
     "baseArgs" in editor && Array.isArray(editor.baseArgs) ? editor.baseArgs : [];
   return [...baseArgs, ...resolveCommandEditorArgs(editor, target)];
@@ -227,6 +229,15 @@ export function resolveAvailableEditors(
       continue;
     }
 
+    if (hasPlatformInstallationEvidence(editor, platform, env)) {
+      available.push(editor.id);
+      continue;
+    }
+
+    if (platform === "darwin" && hasDarwinInstallationEvidence(editor)) {
+      continue;
+    }
+
     const command = resolveAvailableCommand(editor.commands, { platform, env });
     if (command !== null) {
       available.push(editor.id);
@@ -283,6 +294,26 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
   const editorDef = EDITORS.find((editor) => editor.id === input.editor);
   if (!editorDef) {
     return yield* new OpenError({ message: `Unknown editor: ${input.editor}` });
+  }
+
+  if (platform === "darwin") {
+    const appPath = resolveDarwinEditorApp(editorDef, env);
+    if (appPath !== null) {
+      return {
+        command: "open",
+        args: ["-a", appPath, "--args", ...resolveEditorArgs(editorDef, input.cwd)],
+      };
+    }
+  }
+
+  if (platform === "win32") {
+    const executablePath = resolveWin32EditorExecutable(editorDef, env);
+    if (executablePath !== null) {
+      return {
+        command: executablePath,
+        args: resolveEditorArgs(editorDef, input.cwd),
+      };
+    }
   }
 
   if (editorDef.commands) {
