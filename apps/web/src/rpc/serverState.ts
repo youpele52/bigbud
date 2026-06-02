@@ -50,10 +50,6 @@ const EMPTY_KEYBINDINGS: ServerConfig["keybindings"] = [];
 const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 const EMPTY_SERVER_DISCOVERY_AGENTS: ReadonlyArray<ServerDiscoveredAgent> = [];
 const EMPTY_SERVER_DISCOVERY_SKILLS: ReadonlyArray<ServerDiscoveredSkill> = [];
-const EMPTY_SERVER_DISCOVERY: ServerDiscoveryCatalog = {
-  agents: EMPTY_SERVER_DISCOVERY_AGENTS,
-  skills: EMPTY_SERVER_DISCOVERY_SKILLS,
-};
 
 const selectAvailableEditors = (config: ServerConfig | null): ReadonlyArray<EditorId> =>
   config?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
@@ -63,8 +59,6 @@ const selectKeybindingsConfigPath = (config: ServerConfig | null) =>
 const selectObservability = (config: ServerConfig | null) => config?.observability ?? null;
 const selectProviders = (config: ServerConfig | null) =>
   config?.providers ?? EMPTY_SERVER_PROVIDERS;
-const selectDiscovery = (config: ServerConfig | null) =>
-  config?.discovery ?? EMPTY_SERVER_DISCOVERY;
 const selectDiscoveredAgents = (config: ServerConfig | null) =>
   config?.discovery.agents ?? EMPTY_SERVER_DISCOVERY_AGENTS;
 const selectDiscoveredSkills = (config: ServerConfig | null) =>
@@ -302,10 +296,6 @@ export function useServerSettings(): ServerSettings {
 
 export function useServerProviders(): ReadonlyArray<ServerProvider> {
   return useAtomValue(serverConfigAtom, selectProviders);
-}
-
-export function useServerDiscovery(): ServerDiscoveryCatalog {
-  return useAtomValue(serverConfigAtom, selectDiscovery);
 }
 
 export function useServerDiscoveredAgents(): ReadonlyArray<ServerDiscoveredAgent> {

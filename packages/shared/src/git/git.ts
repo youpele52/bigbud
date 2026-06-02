@@ -1,10 +1,8 @@
 import type {
   GitBranch,
-  GitHostingProvider,
   GitStatusLocalResult,
   GitStatusRemoteResult,
   GitStatusResult,
-  GitStatusStreamEvent,
 } from "@bigbud/contracts";
 
 /**
@@ -127,68 +125,6 @@ export function dedupeRemoteBranchesWithLocalMatches(
   });
 }
 
-// ── Git hosting provider detection ───────────────────────────────────────────
-
-const GITHUB_HOSTS = ["github.com", "github."];
-const GITLAB_HOSTS = ["gitlab.com", "gitlab."];
-
-/**
- * Detect the Git hosting provider from a remote URL.
- * Supports both HTTPS and SSH remote URL formats.
- */
-export function detectGitHostingProviderFromRemoteUrl(
-  remoteUrl: string,
-): GitHostingProvider | null {
-  if (!remoteUrl || remoteUrl.trim().length === 0) {
-    return null;
-  }
-
-  const normalized = remoteUrl.trim().toLowerCase();
-
-  for (const host of GITHUB_HOSTS) {
-    if (normalized.includes(host)) {
-      return { kind: "github", name: "GitHub", baseUrl: "https://github.com" };
-    }
-  }
-
-  for (const host of GITLAB_HOSTS) {
-    if (normalized.includes(host)) {
-      return { kind: "gitlab", name: "GitLab", baseUrl: "https://gitlab.com" };
-    }
-  }
-
-  return null;
-}
-
-// ── Git status stream helpers ─────────────────────────────────────────────────
-
-/**
- * Extract local-only fields from a full GitStatusResult.
- */
-function toLocalStatusPart(full: GitStatusResult): GitStatusLocalResult {
-  return {
-    isRepo: full.isRepo,
-    ...(full.hostingProvider !== undefined ? { hostingProvider: full.hostingProvider } : {}),
-    hasOriginRemote: full.hasOriginRemote,
-    isDefaultBranch: full.isDefaultBranch,
-    branch: full.branch,
-    hasWorkingTreeChanges: full.hasWorkingTreeChanges,
-    workingTree: full.workingTree,
-  };
-}
-
-/**
- * Extract remote-only fields from a full GitStatusResult.
- */
-function toRemoteStatusPart(full: GitStatusResult): GitStatusRemoteResult {
-  return {
-    hasUpstream: full.hasUpstream,
-    aheadCount: full.aheadCount,
-    behindCount: full.behindCount,
-    pr: full.pr,
-  };
-}
-
 /**
  * Merge local and remote status parts into a full GitStatusResult.
  */
@@ -203,40 +139,4 @@ export function mergeGitStatusParts(
     behindCount: remote?.behindCount ?? 0,
     pr: remote?.pr ?? null,
   };
-}
-
-/**
- * Apply a GitStatusStreamEvent to an existing (or null) GitStatusResult,
- * returning the updated full status.
- */
-export function applyGitStatusStreamEvent(
-  current: GitStatusResult | null,
-  event: GitStatusStreamEvent,
-): GitStatusResult {
-  if (event._tag === "snapshot") {
-    return mergeGitStatusParts(event.local, event.remote);
-  }
-
-  if (event._tag === "localUpdated") {
-    if (current === null) {
-      return mergeGitStatusParts(event.local, null);
-    }
-    return mergeGitStatusParts(event.local, toRemoteStatusPart(current));
-  }
-
-  // remoteUpdated
-  if (current === null) {
-    return mergeGitStatusParts(
-      {
-        isRepo: false,
-        hasOriginRemote: false,
-        isDefaultBranch: false,
-        branch: null,
-        hasWorkingTreeChanges: false,
-        workingTree: { files: [], insertions: 0, deletions: 0 },
-      },
-      event.remote,
-    );
-  }
-  return mergeGitStatusParts(toLocalStatusPart(current), event.remote);
 }

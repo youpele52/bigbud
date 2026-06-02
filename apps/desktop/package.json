@@ -29,7 +29,7 @@
     "@bigbud/shared": "workspace:*",
     "@electron/notarize": "^3.1.1",
     "@types/node": "catalog:",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "25.1.8",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

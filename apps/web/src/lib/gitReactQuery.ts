@@ -37,8 +37,6 @@ export const gitQueryKeys = {
 export const gitMutationKeys = {
   init: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
     ["git", "mutation", "init", resolveExecutionTargetId(executionTargetId), cwd] as const,
-  checkout: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
-    ["git", "mutation", "checkout", resolveExecutionTargetId(executionTargetId), cwd] as const,
   runStackedAction: (
     cwd: string | null,
     executionTargetId?: ExecutionTargetId | null | undefined,
@@ -203,28 +201,6 @@ export function gitInitMutationOptions(input: {
   });
 }
 
-export function gitCheckoutMutationOptions(input: {
-  cwd: string | null;
-  executionTargetId?: ExecutionTargetId | null | undefined;
-  queryClient: QueryClient;
-}) {
-  return mutationOptions({
-    mutationKey: gitMutationKeys.checkout(input.cwd, input.executionTargetId),
-    mutationFn: async (branch: string) => {
-      const api = ensureNativeApi();
-      if (!input.cwd) throw new Error("Git checkout is unavailable.");
-      return api.git.checkout({
-        cwd: input.cwd,
-        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-        branch,
-      });
-    },
-    onSuccess: async () => {
-      await invalidateGitQueries(input.queryClient);
-    },
-  });
-}
-
 export function gitRunStackedActionMutationOptions(input: {
   cwd: string | null;
   executionTargetId?: ExecutionTargetId | null | undefined;
@@ -282,38 +258,6 @@ export function gitPullMutationOptions(input: {
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
       });
     },
-    onSettled: async () => {
-      await invalidateGitQueries(input.queryClient);
-    },
-  });
-}
-
-export function gitCreateWorktreeMutationOptions(input: { queryClient: QueryClient }) {
-  return mutationOptions({
-    mutationFn: async ({
-      cwd,
-      executionTargetId,
-      branch,
-      newBranch,
-      path,
-    }: {
-      cwd: string;
-      executionTargetId?: ExecutionTargetId | null | undefined;
-      branch: string;
-      newBranch: string;
-      path?: string | null;
-    }) => {
-      const api = ensureNativeApi();
-      if (!cwd) throw new Error("Git worktree creation is unavailable.");
-      return api.git.createWorktree({
-        cwd,
-        ...(executionTargetId ? { executionTargetId } : {}),
-        branch,
-        newBranch,
-        path: path ?? null,
-      });
-    },
-    mutationKey: ["git", "mutation", "create-worktree"] as const,
     onSettled: async () => {
       await invalidateGitQueries(input.queryClient);
     },
