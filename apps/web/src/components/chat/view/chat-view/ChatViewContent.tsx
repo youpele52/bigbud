@@ -20,6 +20,7 @@ import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 import { useFilesPanelStore } from "../../../../stores/files/filesPanel.store";
+import { useTerminalPanelStore } from "../../../../stores/terminal/terminalPanel.store";
 import { useSearchStore } from "../../../../stores/ui";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
@@ -63,6 +64,7 @@ export function ChatViewContent({
   const { branchThread } = useThreadActions();
   const browserOpen = useBrowserPanelStore((state) => state.open);
   const filesOpen = useFilesPanelStore((state) => state.open);
+  const terminalPanelOpen = useTerminalPanelStore((state) => state.open);
   const searchFocusRequest = useSearchStore((state) => state.focusRequest);
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
@@ -155,12 +157,13 @@ export function ChatViewContent({
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
           terminalAvailable={base.activeProject !== undefined}
-          terminalOpen={base.terminalState.terminalOpen}
+          terminalOpen={terminalPanelOpen}
           terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
+          terminalPanelToggleShortcutLabel={composer.terminalPanelToggleShortcutLabel}
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
-          filesToggleShortcutLabel={null}
+          filesToggleShortcutLabel={composer.filesPanelShortcutLabel}
           gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           diffOpen={base.diffOpen}
@@ -172,7 +175,7 @@ export function ChatViewContent({
           onAddProjectScript={runtime.projectScripts.saveProjectScript}
           onUpdateProjectScript={runtime.projectScripts.updateProjectScript}
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
-          onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
+          onToggleTerminal={runtime.onToggleTerminalPanel}
           onToggleDiff={runtime.onToggleDiff}
           onToggleBrowser={runtime.onToggleBrowser}
           onToggleFiles={runtime.onToggleFiles}

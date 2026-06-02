@@ -63,6 +63,7 @@ describe("ChatHeader", () => {
     sidebarToggleShortcutLabel: null,
     terminalAvailable: true,
     terminalOpen: false,
+    terminalPanelToggleShortcutLabel: null,
     terminalToggleShortcutLabel: null,
   } as const;
 
@@ -73,7 +74,7 @@ describe("ChatHeader", () => {
       </SidebarProvider>,
     );
 
-    expect(markup.indexOf('aria-label="Toggle terminal drawer"')).toBeLessThan(
+    expect(markup.indexOf('aria-label="Toggle terminal panel"')).toBeLessThan(
       markup.indexOf('aria-label="Toggle browser panel"'),
     );
     expect(markup.indexOf('aria-label="Toggle browser panel"')).toBeLessThan(

@@ -49,11 +49,30 @@ function makeTerminalEvent(
   }
 }
 
+function makeStartedTerminalEvent(terminalId: string): TerminalEvent {
+  return makeTerminalEvent("started", {
+    terminalId,
+    snapshot: {
+      threadId: THREAD_ID,
+      terminalId,
+      cwd: "/tmp/worktree",
+      worktreePath: "/tmp/worktree",
+      status: "running",
+      pid: 123,
+      history: "",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: "2026-04-02T20:00:00.000Z",
+    },
+  });
+}
+
 describe("terminalStateStore actions", () => {
   beforeEach(() => {
     useTerminalStateStore.persist.clearStorage();
     useTerminalStateStore.setState({
       terminalStateByThreadId: {},
+      panelTerminalStateByThreadId: {},
       terminalLaunchContextByThreadId: {},
       terminalEventEntriesByKey: {},
       nextTerminalEventId: 1,
@@ -148,6 +167,24 @@ describe("terminalStateStore actions", () => {
     ]);
   });
 
+  it("initializes panel terminals without sharing the default drawer terminal", () => {
+    const store = useTerminalStateStore.getState();
+    store.ensurePanelTerminal(THREAD_ID, "panel-terminal-1", { active: true });
+
+    const panelTerminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().panelTerminalStateByThreadId,
+      THREAD_ID,
+    );
+    const drawerTerminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().terminalStateByThreadId,
+      THREAD_ID,
+    );
+
+    expect(panelTerminalState.terminalIds).toEqual(["panel-terminal-1"]);
+    expect(panelTerminalState.activeTerminalId).toBe("panel-terminal-1");
+    expect(drawerTerminalState.terminalIds).toEqual(["default"]);
+  });
+
   it("allows unlimited groups while keeping each group capped at four terminals", () => {
     const store = useTerminalStateStore.getState();
     store.splitTerminal(THREAD_ID, "terminal-2");
@@ -237,23 +274,7 @@ describe("terminalStateStore actions", () => {
 
   it("applies started terminal events to terminal state, launch context, and event buffer", () => {
     const store = useTerminalStateStore.getState();
-    store.applyTerminalEvent(
-      makeTerminalEvent("started", {
-        terminalId: "setup-bootstrap",
-        snapshot: {
-          threadId: THREAD_ID,
-          terminalId: "setup-bootstrap",
-          cwd: "/tmp/worktree",
-          worktreePath: "/tmp/worktree",
-          status: "running",
-          pid: 123,
-          history: "",
-          exitCode: null,
-          exitSignal: null,
-          updatedAt: "2026-04-02T20:00:00.000Z",
-        },
-      }),
-    );
+    store.applyTerminalEvent(makeStartedTerminalEvent("setup-bootstrap"));
 
     const terminalState = selectThreadTerminalState(
       useTerminalStateStore.getState().terminalStateByThreadId,
@@ -311,6 +332,38 @@ describe("terminalStateStore actions", () => {
 
     expect(terminalState.runningTerminalIds).toEqual([]);
     expect(entries.map((entry) => entry.event.type)).toEqual(["activity", "exited"]);
+  });
+
+  it("routes panel terminal events to panel state without adding them to drawer state", () => {
+    const store = useTerminalStateStore.getState();
+    store.ensurePanelTerminal(THREAD_ID, "panel-terminal-1", { active: true });
+
+    store.applyTerminalEvent(makeStartedTerminalEvent("panel-terminal-1"));
+    store.applyTerminalEvent(
+      makeTerminalEvent("activity", {
+        terminalId: "panel-terminal-1",
+        hasRunningSubprocess: true,
+      }),
+    );
+
+    const drawerTerminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().terminalStateByThreadId,
+      THREAD_ID,
+    );
+    const panelTerminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().panelTerminalStateByThreadId,
+      THREAD_ID,
+    );
+    const entries = selectTerminalEventEntries(
+      useTerminalStateStore.getState().terminalEventEntriesByKey,
+      THREAD_ID,
+      "panel-terminal-1",
+    );
+
+    expect(drawerTerminalState.terminalIds).toEqual(["default"]);
+    expect(panelTerminalState.terminalIds).toEqual(["panel-terminal-1"]);
+    expect(panelTerminalState.runningTerminalIds).toEqual(["panel-terminal-1"]);
+    expect(entries.map((entry) => entry.event.type)).toEqual(["started", "activity"]);
   });
 
   it("clears buffered terminal events when a thread terminal state is removed", () => {

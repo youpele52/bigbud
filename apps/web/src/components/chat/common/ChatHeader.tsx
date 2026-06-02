@@ -40,6 +40,7 @@ interface ChatHeaderProps {
   terminalAvailable: boolean;
   terminalOpen: boolean;
   terminalToggleShortcutLabel: string | null;
+  terminalPanelToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
   sidebarToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
@@ -72,6 +73,7 @@ export const ChatHeader = memo(function ChatHeader({
   terminalAvailable,
   terminalOpen,
   terminalToggleShortcutLabel,
+  terminalPanelToggleShortcutLabel,
   diffToggleShortcutLabel,
   sidebarToggleShortcutLabel,
   browserToggleShortcutLabel,
@@ -185,7 +187,7 @@ export const ChatHeader = memo(function ChatHeader({
                 className="shrink-0"
                 pressed={terminalOpen}
                 onPressedChange={onToggleTerminal}
-                aria-label="Toggle terminal drawer"
+                aria-label="Toggle terminal panel"
                 variant="toolbar"
                 size="xs"
                 disabled={!terminalAvailable}
@@ -197,9 +199,9 @@ export const ChatHeader = memo(function ChatHeader({
           <TooltipPopup side="bottom">
             {!terminalAvailable
               ? "Terminal is unavailable until this thread has an active project."
-              : terminalToggleShortcutLabel
-                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                : "Toggle terminal drawer"}
+              : terminalToggleShortcutLabel || terminalPanelToggleShortcutLabel
+                ? `Toggle terminal panel (${[terminalToggleShortcutLabel, terminalPanelToggleShortcutLabel].filter(Boolean).join(", ")})`
+                : "Toggle terminal panel"}
           </TooltipPopup>
         </Tooltip>
         <Tooltip>

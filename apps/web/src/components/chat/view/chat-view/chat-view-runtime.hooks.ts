@@ -33,6 +33,7 @@ import {
   toggleBrowserPanel,
 } from "../../../../stores/browser/browserPanel.actions";
 import { toggleFilesPanel } from "../../../../stores/files/filesPanel.coordinator";
+import { toggleTerminalPanel } from "../../../../stores/terminal/terminalPanel.coordinator";
 import { requestRightPanel } from "../../../../stores/rightPanel/rightPanel.coordinator";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -161,6 +162,10 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
 
   const onToggleFiles = useCallback(() => {
     toggleFilesPanel();
+  }, []);
+
+  const onToggleTerminalPanel = useCallback(() => {
+    toggleTerminalPanel();
   }, []);
 
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
@@ -379,6 +384,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     onToggleDiff,
     onToggleBrowser,
     onToggleFiles,
+    onToggleTerminalPanel,
     onToggleSearch,
     setThreadError,
     turnActions,

@@ -215,6 +215,7 @@ export function useChatViewInteractions({
     terminalState: base.terminalState,
     keybindings: composer.keybindings,
     toggleTerminalVisibility: runtime.terminalActions.toggleTerminalVisibility,
+    toggleTerminalPanel: runtime.onToggleTerminalPanel,
     setTerminalOpen: runtime.terminalActions.setTerminalOpen,
     splitTerminal: runtime.terminalActions.splitTerminal,
     closeTerminal: runtime.terminalActions.closeTerminal,
