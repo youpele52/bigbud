@@ -1,13 +1,14 @@
 import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bigbud/contracts";
-import { ChevronRightIcon, FolderIcon, FolderOpenIcon, XIcon } from "lucide-react";
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRightIcon, XIcon } from "lucide-react";
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../ui/button";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { openPathInPreferredApp } from "../../models/editor";
+import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useDefaultChatCwd } from "../../rpc/serverState";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
+import { useComposerDraftStore } from "../../stores/composer";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
@@ -23,6 +24,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { closeFilesPanel } from "../../stores/files/filesPanel.coordinator";
 import { RightPanelShell } from "../right-panel/RightPanelShell";
 import { useRightPanelWidth } from "../right-panel/useRightPanelWidth";
+import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 
 interface FilesPanelProps {
   activeThreadId?: ThreadId | null;
@@ -35,12 +37,22 @@ interface DirectoryState {
 }
 
 const EMPTY_ENTRIES: ReadonlyArray<ProjectEntry> = [];
-const FILES_PANEL_MIN_WIDTH = 320;
+const FILES_PANEL_MIN_WIDTH = 520;
 const FILES_PANEL_WIDTH_STORAGE_KEY = "files_panel_width";
+const FILES_TREE_WIDTH_STORAGE_KEY = "files_tree_width";
+const FILES_TREE_MIN_WIDTH = 220;
+const FILES_TREE_MAX_WIDTH_FACTOR = 0.6;
+const FILES_TREE_DEFAULT_WIDTH = 280;
 
 function entryName(entry: ProjectEntry): string {
   const segments = entry.path.split("/");
   return segments.at(-1) ?? entry.path;
+}
+
+function makeAnnotationId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `code-annotation-${Date.now()}`;
 }
 
 export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPanelProps) {
@@ -51,6 +63,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const { resolvedTheme } = useTheme();
   const defaultChatCwd = useDefaultChatCwd();
   const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
+  const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const workspaceExecutionTargetId = project
     ? resolveWorkspaceExecutionTargetId(project)
@@ -59,14 +72,48 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
     minWidth: FILES_PANEL_MIN_WIDTH,
     storageKey: FILES_PANEL_WIDTH_STORAGE_KEY,
   });
+  const fileTreeContainerRef = useRef<HTMLDivElement>(null);
+  const [fileTreeWidth, setFileTreeWidth] = useState(() => {
+    const stored = Number.parseInt(localStorage.getItem(FILES_TREE_WIDTH_STORAGE_KEY) ?? "", 10);
+    return Number.isFinite(stored) && stored >= FILES_TREE_MIN_WIDTH
+      ? stored
+      : FILES_TREE_DEFAULT_WIDTH;
+  });
+
+  const handleTreeResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = fileTreeContainerRef.current;
+    if (!container) return;
+
+    const startX = e.clientX;
+    const startWidth = fileTreeWidth;
+    const maxWidth = container.getBoundingClientRect().width * FILES_TREE_MAX_WIDTH_FACTOR;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(FILES_TREE_MIN_WIDTH, Math.min(maxWidth, startWidth - deltaX));
+      setFileTreeWidth(newWidth);
+      localStorage.setItem(FILES_TREE_WIDTH_STORAGE_KEY, String(newWidth));
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  };
   const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
   const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
     {},
   );
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
 
   useEffect(() => {
     setExpandedDirectories({});
     setDirectoryStateByPath({});
+    setPreviewPath(null);
   }, [workspaceRoot]);
 
   const loadDirectory = useCallback(
@@ -143,6 +190,10 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const handleOpenFile = useCallback(
     (entry: ProjectEntry) => {
       if (!workspaceRoot) return;
+      if (isCodeRelatedFilePath(entry.path)) {
+        setPreviewPath(entry.path);
+        return;
+      }
       const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
       const api = readNativeApi();
       if (!api) return;
@@ -151,6 +202,30 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       });
     },
     [workspaceRoot],
+  );
+
+  const handleCreateCodeAnnotation = useCallback(
+    (annotation: CodeAnnotationDraft) => {
+      if (!activeThreadId || !workspaceRoot || !previewPath) return;
+      addAnnotation(activeThreadId, {
+        id: makeAnnotationId(),
+        kind: "code",
+        comment: annotation.comment,
+        intent: annotation.intent,
+        createdAt: new Date().toISOString(),
+        file: {
+          ...(project?.name ? { projectName: project.name } : {}),
+          cwd: workspaceRoot,
+          relativePath: previewPath,
+        },
+        selection: {
+          startLine: annotation.startLine,
+          endLine: annotation.endLine,
+          text: annotation.text,
+        },
+      });
+    },
+    [activeThreadId, addAnnotation, previewPath, project?.name, workspaceRoot],
   );
 
   const renderEntries = useCallback(
@@ -181,7 +256,9 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
               onClick={() => {
                 if (isDirectory) {
                   handleToggleDirectory(entry);
+                  return;
                 }
+                handleOpenFile(entry);
               }}
               onDoubleClick={() => {
                 if (isDirectory) return;
@@ -204,7 +281,10 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
                     }
                   });
               }}
-              className="flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-accent/40"
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-accent/40",
+                !isDirectory && previewPath === entry.path && "bg-accent/45 text-accent-foreground",
+              )}
               style={{ paddingLeft: `${8 + depth * 16}px` }}
             >
               {isDirectory ? (
@@ -214,20 +294,12 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
               ) : (
                 <span className="size-3 shrink-0" />
               )}
-              {isDirectory ? (
-                expanded ? (
-                  <FolderOpenIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                ) : (
-                  <FolderIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                )
-              ) : (
-                <VscodeEntryIcon
-                  pathValue={entry.path}
-                  kind="file"
-                  theme={resolvedTheme}
-                  className="size-3.5 shrink-0"
-                />
-              )}
+              <VscodeEntryIcon
+                pathValue={entry.path}
+                kind={isDirectory ? "directory" : "file"}
+                theme={resolvedTheme}
+                className="size-3.5 shrink-0"
+              />
               <span className="truncate text-xs text-foreground/80">{name}</span>
             </button>
             {isDirectory && expanded ? (
@@ -260,10 +332,21 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       copyToClipboard,
       handleOpenFile,
       handleToggleDirectory,
+      previewPath,
       resolvedTheme,
       workspaceRoot,
     ],
   );
+
+  const treeBody = useMemo(() => {
+    if (rootDirectoryState?.loading) {
+      return <div className="p-3 text-sm text-muted-foreground/70">Loading files...</div>;
+    }
+    if (rootDirectoryState?.error) {
+      return <div className="p-3 text-sm text-destructive/80">{rootDirectoryState.error}</div>;
+    }
+    return <div className="space-y-0.5 p-2">{renderEntries(sortedRootEntries, 0)}</div>;
+  }, [renderEntries, rootDirectoryState, sortedRootEntries]);
 
   const panelBody = useMemo(() => {
     if (!workspaceRoot) {
@@ -280,14 +363,46 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
         </div>
       );
     }
-    if (rootDirectoryState?.loading) {
-      return <div className="p-3 text-sm text-muted-foreground/70">Loading files...</div>;
+    if (!previewPath) {
+      return <div className="h-full overflow-y-auto">{treeBody}</div>;
     }
-    if (rootDirectoryState?.error) {
-      return <div className="p-3 text-sm text-destructive/80">{rootDirectoryState.error}</div>;
-    }
-    return <div className="space-y-0.5 p-2">{renderEntries(sortedRootEntries, 0)}</div>;
-  }, [remoteWorkspace, renderEntries, rootDirectoryState, sortedRootEntries, workspaceRoot]);
+    return (
+      <div ref={fileTreeContainerRef} className="flex h-full min-h-0">
+        <div className="min-h-0 min-w-0 flex-1">
+          <FilePreview
+            cwd={workspaceRoot}
+            relativePath={previewPath}
+            executionTargetId={workspaceExecutionTargetId}
+            projectName={project?.name}
+            onBack={() => setPreviewPath(null)}
+            onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
+          />
+        </div>
+        <div
+          className="z-10 w-[3px] shrink-0 cursor-col-resize select-none hover:bg-primary/30"
+          role="separator"
+          onMouseDown={handleTreeResizeStart}
+        />
+        <div
+          className="min-h-0 overflow-y-auto border-l border-border"
+          style={{ width: fileTreeWidth }}
+        >
+          {treeBody}
+        </div>
+      </div>
+    );
+  }, [
+    activeThreadId,
+    fileTreeWidth,
+    handleCreateCodeAnnotation,
+    handleTreeResizeStart,
+    previewPath,
+    project?.name,
+    remoteWorkspace,
+    treeBody,
+    workspaceExecutionTargetId,
+    workspaceRoot,
+  ]);
 
   return (
     <RightPanelShell
@@ -322,7 +437,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
           <XIcon />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">{panelBody}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{panelBody}</div>
     </RightPanelShell>
   );
 });

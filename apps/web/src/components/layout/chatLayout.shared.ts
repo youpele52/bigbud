@@ -1,4 +1,4 @@
-export const THREAD_MAIN_CONTENT_MIN_WIDTH_PX = 40 * 16;
+export const THREAD_MAIN_CONTENT_MIN_WIDTH_PX = 24 * 16;
 
 const LEFT_SIDEBAR_GAP_SELECTOR =
   "[data-slot='sidebar'][data-side='left'] [data-slot='sidebar-gap']";
