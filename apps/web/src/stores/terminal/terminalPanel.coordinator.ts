@@ -1,34 +1,25 @@
 import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
-import { useBrowserPanelStore } from "../browser/browser.store";
-import { useFilesPanelStore } from "../files/filesPanel.store";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useTerminalPanelStore } from "./terminalPanel.store";
 
 export function toggleTerminalPanel() {
-  const { open, setOpen } = useTerminalPanelStore.getState();
-
-  if (!open) {
-    requestRightPanel("terminal");
-    closeDiffPanelIfOpen();
-    useBrowserPanelStore.getState().setOpen(false);
-    useFilesPanelStore.getState().setOpen(false);
-  } else if (useTerminalPanelStore.getState().open) {
-    requestRightPanel(null);
+  if (!useTerminalPanelStore.getState().open) {
+    openTerminalPanel();
+    return;
   }
 
-  setOpen(!open);
+  closeTerminalPanel();
 }
 
 export function openTerminalPanel() {
   requestRightPanel("terminal");
   closeDiffPanelIfOpen();
-  useBrowserPanelStore.getState().setOpen(false);
-  useFilesPanelStore.getState().setOpen(false);
+  useRightPanelTabsStore.getState().openTab("terminal");
   useTerminalPanelStore.getState().setOpen(true);
 }
 
 export function closeTerminalPanel() {
-  if (useTerminalPanelStore.getState().open) {
-    requestRightPanel(null);
-  }
+  useRightPanelTabsStore.getState().closeTab("terminal");
+  requestRightPanel(useRightPanelTabsStore.getState().activeKind);
   useTerminalPanelStore.getState().setOpen(false);
 }

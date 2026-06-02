@@ -18,6 +18,7 @@ vi.mock("../../../stores/main", async () => {
 import { DEFAULT_BINDINGS } from "../../../models/keybindings/keybindings.models.test.helpers";
 import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
 import { useStore } from "../../../stores/main";
+import { useRightPanelTabsStore } from "../../../stores/rightPanel/rightPanelTabs.store";
 import { SidebarProvider } from "../../ui/sidebar";
 import { ChatHeader } from "./ChatHeader";
 
@@ -27,6 +28,7 @@ describe("ChatHeader", () => {
     mockIsThreadRunning = false;
     mockIsThreadCompacting = false;
     useBrowserPanelStore.setState({ open: false, url: "" });
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
     useStore.setState({
       projects: [],
       threads: [],
@@ -41,11 +43,9 @@ describe("ChatHeader", () => {
     activeProjectName: undefined,
     activeThreadTitle: "Thread",
     availableEditors: [],
-    browserOpen: false,
     browserToggleShortcutLabel: null,
     diffOpen: false,
     diffToggleShortcutLabel: null,
-    filesOpen: false,
     filesToggleShortcutLabel: null,
     gitCwd: null,
     isGitRepo: true,
@@ -62,24 +62,19 @@ describe("ChatHeader", () => {
     preferredScriptId: null,
     sidebarToggleShortcutLabel: null,
     terminalAvailable: true,
-    terminalOpen: false,
     terminalPanelToggleShortcutLabel: null,
     terminalToggleShortcutLabel: null,
   } as const;
 
-  it("renders the browser toggle immediately before the diff toggle", () => {
+  it("renders the sidebar toggle and the right panel launcher", () => {
     const markup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
         <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} />
       </SidebarProvider>,
     );
 
-    expect(markup.indexOf('aria-label="Toggle terminal panel"')).toBeLessThan(
-      markup.indexOf('aria-label="Toggle browser panel"'),
-    );
-    expect(markup.indexOf('aria-label="Toggle browser panel"')).toBeLessThan(
-      markup.indexOf('aria-label="Toggle diff panel"'),
-    );
+    expect(markup).toContain('aria-label="Toggle sidebar"');
+    expect(markup).toContain('aria-label="Open right panel tools"');
   });
 
   it("shows blue dots while running and orange dots while compacting", () => {

@@ -1,5 +1,5 @@
 import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
-import { useFilesPanelStore } from "../files/filesPanel.store";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useBrowserPanelStore } from "./browser.store";
 
 export function openBrowserPanel(input: { url?: string } = {}) {
@@ -12,27 +12,21 @@ export function openBrowserPanel(input: { url?: string } = {}) {
 
   requestRightPanel("browser");
   closeDiffPanelIfOpen();
-  useFilesPanelStore.getState().setOpen(false);
+  useRightPanelTabsStore.getState().openTab("browser");
   setOpen(true);
 }
 
 export function toggleBrowserPanel() {
-  const { open, setOpen } = useBrowserPanelStore.getState();
-
-  if (!open) {
-    requestRightPanel("browser");
-    closeDiffPanelIfOpen();
-    useFilesPanelStore.getState().setOpen(false);
-  } else if (useBrowserPanelStore.getState().open) {
-    requestRightPanel(null);
+  if (!useBrowserPanelStore.getState().open) {
+    openBrowserPanel();
+    return;
   }
 
-  setOpen(!open);
+  closeBrowserPanel();
 }
 
 export function closeBrowserPanel() {
-  if (useBrowserPanelStore.getState().open) {
-    requestRightPanel(null);
-  }
+  useRightPanelTabsStore.getState().closeTab("browser");
+  requestRightPanel(useRightPanelTabsStore.getState().activeKind);
   useBrowserPanelStore.getState().setOpen(false);
 }
