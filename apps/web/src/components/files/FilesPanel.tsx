@@ -63,6 +63,10 @@ function makeAnnotationId(): string {
 
 export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPanelProps) {
   const open = useFilesPanelStore((state) => state.open);
+  const previewPath = useFilesPanelStore((state) => state.previewPath);
+  const previewPosition = useFilesPanelStore((state) => state.previewPosition);
+  const setPreviewPath = useFilesPanelStore((state) => state.setPreviewPath);
+  const setPreviewPosition = useFilesPanelStore((state) => state.setPreviewPosition);
   const activeTab = useRightPanelTabsStore((state) => state.activeKind);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
@@ -118,13 +122,12 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
     {},
   );
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
-
   useEffect(() => {
     setExpandedDirectories({});
     setDirectoryStateByPath({});
     setPreviewPath(null);
-  }, [workspaceRoot]);
+    setPreviewPosition(null);
+  }, [setPreviewPath, setPreviewPosition, workspaceRoot]);
 
   const loadDirectory = useCallback(
     async (relativePath: string) => {
@@ -183,6 +186,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
   const showPanel = open && Boolean(workspaceRoot) && activeTab === "files";
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
+  const previewTargetLine = previewPosition?.line;
 
   const handleToggleDirectory = useCallback(
     (entry: ProjectEntry) => {
@@ -202,6 +206,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       if (!workspaceRoot) return;
       if (isCodeRelatedFilePath(entry.path)) {
         setPreviewPath(entry.path);
+        setPreviewPosition(null);
         return;
       }
       const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
@@ -211,7 +216,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
         console.error("Failed to open file:", error);
       });
     },
-    [workspaceRoot],
+    [setPreviewPath, setPreviewPosition, workspaceRoot],
   );
 
   const handleCreateCodeAnnotation = useCallback(
@@ -382,9 +387,13 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
           <FilePreview
             cwd={workspaceRoot}
             relativePath={previewPath}
+            targetLine={previewTargetLine}
             executionTargetId={workspaceExecutionTargetId}
             projectName={project?.name}
-            onBack={() => setPreviewPath(null)}
+            onBack={() => {
+              setPreviewPath(null);
+              setPreviewPosition(null);
+            }}
             onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
           />
         </div>
@@ -407,8 +416,11 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
     handleCreateCodeAnnotation,
     handleTreeResizeStart,
     previewPath,
+    previewTargetLine,
     project?.name,
     remoteWorkspace,
+    setPreviewPath,
+    setPreviewPosition,
     treeBody,
     workspaceExecutionTargetId,
     workspaceRoot,
