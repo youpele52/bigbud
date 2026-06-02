@@ -197,6 +197,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     directories: {
       buildResources: buildResourcesDir,
     },
+    npmRebuild: false,
     extraMetadata: {
       homepage: "https://bigbud.app",
       author: {

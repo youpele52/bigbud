@@ -49,11 +49,32 @@ const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
   "@earendil-works/pi-coding-agent",
 ]);
 
+const NATIVE_SERVER_EXTERNAL_PACKAGES = new Set(["node-pty"]);
+
 /** Filter a dependency map to only include packages that are external at runtime. */
 function pickExternalDependencies(dependencies: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [name, version] of Object.entries(dependencies)) {
     if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name)) {
+      result[name] = version;
+    }
+  }
+  return result;
+}
+
+/**
+ * Like pickExternalDependencies but excludes native compiled addons.
+ *
+ * Native addons must only live in the staged server directory (loaded from
+ * _modules at runtime). Installing them in the app-root node_modules triggers
+ * electron-builder's implicit npmRebuild which hangs on Windows.
+ */
+function pickNonNativeExternalDependencies(
+  dependencies: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [name, version] of Object.entries(dependencies)) {
+    if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name) && !NATIVE_SERVER_EXTERNAL_PACKAGES.has(name)) {
       result[name] = version;
     }
   }
@@ -283,6 +304,9 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // Only packages that cannot be bundled (native addons, runtime require.resolve)
   // need to be installed in the staged server directory.
   const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
+  const serverNonNativeExternalDependencies = pickNonNativeExternalDependencies(
+    resolvedServerDependencies,
+  );
 
   const stagePackageJson: StagePackageJson = {
     name: "bigbud-desktop",
@@ -304,7 +328,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       repoRoot,
     ),
     dependencies: {
-      ...serverExternalDependencies,
+      ...serverNonNativeExternalDependencies,
       ...resolvedDesktopRuntimeDependencies,
     },
     devDependencies: {
