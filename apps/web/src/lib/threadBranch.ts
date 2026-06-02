@@ -190,21 +190,3 @@ export function prepareSeedMessages(
     ),
   );
 }
-
-/**
- * Type guard to check if messages conform to SeedMessageInput.
- */
-export function isSeedMessageInput(
-  messages: ReadonlyArray<unknown>,
-): messages is ReadonlyArray<SeedMessageInput> {
-  return messages.every(
-    (msg): msg is SeedMessageInput =>
-      typeof msg === "object" &&
-      msg !== null &&
-      "id" in msg &&
-      "role" in msg &&
-      "text" in msg &&
-      "streaming" in msg &&
-      "createdAt" in msg,
-  );
-}

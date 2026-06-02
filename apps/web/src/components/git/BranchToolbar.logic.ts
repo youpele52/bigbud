@@ -8,27 +8,12 @@ export {
 export const EnvMode = Schema.Literals(["local", "worktree"]);
 export type EnvMode = typeof EnvMode.Type;
 
-const GENERIC_LOCAL_LABELS = new Set(["local", "local environment"]);
-
-function normalizeDisplayLabel(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
 export function resolveEnvModeLabel(mode: EnvMode): string {
   return mode === "worktree" ? "New worktree" : "Current checkout";
 }
 
 export function resolveCurrentWorkspaceLabel(activeWorktreePath: string | null): string {
   return activeWorktreePath ? "Current worktree" : resolveEnvModeLabel("local");
-}
-
-export function resolvePrimaryWorkspaceLabel(label: string | null | undefined): string {
-  const normalizedLabel = normalizeDisplayLabel(label);
-  if (!normalizedLabel) {
-    return "This device";
-  }
-  return GENERIC_LOCAL_LABELS.has(normalizedLabel.toLowerCase()) ? "This device" : normalizedLabel;
 }
 
 export function resolveEffectiveEnvMode(input: {
