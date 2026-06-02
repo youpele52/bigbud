@@ -72,6 +72,11 @@ const CODE_RELATED_FILENAMES = new Set([
 ]);
 const POSITION_SUFFIX_PATTERN = /:\d+(?::\d+)?$/;
 
+export interface PathPosition {
+  line: number;
+  column: number | null;
+}
+
 function basenameOfPath(pathValue: string): string {
   const segments = pathValue.split(/[\\/]/);
   return segments.at(-1) ?? pathValue;
@@ -79,6 +84,24 @@ function basenameOfPath(pathValue: string): string {
 
 export function stripPathPositionSuffix(pathValue: string): string {
   return pathValue.replace(POSITION_SUFFIX_PATTERN, "");
+}
+
+export function parsePathPositionSuffix(pathValue: string): PathPosition | null {
+  const match = pathValue.match(/:(\d+)(?::(\d+))?$/);
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const line = Number.parseInt(match[1], 10);
+  if (!Number.isFinite(line) || line <= 0) {
+    return null;
+  }
+
+  const columnValue = match[2] ? Number.parseInt(match[2], 10) : null;
+  const column =
+    columnValue !== null && Number.isFinite(columnValue) && columnValue > 0 ? columnValue : null;
+
+  return { line, column };
 }
 
 export function isCodeRelatedFilePath(pathValue: string): boolean {

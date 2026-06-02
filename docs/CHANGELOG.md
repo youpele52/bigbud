@@ -33,9 +33,25 @@ Entries below are grouped by release tag and date.
 - The plan sidebar now shows active tasks in a more compact layout, so you can see what the AI is implementing at a glance without scrolling.
 - Tuned the chat view so new content scrolling into view feels smoother and more natural as responses stream in.
 
+### Right Panel Launcher and Tabs
+
+- Consolidated the right-panel entry points into a single launcher so browser, files, terminal, and side chat are opened from one place instead of separate header buttons.
+- Added a tab strip for the right panel so browser, files, and terminal can stay available as distinct views while you switch between them from the same workspace area.
+
+### Right Panel Tab Polish
+
+- Aligned the right-panel divider and tab strip with the main chat line so the header rhythm stays consistent across the layout.
+- Moved the close action into the tab hover state and removed the extra close button from the panel body to keep the tab controls cleaner.
+
+### Chat File Paths Open In App
+
+- Clicking a supported file path in chat now opens that file in bigbud's own file viewer instead of immediately jumping out to your editor, so reading referenced code stays inside the app when possible.
+- Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
+- When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
+
 ### Validation
 
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, and editor routing.
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, editor routing, and chat file-path preview targeting.
 
 ## v0.1.638 (31 May, 2026)
 

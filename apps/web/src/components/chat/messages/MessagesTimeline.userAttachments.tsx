@@ -1,10 +1,9 @@
 import { ChevronDownIcon } from "lucide-react";
 import type { ChatFileAttachment, ChatPathAttachment } from "../../../models/types/app.types";
-import { openPathInPreferredApp } from "../../../models/editor";
-import { readNativeApi } from "../../../rpc/nativeApi";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
 import { cn } from "~/lib/utils";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
+import { openChatFileTarget, showChatFileTargetContextMenu } from "../common/chatFileTargets";
 
 type UserFileReference = ChatFileAttachment | ChatPathAttachment;
 type UserFileWithSourcePath = ChatFileAttachment & { sourcePath: string };
@@ -13,11 +12,7 @@ type VscodeIconTheme = "light" | "dark";
 function openChatFilePath(path: string, markdownCwd: string | undefined): void {
   const targetPath = resolveMarkdownFileLinkTarget(path, markdownCwd);
   if (!targetPath) return;
-  const api = readNativeApi();
-  if (!api) return;
-  void openPathInPreferredApp(api, targetPath).catch((error) => {
-    console.error("Failed to open file:", error);
-  });
+  openChatFileTarget(targetPath, markdownCwd);
 }
 
 export function UserFileReferenceChips(props: {
@@ -48,6 +43,18 @@ export function UserFileReferenceChips(props: {
                     event.preventDefault();
                     event.stopPropagation();
                     openChatFilePath(fileTargetPath, props.markdownCwd);
+                  }
+                : undefined
+            }
+            onContextMenu={
+              fileTargetPath
+                ? (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    showChatFileTargetContextMenu(fileTargetPath, props.markdownCwd, {
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
                   }
                 : undefined
             }
@@ -94,6 +101,16 @@ export function UserFileSourcePaths(props: {
               event.preventDefault();
               event.stopPropagation();
               openChatFilePath(file.sourcePath, props.markdownCwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const targetPath = resolveMarkdownFileLinkTarget(file.sourcePath, props.markdownCwd);
+              if (!targetPath) return;
+              showChatFileTargetContextMenu(targetPath, props.markdownCwd, {
+                x: event.clientX,
+                y: event.clientY,
+              });
             }}
           >
             <VscodeEntryIcon
