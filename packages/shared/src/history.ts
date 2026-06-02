@@ -107,12 +107,6 @@ function finalizeWithPrompt(
   return text.length <= maxChars ? text : null;
 }
 
-export function hasImageAttachments(
-  attachments: ReadonlyArray<ChatAttachment> | undefined,
-): boolean {
-  return attachments?.some((attachment) => attachment.type === "image") ?? false;
-}
-
 /** Returns true when there are any non-image file attachments. */
 export function hasFileAttachments(
   attachments: ReadonlyArray<ChatAttachment> | undefined,
