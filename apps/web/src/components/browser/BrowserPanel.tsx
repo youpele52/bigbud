@@ -24,6 +24,7 @@ import {
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
 import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
+import { planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 import { RightPanelShell } from "../right-panel/RightPanelShell";
@@ -45,6 +46,7 @@ export const BrowserPanel = memo(function BrowserPanel({
 }: BrowserPanelProps) {
   const { open, url, setUrl } = useBrowserPanelStore();
   const activeTab = useRightPanelTabsStore((state) => state.activeKind);
+  const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
@@ -67,12 +69,24 @@ export const BrowserPanel = memo(function BrowserPanel({
     x: number;
     y: number;
   }>({ open: false, x: 0, y: 0 });
+  const [queuedDesktopReload, setQueuedDesktopReload] = useState<
+    "normal" | "ignoring-cache" | null
+  >(null);
   const { panelWidth, onResizePointerDown } = useRightPanelWidth({
     minWidth: BROWSER_PANEL_MIN_WIDTH,
     storageKey: BROWSER_PANEL_WIDTH_STORAGE_KEY,
   });
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const visible = open && activeTab === "browser";
+
+  const reloadViewport = useCallback((mode: "normal" | "ignoring-cache") => {
+    if (mode === "ignoring-cache") {
+      viewportRef.current?.reloadIgnoringCache();
+      return;
+    }
+
+    viewportRef.current?.reload();
+  }, []);
 
   const handleNavigate = useCallback(() => {
     let nextUrl = inputUrl.trim();
@@ -209,6 +223,45 @@ export const BrowserPanel = memo(function BrowserPanel({
     if (!nextUrl) return;
     setInputUrl(nextUrl);
   }, [url]);
+
+  useEffect(() => {
+    const onMenuAction = window.desktopBridge?.onMenuAction;
+    if (typeof onMenuAction !== "function") {
+      return;
+    }
+
+    const unsubscribe = onMenuAction((action) => {
+      const reloadPlan = planDesktopBrowserReload({
+        action,
+        browserOpen: open,
+        browserVisible: visible,
+      });
+      if (!reloadPlan.reloadMode) {
+        return;
+      }
+
+      if (reloadPlan.shouldActivateBrowser) {
+        setQueuedDesktopReload(reloadPlan.reloadMode);
+        setActiveTab("browser");
+        return;
+      }
+
+      reloadViewport(reloadPlan.reloadMode);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [open, reloadViewport, setActiveTab, visible]);
+
+  useEffect(() => {
+    if (!visible || !queuedDesktopReload) {
+      return;
+    }
+
+    reloadViewport(queuedDesktopReload);
+    setQueuedDesktopReload(null);
+  }, [queuedDesktopReload, reloadViewport, visible]);
 
   if (!visible) return null;
 
