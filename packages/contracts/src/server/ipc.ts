@@ -22,6 +22,8 @@ import type {
 import type {
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
+  ProjectReadFilePreviewInput,
+  ProjectReadFilePreviewResult,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
@@ -178,6 +180,7 @@ export interface NativeApi {
   };
   projects: {
     listDirectory: (input: ProjectListDirectoryInput) => Promise<ProjectListDirectoryResult>;
+    readFilePreview: (input: ProjectReadFilePreviewInput) => Promise<ProjectReadFilePreviewResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
   };
