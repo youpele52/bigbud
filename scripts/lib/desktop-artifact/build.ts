@@ -6,13 +6,12 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 
-import { Cause, Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
 import {
   BuildScriptError,
   BuildArch,
-  BuildPlatform,
   PLATFORM_CONFIG,
   RepoRoot,
   commandOutputOptions,
@@ -50,11 +49,32 @@ const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
   "@earendil-works/pi-coding-agent",
 ]);
 
+const NATIVE_SERVER_EXTERNAL_PACKAGES = new Set(["node-pty"]);
+
 /** Filter a dependency map to only include packages that are external at runtime. */
 function pickExternalDependencies(dependencies: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [name, version] of Object.entries(dependencies)) {
     if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name)) {
+      result[name] = version;
+    }
+  }
+  return result;
+}
+
+/**
+ * Like pickExternalDependencies but excludes native compiled addons.
+ *
+ * Native addons must only live in the staged server directory (loaded from
+ * _modules at runtime). Installing them in the app-root node_modules triggers
+ * electron-builder's implicit npmRebuild which hangs on Windows.
+ */
+function pickNonNativeExternalDependencies(
+  dependencies: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [name, version] of Object.entries(dependencies)) {
+    if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name) && !NATIVE_SERVER_EXTERNAL_PACKAGES.has(name)) {
       result[name] = version;
     }
   }
@@ -117,16 +137,14 @@ const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(f
     try: () => {
       const require = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
       const entry = require.resolve("electron-builder");
-      const candidateDirs = [dirname(entry), dirname(dirname(entry))];
-      for (const candidateDir of candidateDirs) {
-        const cliPath = path.join(candidateDir, "cli.js");
-        if (existsSync(cliPath)) {
-          return cliPath;
-        }
-        const altCliPath = path.join(candidateDir, "out", "cli.js");
-        if (existsSync(altCliPath)) {
-          return altCliPath;
-        }
+      const pkgDir = dirname(entry);
+      const cliPath = path.join(pkgDir, "cli.js");
+      if (existsSync(cliPath)) {
+        return cliPath;
+      }
+      const altCliPath = path.join(pkgDir, "out", "cli", "cli.js");
+      if (existsSync(altCliPath)) {
+        return altCliPath;
       }
       return null;
     },
@@ -173,66 +191,6 @@ const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts
         cause,
       }),
   });
-});
-
-function shouldRetrySignedMacBuildError(cause: unknown): boolean {
-  if (!(cause instanceof BuildScriptError)) {
-    return false;
-  }
-
-  return cause.message.includes("Command exited with non-zero exit code");
-}
-
-const runElectronBuilder = Effect.fn("runElectronBuilder")(function* (input: {
-  readonly stageAppDir: string;
-  readonly buildEnv: NodeJS.ProcessEnv;
-  readonly verbose: boolean;
-  readonly platform: typeof BuildPlatform.Type;
-  readonly arch: typeof BuildArch.Type;
-  readonly target: string;
-  readonly appVersion: string;
-  readonly cliFlag: "--mac" | "--linux" | "--win";
-  readonly signed: boolean;
-}) {
-  const electronBuilderResult = yield* resolveElectronBuilderBinary();
-  const builderCommand = electronBuilderResult.fallback
-    ? ChildProcess.make({
-        cwd: input.stageAppDir,
-        env: input.buildEnv,
-        ...commandOutputOptions(input.verbose),
-        shell: shellOptionForPlatform(input.platform),
-      })`bunx electron-builder ${input.cliFlag} --${input.arch} --publish never`
-    : ChildProcess.make({
-        cwd: input.stageAppDir,
-        env: input.buildEnv,
-        ...commandOutputOptions(input.verbose),
-        shell: shellOptionForPlatform(input.platform),
-      })`${electronBuilderResult.binary} ${input.cliFlag} --${input.arch} --publish never`;
-
-  yield* Effect.log(
-    `[desktop-artifact] Building ${input.platform}/${input.target} (arch=${input.arch}, version=${input.appVersion}) using ${electronBuilderResult.binary}...`,
-  );
-
-  const buildOnce = runCommand(builderCommand);
-  if (!(input.platform === "mac" && input.signed)) {
-    yield* buildOnce;
-    return;
-  }
-
-  const firstAttempt = yield* Effect.exit(buildOnce);
-  if (firstAttempt._tag === "Success") {
-    return;
-  }
-
-  if (!shouldRetrySignedMacBuildError(Cause.squash(firstAttempt.cause))) {
-    return yield* firstAttempt;
-  }
-
-  yield* Effect.logWarning(
-    "[desktop-artifact] macOS signing failed. Retrying desktop packaging once to recover from transient codesign/timestamp failures...",
-  );
-  yield* Effect.sleep("2 seconds");
-  yield* buildOnce;
 });
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
@@ -346,6 +304,9 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // Only packages that cannot be bundled (native addons, runtime require.resolve)
   // need to be installed in the staged server directory.
   const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
+  const serverNonNativeExternalDependencies = pickNonNativeExternalDependencies(
+    resolvedServerDependencies,
+  );
 
   const stagePackageJson: StagePackageJson = {
     name: "bigbud-desktop",
@@ -367,7 +328,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       repoRoot,
     ),
     dependencies: {
-      ...serverExternalDependencies,
+      ...serverNonNativeExternalDependencies,
       ...resolvedDesktopRuntimeDependencies,
     },
     devDependencies: {
@@ -476,17 +437,29 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  yield* runElectronBuilder({
-    stageAppDir,
-    buildEnv,
-    verbose: options.verbose,
-    platform: options.platform,
-    arch: options.arch,
-    target: options.target,
-    appVersion,
-    cliFlag: platformConfig.cliFlag,
-    signed: options.signed,
-  });
+  const electronBuilderResult = yield* resolveElectronBuilderBinary();
+  yield* Effect.log(
+    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
+  );
+  if (electronBuilderResult.fallback) {
+    yield* runCommand(
+      ChildProcess.make({
+        cwd: stageAppDir,
+        env: buildEnv,
+        ...commandOutputOptions(options.verbose),
+        shell: shellOptionForPlatform(options.platform),
+      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    );
+  } else {
+    yield* runCommand(
+      ChildProcess.make({
+        cwd: stageAppDir,
+        env: buildEnv,
+        ...commandOutputOptions(options.verbose),
+        shell: shellOptionForPlatform(options.platform),
+      })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
+    );
+  }
 
   const stageDistDir = path.join(stageAppDir, "dist");
   if (!(yield* fs.exists(stageDistDir))) {
