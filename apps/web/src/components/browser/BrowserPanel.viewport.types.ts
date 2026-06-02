@@ -2,6 +2,7 @@ export interface BrowserViewportRef {
   goBack(): void;
   goForward(): void;
   reload(): void;
+  reloadIgnoringCache(): void;
   openDevTools(): void;
   startAnnotation(): Promise<import("./BrowserPanel.annotation").BrowserAnnotationResult | null>;
   cancelAnnotation(): Promise<void>;
