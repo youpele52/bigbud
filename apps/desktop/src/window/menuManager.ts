@@ -205,8 +205,16 @@ export function configureApplicationMenu(deps: MenuManagerDeps): void {
     {
       label: "View",
       submenu: [
-        { role: "reload" },
-        { role: "forceReload" },
+        {
+          label: "Reload Browser",
+          accelerator: "CmdOrCtrl+R",
+          click: () => dispatchMenuAction(deps, "reload-browser"),
+        },
+        {
+          label: "Reload Browser and Ignore Cache",
+          accelerator: "Shift+CmdOrCtrl+R",
+          click: () => dispatchMenuAction(deps, "reload-browser-ignoring-cache"),
+        },
         { role: "toggleDevTools" },
         { type: "separator" },
         { role: "resetZoom" },
