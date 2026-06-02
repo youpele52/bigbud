@@ -1,5 +1,4 @@
 import { type ThreadId } from "@bigbud/contracts";
-import { XIcon } from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
 import { normalizeTerminalContextSelection } from "../../lib/terminalContext";
 import { randomUUID } from "~/lib/utils";
@@ -7,11 +6,17 @@ import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { useComposerDraftStore } from "../../stores/composer";
+import { closeBrowserPanel, openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { closeFilesPanel, openFilesPanel } from "../../stores/files/filesPanel.coordinator";
+import { useRightPanelTabsStore } from "../../stores/rightPanel/rightPanelTabs.store";
 import { useTerminalStateStore } from "../../stores/terminal";
-import { closeTerminalPanel } from "../../stores/terminal/terminalPanel.coordinator";
+import {
+  closeTerminalPanel,
+  openTerminalPanel,
+} from "../../stores/terminal/terminalPanel.coordinator";
 import { useTerminalPanelStore } from "../../stores/terminal/terminalPanel.store";
-import { Button } from "../ui/button";
 import { RightPanelShell } from "../right-panel/RightPanelShell";
+import { RightPanelTabs } from "../right-panel/RightPanelTabs";
 import { useRightPanelWidth } from "../right-panel/useRightPanelWidth";
 import { useThreadTerminalDrawer } from "./useThreadTerminalDrawer";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
@@ -25,6 +30,7 @@ interface TerminalPanelProps {
 
 export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: TerminalPanelProps) {
   const open = useTerminalPanelStore((state) => state.open);
+  const activeTab = useRightPanelTabsStore((state) => state.activeKind);
   const { panelWidth, onResizePointerDown } = useRightPanelWidth({
     minWidth: TERMINAL_PANEL_MIN_WIDTH,
     storageKey: TERMINAL_PANEL_WIDTH_STORAGE_KEY,
@@ -58,7 +64,9 @@ export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: Ter
     [activeThreadId],
   );
 
-  if (!open || !panelTerminalState || !drawer.project || !drawer.cwd) {
+  const visible = open && activeTab === "terminal";
+
+  if (!visible || !panelTerminalState || !drawer.project || !drawer.cwd) {
     return null;
   }
 
@@ -70,22 +78,21 @@ export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: Ter
       resizeAriaLabel="Resize terminal panel"
     >
       <div className="flex h-full flex-col">
-        <div
-          className={cn(
-            "flex items-center justify-between border-b border-border px-3",
-            isElectron ? "h-[52px]" : "py-2",
-          )}
-        >
+        <RightPanelTabs
+          browserShortcutLabel={null}
+          filesShortcutLabel={null}
+          hasActiveProject
+          onCloseBrowser={closeBrowserPanel}
+          onCloseFiles={closeFilesPanel}
+          onCloseTerminal={closeTerminalPanel}
+          onOpenBrowser={openBrowserPanel}
+          onOpenFiles={openFilesPanel}
+          onOpenTerminal={openTerminalPanel}
+          terminalAvailable
+          terminalShortcutLabel={null}
+        />
+        <div className={cn("border-b border-border px-3", isElectron ? "py-3" : "py-2")}>
           <p className="text-sm font-medium text-foreground">Terminal</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={closeTerminalPanel}
-            aria-label="Close terminal panel"
-          >
-            <XIcon />
-          </Button>
         </div>
         <div className="min-h-0 flex-1">
           <ThreadTerminalDrawer
@@ -95,7 +102,7 @@ export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: Ter
             cwd={drawer.cwd}
             worktreePath={drawer.effectiveWorktreePath}
             runtimeEnv={drawer.runtimeEnv}
-            visible={open}
+            visible={visible}
             height={drawer.terminalState.terminalHeight}
             terminalIds={drawer.terminalState.terminalIds}
             activeTerminalId={drawer.terminalState.activeTerminalId}

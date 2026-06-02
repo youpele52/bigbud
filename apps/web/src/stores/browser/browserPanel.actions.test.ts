@@ -8,11 +8,13 @@ import {
   registerDiffPanelCloseAction,
   requestRightPanel,
 } from "../rightPanel/rightPanel.coordinator";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
 describe("browserPanel.actions", () => {
   afterEach(() => {
     useBrowserPanelStore.setState({ open: false, url: "" });
     useFilesPanelStore.setState({ open: false });
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
     registerDiffPanelCloseAction(null);
     requestRightPanel(null);
   });
@@ -30,15 +32,20 @@ describe("browserPanel.actions", () => {
     });
   });
 
-  it("closes the files panel when opening the browser", () => {
+  it("keeps the files tab open while switching the active panel to browser", () => {
     useFilesPanelStore.setState({ open: true });
     requestRightPanel("files");
+    useRightPanelTabsStore.setState({ activeKind: "files", openTabs: ["files"] });
 
     openBrowserPanel({ url: "https://example.com" });
 
-    expect(useFilesPanelStore.getState().open).toBe(false);
+    expect(useFilesPanelStore.getState().open).toBe(true);
     expect(useBrowserPanelStore.getState().open).toBe(true);
     expect(getRequestedRightPanel()).toBe("browser");
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "browser",
+      openTabs: ["files", "browser"],
+    });
   });
 
   it("only closes the diff panel when toggling the browser open", () => {

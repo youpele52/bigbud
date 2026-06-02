@@ -18,9 +18,6 @@ import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
-import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
-import { useFilesPanelStore } from "../../../../stores/files/filesPanel.store";
-import { useTerminalPanelStore } from "../../../../stores/terminal/terminalPanel.store";
 import { useSearchStore } from "../../../../stores/ui";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
@@ -62,9 +59,6 @@ export function ChatViewContent({
   interactions,
 }: ChatViewContentProps) {
   const { branchThread } = useThreadActions();
-  const browserOpen = useBrowserPanelStore((state) => state.open);
-  const filesOpen = useFilesPanelStore((state) => state.open);
-  const terminalPanelOpen = useTerminalPanelStore((state) => state.open);
   const searchFocusRequest = useSearchStore((state) => state.focusRequest);
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
@@ -157,7 +151,6 @@ export function ChatViewContent({
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
           terminalAvailable={base.activeProject !== undefined}
-          terminalOpen={terminalPanelOpen}
           terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
           terminalPanelToggleShortcutLabel={composer.terminalPanelToggleShortcutLabel}
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
@@ -167,8 +160,6 @@ export function ChatViewContent({
           gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           diffOpen={base.diffOpen}
-          browserOpen={browserOpen}
-          filesOpen={filesOpen}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}

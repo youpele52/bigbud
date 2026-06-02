@@ -1,8 +1,7 @@
 import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bigbud/contracts";
-import { ChevronRightIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "../ui/button";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -21,8 +20,15 @@ import {
 } from "./filesPanel.dnd";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
 import { useTheme } from "../../hooks/useTheme";
-import { closeFilesPanel } from "../../stores/files/filesPanel.coordinator";
+import { closeFilesPanel, openFilesPanel } from "../../stores/files/filesPanel.coordinator";
+import { closeBrowserPanel, openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { useRightPanelTabsStore } from "../../stores/rightPanel/rightPanelTabs.store";
+import {
+  closeTerminalPanel,
+  openTerminalPanel,
+} from "../../stores/terminal/terminalPanel.coordinator";
 import { RightPanelShell } from "../right-panel/RightPanelShell";
+import { RightPanelTabs } from "../right-panel/RightPanelTabs";
 import { useRightPanelWidth } from "../right-panel/useRightPanelWidth";
 import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 
@@ -57,6 +63,7 @@ function makeAnnotationId(): string {
 
 export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPanelProps) {
   const open = useFilesPanelStore((state) => state.open);
+  const activeTab = useRightPanelTabsStore((state) => state.activeKind);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
@@ -80,30 +87,33 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       : FILES_TREE_DEFAULT_WIDTH;
   });
 
-  const handleTreeResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const container = fileTreeContainerRef.current;
-    if (!container) return;
+  const handleTreeResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const container = fileTreeContainerRef.current;
+      if (!container) return;
 
-    const startX = e.clientX;
-    const startWidth = fileTreeWidth;
-    const maxWidth = container.getBoundingClientRect().width * FILES_TREE_MAX_WIDTH_FACTOR;
+      const startX = e.clientX;
+      const startWidth = fileTreeWidth;
+      const maxWidth = container.getBoundingClientRect().width * FILES_TREE_MAX_WIDTH_FACTOR;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const newWidth = Math.max(FILES_TREE_MIN_WIDTH, Math.min(maxWidth, startWidth - deltaX));
-      setFileTreeWidth(newWidth);
-      localStorage.setItem(FILES_TREE_WIDTH_STORAGE_KEY, String(newWidth));
-    };
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const deltaX = moveEvent.clientX - startX;
+        const newWidth = Math.max(FILES_TREE_MIN_WIDTH, Math.min(maxWidth, startWidth - deltaX));
+        setFileTreeWidth(newWidth);
+        localStorage.setItem(FILES_TREE_WIDTH_STORAGE_KEY, String(newWidth));
+      };
 
-    const handleMouseUp = () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
+      const handleMouseUp = () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+      };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-  };
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    },
+    [fileTreeWidth],
+  );
   const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
   const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
     {},
@@ -171,7 +181,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
 
   const rootDirectoryState = directoryStateByPath[""];
   const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
-  const showPanel = open && Boolean(workspaceRoot);
+  const showPanel = open && Boolean(workspaceRoot) && activeTab === "files";
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
 
   const handleToggleDirectory = useCallback(
@@ -411,12 +421,20 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       onResizePointerDown={onResizePointerDown}
       resizeAriaLabel="Resize files panel"
     >
-      <div
-        className={cn(
-          "flex items-center justify-between border-b border-border px-3",
-          isElectron ? "h-[52px]" : "py-2",
-        )}
-      >
+      <RightPanelTabs
+        browserShortcutLabel={null}
+        filesShortcutLabel={null}
+        hasActiveProject={Boolean(workspaceRoot)}
+        onCloseBrowser={closeBrowserPanel}
+        onCloseFiles={closeFilesPanel}
+        onCloseTerminal={closeTerminalPanel}
+        onOpenBrowser={openBrowserPanel}
+        onOpenFiles={openFilesPanel}
+        onOpenTerminal={openTerminalPanel}
+        terminalAvailable={Boolean(workspaceRoot)}
+        terminalShortcutLabel={null}
+      />
+      <div className={cn("border-b border-border px-3", isElectron ? "py-2.5" : "py-2")}>
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Files</p>
           <p
@@ -426,16 +444,6 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
             {workspaceRoot ?? "No workspace"}
           </p>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="[-webkit-app-region:no-drag]"
-          onClick={closeFilesPanel}
-          aria-label="Close files panel"
-        >
-          <XIcon />
-        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">{panelBody}</div>
     </RightPanelShell>

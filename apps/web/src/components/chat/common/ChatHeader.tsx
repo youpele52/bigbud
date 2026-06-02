@@ -6,14 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import {
-  DiffIcon,
-  FolderTreeIcon,
-  GlobeIcon,
-  PanelLeftCloseIcon,
-  PanelLeftIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -21,7 +14,9 @@ import ProjectScriptsControl, {
 import { Toggle } from "../../ui/toggle";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
+import { RightPanelLauncherMenu, type RightPanelLauncherKind } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
+import { useRightPanelTabsStore } from "../../../stores/rightPanel/rightPanelTabs.store";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -38,7 +33,6 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   terminalAvailable: boolean;
-  terminalOpen: boolean;
   terminalToggleShortcutLabel: string | null;
   terminalPanelToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
@@ -48,8 +42,6 @@ interface ChatHeaderProps {
   gitCwd: string | null;
   executionTargetId?: string | undefined;
   diffOpen: boolean;
-  browserOpen: boolean;
-  filesOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -71,7 +63,6 @@ export const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   terminalAvailable,
-  terminalOpen,
   terminalToggleShortcutLabel,
   terminalPanelToggleShortcutLabel,
   diffToggleShortcutLabel,
@@ -81,8 +72,6 @@ export const ChatHeader = memo(function ChatHeader({
   gitCwd,
   executionTargetId,
   diffOpen,
-  browserOpen,
-  filesOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -94,8 +83,12 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const isThreadCompacting = useIsThreadCompacting(activeThreadId);
+  const activeTabbedRightPanelKind = useRightPanelTabsStore((state) => state.activeKind);
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
+  const activeRightPanelKind: RightPanelLauncherKind | null = diffOpen
+    ? "diff"
+    : activeTabbedRightPanelKind;
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -180,99 +173,22 @@ export const ChatHeader = memo(function ChatHeader({
             {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
           </TooltipPopup>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={terminalOpen}
-                onPressedChange={onToggleTerminal}
-                aria-label="Toggle terminal panel"
-                variant="toolbar"
-                size="xs"
-                disabled={!terminalAvailable}
-              >
-                <TerminalIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!terminalAvailable
-              ? "Terminal is unavailable until this thread has an active project."
-              : terminalToggleShortcutLabel || terminalPanelToggleShortcutLabel
-                ? `Toggle terminal panel (${[terminalToggleShortcutLabel, terminalPanelToggleShortcutLabel].filter(Boolean).join(", ")})`
-                : "Toggle terminal panel"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={browserOpen}
-                onPressedChange={onToggleBrowser}
-                aria-label="Toggle browser panel"
-                variant="toolbar"
-                size="xs"
-              >
-                <GlobeIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {browserToggleShortcutLabel
-              ? `Toggle browser panel (${browserToggleShortcutLabel})`
-              : "Toggle browser panel"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={filesOpen}
-                onPressedChange={onToggleFiles}
-                aria-label="Toggle files panel"
-                variant="toolbar"
-                size="xs"
-                disabled={!activeProjectName}
-              >
-                <FolderTreeIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!activeProjectName
-              ? "Files panel is unavailable until this thread has an active project."
-              : filesToggleShortcutLabel
-                ? `Toggle files panel (${filesToggleShortcutLabel})`
-                : "Toggle files panel"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
-                variant="toolbar"
-                size="xs"
-                disabled={!isGitRepo}
-              >
-                <DiffIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!isGitRepo
-              ? "Diff panel is unavailable because this project is not a git repository."
-              : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
-          </TooltipPopup>
-        </Tooltip>
+        <RightPanelLauncherMenu
+          activeKind={activeRightPanelKind}
+          browserToggleShortcutLabel={browserToggleShortcutLabel}
+          diffToggleShortcutLabel={diffToggleShortcutLabel}
+          filesToggleShortcutLabel={filesToggleShortcutLabel}
+          hasActiveProject={Boolean(activeProjectName)}
+          isGitRepo={isGitRepo}
+          onToggleBrowser={onToggleBrowser}
+          onToggleDiff={onToggleDiff}
+          onToggleFiles={onToggleFiles}
+          onToggleTerminal={onToggleTerminal}
+          terminalAvailable={terminalAvailable}
+          terminalShortcutLabel={
+            terminalToggleShortcutLabel || terminalPanelToggleShortcutLabel || null
+          }
+        />
       </div>
     </div>
   );
