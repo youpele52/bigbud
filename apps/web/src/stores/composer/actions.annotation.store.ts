@@ -6,10 +6,14 @@ import {
   type ComposerDraftStoreState,
   type ComposerThreadDraftState,
 } from "./types.store";
+import { isCodeAnnotationAttachment } from "./types.annotation.store";
 
 type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 
 export function createComposerAnnotationActions(set: SetFn) {
+  const dedupKey = (annotation: ComposerAnnotationAttachment) =>
+    isCodeAnnotationAttachment(annotation) ? annotation.id : annotation.imageId;
+
   return {
     addAnnotation: (threadId: ThreadId, annotation: ComposerAnnotationAttachment) => {
       if (threadId.length === 0) {
@@ -19,7 +23,7 @@ export function createComposerAnnotationActions(set: SetFn) {
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         if (
           existing.annotations.some(
-            (entry) => entry.id === annotation.id || entry.imageId === annotation.imageId,
+            (entry) => entry.id === annotation.id || dedupKey(entry) === dedupKey(annotation),
           )
         ) {
           return state;
@@ -42,16 +46,17 @@ export function createComposerAnnotationActions(set: SetFn) {
       set((state) => {
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         const existingIds = new Set(existing.annotations.map((annotation) => annotation.id));
-        const existingImageIds = new Set(
-          existing.annotations.map((annotation) => annotation.imageId),
+        const existingDedupKeys = new Set(
+          existing.annotations.map((annotation) => dedupKey(annotation)),
         );
         const accepted: ComposerAnnotationAttachment[] = [];
         for (const annotation of annotations) {
-          if (existingIds.has(annotation.id) || existingImageIds.has(annotation.imageId)) {
+          const key = dedupKey(annotation);
+          if (existingIds.has(annotation.id) || existingDedupKeys.has(key)) {
             continue;
           }
           existingIds.add(annotation.id);
-          existingImageIds.add(annotation.imageId);
+          existingDedupKeys.add(key);
           accepted.push(annotation);
         }
         if (accepted.length === 0) {

@@ -100,6 +100,30 @@ function makeAnnotation(input: {
   };
 }
 
+function makeCodeAnnotation(input: {
+  id: string;
+  comment?: string;
+  intent?: "ask" | "context" | "fix";
+}): ComposerAnnotationAttachment {
+  return {
+    id: input.id,
+    kind: "code",
+    comment: input.comment ?? "Change this line",
+    intent: input.intent ?? "fix",
+    createdAt: "2026-06-02T00:00:00.000Z",
+    file: {
+      projectName: "Project",
+      cwd: "/tmp/project",
+      relativePath: "src/main.ts",
+    },
+    selection: {
+      startLine: 12,
+      endLine: 14,
+      text: "const value = 1;",
+    },
+  };
+}
+
 function resetComposerDraftStore() {
   useComposerDraftStore.setState({
     draftsByThreadId: {},
@@ -284,6 +308,19 @@ describe("composerDraftStore annotations", () => {
     useComposerDraftStore.getState().removeImage(threadId, image.id);
 
     expect(useComposerDraftStore.getState().draftsByThreadId[threadId]).toBeUndefined();
+  });
+
+  it("keeps code annotations when screenshot images are removed", () => {
+    const image = makeImage({ id: "image-1", previewUrl: "blob:image-1" });
+    const codeAnnotation = makeCodeAnnotation({ id: "code-annotation-1" });
+    useComposerDraftStore.getState().addImage(threadId, image);
+    useComposerDraftStore.getState().addAnnotation(threadId, codeAnnotation);
+
+    useComposerDraftStore.getState().removeImage(threadId, image.id);
+
+    const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
+    expect(draft?.images).toEqual([]);
+    expect(draft?.annotations).toEqual([codeAnnotation]);
   });
 
   it("persists annotations with draft metadata", () => {

@@ -48,6 +48,68 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
     return null;
   }
   const candidate = value as Record<string, unknown>;
+  const id = candidate.id;
+  const comment = candidate.comment;
+  const createdAt = candidate.createdAt;
+  const rawIntent = candidate.intent;
+  const intent: "ask" | "context" | "fix" =
+    rawIntent === "ask" || rawIntent === "context" || rawIntent === "fix" ? rawIntent : "fix";
+  if (
+    typeof id !== "string" ||
+    id.length === 0 ||
+    typeof comment !== "string" ||
+    typeof createdAt !== "string" ||
+    createdAt.length === 0
+  ) {
+    return null;
+  }
+
+  if (candidate.kind === "code") {
+    const file = candidate.file;
+    const selection = candidate.selection;
+    if (!file || typeof file !== "object" || !selection || typeof selection !== "object") {
+      return null;
+    }
+    const fileCandidate = file as Record<string, unknown>;
+    const selectionCandidate = selection as Record<string, unknown>;
+    const cwd = fileCandidate.cwd;
+    const relativePath = fileCandidate.relativePath;
+    const projectName = fileCandidate.projectName;
+    const startLine = normalizeFiniteNumber(selectionCandidate.startLine);
+    const endLine = normalizeFiniteNumber(selectionCandidate.endLine);
+    const text = selectionCandidate.text;
+    if (
+      typeof cwd !== "string" ||
+      cwd.length === 0 ||
+      typeof relativePath !== "string" ||
+      relativePath.length === 0 ||
+      startLine === null ||
+      endLine === null ||
+      typeof text !== "string"
+    ) {
+      return null;
+    }
+    const normalizedStartLine = Math.max(1, Math.floor(startLine));
+    const normalizedEndLine = Math.max(normalizedStartLine, Math.floor(endLine));
+    return {
+      id,
+      kind: "code",
+      comment,
+      intent,
+      createdAt,
+      file: {
+        ...(typeof projectName === "string" && projectName.length > 0 ? { projectName } : {}),
+        cwd,
+        relativePath,
+      },
+      selection: {
+        startLine: normalizedStartLine,
+        endLine: normalizedEndLine,
+        text,
+      },
+    };
+  }
+
   const page = candidate.page;
   const element = candidate.element;
   const viewport = candidate.viewport;
@@ -61,10 +123,7 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
   const rect = elementCandidate.rect;
   if (!rect || typeof rect !== "object") return null;
   const rectCandidate = rect as Record<string, unknown>;
-  const id = candidate.id;
   const imageId = candidate.imageId;
-  const comment = candidate.comment;
-  const createdAt = candidate.createdAt;
   const url = pageCandidate.url;
   const title = pageCandidate.title;
   const selector = elementCandidate.selector;
@@ -106,9 +165,6 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
   }
   const ariaLabel = elementCandidate.ariaLabel;
   const elementId = elementCandidate.id;
-  const rawIntent = candidate.intent;
-  const intent: "ask" | "context" | "fix" =
-    rawIntent === "ask" || rawIntent === "context" || rawIntent === "fix" ? rawIntent : "fix";
   return {
     id,
     imageId,
