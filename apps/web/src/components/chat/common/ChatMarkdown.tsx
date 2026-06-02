@@ -14,14 +14,13 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { openPathInPreferredApp } from "../../../models/editor";
 import { resolveDiffThemeName } from "../../../lib/diffRendering";
 import { useTheme } from "../../../hooks/useTheme";
 import { openBrowserPanel } from "../../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../../utils/markdown";
-import { readNativeApi } from "../../../rpc/nativeApi";
 import { cn } from "~/lib/utils";
 import { SyntaxHighlightedCode } from "./SyntaxHighlightedCode";
+import { openChatFileTarget, showChatFileTargetContextMenu } from "./chatFileTargets";
 
 interface ChatMarkdownProps {
   text: string;
@@ -132,15 +131,6 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   );
 }
 
-function openChatPath(targetPath: string): void {
-  const api = readNativeApi();
-  if (api) {
-    void openPathInPreferredApp(api, targetPath);
-  } else {
-    console.warn("Native API not found. Unable to open file.");
-  }
-}
-
 function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
@@ -175,7 +165,15 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              openChatPath(targetPath);
+              openChatFileTarget(targetPath, cwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              showChatFileTargetContextMenu(targetPath, cwd, {
+                x: event.clientX,
+                y: event.clientY,
+              });
             }}
           />
         );
@@ -198,7 +196,15 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onDoubleClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              openChatPath(targetPath);
+              openChatFileTarget(targetPath, cwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              showChatFileTargetContextMenu(targetPath, cwd, {
+                x: event.clientX,
+                y: event.clientY,
+              });
             }}
             {...props}
           >

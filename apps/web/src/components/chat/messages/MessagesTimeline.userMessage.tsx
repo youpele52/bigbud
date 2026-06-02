@@ -13,9 +13,8 @@ import {
   COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME,
 } from "../view/composerInlineChip";
 import { cn } from "~/lib/utils";
-import { openPathInPreferredApp } from "../../../models/editor";
-import { readNativeApi } from "../../../rpc/nativeApi";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
+import { openChatFileTarget, showChatFileTargetContextMenu } from "../common/chatFileTargets";
 
 const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
   "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
@@ -24,6 +23,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
   mentionKind: "path" | "agent" | "skill";
   targetPath?: string | null;
+  workspaceRoot?: string | undefined;
 }) {
   const clickable = props.mentionKind === "path" && props.targetPath;
   return (
@@ -37,10 +37,20 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
               event.stopPropagation();
               const targetPath = props.targetPath;
               if (!targetPath) return;
-              const api = readNativeApi();
-              if (!api) return;
-              void openPathInPreferredApp(api, targetPath).catch((error) => {
-                console.error("Failed to open file:", error);
+              openChatFileTarget(targetPath, props.workspaceRoot);
+            }
+          : undefined
+      }
+      onContextMenu={
+        clickable
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const targetPath = props.targetPath;
+              if (!targetPath) return;
+              showChatFileTargetContextMenu(targetPath, props.workspaceRoot, {
+                x: event.clientX,
+                y: event.clientY,
               });
             }
           : undefined
@@ -86,6 +96,7 @@ function renderUserMessageTextWithMentionChips(text: string, cwd: string | undef
               ? resolveMarkdownFileLinkTarget(segment.rawValue, cwd)
               : null
           }
+          workspaceRoot={cwd}
         />
       );
     }

@@ -9,6 +9,15 @@ export function openFilesPanel() {
   useFilesPanelStore.getState().setOpen(true);
 }
 
+export function openFileInFilesPanel(
+  relativePath: string,
+  previewPosition?: { line: number; column: number | null } | null,
+) {
+  openFilesPanel();
+  useFilesPanelStore.getState().setPreviewPath(relativePath);
+  useFilesPanelStore.getState().setPreviewPosition(previewPosition ?? null);
+}
+
 export function toggleFilesPanel() {
   if (!useFilesPanelStore.getState().open) {
     openFilesPanel();
@@ -22,4 +31,6 @@ export function closeFilesPanel() {
   useRightPanelTabsStore.getState().closeTab("files");
   requestRightPanel(useRightPanelTabsStore.getState().activeKind);
   useFilesPanelStore.getState().setOpen(false);
+  useFilesPanelStore.getState().setPreviewPath(null);
+  useFilesPanelStore.getState().setPreviewPosition(null);
 }

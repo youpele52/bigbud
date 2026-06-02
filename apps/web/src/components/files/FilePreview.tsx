@@ -1,5 +1,5 @@
 import { AlertCircleIcon, XIcon } from "lucide-react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
 import { AnnotationComposerPanel } from "../annotations/AnnotationComposerPanel";
@@ -9,10 +9,12 @@ import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
+import { FILE_PREVIEW_LINE_HEIGHT, getPreviewScrollTop } from "./FilePreview.logic";
 
 interface FilePreviewProps {
   cwd: string;
   relativePath: string;
+  targetLine?: number | undefined;
   executionTargetId?: string | undefined;
   projectName?: string | undefined;
   onBack?: (() => void) | undefined;
@@ -69,6 +71,7 @@ function buildBreadcrumb(projectName: string | undefined, cwd: string, relativeP
 export const FilePreview = memo(function FilePreview({
   cwd,
   relativePath,
+  targetLine,
   executionTargetId,
   projectName,
   onBack,
@@ -78,6 +81,7 @@ export const FilePreview = memo(function FilePreview({
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
   );
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
 
@@ -129,6 +133,28 @@ export const FilePreview = memo(function FilePreview({
   useEffect(() => {
     setSelectedRange(null);
   }, [relativePath]);
+
+  useEffect(() => {
+    if (!targetLine || state.loading || state.error) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const scrollTop = getPreviewScrollTop(
+      targetLine,
+      state.contents.split("\n").length,
+      container.clientHeight,
+      FILE_PREVIEW_LINE_HEIGHT,
+    );
+    if (scrollTop === null) {
+      return;
+    }
+    container.scrollTo({ top: scrollTop, behavior: "smooth" });
+  }, [state.contents, state.error, state.loading, targetLine]);
 
   const lines = useMemo(
     () =>
@@ -242,7 +268,7 @@ export const FilePreview = memo(function FilePreview({
           <span>{state.error}</span>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto">
           {state.truncated ? (
             <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
               Preview truncated.
@@ -256,6 +282,7 @@ export const FilePreview = memo(function FilePreview({
                   type="button"
                   className={cn(
                     "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground",
+                    targetLine === line.lineNumber && "bg-primary/15 text-foreground",
                     selectedRange &&
                       line.lineNumber >= selectedRange.startLine &&
                       line.lineNumber <= selectedRange.endLine &&
