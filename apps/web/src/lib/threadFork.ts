@@ -32,6 +32,15 @@ export interface SeedMessageInput {
         readonly sizeBytes: number;
         readonly sourcePath?: string;
       }
+    | {
+        readonly type: "path";
+        readonly id: string;
+        readonly name: string;
+        readonly mimeType: string;
+        readonly sizeBytes: 0;
+        readonly path: string;
+        readonly entryKind: "file" | "directory";
+      }
   >;
   readonly streaming: boolean;
   readonly createdAt: string;
@@ -57,6 +66,15 @@ export interface SeedMessageOutput {
         readonly mimeType: string;
         readonly sizeBytes: number;
         readonly sourcePath?: string;
+      }
+    | {
+        readonly type: "path";
+        readonly id: string;
+        readonly name: string;
+        readonly mimeType: string;
+        readonly sizeBytes: 0;
+        readonly path: string;
+        readonly entryKind: "file" | "directory";
       }
   >;
   readonly turnId: null;
@@ -99,6 +117,17 @@ export function prepareSeedMessages(
                   name: attachment.name,
                   mimeType: attachment.mimeType,
                   sizeBytes: attachment.sizeBytes,
+                };
+              }
+              if (attachment.type === "path") {
+                return {
+                  type: "path" as const,
+                  id: attachment.id,
+                  name: attachment.name,
+                  mimeType: attachment.mimeType,
+                  sizeBytes: attachment.sizeBytes,
+                  path: attachment.path,
+                  entryKind: attachment.entryKind,
                 };
               }
               return {

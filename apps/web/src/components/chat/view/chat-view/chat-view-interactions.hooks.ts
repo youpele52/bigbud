@@ -4,10 +4,8 @@ import { useCallback } from "react";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
 import { openDiffRouteSearch } from "~/utils/diff";
-import {
-  closeBrowserPanel,
-  requestRightPanel,
-} from "../../../../stores/browser/browserPanel.coordinator";
+import { closeBrowserPanel } from "../../../../stores/browser/browserPanel.actions";
+import { requestRightPanel } from "../../../../stores/rightPanel/rightPanel.coordinator";
 
 import {
   useApplyPromptReplacement,
@@ -217,6 +215,7 @@ export function useChatViewInteractions({
     terminalState: base.terminalState,
     keybindings: composer.keybindings,
     toggleTerminalVisibility: runtime.terminalActions.toggleTerminalVisibility,
+    toggleTerminalPanel: runtime.onToggleTerminalPanel,
     setTerminalOpen: runtime.terminalActions.setTerminalOpen,
     splitTerminal: runtime.terminalActions.splitTerminal,
     closeTerminal: runtime.terminalActions.closeTerminal,

@@ -449,6 +449,17 @@ label:has(> select#reasoning-effort) select {
   background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
 }
 
+.file-preview-code .chat-markdown-shiki .shiki {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+}
+
+.file-preview-code .chat-markdown-shiki .shiki code {
+  display: block;
+  line-height: 1.25rem;
+}
+
 .chat-markdown table {
   width: 100%;
   border-collapse: collapse;

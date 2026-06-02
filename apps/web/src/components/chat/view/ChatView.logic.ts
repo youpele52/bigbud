@@ -16,7 +16,6 @@ import {
 } from "../../../models/types";
 import { getProviderModelCapabilities } from "../../../models/provider";
 import { type ComposerImageAttachment, type DraftThreadState } from "../../../stores/composer";
-import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 import { Schema } from "effect";
 import {
   filterTerminalContextsWithText,
@@ -36,6 +35,12 @@ export {
   waitForThreadToDisappear,
   waitForThreadToExist,
 } from "./ChatView.threadWait.logic";
+export {
+  appendAnnotationsToPrompt,
+  appendBrowserAnnotationsToPrompt,
+  buildBrowserAnnotationPrompt,
+  buildCodeAnnotationPrompt,
+} from "./ChatView.annotations.logic";
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "bigbud:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 
@@ -210,59 +215,6 @@ export function deriveComposerSendState(options: {
       (options.annotationCount ?? 0) > 0 ||
       sendableTerminalContexts.length > 0,
   };
-}
-
-export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttachment): string {
-  const { element, page, viewport, intent } = annotation;
-  const rect = element.rect;
-  const userInstruction = annotation.comment.trim() || "(no instruction provided)";
-
-  const closingLine =
-    intent === "fix"
-      ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
-      : intent === "context"
-        ? "Refer to the attached screenshot and selected element metadata when responding."
-        : undefined;
-
-  const lines = [
-    "Browser annotation",
-    "",
-    "User instruction:",
-    userInstruction,
-    "",
-    "Page:",
-    `Title: ${page.title}`,
-    `URL: ${page.url}`,
-    `Viewport: width=${viewport.width} height=${viewport.height} devicePixelRatio=${viewport.devicePixelRatio}`,
-    "",
-    "Selected element:",
-    `Selector: ${element.selector}`,
-    `Tag: ${element.tag}`,
-    `Role: ${element.role}`,
-    `Text: ${element.text}`,
-    `Aria label: ${element.ariaLabel ?? ""}`,
-    `Rect: x=${rect.x} y=${rect.y} width=${rect.width} height=${rect.height}`,
-  ];
-
-  if (closingLine) {
-    lines.push("", closingLine);
-  }
-
-  return lines.join("\n");
-}
-
-export function appendBrowserAnnotationsToPrompt(
-  prompt: string,
-  annotations: ReadonlyArray<ComposerAnnotationAttachment>,
-): string {
-  if (annotations.length === 0) {
-    return prompt;
-  }
-  const annotationText = annotations
-    .map((annotation) => buildBrowserAnnotationPrompt(annotation))
-    .join("\n\n---\n\n");
-  const trimmedPrompt = prompt.trimEnd();
-  return trimmedPrompt.length > 0 ? `${trimmedPrompt}\n\n${annotationText}` : annotationText;
 }
 
 export function buildExpiredTerminalContextToastCopy(

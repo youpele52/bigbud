@@ -13,10 +13,13 @@ export const WS_METHODS = {
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
+  projectsListDirectory: "projects.listDirectory",
+  projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
+  shellOpenPath: "shell.openPath",
 
   // Git methods
   gitPull: "git.pull",

@@ -50,6 +50,67 @@ const writeTextFile = Effect.fn("writeTextFile")(function* (
 });
 
 it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
+  describe("readFilePreview", () => {
+    it.effect("reads text files relative to the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "src/example.ts", "export const value = 1;\n");
+
+        const result = yield* workspaceFileSystem.readFilePreview({
+          cwd,
+          relativePath: "src/example.ts",
+        });
+
+        expect(result).toEqual({
+          relativePath: "src/example.ts",
+          contents: "export const value = 1;\n",
+          sizeBytes: 24,
+          truncated: false,
+        });
+      }),
+    );
+
+    it.effect("truncates previews to the requested max bytes", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "src/large.ts", "1234567890");
+
+        const result = yield* workspaceFileSystem.readFilePreview({
+          cwd,
+          relativePath: "src/large.ts",
+          maxBytes: 4,
+        });
+
+        expect(result).toEqual({
+          relativePath: "src/large.ts",
+          contents: "1234",
+          sizeBytes: 10,
+          truncated: true,
+        });
+      }),
+    );
+
+    it.effect("rejects previews outside the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+
+        const error = yield* workspaceFileSystem
+          .readFilePreview({
+            cwd,
+            relativePath: "../escape.md",
+          })
+          .pipe(Effect.flip);
+
+        expect(error.message).toContain(
+          "Workspace file path must be relative to the project root: ../escape.md",
+        );
+      }),
+    );
+  });
+
   describe("writeFile", () => {
     it.effect("writes files relative to the workspace root", () =>
       Effect.gen(function* () {

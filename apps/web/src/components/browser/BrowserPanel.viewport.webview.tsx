@@ -52,6 +52,10 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
       goForward: () =>
         runIfReady(webviewRef.current, readyRef.current, (webview) => webview.goForward()),
       reload: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.reload()),
+      reloadIgnoringCache: () =>
+        runIfReady(webviewRef.current, readyRef.current, (webview) =>
+          webview.reloadIgnoringCache(),
+        ),
       openDevTools: () =>
         runIfReady(webviewRef.current, readyRef.current, (webview) => webview.openDevTools()),
       cancelAnnotation: async () => {

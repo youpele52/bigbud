@@ -465,6 +465,77 @@ describe("MessagesTimeline", () => {
     expect(markup).not.toContain("<span>Please inspect\n\nBrowser annotation");
   });
 
+  it("renders sent code annotations as a compact expandable attachment", async () => {
+    const annotation = [
+      "Code annotation",
+      "",
+      "User instruction:",
+      "Extract this into a helper",
+      "",
+      "File:",
+      "Project: bigbud",
+      "Workspace: /Users/youpele/DevWorld/bigbud",
+      "Path: apps/web/src/main.ts",
+      "Lines: 20-22",
+      "",
+      "Selected code:",
+      "```",
+      "const value = createValue();",
+      "```",
+      "",
+      "Use the selected code and user instruction to make the appropriate code change.",
+    ].join("\n");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-code-annotation-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-code-annotation-1"),
+              role: "user",
+              text: `Please inspect\n\n${annotation}`,
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("1 annotation");
+    expect(markup).toContain("Extract this into a helper");
+    expect(markup).toContain("bigbud &gt; apps/web/src/main.ts");
+    expect(markup).toContain("Lines 20-22");
+    expect(markup).toContain("const value = createValue();");
+    expect(markup).toContain("Please inspect");
+    expect(markup).toContain("text-info");
+    expect(markup).not.toContain("Use the selected code and user instruction");
+    expect(markup).not.toContain("<span>Please inspect\n\nCode annotation");
+  });
+
   it("renders per-turn changed-files expansion state from props", async () => {
     const assistantMessageId = MessageId.makeUnsafe("message-diff-1");
     const turnId = TurnId.makeUnsafe("turn-diff-1");

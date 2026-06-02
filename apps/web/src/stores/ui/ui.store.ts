@@ -6,6 +6,7 @@ import {
   persistState,
   readPersistedState,
   reorderProjects,
+  setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
@@ -19,6 +20,7 @@ export {
   persistState,
   readPersistedState,
   reorderProjects,
+  setSelectedProject,
   setFavouritesExpanded,
   setProjectExpanded,
   syncProjects,
@@ -225,6 +227,7 @@ interface UiStateStore extends UiState {
   setFavouritesExpanded: (expanded: boolean) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
+  setSelectedProject: (projectId: ProjectId | null) => void;
   reorderProjects: (draggedProjectId: ProjectId, targetProjectId: ProjectId) => void;
 }
 
@@ -243,6 +246,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),
+  setSelectedProject: (projectId) => set((state) => setSelectedProject(state, projectId)),
   reorderProjects: (draggedProjectId, targetProjectId) =>
     set((state) => reorderProjects(state, draggedProjectId, targetProjectId)),
 }));

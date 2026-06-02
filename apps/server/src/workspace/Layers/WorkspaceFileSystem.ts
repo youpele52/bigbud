@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
+import { open, stat } from "node:fs/promises";
 
 import {
   WorkspaceFileSystem,
@@ -12,11 +13,75 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 
+const DEFAULT_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
+
+async function readTextFilePreview(
+  absolutePath: string,
+  maxBytes: number,
+): Promise<{ contents: string; sizeBytes: number; truncated: boolean }> {
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) {
+    throw new Error("Workspace preview target is not a file.");
+  }
+
+  const bytesToRead = Math.min(fileStat.size, maxBytes);
+  const buffer = Buffer.alloc(bytesToRead);
+  const fileHandle = await open(absolutePath, "r");
+  try {
+    const { bytesRead } = await fileHandle.read(buffer, 0, bytesToRead, 0);
+    const bytes = buffer.subarray(0, bytesRead);
+    if (bytes.includes(0)) {
+      throw new Error("Binary files cannot be previewed.");
+    }
+    return {
+      contents: new TextDecoder("utf-8").decode(bytes),
+      sizeBytes: fileStat.size,
+      truncated: fileStat.size > maxBytes,
+    };
+  } finally {
+    await fileHandle.close();
+  }
+}
+
 export const makeWorkspaceFileSystem = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths;
   const workspaceEntries = yield* WorkspaceEntries;
+
+  const readFilePreview: WorkspaceFileSystemShape["readFilePreview"] = Effect.fn(
+    "WorkspaceFileSystem.readFilePreview",
+  )(function* (input) {
+    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    const target = yield* workspacePaths.resolveRelativePathWithinRoot({
+      workspaceRoot: input.cwd,
+      relativePath: input.relativePath,
+    });
+
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        relativePath: input.relativePath,
+        operation: "workspaceFileSystem.readFilePreviewRemote",
+        detail: "Remote workspace file preview is not supported yet.",
+      });
+    }
+
+    const preview = yield* Effect.tryPromise({
+      try: () =>
+        readTextFilePreview(target.absolutePath, input.maxBytes ?? DEFAULT_FILE_PREVIEW_MAX_BYTES),
+      catch: (cause) =>
+        new WorkspaceFileSystemError({
+          cwd: input.cwd,
+          relativePath: input.relativePath,
+          operation: "workspaceFileSystem.readFilePreview",
+          detail: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+
+    return { relativePath: target.relativePath, ...preview };
+  });
 
   const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
@@ -84,7 +149,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     yield* workspaceEntries.invalidate(input.cwd);
     return { relativePath: target.relativePath };
   });
-  return { writeFile } satisfies WorkspaceFileSystemShape;
+  return { readFilePreview, writeFile } satisfies WorkspaceFileSystemShape;
 });
 
 export const WorkspaceFileSystemLive = Layer.effect(WorkspaceFileSystem, makeWorkspaceFileSystem);

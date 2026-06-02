@@ -16,6 +16,7 @@ import {
   VisualStudioCode,
   VisualStudioCodeInsiders,
   VSCodium,
+  WindsurfIcon,
   Zed,
 } from "../../Icons";
 import { cn, isMacPlatform, isWindowsPlatform } from "~/lib/utils";
@@ -64,6 +65,11 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
       Icon: Zed,
       value: "zed",
       iconClassName: MONOCHROME_EDITOR_ICON_CLASS_NAME,
+    },
+    {
+      label: "Windsurf",
+      Icon: WindsurfIcon,
+      value: "windsurf",
     },
     {
       label: "Kiro",

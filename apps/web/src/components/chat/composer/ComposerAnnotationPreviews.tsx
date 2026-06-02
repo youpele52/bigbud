@@ -1,10 +1,13 @@
-import { MousePointerSquareDashedIcon, XIcon } from "lucide-react";
-import { Button } from "../../ui/button";
-import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
+import { MousePointerSquareDashedIcon } from "lucide-react";
 import type {
   ComposerAnnotationAttachment,
   ComposerImageAttachment,
 } from "../../../stores/composer";
+import { isCodeAnnotationAttachment } from "../../../stores/composer";
+import {
+  StructuredAnnotationPreviews,
+  type StructuredAnnotationPreviewItem,
+} from "./StructuredAnnotationPreviews";
 
 interface ComposerAnnotationPreviewsProps {
   annotations: ComposerAnnotationAttachment[];
@@ -25,93 +28,74 @@ export function ComposerAnnotationPreviews({
 }: ComposerAnnotationPreviewsProps) {
   if (annotations.length === 0) return null;
   const imageById = new Map(images.map((image) => [image.id, image]));
+  const items: StructuredAnnotationPreviewItem[] = annotations.map((annotation, index) => {
+    if (isCodeAnnotationAttachment(annotation)) {
+      const lineLabel =
+        annotation.selection.startLine === annotation.selection.endLine
+          ? `Line ${annotation.selection.startLine}`
+          : `Lines ${annotation.selection.startLine}-${annotation.selection.endLine}`;
+      return {
+        id: annotation.id,
+        thumbnail: null,
+        title: annotation.comment.trim() || "No instruction provided",
+        badge: (
+          <span className="shrink-0 rounded bg-info/15 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-info">
+            code
+          </span>
+        ),
+        subtitle: annotation.file.projectName
+          ? `${annotation.file.projectName} > ${annotation.file.relativePath}`
+          : annotation.file.relativePath,
+        detail: lineLabel,
+        removeLabel: `Remove annotation ${index + 1}`,
+      };
+    }
+    const image = imageById.get(annotation.imageId);
+    return {
+      id: annotation.id,
+      thumbnail: image ? (
+        <img
+          src={image.previewUrl}
+          alt={`Annotation ${index + 1} screenshot`}
+          className="h-full w-full object-cover"
+        />
+      ) : null,
+      title: annotation.comment.trim() || "No instruction provided",
+      badge: (
+        <span
+          className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+          style={{
+            backgroundColor:
+              annotation.intent === "fix"
+                ? "rgb(254 226 226)"
+                : annotation.intent === "context"
+                  ? "rgb(254 249 195)"
+                  : "rgb(219 234 254)",
+            color:
+              annotation.intent === "fix"
+                ? "rgb(153 27 27)"
+                : annotation.intent === "context"
+                  ? "rgb(161 98 7)"
+                  : "rgb(29 78 216)",
+          }}
+        >
+          {annotation.intent}
+        </span>
+      ),
+      subtitle: annotation.page.title || annotation.page.url,
+      detail: annotation.element.selector || annotation.element.tag,
+      removeLabel: `Remove annotation ${index + 1}`,
+    };
+  });
 
   return (
-    <div className="mb-3 flex flex-wrap gap-2">
-      <Popover>
-        <div className="group inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-1 py-1">
-          <PopoverTrigger
-            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-foreground/80 transition-colors hover:bg-muted/60"
-            aria-label={`Show ${annotationLabel(annotations.length)}`}
-          >
-            <MousePointerSquareDashedIcon className="size-3.5 text-info" />
-            <span>{annotationLabel(annotations.length)}</span>
-          </PopoverTrigger>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="shrink-0 opacity-60 transition-opacity hover:opacity-100 group-hover:opacity-100"
-            onClick={onClearAnnotations}
-            aria-label={annotations.length === 1 ? "Remove annotation" : "Remove all annotations"}
-          >
-            <XIcon />
-          </Button>
-        </div>
-        <PopoverPopup align="start" side="top" className="w-[min(420px,calc(100vw-2rem))] p-0">
-          <div className="max-h-80 space-y-2 overflow-y-auto p-3">
-            {annotations.map((annotation, index) => {
-              const image = imageById.get(annotation.imageId);
-              return (
-                <div
-                  key={annotation.id}
-                  className="group grid grid-cols-[56px_minmax(0,1fr)_auto] gap-3 rounded-lg border border-border/80 bg-background p-2"
-                >
-                  <div className="h-14 w-14 overflow-hidden rounded-md border border-border/70 bg-muted">
-                    {image ? (
-                      <img
-                        src={image.previewUrl}
-                        alt={`Annotation ${index + 1} screenshot`}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-xs font-medium text-foreground">
-                        {annotation.comment.trim() || "No instruction provided"}
-                      </span>
-                      <span
-                        className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide"
-                        style={{
-                          backgroundColor:
-                            annotation.intent === "fix"
-                              ? "rgb(254 226 226)"
-                              : annotation.intent === "context"
-                                ? "rgb(254 249 195)"
-                                : "rgb(219 234 254)",
-                          color:
-                            annotation.intent === "fix"
-                              ? "rgb(153 27 27)"
-                              : annotation.intent === "context"
-                                ? "rgb(161 98 7)"
-                                : "rgb(29 78 216)",
-                        }}
-                      >
-                        {annotation.intent}
-                      </span>
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {annotation.page.title || annotation.page.url}
-                    </div>
-                    <div className="truncate font-mono text-[11px] text-muted-foreground/80">
-                      {annotation.element.selector || annotation.element.tag}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="opacity-0 transition-opacity group-hover:opacity-100"
-                    onClick={() => onRemoveAnnotation(annotation.id)}
-                    aria-label={`Remove annotation ${index + 1}`}
-                  >
-                    <XIcon />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        </PopoverPopup>
-      </Popover>
-    </div>
+    <StructuredAnnotationPreviews
+      triggerIcon={<MousePointerSquareDashedIcon className="size-3.5 text-info" />}
+      label={annotationLabel(annotations.length)}
+      clearLabel={annotations.length === 1 ? "Remove annotation" : "Remove all annotations"}
+      items={items}
+      onRemoveItem={onRemoveAnnotation}
+      onClear={onClearAnnotations}
+    />
   );
 }

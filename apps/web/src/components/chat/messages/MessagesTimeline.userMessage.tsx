@@ -13,6 +13,8 @@ import {
   COMPOSER_INLINE_CHIP_LABEL_CLASS_NAME,
 } from "../view/composerInlineChip";
 import { cn } from "~/lib/utils";
+import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
+import { openChatFileTarget, showChatFileTargetContextMenu } from "../common/chatFileTargets";
 
 const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
   "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
@@ -20,9 +22,40 @@ const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
 const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
   mentionKind: "path" | "agent" | "skill";
+  targetPath?: string | null;
+  workspaceRoot?: string | undefined;
 }) {
+  const clickable = props.mentionKind === "path" && props.targetPath;
   return (
-    <span className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]")}>
+    <span
+      className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]", clickable && "cursor-pointer")}
+      title={clickable ? "Double-click to open" : undefined}
+      onDoubleClick={
+        clickable
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const targetPath = props.targetPath;
+              if (!targetPath) return;
+              openChatFileTarget(targetPath, props.workspaceRoot);
+            }
+          : undefined
+      }
+      onContextMenu={
+        clickable
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const targetPath = props.targetPath;
+              if (!targetPath) return;
+              showChatFileTargetContextMenu(targetPath, props.workspaceRoot, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }
+          : undefined
+      }
+    >
       {props.mentionKind === "path" ? (
         <FileIcon className="size-3.5 shrink-0 opacity-85" />
       ) : props.mentionKind === "skill" ? (
@@ -35,7 +68,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   );
 });
 
-function renderUserMessageTextWithMentionChips(text: string): ReactNode {
+function renderUserMessageTextWithMentionChips(text: string, cwd: string | undefined): ReactNode {
   const segments = splitPromptIntoComposerSegments(text, [], {
     allowTrailingAgentAndSkillMentions: true,
   });
@@ -58,6 +91,12 @@ function renderUserMessageTextWithMentionChips(text: string): ReactNode {
           key={`user-message-mention:${mentionKeyIndex}:${segment.rawValue}`}
           label={segment.displayLabel}
           mentionKind={segment.mentionKind}
+          targetPath={
+            segment.mentionKind === "path"
+              ? resolveMarkdownFileLinkTarget(segment.rawValue, cwd)
+              : null
+          }
+          workspaceRoot={cwd}
         />
       );
     }
@@ -79,6 +118,7 @@ const UserMessageTerminalContextInlineLabel = memo(
 export const UserMessageBody = memo(function UserMessageBody(props: {
   text: string;
   terminalContexts: ParsedTerminalContextEntry[];
+  cwd: string | undefined;
 }) {
   if (props.terminalContexts.length > 0) {
     const hasEmbeddedInlineLabels = textContainsInlineTerminalContextLabels(
@@ -148,7 +188,7 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
     if (props.text.length > 0) {
       inlineNodes.push(
         <span key="user-message-terminal-context-inline-text">
-          {renderUserMessageTextWithMentionChips(props.text)}
+          {renderUserMessageTextWithMentionChips(props.text, props.cwd)}
         </span>,
       );
     } else if (inlinePrefix.length === 0) {
@@ -168,7 +208,7 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
 
   return (
     <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
-      {renderUserMessageTextWithMentionChips(props.text)}
+      {renderUserMessageTextWithMentionChips(props.text, props.cwd)}
     </div>
   );
 });

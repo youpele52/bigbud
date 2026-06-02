@@ -60,6 +60,7 @@ function compile(bindings: TestBinding[]): ResolvedKeybindingsConfig {
 
 export const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("j"), command: "terminal.toggle" },
+  { shortcut: modShortcut("j", { shiftKey: true }), command: "terminalPanel.toggle" },
   {
     shortcut: modShortcut("k"),
     command: "commandPalette.toggle",

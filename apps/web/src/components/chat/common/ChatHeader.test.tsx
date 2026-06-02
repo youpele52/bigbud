@@ -18,6 +18,7 @@ vi.mock("../../../stores/main", async () => {
 import { DEFAULT_BINDINGS } from "../../../models/keybindings/keybindings.models.test.helpers";
 import { useBrowserPanelStore } from "../../../stores/browser/browser.store";
 import { useStore } from "../../../stores/main";
+import { useRightPanelTabsStore } from "../../../stores/rightPanel/rightPanelTabs.store";
 import { SidebarProvider } from "../../ui/sidebar";
 import { ChatHeader } from "./ChatHeader";
 
@@ -27,6 +28,7 @@ describe("ChatHeader", () => {
     mockIsThreadRunning = false;
     mockIsThreadCompacting = false;
     useBrowserPanelStore.setState({ open: false, url: "" });
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
     useStore.setState({
       projects: [],
       threads: [],
@@ -36,45 +38,43 @@ describe("ChatHeader", () => {
     });
   });
 
-  it("renders the browser toggle immediately before the diff toggle", () => {
+  const baseProps = {
+    activeProjectScripts: undefined,
+    activeProjectName: undefined,
+    activeThreadTitle: "Thread",
+    availableEditors: [],
+    browserToggleShortcutLabel: null,
+    diffOpen: false,
+    diffToggleShortcutLabel: null,
+    filesToggleShortcutLabel: null,
+    gitCwd: null,
+    isGitRepo: true,
+    keybindings: DEFAULT_BINDINGS,
+    onAddProjectScript: async () => undefined,
+    onDeleteProjectScript: async () => undefined,
+    onRunProjectScript: () => undefined,
+    onToggleBrowser: () => undefined,
+    onToggleDiff: () => undefined,
+    onToggleFiles: () => undefined,
+    onToggleTerminal: () => undefined,
+    onUpdateProjectScript: async () => undefined,
+    openInCwd: null,
+    preferredScriptId: null,
+    sidebarToggleShortcutLabel: null,
+    terminalAvailable: true,
+    terminalPanelToggleShortcutLabel: null,
+    terminalToggleShortcutLabel: null,
+  } as const;
+
+  it("renders the sidebar toggle and the right panel launcher", () => {
     const markup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-1" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} />
       </SidebarProvider>,
     );
 
-    expect(markup.indexOf('aria-label="Toggle terminal drawer"')).toBeLessThan(
-      markup.indexOf('aria-label="Toggle browser panel"'),
-    );
-    expect(markup.indexOf('aria-label="Toggle browser panel"')).toBeLessThan(
-      markup.indexOf('aria-label="Toggle diff panel"'),
-    );
+    expect(markup).toContain('aria-label="Toggle sidebar"');
+    expect(markup).toContain('aria-label="Open right panel tools"');
   });
 
   it("shows blue dots while running and orange dots while compacting", () => {
@@ -82,33 +82,7 @@ describe("ChatHeader", () => {
 
     const runningMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-running" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-running" as never} {...baseProps} />
       </SidebarProvider>,
     );
 
@@ -117,33 +91,7 @@ describe("ChatHeader", () => {
 
     const compactingMarkup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
-        <ChatHeader
-          activeThreadId={"thread-compacting" as never}
-          activeThreadTitle="Thread"
-          activeProjectName={undefined}
-          isGitRepo
-          openInCwd={null}
-          activeProjectScripts={undefined}
-          preferredScriptId={null}
-          keybindings={DEFAULT_BINDINGS}
-          availableEditors={[]}
-          terminalAvailable
-          terminalOpen={false}
-          terminalToggleShortcutLabel={null}
-          diffToggleShortcutLabel={null}
-          sidebarToggleShortcutLabel={null}
-          browserToggleShortcutLabel={null}
-          gitCwd={null}
-          diffOpen={false}
-          browserOpen={false}
-          onRunProjectScript={() => undefined}
-          onAddProjectScript={async () => undefined}
-          onUpdateProjectScript={async () => undefined}
-          onDeleteProjectScript={async () => undefined}
-          onToggleTerminal={() => undefined}
-          onToggleDiff={() => undefined}
-          onToggleBrowser={() => undefined}
-        />
+        <ChatHeader activeThreadId={"thread-compacting" as never} {...baseProps} />
       </SidebarProvider>,
     );
 

@@ -35,6 +35,17 @@ export {
 } from "./types.store";
 
 export {
+  AnnotationIntentSchema,
+  ComposerAnnotationAttachmentBase,
+  ComposerAnnotationElement,
+  ComposerAnnotationViewport,
+  ComposerBrowserAnnotationAttachment,
+  ComposerCodeAnnotationAttachment,
+  isCodeAnnotationAttachment,
+  type AnnotationIntent,
+} from "./types.annotation.store";
+
+export {
   composerImageDedupKey,
   createEmptyThreadDraft,
   deriveEffectiveComposerModelState,

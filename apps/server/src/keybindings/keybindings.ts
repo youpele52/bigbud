@@ -55,6 +55,7 @@ export { parseKeybindingShortcut } from "./keybindings.parser";
 
 export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+j", command: "terminal.toggle" },
+  { key: "mod+shift+j", command: "terminalPanel.toggle" },
   { key: "mod+b", command: "sidebar.toggle" },
   { key: "mod+,", command: "settings.toggle" },
   { key: "mod+f", command: "search.toggle" },
@@ -63,6 +64,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
   { key: "mod+shift+g", command: "diff.toggle", when: "!terminalFocus" },
   { key: "mod+shift+b", command: "browser.toggle", when: "!terminalFocus" },
+  { key: "mod+shift+e", command: "files.toggle", when: "!terminalFocus" },
   { key: "mod+p", command: "commandPalette.toggle", when: "!terminalFocus" },
   { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
   { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" },

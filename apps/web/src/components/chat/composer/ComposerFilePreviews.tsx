@@ -9,10 +9,8 @@ interface ComposerFilePreviewsProps {
   onRemoveFile: (fileId: string) => void;
 }
 
-/** Strips the file extension from a filename, returning the base name. */
-function fileBaseName(name: string): string {
-  const dotIndex = name.lastIndexOf(".");
-  return dotIndex > 0 ? name.slice(0, dotIndex) : name;
+function entryDisplayName(file: ComposerFileAttachment): string {
+  return file.name;
 }
 
 export function ComposerFilePreviews({
@@ -30,13 +28,13 @@ export function ComposerFilePreviews({
           className="group relative flex max-w-[160px] items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1.5"
         >
           <VscodeEntryIcon
-            pathValue={file.name}
-            kind="file"
+            pathValue={file.filePath || file.name}
+            kind={file.entryKind === "directory" ? "directory" : "file"}
             theme={resolvedTheme}
             className="shrink-0"
           />
-          <span className="truncate text-xs text-foreground/80" title={file.name}>
-            {fileBaseName(file.name)}
+          <span className="truncate text-xs text-foreground/80" title={file.filePath || file.name}>
+            {entryDisplayName(file)}
           </span>
           <Button
             variant="ghost"

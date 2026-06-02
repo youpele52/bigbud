@@ -18,7 +18,6 @@ import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
-import { useBrowserPanelStore } from "../../../../stores/browser/browser.store";
 import { useSearchStore } from "../../../../stores/ui";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
@@ -60,7 +59,6 @@ export function ChatViewContent({
   interactions,
 }: ChatViewContentProps) {
   const { branchThread } = useThreadActions();
-  const browserOpen = useBrowserPanelStore((state) => state.open);
   const searchFocusRequest = useSearchStore((state) => state.focusRequest);
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
@@ -153,24 +151,25 @@ export function ChatViewContent({
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
           terminalAvailable={base.activeProject !== undefined}
-          terminalOpen={base.terminalState.terminalOpen}
           terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
+          terminalPanelToggleShortcutLabel={composer.terminalPanelToggleShortcutLabel}
           diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
+          filesToggleShortcutLabel={composer.filesPanelShortcutLabel}
           gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           diffOpen={base.diffOpen}
-          browserOpen={browserOpen}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
           onAddProjectScript={runtime.projectScripts.saveProjectScript}
           onUpdateProjectScript={runtime.projectScripts.updateProjectScript}
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
-          onToggleTerminal={runtime.terminalActions.toggleTerminalVisibility}
+          onToggleTerminal={runtime.onToggleTerminalPanel}
           onToggleDiff={runtime.onToggleDiff}
           onToggleBrowser={runtime.onToggleBrowser}
+          onToggleFiles={runtime.onToggleFiles}
         />
       </header>
 
