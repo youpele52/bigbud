@@ -122,7 +122,7 @@ describe("terminalContext", () => {
           body: "12 | git status\n13 | On branch main",
         },
       ],
-      browserAnnotations: [],
+      annotations: [],
       readDocument: null,
     });
   });
@@ -177,7 +177,51 @@ describe("terminalContext", () => {
     expect(deriveDisplayedUserMessageState(prompt)).toMatchObject({
       visibleText: "Please inspect",
       copyText: prompt,
-      browserAnnotations: [{ text: annotation }, { text: annotation }],
+      annotations: [
+        { kind: "browser", text: annotation },
+        { kind: "browser", text: annotation },
+      ],
+      readDocument: null,
+    });
+  });
+
+  it("hides trailing code annotation blocks from visible user message text", () => {
+    const annotation = [
+      "Code annotation",
+      "",
+      "User instruction:",
+      "Extract this into a helper",
+      "",
+      "File:",
+      "Project: bigbud",
+      "Workspace: /Users/youpele/DevWorld/bigbud",
+      "Path: apps/web/src/main.ts",
+      "Lines: 20-22",
+      "",
+      "Selected code:",
+      "```",
+      "const value = createValue();",
+      "```",
+      "",
+      "Use the selected code and user instruction to make the appropriate code change.",
+    ].join("\n");
+    const prompt = `Please inspect\n\n${annotation}`;
+
+    expect(deriveDisplayedUserMessageState(prompt)).toMatchObject({
+      visibleText: "Please inspect",
+      copyText: prompt,
+      annotations: [
+        {
+          kind: "code",
+          text: annotation,
+          comment: "Extract this into a helper",
+          projectName: "bigbud",
+          workspace: "/Users/youpele/DevWorld/bigbud",
+          path: "apps/web/src/main.ts",
+          lineLabel: "Lines 20-22",
+          selectedCode: "const value = createValue();",
+        },
+      ],
       readDocument: null,
     });
   });
@@ -204,7 +248,7 @@ describe("terminalContext", () => {
       contextCount: 0,
       previewTitle: null,
       contexts: [],
-      browserAnnotations: [],
+      annotations: [],
       readDocument: {
         sourceUrl: "https://example.com/report",
         resolvedUrl: "https://cdn.example.com/report.pdf",

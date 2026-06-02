@@ -61,7 +61,17 @@ export interface ChatFileAttachment {
   sourcePath?: string;
 }
 
-export type ChatAttachment = ChatImageAttachment | ChatFileAttachment;
+export interface ChatPathAttachment {
+  type: "path";
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: 0;
+  path: string;
+  entryKind: "file" | "directory";
+}
+
+export type ChatAttachment = ChatImageAttachment | ChatFileAttachment | ChatPathAttachment;
 
 export interface ChatMessageReplyTarget {
   messageId: MessageId;

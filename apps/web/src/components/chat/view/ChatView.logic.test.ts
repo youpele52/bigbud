@@ -183,6 +183,34 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(prompt).not.toContain("code change");
     expect(prompt).toContain("What does this do?");
   });
+
+  it("appends code annotation file and selected line context", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "code-annotation-1",
+      kind: "code",
+      comment: "Extract this into a helper",
+      intent: "fix",
+      createdAt: "2026-06-02T00:00:00.000Z",
+      file: {
+        projectName: "bigbud",
+        cwd: "/Users/youpele/DevWorld/bigbud",
+        relativePath: "apps/web/src/main.ts",
+      },
+      selection: {
+        startLine: 20,
+        endLine: 22,
+        text: "const value = createValue();",
+      },
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("Please update", [annotation]);
+    expect(prompt).toContain("Code annotation");
+    expect(prompt).toContain("Project: bigbud");
+    expect(prompt).toContain("Path: apps/web/src/main.ts");
+    expect(prompt).toContain("Lines: 20-22");
+    expect(prompt).toContain("const value = createValue();");
+    expect(prompt).toContain("make the appropriate code change");
+  });
 });
 
 describe("buildExpiredTerminalContextToastCopy", () => {

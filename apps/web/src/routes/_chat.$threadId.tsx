@@ -17,13 +17,17 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useStore } from "../stores/main";
 import { Sheet, SheetPopup } from "../components/ui/sheet";
+import { closeBrowserPanel } from "../stores/browser/browserPanel.actions";
+import { closeFilesPanel } from "../stores/files/filesPanel.coordinator";
+import { closeTerminalPanel } from "../stores/terminal/terminalPanel.coordinator";
 import {
-  closeBrowserPanel,
   getRequestedRightPanel,
   registerDiffPanelCloseAction,
   requestRightPanel,
-} from "../stores/browser/browserPanel.coordinator";
+} from "../stores/rightPanel/rightPanel.coordinator";
 import { useBrowserPanelStore } from "../stores/browser/browser.store";
+import { useFilesPanelStore } from "../stores/files/filesPanel.store";
+import { useTerminalPanelStore } from "../stores/terminal/terminalPanel.store";
 import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "~/components/ui/sidebar";
 
 const DIFF_INLINE_LAYOUT_MEDIA_QUERY = "(max-width: 1180px)";
@@ -171,6 +175,8 @@ function ChatThreadRouteView() {
   const routeThreadExists = threadExists || draftThreadExists;
   const diffOpen = search.diff === "1";
   const browserOpen = useBrowserPanelStore((state) => state.open);
+  const filesOpen = useFilesPanelStore((state) => state.open);
+  const terminalOpen = useTerminalPanelStore((state) => state.open);
   const shouldUseDiffSheet = useMediaQuery(DIFF_INLINE_LAYOUT_MEDIA_QUERY);
   usePageTitle(threadTitle);
   // TanStack Router keeps active route components mounted across param-only navigations
@@ -190,6 +196,8 @@ function ChatThreadRouteView() {
   const openDiff = useCallback(() => {
     requestRightPanel("diff");
     closeBrowserPanel();
+    closeFilesPanel();
+    closeTerminalPanel();
 
     void navigate({
       to: "/$threadId",
@@ -207,17 +215,19 @@ function ChatThreadRouteView() {
   useEffect(() => registerDiffPanelCloseAction(closeDiff), [closeDiff]);
 
   useEffect(() => {
-    if (!browserOpen || !diffOpen) {
+    if ((!browserOpen && !filesOpen && !terminalOpen) || !diffOpen) {
       return;
     }
 
     if (getRequestedRightPanel() === "diff") {
       closeBrowserPanel();
+      closeFilesPanel();
+      closeTerminalPanel();
       return;
     }
 
     closeDiff();
-  }, [browserOpen, closeDiff, diffOpen]);
+  }, [browserOpen, closeDiff, diffOpen, filesOpen, terminalOpen]);
 
   useEffect(() => {
     if (!bootstrapComplete) {

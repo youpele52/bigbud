@@ -50,6 +50,7 @@ export function useSidebarProjectActions({
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
+  const setSelectedProject = useUiStateStore((store) => store.setSelectedProject);
   const toggleProject = useUiStateStore((store) => store.toggleProject);
   const verifiedExecutionTargetIds = useRemoteAccessStore(
     (store) => store.verifiedExecutionTargetIds,
@@ -298,6 +299,7 @@ export function useSidebarProjectActions({
         isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
 
       if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        setSelectedProject(projectId);
         toggleProject(projectId);
         return;
       }
@@ -306,6 +308,7 @@ export function useSidebarProjectActions({
         executionTargetId,
         ...(project.cwd ? { cwd: project.cwd } : {}),
         onVerified: () => {
+          setSelectedProject(projectId);
           setProjectExpanded(projectId, true);
         },
       });
@@ -317,6 +320,7 @@ export function useSidebarProjectActions({
       projects,
       selectedThreadIdsSize,
       setProjectExpanded,
+      setSelectedProject,
       suppressProjectClickAfterDragRef,
       suppressProjectClickForContextMenuRef,
       toggleProject,
@@ -339,6 +343,7 @@ export function useSidebarProjectActions({
         isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
 
       if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+        setSelectedProject(projectId);
         toggleProject(projectId);
         return;
       }
@@ -347,6 +352,7 @@ export function useSidebarProjectActions({
         executionTargetId,
         ...(project.cwd ? { cwd: project.cwd } : {}),
         onVerified: () => {
+          setSelectedProject(projectId);
           setProjectExpanded(projectId, true);
         },
       });
@@ -356,6 +362,7 @@ export function useSidebarProjectActions({
       ensureRemoteExecutionTargetAccess,
       projects,
       setProjectExpanded,
+      setSelectedProject,
       toggleProject,
       verifiedExecutionTargetIds,
     ],

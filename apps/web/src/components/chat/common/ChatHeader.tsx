@@ -6,7 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { memo } from "react";
 import GitActionsControl from "../../git/GitActionsControl";
-import { DiffIcon, GlobeIcon, PanelLeftCloseIcon, PanelLeftIcon, TerminalIcon } from "lucide-react";
+import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
@@ -14,7 +14,9 @@ import ProjectScriptsControl, {
 import { Toggle } from "../../ui/toggle";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
+import { RightPanelLauncherMenu, type RightPanelLauncherKind } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
+import { useRightPanelTabsStore } from "../../../stores/rightPanel/rightPanelTabs.store";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -31,15 +33,15 @@ interface ChatHeaderProps {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   terminalAvailable: boolean;
-  terminalOpen: boolean;
   terminalToggleShortcutLabel: string | null;
+  terminalPanelToggleShortcutLabel: string | null;
   diffToggleShortcutLabel: string | null;
   sidebarToggleShortcutLabel: string | null;
   browserToggleShortcutLabel: string | null;
+  filesToggleShortcutLabel: string | null;
   gitCwd: string | null;
   executionTargetId?: string | undefined;
   diffOpen: boolean;
-  browserOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -47,6 +49,7 @@ interface ChatHeaderProps {
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
   onToggleBrowser: () => void;
+  onToggleFiles: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -60,15 +63,15 @@ export const ChatHeader = memo(function ChatHeader({
   keybindings,
   availableEditors,
   terminalAvailable,
-  terminalOpen,
   terminalToggleShortcutLabel,
+  terminalPanelToggleShortcutLabel,
   diffToggleShortcutLabel,
   sidebarToggleShortcutLabel,
   browserToggleShortcutLabel,
+  filesToggleShortcutLabel,
   gitCwd,
   executionTargetId,
   diffOpen,
-  browserOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -76,11 +79,16 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleTerminal,
   onToggleDiff,
   onToggleBrowser,
+  onToggleFiles,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const isThreadCompacting = useIsThreadCompacting(activeThreadId);
+  const activeTabbedRightPanelKind = useRightPanelTabsStore((state) => state.activeKind);
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
+  const activeRightPanelKind: RightPanelLauncherKind | null = diffOpen
+    ? "diff"
+    : activeTabbedRightPanelKind;
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -165,75 +173,22 @@ export const ChatHeader = memo(function ChatHeader({
             {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
           </TooltipPopup>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={terminalOpen}
-                onPressedChange={onToggleTerminal}
-                aria-label="Toggle terminal drawer"
-                variant="toolbar"
-                size="xs"
-                disabled={!terminalAvailable}
-              >
-                <TerminalIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!terminalAvailable
-              ? "Terminal is unavailable until this thread has an active project."
-              : terminalToggleShortcutLabel
-                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                : "Toggle terminal drawer"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={browserOpen}
-                onPressedChange={onToggleBrowser}
-                aria-label="Toggle browser panel"
-                variant="toolbar"
-                size="xs"
-              >
-                <GlobeIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {browserToggleShortcutLabel
-              ? `Toggle browser panel (${browserToggleShortcutLabel})`
-              : "Toggle browser panel"}
-          </TooltipPopup>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
-                variant="toolbar"
-                size="xs"
-                disabled={!isGitRepo}
-              >
-                <DiffIcon className="size-3" />
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {!isGitRepo
-              ? "Diff panel is unavailable because this project is not a git repository."
-              : diffToggleShortcutLabel
-                ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                : "Toggle diff panel"}
-          </TooltipPopup>
-        </Tooltip>
+        <RightPanelLauncherMenu
+          activeKind={activeRightPanelKind}
+          browserToggleShortcutLabel={browserToggleShortcutLabel}
+          diffToggleShortcutLabel={diffToggleShortcutLabel}
+          filesToggleShortcutLabel={filesToggleShortcutLabel}
+          hasActiveProject={Boolean(activeProjectName)}
+          isGitRepo={isGitRepo}
+          onToggleBrowser={onToggleBrowser}
+          onToggleDiff={onToggleDiff}
+          onToggleFiles={onToggleFiles}
+          onToggleTerminal={onToggleTerminal}
+          terminalAvailable={terminalAvailable}
+          terminalShortcutLabel={
+            terminalToggleShortcutLabel || terminalPanelToggleShortcutLabel || null
+          }
+        />
       </div>
     </div>
   );

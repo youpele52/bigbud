@@ -20,6 +20,10 @@ import type {
   GitStatusStreamEvent,
 } from "../workspace/git";
 import type {
+  ProjectListDirectoryInput,
+  ProjectListDirectoryResult,
+  ProjectReadFilePreviewInput,
+  ProjectReadFilePreviewResult,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
   ProjectWriteFileInput,
@@ -175,11 +179,14 @@ export interface NativeApi {
     onEvent: (callback: (event: TerminalEvent) => void) => () => void;
   };
   projects: {
+    listDirectory: (input: ProjectListDirectoryInput) => Promise<ProjectListDirectoryResult>;
+    readFilePreview: (input: ProjectReadFilePreviewInput) => Promise<ProjectReadFilePreviewResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
+    openPath: (path: string) => Promise<void>;
     openExternal: (url: string) => Promise<void>;
   };
   git: {

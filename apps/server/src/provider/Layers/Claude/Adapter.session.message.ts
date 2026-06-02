@@ -27,6 +27,7 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
     const sdkContent: Array<Record<string, unknown>> = [];
 
     for (const attachment of input.attachments ?? []) {
+      if (attachment.type === "path") continue;
       if (attachment.type === "image") {
         if (!SUPPORTED_CLAUDE_IMAGE_MIME_TYPES.has(attachment.mimeType)) {
           return yield* new ProviderAdapterValidationError({

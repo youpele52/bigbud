@@ -6,6 +6,8 @@ import {
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
+  ProjectListDirectoryError,
+  ProjectReadFilePreviewError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ServerReadDocumentUrlError,
@@ -218,6 +220,37 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         ),
         { "rpc.aggregate": "workspace" },
       ),
+    [WS_METHODS.projectsListDirectory]: (
+      input: Parameters<WsRpcContext["workspaceEntries"]["listDirectory"]>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.projectsListDirectory,
+        context.workspaceEntries.listDirectory(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProjectListDirectoryError({
+                message: `Failed to list workspace directory: ${cause.detail}`,
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
+    [WS_METHODS.projectsReadFilePreview]: (
+      input: Parameters<WsRpcContext["workspaceFileSystem"]["readFilePreview"]>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.projectsReadFilePreview,
+        context.workspaceFileSystem.readFilePreview(input).pipe(
+          Effect.mapError((cause) => {
+            const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+              ? "Workspace file path must stay within the project root."
+              : `Failed to read workspace file preview: ${cause.detail}`;
+            return new ProjectReadFilePreviewError({ message, cause });
+          }),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
     [WS_METHODS.projectsWriteFile]: (
       input: Parameters<WsRpcContext["workspaceFileSystem"]["writeFile"]>[0],
     ) =>
@@ -235,6 +268,10 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
       ),
     [WS_METHODS.shellOpenInEditor]: (input: Parameters<WsRpcContext["open"]["openInEditor"]>[0]) =>
       observeRpcEffect(WS_METHODS.shellOpenInEditor, context.open.openInEditor(input), {
+        "rpc.aggregate": "workspace",
+      }),
+    [WS_METHODS.shellOpenPath]: (input: Parameters<WsRpcContext["open"]["openPath"]>[0]) =>
+      observeRpcEffect(WS_METHODS.shellOpenPath, context.open.openPath(input), {
         "rpc.aggregate": "workspace",
       }),
     [WS_METHODS.subscribeServerConfig]: (_input: unknown) =>

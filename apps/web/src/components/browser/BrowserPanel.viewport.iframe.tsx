@@ -24,6 +24,11 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
           iframe.src = url;
         }
       },
+      reloadIgnoringCache: () => {
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        iframe.src = url;
+      },
       openDevTools: () => undefined,
       startAnnotation: async () => null,
       cancelAnnotation: async () => undefined,

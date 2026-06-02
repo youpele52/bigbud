@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
-import { OpenError, OpenInEditorInput } from "../workspace/editor";
+import { OpenError, OpenInEditorInput, OpenPathInput } from "../workspace/editor";
 import {
   GitActionProgressEvent,
   GitCheckoutInput,
@@ -48,6 +48,12 @@ import {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import {
+  ProjectListDirectoryError,
+  ProjectListDirectoryInput,
+  ProjectListDirectoryResult,
+  ProjectReadFilePreviewError,
+  ProjectReadFilePreviewInput,
+  ProjectReadFilePreviewResult,
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -150,6 +156,18 @@ export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntr
   error: ProjectSearchEntriesError,
 });
 
+export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirectory, {
+  payload: ProjectListDirectoryInput,
+  success: ProjectListDirectoryResult,
+  error: ProjectListDirectoryError,
+});
+
+export const WsProjectsReadFilePreviewRpc = Rpc.make(WS_METHODS.projectsReadFilePreview, {
+  payload: ProjectReadFilePreviewInput,
+  success: ProjectReadFilePreviewResult,
+  error: ProjectReadFilePreviewError,
+});
+
 export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   payload: ProjectWriteFileInput,
   success: ProjectWriteFileResult,
@@ -158,6 +176,11 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
+  error: OpenError,
+});
+
+export const WsShellOpenPathRpc = Rpc.make(WS_METHODS.shellOpenPath, {
+  payload: OpenPathInput,
   error: OpenError,
 });
 
@@ -349,8 +372,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
+  WsProjectsListDirectoryRpc,
+  WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
+  WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,
   WsGitRefreshStatusRpc,

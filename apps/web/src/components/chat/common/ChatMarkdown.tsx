@@ -1,11 +1,7 @@
-import { getSharedHighlighter } from "@pierre/diffs";
-import type { DiffsHighlighter, SupportedLanguages } from "@pierre/diffs";
 import { CheckIcon, CopyIcon } from "lucide-react";
-import React, {
+import {
   Children,
-  Suspense,
   isValidElement,
-  use,
   useCallback,
   memo,
   useEffect,
@@ -18,36 +14,13 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { openInPreferredEditor } from "../../../models/editor";
-import { resolveDiffThemeName, type DiffThemeName } from "../../../lib/diffRendering";
-import { fnv1a32 } from "../../../lib/diffRendering";
-import { LRUCache } from "../../../lib/lruCache";
+import { resolveDiffThemeName } from "../../../lib/diffRendering";
 import { useTheme } from "../../../hooks/useTheme";
-import { openBrowserPanel } from "../../../stores/browser/browserPanel.coordinator";
+import { openBrowserPanel } from "../../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../../utils/markdown";
-import { readNativeApi } from "../../../rpc/nativeApi";
 import { cn } from "~/lib/utils";
-
-class CodeHighlightErrorBoundary extends React.Component<
-  { fallback: ReactNode; children: ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: { fallback: ReactNode; children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  override render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
+import { SyntaxHighlightedCode } from "./SyntaxHighlightedCode";
+import { openChatFileTarget, showChatFileTargetContextMenu } from "./chatFileTargets";
 
 interface ChatMarkdownProps {
   text: string;
@@ -57,13 +30,6 @@ interface ChatMarkdownProps {
 }
 
 const CODE_FENCE_LANGUAGE_REGEX = /(?:^|\s)language-([^\s]+)/;
-const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;
-const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
-const highlightedCodeCache = new LRUCache<string>(
-  MAX_HIGHLIGHT_CACHE_ENTRIES,
-  MAX_HIGHLIGHT_CACHE_MEMORY_BYTES,
-);
-const highlighterPromiseCache = new Map<string, Promise<DiffsHighlighter>>();
 
 function extractFenceLanguage(className: string | undefined): string {
   const match = className?.match(CODE_FENCE_LANGUAGE_REGEX);
@@ -105,35 +71,6 @@ function extractCodeBlock(
     className: onlyChild.props.className,
     code: nodeToPlainText(onlyChild.props.children),
   };
-}
-
-function createHighlightCacheKey(code: string, language: string, themeName: DiffThemeName): string {
-  return `${fnv1a32(code).toString(36)}:${code.length}:${language}:${themeName}`;
-}
-
-function estimateHighlightedSize(html: string, code: string): number {
-  return Math.max(html.length * 2, code.length * 3);
-}
-
-function getHighlighterPromise(language: string): Promise<DiffsHighlighter> {
-  const cached = highlighterPromiseCache.get(language);
-  if (cached) return cached;
-
-  const promise = getSharedHighlighter({
-    themes: [resolveDiffThemeName("dark"), resolveDiffThemeName("light")],
-    langs: [language as SupportedLanguages],
-    preferredHighlighter: "shiki-js",
-  }).catch((err) => {
-    highlighterPromiseCache.delete(language);
-    if (language === "text") {
-      // "text" itself failed — Shiki cannot initialize at all, surface the error
-      throw err;
-    }
-    // Language not supported by Shiki — fall back to "text"
-    return getHighlighterPromise("text");
-  });
-  highlighterPromiseCache.set(language, promise);
-  return promise;
 }
 
 function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNode }) {
@@ -194,80 +131,6 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   );
 }
 
-interface SuspenseShikiCodeBlockProps {
-  className: string | undefined;
-  code: string;
-  themeName: DiffThemeName;
-  isStreaming: boolean;
-}
-
-function SuspenseShikiCodeBlock({
-  className,
-  code,
-  themeName,
-  isStreaming,
-}: SuspenseShikiCodeBlockProps) {
-  const language = extractFenceLanguage(className);
-  const cacheKey = createHighlightCacheKey(code, language, themeName);
-  const cachedHighlightedHtml = !isStreaming ? highlightedCodeCache.get(cacheKey) : null;
-
-  if (cachedHighlightedHtml != null) {
-    return <RenderedHighlightedCode html={cachedHighlightedHtml} />;
-  }
-
-  return (
-    <RenderedShikiCodeBlock
-      cacheKey={cacheKey}
-      code={code}
-      isStreaming={isStreaming}
-      language={language}
-      themeName={themeName}
-    />
-  );
-}
-
-function RenderedShikiCodeBlock(props: {
-  cacheKey: string;
-  code: string;
-  isStreaming: boolean;
-  language: string;
-  themeName: DiffThemeName;
-}) {
-  const highlighter = use(getHighlighterPromise(props.language));
-  const highlightedHtml = useMemo(() => {
-    try {
-      return highlighter.codeToHtml(props.code, { lang: props.language, theme: props.themeName });
-    } catch (error) {
-      // Log highlighting failures for debugging while falling back to plain text
-      console.warn(
-        `Code highlighting failed for language "${props.language}", falling back to plain text.`,
-        error instanceof Error ? error.message : error,
-      );
-      // If highlighting fails for this language, render as plain text
-      return highlighter.codeToHtml(props.code, { lang: "text", theme: props.themeName });
-    }
-  }, [highlighter, props.code, props.language, props.themeName]);
-
-  useEffect(() => {
-    if (!props.isStreaming) {
-      highlightedCodeCache.set(
-        props.cacheKey,
-        highlightedHtml,
-        estimateHighlightedSize(highlightedHtml, props.code),
-      );
-    }
-  }, [highlightedHtml, props.cacheKey, props.code, props.isStreaming]);
-
-  return <RenderedHighlightedCode html={highlightedHtml} />;
-}
-
-function RenderedHighlightedCode({ html }: { html: string }) {
-  return (
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki renders trusted syntax-highlighted HTML.
-    <div className="chat-markdown-shiki" dangerouslySetInnerHTML={{ __html: html }} />
-  );
-}
-
 function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
@@ -302,14 +165,51 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              const api = readNativeApi();
-              if (api) {
-                void openInPreferredEditor(api, targetPath);
-              } else {
-                console.warn("Native API not found. Unable to open file in editor.");
-              }
+              openChatFileTarget(targetPath, cwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              showChatFileTargetContextMenu(targetPath, cwd, {
+                x: event.clientX,
+                y: event.clientY,
+              });
             }}
           />
+        );
+      },
+      code({ node: _node, className: codeClassName, children, ...props }) {
+        const inlineText = nodeToPlainText(children).trim();
+        const targetPath = codeClassName ? null : resolveMarkdownFileLinkTarget(inlineText, cwd);
+        if (!targetPath) {
+          return (
+            <code className={codeClassName} {...props}>
+              {children}
+            </code>
+          );
+        }
+
+        return (
+          <code
+            className={cn(codeClassName, "cursor-pointer")}
+            title="Double-click to open"
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openChatFileTarget(targetPath, cwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              showChatFileTargetContextMenu(targetPath, cwd, {
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
+            {...props}
+          >
+            {children}
+          </code>
         );
       },
       pre({ node: _node, children, ...props }) {
@@ -320,16 +220,13 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
 
         return (
           <MarkdownCodeBlock code={codeBlock.code}>
-            <CodeHighlightErrorBoundary fallback={<pre {...props}>{children}</pre>}>
-              <Suspense fallback={<pre {...props}>{children}</pre>}>
-                <SuspenseShikiCodeBlock
-                  className={codeBlock.className}
-                  code={codeBlock.code}
-                  themeName={diffThemeName}
-                  isStreaming={isStreaming}
-                />
-              </Suspense>
-            </CodeHighlightErrorBoundary>
+            <SyntaxHighlightedCode
+              code={codeBlock.code}
+              language={extractFenceLanguage(codeBlock.className)}
+              themeName={diffThemeName}
+              isStreaming={isStreaming}
+              fallback={<pre {...props}>{children}</pre>}
+            />
           </MarkdownCodeBlock>
         );
       },

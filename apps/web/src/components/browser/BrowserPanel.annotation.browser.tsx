@@ -65,6 +65,7 @@ vi.mock("./BrowserPanel.viewport", async () => {
       goBack: () => undefined,
       goForward: () => undefined,
       reload: () => undefined,
+      reloadIgnoringCache: () => undefined,
       openDevTools: () => undefined,
       startAnnotation: annotationHarness.startAnnotation,
       cancelAnnotation: annotationHarness.cancelAnnotation,

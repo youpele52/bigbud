@@ -410,7 +410,7 @@ describe("ClaudeAdapterLive", () => {
         mimeType: "image/png",
         sizeBytes: 4,
       };
-      const attachmentPath = path.join(attachmentsDir, attachmentRelativePath(attachment));
+      const attachmentPath = path.join(attachmentsDir, attachmentRelativePath(attachment) ?? "");
       mkdirSync(path.dirname(attachmentPath), { recursive: true });
       writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
 

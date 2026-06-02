@@ -1,4 +1,4 @@
-import { EDITORS, EditorId, NativeApi } from "@bigbud/contracts";
+import { CODE_EDITORS, EDITORS, EditorId, NativeApi, type CodeEditorId } from "@bigbud/contracts";
 import {
   getLocalStorageItem,
   setLocalStorageItem,
@@ -38,9 +38,28 @@ export function resolveAndPersistPreferredEditor(
   return editor ?? null;
 }
 
-export async function openInPreferredEditor(api: NativeApi, targetPath: string): Promise<EditorId> {
+export function resolveAndPersistPreferredCodeEditor(
+  availableEditors: readonly EditorId[],
+): CodeEditorId | null {
+  const availableEditorIds = new Set(availableEditors);
+  const stored = getLocalStorageItem(LAST_EDITOR_KEY, EditorId, {
+    legacyKeys: LEGACY_LAST_EDITOR_KEYS,
+  });
+  if (stored && stored !== "file-manager" && availableEditorIds.has(stored)) return stored;
+  const editor = CODE_EDITORS.find((editor) => availableEditorIds.has(editor.id))?.id ?? null;
+  if (editor && (!stored || !availableEditorIds.has(stored)))
+    setLocalStorageItem(LAST_EDITOR_KEY, editor, EditorId, {
+      legacyKeys: LEGACY_LAST_EDITOR_KEYS,
+    });
+  return editor ?? null;
+}
+
+export async function openInPreferredEditor(
+  api: NativeApi,
+  targetPath: string,
+): Promise<CodeEditorId> {
   const { availableEditors } = await api.server.getConfig();
-  const editor = resolveAndPersistPreferredEditor(availableEditors);
+  const editor = resolveAndPersistPreferredCodeEditor(availableEditors);
   if (!editor) throw new Error("No available editors found.");
   await api.shell.openInEditor(targetPath, editor);
   return editor;

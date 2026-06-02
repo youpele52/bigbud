@@ -1,10 +1,14 @@
 import { type ThreadId } from "@bigbud/contracts";
 import {
-  extractTrailingBrowserAnnotations,
-  type ParsedBrowserAnnotationEntry,
-} from "./terminalContext.browserAnnotations";
+  extractTrailingAnnotations,
+  type ParsedUserAnnotationEntry,
+} from "./terminalContext.annotations";
 
-export type { ParsedBrowserAnnotationEntry } from "./terminalContext.browserAnnotations";
+export type {
+  ParsedBrowserAnnotationEntry,
+  ParsedCodeAnnotationEntry,
+  ParsedUserAnnotationEntry,
+} from "./terminalContext.annotations";
 
 export interface TerminalContextSelection {
   terminalId: string;
@@ -33,7 +37,7 @@ export interface DisplayedUserMessageState {
   contextCount: number;
   previewTitle: string | null;
   contexts: ParsedTerminalContextEntry[];
-  browserAnnotations: ParsedBrowserAnnotationEntry[];
+  annotations: ParsedUserAnnotationEntry[];
   readDocument: ParsedReadDocumentEntry | null;
 }
 
@@ -259,7 +263,7 @@ export function extractTrailingTerminalContexts(prompt: string): ExtractedTermin
 }
 
 export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMessageState {
-  const extractedAnnotations = extractTrailingBrowserAnnotations(prompt);
+  const extractedAnnotations = extractTrailingAnnotations(prompt);
   const extractedContexts = extractTrailingTerminalContexts(extractedAnnotations.promptText);
   const extractedReadDocument = extractTrailingReadDocument(extractedContexts.promptText);
   const visibleText = extractedReadDocument.promptText.replace(
@@ -272,7 +276,7 @@ export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMe
     contextCount: extractedContexts.contextCount,
     previewTitle: extractedContexts.previewTitle,
     contexts: extractedContexts.contexts,
-    browserAnnotations: extractedAnnotations.annotations,
+    annotations: extractedAnnotations.annotations,
     readDocument: extractedReadDocument.document,
   };
 }

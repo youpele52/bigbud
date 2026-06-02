@@ -435,7 +435,7 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.activeTurnId).toEqual(asTurnId("turn-1"));
   });
 
-  it("adds attached file metadata without exposing source paths to providers", async () => {
+  it("adds attached file metadata with full source path to providers", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
     const sourcePath = "/Users/alice/Desktop/report.pdf";
@@ -470,8 +470,48 @@ describe("ProviderCommandReactor", () => {
 
     const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
-    expect(sendInput?.input).toContain("- report.pdf (application/pdf, 120000 bytes)");
-    expect(sendInput?.input).not.toContain(sourcePath);
+    expect(sendInput?.input).toContain(
+      `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
+    );
+  });
+
+  it("adds path-reference attachment metadata with full path to providers", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    const path = "/Users/alice/Resumes/index.html";
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-path-ref-metadata"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-path-ref-metadata"),
+          role: "user",
+          text: "whats this file path",
+          attachments: [
+            {
+              type: "path",
+              id: "thread-attachment-00000000-0000-4000-8000-000000000010",
+              name: "index.html",
+              mimeType: "text/html",
+              sizeBytes: 0,
+              path,
+              entryKind: "file",
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("<attached_files>");
+    expect(sendInput?.input).toContain(`- index.html (file, path reference) -> ${path}`);
   });
 
   it("injects structured reply context into provider input for replied messages", async () => {
@@ -525,7 +565,7 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain("follow up");
   });
 
-  it("does not add generic attached file metadata for Pi", async () => {
+  it("adds generic attached file metadata uniformly for Pi with full source path", async () => {
     const harness = await createHarness({
       threadModelSelection: {
         provider: "pi",
@@ -534,6 +574,7 @@ describe("ProviderCommandReactor", () => {
       },
     });
     const now = new Date().toISOString();
+    const sourcePath = "/Users/alice/Desktop/report.pdf";
 
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -542,43 +583,6 @@ describe("ProviderCommandReactor", () => {
         threadId: ThreadId.makeUnsafe("thread-1"),
         message: {
           messageId: asMessageId("user-message-pi-attachment-metadata"),
-          role: "user",
-          text: "summarize this",
-          attachments: [
-            {
-              type: "file",
-              id: "thread-attachment-00000000-0000-4000-8000-000000000001",
-              name: "report.pdf",
-              mimeType: "application/pdf",
-              sizeBytes: 120_000,
-              sourcePath: "/Users/alice/Desktop/report.pdf",
-            },
-          ],
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
-    );
-
-    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
-
-    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
-    expect(sendInput?.input).toBe("summarize this");
-  });
-
-  it("adds attached file metadata without exposing source paths to providers", async () => {
-    const harness = await createHarness();
-    const now = new Date().toISOString();
-    const sourcePath = "/Users/alice/Desktop/report.pdf";
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe("cmd-turn-start-attachment-metadata"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-attachment-metadata"),
           role: "user",
           text: "summarize this",
           attachments: [
@@ -602,50 +606,9 @@ describe("ProviderCommandReactor", () => {
 
     const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
     expect(sendInput?.input).toContain("<attached_files>");
-    expect(sendInput?.input).toContain("- report.pdf (application/pdf, 120000 bytes)");
-    expect(sendInput?.input).not.toContain(sourcePath);
-  });
-
-  it("does not add generic attached file metadata for Pi", async () => {
-    const harness = await createHarness({
-      threadModelSelection: {
-        provider: "pi",
-        model: "claude-sonnet-4",
-        subProviderID: "anthropic",
-      },
-    });
-    const now = new Date().toISOString();
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
-        type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe("cmd-turn-start-pi-attachment-metadata"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
-        message: {
-          messageId: asMessageId("user-message-pi-attachment-metadata"),
-          role: "user",
-          text: "summarize this",
-          attachments: [
-            {
-              type: "file",
-              id: "thread-attachment-00000000-0000-4000-8000-000000000001",
-              name: "report.pdf",
-              mimeType: "application/pdf",
-              sizeBytes: 120_000,
-              sourcePath: "/Users/alice/Desktop/report.pdf",
-            },
-          ],
-        },
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        runtimeMode: "approval-required",
-        createdAt: now,
-      }),
+    expect(sendInput?.input).toContain(
+      `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
     );
-
-    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
-
-    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
-    expect(sendInput?.input).toBe("summarize this");
   });
 
   it("expands compact agent mentions for provider input while keeping stored user text compact", async () => {

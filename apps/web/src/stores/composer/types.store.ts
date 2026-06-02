@@ -19,6 +19,11 @@ import {
   type ChatImageAttachment,
   type ChatMessageReplyTarget,
 } from "../../models/types";
+import {
+  ComposerAnnotationAttachment as ComposerAnnotationAttachmentSchema,
+  type ComposerAnnotationAttachment,
+} from "./types.annotation.store";
+export type { ComposerAnnotationAttachment } from "./types.annotation.store";
 
 export {
   COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
@@ -42,48 +47,10 @@ export interface ComposerImageAttachment extends Omit<ChatImageAttachment, "prev
   file: File;
 }
 
-export const ComposerAnnotationElement = Schema.Struct({
-  selector: Schema.String,
-  tag: Schema.String,
-  role: Schema.String,
-  text: Schema.String,
-  ariaLabel: Schema.NullOr(Schema.String),
-  id: Schema.NullOr(Schema.String),
-  className: Schema.String,
-  rect: Schema.Struct({
-    x: Schema.Number,
-    y: Schema.Number,
-    width: Schema.Number,
-    height: Schema.Number,
-  }),
-});
-
-export const ComposerAnnotationViewport = Schema.Struct({
-  width: Schema.Number,
-  height: Schema.Number,
-  devicePixelRatio: Schema.Number,
-});
-
-export const AnnotationIntentSchema = Schema.Literals(["ask", "context", "fix"]);
-export type AnnotationIntent = typeof AnnotationIntentSchema.Type;
-
-export const ComposerAnnotationAttachment = Schema.Struct({
-  id: Schema.String,
-  imageId: Schema.String,
-  comment: Schema.String,
-  intent: AnnotationIntentSchema,
-  page: Schema.Struct({
-    url: Schema.String,
-    title: Schema.String,
-  }),
-  element: ComposerAnnotationElement,
-  viewport: ComposerAnnotationViewport,
-  createdAt: Schema.String,
-});
-export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.Type;
-
 /** In-memory representation of a non-image file attachment. Holds only the path — no bytes. */
 export interface ComposerFileAttachment extends ChatFileAttachment {
+  entryKind?: "file" | "directory";
+  attachmentMode?: "upload" | "path-reference";
   /** Absolute filesystem path — available on desktop (Electron). On web, this is empty string. */
   filePath: string;
   /** The original File object — used on web fallback (base64 transport). Null on desktop. */
@@ -96,6 +63,8 @@ export const PersistedComposerFileAttachment = Schema.Struct({
   mimeType: Schema.String,
   sizeBytes: Schema.Number,
   filePath: Schema.String,
+  entryKind: Schema.optional(Schema.Literals(["file", "directory"])),
+  attachmentMode: Schema.optional(Schema.Literals(["upload", "path-reference"])),
 });
 
 export const PersistedTerminalContextDraft = Schema.Struct({
@@ -116,7 +85,7 @@ export const PersistedComposerThreadDraftState = Schema.Struct({
   shellMode: Schema.optionalKey(Schema.Boolean),
   attachments: Schema.Array(PersistedComposerImageAttachment),
   fileAttachments: Schema.optionalKey(Schema.Array(PersistedComposerFileAttachment)),
-  annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationAttachment)),
+  annotations: Schema.optionalKey(Schema.Array(ComposerAnnotationAttachmentSchema)),
   terminalContexts: Schema.optionalKey(Schema.Array(PersistedTerminalContextDraft)),
   modelSelectionByProvider: Schema.optionalKey(
     Schema.Record(ProviderKind, Schema.optionalKey(ModelSelection)),

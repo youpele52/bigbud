@@ -9,7 +9,12 @@
 import { Schema, ServiceMap } from "effect";
 import type { Effect } from "effect";
 
-import type { ProjectWriteFileInput, ProjectWriteFileResult } from "@bigbud/contracts";
+import type {
+  ProjectReadFilePreviewInput,
+  ProjectReadFilePreviewResult,
+  ProjectWriteFileInput,
+  ProjectWriteFileResult,
+} from "@bigbud/contracts";
 import { WorkspacePathOutsideRootError } from "./WorkspacePaths.ts";
 
 export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceFileSystemError>()(
@@ -27,6 +32,16 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
  * WorkspaceFileSystemShape - Service API for workspace-relative file operations.
  */
 export interface WorkspaceFileSystemShape {
+  /**
+   * Read a bounded, text-only preview of a file relative to the workspace root.
+   */
+  readonly readFilePreview: (
+    input: ProjectReadFilePreviewInput,
+  ) => Effect.Effect<
+    ProjectReadFilePreviewResult,
+    WorkspaceFileSystemError | WorkspacePathOutsideRootError
+  >;
+
   /**
    * Write a file relative to the workspace root.
    *

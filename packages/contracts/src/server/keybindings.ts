@@ -29,11 +29,13 @@ export type ThreadKeybindingCommand = (typeof THREAD_KEYBINDING_COMMANDS)[number
 
 const STATIC_KEYBINDING_COMMANDS = [
   "terminal.toggle",
+  "terminalPanel.toggle",
   "terminal.split",
   "terminal.new",
   "terminal.close",
   "diff.toggle",
   "browser.toggle",
+  "files.toggle",
   "commandPalette.toggle",
   "sidebar.toggle",
   "settings.toggle",

@@ -1,18 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { closeBrowserPanel, openBrowserPanel, toggleBrowserPanel } from "./browserPanel.actions";
+import { useBrowserPanelStore } from "./browser.store";
+import { useFilesPanelStore } from "../files/filesPanel.store";
 import {
-  closeBrowserPanel,
   getRequestedRightPanel,
-  openBrowserPanel,
   registerDiffPanelCloseAction,
   requestRightPanel,
-  toggleBrowserPanel,
-} from "./browserPanel.coordinator";
-import { useBrowserPanelStore } from "./browser.store";
+} from "../rightPanel/rightPanel.coordinator";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
-describe("browserPanel.coordinator", () => {
+describe("browserPanel.actions", () => {
   afterEach(() => {
     useBrowserPanelStore.setState({ open: false, url: "" });
+    useFilesPanelStore.setState({ open: false });
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
     registerDiffPanelCloseAction(null);
     requestRightPanel(null);
   });
@@ -27,6 +29,22 @@ describe("browserPanel.coordinator", () => {
     expect(useBrowserPanelStore.getState()).toMatchObject({
       open: true,
       url: "https://example.com/path",
+    });
+  });
+
+  it("keeps the files tab open while switching the active panel to browser", () => {
+    useFilesPanelStore.setState({ open: true });
+    requestRightPanel("files");
+    useRightPanelTabsStore.setState({ activeKind: "files", openTabs: ["files"] });
+
+    openBrowserPanel({ url: "https://example.com" });
+
+    expect(useFilesPanelStore.getState().open).toBe(true);
+    expect(useBrowserPanelStore.getState().open).toBe(true);
+    expect(getRequestedRightPanel()).toBe("browser");
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "browser",
+      openTabs: ["files", "browser"],
     });
   });
 
