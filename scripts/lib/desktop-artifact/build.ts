@@ -6,12 +6,13 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 
-import { Effect, FileSystem, Path } from "effect";
+import { Cause, Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
 import {
   BuildScriptError,
   BuildArch,
+  BuildPlatform,
   PLATFORM_CONFIG,
   RepoRoot,
   commandOutputOptions,
@@ -116,14 +117,16 @@ const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(f
     try: () => {
       const require = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
       const entry = require.resolve("electron-builder");
-      const pkgDir = dirname(entry);
-      const cliPath = path.join(pkgDir, "cli.js");
-      if (existsSync(cliPath)) {
-        return cliPath;
-      }
-      const altCliPath = path.join(pkgDir, "out", "cli", "cli.js");
-      if (existsSync(altCliPath)) {
-        return altCliPath;
+      const candidateDirs = [dirname(entry), dirname(dirname(entry))];
+      for (const candidateDir of candidateDirs) {
+        const cliPath = path.join(candidateDir, "cli.js");
+        if (existsSync(cliPath)) {
+          return cliPath;
+        }
+        const altCliPath = path.join(candidateDir, "out", "cli.js");
+        if (existsSync(altCliPath)) {
+          return altCliPath;
+        }
       }
       return null;
     },
@@ -170,6 +173,66 @@ const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts
         cause,
       }),
   });
+});
+
+function shouldRetrySignedMacBuildError(cause: unknown): boolean {
+  if (!(cause instanceof BuildScriptError)) {
+    return false;
+  }
+
+  return cause.message.includes("Command exited with non-zero exit code");
+}
+
+const runElectronBuilder = Effect.fn("runElectronBuilder")(function* (input: {
+  readonly stageAppDir: string;
+  readonly buildEnv: NodeJS.ProcessEnv;
+  readonly verbose: boolean;
+  readonly platform: typeof BuildPlatform.Type;
+  readonly arch: typeof BuildArch.Type;
+  readonly target: string;
+  readonly appVersion: string;
+  readonly cliFlag: "--mac" | "--linux" | "--win";
+  readonly signed: boolean;
+}) {
+  const electronBuilderResult = yield* resolveElectronBuilderBinary();
+  const builderCommand = electronBuilderResult.fallback
+    ? ChildProcess.make({
+        cwd: input.stageAppDir,
+        env: input.buildEnv,
+        ...commandOutputOptions(input.verbose),
+        shell: shellOptionForPlatform(input.platform),
+      })`bunx electron-builder ${input.cliFlag} --${input.arch} --publish never`
+    : ChildProcess.make({
+        cwd: input.stageAppDir,
+        env: input.buildEnv,
+        ...commandOutputOptions(input.verbose),
+        shell: shellOptionForPlatform(input.platform),
+      })`${electronBuilderResult.binary} ${input.cliFlag} --${input.arch} --publish never`;
+
+  yield* Effect.log(
+    `[desktop-artifact] Building ${input.platform}/${input.target} (arch=${input.arch}, version=${input.appVersion}) using ${electronBuilderResult.binary}...`,
+  );
+
+  const buildOnce = runCommand(builderCommand);
+  if (!(input.platform === "mac" && input.signed)) {
+    yield* buildOnce;
+    return;
+  }
+
+  const firstAttempt = yield* Effect.exit(buildOnce);
+  if (firstAttempt._tag === "Success") {
+    return;
+  }
+
+  if (!shouldRetrySignedMacBuildError(Cause.squash(firstAttempt.cause))) {
+    return yield* firstAttempt;
+  }
+
+  yield* Effect.logWarning(
+    "[desktop-artifact] macOS signing failed. Retrying desktop packaging once to recover from transient codesign/timestamp failures...",
+  );
+  yield* Effect.sleep("2 seconds");
+  yield* buildOnce;
 });
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
@@ -413,29 +476,17 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  const electronBuilderResult = yield* resolveElectronBuilderBinary();
-  yield* Effect.log(
-    `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
-  );
-  if (electronBuilderResult.fallback) {
-    yield* runCommand(
-      ChildProcess.make({
-        cwd: stageAppDir,
-        env: buildEnv,
-        ...commandOutputOptions(options.verbose),
-        shell: shellOptionForPlatform(options.platform),
-      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
-    );
-  } else {
-    yield* runCommand(
-      ChildProcess.make({
-        cwd: stageAppDir,
-        env: buildEnv,
-        ...commandOutputOptions(options.verbose),
-        shell: shellOptionForPlatform(options.platform),
-      })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
-    );
-  }
+  yield* runElectronBuilder({
+    stageAppDir,
+    buildEnv,
+    verbose: options.verbose,
+    platform: options.platform,
+    arch: options.arch,
+    target: options.target,
+    appVersion,
+    cliFlag: platformConfig.cliFlag,
+    signed: options.signed,
+  });
 
   const stageDistDir = path.join(stageAppDir, "dist");
   if (!(yield* fs.exists(stageDistDir))) {
