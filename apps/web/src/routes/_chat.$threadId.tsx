@@ -230,23 +230,6 @@ function ChatThreadRouteView() {
   }, [browserOpen, closeDiff, diffOpen, filesOpen, terminalOpen]);
 
   useEffect(() => {
-    if (!terminalOpen || (!browserOpen && !filesOpen && !diffOpen)) {
-      return;
-    }
-
-    if (getRequestedRightPanel() === "terminal") {
-      closeBrowserPanel();
-      closeFilesPanel();
-      if (diffOpen) {
-        closeDiff();
-      }
-      return;
-    }
-
-    closeTerminalPanel();
-  }, [browserOpen, closeDiff, diffOpen, filesOpen, terminalOpen]);
-
-  useEffect(() => {
     if (!bootstrapComplete) {
       return;
     }

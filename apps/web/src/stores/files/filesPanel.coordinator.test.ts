@@ -8,26 +8,33 @@ import {
   registerDiffPanelCloseAction,
   requestRightPanel,
 } from "../rightPanel/rightPanel.coordinator";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
 describe("filesPanel.coordinator", () => {
   afterEach(() => {
     useFilesPanelStore.setState({ open: false });
     useBrowserPanelStore.setState({ open: false });
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
     registerDiffPanelCloseAction(null);
     requestRightPanel(null);
   });
 
-  it("closes the diff panel and browser panel when toggling files open", () => {
+  it("closes the diff panel and switches the active panel to files", () => {
     const closeDiff = vi.fn();
     registerDiffPanelCloseAction(closeDiff);
     useBrowserPanelStore.setState({ open: true });
+    useRightPanelTabsStore.setState({ activeKind: "browser", openTabs: ["browser"] });
 
     toggleFilesPanel();
 
     expect(closeDiff).toHaveBeenCalledTimes(1);
-    expect(useBrowserPanelStore.getState().open).toBe(false);
+    expect(useBrowserPanelStore.getState().open).toBe(true);
     expect(useFilesPanelStore.getState().open).toBe(true);
     expect(getRequestedRightPanel()).toBe("files");
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "files",
+      openTabs: ["browser", "files"],
+    });
   });
 
   it("does not invoke the diff close action when toggling files closed", () => {
@@ -46,6 +53,7 @@ describe("filesPanel.coordinator", () => {
   it("closeFilesPanel clears the requested right panel", () => {
     useFilesPanelStore.setState({ open: true });
     requestRightPanel("files");
+    useRightPanelTabsStore.setState({ activeKind: "files", openTabs: ["files"] });
 
     closeFilesPanel();
 

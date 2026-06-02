@@ -1,24 +1,25 @@
 import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useFilesPanelStore } from "./filesPanel.store";
-import { useBrowserPanelStore } from "../browser/browser.store";
+
+export function openFilesPanel() {
+  requestRightPanel("files");
+  closeDiffPanelIfOpen();
+  useRightPanelTabsStore.getState().openTab("files");
+  useFilesPanelStore.getState().setOpen(true);
+}
 
 export function toggleFilesPanel() {
-  const { open, setOpen } = useFilesPanelStore.getState();
-
-  if (!open) {
-    requestRightPanel("files");
-    closeDiffPanelIfOpen();
-    useBrowserPanelStore.getState().setOpen(false);
-  } else if (useFilesPanelStore.getState().open) {
-    requestRightPanel(null);
+  if (!useFilesPanelStore.getState().open) {
+    openFilesPanel();
+    return;
   }
 
-  setOpen(!open);
+  closeFilesPanel();
 }
 
 export function closeFilesPanel() {
-  if (useFilesPanelStore.getState().open) {
-    requestRightPanel(null);
-  }
+  useRightPanelTabsStore.getState().closeTab("files");
+  requestRightPanel(useRightPanelTabsStore.getState().activeKind);
   useFilesPanelStore.getState().setOpen(false);
 }
