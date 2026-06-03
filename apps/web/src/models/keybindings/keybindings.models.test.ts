@@ -298,6 +298,33 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
+  it("matches alt+mod letter shortcuts on macOS using event.code", () => {
+    const bindings = compile([
+      {
+        shortcut: modShortcut("b", { altKey: true }),
+        command: "rightPanel.toggle",
+        whenAst: whenNot(whenIdentifier("terminalFocus")),
+      },
+    ]);
+
+    assert.strictEqual(
+      resolveShortcutCommand(
+        event({
+          key: "∫",
+          code: "KeyB",
+          metaKey: true,
+          altKey: true,
+        }),
+        bindings,
+        {
+          platform: "MacIntel",
+          context: { terminalFocus: false },
+        },
+      ),
+      "rightPanel.toggle",
+    );
+  });
+
   it("matches chat.new shortcut", () => {
     assert.isTrue(
       isChatNewShortcut(event({ key: "n", metaKey: true }), DEFAULT_BINDINGS, {
