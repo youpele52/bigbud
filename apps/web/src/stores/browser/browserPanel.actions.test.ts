@@ -1,31 +1,22 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { closeBrowserPanel, openBrowserPanel, toggleBrowserPanel } from "./browserPanel.actions";
 import { useBrowserPanelStore } from "./browser.store";
 import { useFilesPanelStore } from "../files/filesPanel.store";
-import {
-  getRequestedRightPanel,
-  registerDiffPanelCloseAction,
-  requestRightPanel,
-} from "../rightPanel/rightPanel.coordinator";
+import { getRequestedRightPanel, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
 describe("browserPanel.actions", () => {
   afterEach(() => {
     useBrowserPanelStore.setState({ open: false, url: "" });
     useFilesPanelStore.setState({ open: false });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
-    registerDiffPanelCloseAction(null);
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
     requestRightPanel(null);
   });
 
-  it("closes the diff panel before opening the browser with a URL", () => {
-    const closeDiff = vi.fn();
-    registerDiffPanelCloseAction(closeDiff);
-
+  it("opens the browser with a normalized URL", () => {
     openBrowserPanel({ url: " https://example.com/path " });
 
-    expect(closeDiff).toHaveBeenCalledTimes(1);
     expect(useBrowserPanelStore.getState()).toMatchObject({
       open: true,
       url: "https://example.com/path",
@@ -48,16 +39,29 @@ describe("browserPanel.actions", () => {
     });
   });
 
-  it("only closes the diff panel when toggling the browser open", () => {
-    const closeDiff = vi.fn();
-    registerDiffPanelCloseAction(closeDiff);
+  it("activates the browser instead of closing it when the tab is already open in the background", () => {
+    useBrowserPanelStore.setState({ open: true, url: "https://example.com" });
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      openTabs: ["browser", "files"],
+      rightPanelOpen: true,
+    });
 
     toggleBrowserPanel();
-    expect(closeDiff).toHaveBeenCalledTimes(1);
+
+    expect(useBrowserPanelStore.getState().open).toBe(true);
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "browser",
+      openTabs: ["browser", "files"],
+      rightPanelOpen: true,
+    });
+  });
+
+  it("closes the browser only when toggling the active browser tab", () => {
+    toggleBrowserPanel();
     expect(useBrowserPanelStore.getState().open).toBe(true);
 
     toggleBrowserPanel();
-    expect(closeDiff).toHaveBeenCalledTimes(1);
     expect(useBrowserPanelStore.getState().open).toBe(false);
   });
 
