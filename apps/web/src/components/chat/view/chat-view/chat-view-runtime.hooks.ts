@@ -144,6 +144,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     if (!base.diffOpen) {
       requestRightPanel("diff");
       closeBrowserPanel();
+      useRightPanelTabsStore.getState().openTab("diff");
     } else {
       requestRightPanel(null);
     }
