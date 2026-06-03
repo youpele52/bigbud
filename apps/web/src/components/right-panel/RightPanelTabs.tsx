@@ -1,4 +1,4 @@
-import { FoldersIcon, GlobeIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-react";
+import { DiffIcon, FoldersIcon, GlobeIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
@@ -24,12 +24,15 @@ const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: str
 
 interface RightPanelTabsProps {
   browserShortcutLabel: string | null;
+  diffShortcutLabel?: string | null;
   filesShortcutLabel: string | null;
   hasActiveProject: boolean;
+  isGitRepo?: boolean;
   onCloseBrowser: () => void;
   onCloseFiles: () => void;
   onCloseTerminal: () => void;
   onOpenBrowser: () => void;
+  onOpenDiff?: () => void;
   onOpenFiles: () => void;
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
@@ -55,12 +58,15 @@ function TabMenuItem(props: {
 
 export function RightPanelTabs({
   browserShortcutLabel,
+  diffShortcutLabel,
   filesShortcutLabel,
   hasActiveProject,
+  isGitRepo,
   onCloseBrowser,
   onCloseFiles,
   onCloseTerminal,
   onOpenBrowser,
+  onOpenDiff,
   onOpenFiles,
   onOpenTerminal,
   terminalAvailable,
@@ -158,6 +164,13 @@ export function RightPanelTabs({
             onSelect={onOpenTerminal}
             shortcutLabel={terminalShortcutLabel}
           />
+          {onOpenDiff && (
+            <MenuItem disabled={!isGitRepo} onClick={onOpenDiff}>
+              <DiffIcon className="size-3.5" />
+              <span>Diff</span>
+              {diffShortcutLabel ? <MenuShortcut>{diffShortcutLabel}</MenuShortcut> : null}
+            </MenuItem>
+          )}
         </MenuPopup>
       </Menu>
     </div>

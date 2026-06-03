@@ -68,6 +68,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const setPreviewPath = useFilesPanelStore((state) => state.setPreviewPath);
   const setPreviewPosition = useFilesPanelStore((state) => state.setPreviewPosition);
   const activeTab = useRightPanelTabsStore((state) => state.activeKind);
+  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
@@ -184,7 +185,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
 
   const rootDirectoryState = directoryStateByPath[""];
   const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
-  const showPanel = open && Boolean(workspaceRoot) && activeTab === "files";
+  const showPanel = open && Boolean(workspaceRoot) && activeTab === "files" && rightPanelOpen;
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
   const previewTargetLine = previewPosition?.line;
 

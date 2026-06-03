@@ -28,7 +28,12 @@ describe("ChatHeader", () => {
     mockIsThreadRunning = false;
     mockIsThreadCompacting = false;
     useBrowserPanelStore.setState({ open: false, url: "" });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
+    useRightPanelTabsStore.setState({
+      activeKind: null,
+      openTabs: [],
+      rightPanelOpen: false,
+      lastActiveKind: null,
+    });
     useStore.setState({
       projects: [],
       threads: [],
@@ -43,30 +48,22 @@ describe("ChatHeader", () => {
     activeProjectName: undefined,
     activeThreadTitle: "Thread",
     availableEditors: [],
-    browserToggleShortcutLabel: null,
     diffOpen: false,
-    diffToggleShortcutLabel: null,
-    filesToggleShortcutLabel: null,
     gitCwd: null,
-    isGitRepo: true,
     keybindings: DEFAULT_BINDINGS,
     onAddProjectScript: async () => undefined,
     onDeleteProjectScript: async () => undefined,
     onRunProjectScript: () => undefined,
-    onToggleBrowser: () => undefined,
-    onToggleDiff: () => undefined,
-    onToggleFiles: () => undefined,
-    onToggleTerminal: () => undefined,
+    onToggleRightPanel: () => undefined,
     onUpdateProjectScript: async () => undefined,
     openInCwd: null,
     preferredScriptId: null,
+    rightPanelOpen: false,
+    rightPanelToggleShortcutLabel: null,
     sidebarToggleShortcutLabel: null,
-    terminalAvailable: true,
-    terminalPanelToggleShortcutLabel: null,
-    terminalToggleShortcutLabel: null,
   } as const;
 
-  it("renders the sidebar toggle and the right panel launcher", () => {
+  it("renders the sidebar toggle and the right panel toggle", () => {
     const markup = renderToStaticMarkup(
       <SidebarProvider defaultOpen>
         <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} />
@@ -74,7 +71,7 @@ describe("ChatHeader", () => {
     );
 
     expect(markup).toContain('aria-label="Toggle sidebar"');
-    expect(markup).toContain('aria-label="Open right panel tools"');
+    expect(markup).toContain('aria-label="Open right panel"');
   });
 
   it("shows blue dots while running and orange dots while compacting", () => {

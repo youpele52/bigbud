@@ -31,6 +31,7 @@ interface TerminalPanelProps {
 export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: TerminalPanelProps) {
   const open = useTerminalPanelStore((state) => state.open);
   const activeTab = useRightPanelTabsStore((state) => state.activeKind);
+  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const { panelWidth, onResizePointerDown } = useRightPanelWidth({
     minWidth: TERMINAL_PANEL_MIN_WIDTH,
     storageKey: TERMINAL_PANEL_WIDTH_STORAGE_KEY,
@@ -64,7 +65,7 @@ export const TerminalPanel = memo(function TerminalPanel({ activeThreadId }: Ter
     [activeThreadId],
   );
 
-  const visible = open && activeTab === "terminal";
+  const visible = open && activeTab === "terminal" && rightPanelOpen;
 
   if (!visible || !panelTerminalState || !drawer.project || !drawer.cwd) {
     return null;
