@@ -4,6 +4,16 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.640 (3 June, 2026)
+
+### Right Panel Toggle, State Persistence, and Shortcut
+
+- Replaced the right-panel dropdown launcher with a single toggle button that opens and closes the panel via `alt+mod+b`, with the shortcut label shown in the tooltip.
+- Right panel now remembers its active tab when closed — reopening restores the exact same view (Browser, Files, Terminal, or Diff) instead of resetting to the launcher.
+- Added an empty-state launcher grid with four cards (Browser, Files, Terminal, Diff) that shows when the panel is empty or first opened, each card displaying its icon, description, and keyboard shortcut label.
+- Added Diff as an openable tab in the `+` panel tab menu alongside Browser, Files, and Terminal.
+- Fixed the `alt+mod+b` shortcut not firing on macOS, where the Option modifier changes `KeyboardEvent.key` for letter keys, by adding a code-based fallback in the keybinding matcher.
+
 ## v0.1.639 (2 June, 2026)
 
 ### Browse and Preview Files Without Leaving the App

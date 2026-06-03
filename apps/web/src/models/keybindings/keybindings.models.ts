@@ -40,6 +40,11 @@ const EVENT_CODE_KEY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   Digit9: ["9"],
 };
 
+function eventCodeLetterAlias(code: string | undefined): string | null {
+  if (!code?.startsWith("Key") || code.length !== 4) return null;
+  return code.slice(3).toLowerCase();
+}
+
 function normalizeEventKey(key: string): string {
   const normalized = key.toLowerCase();
   if (normalized === "esc") return "escape";
@@ -48,6 +53,10 @@ function normalizeEventKey(key: string): string {
 
 function resolveEventKeys(event: ShortcutEventLike): Set<string> {
   const keys = new Set([normalizeEventKey(event.key)]);
+  const letterAlias = eventCodeLetterAlias(event.code);
+  if (letterAlias) {
+    keys.add(letterAlias);
+  }
   const aliases = event.code ? EVENT_CODE_KEY_ALIASES[event.code] : undefined;
   if (!aliases) return keys;
 

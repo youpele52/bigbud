@@ -46,6 +46,7 @@ export const BrowserPanel = memo(function BrowserPanel({
 }: BrowserPanelProps) {
   const { open, url, setUrl } = useBrowserPanelStore();
   const activeTab = useRightPanelTabsStore((state) => state.activeKind);
+  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
@@ -77,7 +78,7 @@ export const BrowserPanel = memo(function BrowserPanel({
     storageKey: BROWSER_PANEL_WIDTH_STORAGE_KEY,
   });
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
-  const visible = open && activeTab === "browser";
+  const visible = open && activeTab === "browser" && rightPanelOpen;
 
   const reloadViewport = useCallback((mode: "normal" | "ignoring-cache") => {
     if (mode === "ignoring-cache") {
@@ -272,6 +273,10 @@ export const BrowserPanel = memo(function BrowserPanel({
     },
     viewportRef,
   );
+
+  if (!visible) {
+    return null;
+  }
 
   return (
     <RightPanelShell
