@@ -63,12 +63,15 @@ export function RightPanelLauncherPanel({
     >
       <RightPanelTabs
         browserShortcutLabel={browserShortcutLabel}
+        diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
+        isGitRepo={true}
         onCloseBrowser={closeBrowserPanel}
         onCloseFiles={closeFilesPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenBrowser={onToggleBrowser}
+        onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
         onOpenTerminal={openTerminalPanel}
         terminalAvailable={Boolean(workspaceRoot)}
