@@ -168,6 +168,10 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     () => shortcutLabelForCommand(keybindings, "sidebar.toggle"),
     [keybindings],
   );
+  const rightPanelToggleShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "rightPanel.toggle"),
+    [keybindings],
+  );
   const searchToggleShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "search.toggle"),
     [keybindings],
@@ -219,6 +223,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     browserPanelShortcutLabel,
     filesPanelShortcutLabel,
     sidebarToggleShortcutLabel,
+    rightPanelToggleShortcutLabel,
     searchToggleShortcutLabel,
   };
 }

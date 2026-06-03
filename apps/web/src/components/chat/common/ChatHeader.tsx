@@ -14,9 +14,8 @@ import ProjectScriptsControl, {
 import { Toggle } from "../../ui/toggle";
 import { useSidebar } from "../../ui/sidebar";
 import { OpenInPicker } from "./OpenInPicker";
-import { RightPanelLauncherMenu, type RightPanelLauncherKind } from "./RightPanelLauncherMenu";
+import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
-import { useRightPanelTabsStore } from "../../../stores/rightPanel/rightPanelTabs.store";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
@@ -26,69 +25,47 @@ interface ChatHeaderProps {
   activeThreadId: ThreadId;
   activeThreadTitle: string;
   activeProjectName: string | undefined;
-  isGitRepo: boolean;
   openInCwd: string | null;
   activeProjectScripts: ProjectScript[] | undefined;
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
-  terminalAvailable: boolean;
-  terminalToggleShortcutLabel: string | null;
-  terminalPanelToggleShortcutLabel: string | null;
-  diffToggleShortcutLabel: string | null;
-  sidebarToggleShortcutLabel: string | null;
-  browserToggleShortcutLabel: string | null;
-  filesToggleShortcutLabel: string | null;
   gitCwd: string | null;
   executionTargetId?: string | undefined;
-  diffOpen: boolean;
+  sidebarToggleShortcutLabel: string | null;
+  rightPanelToggleShortcutLabel: string | null;
+  rightPanelOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
-  onToggleTerminal: () => void;
-  onToggleDiff: () => void;
-  onToggleBrowser: () => void;
-  onToggleFiles: () => void;
+  onToggleRightPanel: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
   activeThreadId,
   activeThreadTitle,
   activeProjectName,
-  isGitRepo,
   openInCwd,
   activeProjectScripts,
   preferredScriptId,
   keybindings,
   availableEditors,
-  terminalAvailable,
-  terminalToggleShortcutLabel,
-  terminalPanelToggleShortcutLabel,
-  diffToggleShortcutLabel,
-  sidebarToggleShortcutLabel,
-  browserToggleShortcutLabel,
-  filesToggleShortcutLabel,
   gitCwd,
   executionTargetId,
-  diffOpen,
+  sidebarToggleShortcutLabel,
+  rightPanelToggleShortcutLabel,
+  rightPanelOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
-  onToggleTerminal,
-  onToggleDiff,
-  onToggleBrowser,
-  onToggleFiles,
+  onToggleRightPanel,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
   const isThreadCompacting = useIsThreadCompacting(activeThreadId);
-  const activeTabbedRightPanelKind = useRightPanelTabsStore((state) => state.activeKind);
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
-  const activeRightPanelKind: RightPanelLauncherKind | null = diffOpen
-    ? "diff"
-    : activeTabbedRightPanelKind;
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -173,21 +150,10 @@ export const ChatHeader = memo(function ChatHeader({
             {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
           </TooltipPopup>
         </Tooltip>
-        <RightPanelLauncherMenu
-          activeKind={activeRightPanelKind}
-          browserToggleShortcutLabel={browserToggleShortcutLabel}
-          diffToggleShortcutLabel={diffToggleShortcutLabel}
-          filesToggleShortcutLabel={filesToggleShortcutLabel}
-          hasActiveProject={Boolean(activeProjectName)}
-          isGitRepo={isGitRepo}
-          onToggleBrowser={onToggleBrowser}
-          onToggleDiff={onToggleDiff}
-          onToggleFiles={onToggleFiles}
-          onToggleTerminal={onToggleTerminal}
-          terminalAvailable={terminalAvailable}
-          terminalShortcutLabel={
-            terminalToggleShortcutLabel || terminalPanelToggleShortcutLabel || null
-          }
+        <RightPanelToggleButton
+          rightPanelOpen={rightPanelOpen}
+          rightPanelToggleShortcutLabel={rightPanelToggleShortcutLabel}
+          onToggle={onToggleRightPanel}
         />
       </div>
     </div>
