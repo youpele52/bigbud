@@ -14,6 +14,7 @@ import {
 import {
   cleanupProcessHandles,
   clearKillFiberWith,
+  enqueueProcessEvent,
   registerKillFiberWith,
   runKillEscalationWith,
   snapshot,
@@ -199,6 +200,54 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       yield* flushPersist(threadId, terminalId);
     });
 
+    const ptyOutputWorker = yield* makeKeyedCoalescingWorker<
+      string,
+      {
+        readonly session: TerminalSessionState;
+        readonly expectedPid: number;
+        readonly data: string;
+      },
+      never,
+      never
+    >({
+      merge: (current, next) => ({
+        session: current.session,
+        expectedPid: current.expectedPid,
+        data: `${current.data}${next.data}`,
+      }),
+      process: (_sessionKey, request) =>
+        Effect.sync(() => {
+          if (
+            !enqueueProcessEvent(request.session, request.expectedPid, {
+              type: "output",
+              data: request.data,
+            })
+          ) {
+            return;
+          }
+          runFork(drainProcessEvents(request.session, request.expectedPid));
+        }),
+    });
+
+    const queuePtyOutput = Effect.fn("terminal.queuePtyOutput")(function* (
+      session: TerminalSessionState,
+      expectedPid: number,
+      data: string,
+    ) {
+      yield* ptyOutputWorker.enqueue(toSessionKey(session.threadId, session.terminalId), {
+        session,
+        expectedPid,
+        data,
+      });
+    });
+
+    const flushPtyOutput = Effect.fn("terminal.flushPtyOutput")(function* (
+      threadId: string,
+      terminalId: string,
+    ) {
+      yield* ptyOutputWorker.drainKey(toSessionKey(threadId, terminalId));
+    });
+
     const { readHistory, deleteHistory, deleteAllHistoryForThread } = makeHistoryAccessors({
       logsDir,
       historyLineLimit,
@@ -244,6 +293,8 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       modifyManagerState,
       readManagerState,
       publishEvent,
+      queuePtyOutput,
+      flushPtyOutput,
       evictInactiveSessionsIfNeeded,
       queuePersist,
       processKillGraceMs,
@@ -362,6 +413,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       withThreadLock,
       stopProcess: stopProcess,
       startSession: startSession,
+      flushPtyOutput,
       persistHistory,
       flushPersist,
       readHistory,

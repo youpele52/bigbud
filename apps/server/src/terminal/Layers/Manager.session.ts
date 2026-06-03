@@ -50,6 +50,7 @@ export interface SessionApiContext {
     input: TerminalStartInput,
     eventType: "started" | "restarted",
   ) => Effect.Effect<void>;
+  flushPtyOutput: (threadId: string, terminalId: string) => Effect.Effect<void>;
   persistHistory: (threadId: string, terminalId: string, history: string) => Effect.Effect<void>;
   flushPersist: (threadId: string, terminalId: string) => Effect.Effect<void>;
   readHistory: (threadId: string, terminalId: string) => Effect.Effect<string>;
@@ -74,6 +75,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     modifyManagerState,
     stopProcess,
     startSession,
+    flushPtyOutput,
     persistHistory,
     flushPersist,
     readHistory,
@@ -122,6 +124,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const sessionKey = toSessionKey(input.threadId, terminalId);
         const existing = yield* getSession(input.threadId, terminalId);
         if (Option.isNone(existing)) {
+          yield* flushPtyOutput(input.threadId, terminalId);
           yield* flushPersist(input.threadId, terminalId);
           const history = yield* readHistory(input.threadId, terminalId);
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
@@ -171,6 +174,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const runtimeEnvChanged = !Equal.equals(currentRuntimeEnv, nextRuntimeEnv);
 
         if (liveSession.cwd !== input.cwd || runtimeEnvChanged) {
+          yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           yield* stopProcess(liveSession);
           liveSession.executionTargetId = executionTargetId;
           liveSession.cwd = input.cwd;
@@ -179,6 +183,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           resetSessionRuntimeState(liveSession);
           yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         } else if (liveSession.status === "exited" || liveSession.status === "error") {
+          yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           liveSession.executionTargetId = executionTargetId;
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.worktreePath = input.worktreePath ?? null;
@@ -245,6 +250,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       Effect.gen(function* () {
         const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
         const session = yield* requireSession(input.threadId, terminalId);
+        yield* flushPtyOutput(input.threadId, terminalId);
         resetSessionRuntimeState(session);
         session.updatedAt = new Date().toISOString();
         yield* persistHistory(input.threadId, terminalId, session.history);
@@ -297,6 +303,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           yield* evictInactiveSessionsIfNeeded();
         } else {
           session = existingSession.value;
+          yield* flushPtyOutput(session.threadId, session.terminalId);
           yield* stopProcess(session);
           session.executionTargetId = executionTargetId;
           session.cwd = input.cwd;
@@ -336,6 +343,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     const session = yield* getSession(threadId, terminalId);
 
     if (Option.isSome(session)) {
+      yield* flushPtyOutput(threadId, terminalId);
       yield* stopProcess(session.value);
       yield* persistHistory(threadId, terminalId, session.value.history);
     }
