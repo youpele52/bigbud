@@ -3,14 +3,7 @@ import {
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
-import {
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useMemo } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
 import {
@@ -19,8 +12,8 @@ import {
   type ThreadTerminalGroup,
 } from "../../models/types";
 import { ThreadTerminalDrawerSidebar } from "./ThreadTerminalDrawerSidebar";
-import { clampDrawerHeight } from "./ThreadTerminalDrawer.logic";
 import { ThreadTerminalDrawerFloatingActions } from "./ThreadTerminalDrawerFloatingActions";
+import { useThreadTerminalDrawerResize } from "./ThreadTerminalDrawer.resize";
 import { ThreadTerminalDrawerViewport } from "./ThreadTerminalDrawerViewport";
 
 // Re-export pure utilities consumed by tests and other modules
@@ -83,17 +76,18 @@ export default function ThreadTerminalDrawer({
   keybindings,
   mode = "drawer",
 }: ThreadTerminalDrawerProps) {
-  const [drawerHeight, setDrawerHeight] = useState(() => clampDrawerHeight(height));
-  const [resizeEpoch, setResizeEpoch] = useState(0);
-  const drawerHeightRef = useRef(drawerHeight);
-  const lastSyncedHeightRef = useRef(clampDrawerHeight(height));
-  const onHeightChangeRef = useRef(onHeightChange);
-  const resizeStateRef = useRef<{
-    pointerId: number;
-    startY: number;
-    startHeight: number;
-  } | null>(null);
-  const didResizeDuringDragRef = useRef(false);
+  const {
+    drawerHeight,
+    resizeEpoch,
+    handleResizePointerDown,
+    handleResizePointerMove,
+    handleResizePointerEnd,
+  } = useThreadTerminalDrawerResize({
+    height,
+    threadId,
+    visible,
+    onHeightChange,
+  });
 
   const normalizedTerminalIds = useMemo(() => {
     const cleaned = [...new Set(terminalIds.map((id) => id.trim()).filter((id) => id.length > 0))];
@@ -212,108 +206,6 @@ export default function ThreadTerminalDrawer({
   const onNewTerminalAction = useCallback(() => {
     onNewTerminal();
   }, [onNewTerminal]);
-
-  useEffect(() => {
-    onHeightChangeRef.current = onHeightChange;
-  }, [onHeightChange]);
-
-  useEffect(() => {
-    drawerHeightRef.current = drawerHeight;
-  }, [drawerHeight]);
-
-  const syncHeight = useCallback((nextHeight: number) => {
-    const clampedHeight = clampDrawerHeight(nextHeight);
-    if (lastSyncedHeightRef.current === clampedHeight) return;
-    lastSyncedHeightRef.current = clampedHeight;
-    onHeightChangeRef.current(clampedHeight);
-  }, []);
-
-  useEffect(() => {
-    const clampedHeight = clampDrawerHeight(height);
-    setDrawerHeight(clampedHeight);
-    drawerHeightRef.current = clampedHeight;
-    lastSyncedHeightRef.current = clampedHeight;
-  }, [height, threadId]);
-
-  const handleResizePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    didResizeDuringDragRef.current = false;
-    resizeStateRef.current = {
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      startHeight: drawerHeightRef.current,
-    };
-  }, []);
-
-  const handleResizePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    const resizeState = resizeStateRef.current;
-    if (!resizeState || resizeState.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    const clampedHeight = clampDrawerHeight(
-      resizeState.startHeight + (resizeState.startY - event.clientY),
-    );
-    if (clampedHeight === drawerHeightRef.current) {
-      return;
-    }
-    didResizeDuringDragRef.current = true;
-    drawerHeightRef.current = clampedHeight;
-    setDrawerHeight(clampedHeight);
-  }, []);
-
-  const handleResizePointerEnd = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      const resizeState = resizeStateRef.current;
-      if (!resizeState || resizeState.pointerId !== event.pointerId) return;
-      resizeStateRef.current = null;
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      if (!didResizeDuringDragRef.current) {
-        return;
-      }
-      syncHeight(drawerHeightRef.current);
-      setResizeEpoch((value) => value + 1);
-    },
-    [syncHeight],
-  );
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    const onWindowResize = () => {
-      const clampedHeight = clampDrawerHeight(drawerHeightRef.current);
-      const changed = clampedHeight !== drawerHeightRef.current;
-      if (changed) {
-        setDrawerHeight(clampedHeight);
-        drawerHeightRef.current = clampedHeight;
-      }
-      if (!resizeStateRef.current) {
-        syncHeight(clampedHeight);
-      }
-      setResizeEpoch((value) => value + 1);
-    };
-    window.addEventListener("resize", onWindowResize);
-    return () => {
-      window.removeEventListener("resize", onWindowResize);
-    };
-  }, [syncHeight, visible]);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    setResizeEpoch((value) => value + 1);
-  }, [visible]);
-
-  useEffect(() => {
-    return () => {
-      syncHeight(drawerHeightRef.current);
-    };
-  }, [syncHeight]);
 
   return (
     <aside

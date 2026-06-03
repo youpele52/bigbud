@@ -307,6 +307,7 @@ export {
 export {
   terminalEventBufferKey,
   selectTerminalEventEntries,
+  selectTerminalEventLastId,
   appendTerminalEventEntry,
   launchContextFromStartEvent,
 } from "./helpers.events.store";
