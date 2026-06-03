@@ -58,6 +58,7 @@ export function TerminalViewport({
   const selectionActionTimerRef = useRef<number | null>(null);
   const lastAppliedTerminalEventIdRef = useRef(0);
   const terminalHydratedRef = useRef(false);
+  const resizeRequestStateRef = useRef({ inFlight: false, pending: false });
   const handleSessionExited = useEffectEvent(() => {
     onSessionExited();
   });
@@ -114,6 +115,38 @@ export function TerminalViewport({
   });
 
   useEffect(() => {
+    resizeRequestStateRef.current = { inFlight: false, pending: false };
+  }, [terminalId, threadId]);
+
+  const requestTerminalResize = useEffectEvent(() => {
+    const api = readNativeApi();
+    const terminal = terminalRef.current;
+    if (!api || !terminal) return;
+    if (resizeRequestStateRef.current.inFlight) {
+      resizeRequestStateRef.current.pending = true;
+      return;
+    }
+    resizeRequestStateRef.current.inFlight = true;
+    resizeRequestStateRef.current.pending = false;
+    void api.terminal
+      .resize({
+        threadId,
+        terminalId,
+        cols: terminal.cols,
+        rows: terminal.rows,
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        resizeRequestStateRef.current.inFlight = false;
+        if (!resizeRequestStateRef.current.pending) {
+          return;
+        }
+        resizeRequestStateRef.current.pending = false;
+        requestTerminalResize();
+      });
+  });
+
+  useEffect(() => {
     if (!autoFocus) return;
     void focusRequestId;
     const terminal = terminalRef.current;
@@ -130,29 +163,21 @@ export function TerminalViewport({
   useEffect(() => {
     void drawerHeight;
     void resizeEpoch;
-    const api = readNativeApi();
     const terminal = terminalRef.current;
     const fitAddon = fitAddonRef.current;
-    if (!api || !terminal || !fitAddon) return;
+    if (!terminal || !fitAddon) return;
     const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
     const frame = window.requestAnimationFrame(() => {
       fitAddon.fit();
       if (wasAtBottom) {
         terminal.scrollToBottom();
       }
-      void api.terminal
-        .resize({
-          threadId,
-          terminalId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        })
-        .catch(() => undefined);
+      requestTerminalResize();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, resizeEpoch, terminalId, threadId]);
+  }, [drawerHeight, resizeEpoch]);
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
