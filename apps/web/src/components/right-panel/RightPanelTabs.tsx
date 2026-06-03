@@ -79,6 +79,7 @@ export function RightPanelTabs({
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
+
   const closeTab = (kind: RightPanelTabKind) => {
     switch (kind) {
       case "browser":
@@ -99,11 +100,11 @@ export function RightPanelTabs({
   return (
     <div
       className={cn(
-        "flex items-end overflow-hidden border-b border-border bg-card px-3",
+        "flex items-center overflow-hidden border-b border-border bg-card/95 px-3",
         isElectron ? "h-[52px] pt-2" : "pt-2",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {openTabs.map((kind, index) => {
           const Icon = TAB_ICONS[kind];
           const isActive = activeKind === kind;
@@ -112,34 +113,30 @@ export function RightPanelTabs({
             <div
               key={kind}
               className={cn(
-                "group relative inline-flex h-9 shrink-0 items-center rounded-t-lg border border-b-0 text-sm",
+                "group grid h-9 min-w-[132px] shrink-0 grid-cols-[24px_auto_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
                 index > 0 && "-ml-px",
                 isActive
                   ? "-mb-px border-border bg-background text-foreground"
-                  : "border-transparent text-muted-foreground hover:bg-secondary/40 hover:text-foreground",
+                  : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-accent/30 hover:text-foreground cursor-pointer",
               )}
             >
+              <span aria-hidden="true" className="block size-4 justify-self-center" />
               <button
                 type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-t-lg px-3"
+                className="flex items-center justify-center gap-1.5 px-1.5"
                 onClick={() => {
                   setActiveTab(kind);
                   requestRightPanel(kind);
                 }}
               >
                 <Icon className="size-3.5" />
-                <span>{TAB_LABELS[kind]}</span>
+                <span className="text-xs font-medium">{TAB_LABELS[kind]}</span>
               </button>
-              <span className="inline-flex w-6 items-center justify-center">
+              <span className="flex items-center justify-center">
                 <button
                   type="button"
                   aria-label={`Close ${TAB_LABELS[kind]} tab`}
-                  className={cn(
-                    "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/80 hover:bg-secondary hover:text-foreground",
-                    isActive
-                      ? "opacity-100"
-                      : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
-                  )}
+                  className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/70 opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     closeTab(kind);
@@ -157,7 +154,7 @@ export function RightPanelTabs({
           render={
             <Button
               aria-label="Open another right panel tab"
-              className="mb-1 ml-2"
+              className="mb-1 ml-2 rounded-md border border-transparent hover:border-border/60 hover:bg-accent/40"
               size="icon-xs"
               variant="ghost"
             >
