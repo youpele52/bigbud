@@ -36,6 +36,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "diff.toggle",
   "browser.toggle",
   "files.toggle",
+  "rightPanel.toggle",
   "commandPalette.toggle",
   "sidebar.toggle",
   "settings.toggle",

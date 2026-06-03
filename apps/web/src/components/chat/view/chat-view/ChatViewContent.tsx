@@ -19,6 +19,7 @@ import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
 import { useSearchStore } from "../../../../stores/ui";
+import { useRightPanelTabsStore } from "../../../../stores/rightPanel/rightPanelTabs.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
@@ -61,6 +62,7 @@ export function ChatViewContent({
   const { branchThread } = useThreadActions();
   const searchFocusRequest = useSearchStore((state) => state.focusRequest);
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
+  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
@@ -144,32 +146,23 @@ export function ChatViewContent({
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
-          isGitRepo={composer.isGitRepo}
           openInCwd={composer.gitCwd}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
-          terminalAvailable={base.activeProject !== undefined}
-          terminalToggleShortcutLabel={composer.terminalToggleShortcutLabel}
-          terminalPanelToggleShortcutLabel={composer.terminalPanelToggleShortcutLabel}
-          diffToggleShortcutLabel={composer.diffPanelShortcutLabel}
-          sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
-          browserToggleShortcutLabel={composer.browserPanelShortcutLabel}
-          filesToggleShortcutLabel={composer.filesPanelShortcutLabel}
           gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
-          diffOpen={base.diffOpen}
+          sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
+          rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}
+          rightPanelOpen={rightPanelOpen}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
           onAddProjectScript={runtime.projectScripts.saveProjectScript}
           onUpdateProjectScript={runtime.projectScripts.updateProjectScript}
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
-          onToggleTerminal={runtime.onToggleTerminalPanel}
-          onToggleDiff={runtime.onToggleDiff}
-          onToggleBrowser={runtime.onToggleBrowser}
-          onToggleFiles={runtime.onToggleFiles}
+          onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </header>
 

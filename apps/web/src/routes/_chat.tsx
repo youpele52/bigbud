@@ -1,5 +1,5 @@
 import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
-import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Outlet, createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import {
@@ -20,10 +20,15 @@ import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
 import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
-import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
+import {
+  closeTerminalPanel,
+  toggleTerminalPanel,
+} from "~/stores/terminal/terminalPanel.coordinator";
+import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import BrowserPanel from "~/components/browser/BrowserPanel";
 import { FilesPanel } from "~/components/files/FilesPanel";
 import TerminalPanel from "~/components/terminal/TerminalPanel";
+import { RightPanelLauncherPanel } from "~/components/right-panel/RightPanelLauncherPanel";
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
@@ -124,6 +129,13 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         return;
       }
 
+      if (command === "rightPanel.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        useRightPanelTabsStore.getState().toggleRightPanel();
+        return;
+      }
+
       if (command === "settings.toggle") {
         event.preventDefault();
         event.stopPropagation();
@@ -161,6 +173,29 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
 function ChatRouteLayout() {
   const { routeThreadId } = useHandleNewThread();
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false });
+  const diffOpen = search.diff === "1";
+
+  const onToggleDiff = () => {
+    if (!routeThreadId) return;
+    closeBrowserPanel();
+    closeFilesPanel();
+    closeTerminalPanel();
+    void navigate({
+      to: "/$threadId",
+      params: { threadId: routeThreadId },
+      replace: true,
+      search: (previous) => {
+        const prev = previous as Record<string, unknown>;
+        if (diffOpen) {
+          const { diff: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, diff: "1" };
+      },
+    });
+  };
 
   return (
     <>
@@ -170,6 +205,13 @@ function ChatRouteLayout() {
       <BrowserPanel activeThreadId={routeThreadId ?? null} />
       <FilesPanel activeThreadId={routeThreadId ?? null} />
       <TerminalPanel activeThreadId={routeThreadId ?? null} />
+      <RightPanelLauncherPanel
+        activeThreadId={routeThreadId ?? null}
+        onToggleBrowser={toggleBrowserPanel}
+        onToggleDiff={onToggleDiff}
+        onToggleFiles={toggleFilesPanel}
+        onToggleTerminal={toggleTerminalPanel}
+      />
     </>
   );
 }
