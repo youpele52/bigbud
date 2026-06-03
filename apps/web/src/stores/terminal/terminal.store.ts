@@ -11,6 +11,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { resolveStorage } from "../../lib/storage";
 import {
   appendTerminalEventEntry,
+  selectTerminalEventLastId,
   createDefaultThreadTerminalState,
   newThreadTerminal,
   normalizeThreadTerminalState,
@@ -26,10 +27,18 @@ import {
   type ThreadTerminalLaunchContext,
   type ThreadTerminalState,
 } from "./helpers.store";
-import { applyTerminalEventToState, ensurePanelTerminalInState } from "./terminal.store.panel";
+import {
+  applyTerminalEventToState,
+  applyTerminalEventsToState,
+  ensurePanelTerminalInState,
+} from "./terminal.store.panel";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
-export { selectTerminalEventEntries, selectThreadTerminalState } from "./helpers.store";
+export {
+  selectTerminalEventEntries,
+  selectTerminalEventLastId,
+  selectThreadTerminalState,
+} from "./helpers.store";
 
 const TERMINAL_STATE_STORAGE_KEY = "bigbud:terminal-state:v1";
 const LEGACY_TERMINAL_STATE_STORAGE_KEYS = ["t3code:terminal-state:v1"] as const;
@@ -47,6 +56,7 @@ interface TerminalStateStoreState {
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
+  terminalEventLastIdsByKey: Record<string, number>;
   nextTerminalEventId: number;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setTerminalHeight: (threadId: ThreadId, height: number) => void;
@@ -79,6 +89,7 @@ interface TerminalStateStoreState {
   ) => void;
   recordTerminalEvent: (event: import("@bigbud/contracts").TerminalEvent) => void;
   applyTerminalEvent: (event: import("@bigbud/contracts").TerminalEvent) => void;
+  applyTerminalEvents: (events: ReadonlyArray<import("@bigbud/contracts").TerminalEvent>) => void;
   clearTerminalState: (threadId: ThreadId) => void;
   removeTerminalState: (threadId: ThreadId) => void;
   removeOrphanedTerminalStates: (activeThreadIds: Set<ThreadId>) => void;
@@ -130,6 +141,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         panelTerminalStateByThreadId: {},
         terminalLaunchContextByThreadId: {},
         terminalEventEntriesByKey: {},
+        terminalEventLastIdsByKey: {},
         nextTerminalEventId: 1,
         setTerminalOpen: (threadId, open) =>
           updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
@@ -205,11 +217,13 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           set((state) =>
             appendTerminalEventEntry(
               state.terminalEventEntriesByKey,
+              state.terminalEventLastIdsByKey,
               state.nextTerminalEventId,
               event,
             ),
           ),
         applyTerminalEvent: (event) => set((state) => applyTerminalEventToState(state, event)),
+        applyTerminalEvents: (events) => set((state) => applyTerminalEventsToState(state, events)),
         clearTerminalState: (threadId) =>
           set((state) => {
             const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
@@ -226,10 +240,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const { [threadId]: _removed, ...remainingLaunchContexts } =
               state.terminalLaunchContextByThreadId;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
+            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
               if (key.startsWith(`${threadId}\u0000`)) {
                 delete nextTerminalEventEntriesByKey[key];
+                delete nextTerminalEventLastIdsByKey[key];
                 removedEventEntries = true;
               }
             }
@@ -246,6 +262,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
               terminalLaunchContextByThreadId: remainingLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
+              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
             };
           }),
         removeTerminalState: (threadId) =>
@@ -255,10 +272,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               state.panelTerminalStateByThreadId[threadId] !== undefined;
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
+            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
               if (key.startsWith(`${threadId}\u0000`)) {
                 delete nextTerminalEventEntriesByKey[key];
+                delete nextTerminalEventLastIdsByKey[key];
                 removedEventEntries = true;
               }
             }
@@ -281,6 +300,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
+              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
             };
           }),
         removeOrphanedTerminalStates: (activeThreadIds) =>
@@ -295,11 +315,13 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               state.terminalLaunchContextByThreadId,
             ).filter((id) => !activeThreadIds.has(id as ThreadId));
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
+            const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
             let removedEventEntries = false;
             for (const key of Object.keys(nextTerminalEventEntriesByKey)) {
               const [threadId] = key.split("\u0000");
               if (threadId && !activeThreadIds.has(threadId as ThreadId)) {
                 delete nextTerminalEventEntriesByKey[key];
+                delete nextTerminalEventLastIdsByKey[key];
                 removedEventEntries = true;
               }
             }
@@ -328,6 +350,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               panelTerminalStateByThreadId: nextPanel,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
+              terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
             };
           }),
       };
