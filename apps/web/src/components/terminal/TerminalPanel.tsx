@@ -19,20 +19,16 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
 }: TerminalPanelProps) {
   const open = useTerminalPanelStore((state) => state.open);
   const keybindings = useServerKeybindings();
+  const hasPanelTerminalState = useTerminalStateStore((state) =>
+    activeThreadId ? state.panelTerminalStateByThreadId[activeThreadId] !== undefined : false,
+  );
   const ensurePanelTerminal = useTerminalStateStore((state) => state.ensurePanelTerminal);
   const drawer = useThreadTerminalDrawer(activeThreadId ?? ("" as ThreadId), null, open, "panel");
 
   useEffect(() => {
-    if (!open || !activeThreadId || !drawer.cwd || drawer.terminalState.terminalIds.length > 0)
-      return;
+    if (!open || !activeThreadId || !drawer.cwd || hasPanelTerminalState) return;
     ensurePanelTerminal(activeThreadId, `terminal-${randomUUID()}`, { active: true });
-  }, [
-    activeThreadId,
-    drawer.cwd,
-    drawer.terminalState.terminalIds.length,
-    ensurePanelTerminal,
-    open,
-  ]);
+  }, [activeThreadId, drawer.cwd, ensurePanelTerminal, hasPanelTerminalState, open]);
 
   const handleAddTerminalContext = useCallback(
     (selection: Parameters<typeof normalizeTerminalContextSelection>[0]) => {
@@ -62,13 +58,13 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
         Select a project with a workspace before opening the terminal.
       </div>
     );
-  } else if (activeThreadId && drawer.cwd && drawer.terminalState.terminalIds.length === 0) {
+  } else if (activeThreadId && drawer.cwd && !hasPanelTerminalState) {
     body = (
       <div className="flex h-full items-center justify-center px-3 py-2 text-sm text-muted-foreground/70">
         Initializing terminal...
       </div>
     );
-  } else if (activeThreadId && drawer.project && drawer.cwd) {
+  } else if (activeThreadId && drawer.project && drawer.cwd && hasPanelTerminalState) {
     body = (
       <ThreadTerminalDrawer
         mode="panel"
