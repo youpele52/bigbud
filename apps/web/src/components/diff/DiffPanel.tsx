@@ -168,7 +168,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         </button>
         <div
           ref={turnStripRef}
-          className="turn-chip-strip flex gap-1 overflow-x-auto px-8 py-0.5"
+          className="turn-chip-strip flex gap-1 overflow-x-auto px-6 py-0.5"
           style={
             canScrollTurnStripLeft || canScrollTurnStripRight
               ? {
@@ -308,7 +308,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
               )
             ) : renderablePatch.kind === "files" ? (
               <Virtualizer
-                className="diff-render-surface h-full min-h-0 overflow-auto px-2 pb-2"
+                className="diff-render-surface h-full min-h-0 overflow-auto px-3 pb-3"
                 config={{
                   overscrollSize: 600,
                   intersectionObserverMargin: 1200,
@@ -322,7 +322,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                     <div
                       key={themedFileKey}
                       data-diff-file-path={filePath}
-                      className="diff-render-file mb-2 rounded-md first:mt-2 last:mb-0"
+                      className="diff-render-file mb-3 rounded-md first:mt-3 last:mb-0"
                       onClickCapture={(event) => {
                         const nativeEvent = event.nativeEvent as MouseEvent;
                         const composedPath = nativeEvent.composedPath?.() ?? [];

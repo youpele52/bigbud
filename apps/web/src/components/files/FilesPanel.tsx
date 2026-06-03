@@ -2,73 +2,44 @@ import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bi
 import { ChevronRightIcon } from "lucide-react";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { cn } from "~/lib/utils";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { useTheme } from "../../hooks/useTheme";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useDefaultChatCwd } from "../../rpc/serverState";
-import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { useComposerDraftStore } from "../../stores/composer";
+import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
-import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { cn } from "~/lib/utils";
-import { isElectron } from "../../config/env";
+import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
+import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
+import { FilesPanelHeader } from "./FilesPanel.header";
+import {
+  EMPTY_ENTRIES,
+  entryName,
+  makeAnnotationId,
+  type DirectoryState,
+} from "./FilesPanel.shared";
+import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
 import {
   BIGBUD_FILES_PANEL_DRAG_MIME,
   joinWorkspaceEntryPath,
   serializeFilesPanelDragEntry,
 } from "./filesPanel.dnd";
-import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
-import { useTheme } from "../../hooks/useTheme";
-import { closeFilesPanel, openFilesPanel } from "../../stores/files/filesPanel.coordinator";
-import { closeBrowserPanel, openBrowserPanel } from "../../stores/browser/browserPanel.actions";
-import { useRightPanelTabsStore } from "../../stores/rightPanel/rightPanelTabs.store";
-import {
-  closeTerminalPanel,
-  openTerminalPanel,
-} from "../../stores/terminal/terminalPanel.coordinator";
-import { RightPanelShell } from "../right-panel/RightPanelShell";
-import { RightPanelTabs } from "../right-panel/RightPanelTabs";
-import { useRightPanelWidth } from "../right-panel/useRightPanelWidth";
-import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 
 interface FilesPanelProps {
   activeThreadId?: ThreadId | null;
 }
 
-interface DirectoryState {
-  entries: ReadonlyArray<ProjectEntry>;
-  loading: boolean;
-  error: string | null;
-}
-
-const EMPTY_ENTRIES: ReadonlyArray<ProjectEntry> = [];
-const FILES_PANEL_MIN_WIDTH = 520;
-const FILES_PANEL_WIDTH_STORAGE_KEY = "files_panel_width";
-const FILES_TREE_WIDTH_STORAGE_KEY = "files_tree_width";
-const FILES_TREE_MIN_WIDTH = 220;
-const FILES_TREE_MAX_WIDTH_FACTOR = 0.6;
-const FILES_TREE_DEFAULT_WIDTH = 280;
-
-function entryName(entry: ProjectEntry): string {
-  const segments = entry.path.split("/");
-  return segments.at(-1) ?? entry.path;
-}
-
-function makeAnnotationId(): string {
-  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `code-annotation-${Date.now()}`;
-}
-
-export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPanelProps) {
-  const open = useFilesPanelStore((state) => state.open);
+export const FilesPanelContent = memo(function FilesPanelContent({
+  activeThreadId,
+}: FilesPanelProps) {
   const previewPath = useFilesPanelStore((state) => state.previewPath);
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const setPreviewPath = useFilesPanelStore((state) => state.setPreviewPath);
   const setPreviewPosition = useFilesPanelStore((state) => state.setPreviewPosition);
-  const activeTab = useRightPanelTabsStore((state) => state.activeKind);
-  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
@@ -80,33 +51,28 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   const workspaceExecutionTargetId = project
     ? resolveWorkspaceExecutionTargetId(project)
     : undefined;
-  const { panelWidth, onResizePointerDown } = useRightPanelWidth({
-    minWidth: FILES_PANEL_MIN_WIDTH,
-    storageKey: FILES_PANEL_WIDTH_STORAGE_KEY,
-  });
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
-  const [fileTreeWidth, setFileTreeWidth] = useState(() => {
-    const stored = Number.parseInt(localStorage.getItem(FILES_TREE_WIDTH_STORAGE_KEY) ?? "", 10);
-    return Number.isFinite(stored) && stored >= FILES_TREE_MIN_WIDTH
-      ? stored
-      : FILES_TREE_DEFAULT_WIDTH;
-  });
+  const { fileTreeWidth, resizeTreeWidth } = useFilesTreeWidth();
+  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
+  const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
+    {},
+  );
 
   const handleTreeResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
+    (event: React.MouseEvent) => {
+      event.preventDefault();
       const container = fileTreeContainerRef.current;
       if (!container) return;
 
-      const startX = e.clientX;
+      const startX = event.clientX;
       const startWidth = fileTreeWidth;
-      const maxWidth = container.getBoundingClientRect().width * FILES_TREE_MAX_WIDTH_FACTOR;
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
-        const deltaX = moveEvent.clientX - startX;
-        const newWidth = Math.max(FILES_TREE_MIN_WIDTH, Math.min(maxWidth, startWidth - deltaX));
-        setFileTreeWidth(newWidth);
-        localStorage.setItem(FILES_TREE_WIDTH_STORAGE_KEY, String(newWidth));
+        resizeTreeWidth(
+          container.getBoundingClientRect().width,
+          startWidth,
+          moveEvent.clientX - startX,
+        );
       };
 
       const handleMouseUp = () => {
@@ -117,12 +83,9 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("mouseup", handleMouseUp);
     },
-    [fileTreeWidth],
+    [fileTreeWidth, resizeTreeWidth],
   );
-  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
-  const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
-    {},
-  );
+
   useEffect(() => {
     setExpandedDirectories({});
     setDirectoryStateByPath({});
@@ -178,23 +141,22 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   );
 
   useEffect(() => {
-    if (!open || !workspaceRoot) return;
+    if (!workspaceRoot) return;
     if (directoryStateByPath[""] !== undefined) return;
     void loadDirectory("");
-  }, [directoryStateByPath, loadDirectory, open, workspaceRoot]);
+  }, [directoryStateByPath, loadDirectory, workspaceRoot]);
 
   const rootDirectoryState = directoryStateByPath[""];
   const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
-  const showPanel = open && Boolean(workspaceRoot) && activeTab === "files" && rightPanelOpen;
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
   const previewTargetLine = previewPosition?.line;
 
   const handleToggleDirectory = useCallback(
     (entry: ProjectEntry) => {
-      setExpandedDirectories((current) => {
-        const nextExpanded = !(current[entry.path] ?? false);
-        return { ...current, [entry.path]: nextExpanded };
-      });
+      setExpandedDirectories((current) => ({
+        ...current,
+        [entry.path]: !(current[entry.path] ?? false),
+      }));
       if (directoryStateByPath[entry.path] === undefined) {
         void loadDirectory(entry.path);
       }
@@ -257,6 +219,7 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
               type="button"
               draggable
               onDragStart={(event) => {
+                if (!workspaceRoot) return;
                 const absolutePath = joinWorkspaceEntryPath(workspaceRoot, entry.path);
                 event.dataTransfer.effectAllowed = "copy";
                 event.dataTransfer.setData(
@@ -343,9 +306,9 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
         );
       }),
     [
+      copyToClipboard,
       directoryStateByPath,
       expandedDirectories,
-      copyToClipboard,
       handleOpenFile,
       handleToggleDirectory,
       previewPath,
@@ -428,37 +391,9 @@ export const FilesPanel = memo(function FilesPanel({ activeThreadId }: FilesPane
   ]);
 
   return (
-    <RightPanelShell
-      open={showPanel}
-      width={panelWidth}
-      onResizePointerDown={onResizePointerDown}
-      resizeAriaLabel="Resize files panel"
-    >
-      <RightPanelTabs
-        browserShortcutLabel={null}
-        filesShortcutLabel={null}
-        hasActiveProject={Boolean(workspaceRoot)}
-        onCloseBrowser={closeBrowserPanel}
-        onCloseFiles={closeFilesPanel}
-        onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={openBrowserPanel}
-        onOpenFiles={openFilesPanel}
-        onOpenTerminal={openTerminalPanel}
-        terminalAvailable={Boolean(workspaceRoot)}
-        terminalShortcutLabel={null}
-      />
-      <div className={cn("border-b border-border px-3", isElectron ? "py-2.5" : "py-2")}>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Files</p>
-          <p
-            className="truncate text-[11px] text-muted-foreground/65"
-            title={workspaceRoot ?? undefined}
-          >
-            {workspaceRoot ?? "No workspace"}
-          </p>
-        </div>
-      </div>
+    <>
+      <FilesPanelHeader workspaceRoot={workspaceRoot} />
       <div className="min-h-0 flex-1 overflow-hidden">{panelBody}</div>
-    </RightPanelShell>
+    </>
   );
 });
