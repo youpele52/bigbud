@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 import { proposedPlanTitle } from "~/logic/proposed-plan";
 import { openDiffRouteSearch } from "~/utils/diff";
+import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { closeBrowserPanel } from "../../../../stores/browser/browserPanel.actions";
 import { requestRightPanel } from "../../../../stores/rightPanel/rightPanel.coordinator";
 
@@ -245,6 +246,7 @@ export function useChatViewInteractions({
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {
       requestRightPanel("diff");
+      useRightPanelTabsStore.getState().openTab("diff");
       closeBrowserPanel();
 
       void base.navigate({

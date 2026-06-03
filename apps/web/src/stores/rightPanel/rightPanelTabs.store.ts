@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type RightPanelTabKind = "browser" | "files" | "terminal";
+export type RightPanelTabKind = "browser" | "diff" | "files" | "terminal";
 
 interface RightPanelTabsState {
   activeKind: RightPanelTabKind | null;
@@ -8,6 +8,7 @@ interface RightPanelTabsState {
   rightPanelOpen: boolean;
   lastActiveKind: RightPanelTabKind | null;
   closeTab: (kind: RightPanelTabKind) => void;
+  ensureTabOpen: (kind: RightPanelTabKind) => void;
   openTab: (kind: RightPanelTabKind) => void;
   setActiveTab: (kind: RightPanelTabKind) => void;
   toggleRightPanel: () => void;
@@ -38,6 +39,13 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
         rightPanelOpen: shouldClose ? false : state.rightPanelOpen,
       };
     }),
+  ensureTabOpen: (kind) =>
+    set((state) => ({
+      activeKind: state.activeKind ?? kind,
+      lastActiveKind: state.lastActiveKind ?? kind,
+      openTabs: state.openTabs.includes(kind) ? state.openTabs : [...state.openTabs, kind],
+      rightPanelOpen: true,
+    })),
   openTab: (kind) =>
     set((state) => ({
       activeKind: kind,
