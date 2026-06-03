@@ -1,10 +1,9 @@
-import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useFilesPanelStore } from "./filesPanel.store";
 
 export function openFilesPanel() {
   requestRightPanel("files");
-  closeDiffPanelIfOpen();
   useRightPanelTabsStore.getState().openTab("files");
   useFilesPanelStore.getState().setOpen(true);
 }
@@ -19,7 +18,11 @@ export function openFileInFilesPanel(
 }
 
 export function toggleFilesPanel() {
-  if (!useFilesPanelStore.getState().open) {
+  const tabState = useRightPanelTabsStore.getState();
+  const filesOpen = useFilesPanelStore.getState().open;
+  const filesActive = tabState.activeKind === "files" && tabState.rightPanelOpen;
+
+  if (!filesOpen || !filesActive) {
     openFilesPanel();
     return;
   }

@@ -16,6 +16,13 @@ interface RightPanelTabsState {
   closeRightPanel: () => void;
 }
 
+function appendTabIfMissing(
+  openTabs: ReadonlyArray<RightPanelTabKind>,
+  kind: RightPanelTabKind,
+): ReadonlyArray<RightPanelTabKind> {
+  return openTabs.includes(kind) ? openTabs : [...openTabs, kind];
+}
+
 export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
   activeKind: null,
   openTabs: [],
@@ -27,9 +34,14 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
         return state;
       }
 
+      const closedTabIndex = state.openTabs.indexOf(kind);
       const nextTabs = state.openTabs.filter((tab) => tab !== kind);
       const nextActive =
-        state.activeKind === kind ? (nextTabs[nextTabs.length - 1] ?? null) : state.activeKind;
+        state.activeKind === kind
+          ? (nextTabs[Math.max(0, closedTabIndex - 1)] ??
+            nextTabs[Math.min(closedTabIndex, nextTabs.length - 1)] ??
+            null)
+          : state.activeKind;
       const shouldClose = nextTabs.length === 0;
 
       return {
@@ -43,14 +55,14 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
     set((state) => ({
       activeKind: state.activeKind ?? kind,
       lastActiveKind: state.lastActiveKind ?? kind,
-      openTabs: state.openTabs.includes(kind) ? state.openTabs : [...state.openTabs, kind],
+      openTabs: appendTabIfMissing(state.openTabs, kind),
       rightPanelOpen: true,
     })),
   openTab: (kind) =>
     set((state) => ({
       activeKind: kind,
       lastActiveKind: kind,
-      openTabs: state.openTabs.includes(kind) ? state.openTabs : [...state.openTabs, kind],
+      openTabs: appendTabIfMissing(state.openTabs, kind),
       rightPanelOpen: true,
     })),
   setActiveTab: (kind) =>
