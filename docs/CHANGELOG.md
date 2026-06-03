@@ -4,6 +4,14 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.641 (4 June, 2026)
+
+### Smoother Panels and Terminal Performance
+
+- Left sidebar, right panel, and the terminal drawer now animate with a slower, more polished motion curve so opening and closing them (via `mod+j`, toolbar clicks, or keyboard shortcuts) feels fluid instead of abrupt.
+- Terminal output is now batched both client-side and server-side, coalescing rapid-fire PTY events into fewer render updates — less flicker, less CPU churn, and smoother scrolling when output is streaming fast.
+- Refactored the right panel internals to consolidate tab state, decouple the diff panel from the coordination layer, and give the tab strip a cleaner visual hierarchy.
+
 ## v0.1.640 (3 June, 2026)
 
 ### Right Panel Toggle, State Persistence, and Shortcut
