@@ -1,4 +1,4 @@
-import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useBrowserPanelStore } from "./browser.store";
 
@@ -11,13 +11,16 @@ export function openBrowserPanel(input: { url?: string } = {}) {
   }
 
   requestRightPanel("browser");
-  closeDiffPanelIfOpen();
   useRightPanelTabsStore.getState().openTab("browser");
   setOpen(true);
 }
 
 export function toggleBrowserPanel() {
-  if (!useBrowserPanelStore.getState().open) {
+  const tabState = useRightPanelTabsStore.getState();
+  const browserOpen = useBrowserPanelStore.getState().open;
+  const browserActive = tabState.activeKind === "browser" && tabState.rightPanelOpen;
+
+  if (!browserOpen || !browserActive) {
     openBrowserPanel();
     return;
   }
