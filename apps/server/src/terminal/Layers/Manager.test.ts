@@ -1022,7 +1022,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
     }),
   );
 
-  it.effect("preserves queued PTY output ordering through exit callbacks", () =>
+  it.effect("batches queued PTY output while preserving exit ordering", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter, getEvents } = yield* createManager(5, {
         ptyAdapter: new FakePtyAdapter("async"),
@@ -1042,7 +1042,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
           const relevant = events.filter(
             (event) => event.type === "output" || event.type === "exited",
           );
-          return relevant.length >= 3;
+          return relevant.length >= 2;
         }),
         "1200 millis",
       );
@@ -1051,10 +1051,35 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
         (event) => event.type === "output" || event.type === "exited",
       );
       expect(relevant).toEqual([
-        expect.objectContaining({ type: "output", data: "first\n" }),
-        expect.objectContaining({ type: "output", data: "second\n" }),
+        expect.objectContaining({ type: "output", data: "first\nsecond\n" }),
         expect.objectContaining({ type: "exited", exitCode: 0, exitSignal: 0 }),
       ]);
+    }),
+  );
+
+  it.effect("flushes queued PTY output before clearing the transcript", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, getEvents, logsDir } = yield* createManager(5, {
+        ptyAdapter: new FakePtyAdapter("async"),
+      });
+
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+
+      process.emitData("stale-before-clear\n");
+      yield* manager.clear({ threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID });
+      yield* Effect.sleep("80 millis");
+
+      const relevant = (yield* getEvents).filter(
+        (event) => event.type === "output" || event.type === "cleared",
+      );
+      expect(relevant).toEqual([
+        expect.objectContaining({ type: "output", data: "stale-before-clear\n" }),
+        expect.objectContaining({ type: "cleared" }),
+      ]);
+      expect(yield* readFileString(historyLogPath(logsDir))).toBe("");
     }),
   );
 
