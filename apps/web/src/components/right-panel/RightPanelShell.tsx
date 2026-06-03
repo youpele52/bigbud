@@ -22,16 +22,16 @@ export function RightPanelShell({
   return (
     <>
       <div
-        className="hidden shrink-0 bg-transparent md:block"
+        className="hidden shrink-0 bg-transparent transition-[width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:block"
         data-right-panel-placeholder="true"
         style={{ width: open ? width : 0 }}
       />
       <div
         className={cn(
-          "fixed right-0 top-0 z-40 flex h-dvh flex-col border-l border-border bg-card text-foreground",
+          "fixed right-0 top-0 z-40 flex h-dvh flex-col border-l border-border bg-card text-foreground transition-[transform,width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           className,
         )}
-        style={{ width, right: open ? 0 : -width }}
+        style={{ width, transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
         {children}
         {onResizePointerDown ? (
