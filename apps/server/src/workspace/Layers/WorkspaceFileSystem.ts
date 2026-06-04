@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Duration, Effect, FileSystem, Layer, Path, Stream } from "effect";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { open, stat } from "node:fs/promises";
 
@@ -83,6 +83,44 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     return { relativePath: target.relativePath, ...preview };
   });
 
+  const watchDirectory: WorkspaceFileSystemShape["watchDirectory"] = Effect.fn(
+    "WorkspaceFileSystem.watchDirectory",
+  )(function* (input) {
+    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    const target = yield* workspacePaths.resolveRelativePathWithinRoot({
+      workspaceRoot: input.cwd,
+      relativePath: input.relativePath ?? "",
+    });
+
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        relativePath: input.relativePath,
+        operation: "workspaceFileSystem.watchDirectoryRemote",
+        detail: "Remote workspace directory watching is not supported yet.",
+      });
+    }
+
+    return fileSystem.watch(target.absolutePath).pipe(
+      Stream.debounce(Duration.millis(100)),
+      Stream.map(() => ({
+        version: 1 as const,
+        type: "directoryChanged" as const,
+        relativePath: target.relativePath,
+      })),
+      Stream.mapError(
+        (cause) =>
+          new WorkspaceFileSystemError({
+            cwd: input.cwd,
+            relativePath: target.relativePath,
+            operation: "workspaceFileSystem.watchDirectory",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
+  });
+
   const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
   )(function* (input) {
@@ -149,7 +187,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     yield* workspaceEntries.invalidate(input.cwd);
     return { relativePath: target.relativePath };
   });
-  return { readFilePreview, writeFile } satisfies WorkspaceFileSystemShape;
+  return { readFilePreview, watchDirectory, writeFile } satisfies WorkspaceFileSystemShape;
 });
 
 export const WorkspaceFileSystemLive = Layer.effect(WorkspaceFileSystem, makeWorkspaceFileSystem);
