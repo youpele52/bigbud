@@ -8,8 +8,9 @@ Entries below are grouped by release tag and date.
 
 ### Files Panel Live Directory Watching for Local Workspaces
 
-- Replaced Files panel polling with scoped live directory watching so the root and currently expanded folders refresh automatically when workspace files or folders change, backed by debounced `fs.watch` events on the server and a new WebSocket subscription (`fs:watch:project-directory`) across the contracts layer, server RPC handlers, and web client.
-- Fixed root directory watching: omitting `relativePath` in the watch request now watches the normalized workspace root instead of sending an empty path through the strict relative-path resolver. This fixes the case where the Files panel root was a default directory like `~/Documents` and root-level file changes went unobserved even though expanded subfolders already refreshed correctly.
+- Replaced Files panel polling with scoped live directory watching so the root and currently expanded folders refresh automatically when workspace files or folders change, backed by debounced `fs.watch` events on the server and a new WebSocket subscription across the contracts layer, server RPC handlers, and web client.
+- The new live watcher now supports both project roots and default chat folders like `~/Documents`, so omitting `relativePath` correctly watches the normalized workspace root instead of falling through the strict relative-path resolver.
+- Updated the Files panel rendering to keep cached directory entries visible during live refreshes, eliminating flicker while watched root and expanded folders update in the background.
 
 ### Right Panel Refactoring and Shared Host
 
