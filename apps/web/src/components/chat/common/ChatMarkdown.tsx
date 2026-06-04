@@ -19,8 +19,12 @@ import { useTheme } from "../../../hooks/useTheme";
 import { openBrowserPanel } from "../../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../../utils/markdown";
 import { cn } from "~/lib/utils";
+import {
+  ChatFileTargetContextMenu,
+  useChatFileTargetContextMenu,
+} from "./ChatFileTargetContextMenu";
 import { SyntaxHighlightedCode } from "./SyntaxHighlightedCode";
-import { openChatFileTarget, showChatFileTargetContextMenu } from "./chatFileTargets";
+import { openChatFileTarget } from "./chatFileTargets";
 
 interface ChatMarkdownProps {
   text: string;
@@ -134,6 +138,7 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
 function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdownProps) {
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
+  const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
   const markdownUrlTransform = useCallback((href: string) => {
     return rewriteMarkdownFileUriHref(href) ?? defaultUrlTransform(href);
   }, []);
@@ -170,7 +175,10 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              showChatFileTargetContextMenu(targetPath, cwd, {
+              showContextMenu({
+                targetPath,
+                workspaceRoot: cwd,
+                kind: "file",
                 x: event.clientX,
                 y: event.clientY,
               });
@@ -201,7 +209,10 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              showChatFileTargetContextMenu(targetPath, cwd, {
+              showContextMenu({
+                targetPath,
+                workspaceRoot: cwd,
+                kind: "file",
                 x: event.clientX,
                 y: event.clientY,
               });
@@ -231,7 +242,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
         );
       },
     }),
-    [cwd, diffThemeName, isStreaming],
+    [cwd, diffThemeName, isStreaming, showContextMenu],
   );
 
   return (
@@ -248,6 +259,7 @@ function ChatMarkdown({ text, cwd, isStreaming = false, className }: ChatMarkdow
       >
         {text}
       </ReactMarkdown>
+      <ChatFileTargetContextMenu contextMenuState={contextMenuState} onClose={hideContextMenu} />
     </div>
   );
 }
