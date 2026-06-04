@@ -87,10 +87,27 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     "WorkspaceFileSystem.watchDirectory",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-    const target = yield* workspacePaths.resolveRelativePathWithinRoot({
-      workspaceRoot: input.cwd,
-      relativePath: input.relativePath ?? "",
-    });
+    const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceFileSystemError({
+            cwd: input.cwd,
+            relativePath: input.relativePath,
+            operation: "workspaceFileSystem.watchDirectory",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
+    const target = input.relativePath
+      ? yield* workspacePaths.resolveRelativePathWithinRoot({
+          workspaceRoot: normalizedWorkspaceRoot,
+          relativePath: input.relativePath,
+        })
+      : {
+          absolutePath: normalizedWorkspaceRoot,
+          relativePath: "",
+        };
 
     if (!isLocalExecutionTarget(executionTargetId)) {
       return yield* new WorkspaceFileSystemError({
