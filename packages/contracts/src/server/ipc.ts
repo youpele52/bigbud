@@ -20,6 +20,8 @@ import type {
   GitStatusStreamEvent,
 } from "../workspace/git";
 import type {
+  ProjectDirectoryWatchEvent,
+  ProjectDirectoryWatchInput,
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
   ProjectReadFilePreviewInput,
@@ -180,6 +182,11 @@ export interface NativeApi {
   };
   projects: {
     listDirectory: (input: ProjectListDirectoryInput) => Promise<ProjectListDirectoryResult>;
+    onDirectoryChange: (
+      input: ProjectDirectoryWatchInput,
+      callback: (event: ProjectDirectoryWatchEvent) => void,
+      options?: { onResubscribe?: () => void },
+    ) => () => void;
     readFilePreview: (input: ProjectReadFilePreviewInput) => Promise<ProjectReadFilePreviewResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;

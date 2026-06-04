@@ -48,6 +48,9 @@ import {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import {
+  ProjectDirectoryWatchError,
+  ProjectDirectoryWatchEvent,
+  ProjectDirectoryWatchInput,
   ProjectListDirectoryError,
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
@@ -161,6 +164,16 @@ export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirect
   success: ProjectListDirectoryResult,
   error: ProjectListDirectoryError,
 });
+
+export const WsSubscribeProjectDirectoryChangesRpc = Rpc.make(
+  WS_METHODS.subscribeProjectDirectoryChanges,
+  {
+    payload: ProjectDirectoryWatchInput,
+    success: ProjectDirectoryWatchEvent,
+    error: ProjectDirectoryWatchError,
+    stream: true,
+  },
+);
 
 export const WsProjectsReadFilePreviewRpc = Rpc.make(WS_METHODS.projectsReadFilePreview, {
   payload: ProjectReadFilePreviewInput,
@@ -373,6 +386,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsListDirectoryRpc,
+  WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
   WsShellOpenInEditorRpc,
