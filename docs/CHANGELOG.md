@@ -6,9 +6,39 @@ Entries below are grouped by release tag and date.
 
 ## v0.1.641 (4 June, 2026)
 
-- Left sidebar, right panel, and the terminal drawer now animate with a smoother motion curve, while terminal output is batched on both the client and server to reduce flicker, CPU churn, and scrolling jank during heavy streaming.
-- Refactored the right panel to simplify tab coordination, decouple the shared diff panel from the route layer, and clean up the tab-strip hierarchy; also renamed non-route `__root.*` helpers to `-__root.*` to match TanStack Router's ignore convention and remove startup warnings.
-- Replaced Files panel polling with scoped live directory watching for local workspaces, so the root and currently expanded folders refresh automatically when files or folders change, backed by debounced server-side watch events and websocket subscriptions across the contracts, server, and web client.
+### Files Panel Live Directory Watching for Local Workspaces
+
+- Replaced Files panel polling with scoped live directory watching so the root and currently expanded folders refresh automatically when workspace files or folders change, backed by debounced `fs.watch` events on the server and a new WebSocket subscription (`fs:watch:project-directory`) across the contracts layer, server RPC handlers, and web client.
+- Fixed root directory watching: omitting `relativePath` in the watch request now watches the normalized workspace root instead of sending an empty path through the strict relative-path resolver. This fixes the case where the Files panel root was a default directory like `~/Documents` and root-level file changes went unobserved even though expanded subfolders already refreshed correctly.
+
+### Right Panel Refactoring and Shared Host
+
+- Consolidated the right panel into a shared host component that owns the tab strip, so all tools (Browser, Files, Terminal, Diff) open as tabs in one consistent panel instead of separate floating sheets.
+- Decoupled the right panel tab coordination from the diff panel by extracting tab selection state into a generic hook and removing the diff panel's direct dependency on route-level tab state.
+- Redesigned the right panel tab strip with improved visual hierarchy — the active tab uses a stronger foreground and background tint, inactive tabs are visually flattened, and the close button now sits inside the tab hover state instead of at the panel edge.
+- Removed all legacy route-mounted diff panel code (`DiffPanelSheet`, `DeferredDiffPanel`), the `useMediaQuery` responsive variant that selected between them, and the `hasOpenedDiff` flag that tracked first-open state. The diff panel now renders exclusively inside the shared right-panel host tab.
+
+### Terminal Output Batching and Scroll Stability
+
+- Server-side PTY output is now batched before sending to the client, coalescing rapid sequential writes into a single message to reduce CPU churn and network overhead during heavy streaming.
+- Client-side terminal writes are batched at the composable level so rapid output events (common during AI streaming) are applied in a single render pass instead of dozens of individual ones, eliminating intermediate flicker and scrolling jank.
+- Terminal drawer resize events are deduplicated on the client to avoid redundant layout recalculations, and a retry mechanism handles edge cases on very small viewports where the resize might not take effect immediately.
+
+### Prompt Queue Thread Affinity
+
+- Fixed a bug where prompts queued while a thread was still running would follow the user when they navigated to a different thread — the queue state is now keyed by `threadId`, and any pending `requestAnimationFrame` callback is cancelled on thread switch or unmount. This means a queue prompt stays attached to its original thread, never auto-sends in the wrong conversation, and remains waiting in the composer when you navigate back.
+
+### Panel and Drawer Transition Smoothing
+
+- Left sidebar, right panel, and terminal drawer now animate with a smoother motion curve for all open and close transitions.
+
+### Route Helper File Renaming
+
+- Renamed `__root.bootstrap.tsx`, `__root.logic.tsx`, and `__root.recovery.ts` to `-__root.bootstrap.tsx`, `-__root.logic.tsx`, and `-__root.recovery.ts` following TanStack Router's ignore convention (files prefixed with `-` are excluded from route detection). This eliminates the startup warnings about non-route helper files not exporting a Route.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the workspace directory watcher (root-level watching, path escape rejection), scoped project-directory WebSocket subscriptions, server and client RPC routing, Files panel directory refresh hook, route regression (diff=1 does not mount standalone diff UI), and prompt queue formatting and thread affinity behavior.
 
 ## v0.1.640 (3 June, 2026)
 
