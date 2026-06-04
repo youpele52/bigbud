@@ -13,8 +13,14 @@ export function openFileInFilesPanel(
   previewPosition?: { line: number; column: number | null } | null,
 ) {
   openFilesPanel();
-  useFilesPanelStore.getState().setPreviewPath(relativePath);
-  useFilesPanelStore.getState().setPreviewPosition(previewPosition ?? null);
+  useFilesPanelStore.getState().requestFileOpen(relativePath, previewPosition ?? null);
+}
+
+export function openDirectoryInFilesPanel(relativePath: string) {
+  openFilesPanel();
+  useFilesPanelStore.getState().setPreviewPath(null);
+  useFilesPanelStore.getState().setPreviewPosition(null);
+  useFilesPanelStore.getState().requestDirectoryNavigation(relativePath);
 }
 
 export function toggleFilesPanel() {

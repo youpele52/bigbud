@@ -8,7 +8,13 @@ import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
 describe("filesPanel.coordinator", () => {
   afterEach(() => {
-    useFilesPanelStore.setState({ open: false });
+    useFilesPanelStore.setState({
+      open: false,
+      previewPath: null,
+      previewPosition: null,
+      fileOpenRequest: null,
+      directoryNavigationRequest: null,
+    });
     useBrowserPanelStore.setState({ open: false });
     useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
     requestRightPanel(null);

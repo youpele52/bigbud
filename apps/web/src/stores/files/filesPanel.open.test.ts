@@ -3,14 +3,21 @@ import { describe, expect, it } from "vitest";
 import { parsePathPositionSuffix } from "../../models/editor";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useFilesPanelStore } from "./filesPanel.store";
-import { canOpenPathInFilesPanel, resolveWorkspaceRelativePreviewPath } from "./filesPanel.open";
-import { openPathInFilesPanelIfSupported } from "./filesPanel.open";
+import {
+  canOpenDirectoryInFilesPanel,
+  canOpenPathInFilesPanel,
+  openDirectoryInFilesPanelIfSupported,
+  openPathInFilesPanelIfSupported,
+  resolveWorkspaceRelativeEntryPath,
+} from "./filesPanel.open";
 
 function resetFilesPanelState() {
   useFilesPanelStore.setState({
     open: false,
     previewPath: null,
     previewPosition: null,
+    fileOpenRequest: null,
+    directoryNavigationRequest: null,
   });
   useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
 }
@@ -35,10 +42,10 @@ describe("parsePathPositionSuffix", () => {
   });
 });
 
-describe("resolveWorkspaceRelativePreviewPath", () => {
+describe("resolveWorkspaceRelativeEntryPath", () => {
   it("maps a workspace file path to a relative preview path", () => {
     expect(
-      resolveWorkspaceRelativePreviewPath(
+      resolveWorkspaceRelativeEntryPath(
         "/Users/alice/project/src/index.ts",
         "/Users/alice/project",
       ),
@@ -47,7 +54,7 @@ describe("resolveWorkspaceRelativePreviewPath", () => {
 
   it("strips line and column suffixes before opening in the viewer", () => {
     expect(
-      resolveWorkspaceRelativePreviewPath(
+      resolveWorkspaceRelativeEntryPath(
         "/Users/alice/project/src/index.ts:16:23",
         "/Users/alice/project",
       ),
@@ -56,7 +63,7 @@ describe("resolveWorkspaceRelativePreviewPath", () => {
 
   it("rejects files outside the current workspace", () => {
     expect(
-      resolveWorkspaceRelativePreviewPath(
+      resolveWorkspaceRelativeEntryPath(
         "/Users/alice/other-project/src/index.ts",
         "/Users/alice/project",
       ),
@@ -65,7 +72,7 @@ describe("resolveWorkspaceRelativePreviewPath", () => {
 
   it("handles windows paths case-insensitively", () => {
     expect(
-      resolveWorkspaceRelativePreviewPath(
+      resolveWorkspaceRelativeEntryPath(
         "C:\\Users\\Alice\\Project\\src\\index.ts:8",
         "C:\\Users\\alice\\project",
       ),
@@ -87,6 +94,20 @@ describe("canOpenPathInFilesPanel", () => {
   });
 });
 
+describe("canOpenDirectoryInFilesPanel", () => {
+  it("allows workspace directories", () => {
+    expect(canOpenDirectoryInFilesPanel("/Users/alice/project/src", "/Users/alice/project")).toBe(
+      true,
+    );
+  });
+
+  it("rejects directories outside the workspace", () => {
+    expect(canOpenDirectoryInFilesPanel("/Users/alice/other/src", "/Users/alice/project")).toBe(
+      false,
+    );
+  });
+});
+
 describe("openPathInFilesPanelIfSupported", () => {
   it("opens the files tab with the parsed preview position", () => {
     resetFilesPanelState();
@@ -100,8 +121,11 @@ describe("openPathInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
-      previewPath: "src/index.ts",
-      previewPosition: { line: 16, column: 23 },
+      fileOpenRequest: {
+        path: "src/index.ts",
+        position: { line: 16, column: 23 },
+        requestId: 1,
+      },
     });
     expect(useRightPanelTabsStore.getState()).toMatchObject({
       activeKind: "files",
@@ -115,6 +139,7 @@ describe("openPathInFilesPanelIfSupported", () => {
       open: true,
       previewPath: "src/old.ts",
       previewPosition: { line: 9, column: 2 },
+      fileOpenRequest: null,
     });
 
     expect(
@@ -122,8 +147,36 @@ describe("openPathInFilesPanelIfSupported", () => {
     ).toBe(true);
 
     expect(useFilesPanelStore.getState()).toMatchObject({
-      previewPath: "src/new.ts",
+      fileOpenRequest: {
+        path: "src/new.ts",
+        position: null,
+        requestId: 1,
+      },
+    });
+  });
+});
+
+describe("openDirectoryInFilesPanelIfSupported", () => {
+  it("opens the files tab and requests directory navigation", () => {
+    resetFilesPanelState();
+
+    expect(
+      openDirectoryInFilesPanelIfSupported("/Users/alice/project/src/lib", "/Users/alice/project"),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      previewPath: null,
       previewPosition: null,
+      fileOpenRequest: null,
+      directoryNavigationRequest: {
+        path: "src/lib",
+        requestId: 1,
+      },
+    });
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "files",
+      openTabs: ["files"],
     });
   });
 });
