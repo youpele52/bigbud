@@ -171,6 +171,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const rootDirectoryState = directoryStateByPath[""];
   const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
+  const showRootLoading = rootDirectoryState?.loading && sortedRootEntries.length === 0;
   const previewTargetLine = previewPosition?.line;
 
   const handleToggleDirectory = useCallback(
@@ -219,7 +220,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   );
 
   const treeBody = useMemo(() => {
-    if (rootDirectoryState?.loading) {
+    if (showRootLoading) {
       return <div className="p-3 text-sm text-muted-foreground/70">Loading files...</div>;
     }
     if (rootDirectoryState?.error) {
@@ -250,6 +251,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     previewPath,
     resolvedTheme,
     rootDirectoryState,
+    showRootLoading,
     sortedRootEntries,
     workspaceRoot,
   ]);
