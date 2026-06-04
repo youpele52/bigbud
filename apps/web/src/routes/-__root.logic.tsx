@@ -26,7 +26,7 @@ import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
-import { createEventRouterRecovery } from "./__root.recovery";
+import { createEventRouterRecovery } from "./-__root.recovery";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter() {
