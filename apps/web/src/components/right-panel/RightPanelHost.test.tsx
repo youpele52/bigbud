@@ -1,35 +1,30 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { resetRightPanelTabsState, useRightPanelTabsStoreMock } = vi.hoisted(() => {
-  const initialState = {
+const rightPanelTabsStoreMock = vi.hoisted(() => {
+  type RightPanelTabsState = {
+    activeKind: "browser" | "diff" | "files" | "terminal" | null;
+    openTabs: ReadonlyArray<"browser" | "diff" | "files" | "terminal">;
+    rightPanelOpen: boolean;
+    lastActiveKind: "browser" | "diff" | "files" | "terminal" | null;
+  };
+
+  let state: RightPanelTabsState = {
     activeKind: null,
-    openTabs: [] as Array<"browser" | "files" | "terminal" | "diff">,
+    openTabs: [],
     rightPanelOpen: false,
     lastActiveKind: null,
-    closeTab: () => undefined,
-    ensureTabOpen: () => undefined,
-    openTab: () => undefined,
-    setActiveTab: () => undefined,
-    toggleRightPanel: () => undefined,
-    openRightPanel: () => undefined,
-    closeRightPanel: () => undefined,
   };
-
-  const state = { ...initialState };
-  const resetState = () => {
-    Object.assign(state, initialState);
-  };
-
-  const store = Object.assign((selector: (snapshot: typeof state) => unknown) => selector(state), {
-    setState: (partial: Partial<typeof state>) => {
-      Object.assign(state, partial);
-    },
-  });
 
   return {
-    resetRightPanelTabsState: resetState,
-    useRightPanelTabsStoreMock: store,
+    useRightPanelTabsStore: Object.assign(
+      <T,>(selector: (storeState: RightPanelTabsState) => T) => selector(state),
+      {
+        setState: (nextState: Partial<RightPanelTabsState>) => {
+          state = { ...state, ...nextState };
+        },
+      },
+    ),
   };
 });
 
@@ -53,7 +48,7 @@ vi.mock("~/stores/ui", () => ({
 }));
 
 vi.mock("~/stores/rightPanel/rightPanelTabs.store", () => ({
-  useRightPanelTabsStore: useRightPanelTabsStoreMock,
+  useRightPanelTabsStore: rightPanelTabsStoreMock.useRightPanelTabsStore,
 }));
 
 vi.mock("./useRightPanelWidth", () => ({
@@ -99,12 +94,10 @@ vi.mock("./openDiffPanel", () => ({
 }));
 
 import { RightPanelHost } from "./RightPanelHost";
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 
 describe("RightPanelHost", () => {
   beforeEach(() => {
-    resetRightPanelTabsState();
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "browser",
       openTabs: ["browser", "files", "terminal"],
       rightPanelOpen: true,
@@ -113,8 +106,7 @@ describe("RightPanelHost", () => {
   });
 
   afterEach(() => {
-    resetRightPanelTabsState();
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
       openTabs: [],
       rightPanelOpen: false,
@@ -123,26 +115,39 @@ describe("RightPanelHost", () => {
   });
 
   it("keeps open tab bodies mounted while switching the active tab", () => {
-    const initialMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+    const browserMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
 
-    expect(initialMarkup).toContain('data-testid="browser-panel"');
-    expect(initialMarkup).toContain('data-testid="files-panel"');
-    expect(initialMarkup).toContain('data-testid="terminal-panel"');
-    expect(initialMarkup).toContain('aria-hidden="false"');
-    expect(initialMarkup).toContain("pointer-events-none invisible");
+    expect(browserMarkup).toContain('data-testid="browser-panel"');
+    expect(browserMarkup).toContain('data-testid="files-panel"');
+    expect(browserMarkup).toContain('data-testid="terminal-panel"');
+    expect(browserMarkup).toContain(
+      'aria-hidden="false"><div data-testid="browser-panel">browser</div>',
+    );
+    expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="files-panel">files</div>',
+    );
+    expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
+    );
 
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
       openTabs: ["browser", "files", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "files",
     });
-    const switchedMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
 
-    expect(switchedMarkup).toContain('data-testid="browser-panel"');
-    expect(switchedMarkup).toContain('data-testid="files-panel"');
-    expect(switchedMarkup).toContain('data-testid="terminal-panel"');
-    expect(switchedMarkup).toContain('aria-hidden="false"');
-    expect(switchedMarkup).toContain("pointer-events-none invisible");
+    const filesMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+
+    expect(filesMarkup).toContain('data-testid="browser-panel"');
+    expect(filesMarkup).toContain('data-testid="files-panel"');
+    expect(filesMarkup).toContain('data-testid="terminal-panel"');
+    expect(filesMarkup).toContain(
+      'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
+    );
+    expect(filesMarkup).toContain('aria-hidden="false"><div data-testid="files-panel">files</div>');
+    expect(filesMarkup).toContain(
+      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
+    );
   });
 });
