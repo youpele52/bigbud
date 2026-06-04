@@ -40,12 +40,24 @@ export function selectTerminalEventEntries(
   );
 }
 
+export function selectTerminalEventLastId(
+  terminalEventLastIdsByKey: Record<string, number>,
+  threadId: ThreadId,
+  terminalId: string,
+): number {
+  if (threadId.length === 0 || terminalId.trim().length === 0) {
+    return 0;
+  }
+  return terminalEventLastIdsByKey[terminalEventBufferKey(threadId, terminalId)] ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Event buffer mutations (return new state — no side effects)
 // ---------------------------------------------------------------------------
 
 export function appendTerminalEventEntry(
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>,
+  terminalEventLastIdsByKey: Record<string, number>,
   nextTerminalEventId: number,
   event: TerminalEvent,
 ) {
@@ -64,6 +76,10 @@ export function appendTerminalEventEntry(
     terminalEventEntriesByKey: {
       ...terminalEventEntriesByKey,
       [key]: nextEntries,
+    },
+    terminalEventLastIdsByKey: {
+      ...terminalEventLastIdsByKey,
+      [key]: nextTerminalEventId,
     },
     nextTerminalEventId: nextTerminalEventId + 1,
   };

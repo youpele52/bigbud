@@ -1,97 +1,46 @@
+import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef } from "react";
+
 import {
-  type PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import * as Schema from "effect/Schema";
+  getRightPanelMaxWidth,
+  useRightPanelWidthStore,
+} from "~/stores/rightPanel/rightPanelWidth.store";
 
-import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
-import {
-  getLeftSidebarGapWidth,
-  THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
-} from "../layout/chatLayout.shared";
-
-interface UseRightPanelWidthOptions {
-  minWidth: number;
-  storageKey: string;
+function disableTransitions(element: HTMLElement) {
+  element.style.setProperty("transition-duration", "0s");
 }
 
-function getRightPanelMaxWidth(minWidth: number) {
-  const viewportMaxWidth = Math.floor(window.innerWidth * 0.8);
-  const sharedLayoutMaxWidth = Math.floor(
-    window.innerWidth - getLeftSidebarGapWidth() - THREAD_MAIN_CONTENT_MIN_WIDTH_PX,
-  );
-
-  return Math.max(minWidth, Math.min(viewportMaxWidth, sharedLayoutMaxWidth));
+function restoreTransitions(element: HTMLElement) {
+  element.style.removeProperty("transition-duration");
 }
 
-function getRightPanelDefaultWidth(minWidth: number) {
-  return Math.max(minWidth, Math.floor(window.innerWidth / 3));
-}
-
-export function useRightPanelWidth({ minWidth, storageKey }: UseRightPanelWidthOptions) {
-  const [panelWidth, setPanelWidth] = useState(() => {
-    const stored = getLocalStorageItem(storageKey, Schema.Finite);
-    const max = getRightPanelMaxWidth(minWidth);
-    return stored ? Math.max(minWidth, Math.min(max, stored)) : getRightPanelDefaultWidth(minWidth);
-  });
-  const [resizing, setResizing] = useState(false);
+export function useRightPanelWidth() {
+  const panelWidth = useRightPanelWidthStore((state) => state.panelWidth);
+  const resizing = useRightPanelWidthStore((state) => state.resizing);
+  const setPanelWidth = useRightPanelWidthStore((state) => state.setPanelWidth);
+  const setResizing = useRightPanelWidthStore((state) => state.setResizing);
   const startRef = useRef<{ x: number; width: number } | null>(null);
-  const pendingWidthRef = useRef(panelWidth);
+  const transitionTargetsRef = useRef<HTMLElement[]>([]);
 
   const onResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return;
       event.preventDefault();
+
+      const handle = event.currentTarget;
+      const container = handle.parentElement;
+      const placeholder = container?.previousElementSibling as HTMLElement | null;
+      const targets = [container, placeholder].filter(
+        (el): el is HTMLElement => el !== null && el !== undefined,
+      );
+      targets.forEach(disableTransitions);
+      transitionTargetsRef.current = targets;
+
       event.currentTarget.setPointerCapture(event.pointerId);
       setResizing(true);
       startRef.current = { x: event.clientX, width: panelWidth };
     },
-    [panelWidth],
+    [panelWidth, setResizing],
   );
-
-  useEffect(() => {
-    const handleResize = () => {
-      const max = getRightPanelMaxWidth(minWidth);
-      setPanelWidth((currentWidth) => {
-        if (currentWidth <= max) return currentWidth;
-        const nextWidth = Math.max(minWidth, max);
-        pendingWidthRef.current = nextWidth;
-        return nextWidth;
-      });
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [minWidth]);
-
-  useEffect(() => {
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const leftSidebarGap = document.querySelector<HTMLElement>(
-      "[data-slot='sidebar'][data-side='left'] [data-slot='sidebar-gap']",
-    );
-    if (!leftSidebarGap) {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      const max = getRightPanelMaxWidth(minWidth);
-      setPanelWidth((currentWidth) => {
-        const nextWidth = Math.min(currentWidth, max);
-        pendingWidthRef.current = nextWidth;
-        return nextWidth;
-      });
-    });
-    observer.observe(leftSidebarGap);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [minWidth]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -100,26 +49,25 @@ export function useRightPanelWidth({ minWidth, storageKey }: UseRightPanelWidthO
       const start = startRef.current;
       if (!start) return;
       const delta = start.x - event.clientX;
-      const nextWidth = Math.max(
-        minWidth,
-        Math.min(getRightPanelMaxWidth(minWidth), start.width + delta),
-      );
+      const nextWidth = Math.max(320, Math.min(getRightPanelMaxWidth(320), start.width + delta));
       setPanelWidth(nextWidth);
-      pendingWidthRef.current = nextWidth;
     };
     const onPointerUp = () => {
+      transitionTargetsRef.current.forEach(restoreTransitions);
+      transitionTargetsRef.current = [];
       setResizing(false);
       startRef.current = null;
-      setLocalStorageItem(storageKey, pendingWidthRef.current, Schema.Finite);
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
 
     return () => {
+      transitionTargetsRef.current.forEach(restoreTransitions);
+      transitionTargetsRef.current = [];
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
     };
-  }, [minWidth, resizing, storageKey]);
+  }, [resizing, setPanelWidth, setResizing]);
 
   return {
     onResizePointerDown,

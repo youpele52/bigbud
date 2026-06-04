@@ -1,9 +1,13 @@
-import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useTerminalPanelStore } from "./terminalPanel.store";
 
 export function toggleTerminalPanel() {
-  if (!useTerminalPanelStore.getState().open) {
+  const tabState = useRightPanelTabsStore.getState();
+  const terminalOpen = useTerminalPanelStore.getState().open;
+  const terminalActive = tabState.activeKind === "terminal" && tabState.rightPanelOpen;
+
+  if (!terminalOpen || !terminalActive) {
     openTerminalPanel();
     return;
   }
@@ -13,7 +17,6 @@ export function toggleTerminalPanel() {
 
 export function openTerminalPanel() {
   requestRightPanel("terminal");
-  closeDiffPanelIfOpen();
   useRightPanelTabsStore.getState().openTab("terminal");
   useTerminalPanelStore.getState().setOpen(true);
 }

@@ -7,9 +7,11 @@
  * @module WorkspaceFileSystem
  */
 import { Schema, ServiceMap } from "effect";
-import type { Effect } from "effect";
+import type { Effect, Stream } from "effect";
 
 import type {
+  ProjectDirectoryWatchEvent,
+  ProjectDirectoryWatchInput,
   ProjectReadFilePreviewInput,
   ProjectReadFilePreviewResult,
   ProjectWriteFileInput,
@@ -52,6 +54,16 @@ export interface WorkspaceFileSystemShape {
     input: ProjectWriteFileInput,
   ) => Effect.Effect<
     ProjectWriteFileResult,
+    WorkspaceFileSystemError | WorkspacePathOutsideRootError
+  >;
+
+  /**
+   * Watch a directory relative to the workspace root and emit invalidation events.
+   */
+  readonly watchDirectory: (
+    input: ProjectDirectoryWatchInput,
+  ) => Effect.Effect<
+    Stream.Stream<ProjectDirectoryWatchEvent, WorkspaceFileSystemError>,
     WorkspaceFileSystemError | WorkspacePathOutsideRootError
   >;
 }

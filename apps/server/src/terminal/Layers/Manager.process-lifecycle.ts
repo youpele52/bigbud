@@ -21,6 +21,12 @@ export interface ProcessLifecycleContext {
   ) => Effect.Effect<A>;
   readManagerState: Effect.Effect<TerminalManagerState>;
   publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
+  queuePtyOutput: (
+    session: TerminalSessionState,
+    expectedPid: number,
+    data: string,
+  ) => Effect.Effect<void>;
+  flushPtyOutput: (threadId: string, terminalId: string) => Effect.Effect<void>;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   queuePersist: (threadId: string, terminalId: string, history: string) => Effect.Effect<void>;
   processKillGraceMs: number;

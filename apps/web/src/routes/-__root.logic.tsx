@@ -26,7 +26,7 @@ import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
-import { createEventRouterRecovery } from "./__root.recovery";
+import { createEventRouterRecovery } from "./-__root.recovery";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter() {
@@ -46,7 +46,7 @@ export function EventRouter() {
   const removeOrphanedTerminalStates = useTerminalStateStore(
     (store) => store.removeOrphanedTerminalStates,
   );
-  const applyTerminalEvent = useTerminalStateStore((store) => store.applyTerminalEvent);
+  const applyTerminalEvents = useTerminalStateStore((store) => store.applyTerminalEvents);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
@@ -197,8 +197,27 @@ export function EventRouter() {
       removeFromSelection,
       removeTerminalState,
       removeOrphanedTerminalStates,
-      applyTerminalEvent,
+      applyTerminalEvent: (event) => applyTerminalEvents([event]),
     });
+
+    const pendingTerminalEvents: Array<import("@bigbud/contracts").TerminalEvent> = [];
+    let flushPendingTerminalEventsScheduled = false;
+    const flushPendingTerminalEvents = () => {
+      flushPendingTerminalEventsScheduled = false;
+      if (disposed || pendingTerminalEvents.length === 0) {
+        return;
+      }
+      applyTerminalEvents(pendingTerminalEvents.splice(0, pendingTerminalEvents.length));
+    };
+    const schedulePendingTerminalEventsFlush = () => {
+      if (flushPendingTerminalEventsScheduled) {
+        return;
+      }
+      flushPendingTerminalEventsScheduled = true;
+      queueMicrotask(() => {
+        flushPendingTerminalEvents();
+      });
+    };
 
     const bootstrapFromSnapshot = async (): Promise<void> => {
       await eventRecovery.runSnapshotRecovery("bootstrap", () => disposed);
@@ -249,12 +268,15 @@ export function EventRouter() {
       if (thread && thread.archivedAt !== null) {
         return;
       }
-      applyTerminalEvent(event);
+      pendingTerminalEvents.push(event);
+      schedulePendingTerminalEventsFlush();
     });
     return () => {
       disposed = true;
       disposedRef.current = true;
       eventRecovery.cancel();
+      flushPendingTerminalEventsScheduled = false;
+      pendingTerminalEvents.length = 0;
       unsubDomainEvent();
       unsubTerminalEvent();
     };
@@ -266,7 +288,7 @@ export function EventRouter() {
     removeFromSelection,
     removeTerminalState,
     removeOrphanedTerminalStates,
-    applyTerminalEvent,
+    applyTerminalEvents,
     clearThreadUi,
     syncProjects,
     syncServerReadModel,

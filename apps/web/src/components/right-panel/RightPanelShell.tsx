@@ -19,21 +19,19 @@ export function RightPanelShell({
   width,
   onResizePointerDown,
 }: RightPanelShellProps) {
-  if (!open) return null;
-
   return (
     <>
       <div
-        className="hidden shrink-0 bg-transparent md:block"
+        className="hidden shrink-0 bg-transparent transition-[width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] md:block"
         data-right-panel-placeholder="true"
-        style={{ width }}
+        style={{ width: open ? width : 0 }}
       />
       <div
         className={cn(
-          "fixed right-0 top-0 z-40 flex h-dvh flex-col border-l border-border bg-card text-foreground",
+          "fixed right-0 top-0 z-40 flex h-dvh flex-col border-l border-border bg-card text-foreground transition-[transform,width] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
           className,
         )}
-        style={{ width }}
+        style={{ width, transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
         {children}
         {onResizePointerDown ? (
@@ -44,7 +42,7 @@ export function RightPanelShell({
             aria-label={resizeAriaLabel}
             tabIndex={0}
           >
-            <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors hover:bg-border" />
+            <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent hover:bg-border" />
           </div>
         ) : null}
       </div>

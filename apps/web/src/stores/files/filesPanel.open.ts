@@ -5,7 +5,7 @@ import {
   stripPathPositionSuffix,
 } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { openFileInFilesPanel } from "./filesPanel.coordinator";
+import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
 
 function normalizePathForCompare(pathValue: string): string {
   return pathValue.replaceAll("\\", "/").replace(/\/+$/, "");
@@ -15,7 +15,7 @@ function isWindowsStylePath(pathValue: string): boolean {
   return /^[A-Za-z]:\//.test(pathValue);
 }
 
-export function resolveWorkspaceRelativePreviewPath(
+export function resolveWorkspaceRelativeEntryPath(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): string | null {
@@ -49,20 +49,40 @@ export function canOpenPathInFilesPanel(
 ): boolean {
   return (
     isCodeRelatedFilePath(targetPath) &&
-    resolveWorkspaceRelativePreviewPath(targetPath, workspaceRoot) !== null
+    resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot) !== null
   );
+}
+
+export function canOpenDirectoryInFilesPanel(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): boolean {
+  return resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot) !== null;
 }
 
 export function openPathInFilesPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativePreviewPath(targetPath, workspaceRoot);
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
   if (!relativePath || !isCodeRelatedFilePath(targetPath)) {
     return false;
   }
 
   openFileInFilesPanel(relativePath, parsePathPositionSuffix(targetPath));
+  return true;
+}
+
+export function openDirectoryInFilesPanelIfSupported(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): boolean {
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  if (!relativePath) {
+    return false;
+  }
+
+  openDirectoryInFilesPanel(relativePath);
   return true;
 }
 

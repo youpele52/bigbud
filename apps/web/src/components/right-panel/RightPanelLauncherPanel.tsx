@@ -13,9 +13,6 @@ import { useServerKeybindings } from "~/rpc/serverState";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import type { ThreadId } from "@bigbud/contracts";
 
-const LAUNCHER_PANEL_WIDTH_STORAGE_KEY = "right_panel_launcher_width";
-const LAUNCHER_PANEL_MIN_WIDTH = 320;
-
 interface RightPanelLauncherPanelProps {
   activeThreadId?: ThreadId | null;
   onToggleBrowser: () => void;
@@ -40,10 +37,7 @@ export function RightPanelLauncherPanel({
   const defaultChatCwd = useDefaultChatCwd();
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
 
-  const { panelWidth, onResizePointerDown } = useRightPanelWidth({
-    minWidth: LAUNCHER_PANEL_MIN_WIDTH,
-    storageKey: LAUNCHER_PANEL_WIDTH_STORAGE_KEY,
-  });
+  const { panelWidth, onResizePointerDown } = useRightPanelWidth();
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
