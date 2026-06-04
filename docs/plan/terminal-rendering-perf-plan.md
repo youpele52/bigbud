@@ -1,5 +1,25 @@
 # Terminal Rendering Performance Plan
 
+## Implementation Status
+
+This plan has been implemented partially, but not completely.
+
+Implemented:
+
+1. Client-side terminal write batching exists via `TerminalWriteBatcher`, and terminal output now flows through it from `TerminalViewport.events.ts` and `TerminalViewport.session.ts`.
+2. Pending output is flushed before non-output terminal events such as snapshot replace, clear, error, and exit handling.
+3. Resize churn reductions are in place: drawer drag height updates are rAF-throttled in `ThreadTerminalDrawer.resize.ts`, window resize is debounced, and resize RPCs are coalesced in `TerminalViewport.tsx` with an in-flight guard.
+4. The store-side subscribe optimization is in place: `terminalEventLastIdsByKey` exists and `TerminalViewport.session.ts` now does an O(1) last-id change check before reading entries.
+5. Tests were added for the batching/event wiring (`TerminalWriteBatcher.test.ts`, `TerminalViewport.events.test.ts`).
+
+Still missing relative to this plan:
+
+1. Phase 4 has not been implemented. The server still publishes one output event per PTY chunk; there is no server-side PTY output batching in `apps/server/src/terminal/Layers/Manager.process-drain.ts`.
+2. Phase 1 was implemented with xterm `write(..., callback)` serialization rather than the exact rAF accumulator proposed here, so the specific "max 60 writes/sec" design from this document is not what shipped.
+3. The manual validation matrix listed at the end of this document is not recorded here as completed.
+
+Keep this file until Phase 4 is either implemented or explicitly rejected.
+
 ## Executive Summary
 
 | Root Cause                                         | Confidence | Verdict                                                                                                                                                                    |

@@ -2,6 +2,8 @@
 
 ## Status
 
+This plan has been implemented partially, but not completely.
+
 Phase 1 is complete.
 
 Completed in phase 1:
@@ -13,7 +15,27 @@ Completed in phase 1:
 5. Double-click open behavior for local files, including code/markdown files opening in the configured editor and non-code files opening through the OS default application.
 6. Files panel pointer hover and right-click path copy behavior.
 
-Phase 2 is the dedicated read-only code review surface.
+Implemented from phase 2:
+
+1. A dedicated in-app read-only file viewer exists inside the right-side Files panel (`FilePreview.tsx`).
+2. Supported workspace files can be opened in-app from both the Files tree and chat file/path references.
+3. Server-side bounded preview reads exist via `workspaceFileSystem.readFilePreview`, including workspace-root path confinement, size limits, local-only access, and binary-file rejection.
+4. The viewer renders syntax-highlighted code with line numbers and supports line/range selection.
+5. Code annotations can be created from the viewer and added to composer draft state.
+6. A slimmer shared annotation model now exists with a shared base type plus browser/code-specific attachments.
+7. Composer previews reuse a shared structured annotation preview shell for browser and code annotations.
+8. Send-time prompt serialization includes structured code annotation context without automatically injecting the whole file.
+9. Sent code annotations render in the timeline as compact expandable attachments.
+
+Still missing relative to this plan:
+
+1. The plan explicitly called for Monaco in read-only mode, but the shipped implementation uses `SyntaxHighlightedCode` instead, so Monaco-specific viewer capabilities are not present.
+2. The viewer does not yet provide in-file search.
+3. Timeline annotation entries do not yet reopen the file viewer and jump back to the annotated location.
+4. The code annotation payload is still slimmer than planned: it does not yet store `language`, `selectionKind`, `startColumn`, `endColumn`, or `symbolName`.
+5. Symbol-aware review features remain unimplemented: no file outline, no symbol navigation, no symbol-based annotations, and no re-anchoring when files change.
+
+Keep this file until the remaining phase 2 viewer/replay/symbol-review work is either completed or intentionally descoped.
 
 ## Goal
 
