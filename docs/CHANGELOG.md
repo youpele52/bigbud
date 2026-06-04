@@ -12,6 +12,10 @@ Entries below are grouped by release tag and date.
 - Terminal output is now batched both client-side and server-side, coalescing rapid-fire PTY events into fewer render updates — less flicker, less CPU churn, and smoother scrolling when output is streaming fast.
 - Refactored the right panel internals to consolidate tab state, decouple the diff panel from the coordination layer, and give the tab strip a cleaner visual hierarchy.
 
+### Route File Cleanup
+
+- Renamed non-route `__root.*` helper files to `-__root.*` following the TanStack Router ignore convention, eliminating startup warnings from helper modules colocated next to the root route.
+
 ## v0.1.640 (3 June, 2026)
 
 ### Right Panel Toggle, State Persistence, and Shortcut
