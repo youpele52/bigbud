@@ -1,6 +1,31 @@
 import { describe, expect, it } from "vitest";
 
-import { clampPreviewTargetLine, getPreviewScrollTop } from "./FilePreview.logic";
+import {
+  clampPreviewTargetLine,
+  getFilePreviewWatchRelativePath,
+  getPreviewScrollTop,
+  shouldShowPreviewLoading,
+} from "./FilePreview.logic";
+
+describe("getFilePreviewWatchRelativePath", () => {
+  it("omits the relative path when previewing a root-level file", () => {
+    expect(getFilePreviewWatchRelativePath("CHANGELOG.md")).toBeUndefined();
+  });
+
+  it("watches the parent directory for nested files", () => {
+    expect(getFilePreviewWatchRelativePath("docs/CHANGELOG.md")).toBe("docs");
+    expect(getFilePreviewWatchRelativePath("docs/plan/release.md")).toBe("docs/plan");
+  });
+});
+
+describe("shouldShowPreviewLoading", () => {
+  it("shows the loading state only before the first successful preview load", () => {
+    expect(shouldShowPreviewLoading({ loading: true, loaded: false, error: null })).toBe(true);
+    expect(shouldShowPreviewLoading({ loading: true, loaded: true, error: null })).toBe(false);
+    expect(shouldShowPreviewLoading({ loading: false, loaded: false, error: null })).toBe(false);
+    expect(shouldShowPreviewLoading({ loading: true, loaded: false, error: "Failed" })).toBe(false);
+  });
+});
 
 describe("clampPreviewTargetLine", () => {
   it("returns null when no target line is provided", () => {

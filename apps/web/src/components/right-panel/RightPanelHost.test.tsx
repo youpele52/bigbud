@@ -1,7 +1,32 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
+const rightPanelTabsStoreMock = vi.hoisted(() => {
+  type RightPanelTabsState = {
+    activeKind: "browser" | "diff" | "files" | "terminal" | null;
+    openTabs: ReadonlyArray<"browser" | "diff" | "files" | "terminal">;
+    rightPanelOpen: boolean;
+    lastActiveKind: "browser" | "diff" | "files" | "terminal" | null;
+  };
+
+  let state: RightPanelTabsState = {
+    activeKind: null,
+    openTabs: [],
+    rightPanelOpen: false,
+    lastActiveKind: null,
+  };
+
+  return {
+    useRightPanelTabsStore: Object.assign(
+      <T,>(selector: (storeState: RightPanelTabsState) => T) => selector(state),
+      {
+        setState: (nextState: Partial<RightPanelTabsState>) => {
+          state = { ...state, ...nextState };
+        },
+      },
+    ),
+  };
+});
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -20,6 +45,10 @@ vi.mock("~/stores/main", () => ({
 vi.mock("~/stores/ui", () => ({
   useUiStateStore: (selector: (state: { selectedProjectId: string | null }) => unknown) =>
     selector({ selectedProjectId: "project-1" }),
+}));
+
+vi.mock("~/stores/rightPanel/rightPanelTabs.store", () => ({
+  useRightPanelTabsStore: rightPanelTabsStoreMock.useRightPanelTabsStore,
 }));
 
 vi.mock("./useRightPanelWidth", () => ({
@@ -68,7 +97,7 @@ import { RightPanelHost } from "./RightPanelHost";
 
 describe("RightPanelHost", () => {
   beforeEach(() => {
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "browser",
       openTabs: ["browser", "files", "terminal"],
       rightPanelOpen: true,
@@ -77,8 +106,7 @@ describe("RightPanelHost", () => {
   });
 
   afterEach(() => {
-    cleanup();
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
       openTabs: [],
       rightPanelOpen: false,
@@ -87,29 +115,39 @@ describe("RightPanelHost", () => {
   });
 
   it("keeps open tab bodies mounted while switching the active tab", () => {
-    const { rerender } = render(<RightPanelHost activeThreadId={null} />);
+    const browserMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
 
-    const browserPanel = screen.getByTestId("browser-panel");
-    const filesPanel = screen.getByTestId("files-panel");
-    const terminalPanel = screen.getByTestId("terminal-panel");
+    expect(browserMarkup).toContain('data-testid="browser-panel"');
+    expect(browserMarkup).toContain('data-testid="files-panel"');
+    expect(browserMarkup).toContain('data-testid="terminal-panel"');
+    expect(browserMarkup).toContain(
+      'aria-hidden="false"><div data-testid="browser-panel">browser</div>',
+    );
+    expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="files-panel">files</div>',
+    );
+    expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
+    );
 
-    expect(browserPanel.parentElement).not.toHaveClass("invisible");
-    expect(filesPanel.parentElement).toHaveClass("invisible");
-    expect(terminalPanel.parentElement).toHaveClass("invisible");
-
-    useRightPanelTabsStore.setState({
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
       openTabs: ["browser", "files", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "files",
     });
-    rerender(<RightPanelHost activeThreadId={null} />);
 
-    expect(screen.getByTestId("browser-panel")).toBe(browserPanel);
-    expect(screen.getByTestId("files-panel")).toBe(filesPanel);
-    expect(screen.getByTestId("terminal-panel")).toBe(terminalPanel);
-    expect(browserPanel.parentElement).toHaveClass("invisible");
-    expect(filesPanel.parentElement).not.toHaveClass("invisible");
-    expect(terminalPanel.parentElement).toHaveClass("invisible");
+    const filesMarkup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+
+    expect(filesMarkup).toContain('data-testid="browser-panel"');
+    expect(filesMarkup).toContain('data-testid="files-panel"');
+    expect(filesMarkup).toContain('data-testid="terminal-panel"');
+    expect(filesMarkup).toContain(
+      'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
+    );
+    expect(filesMarkup).toContain('aria-hidden="false"><div data-testid="files-panel">files</div>');
+    expect(filesMarkup).toContain(
+      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
+    );
   });
 });

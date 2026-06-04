@@ -11,6 +11,7 @@ Entries below are grouped by release tag and date.
 - Replaced Files panel polling with scoped live directory watching so the root and currently expanded folders refresh automatically when workspace files or folders change, backed by debounced `fs.watch` events on the server and a new WebSocket subscription across the contracts layer, server RPC handlers, and web client.
 - The new live watcher now supports both project roots and default chat folders like `~/Documents`, so omitting `relativePath` correctly watches the normalized workspace root instead of falling through the strict relative-path resolver.
 - Updated the Files panel rendering to keep cached directory entries visible during live refreshes, eliminating flicker while watched root and expanded folders update in the background.
+- Extended the same live directory-watching pattern to the file preview viewer, so open files now refresh automatically when their parent directory changes without flickering during background reloads.
 
 ### Right Panel Refactoring and Shared Host
 

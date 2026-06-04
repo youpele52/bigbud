@@ -1,5 +1,5 @@
 import { AlertCircleIcon, XIcon } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
 import { AnnotationComposerPanel } from "../annotations/AnnotationComposerPanel";
@@ -9,7 +9,12 @@ import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
-import { FILE_PREVIEW_LINE_HEIGHT, getPreviewScrollTop } from "./FilePreview.logic";
+import {
+  FILE_PREVIEW_LINE_HEIGHT,
+  getPreviewScrollTop,
+  shouldShowPreviewLoading,
+} from "./FilePreview.logic";
+import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 
 interface FilePreviewProps {
   cwd: string;
@@ -31,6 +36,7 @@ export interface CodeAnnotationDraft {
 
 interface PreviewState {
   loading: boolean;
+  loaded: boolean;
   contents: string;
   truncated: boolean;
   error: string | null;
@@ -38,6 +44,7 @@ interface PreviewState {
 
 const INITIAL_STATE: PreviewState = {
   loading: true,
+  loaded: false,
   contents: "",
   truncated: false,
   error: null,
@@ -82,53 +89,112 @@ export const FilePreview = memo(function FilePreview({
     null,
   );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const previewRequestIdRef = useRef(0);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
 
+  const loadPreview = useCallback(
+    (options?: { readonly preserveContents?: boolean }) => {
+      const requestId = ++previewRequestIdRef.current;
+      const preserveContents = options?.preserveContents ?? false;
+
+      setState((current) =>
+        preserveContents
+          ? {
+              ...current,
+              loading: true,
+            }
+          : INITIAL_STATE,
+      );
+
+      const api = readNativeApi();
+      if (!api) {
+        setState((current) => {
+          if (requestId !== previewRequestIdRef.current) {
+            return current;
+          }
+
+          if (preserveContents && current.loaded) {
+            return {
+              ...current,
+              loading: false,
+            };
+          }
+
+          return {
+            loading: false,
+            loaded: false,
+            contents: "",
+            truncated: false,
+            error: "Native API not found.",
+          };
+        });
+        return;
+      }
+
+      void api.projects
+        .readFilePreview({
+          cwd,
+          relativePath,
+          ...(executionTargetId ? { executionTargetId } : {}),
+        })
+        .then((result) => {
+          setState((current) => {
+            if (requestId !== previewRequestIdRef.current) {
+              return current;
+            }
+
+            return {
+              loading: false,
+              loaded: true,
+              contents: result.contents,
+              truncated: result.truncated,
+              error: null,
+            };
+          });
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "Failed to load file preview.";
+
+          setState((current) => {
+            if (requestId !== previewRequestIdRef.current) {
+              return current;
+            }
+
+            if (preserveContents && current.loaded) {
+              return {
+                ...current,
+                loading: false,
+              };
+            }
+
+            return {
+              loading: false,
+              loaded: false,
+              contents: "",
+              truncated: false,
+              error: message,
+            };
+          });
+        });
+    },
+    [cwd, executionTargetId, relativePath],
+  );
+
+  const refreshPreview = useCallback(() => {
+    loadPreview({ preserveContents: true });
+  }, [loadPreview]);
+
   useEffect(() => {
-    let active = true;
-    setState(INITIAL_STATE);
+    loadPreview();
+  }, [loadPreview]);
 
-    const api = readNativeApi();
-    if (!api) {
-      setState({
-        loading: false,
-        contents: "",
-        truncated: false,
-        error: "Native API not found.",
-      });
-      return;
-    }
-
-    void api.projects
-      .readFilePreview({
-        cwd,
-        relativePath,
-        ...(executionTargetId ? { executionTargetId } : {}),
-      })
-      .then((result) => {
-        if (!active) return;
-        setState({
-          loading: false,
-          contents: result.contents,
-          truncated: result.truncated,
-          error: null,
-        });
-      })
-      .catch((error) => {
-        if (!active) return;
-        setState({
-          loading: false,
-          contents: "",
-          truncated: false,
-          error: error instanceof Error ? error.message : "Failed to load file preview.",
-        });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [cwd, executionTargetId, relativePath]);
+  useFilePreviewRefresh({
+    cwd,
+    relativePath,
+    executionTargetId,
+    refreshPreview,
+  });
 
   useEffect(() => {
     setSelectedRange(null);
@@ -260,7 +326,7 @@ export const FilePreview = memo(function FilePreview({
         ) : null}
       </div>
 
-      {state.loading ? (
+      {shouldShowPreviewLoading(state) ? (
         <div className="p-3 text-sm text-muted-foreground/70">Loading preview...</div>
       ) : state.error ? (
         <div className="flex gap-2 p-3 text-sm text-destructive/80">
