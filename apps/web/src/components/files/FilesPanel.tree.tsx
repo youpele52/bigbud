@@ -33,6 +33,8 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
   return props.entries.map((entry) => {
     const expanded = props.expandedDirectories[entry.path] ?? false;
     const nestedState = props.directoryStateByPath[entry.path];
+    const nestedEntries = nestedState?.entries ?? EMPTY_ENTRIES;
+    const showNestedLoading = nestedState?.loading && nestedEntries.length === 0;
     const name = entryName(entry);
     const isDirectory = entry.kind === "directory";
 
@@ -102,7 +104,7 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
         </button>
         {isDirectory && expanded ? (
           <div>
-            {nestedState?.loading ? (
+            {showNestedLoading ? (
               <div
                 className="px-2 py-1 text-xs text-muted-foreground/60"
                 style={{ paddingLeft: `${24 + props.depth * 16}px` }}
@@ -119,7 +121,7 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
             ) : (
               renderFilesPanelTree({
                 ...props,
-                entries: nestedState?.entries ?? EMPTY_ENTRIES,
+                entries: nestedEntries,
                 depth: props.depth + 1,
               })
             )}
