@@ -40,17 +40,39 @@ interface UsePromptQueueInput {
 }
 
 export function usePromptQueue(input: UsePromptQueueInput) {
-  const [queuedPrompts, setQueuedPrompts] = useState<QueuedPrompt[]>([]);
+  const [queuedPromptsByThreadId, setQueuedPromptsByThreadId] = useState<
+    Partial<Record<ThreadId, QueuedPrompt[]>>
+  >({});
   const [flushAfterInterrupt, setFlushAfterInterrupt] = useState(false);
-  const queuedPromptsRef = useRef<QueuedPrompt[]>([]);
+  const queuedPromptsRef = useRef<Partial<Record<ThreadId, QueuedPrompt[]>>>({});
   const isFlushingRef = useRef(false);
+  const activeThreadIdRef = useRef(input.threadId);
+  const flushFrameRef = useRef<number | null>(null);
+
+  activeThreadIdRef.current = input.threadId;
+
+  const queuedPrompts = useMemo(
+    () => queuedPromptsByThreadId[input.threadId] ?? [],
+    [queuedPromptsByThreadId, input.threadId],
+  );
 
   useEffect(() => {
-    queuedPromptsRef.current = [];
-    setQueuedPrompts([]);
     setFlushAfterInterrupt(false);
     isFlushingRef.current = false;
+    if (flushFrameRef.current !== null) {
+      window.cancelAnimationFrame(flushFrameRef.current);
+      flushFrameRef.current = null;
+    }
   }, [input.threadId]);
+
+  useEffect(
+    () => () => {
+      if (flushFrameRef.current !== null) {
+        window.cancelAnimationFrame(flushFrameRef.current);
+      }
+    },
+    [],
+  );
 
   const queuedPromptCount = queuedPrompts.length;
   const hasQueuedPrompts = queuedPromptCount > 0;
@@ -63,7 +85,8 @@ export function usePromptQueue(input: UsePromptQueueInput) {
         return "empty";
       }
 
-      const existing = queuedPromptsRef.current;
+      const threadId = input.threadId;
+      const existing = queuedPromptsRef.current[threadId] ?? [];
       if (existing.length >= MAX_QUEUED_PROMPTS) {
         return "full";
       }
@@ -75,48 +98,82 @@ export function usePromptQueue(input: UsePromptQueueInput) {
           createdAt: new Date().toISOString(),
         },
       ];
-      queuedPromptsRef.current = next;
-      setQueuedPrompts(next);
+      queuedPromptsRef.current = {
+        ...queuedPromptsRef.current,
+        [threadId]: next,
+      };
+      setQueuedPromptsByThreadId((existingByThreadId) => ({
+        ...existingByThreadId,
+        [threadId]: next,
+      }));
       return "queued";
     },
     [input],
   );
 
   const removeQueuedPrompt = useCallback((id: string) => {
-    const next = queuedPromptsRef.current.filter((prompt) => prompt.id !== id);
-    queuedPromptsRef.current = next;
-    setQueuedPrompts(next);
+    const threadId = activeThreadIdRef.current;
+    const next = (queuedPromptsRef.current[threadId] ?? []).filter((prompt) => prompt.id !== id);
+    queuedPromptsRef.current = {
+      ...queuedPromptsRef.current,
+      [threadId]: next,
+    };
+    setQueuedPromptsByThreadId((existingByThreadId) => ({
+      ...existingByThreadId,
+      [threadId]: next,
+    }));
   }, []);
 
   const clearQueuedPrompts = useCallback(() => {
-    queuedPromptsRef.current = [];
-    setQueuedPrompts([]);
+    const threadId = activeThreadIdRef.current;
+    queuedPromptsRef.current = {
+      ...queuedPromptsRef.current,
+      [threadId]: [],
+    };
+    setQueuedPromptsByThreadId((existingByThreadId) => ({
+      ...existingByThreadId,
+      [threadId]: [],
+    }));
     setFlushAfterInterrupt(false);
   }, []);
 
   const flushQueuedPrompts = useCallback(async () => {
-    if (isFlushingRef.current || queuedPrompts.length === 0) {
+    const threadId = input.threadId;
+    const pendingPrompts = queuedPromptsRef.current[threadId] ?? [];
+    if (isFlushingRef.current || pendingPrompts.length === 0) {
       return;
     }
     isFlushingRef.current = true;
-    const nextPrompt = formatQueuedPromptText(queuedPrompts);
-    queuedPromptsRef.current = [];
-    setQueuedPrompts([]);
+    const nextPrompt = formatQueuedPromptText(pendingPrompts);
     setFlushAfterInterrupt(false);
-    input.promptRef.current = nextPrompt;
-    input.setPrompt(nextPrompt);
-    input.setComposerShellMode(false);
-    input.setComposerCursor(input.collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    input.setComposerTrigger(input.detectComposerTrigger(nextPrompt, nextPrompt.length));
-    input.scheduleComposerFocus();
-    input.setForceSendQueuedPrompt(true);
-    window.requestAnimationFrame(() => {
+    flushFrameRef.current = window.requestAnimationFrame(() => {
+      flushFrameRef.current = null;
+      if (activeThreadIdRef.current !== threadId) {
+        input.setForceSendQueuedPrompt(false);
+        isFlushingRef.current = false;
+        return;
+      }
+      queuedPromptsRef.current = {
+        ...queuedPromptsRef.current,
+        [threadId]: [],
+      };
+      setQueuedPromptsByThreadId((existingByThreadId) => ({
+        ...existingByThreadId,
+        [threadId]: [],
+      }));
+      input.promptRef.current = nextPrompt;
+      input.setPrompt(nextPrompt);
+      input.setComposerShellMode(false);
+      input.setComposerCursor(input.collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+      input.setComposerTrigger(input.detectComposerTrigger(nextPrompt, nextPrompt.length));
+      input.scheduleComposerFocus();
+      input.setForceSendQueuedPrompt(true);
       void input.onSend().finally(() => {
         input.setForceSendQueuedPrompt(false);
         isFlushingRef.current = false;
       });
     });
-  }, [input, queuedPrompts]);
+  }, [input]);
 
   const interruptAndFlushQueuedPrompts = useCallback(async () => {
     if (queuedPrompts.length === 0) {
