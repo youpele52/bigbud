@@ -23,6 +23,7 @@ import {
   type DirectoryState,
 } from "./FilesPanel.shared";
 import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
+import { useFilesPanelDirectoryRefresh } from "./useFilesPanelDirectoryRefresh";
 import {
   BIGBUD_FILES_PANEL_DRAG_MIME,
   joinWorkspaceEntryPath,
@@ -94,10 +95,11 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   }, [setPreviewPath, setPreviewPosition, workspaceRoot]);
 
   const loadDirectory = useCallback(
-    async (relativePath: string) => {
+    async (relativePath: string, options?: { readonly force?: boolean }) => {
       if (!workspaceRoot) return;
       const existing = directoryStateByPath[relativePath];
       if (existing?.loading) return;
+      if (existing && !options?.force) return;
 
       setDirectoryStateByPath((current) => ({
         ...current,
@@ -139,6 +141,14 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     },
     [directoryStateByPath, workspaceExecutionTargetId, workspaceRoot],
   );
+
+  useFilesPanelDirectoryRefresh({
+    workspaceRoot,
+    workspaceExecutionTargetId,
+    expandedDirectories,
+    directoryStateByPath,
+    loadDirectory,
+  });
 
   useEffect(() => {
     if (!workspaceRoot) return;

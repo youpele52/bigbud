@@ -3,6 +3,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  ProjectDirectoryWatchError,
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
@@ -16,6 +17,7 @@ import {
 import { clamp } from "effect/Number";
 
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
+import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
@@ -27,6 +29,15 @@ import {
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 
 export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
+  const toProjectDirectoryWatchError = (
+    cause: WorkspaceFileSystemError | WorkspacePathOutsideRootError,
+  ) => {
+    const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+      ? "Workspace directory path must stay within the project root."
+      : `Failed to watch workspace directory: ${cause.detail}`;
+    return new ProjectDirectoryWatchError({ message, cause });
+  };
+
   return {
     [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
       observeRpcEffect(
@@ -233,6 +244,27 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
                 cause,
               }),
           ),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
+    [WS_METHODS.subscribeProjectDirectoryChanges]: (
+      input: Parameters<WsRpcContext["workspaceFileSystem"]["watchDirectory"]>[0],
+    ) =>
+      observeRpcStreamEffect(
+        WS_METHODS.subscribeProjectDirectoryChanges,
+        context.workspaceFileSystem.watchDirectory(input).pipe(
+          Effect.map((stream) =>
+            stream.pipe(
+              Stream.mapError(
+                (cause) =>
+                  new ProjectDirectoryWatchError({
+                    message: `Failed to watch workspace directory: ${cause.detail}`,
+                    cause,
+                  }),
+              ),
+            ),
+          ),
+          Effect.mapError(toProjectDirectoryWatchError),
         ),
         { "rpc.aggregate": "workspace" },
       ),

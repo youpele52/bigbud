@@ -2,7 +2,7 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { EditorId, OpenError, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Stream } from "effect";
 
 import {
   buildAppUnderTest,
@@ -118,6 +118,35 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         sizeBytes: 25,
         truncated: false,
       });
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("routes websocket rpc subscribeProjectDirectoryChanges errors", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const workspaceDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ws-project-watch-" });
+
+      yield* buildAppUnderTest();
+
+      const wsUrl = yield* getWsServerUrl("/ws");
+      const result = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.subscribeProjectDirectoryChanges]({
+            cwd: workspaceDir,
+            relativePath: "../escape",
+          }).pipe(Stream.runHead, Effect.result),
+        ),
+      );
+
+      assert.equal(result._tag, "Failure");
+      if (result._tag !== "Failure") {
+        return;
+      }
+      assert.isTrue(result.failure._tag === "ProjectDirectoryWatchError");
+      assert.equal(
+        result.failure.message,
+        "Workspace directory path must stay within the project root.",
+      );
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

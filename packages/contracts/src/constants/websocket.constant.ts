@@ -14,6 +14,7 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsListDirectory: "projects.listDirectory",
+  subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
 
