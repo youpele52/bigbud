@@ -78,6 +78,7 @@ interface TerminalEventStateSlice extends PanelTerminalStateSlice {
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
+  terminalEventLastIdsByKey: Record<string, number>;
   nextTerminalEventId: number;
 }
 
@@ -138,6 +139,7 @@ export function applyTerminalEventToState(
 
   const nextEventState = appendTerminalEventEntry(
     state.terminalEventEntriesByKey,
+    state.terminalEventLastIdsByKey,
     state.nextTerminalEventId,
     event,
   );
@@ -148,4 +150,14 @@ export function applyTerminalEventToState(
     terminalLaunchContextByThreadId: nextTerminalLaunchContextByThreadId,
     ...nextEventState,
   };
+}
+
+export function applyTerminalEventsToState(
+  state: TerminalEventStateSlice,
+  events: ReadonlyArray<TerminalEvent>,
+): TerminalEventStateSlice {
+  if (events.length === 0) {
+    return state;
+  }
+  return events.reduce((nextState, event) => applyTerminalEventToState(nextState, event), state);
 }

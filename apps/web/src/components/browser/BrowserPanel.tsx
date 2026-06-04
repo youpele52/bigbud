@@ -1,19 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ThreadId } from "@bigbud/contracts";
+
 import { randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { useComposerDraftStore } from "~/stores/composer";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
-import { closeBrowserPanel, openBrowserPanel } from "../../stores/browser/browserPanel.actions";
-import { closeFilesPanel, openFilesPanel } from "../../stores/files/filesPanel.coordinator";
-import { useProjectById, useThreadById } from "../../stores/main";
-import { useRightPanelTabsStore } from "../../stores/rightPanel/rightPanelTabs.store";
-import {
-  closeTerminalPanel,
-  openTerminalPanel,
-} from "../../stores/terminal/terminalPanel.coordinator";
-import { useUiStateStore } from "../../stores/ui";
+import { closeBrowserPanel } from "../../stores/browser/browserPanel.actions";
 import { dataUrlToFile } from "./BrowserPanel.annotation";
 import {
   BrowserViewport,
@@ -27,31 +20,15 @@ import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.histo
 import { planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
-import { RightPanelShell } from "../right-panel/RightPanelShell";
-import { RightPanelTabs } from "../right-panel/RightPanelTabs";
-import { useRightPanelWidth } from "../right-panel/useRightPanelWidth";
-import { useDefaultChatCwd } from "../../rpc/serverState";
-
-const BROWSER_PANEL_WIDTH_STORAGE_KEY = "browser_panel_width";
-const BROWSER_PANEL_MIN_WIDTH = 320;
 
 interface BrowserPanelProps {
-  className?: string;
   activeThreadId?: ThreadId | null;
 }
 
-export const BrowserPanel = memo(function BrowserPanel({
-  className,
+export const BrowserPanelContent = memo(function BrowserPanelContent({
   activeThreadId,
 }: BrowserPanelProps) {
   const { open, url, setUrl } = useBrowserPanelStore();
-  const activeTab = useRightPanelTabsStore((state) => state.activeKind);
-  const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
-  const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
   const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const [inputUrl, setInputUrl] = useState(url);
@@ -65,20 +42,14 @@ export const BrowserPanel = memo(function BrowserPanel({
   });
   const [annotationActive, setAnnotationActive] = useState(false);
   const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
-  const [contextMenu, setContextMenu] = useState<{
-    open: boolean;
-    x: number;
-    y: number;
-  }>({ open: false, x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number }>({
+    open: false,
+    x: 0,
+    y: 0,
+  });
   const [queuedDesktopReload, setQueuedDesktopReload] = useState<
     "normal" | "ignoring-cache" | null
   >(null);
-  const { panelWidth, onResizePointerDown } = useRightPanelWidth({
-    minWidth: BROWSER_PANEL_MIN_WIDTH,
-    storageKey: BROWSER_PANEL_WIDTH_STORAGE_KEY,
-  });
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
-  const visible = open && activeTab === "browser" && rightPanelOpen;
 
   const reloadViewport = useCallback((mode: "normal" | "ignoring-cache") => {
     if (mode === "ignoring-cache") {
@@ -166,6 +137,7 @@ export const BrowserPanel = memo(function BrowserPanel({
       const annotation = await viewportRef.current?.startAnnotation();
       setAnnotationActive(false);
       if (!annotation) return;
+
       const file = dataUrlToFile(
         annotation.screenshot.dataUrl,
         "browser-annotation.png",
@@ -175,6 +147,7 @@ export const BrowserPanel = memo(function BrowserPanel({
         toastManager.add({ type: "error", title: "Could not capture browser screenshot." });
         return;
       }
+
       const previewUrl = URL.createObjectURL(file);
       const imageId = randomUUID();
       addComposerImage(activeThreadId, {
@@ -235,7 +208,7 @@ export const BrowserPanel = memo(function BrowserPanel({
       const reloadPlan = planDesktopBrowserReload({
         action,
         browserOpen: open,
-        browserVisible: visible,
+        browserVisible: true,
       });
       if (!reloadPlan.reloadMode) {
         return;
@@ -243,7 +216,6 @@ export const BrowserPanel = memo(function BrowserPanel({
 
       if (reloadPlan.shouldActivateBrowser) {
         setQueuedDesktopReload(reloadPlan.reloadMode);
-        setActiveTab("browser");
         return;
       }
 
@@ -253,18 +225,16 @@ export const BrowserPanel = memo(function BrowserPanel({
     return () => {
       unsubscribe?.();
     };
-  }, [open, reloadViewport, setActiveTab, visible]);
+  }, [open, reloadViewport]);
 
   useEffect(() => {
-    if (!visible || !queuedDesktopReload) {
+    if (!queuedDesktopReload) {
       return;
     }
 
     reloadViewport(queuedDesktopReload);
     setQueuedDesktopReload(null);
-  }, [queuedDesktopReload, reloadViewport, visible]);
-
-  if (!visible) return null;
+  }, [queuedDesktopReload, reloadViewport]);
 
   const contextMenuItems: ContextMenuItem[] = createBrowserContextMenuItems(
     {
@@ -274,31 +244,8 @@ export const BrowserPanel = memo(function BrowserPanel({
     viewportRef,
   );
 
-  if (!visible) {
-    return null;
-  }
-
   return (
-    <RightPanelShell
-      open={open}
-      width={panelWidth}
-      className={className}
-      onResizePointerDown={onResizePointerDown}
-      resizeAriaLabel="Resize browser panel"
-    >
-      <RightPanelTabs
-        browserShortcutLabel={null}
-        filesShortcutLabel={null}
-        hasActiveProject={Boolean(workspaceRoot)}
-        onCloseBrowser={closeBrowserPanel}
-        onCloseFiles={closeFilesPanel}
-        onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={() => openBrowserPanel({ url })}
-        onOpenFiles={openFilesPanel}
-        onOpenTerminal={openTerminalPanel}
-        terminalAvailable={Boolean(workspaceRoot)}
-        terminalShortcutLabel={null}
-      />
+    <>
       <BrowserToolbar
         inputUrl={inputUrl}
         setInputUrl={setInputUrl}
@@ -367,8 +314,12 @@ export const BrowserPanel = memo(function BrowserPanel({
           </>
         )}
       </div>
-    </RightPanelShell>
+    </>
   );
+});
+
+const BrowserPanel = memo(function BrowserPanel(props: BrowserPanelProps) {
+  return <BrowserPanelContent {...props} />;
 });
 
 export default BrowserPanel;

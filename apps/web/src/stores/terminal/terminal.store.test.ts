@@ -1,7 +1,11 @@
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { selectTerminalEventEntries, selectThreadTerminalState } from "./helpers.store";
+import {
+  selectTerminalEventEntries,
+  selectTerminalEventLastId,
+  selectThreadTerminalState,
+} from "./helpers.store";
 import { useTerminalStateStore } from "./terminal.store";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-1");
@@ -75,6 +79,7 @@ describe("terminalStateStore actions", () => {
       panelTerminalStateByThreadId: {},
       terminalLaunchContextByThreadId: {},
       terminalEventEntriesByKey: {},
+      terminalEventLastIdsByKey: {},
       nextTerminalEventId: 1,
     });
   });
@@ -270,6 +275,13 @@ describe("terminalStateStore actions", () => {
     expect(entries).toHaveLength(2);
     expect(entries.map((entry) => entry.id)).toEqual([1, 2]);
     expect(entries.map((entry) => entry.event.type)).toEqual(["output", "activity"]);
+    expect(
+      selectTerminalEventLastId(
+        useTerminalStateStore.getState().terminalEventLastIdsByKey,
+        THREAD_ID,
+        "default",
+      ),
+    ).toBe(2);
   });
 
   it("applies started terminal events to terminal state, launch context, and event buffer", () => {
@@ -334,6 +346,36 @@ describe("terminalStateStore actions", () => {
     expect(entries.map((entry) => entry.event.type)).toEqual(["activity", "exited"]);
   });
 
+  it("applies terminal event batches in order", () => {
+    const store = useTerminalStateStore.getState();
+    store.ensureTerminal(THREAD_ID, "terminal-2", { open: true, active: true });
+
+    store.applyTerminalEvents([
+      makeTerminalEvent("activity", {
+        terminalId: "terminal-2",
+        hasRunningSubprocess: true,
+      }),
+      makeTerminalEvent("exited", {
+        terminalId: "terminal-2",
+        exitCode: 0,
+        exitSignal: null,
+      }),
+    ]);
+
+    const terminalState = selectThreadTerminalState(
+      useTerminalStateStore.getState().terminalStateByThreadId,
+      THREAD_ID,
+    );
+    const entries = selectTerminalEventEntries(
+      useTerminalStateStore.getState().terminalEventEntriesByKey,
+      THREAD_ID,
+      "terminal-2",
+    );
+
+    expect(terminalState.runningTerminalIds).toEqual([]);
+    expect(entries.map((entry) => entry.event.type)).toEqual(["activity", "exited"]);
+  });
+
   it("routes panel terminal events to panel state without adding them to drawer state", () => {
     const store = useTerminalStateStore.getState();
     store.ensurePanelTerminal(THREAD_ID, "panel-terminal-1", { active: true });
@@ -378,6 +420,13 @@ describe("terminalStateStore actions", () => {
     );
 
     expect(entries).toEqual([]);
+    expect(
+      selectTerminalEventLastId(
+        useTerminalStateStore.getState().terminalEventLastIdsByKey,
+        THREAD_ID,
+        "default",
+      ),
+    ).toBe(0);
   });
 
   it("is a no-op when clearing terminal state for a thread with no state or buffered events", () => {

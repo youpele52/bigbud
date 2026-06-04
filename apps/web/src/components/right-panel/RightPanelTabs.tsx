@@ -12,12 +12,14 @@ import {
 
 const TAB_LABELS: Record<RightPanelTabKind, string> = {
   browser: "Browser",
+  diff: "Diff",
   files: "Files",
   terminal: "Terminal",
 };
 
 const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: string }>> = {
   browser: GlobeIcon,
+  diff: DiffIcon,
   files: FoldersIcon,
   terminal: TerminalIcon,
 };
@@ -29,6 +31,7 @@ interface RightPanelTabsProps {
   hasActiveProject: boolean;
   isGitRepo?: boolean;
   onCloseBrowser: () => void;
+  onCloseDiff?: () => void;
   onCloseFiles: () => void;
   onCloseTerminal: () => void;
   onOpenBrowser: () => void;
@@ -63,6 +66,7 @@ export function RightPanelTabs({
   hasActiveProject,
   isGitRepo,
   onCloseBrowser,
+  onCloseDiff,
   onCloseFiles,
   onCloseTerminal,
   onOpenBrowser,
@@ -75,10 +79,14 @@ export function RightPanelTabs({
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
+
   const closeTab = (kind: RightPanelTabKind) => {
     switch (kind) {
       case "browser":
         onCloseBrowser();
+        break;
+      case "diff":
+        onCloseDiff?.();
         break;
       case "files":
         onCloseFiles();
@@ -92,40 +100,43 @@ export function RightPanelTabs({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 border-b border-border px-3",
-        isElectron ? "h-[52px]" : "py-2",
+        "flex items-center overflow-hidden border-b border-border bg-card/95 px-3",
+        isElectron ? "h-[52px] pt-2" : "pt-2",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        {openTabs.map((kind) => {
+      <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {openTabs.map((kind, index) => {
           const Icon = TAB_ICONS[kind];
+          const isActive = activeKind === kind;
 
           return (
             <div
               key={kind}
               className={cn(
-                "group inline-flex h-7 shrink-0 items-center rounded-md text-sm transition-colors",
-                activeKind === kind
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
+                "group grid h-9 min-w-[132px] shrink-0 grid-cols-[24px_auto_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
+                index > 0 && "-ml-px",
+                isActive
+                  ? "-mb-px border-border bg-background text-foreground"
+                  : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-accent/30 hover:text-foreground cursor-pointer",
               )}
             >
+              <span aria-hidden="true" className="block size-4 justify-self-center" />
               <button
                 type="button"
-                className="inline-flex h-7 items-center gap-1.5 px-2"
+                className="flex items-center justify-center gap-1.5 px-1.5"
                 onClick={() => {
                   setActiveTab(kind);
                   requestRightPanel(kind);
                 }}
               >
                 <Icon className="size-3.5" />
-                <span>{TAB_LABELS[kind]}</span>
+                <span className="text-xs font-medium">{TAB_LABELS[kind]}</span>
               </button>
-              <span className="inline-flex w-0 overflow-hidden transition-[width] duration-150 group-hover:w-5 group-focus-within:w-5">
+              <span className="flex items-center justify-center">
                 <button
                   type="button"
                   aria-label={`Close ${TAB_LABELS[kind]} tab`}
-                  className="mr-1 inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:bg-secondary hover:text-foreground"
+                  className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/70 opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     closeTab(kind);
@@ -141,7 +152,12 @@ export function RightPanelTabs({
       <Menu>
         <MenuTrigger
           render={
-            <Button aria-label="Open another right panel tab" size="icon-xs" variant="ghost">
+            <Button
+              aria-label="Open another right panel tab"
+              className="mb-1 ml-2 rounded-md border border-transparent hover:border-border/60 hover:bg-accent/40"
+              size="icon-xs"
+              variant="ghost"
+            >
               <PlusIcon className="size-3.5" />
             </Button>
           }

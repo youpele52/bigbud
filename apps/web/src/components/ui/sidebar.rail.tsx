@@ -59,6 +59,7 @@ export function SidebarRail({
       resizeState.transitionTargets.forEach((element) => {
         element.style.removeProperty("transition-duration");
       });
+      resizeState.rail.style.backgroundColor = "";
       if (resolvedResizable?.storageKey && typeof window !== "undefined") {
         setLocalStorageItem(resolvedResizable.storageKey, resizeState.width, Schema.Finite);
       }
@@ -97,10 +98,12 @@ export function SidebarRail({
       const transitionTargets = [
         sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-gap']"),
         sidebarRoot.querySelector<HTMLElement>("[data-slot='sidebar-container']"),
+        event.currentTarget,
       ].filter((element): element is HTMLElement => element !== null);
       transitionTargets.forEach((element) => {
         element.style.setProperty("transition-duration", "0ms");
       });
+      event.currentTarget.style.backgroundColor = "transparent";
 
       event.preventDefault();
       event.stopPropagation();
@@ -243,9 +246,12 @@ export function SidebarRail({
       if (resizeState?.rafId != null) {
         window.cancelAnimationFrame(resizeState.rafId);
       }
-      resizeState?.transitionTargets.forEach((element) => {
-        element.style.removeProperty("transition-duration");
-      });
+      if (resizeState) {
+        resizeState.transitionTargets.forEach((element) => {
+          element.style.removeProperty("transition-duration");
+        });
+        resizeState.rail.style.backgroundColor = "";
+      }
       document.body.style.removeProperty("cursor");
       document.body.style.removeProperty("user-select");
     };
@@ -255,7 +261,7 @@ export function SidebarRail({
     <button
       aria-label={railLabel}
       className={cn(
-        "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[3px] hover:after:bg-primary/30 group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
+        "-translate-x-1/2 group-data-[side=left]:-right-4 absolute inset-y-0 z-20 hidden w-4 outline-none transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[3px] hover:after:bg-primary/30 group-data-[side=right]:left-0 sm:flex [[data-collapsible=offcanvas][data-state=collapsed]_&]:pointer-events-none",
         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",
         "[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize",
         "group-data-[collapsible=offcanvas]:translate-x-0 hover:group-data-[collapsible=offcanvas]:bg-sidebar group-data-[collapsible=offcanvas]:after:left-full",

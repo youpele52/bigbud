@@ -3,6 +3,7 @@ import {
   DEFAULT_SERVER_SETTINGS,
   type DesktopBridge,
   EventId,
+  type ProjectDirectoryWatchEvent,
   ProjectId,
   type OrchestrationEvent,
   type ServerConfig,
@@ -31,6 +32,7 @@ function registerListener<T>(listeners: Set<(event: T) => void>, listener: (even
 
 const terminalEventListeners = new Set<(event: TerminalEvent) => void>();
 const orchestrationEventListeners = new Set<(event: OrchestrationEvent) => void>();
+const projectDirectoryEventListeners = new Set<(event: ProjectDirectoryWatchEvent) => void>();
 
 const rpcClientMock = {
   dispose: vi.fn(),
@@ -47,6 +49,9 @@ const rpcClientMock = {
   },
   projects: {
     listDirectory: vi.fn(),
+    onDirectoryChange: vi.fn((_, listener: (event: ProjectDirectoryWatchEvent) => void) =>
+      registerListener(projectDirectoryEventListeners, listener),
+    ),
     readFilePreview: vi.fn(),
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
@@ -194,6 +199,7 @@ beforeEach(() => {
   showContextMenuFallbackMock.mockReset();
   terminalEventListeners.clear();
   orchestrationEventListeners.clear();
+  projectDirectoryEventListeners.clear();
   Reflect.deleteProperty(getWindowForTest(), "desktopBridge");
 });
 
@@ -322,6 +328,38 @@ describe("wsNativeApi", () => {
       cwd: "/tmp/project",
       relativePath: "plan.md",
     });
+  });
+
+  it("forwards workspace directory change subscriptions to the project RPC", async () => {
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    const onDirectoryChange = vi.fn();
+
+    api.projects.onDirectoryChange(
+      {
+        cwd: "/tmp/project",
+        relativePath: "docs",
+      },
+      onDirectoryChange,
+    );
+
+    const directoryEvent = {
+      version: 1,
+      type: "directoryChanged",
+      relativePath: "docs",
+    } satisfies ProjectDirectoryWatchEvent;
+    emitEvent(projectDirectoryEventListeners, directoryEvent);
+
+    expect(rpcClientMock.projects.onDirectoryChange).toHaveBeenCalledWith(
+      {
+        cwd: "/tmp/project",
+        relativePath: "docs",
+      },
+      onDirectoryChange,
+      undefined,
+    );
+    expect(onDirectoryChange).toHaveBeenCalledWith(directoryEvent);
   });
 
   it("forwards full-thread diff requests to the orchestration RPC", async () => {

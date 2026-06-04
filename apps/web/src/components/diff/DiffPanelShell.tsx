@@ -8,10 +8,14 @@ import { Skeleton } from "../ui/skeleton";
 export type DiffPanelMode = "inline" | "sheet" | "sidebar";
 
 function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
-  const shouldUseDragRegion = isElectron && mode !== "sheet";
+  const shouldUseDragRegion = isElectron && mode === "inline";
   return cn(
-    "flex items-center justify-between gap-2 px-4",
-    shouldUseDragRegion ? "drag-region h-[52px] border-b border-border" : "h-12",
+    "flex items-center justify-between gap-2 px-3",
+    shouldUseDragRegion
+      ? "drag-region h-[52px] border-b border-border"
+      : isElectron
+        ? "py-2.5"
+        : "py-2",
   );
 }
 
@@ -20,15 +24,17 @@ export function DiffPanelShell(props: {
   header: ReactNode;
   children: ReactNode;
 }) {
-  const shouldUseDragRegion = isElectron && props.mode !== "sheet";
+  const shouldUseDragRegion = isElectron && props.mode === "inline";
 
   return (
     <div
       className={cn(
-        "flex h-full min-w-0 flex-col bg-background",
+        "flex min-w-0 flex-col overflow-hidden bg-background",
         props.mode === "inline"
-          ? "w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
-          : "w-full",
+          ? "h-full w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
+          : props.mode === "sheet"
+            ? "h-full w-full"
+            : "flex-1 w-full",
       )}
     >
       {shouldUseDragRegion ? (
@@ -49,7 +55,7 @@ export function DiffPanelHeaderSkeleton() {
       <div className="relative min-w-0 flex-1">
         <Skeleton className="absolute left-0 top-1/2 size-6 -translate-y-1/2 rounded-md border border-border/50" />
         <Skeleton className="absolute right-0 top-1/2 size-6 -translate-y-1/2 rounded-md border border-border/50" />
-        <div className="flex gap-1 overflow-hidden px-8 py-0.5">
+        <div className="flex gap-1 overflow-hidden px-6 py-0.5">
           <Skeleton className="h-6 w-16 shrink-0 rounded-md" />
           <Skeleton className="h-6 w-24 shrink-0 rounded-md" />
           <Skeleton className="h-6 w-24 shrink-0 rounded-md max-sm:hidden" />

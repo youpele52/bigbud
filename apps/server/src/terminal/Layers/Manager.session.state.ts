@@ -6,6 +6,7 @@ export function resetSessionRuntimeState(session: TerminalSessionState): void {
   session.pendingProcessEvents = [];
   session.pendingProcessEventIndex = 0;
   session.processEventDrainRunning = false;
+  session.runtimeEpoch += 1;
 }
 
 export function createTerminalSessionState(input: {
@@ -25,6 +26,7 @@ export function createTerminalSessionState(input: {
     executionTargetId: input.executionTargetId,
     cwd: input.cwd,
     worktreePath: input.worktreePath,
+    runtimeEpoch: 0,
     status: "starting",
     pid: null,
     history: input.history,

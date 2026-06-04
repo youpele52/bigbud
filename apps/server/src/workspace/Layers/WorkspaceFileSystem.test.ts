@@ -194,4 +194,35 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
       }),
     );
   });
+
+  describe("watchDirectory", () => {
+    it.effect("allows watching the workspace root when relativePath is omitted", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+
+        const stream = yield* workspaceFileSystem.watchDirectory({ cwd });
+
+        expect(stream).toBeDefined();
+      }),
+    );
+
+    it.effect("rejects watches outside the workspace root", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+
+        const error = yield* workspaceFileSystem
+          .watchDirectory({
+            cwd,
+            relativePath: "../escape",
+          })
+          .pipe(Effect.flip);
+
+        expect(error.message).toContain(
+          "Workspace file path must be relative to the project root: ../escape",
+        );
+      }),
+    );
+  });
 });

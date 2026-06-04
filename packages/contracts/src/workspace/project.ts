@@ -56,6 +56,31 @@ export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectLi
   },
 ) {}
 
+export const ProjectDirectoryWatchInput = Schema.Struct({
+  executionTargetId: Schema.optional(ExecutionTargetId),
+  cwd: TrimmedNonEmptyString,
+  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+});
+export type ProjectDirectoryWatchInput = typeof ProjectDirectoryWatchInput.Type;
+
+export const ProjectDirectoryChangedEvent = Schema.Struct({
+  version: Schema.Literal(1),
+  type: Schema.Literal("directoryChanged"),
+  relativePath: Schema.String,
+});
+export type ProjectDirectoryChangedEvent = typeof ProjectDirectoryChangedEvent.Type;
+
+export const ProjectDirectoryWatchEvent = Schema.Union([ProjectDirectoryChangedEvent]);
+export type ProjectDirectoryWatchEvent = typeof ProjectDirectoryWatchEvent.Type;
+
+export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectDirectoryWatchError>()(
+  "ProjectDirectoryWatchError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ProjectReadFilePreviewInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyString,

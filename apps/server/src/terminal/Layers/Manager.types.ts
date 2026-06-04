@@ -26,6 +26,7 @@ export interface TerminalSessionState {
   executionTargetId: string;
   cwd: string;
   worktreePath: string | null;
+  runtimeEpoch: number;
   status: TerminalSessionStatus;
   pid: number | null;
   history: string;

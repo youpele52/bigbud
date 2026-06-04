@@ -1,6 +1,7 @@
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type Terminal } from "@xterm/xterm";
 
+import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 import { selectPendingTerminalEventEntries } from "./ThreadTerminalDrawer.logic";
 import { writeSystemMessage, writeTerminalSnapshot } from "./ThreadTerminalDrawer.logic";
 
@@ -24,6 +25,7 @@ interface TerminalEventEntry {
 export function makeApplyTerminalEvent(input: {
   readonly terminalRef: TerminalRefLike;
   readonly hasHandledExitRef: BooleanRefLike;
+  readonly writeBatcher: TerminalWriteBatcher;
   readonly clearSelectionAction: () => void;
   readonly handleSessionExited: () => void;
 }) {
@@ -38,7 +40,7 @@ export function makeApplyTerminalEvent(input: {
     }
 
     if (event.type === "output") {
-      activeTerminal.write(event.data);
+      input.writeBatcher.write(activeTerminal, event.data);
       input.clearSelectionAction();
       return;
     }
@@ -46,18 +48,21 @@ export function makeApplyTerminalEvent(input: {
     if (event.type === "started" || event.type === "restarted") {
       input.hasHandledExitRef.current = false;
       input.clearSelectionAction();
+      input.writeBatcher.flush();
       writeTerminalSnapshot(activeTerminal, event.snapshot);
       return;
     }
 
     if (event.type === "cleared") {
       input.clearSelectionAction();
+      input.writeBatcher.flush();
       activeTerminal.clear();
       activeTerminal.write("\u001bc");
       return;
     }
 
     if (event.type === "error") {
+      input.writeBatcher.flush();
       writeSystemMessage(activeTerminal, event.message);
       return;
     }
@@ -68,6 +73,7 @@ export function makeApplyTerminalEvent(input: {
     ]
       .filter((value): value is string => value !== null)
       .join(", ");
+    input.writeBatcher.flush();
     writeSystemMessage(
       activeTerminal,
       details.length > 0 ? `Process exited (${details})` : "Process exited",

@@ -1,5 +1,7 @@
 import {
   type GitActionProgressEvent,
+  type ProjectDirectoryWatchEvent,
+  type ProjectDirectoryWatchInput,
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
   type GitStatusInput,
@@ -57,6 +59,11 @@ export interface WsRpcClient {
   };
   readonly projects: {
     readonly listDirectory: RpcUnaryMethod<typeof WS_METHODS.projectsListDirectory>;
+    readonly onDirectoryChange: (
+      input: ProjectDirectoryWatchInput,
+      listener: (event: ProjectDirectoryWatchEvent) => void,
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
     readonly readFilePreview: RpcUnaryMethod<typeof WS_METHODS.projectsReadFilePreview>;
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
@@ -160,6 +167,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     projects: {
       listDirectory: (input) =>
         transport.request((client) => client[WS_METHODS.projectsListDirectory](input)),
+      onDirectoryChange: (input, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeProjectDirectoryChanges](input),
+          listener,
+          options,
+        ),
       readFilePreview: (input) =>
         transport.request((client) => client[WS_METHODS.projectsReadFilePreview](input)),
       searchEntries: (input) =>

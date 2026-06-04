@@ -1,33 +1,31 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { closeFilesPanel, toggleFilesPanel } from "./filesPanel.coordinator";
 import { useFilesPanelStore } from "./filesPanel.store";
 import { useBrowserPanelStore } from "../browser/browser.store";
-import {
-  getRequestedRightPanel,
-  registerDiffPanelCloseAction,
-  requestRightPanel,
-} from "../rightPanel/rightPanel.coordinator";
+import { getRequestedRightPanel, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 
 describe("filesPanel.coordinator", () => {
   afterEach(() => {
-    useFilesPanelStore.setState({ open: false });
+    useFilesPanelStore.setState({
+      open: false,
+      previewPath: null,
+      previewPosition: null,
+      fileOpenRequest: null,
+      directoryNavigationRequest: null,
+    });
     useBrowserPanelStore.setState({ open: false });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
-    registerDiffPanelCloseAction(null);
+    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
     requestRightPanel(null);
   });
 
-  it("closes the diff panel and switches the active panel to files", () => {
-    const closeDiff = vi.fn();
-    registerDiffPanelCloseAction(closeDiff);
+  it("keeps other tabs open and switches the active tab to files", () => {
     useBrowserPanelStore.setState({ open: true });
     useRightPanelTabsStore.setState({ activeKind: "browser", openTabs: ["browser"] });
 
     toggleFilesPanel();
 
-    expect(closeDiff).toHaveBeenCalledTimes(1);
     expect(useBrowserPanelStore.getState().open).toBe(true);
     expect(useFilesPanelStore.getState().open).toBe(true);
     expect(getRequestedRightPanel()).toBe("files");
@@ -37,15 +35,35 @@ describe("filesPanel.coordinator", () => {
     });
   });
 
-  it("does not invoke the diff close action when toggling files closed", () => {
+  it("activates files instead of closing them when the tab is already open in the background", () => {
     useFilesPanelStore.setState({ open: true });
-    requestRightPanel("files");
-    const closeDiff = vi.fn();
-    registerDiffPanelCloseAction(closeDiff);
+    useRightPanelTabsStore.setState({
+      activeKind: "browser",
+      openTabs: ["files", "browser"],
+      rightPanelOpen: true,
+    });
 
     toggleFilesPanel();
 
-    expect(closeDiff).not.toHaveBeenCalled();
+    expect(useFilesPanelStore.getState().open).toBe(true);
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "files",
+      openTabs: ["files", "browser"],
+      rightPanelOpen: true,
+    });
+  });
+
+  it("closes files only when toggling the active files tab", () => {
+    useFilesPanelStore.setState({ open: true });
+    requestRightPanel("files");
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      openTabs: ["files"],
+      rightPanelOpen: true,
+    });
+
+    toggleFilesPanel();
+
     expect(useFilesPanelStore.getState().open).toBe(false);
     expect(getRequestedRightPanel()).toBeNull();
   });

@@ -1,5 +1,8 @@
 import type { ResolvedKeybindingsConfig, ThreadId } from "@bigbud/contracts";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { cn } from "~/lib/utils";
+
 import { useThreadTerminalDrawer } from "../../terminal/useThreadTerminalDrawer";
 import ThreadTerminalDrawer from "../../terminal/ThreadTerminalDrawer";
 import type { TerminalContextSelection } from "../../../lib/terminalContext";
@@ -33,6 +36,28 @@ export function PersistentThreadTerminalDrawer({
   onAddTerminalContext,
 }: PersistentThreadTerminalDrawerProps) {
   const drawer = useThreadTerminalDrawer(threadId, launchContext, visible);
+  const project = drawer.project;
+  const cwd = drawer.cwd;
+  const drawerOpen = drawer.terminalState.terminalOpen;
+  const canRenderDrawer = Boolean(project && cwd);
+  const animatedVisible = visible && drawerOpen;
+  const [shouldRender, setShouldRender] = useState(() => canRenderDrawer && animatedVisible);
+  const [isTransitionVisible, setIsTransitionVisible] = useState(
+    () => canRenderDrawer && animatedVisible,
+  );
+
+  useEffect(() => {
+    if (canRenderDrawer && animatedVisible) {
+      setShouldRender(true);
+      const frameId = requestAnimationFrame(() => {
+        setIsTransitionVisible(true);
+      });
+      return () => {
+        cancelAnimationFrame(frameId);
+      };
+    }
+    setIsTransitionVisible(false);
+  }, [animatedVisible, canRenderDrawer]);
 
   const handleAddTerminalContext = useCallback(
     (selection: TerminalContextSelection) => {
@@ -44,19 +69,38 @@ export function PersistentThreadTerminalDrawer({
     [onAddTerminalContext, visible],
   );
 
-  if (!drawer.project || !drawer.terminalState.terminalOpen || !drawer.cwd) {
+  if (!project || !cwd || !shouldRender) {
     return null;
   }
 
   return (
-    <div className={visible ? undefined : "hidden"}>
+    <div
+      aria-hidden={!animatedVisible}
+      className={cn(
+        "overflow-hidden transition-[max-height,opacity,transform] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[max-height,opacity,transform]",
+        isTransitionVisible
+          ? "translate-y-0 opacity-100"
+          : "pointer-events-none translate-y-3 opacity-0",
+      )}
+      onTransitionEnd={(event) => {
+        if (event.target !== event.currentTarget) {
+          return;
+        }
+        if (!isTransitionVisible) {
+          setShouldRender(false);
+        }
+      }}
+      style={{
+        maxHeight: isTransitionVisible ? `${drawer.terminalState.terminalHeight}px` : "0px",
+      }}
+    >
       <ThreadTerminalDrawer
         threadId={threadId}
         executionTargetId={drawer.executionTargetId}
-        cwd={drawer.cwd}
+        cwd={cwd}
         worktreePath={drawer.effectiveWorktreePath}
         runtimeEnv={drawer.runtimeEnv}
-        visible={visible}
+        visible={animatedVisible}
         height={drawer.terminalState.terminalHeight}
         terminalIds={drawer.terminalState.terminalIds}
         activeTerminalId={drawer.terminalState.activeTerminalId}
@@ -65,9 +109,9 @@ export function PersistentThreadTerminalDrawer({
         focusRequestId={focusRequestId + drawer.focusRequestId}
         onSplitTerminal={drawer.splitTerminal}
         onNewTerminal={drawer.createNewTerminal}
-        splitShortcutLabel={visible ? splitShortcutLabel : undefined}
-        newShortcutLabel={visible ? newShortcutLabel : undefined}
-        closeShortcutLabel={visible ? closeShortcutLabel : undefined}
+        splitShortcutLabel={animatedVisible ? splitShortcutLabel : undefined}
+        newShortcutLabel={animatedVisible ? newShortcutLabel : undefined}
+        closeShortcutLabel={animatedVisible ? closeShortcutLabel : undefined}
         keybindings={keybindings}
         onActiveTerminalChange={drawer.activateTerminal}
         onCloseTerminal={drawer.closeTerminal}

@@ -55,9 +55,23 @@ export function drainProcessEventsWith(
         }
 
         if (nextEvent.type === "output") {
+          let combinedData = nextEvent.data;
+          while (session.pendingProcessEventIndex < session.pendingProcessEvents.length) {
+            const pendingEvent = session.pendingProcessEvents[session.pendingProcessEventIndex];
+            if (!pendingEvent || pendingEvent.type !== "output") {
+              break;
+            }
+            combinedData += pendingEvent.data;
+            session.pendingProcessEventIndex += 1;
+          }
+          if (session.pendingProcessEventIndex >= session.pendingProcessEvents.length) {
+            session.pendingProcessEvents = [];
+            session.pendingProcessEventIndex = 0;
+          }
+
           const sanitized = sanitizeTerminalHistoryChunk(
             session.pendingHistoryControlSequence,
-            nextEvent.data,
+            combinedData,
           );
           session.pendingHistoryControlSequence = sanitized.pendingControlSequence;
           if (sanitized.visibleText.length > 0) {
@@ -73,7 +87,7 @@ export function drainProcessEventsWith(
             threadId: session.threadId,
             terminalId: session.terminalId,
             history: sanitized.visibleText.length > 0 ? session.history : null,
-            data: nextEvent.data,
+            data: combinedData,
           } as const;
         }
 
@@ -279,6 +293,7 @@ export function startSessionWith(
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
       session.processEventDrainRunning = false;
+      session.runtimeEpoch += 1;
       session.updatedAt = new Date().toISOString();
       return [undefined, state] as const;
     });
@@ -302,17 +317,23 @@ export function startSessionWith(
             startedShell = spawnResult.shellLabel;
 
             const processPid = ptyProcess.pid;
+            const runtimeEpoch = session.runtimeEpoch;
             const unsubscribeData = ptyProcess.onData((data) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "output", data })) {
+              if (session.runtimeEpoch !== runtimeEpoch) {
                 return;
               }
-              ctx.runFork(drainProcessEvents(session, processPid));
+              ctx.runFork(ctx.queuePtyOutput(session, processPid, data));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
-                return;
-              }
-              ctx.runFork(drainProcessEvents(session, processPid));
+              ctx.runFork(
+                Effect.gen(function* () {
+                  yield* ctx.flushPtyOutput(session.threadId, session.terminalId);
+                  if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
+                    return;
+                  }
+                  yield* drainProcessEvents(session, processPid);
+                }),
+              );
             });
 
             yield* ctx.modifyManagerState((state) => {

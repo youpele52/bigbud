@@ -21,6 +21,7 @@ export {
   normalizeTerminalGroups,
   normalizeTerminalIds,
   normalizeThreadTerminalState,
+  selectTerminalEventLastId,
   setThreadActiveTerminal,
   setThreadTerminalActivity,
   setThreadTerminalHeight,

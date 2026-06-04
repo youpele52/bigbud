@@ -1,10 +1,9 @@
-import { closeDiffPanelIfOpen, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
+import { requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 import { useFilesPanelStore } from "./filesPanel.store";
 
 export function openFilesPanel() {
   requestRightPanel("files");
-  closeDiffPanelIfOpen();
   useRightPanelTabsStore.getState().openTab("files");
   useFilesPanelStore.getState().setOpen(true);
 }
@@ -14,12 +13,22 @@ export function openFileInFilesPanel(
   previewPosition?: { line: number; column: number | null } | null,
 ) {
   openFilesPanel();
-  useFilesPanelStore.getState().setPreviewPath(relativePath);
-  useFilesPanelStore.getState().setPreviewPosition(previewPosition ?? null);
+  useFilesPanelStore.getState().requestFileOpen(relativePath, previewPosition ?? null);
+}
+
+export function openDirectoryInFilesPanel(relativePath: string) {
+  openFilesPanel();
+  useFilesPanelStore.getState().setPreviewPath(null);
+  useFilesPanelStore.getState().setPreviewPosition(null);
+  useFilesPanelStore.getState().requestDirectoryNavigation(relativePath);
 }
 
 export function toggleFilesPanel() {
-  if (!useFilesPanelStore.getState().open) {
+  const tabState = useRightPanelTabsStore.getState();
+  const filesOpen = useFilesPanelStore.getState().open;
+  const filesActive = tabState.activeKind === "files" && tabState.rightPanelOpen;
+
+  if (!filesOpen || !filesActive) {
     openFilesPanel();
     return;
   }
