@@ -5,6 +5,10 @@ import type {
 } from "../../../stores/composer";
 import { isCodeAnnotationAttachment } from "../../../stores/composer";
 import {
+  normalizeAnnotationComment,
+  normalizeBrowserAnnotationElement,
+} from "../../../stores/composer/types.annotation.store";
+import {
   StructuredAnnotationPreviews,
   type StructuredAnnotationPreviewItem,
 } from "./StructuredAnnotationPreviews";
@@ -29,6 +33,7 @@ export function ComposerAnnotationPreviews({
   if (annotations.length === 0) return null;
   const imageById = new Map(images.map((image) => [image.id, image]));
   const items: StructuredAnnotationPreviewItem[] = annotations.map((annotation, index) => {
+    const comment = normalizeAnnotationComment(annotation.comment);
     if (isCodeAnnotationAttachment(annotation)) {
       const lineLabel =
         annotation.selection.startLine === annotation.selection.endLine
@@ -37,7 +42,7 @@ export function ComposerAnnotationPreviews({
       return {
         id: annotation.id,
         thumbnail: null,
-        title: annotation.comment.trim() || "No instruction provided",
+        title: comment.trim() || "No instruction provided",
         badge: (
           <span className="shrink-0 rounded bg-info/15 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-info">
             code
@@ -51,6 +56,7 @@ export function ComposerAnnotationPreviews({
       };
     }
     const image = imageById.get(annotation.imageId);
+    const element = normalizeBrowserAnnotationElement(annotation.element);
     return {
       id: annotation.id,
       thumbnail: image ? (
@@ -60,7 +66,7 @@ export function ComposerAnnotationPreviews({
           className="h-full w-full object-cover"
         />
       ) : null,
-      title: annotation.comment.trim() || "No instruction provided",
+      title: comment.trim() || "No instruction provided",
       badge: (
         <span
           className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide"
@@ -83,7 +89,7 @@ export function ComposerAnnotationPreviews({
         </span>
       ),
       subtitle: annotation.page.title || annotation.page.url,
-      detail: annotation.element.selector || annotation.element.tag,
+      detail: element.selector || element.tag || "Unknown element",
       removeLabel: `Remove annotation ${index + 1}`,
     };
   });
