@@ -75,6 +75,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   onSelect: (item: ComposerCommandItem) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const discoveryInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
     if (!props.activeItemId || !listRef.current) return;
@@ -105,9 +106,14 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
             canClear={props.discoverySearch.query.length > 0}
             onClear={() => {
               props.discoverySearch?.onQueryChange("");
+              discoveryInputRef.current?.focus();
+            }}
+            onClick={() => {
+              discoveryInputRef.current?.focus();
             }}
           >
             <input
+              ref={discoveryInputRef}
               type="text"
               value={props.discoverySearch.query}
               onChange={(event) => {
