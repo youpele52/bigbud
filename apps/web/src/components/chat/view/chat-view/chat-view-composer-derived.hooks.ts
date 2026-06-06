@@ -27,6 +27,44 @@ import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { useComposerMenuItems } from "./chat-view-composer-derived.menu";
 import { useComposerProviderState } from "./chat-view-composer-derived.models";
 
+function resolveSlashDiscoverySearch(
+  query: string | undefined,
+): { command: "agents" | "skills"; query: string } | null {
+  if (!query) return null;
+  const normalizedQuery = query.trim().toLowerCase();
+  if (
+    normalizedQuery === "agents" ||
+    "agents".startsWith(normalizedQuery) ||
+    normalizedQuery.startsWith("agents ")
+  ) {
+    return {
+      command: "agents",
+      query:
+        normalizedQuery === "agents" || "agents".startsWith(normalizedQuery)
+          ? ""
+          : query.slice("agents".length + 1),
+    };
+  }
+  if (
+    normalizedQuery === "skills" ||
+    "skills".startsWith(normalizedQuery) ||
+    normalizedQuery.startsWith("skills ") ||
+    normalizedQuery === "skill" ||
+    "skills".startsWith(normalizedQuery) ||
+    normalizedQuery.startsWith("skill ")
+  ) {
+    const baseCommand = normalizedQuery.startsWith("skill") ? "skill" : "skills";
+    return {
+      command: "skills",
+      query:
+        normalizedQuery === baseCommand || "skills".startsWith(normalizedQuery)
+          ? ""
+          : query.slice(baseCommand.length + 1),
+    };
+  }
+  return null;
+}
+
 export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const serverConfig = useServerConfig();
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
@@ -103,6 +141,10 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   });
 
   const composerMenuOpen = Boolean(base.composerTrigger);
+  const slashDiscoverySearch =
+    base.composerTrigger?.kind === "slash-command"
+      ? resolveSlashDiscoverySearch(base.composerTrigger.query)
+      : null;
   const activeComposerMenuItem = useMemo(
     () =>
       composerMenuItems.find((item) => item.id === base.composerHighlightedItemId) ??
@@ -210,6 +252,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     workspaceEntries,
     composerMenuItems,
     composerMenuOpen,
+    slashDiscoverySearch,
     activeComposerMenuItem,
     nonPersistedComposerImageIdSet,
     activeProviderStatus,
