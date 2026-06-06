@@ -111,6 +111,56 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
     );
   });
 
+  describe("searchFileContents", () => {
+    it.effect("finds matching text lines in the workspace", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(
+          cwd,
+          "src/example.ts",
+          "export const needle = 1;\nexport const other = 2;\n",
+        );
+
+        const result = yield* workspaceFileSystem.searchFileContents({
+          cwd,
+          query: "needle",
+          limit: 10,
+        });
+
+        expect(result).toEqual({
+          matches: [
+            {
+              path: "src/example.ts",
+              line: 1,
+              column: 14,
+              lineText: "export const needle = 1;",
+            },
+          ],
+          truncated: false,
+        });
+      }),
+    );
+
+    it.effect("limits matches and marks truncated results", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "src/one.ts", "needle one\n");
+        yield* writeTextFile(cwd, "src/two.ts", "needle two\n");
+
+        const result = yield* workspaceFileSystem.searchFileContents({
+          cwd,
+          query: "needle",
+          limit: 1,
+        });
+
+        expect(result.matches).toHaveLength(1);
+        expect(result.truncated).toBe(true);
+      }),
+    );
+  });
+
   describe("writeFile", () => {
     it.effect("writes files relative to the workspace root", () =>
       Effect.gen(function* () {

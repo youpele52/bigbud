@@ -1,5 +1,5 @@
 import { Duration, Effect, FileSystem, Layer, Path, Stream } from "effect";
-import { resolveExecutionTargetId } from "@bigbud/contracts";
+import { resolveExecutionTargetId, type ProjectFileContentMatch } from "@bigbud/contracts";
 import { open, stat } from "node:fs/promises";
 
 import {
@@ -14,6 +14,19 @@ import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 
 const DEFAULT_FILE_PREVIEW_MAX_BYTES = 512 * 1024;
+const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
+const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
+const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
+  "!**/.git/**",
+  "!**/.convex/**",
+  "!**/node_modules/**",
+  "!**/.next/**",
+  "!**/.turbo/**",
+  "!**/dist/**",
+  "!**/build/**",
+  "!**/out/**",
+  "!**/.cache/**",
+];
 
 async function readTextFilePreview(
   absolutePath: string,
@@ -41,6 +54,82 @@ async function readTextFilePreview(
   } finally {
     await fileHandle.close();
   }
+}
+
+function normalizeMatchedPath(pathValue: string): string {
+  return pathValue.replace(/^\.\//, "").replaceAll("\\", "/");
+}
+
+function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
+  const matches: ProjectFileContentMatch[] = [];
+
+  for (const rawLine of stdout.split(/\r?\n/g)) {
+    if (!rawLine.trim()) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawLine);
+    } catch {
+      continue;
+    }
+
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("type" in parsed) ||
+      parsed.type !== "match" ||
+      !("data" in parsed)
+    ) {
+      continue;
+    }
+
+    const data = parsed.data;
+    if (typeof data !== "object" || data === null) {
+      continue;
+    }
+
+    const pathText =
+      "path" in data &&
+      typeof data.path === "object" &&
+      data.path !== null &&
+      "text" in data.path &&
+      typeof data.path.text === "string"
+        ? normalizeMatchedPath(data.path.text)
+        : "";
+    const line =
+      "line_number" in data && typeof data.line_number === "number" ? data.line_number : 0;
+    const lineText =
+      "lines" in data &&
+      typeof data.lines === "object" &&
+      data.lines !== null &&
+      "text" in data.lines &&
+      typeof data.lines.text === "string"
+        ? data.lines.text.replace(/\r?\n$/, "")
+        : "";
+    const column =
+      "submatches" in data && Array.isArray(data.submatches) && data.submatches.length > 0
+        ? data.submatches[0]
+        : null;
+    const columnValue =
+      column && typeof column === "object" && "start" in column && typeof column.start === "number"
+        ? column.start + 1
+        : undefined;
+
+    if (!pathText || line <= 0) {
+      continue;
+    }
+
+    matches.push({
+      path: pathText,
+      line,
+      ...(columnValue !== undefined ? { column: columnValue } : {}),
+      lineText,
+    });
+  }
+
+  return matches;
 }
 
 export const makeWorkspaceFileSystem = Effect.gen(function* () {
@@ -81,6 +170,79 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     });
 
     return { relativePath: target.relativePath, ...preview };
+  });
+
+  const searchFileContents: WorkspaceFileSystemShape["searchFileContents"] = Effect.fn(
+    "WorkspaceFileSystem.searchFileContents",
+  )(function* (input) {
+    const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    const normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
+      Effect.mapError(
+        (cause) =>
+          new WorkspaceFileSystemError({
+            cwd: input.cwd,
+            operation: "workspaceFileSystem.searchFileContents",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
+
+    if (!isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        operation: "workspaceFileSystem.searchFileContentsRemote",
+        detail: "Remote workspace file content search is not supported yet.",
+      });
+    }
+
+    const workspaceTarget = resolveWorkspaceTarget({
+      executionTargetId,
+      cwd: normalizedWorkspaceRoot,
+    });
+    const toolTransportTarget = resolveToolTransportTarget(workspaceTarget);
+    const searchResult = yield* Effect.tryPromise({
+      try: () =>
+        runToolCommand({
+          target: toolTransportTarget,
+          command: "rg",
+          args: [
+            "--json",
+            "--hidden",
+            "--smart-case",
+            ...WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS.flatMap((glob) => ["--glob", glob]),
+            "--",
+            input.query,
+            ".",
+          ],
+          allowNonZeroExit: true,
+          timeoutMs: WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
+          maxBufferBytes: WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES,
+          outputMode: "truncate",
+        }),
+      catch: (cause) =>
+        new WorkspaceFileSystemError({
+          cwd: input.cwd,
+          operation: "workspaceFileSystem.searchFileContentsCommand",
+          detail: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    });
+
+    if (searchResult.code !== 0 && searchResult.code !== 1) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        operation: "workspaceFileSystem.searchFileContentsCommand",
+        detail: searchResult.stderr.trim() || "Workspace file content search failed.",
+      });
+    }
+
+    const matches = parseRipgrepJsonMatches(searchResult.stdout);
+    const limit = Math.max(0, Math.floor(input.limit));
+    return {
+      matches: matches.slice(0, limit),
+      truncated: (searchResult.stdoutTruncated ?? false) || matches.length > limit,
+    };
   });
 
   const watchDirectory: WorkspaceFileSystemShape["watchDirectory"] = Effect.fn(
@@ -204,7 +366,12 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     yield* workspaceEntries.invalidate(input.cwd);
     return { relativePath: target.relativePath };
   });
-  return { readFilePreview, watchDirectory, writeFile } satisfies WorkspaceFileSystemShape;
+  return {
+    readFilePreview,
+    searchFileContents,
+    watchDirectory,
+    writeFile,
+  } satisfies WorkspaceFileSystemShape;
 });
 
 export const WorkspaceFileSystemLive = Layer.effect(WorkspaceFileSystem, makeWorkspaceFileSystem);

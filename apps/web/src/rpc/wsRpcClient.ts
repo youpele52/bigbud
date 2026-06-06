@@ -65,6 +65,7 @@ export interface WsRpcClient {
       options?: StreamSubscriptionOptions,
     ) => () => void;
     readonly readFilePreview: RpcUnaryMethod<typeof WS_METHODS.projectsReadFilePreview>;
+    readonly searchFileContents: RpcUnaryMethod<typeof WS_METHODS.projectsSearchFileContents>;
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
@@ -175,6 +176,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
       readFilePreview: (input) =>
         transport.request((client) => client[WS_METHODS.projectsReadFilePreview](input)),
+      searchFileContents: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsSearchFileContents](input)),
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
