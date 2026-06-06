@@ -132,4 +132,24 @@ describe("useComposerCommandHandlers", () => {
     });
     expect(input.onOpenReadDialog).toHaveBeenCalled();
   });
+
+  it("updates the slash discovery prompt without refocusing the composer", () => {
+    const input = makeInput({
+      promptRef: { current: "Use /agents reviewer" },
+      composerCursor: "Use /agents reviewer".length,
+    });
+    const handlers = renderUseComposerCommandHandlers(input);
+
+    handlers.onChangeComposerDiscoverySearch("agents", "architect");
+
+    expect(input.applyPromptReplacement).toHaveBeenCalledWith(
+      4,
+      "Use /agents reviewer".length,
+      "/agents architect",
+      {
+        expectedText: "/agents reviewer",
+        focusComposer: false,
+      },
+    );
+  });
 });
