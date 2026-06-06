@@ -38,7 +38,7 @@ export interface UseComposerCommandHandlersInput {
     rangeStart: number,
     rangeEnd: number,
     replacement: string,
-    options?: { expectedText?: string },
+    options?: { expectedText?: string; focusComposer?: boolean },
   ) => boolean;
   onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;

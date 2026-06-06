@@ -60,6 +60,20 @@ function tokenStartForCursor(text: string, cursor: number): number {
   return index + 1;
 }
 
+function slashCommandStartForCursor(
+  text: string,
+  lineStart: number,
+  cursor: number,
+): number | null {
+  for (let index = cursor - 1; index >= lineStart; index -= 1) {
+    if (text[index] !== "/") continue;
+    if (index === lineStart || isWhitespace(text[index - 1] ?? "")) {
+      return index;
+    }
+  }
+  return null;
+}
+
 export function expandCollapsedComposerCursor(text: string, cursorInput: number): number {
   const collapsedCursor = clampCursor(text, cursorInput);
   const segments = splitPromptIntoComposerSegments(text);
@@ -208,10 +222,11 @@ export const isCollapsedCursorAdjacentToMention = isCollapsedCursorAdjacentToInl
 export function detectComposerTrigger(text: string, cursorInput: number): ComposerTrigger | null {
   const cursor = clampCursor(text, cursorInput);
   const lineStart = text.lastIndexOf("\n", Math.max(0, cursor - 1)) + 1;
-  const linePrefix = text.slice(lineStart, cursor);
+  const slashStart = slashCommandStartForCursor(text, lineStart, cursor);
+  const slashPrefix = slashStart === null ? "" : text.slice(slashStart, cursor);
 
-  if (linePrefix.startsWith("/")) {
-    const commandMatch = /^\/(\S*)$/.exec(linePrefix);
+  if (slashPrefix.startsWith("/")) {
+    const commandMatch = /^\/(\S*)$/.exec(slashPrefix);
     if (commandMatch) {
       const commandQuery = commandMatch[1] ?? "";
       if (commandQuery.toLowerCase() === "compact") {
@@ -221,7 +236,7 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
         return {
           kind: "slash-model",
           query: "",
-          rangeStart: lineStart,
+          rangeStart: slashStart ?? lineStart,
           rangeEnd: cursor,
         };
       }
@@ -229,24 +244,24 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
         return {
           kind: "slash-command",
           query: commandQuery,
-          rangeStart: lineStart,
+          rangeStart: slashStart ?? lineStart,
           rangeEnd: cursor,
         };
       }
       return null;
     }
 
-    const modelMatch = /^\/model(?:\s+(.*))?$/.exec(linePrefix);
+    const modelMatch = /^\/model(?:\s+(.*))?$/.exec(slashPrefix);
     if (modelMatch) {
       return {
         kind: "slash-model",
         query: (modelMatch[1] ?? "").trim(),
-        rangeStart: lineStart,
+        rangeStart: slashStart ?? lineStart,
         rangeEnd: cursor,
       };
     }
 
-    const discoveryMatch = /^\/(agents|skills|skill)(?:\s+(.*))?$/.exec(linePrefix);
+    const discoveryMatch = /^\/(agents|skills|skill)(?:\s+(.*))?$/.exec(slashPrefix);
     if (discoveryMatch) {
       const rawCommand = discoveryMatch[1]?.toLowerCase();
       const command = rawCommand === "skill" ? "skills" : rawCommand;
@@ -255,13 +270,13 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
         return {
           kind: "slash-command",
           query: query.length > 0 ? `${command} ${query}` : `${command} `,
-          rangeStart: lineStart,
+          rangeStart: slashStart ?? lineStart,
           rangeEnd: cursor,
         };
       }
     }
 
-    const providerSlashCommandMatch = /^\/([^\s]+)(?:\s+(.*))?$/.exec(linePrefix);
+    const providerSlashCommandMatch = /^\/([^\s]+)(?:\s+(.*))?$/.exec(slashPrefix);
     if (providerSlashCommandMatch) {
       if (
         providerSlashCommandMatch[1]?.toLowerCase() === "compact" &&
@@ -275,7 +290,7 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
           (providerSlashCommandMatch[2] ?? "").trim().length > 0
             ? `${providerSlashCommandMatch[1]} ${(providerSlashCommandMatch[2] ?? "").trim()}`
             : `${providerSlashCommandMatch[1] ?? ""} `,
-        rangeStart: lineStart,
+        rangeStart: slashStart ?? lineStart,
         rangeEnd: cursor,
       };
     }

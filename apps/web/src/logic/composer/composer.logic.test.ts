@@ -84,6 +84,46 @@ describe("detectComposerTrigger", () => {
     });
   });
 
+  it("detects slash command tokens after prompt text", () => {
+    const text = "Please switch to /pl";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "pl",
+      rangeStart: "Please switch to ".length,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("detects slash model queries after prompt text", () => {
+    const text = "Use this with /model spark";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-model",
+      query: "spark",
+      rangeStart: "Use this with ".length,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("detects slash discovery commands after prompt text", () => {
+    const text = "Delegate to /agents reviewer";
+    const trigger = detectComposerTrigger(text, text.length);
+
+    expect(trigger).toEqual({
+      kind: "slash-command",
+      query: "agents reviewer",
+      rangeStart: "Delegate to ".length,
+      rangeEnd: text.length,
+    });
+  });
+
+  it("ignores slashes inside existing tokens", () => {
+    expect(detectComposerTrigger("Read https://example.com/docs", 29)).toBeNull();
+  });
+
   it("detects the /agents slash command while typing", () => {
     const text = "/ag";
 
