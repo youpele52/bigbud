@@ -338,6 +338,46 @@ describe("composerDraftStore annotations", () => {
 
     expect(persistedState.draftsByThreadId?.[threadId]?.annotations).toEqual([annotation]);
   });
+
+  it("normalizes malformed browser annotations before storing them", () => {
+    const annotation = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: undefined,
+      intent: "context",
+      page: undefined,
+      element: undefined,
+      viewport: undefined,
+      createdAt: "2026-05-02T00:00:00.000Z",
+    } as unknown as ComposerAnnotationAttachment;
+
+    useComposerDraftStore.getState().addAnnotation(threadId, annotation);
+
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.annotations).toEqual([
+      {
+        id: "annotation-1",
+        imageId: "image-1",
+        comment: "",
+        intent: "context",
+        page: {
+          title: "",
+          url: "",
+        },
+        element: {
+          selector: "",
+          tag: "unknown",
+          role: "",
+          text: "",
+          ariaLabel: null,
+          id: null,
+          className: "",
+          rect: { x: 0, y: 0, width: 0, height: 0 },
+        },
+        viewport: { width: 0, height: 0, devicePixelRatio: 0 },
+        createdAt: "2026-05-02T00:00:00.000Z",
+      },
+    ]);
+  });
 });
 
 describe("composerDraftStore syncPersistedAttachments", () => {
