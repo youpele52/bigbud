@@ -14,6 +14,8 @@ import type {
   ProjectDirectoryWatchInput,
   ProjectReadFilePreviewInput,
   ProjectReadFilePreviewResult,
+  ProjectSearchFileContentsInput,
+  ProjectSearchFileContentsResult,
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "@bigbud/contracts";
@@ -41,6 +43,16 @@ export interface WorkspaceFileSystemShape {
     input: ProjectReadFilePreviewInput,
   ) => Effect.Effect<
     ProjectReadFilePreviewResult,
+    WorkspaceFileSystemError | WorkspacePathOutsideRootError
+  >;
+
+  /**
+   * Search text file contents relative to the workspace root.
+   */
+  readonly searchFileContents: (
+    input: ProjectSearchFileContentsInput,
+  ) => Effect.Effect<
+    ProjectSearchFileContentsResult,
     WorkspaceFileSystemError | WorkspacePathOutsideRootError
   >;
 

@@ -13,6 +13,7 @@ export const WS_METHODS = {
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
+  projectsSearchFileContents: "projects.searchFileContents",
   projectsListDirectory: "projects.listDirectory",
   subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",

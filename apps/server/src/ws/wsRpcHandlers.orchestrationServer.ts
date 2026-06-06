@@ -9,6 +9,7 @@ import {
   ORCHESTRATION_WS_METHODS,
   ProjectListDirectoryError,
   ProjectReadFilePreviewError,
+  ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ServerReadDocumentUrlError,
@@ -228,6 +229,21 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
                 cause,
               }),
           ),
+        ),
+        { "rpc.aggregate": "workspace" },
+      ),
+    [WS_METHODS.projectsSearchFileContents]: (
+      input: Parameters<WsRpcContext["workspaceFileSystem"]["searchFileContents"]>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.projectsSearchFileContents,
+        context.workspaceFileSystem.searchFileContents(input).pipe(
+          Effect.mapError((cause) => {
+            const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+              ? "Workspace file path must stay within the project root."
+              : `Failed to search workspace file contents: ${cause.detail}`;
+            return new ProjectSearchFileContentsError({ message, cause });
+          }),
         ),
         { "rpc.aggregate": "workspace" },
       ),

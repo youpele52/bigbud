@@ -22,6 +22,8 @@ import type {
 import type {
   ProjectDirectoryWatchEvent,
   ProjectDirectoryWatchInput,
+  ProjectSearchFileContentsInput,
+  ProjectSearchFileContentsResult,
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
   ProjectReadFilePreviewInput,
@@ -188,6 +190,9 @@ export interface NativeApi {
       options?: { onResubscribe?: () => void },
     ) => () => void;
     readFilePreview: (input: ProjectReadFilePreviewInput) => Promise<ProjectReadFilePreviewResult>;
+    searchFileContents: (
+      input: ProjectSearchFileContentsInput,
+    ) => Promise<ProjectSearchFileContentsResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
   };

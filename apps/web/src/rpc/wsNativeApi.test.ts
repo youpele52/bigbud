@@ -53,6 +53,7 @@ const rpcClientMock = {
       registerListener(projectDirectoryEventListeners, listener),
     ),
     readFilePreview: vi.fn(),
+    searchFileContents: vi.fn(),
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
   },
@@ -327,6 +328,34 @@ describe("wsNativeApi", () => {
     expect(rpcClientMock.projects.readFilePreview).toHaveBeenCalledWith({
       cwd: "/tmp/project",
       relativePath: "plan.md",
+    });
+  });
+
+  it("forwards workspace file content searches to the project RPC", async () => {
+    rpcClientMock.projects.searchFileContents.mockResolvedValue({
+      matches: [
+        {
+          path: "src/plan.md",
+          line: 3,
+          column: 5,
+          lineText: "needle match",
+        },
+      ],
+      truncated: false,
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+    await api.projects.searchFileContents({
+      cwd: "/tmp/project",
+      query: "needle",
+      limit: 10,
+    });
+
+    expect(rpcClientMock.projects.searchFileContents).toHaveBeenCalledWith({
+      cwd: "/tmp/project",
+      query: "needle",
+      limit: 10,
     });
   });
 

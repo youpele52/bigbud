@@ -57,6 +57,9 @@ import {
   ProjectReadFilePreviewError,
   ProjectReadFilePreviewInput,
   ProjectReadFilePreviewResult,
+  ProjectSearchFileContentsError,
+  ProjectSearchFileContentsInput,
+  ProjectSearchFileContentsResult,
   ProjectSearchEntriesError,
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -157,6 +160,12 @@ export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntr
   payload: ProjectSearchEntriesInput,
   success: ProjectSearchEntriesResult,
   error: ProjectSearchEntriesError,
+});
+
+export const WsProjectsSearchFileContentsRpc = Rpc.make(WS_METHODS.projectsSearchFileContents, {
+  payload: ProjectSearchFileContentsInput,
+  success: ProjectSearchFileContentsResult,
+  error: ProjectSearchFileContentsError,
 });
 
 export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirectory, {
@@ -385,6 +394,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
+  WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
