@@ -2,10 +2,17 @@ import {
   isCodeAnnotationAttachment,
   type ComposerAnnotationAttachment,
 } from "../../../stores/composer";
-import type { ComposerCodeAnnotationAttachment } from "../../../stores/composer/types.annotation.store";
+import {
+  normalizeAnnotationComment,
+  normalizeBrowserAnnotationElement,
+  normalizeBrowserAnnotationPage,
+  normalizeBrowserAnnotationViewport,
+  type ComposerCodeAnnotationAttachment,
+} from "../../../stores/composer/types.annotation.store";
 
 export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAttachment): string {
-  const userInstruction = annotation.comment.trim() || "(no instruction provided)";
+  const userInstruction = normalizeAnnotationComment(annotation.comment).trim();
+  const normalizedInstruction = userInstruction || "(no instruction provided)";
   const lineLabel =
     annotation.selection.startLine === annotation.selection.endLine
       ? `Line: ${annotation.selection.startLine}`
@@ -20,7 +27,7 @@ export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAtta
     "Code annotation",
     "",
     "User instruction:",
-    userInstruction,
+    normalizedInstruction,
     "",
     "File:",
     ...(annotation.file.projectName ? [`Project: ${annotation.file.projectName}`] : []),
@@ -45,9 +52,13 @@ export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttac
   if (isCodeAnnotationAttachment(annotation)) {
     return buildCodeAnnotationPrompt(annotation);
   }
-  const { element, page, viewport, intent } = annotation;
+  const element = normalizeBrowserAnnotationElement(annotation.element);
+  const page = normalizeBrowserAnnotationPage(annotation.page);
+  const viewport = normalizeBrowserAnnotationViewport(annotation.viewport);
+  const { intent } = annotation;
   const rect = element.rect;
-  const userInstruction = annotation.comment.trim() || "(no instruction provided)";
+  const userInstruction = normalizeAnnotationComment(annotation.comment).trim();
+  const normalizedInstruction = userInstruction || "(no instruction provided)";
 
   const closingLine =
     intent === "fix"
@@ -60,7 +71,7 @@ export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttac
     "Browser annotation",
     "",
     "User instruction:",
-    userInstruction,
+    normalizedInstruction,
     "",
     "Page:",
     `Title: ${page.title}`,

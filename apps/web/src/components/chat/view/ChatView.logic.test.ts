@@ -157,6 +157,49 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(prompt).not.toContain("code change");
   });
 
+  it("falls back when a browser annotation comment is missing at runtime", () => {
+    const annotation = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: undefined,
+      intent: "context",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: null,
+        id: "save",
+        className: "primary",
+        rect: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    } as unknown as ComposerAnnotationAttachment;
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).toContain("User instruction:\n(no instruction provided)");
+  });
+
+  it("falls back when browser annotation element metadata is missing at runtime", () => {
+    const annotation = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "Check this",
+      intent: "context",
+      page: undefined,
+      element: undefined,
+      viewport: undefined,
+      createdAt: "2026-05-02T00:00:00.000Z",
+    } as unknown as ComposerAnnotationAttachment;
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).toContain("Selector: ");
+    expect(prompt).toContain("Tag: unknown");
+    expect(prompt).toContain("Viewport: width=0 height=0 devicePixelRatio=0");
+  });
+
   it("omits framing for ask intent", () => {
     const annotation: ComposerAnnotationAttachment = {
       id: "annotation-1",

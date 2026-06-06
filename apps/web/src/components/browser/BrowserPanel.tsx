@@ -4,6 +4,7 @@ import type { ThreadId } from "@bigbud/contracts";
 import { randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { useComposerDraftStore } from "~/stores/composer";
+import { normalizeAnnotationComment } from "~/stores/composer/types.annotation.store";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { closeBrowserPanel } from "../../stores/browser/browserPanel.actions";
@@ -162,7 +163,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       addComposerAnnotation(activeThreadId, {
         id: randomUUID(),
         imageId,
-        comment: annotation.comment,
+        comment: normalizeAnnotationComment(annotation.comment),
         intent: annotation.intent,
         page: annotation.page,
         element: annotation.element,

@@ -1,3 +1,9 @@
+import {
+  normalizeBrowserAnnotationElement,
+  normalizeBrowserAnnotationPage,
+  normalizeBrowserAnnotationViewport,
+} from "../../stores/composer/types.annotation.store";
+
 export type BrowserAnnotationIntent = "ask" | "context" | "fix";
 
 export interface BrowserAnnotationElement {
@@ -60,9 +66,13 @@ export type BrowserAnnotationSelection =
     };
 
 export function buildBrowserAnnotationPrompt(annotation: BrowserAnnotationResult): string {
-  const { element, page, viewport, intent } = annotation;
+  const element = normalizeBrowserAnnotationElement(annotation.element);
+  const page = normalizeBrowserAnnotationPage(annotation.page);
+  const viewport = normalizeBrowserAnnotationViewport(annotation.viewport);
+  const { intent } = annotation;
   const rect = element.rect;
-  const userInstruction = annotation.comment.trim() || "(no instruction provided)";
+  const userInstruction = typeof annotation.comment === "string" ? annotation.comment.trim() : "";
+  const normalizedInstruction = userInstruction || "(no instruction provided)";
 
   const closingLine =
     intent === "fix"
@@ -75,7 +85,7 @@ export function buildBrowserAnnotationPrompt(annotation: BrowserAnnotationResult
     "Browser annotation",
     "",
     "User instruction:",
-    userInstruction,
+    normalizedInstruction,
     "",
     "Page:",
     `Title: ${page.title}`,

@@ -70,6 +70,87 @@ export const ComposerAnnotationAttachment = Schema.Union([
 ]);
 export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.Type;
 
+function normalizeAnnotationText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeNullableAnnotationText(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizeAnnotationNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function normalizeAnnotationComment(comment: unknown): string {
+  return normalizeAnnotationText(comment);
+}
+
+export function normalizeBrowserAnnotationPage(
+  page: unknown,
+): ComposerBrowserAnnotationAttachment["page"] {
+  const candidate = typeof page === "object" && page !== null ? page : {};
+  return {
+    url: normalizeAnnotationText((candidate as { url?: unknown }).url),
+    title: normalizeAnnotationText((candidate as { title?: unknown }).title),
+  };
+}
+
+export function normalizeBrowserAnnotationElement(element: unknown): ComposerAnnotationElement {
+  const candidate = typeof element === "object" && element !== null ? element : {};
+  const rectCandidate =
+    typeof (candidate as { rect?: unknown }).rect === "object" &&
+    (candidate as { rect?: unknown }).rect !== null
+      ? (candidate as { rect: Record<string, unknown> }).rect
+      : {};
+
+  return {
+    selector: normalizeAnnotationText((candidate as { selector?: unknown }).selector),
+    tag: normalizeAnnotationText((candidate as { tag?: unknown }).tag) || "unknown",
+    role: normalizeAnnotationText((candidate as { role?: unknown }).role),
+    text: normalizeAnnotationText((candidate as { text?: unknown }).text),
+    ariaLabel: normalizeNullableAnnotationText((candidate as { ariaLabel?: unknown }).ariaLabel),
+    id: normalizeNullableAnnotationText((candidate as { id?: unknown }).id),
+    className: normalizeAnnotationText((candidate as { className?: unknown }).className),
+    rect: {
+      x: normalizeAnnotationNumber(rectCandidate.x),
+      y: normalizeAnnotationNumber(rectCandidate.y),
+      width: normalizeAnnotationNumber(rectCandidate.width),
+      height: normalizeAnnotationNumber(rectCandidate.height),
+    },
+  };
+}
+
+export function normalizeBrowserAnnotationViewport(viewport: unknown): ComposerAnnotationViewport {
+  const candidate = typeof viewport === "object" && viewport !== null ? viewport : {};
+  return {
+    width: normalizeAnnotationNumber((candidate as { width?: unknown }).width),
+    height: normalizeAnnotationNumber((candidate as { height?: unknown }).height),
+    devicePixelRatio: normalizeAnnotationNumber(
+      (candidate as { devicePixelRatio?: unknown }).devicePixelRatio,
+    ),
+  };
+}
+
+export function normalizeAnnotationAttachment(
+  annotation: ComposerAnnotationAttachment,
+): ComposerAnnotationAttachment {
+  if (isCodeAnnotationAttachment(annotation)) {
+    return {
+      ...annotation,
+      comment: normalizeAnnotationComment(annotation.comment),
+    };
+  }
+
+  return {
+    ...annotation,
+    comment: normalizeAnnotationComment(annotation.comment),
+    page: normalizeBrowserAnnotationPage(annotation.page),
+    element: normalizeBrowserAnnotationElement(annotation.element),
+    viewport: normalizeBrowserAnnotationViewport(annotation.viewport),
+  };
+}
+
 export function isCodeAnnotationAttachment(
   annotation: ComposerAnnotationAttachment,
 ): annotation is ComposerCodeAnnotationAttachment {
