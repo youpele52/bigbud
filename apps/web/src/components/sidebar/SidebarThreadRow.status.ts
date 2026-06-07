@@ -28,6 +28,12 @@ export function terminalStatusFromRunningIds(
   };
 }
 
+export function mergeRunningTerminalIds(
+  ...runningTerminalIdLists: ReadonlyArray<ReadonlyArray<string>>
+): string[] {
+  return [...new Set(runningTerminalIdLists.flat())].filter((terminalId) => terminalId.length > 0);
+}
+
 export function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
   if (!pr) return null;
 
