@@ -8,7 +8,12 @@ import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
 describe("terminalPanel.coordinator", () => {
   afterEach(() => {
     useTerminalPanelStore.setState({ open: false });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
+    useRightPanelTabsStore.setState({
+      activeKind: null,
+      activeTabId: null,
+      openTabs: [],
+      rightPanelOpen: false,
+    });
     requestRightPanel(null);
   });
 
@@ -16,6 +21,7 @@ describe("terminalPanel.coordinator", () => {
     useTerminalPanelStore.setState({ open: true });
     useRightPanelTabsStore.setState({
       activeKind: "browser",
+      activeTabId: "browser",
       openTabs: ["terminal", "browser"],
       rightPanelOpen: true,
     });
@@ -35,6 +41,7 @@ describe("terminalPanel.coordinator", () => {
     requestRightPanel("terminal");
     useRightPanelTabsStore.setState({
       activeKind: "terminal",
+      activeTabId: "terminal",
       openTabs: ["terminal"],
       rightPanelOpen: true,
     });
@@ -50,6 +57,7 @@ describe("terminalPanel.coordinator", () => {
     requestRightPanel("terminal");
     useRightPanelTabsStore.setState({
       activeKind: "terminal",
+      activeTabId: "terminal",
       openTabs: ["browser", "terminal", "files"],
       rightPanelOpen: true,
     });
@@ -58,6 +66,7 @@ describe("terminalPanel.coordinator", () => {
 
     expect(useRightPanelTabsStore.getState()).toMatchObject({
       activeKind: "browser",
+      activeTabId: "browser",
       openTabs: ["browser", "files"],
       rightPanelOpen: true,
     });

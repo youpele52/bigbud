@@ -27,9 +27,10 @@ describe("ChatHeader", () => {
     vi.restoreAllMocks();
     mockIsThreadRunning = false;
     mockIsThreadCompacting = false;
-    useBrowserPanelStore.setState({ open: false, url: "" });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
     useRightPanelTabsStore.setState({
       activeKind: null,
+      activeTabId: null,
       openTabs: [],
       rightPanelOpen: false,
       lastActiveKind: null,

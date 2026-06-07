@@ -476,26 +476,32 @@ describe("wsNativeApi", () => {
   it("routes openExternal through the embedded browser panel store", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
     const { useBrowserPanelStore } = await import("~/stores/browser/browser.store");
-    useBrowserPanelStore.setState({ open: false, url: "" });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
 
     const api = createWsNativeApi();
     await api.shell.openExternal(" https://example.com/path ");
 
+    const browserTabId = Object.keys(useBrowserPanelStore.getState().tabsById)[0] ?? "";
+
     expect(useBrowserPanelStore.getState()).toMatchObject({
       open: true,
-      url: "https://example.com/path",
+      tabsById: {
+        [browserTabId]: {
+          url: "https://example.com/path",
+        },
+      },
     });
   });
 
   it("rejects openExternal when the URL is blank", async () => {
     const { createWsNativeApi } = await import("./wsNativeApi");
     const { useBrowserPanelStore } = await import("~/stores/browser/browser.store");
-    useBrowserPanelStore.setState({ open: false, url: "" });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
 
     const api = createWsNativeApi();
 
     await expect(api.shell.openExternal("   ")).rejects.toThrow("Unable to open link.");
-    expect(useBrowserPanelStore.getState()).toMatchObject({ open: false, url: "" });
+    expect(useBrowserPanelStore.getState()).toMatchObject({ open: false, tabsById: {} });
   });
 
   it("falls back to the browser context menu helper when the desktop bridge is missing", async () => {

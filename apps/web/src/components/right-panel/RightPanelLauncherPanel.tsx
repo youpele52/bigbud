@@ -3,7 +3,7 @@ import { RightPanelTabs } from "./RightPanelTabs";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { useRightPanelWidth } from "./useRightPanelWidth";
-import { closeBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useDefaultChatCwd } from "~/rpc/serverState";
@@ -61,10 +61,10 @@ export function RightPanelLauncherPanel({
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={true}
-        onCloseBrowser={closeBrowserPanel}
+        onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
         onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={onToggleBrowser}
+        onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
         onOpenTerminal={openTerminalPanel}

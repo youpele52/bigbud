@@ -2,7 +2,7 @@ import * as Schema from "effect/Schema";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 
 const BROWSER_HISTORY_STORAGE_KEY = "bigbud:browser-history:v1";
-const MAX_BROWSER_HISTORY_ITEMS = 10;
+const MAX_BROWSER_HISTORY_ITEMS = 20;
 const MAX_BROWSER_HISTORY_SUGGESTIONS = 5;
 
 const BrowserHistoryList = Schema.Array(Schema.String);
