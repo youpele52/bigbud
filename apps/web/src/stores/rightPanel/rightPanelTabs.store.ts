@@ -25,6 +25,7 @@ interface RightPanelTabsState {
   openBrowserTab: () => OpenBrowserTabResult;
   setActiveTab: (tabId: RightPanelTabId) => void;
   toggleRightPanel: () => void;
+  showLauncher: () => void;
   openRightPanel: () => void;
   closeRightPanel: () => void;
 }
@@ -203,6 +204,13 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
       // When opening, restore last active tab or stay on launcher (activeKind === null)
       return { rightPanelOpen: true };
     }),
+  showLauncher: () =>
+    set((state) => ({
+      activeKind: null,
+      activeTabId: null,
+      lastActiveKind: state.lastActiveKind,
+      rightPanelOpen: true,
+    })),
   openRightPanel: () => set({ rightPanelOpen: true }),
   closeRightPanel: () => set({ rightPanelOpen: false }),
 }));

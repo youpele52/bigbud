@@ -9,11 +9,7 @@ import { FilesPanelContent } from "../files/FilesPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { useDefaultChatCwd } from "~/rpc/serverState";
-import {
-  closeBrowserTab,
-  openBrowserPanel,
-  openNewBrowserTab,
-} from "~/stores/browser/browserPanel.actions";
+import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { useProjectById, useThreadById } from "~/stores/main";
 import { closeDiffPanelIfOpen } from "~/stores/rightPanel/rightPanel.coordinator";
@@ -39,6 +35,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const keybindings = useServerKeybindings();
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
+  const activeKind = useRightPanelTabsStore((state) => state.activeKind);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
@@ -79,23 +76,25 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         terminalShortcutLabel={terminalShortcutLabel}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {openTabs.length === 0 ? (
-          <RightPanelLauncher
-            browserShortcutLabel={browserShortcutLabel}
-            diffShortcutLabel={diffShortcutLabel}
-            filesShortcutLabel={filesShortcutLabel}
-            hasActiveProject={Boolean(workspaceRoot)}
-            isGitRepo={Boolean(activeThreadId)}
-            onToggleBrowser={openBrowserPanel}
-            onToggleDiff={openDiff}
-            onToggleFiles={openFilesPanel}
-            onToggleTerminal={openTerminalPanel}
-            terminalAvailable={Boolean(workspaceRoot)}
-            terminalShortcutLabel={terminalShortcutLabel}
-          />
-        ) : null}
-        {openTabs.length > 0 ? (
+        {rightPanelOpen && (activeKind === null || openTabs.length > 0) ? (
           <div className="relative min-h-0 flex-1 overflow-hidden">
+            {activeKind === null ? (
+              <div className="absolute inset-0 flex min-h-0 flex-col overflow-auto">
+                <RightPanelLauncher
+                  browserShortcutLabel={browserShortcutLabel}
+                  diffShortcutLabel={diffShortcutLabel}
+                  filesShortcutLabel={filesShortcutLabel}
+                  hasActiveProject={Boolean(workspaceRoot)}
+                  isGitRepo={Boolean(activeThreadId)}
+                  onToggleBrowser={openNewBrowserTab}
+                  onToggleDiff={openDiff}
+                  onToggleFiles={openFilesPanel}
+                  onToggleTerminal={openTerminalPanel}
+                  terminalAvailable={Boolean(workspaceRoot)}
+                  terminalShortcutLabel={terminalShortcutLabel}
+                />
+              </div>
+            ) : null}
             {openTabs.map((tabId) => {
               const kind = getRightPanelTabKind(tabId);
               const isActive = activeTabId === tabId && rightPanelOpen;

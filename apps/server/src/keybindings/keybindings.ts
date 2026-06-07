@@ -66,6 +66,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+b", command: "browser.toggle", when: "!terminalFocus" },
   { key: "mod+shift+e", command: "files.toggle", when: "!terminalFocus" },
   { key: "alt+mod+b", command: "rightPanel.toggle", when: "!terminalFocus" },
+  { key: "mod+t", command: "rightPanel.newTab", when: "!terminalFocus" },
   { key: "mod+p", command: "commandPalette.toggle", when: "!terminalFocus" },
   { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
   { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" },

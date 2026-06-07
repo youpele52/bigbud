@@ -130,6 +130,13 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         return;
       }
 
+      if (command === "rightPanel.newTab") {
+        event.preventDefault();
+        event.stopPropagation();
+        useRightPanelTabsStore.getState().showLauncher();
+        return;
+      }
+
       if (command === "settings.toggle") {
         event.preventDefault();
         event.stopPropagation();
