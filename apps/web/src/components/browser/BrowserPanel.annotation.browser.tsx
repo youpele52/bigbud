@@ -96,12 +96,17 @@ async function waitForAnnotateButton(): Promise<HTMLButtonElement> {
 describe("BrowserPanel annotation UX", () => {
   beforeEach(() => {
     annotationHarness.reset();
-    useBrowserPanelStore.setState({ open: true, url: "https://example.com" });
+    useBrowserPanelStore.setState({
+      open: true,
+      tabsById: {
+        browser: { title: "", url: "https://example.com" },
+      },
+    });
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
-    useBrowserPanelStore.setState({ open: false, url: "" });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
   });
 
   it("toggles annotation mode on click and cancels it on second click", async () => {

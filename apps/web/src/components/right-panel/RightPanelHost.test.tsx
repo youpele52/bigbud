@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
     activeKind: "browser" | "diff" | "files" | "terminal" | null;
-    openTabs: ReadonlyArray<"browser" | "diff" | "files" | "terminal">;
+    activeTabId: string | null;
+    openTabs: ReadonlyArray<string>;
     rightPanelOpen: boolean;
     lastActiveKind: "browser" | "diff" | "files" | "terminal" | null;
   };
 
   let state: RightPanelTabsState = {
     activeKind: null,
+    activeTabId: null,
     openTabs: [],
     rightPanelOpen: false,
     lastActiveKind: null,
@@ -48,6 +50,7 @@ vi.mock("~/stores/ui", () => ({
 }));
 
 vi.mock("~/stores/rightPanel/rightPanelTabs.store", () => ({
+  getRightPanelTabKind: (tabId: string) => (tabId.startsWith("browser:") ? "browser" : tabId),
   useRightPanelTabsStore: rightPanelTabsStoreMock.useRightPanelTabsStore,
 }));
 
@@ -99,7 +102,8 @@ describe("RightPanelHost", () => {
   beforeEach(() => {
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "browser",
-      openTabs: ["browser", "files", "terminal"],
+      activeTabId: "browser:1",
+      openTabs: ["browser:1", "browser:2", "files", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "browser",
     });
@@ -108,6 +112,7 @@ describe("RightPanelHost", () => {
   afterEach(() => {
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
+      activeTabId: null,
       openTabs: [],
       rightPanelOpen: false,
       lastActiveKind: null,
@@ -124,6 +129,9 @@ describe("RightPanelHost", () => {
       'aria-hidden="false"><div data-testid="browser-panel">browser</div>',
     );
     expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
+    );
+    expect(browserMarkup).toContain(
       'aria-hidden="true"><div data-testid="files-panel">files</div>',
     );
     expect(browserMarkup).toContain(
@@ -132,7 +140,8 @@ describe("RightPanelHost", () => {
 
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
-      openTabs: ["browser", "files", "terminal"],
+      activeTabId: "files",
+      openTabs: ["browser:1", "browser:2", "files", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "files",
     });
