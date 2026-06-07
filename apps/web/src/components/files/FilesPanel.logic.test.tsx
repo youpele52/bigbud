@@ -2,6 +2,7 @@ import type { ProjectEntry } from "@bigbud/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { reconcilePreviewPathAfterDirectoryRefresh } from "./FilesPanel.logic";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
 import type { DirectoryState } from "./FilesPanel.shared";
 
@@ -55,5 +56,72 @@ describe("FilesPanel root loading behavior", () => {
     });
 
     expect(markup).toContain("Loading files...");
+  });
+});
+
+describe("reconcilePreviewPathAfterDirectoryRefresh", () => {
+  it("updates the preview path when a sibling file rename is unambiguous", () => {
+    expect(
+      reconcilePreviewPathAfterDirectoryRefresh({
+        previewPath: "docs/CHANGELOG.md",
+        refreshedRelativePath: "docs",
+        previousEntries: [
+          { path: "docs/CHANGELOG.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+        nextEntries: [
+          { path: "docs/changelog.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+      }),
+    ).toBe("docs/changelog.md");
+  });
+
+  it("keeps the preview path when the current file still exists", () => {
+    expect(
+      reconcilePreviewPathAfterDirectoryRefresh({
+        previewPath: "docs/CHANGELOG.md",
+        refreshedRelativePath: "docs",
+        previousEntries: [
+          { path: "docs/CHANGELOG.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+        nextEntries: [
+          { path: "docs/CHANGELOG.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+          { path: "docs/changelog.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+      }),
+    ).toBe("docs/CHANGELOG.md");
+  });
+
+  it("closes the preview when the file disappears after an ambiguous refresh", () => {
+    expect(
+      reconcilePreviewPathAfterDirectoryRefresh({
+        previewPath: "docs/CHANGELOG.md",
+        refreshedRelativePath: "docs",
+        previousEntries: [
+          { path: "docs/CHANGELOG.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+          { path: "docs/release.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+        nextEntries: [
+          { path: "docs/changelog.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+          {
+            path: "docs/release-notes.md",
+            kind: "file",
+            parentPath: "docs",
+          } satisfies ProjectEntry,
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it("closes the preview when the file is deleted", () => {
+    expect(
+      reconcilePreviewPathAfterDirectoryRefresh({
+        previewPath: "docs/CHANGELOG.md",
+        refreshedRelativePath: "docs",
+        previousEntries: [
+          { path: "docs/CHANGELOG.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
+        ],
+        nextEntries: [],
+      }),
+    ).toBeNull();
   });
 });
