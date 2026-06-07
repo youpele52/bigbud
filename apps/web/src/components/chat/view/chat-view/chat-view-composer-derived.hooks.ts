@@ -65,6 +65,13 @@ function resolveSlashDiscoverySearch(
   return null;
 }
 
+function resolveModelDiscoverySearch(query: string | undefined): {
+  command: "model";
+  query: string;
+} {
+  return { command: "model", query: query ?? "" };
+}
+
 export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const serverConfig = useServerConfig();
   const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
@@ -144,7 +151,9 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   const slashDiscoverySearch =
     base.composerTrigger?.kind === "slash-command"
       ? resolveSlashDiscoverySearch(base.composerTrigger.query)
-      : null;
+      : base.composerTrigger?.kind === "slash-model"
+        ? resolveModelDiscoverySearch(base.composerTrigger.query)
+        : null;
   const activeComposerMenuItem = useMemo(
     () =>
       composerMenuItems.find((item) => item.id === base.composerHighlightedItemId) ??

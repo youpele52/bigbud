@@ -66,7 +66,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   isLoading: boolean;
   triggerKind: ComposerTriggerKind | null;
   discoverySearch: {
-    command: "agents" | "skills";
+    command: "agents" | "skills" | "model";
     query: string;
     onQueryChange: (query: string) => void;
   } | null;
@@ -123,7 +123,11 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                 event.stopPropagation();
               }}
               placeholder={
-                props.discoverySearch.command === "agents" ? "Search agents" : "Search skills"
+                props.discoverySearch.command === "agents"
+                  ? "Search agents"
+                  : props.discoverySearch.command === "skills"
+                    ? "Search skills"
+                    : "Search models"
               }
               className="min-w-0 flex-1 bg-transparent py-0.5 text-[11px] tracking-tight text-foreground placeholder:text-[11px] placeholder:tracking-tight placeholder:text-muted-foreground/50 focus:outline-none"
             />
@@ -133,7 +137,11 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
           {props.discoverySearch && props.items.length > 0 ? (
             <CommandGroup>
               <CommandGroupLabel>
-                {props.discoverySearch.command === "agents" ? "Agents" : "Skills"}
+                {props.discoverySearch.command === "agents"
+                  ? "Agents"
+                  : props.discoverySearch.command === "skills"
+                    ? "Skills"
+                    : "Models"}
               </CommandGroupLabel>
               {props.items.map((item) => (
                 <ComposerCommandMenuItem
@@ -171,7 +179,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                     ? "No matching agents."
                     : props.discoverySearch?.command === "skills"
                       ? "No matching skills."
-                      : "No matching command."}
+                      : props.discoverySearch?.command === "model"
+                        ? "No matching models."
+                        : "No matching command."}
           </p>
         )}
       </div>

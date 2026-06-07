@@ -4,6 +4,31 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.642 (7 June, 2026)
+
+### Workspace Search Across Both Palettes
+
+- Added workspace file name and path search to the command palette, so you can quickly jump to files from the active workspace without leaving the keyboard flow.
+- Added workspace file content search to the search palette, including line and column metadata, so `mod+f` can now locate matching text inside project files instead of only searching chat content.
+- Updated both palettes to reuse the existing file-open flow: previewable files open inside bigbud's Files panel, while unsupported files fall back to the system default app.
+- Added see-more pagination for file results and kept the search scope limited to the active workspace to keep results relevant and responsive.
+
+### Composer Slash Commands and Discovery Search
+
+- Slash commands no longer need to be typed at the very start of a prompt. Commands like `/model`, `/agents`, `/skills`, and provider-specific slash actions now work from anywhere within the active line while still ignoring slashes inside URLs and paths.
+- Added a model-search-style search bar to the `/agents`, `/skills`, and `/model` discovery menus, making large agent, skill, and model lists easier to browse.
+- Fixed the new discovery search bar so clicking anywhere inside the visible search row focuses the input, not just direct clicks on the text field.
+- Grouped discovery results under clear `Agents`, `Skills`, and `Models` headings with matching empty states for cleaner browsing.
+
+### Browser Annotation Safety and Fallbacks
+
+- Hardened browser annotation handling so malformed runtime payloads no longer crash the app when comments, page metadata, element metadata, or viewport fields are missing or incomplete.
+- Updated composer annotation previews and prompt-building logic to use safe fallbacks when browser annotations do not include selectors or other expected fields.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, and malformed browser annotation regression cases.
+
 ## v0.1.641 (4 June, 2026)
 
 ### Files Panel Live Directory Watching for Local Workspaces
