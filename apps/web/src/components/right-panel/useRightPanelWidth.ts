@@ -22,7 +22,7 @@ export function useRightPanelWidth() {
   const transitionTargetsRef = useRef<HTMLElement[]>([]);
 
   const onResizePointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
       if (event.button !== 0) return;
       event.preventDefault();
 
