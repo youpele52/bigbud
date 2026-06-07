@@ -15,7 +15,6 @@ import type { ThreadId } from "@bigbud/contracts";
 
 interface RightPanelLauncherPanelProps {
   activeThreadId?: ThreadId | null;
-  onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
   onToggleTerminal: () => void;
@@ -23,7 +22,6 @@ interface RightPanelLauncherPanelProps {
 
 export function RightPanelLauncherPanel({
   activeThreadId,
-  onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
   onToggleTerminal,
@@ -77,7 +75,7 @@ export function RightPanelLauncherPanel({
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={true}
-        onToggleBrowser={onToggleBrowser}
+        onToggleBrowser={openNewBrowserTab}
         onToggleDiff={onToggleDiff}
         onToggleFiles={onToggleFiles}
         onToggleTerminal={onToggleTerminal}
