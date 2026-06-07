@@ -152,4 +152,24 @@ describe("useComposerCommandHandlers", () => {
       },
     );
   });
+
+  it("updates the model discovery prompt without refocusing the composer", () => {
+    const input = makeInput({
+      promptRef: { current: "Use /model gpt" },
+      composerCursor: "Use /model gpt".length,
+    });
+    const handlers = renderUseComposerCommandHandlers(input);
+
+    handlers.onChangeComposerDiscoverySearch("model", "claude");
+
+    expect(input.applyPromptReplacement).toHaveBeenCalledWith(
+      4,
+      "Use /model gpt".length,
+      "/model claude",
+      {
+        expectedText: "/model gpt",
+        focusComposer: false,
+      },
+    );
+  });
 });
