@@ -37,6 +37,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "browser.toggle",
   "files.toggle",
   "rightPanel.toggle",
+  "rightPanel.newTab",
   "commandPalette.toggle",
   "sidebar.toggle",
   "settings.toggle",

@@ -108,4 +108,24 @@ describe("rightPanelTabs.store", () => {
     expect(state.activeTabId).toBe(first.tabId);
     expect(countRightPanelTabsByKind(state.openTabs, "browser")).toBe(1);
   });
+
+  it("shows the launcher without closing existing tabs", () => {
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+      lastActiveKind: "files",
+      openTabs: ["browser:1", "files", "terminal"],
+      rightPanelOpen: false,
+    });
+
+    useRightPanelTabsStore.getState().showLauncher();
+
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: null,
+      activeTabId: null,
+      lastActiveKind: "files",
+      openTabs: ["browser:1", "files", "terminal"],
+      rightPanelOpen: true,
+    });
+  });
 });

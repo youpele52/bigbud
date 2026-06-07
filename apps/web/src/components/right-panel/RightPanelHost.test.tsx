@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const openNewBrowserTabMock = vi.hoisted(() => vi.fn());
+const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<string, unknown> }));
+
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
     activeKind: "browser" | "diff" | "files" | "terminal" | null;
@@ -44,6 +47,11 @@ vi.mock("~/stores/main", () => ({
   useProjectById: () => ({ cwd: "/workspace" }),
 }));
 
+vi.mock("~/stores/browser/browserPanel.actions", () => ({
+  closeBrowserTab: vi.fn(),
+  openNewBrowserTab: openNewBrowserTabMock,
+}));
+
 vi.mock("~/stores/ui", () => ({
   useUiStateStore: (selector: (state: { selectedProjectId: string | null }) => unknown) =>
     selector({ selectedProjectId: "project-1" }),
@@ -69,7 +77,10 @@ vi.mock("./RightPanelTabs", () => ({
 }));
 
 vi.mock("./RightPanelLauncher", () => ({
-  RightPanelLauncher: () => <div data-testid="right-panel-launcher" />,
+  RightPanelLauncher: (props: Record<string, unknown>) => {
+    launcherPropsMock.props = props;
+    return <div data-testid="right-panel-launcher" />;
+  },
 }));
 
 vi.mock("../browser/BrowserPanel", () => ({
@@ -110,6 +121,8 @@ describe("RightPanelHost", () => {
   });
 
   afterEach(() => {
+    launcherPropsMock.props = null;
+    openNewBrowserTabMock.mockReset();
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
       activeTabId: null,
@@ -158,5 +171,40 @@ describe("RightPanelHost", () => {
     expect(filesMarkup).toContain(
       'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
     );
+  });
+
+  it("shows the launcher while preserving existing tab bodies when no tab is active", () => {
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: null,
+      activeTabId: null,
+      openTabs: ["browser:1", "browser:2", "files", "terminal"],
+      rightPanelOpen: true,
+      lastActiveKind: "browser",
+    });
+
+    const markup = renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+
+    expect(markup).toContain('data-testid="right-panel-launcher"');
+    expect(markup).toContain('data-testid="browser-panel"');
+    expect(markup).toContain('data-testid="files-panel"');
+    expect(markup).toContain('data-testid="terminal-panel"');
+    expect(markup).toContain('aria-hidden="true"><div data-testid="browser-panel">browser</div>');
+    expect(markup).toContain('aria-hidden="true"><div data-testid="files-panel">files</div>');
+    expect(markup).toContain('aria-hidden="true"><div data-testid="terminal-panel">terminal</div>');
+  });
+
+  it("wires the launcher browser action to open a new browser tab", () => {
+    rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
+      activeKind: null,
+      activeTabId: null,
+      openTabs: ["browser:1", "files"],
+      rightPanelOpen: true,
+      lastActiveKind: "browser",
+    });
+
+    renderToStaticMarkup(<RightPanelHost activeThreadId={null} />);
+
+    expect(launcherPropsMock.props).not.toBeNull();
+    expect(launcherPropsMock.props?.onToggleBrowser).toBe(openNewBrowserTabMock);
   });
 });
