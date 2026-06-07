@@ -1,73 +1,199 @@
 import { create } from "zustand";
 
+import { randomUUID } from "~/lib/utils";
+
 export type RightPanelTabKind = "browser" | "diff" | "files" | "terminal";
+export type RightPanelTabId = RightPanelTabKind | `browser:${string}`;
+
+export const MAX_RIGHT_PANEL_BROWSER_TABS = 5;
+
+interface OpenBrowserTabResult {
+  status: "activated" | "created" | "limit_reached";
+  tabId: RightPanelTabId | null;
+}
 
 interface RightPanelTabsState {
   activeKind: RightPanelTabKind | null;
-  openTabs: ReadonlyArray<RightPanelTabKind>;
+  activeTabId: RightPanelTabId | null;
+  openTabs: ReadonlyArray<RightPanelTabId>;
   rightPanelOpen: boolean;
   lastActiveKind: RightPanelTabKind | null;
   closeTab: (kind: RightPanelTabKind) => void;
-  ensureTabOpen: (kind: RightPanelTabKind) => void;
-  openTab: (kind: RightPanelTabKind) => void;
-  setActiveTab: (kind: RightPanelTabKind) => void;
+  closeTabById: (tabId: RightPanelTabId) => void;
+  ensureTabOpen: (kind: Exclude<RightPanelTabKind, "browser">) => void;
+  openTab: (kind: Exclude<RightPanelTabKind, "browser">) => void;
+  openBrowserTab: () => OpenBrowserTabResult;
+  setActiveTab: (tabId: RightPanelTabId) => void;
   toggleRightPanel: () => void;
   openRightPanel: () => void;
   closeRightPanel: () => void;
 }
 
-function appendTabIfMissing(
-  openTabs: ReadonlyArray<RightPanelTabKind>,
+const BROWSER_TAB_PREFIX = "browser:";
+
+export function getRightPanelTabKind(tabId: RightPanelTabId): RightPanelTabKind {
+  return tabId.startsWith(BROWSER_TAB_PREFIX) ? "browser" : (tabId as RightPanelTabKind);
+}
+
+export function isRightPanelTabOfKind(tabId: RightPanelTabId, kind: RightPanelTabKind): boolean {
+  return getRightPanelTabKind(tabId) === kind;
+}
+
+export function countRightPanelTabsByKind(
+  openTabs: ReadonlyArray<RightPanelTabId>,
   kind: RightPanelTabKind,
-): ReadonlyArray<RightPanelTabKind> {
-  return openTabs.includes(kind) ? openTabs : [...openTabs, kind];
+): number {
+  return openTabs.filter((tabId) => isRightPanelTabOfKind(tabId, kind)).length;
+}
+
+export function selectLastRightPanelTabIdByKind(
+  openTabs: ReadonlyArray<RightPanelTabId>,
+  kind: RightPanelTabKind,
+): RightPanelTabId | null {
+  for (let index = openTabs.length - 1; index >= 0; index -= 1) {
+    const tabId = openTabs[index];
+    if (tabId && isRightPanelTabOfKind(tabId, kind)) {
+      return tabId;
+    }
+  }
+
+  return null;
+}
+
+function appendTabIfMissing(
+  openTabs: ReadonlyArray<RightPanelTabId>,
+  tabId: RightPanelTabId,
+): ReadonlyArray<RightPanelTabId> {
+  return openTabs.includes(tabId) ? openTabs : [...openTabs, tabId];
+}
+
+function resolveNextActiveTabId(
+  previousTabs: ReadonlyArray<RightPanelTabId>,
+  nextTabs: ReadonlyArray<RightPanelTabId>,
+  activeTabId: RightPanelTabId | null,
+): RightPanelTabId | null {
+  if (activeTabId === null) {
+    return null;
+  }
+
+  if (nextTabs.includes(activeTabId)) {
+    return activeTabId;
+  }
+
+  const closedTabIndex = previousTabs.indexOf(activeTabId);
+  if (closedTabIndex === -1) {
+    return nextTabs[0] ?? null;
+  }
+
+  return (
+    nextTabs[Math.max(0, closedTabIndex - 1)] ??
+    nextTabs[Math.min(closedTabIndex, nextTabs.length - 1)] ??
+    null
+  );
+}
+
+function buildActiveState(activeTabId: RightPanelTabId | null) {
+  return {
+    activeTabId,
+    activeKind: activeTabId ? getRightPanelTabKind(activeTabId) : null,
+  };
 }
 
 export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
   activeKind: null,
+  activeTabId: null,
   openTabs: [],
   rightPanelOpen: false,
   lastActiveKind: null,
   closeTab: (kind) =>
     set((state) => {
-      if (!state.openTabs.includes(kind)) {
+      const nextTabs = state.openTabs.filter((tabId) => !isRightPanelTabOfKind(tabId, kind));
+      if (nextTabs.length === state.openTabs.length) {
         return state;
       }
 
-      const closedTabIndex = state.openTabs.indexOf(kind);
-      const nextTabs = state.openTabs.filter((tab) => tab !== kind);
-      const nextActive =
-        state.activeKind === kind
-          ? (nextTabs[Math.max(0, closedTabIndex - 1)] ??
-            nextTabs[Math.min(closedTabIndex, nextTabs.length - 1)] ??
-            null)
-          : state.activeKind;
+      const nextActiveTabId = resolveNextActiveTabId(state.openTabs, nextTabs, state.activeTabId);
       const shouldClose = nextTabs.length === 0;
 
       return {
         openTabs: nextTabs,
-        activeKind: nextActive,
-        lastActiveKind: nextActive ?? state.lastActiveKind,
+        ...buildActiveState(nextActiveTabId),
+        lastActiveKind: nextActiveTabId
+          ? getRightPanelTabKind(nextActiveTabId)
+          : state.lastActiveKind,
+        rightPanelOpen: shouldClose ? false : state.rightPanelOpen,
+      };
+    }),
+  closeTabById: (tabId) =>
+    set((state) => {
+      if (!state.openTabs.includes(tabId)) {
+        return state;
+      }
+
+      const nextTabs = state.openTabs.filter((openTabId) => openTabId !== tabId);
+      const nextActiveTabId = resolveNextActiveTabId(state.openTabs, nextTabs, state.activeTabId);
+      const shouldClose = nextTabs.length === 0;
+
+      return {
+        openTabs: nextTabs,
+        ...buildActiveState(nextActiveTabId),
+        lastActiveKind: nextActiveTabId
+          ? getRightPanelTabKind(nextActiveTabId)
+          : state.lastActiveKind,
         rightPanelOpen: shouldClose ? false : state.rightPanelOpen,
       };
     }),
   ensureTabOpen: (kind) =>
-    set((state) => ({
-      activeKind: state.activeKind ?? kind,
-      lastActiveKind: state.lastActiveKind ?? kind,
-      openTabs: appendTabIfMissing(state.openTabs, kind),
-      rightPanelOpen: true,
-    })),
+    set((state) => {
+      const nextTabs = appendTabIfMissing(state.openTabs, kind);
+      const activeTabId = state.activeTabId ?? kind;
+
+      return {
+        openTabs: nextTabs,
+        ...buildActiveState(activeTabId),
+        lastActiveKind: state.lastActiveKind ?? getRightPanelTabKind(activeTabId),
+        rightPanelOpen: true,
+      };
+    }),
   openTab: (kind) =>
     set((state) => ({
-      activeKind: kind,
-      lastActiveKind: kind,
       openTabs: appendTabIfMissing(state.openTabs, kind),
+      ...buildActiveState(kind),
+      lastActiveKind: kind,
       rightPanelOpen: true,
     })),
-  setActiveTab: (kind) =>
+  openBrowserTab: () => {
+    let result: OpenBrowserTabResult = { status: "limit_reached", tabId: null };
+
+    set((state) => {
+      if (countRightPanelTabsByKind(state.openTabs, "browser") >= MAX_RIGHT_PANEL_BROWSER_TABS) {
+        const existingTabId = selectLastRightPanelTabIdByKind(state.openTabs, "browser");
+        result = { status: "limit_reached", tabId: existingTabId };
+        return state;
+      }
+
+      const tabId = `${BROWSER_TAB_PREFIX}${randomUUID()}` as RightPanelTabId;
+      result = { status: "created", tabId };
+
+      return {
+        openTabs: [...state.openTabs, tabId],
+        ...buildActiveState(tabId),
+        lastActiveKind: "browser",
+        rightPanelOpen: true,
+      };
+    });
+
+    return result;
+  },
+  setActiveTab: (tabId) =>
     set((state) =>
-      state.openTabs.includes(kind) ? { activeKind: kind, lastActiveKind: kind } : state,
+      state.openTabs.includes(tabId)
+        ? {
+            ...buildActiveState(tabId),
+            lastActiveKind: getRightPanelTabKind(tabId),
+            rightPanelOpen: true,
+          }
+        : state,
     ),
   toggleRightPanel: () =>
     set((state) => {

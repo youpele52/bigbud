@@ -25,6 +25,12 @@ Entries below are grouped by release tag and date.
 - Hardened browser annotation handling so malformed runtime payloads no longer crash the app when comments, page metadata, element metadata, or viewport fields are missing or incomplete.
 - Updated composer annotation previews and prompt-building logic to use safe fallbacks when browser annotations do not include selectors or other expected fields.
 
+### Browser Tabs and Navigation History
+
+- Added support for up to five browser tabs in the right panel, so you can keep several pages open and switch between them without losing your place.
+- Updated browser tabs to show the current page title when available, with a hostname fallback and hover label for long names, making it easier to recognize each page at a glance.
+- Increased saved browser address history from 10 to 20 entries, giving the address bar more useful recent-page suggestions.
+
 ### Validation
 
 - Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, and malformed browser annotation regression cases.

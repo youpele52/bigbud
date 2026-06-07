@@ -6,12 +6,12 @@ import {
 } from "./BrowserPanel.history";
 
 describe("BrowserPanel history", () => {
-  it("records unique URLs most-recent-first and caps history at 10", () => {
-    const initial = Array.from({ length: 10 }, (_, index) => `https://site-${index}.com`);
+  it("records unique URLs most-recent-first and caps history at 20", () => {
+    const initial = Array.from({ length: 20 }, (_, index) => `https://site-${index}.com`);
 
     const updated = resolveNextBrowserHistory(initial, "https://site-4.com");
 
-    expect(updated).toHaveLength(10);
+    expect(updated).toHaveLength(20);
     expect(updated[0]).toBe("https://site-4.com");
     expect(updated.filter((url) => url === "https://site-4.com")).toHaveLength(1);
   });
@@ -27,7 +27,7 @@ describe("BrowserPanel history", () => {
   });
 
   it("returns stored URLs when the focused address bar is empty", () => {
-    const history = Array.from({ length: 10 }, (_, index) => `https://site-${index}.com`);
+    const history = Array.from({ length: 20 }, (_, index) => `https://site-${index}.com`);
 
     expect(filterBrowserHistory(history, "")).toEqual(history);
   });

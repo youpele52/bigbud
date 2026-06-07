@@ -9,11 +9,18 @@ import { FilesPanelContent } from "../files/FilesPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { useDefaultChatCwd } from "~/rpc/serverState";
-import { closeBrowserPanel, openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import {
+  closeBrowserTab,
+  openBrowserPanel,
+  openNewBrowserTab,
+} from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { useProjectById, useThreadById } from "~/stores/main";
 import { closeDiffPanelIfOpen } from "~/stores/rightPanel/rightPanel.coordinator";
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
+import {
+  getRightPanelTabKind,
+  useRightPanelTabsStore,
+} from "~/stores/rightPanel/rightPanelTabs.store";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useUiStateStore } from "~/stores/ui";
 import { shortcutLabelForCommand } from "~/models/keybindings";
@@ -31,7 +38,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const navigate = useNavigate();
   const keybindings = useServerKeybindings();
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
-  const activeKind = useRightPanelTabsStore((state) => state.activeKind);
+  const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
   const thread = useThreadById(activeThreadId ?? null);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
@@ -60,11 +67,11 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={Boolean(activeThreadId)}
-        onCloseBrowser={closeBrowserPanel}
+        onCloseBrowserTab={closeBrowserTab}
         onCloseDiff={closeDiffPanelIfOpen}
         onCloseFiles={closeFilesPanel}
         onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={openBrowserPanel}
+        onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
         onOpenFiles={openFilesPanel}
         onOpenTerminal={openTerminalPanel}
@@ -89,52 +96,78 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         ) : null}
         {openTabs.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden">
-            {openTabs.includes("browser") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "browser" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "browser"}
-              >
-                <BrowserPanelContent activeThreadId={activeThreadId ?? null} />
-              </div>
-            ) : null}
-            {openTabs.includes("files") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "files" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "files"}
-              >
-                <FilesPanelContent activeThreadId={activeThreadId ?? null} />
-              </div>
-            ) : null}
-            {openTabs.includes("terminal") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "terminal" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "terminal"}
-              >
-                <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
-              </div>
-            ) : null}
-            {openTabs.includes("diff") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "diff" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "diff"}
-              >
-                <DiffWorkerPoolProvider>
-                  <DiffPanel mode="sidebar" />
-                </DiffWorkerPoolProvider>
-              </div>
-            ) : null}
+            {openTabs.map((tabId) => {
+              const kind = getRightPanelTabKind(tabId);
+              const isActive = activeTabId === tabId && rightPanelOpen;
+
+              if (kind === "browser") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <BrowserPanelContent
+                      activeThreadId={activeThreadId ?? null}
+                      tabId={tabId}
+                      visible={isActive}
+                    />
+                  </div>
+                );
+              }
+
+              if (kind === "files") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <FilesPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "terminal") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "diff") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <DiffWorkerPoolProvider>
+                      <DiffPanel mode="sidebar" />
+                    </DiffWorkerPoolProvider>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
           </div>
         ) : null}
       </div>

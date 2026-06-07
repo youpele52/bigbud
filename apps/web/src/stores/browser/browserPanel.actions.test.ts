@@ -1,49 +1,83 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { closeBrowserPanel, openBrowserPanel, toggleBrowserPanel } from "./browserPanel.actions";
+import {
+  closeBrowserPanel,
+  openBrowserPanel,
+  openNewBrowserTab,
+  toggleBrowserPanel,
+} from "./browserPanel.actions";
 import { useBrowserPanelStore } from "./browser.store";
 import { useFilesPanelStore } from "../files/filesPanel.store";
 import { getRequestedRightPanel, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
-import { useRightPanelTabsStore } from "../rightPanel/rightPanelTabs.store";
+import {
+  countRightPanelTabsByKind,
+  MAX_RIGHT_PANEL_BROWSER_TABS,
+  useRightPanelTabsStore,
+} from "../rightPanel/rightPanelTabs.store";
 
 describe("browserPanel.actions", () => {
   afterEach(() => {
-    useBrowserPanelStore.setState({ open: false, url: "" });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
     useFilesPanelStore.setState({ open: false });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
+    useRightPanelTabsStore.setState({
+      activeKind: null,
+      activeTabId: null,
+      openTabs: [],
+      rightPanelOpen: false,
+    });
     requestRightPanel(null);
   });
 
   it("opens the browser with a normalized URL", () => {
     openBrowserPanel({ url: " https://example.com/path " });
 
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
+
     expect(useBrowserPanelStore.getState()).toMatchObject({
       open: true,
-      url: "https://example.com/path",
+      tabsById: {
+        [browserTabIds[0] ?? ""]: {
+          url: "https://example.com/path",
+        },
+      },
     });
   });
 
   it("keeps the files tab open while switching the active panel to browser", () => {
     useFilesPanelStore.setState({ open: true });
     requestRightPanel("files");
-    useRightPanelTabsStore.setState({ activeKind: "files", openTabs: ["files"] });
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+      openTabs: ["files"],
+    });
 
     openBrowserPanel({ url: "https://example.com" });
+
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
 
     expect(useFilesPanelStore.getState().open).toBe(true);
     expect(useBrowserPanelStore.getState().open).toBe(true);
     expect(getRequestedRightPanel()).toBe("browser");
     expect(useRightPanelTabsStore.getState()).toMatchObject({
       activeKind: "browser",
-      openTabs: ["files", "browser"],
+      activeTabId: browserTabIds[0],
+      openTabs: ["files", browserTabIds[0]],
     });
   });
 
   it("activates the browser instead of closing it when the tab is already open in the background", () => {
-    useBrowserPanelStore.setState({ open: true, url: "https://example.com" });
+    openBrowserPanel({ url: "https://example.com" });
+    const browserTabId = Object.keys(useBrowserPanelStore.getState().tabsById)[0] as
+      | `browser:${string}`
+      | undefined;
+
+    expect(browserTabId).toBeTruthy();
+
     useRightPanelTabsStore.setState({
       activeKind: "files",
-      openTabs: ["browser", "files"],
+      activeTabId: "files",
+      openTabs: [browserTabId ?? "browser", "files"],
       rightPanelOpen: true,
     });
 
@@ -52,7 +86,8 @@ describe("browserPanel.actions", () => {
     expect(useBrowserPanelStore.getState().open).toBe(true);
     expect(useRightPanelTabsStore.getState()).toMatchObject({
       activeKind: "browser",
-      openTabs: ["browser", "files"],
+      activeTabId: browserTabId,
+      openTabs: [browserTabId ?? "browser", "files"],
       rightPanelOpen: true,
     });
   });
@@ -63,18 +98,48 @@ describe("browserPanel.actions", () => {
 
     toggleBrowserPanel();
     expect(useBrowserPanelStore.getState().open).toBe(false);
+    expect(countRightPanelTabsByKind(useRightPanelTabsStore.getState().openTabs, "browser")).toBe(
+      0,
+    );
   });
 
   it("closes the browser panel without mutating the current URL", () => {
-    useBrowserPanelStore.setState({ open: true, url: "https://example.com" });
-    requestRightPanel("browser");
+    openBrowserPanel({ url: "https://example.com" });
+    openNewBrowserTab({ url: "https://bigbud.dev" });
 
     closeBrowserPanel();
 
     expect(useBrowserPanelStore.getState()).toMatchObject({
       open: false,
-      url: "https://example.com",
+      tabsById: {},
     });
     expect(getRequestedRightPanel()).toBeNull();
+  });
+
+  it("opens a new browser tab without mutating the current browser tab", () => {
+    openBrowserPanel({ url: "https://example.com" });
+    const firstTabId = Object.keys(useBrowserPanelStore.getState().tabsById)[0] ?? "";
+
+    openNewBrowserTab({ url: "https://bigbud.dev" });
+
+    const { activeTabId, openTabs } = useRightPanelTabsStore.getState();
+    const tabsById = useBrowserPanelStore.getState().tabsById;
+
+    expect(openTabs).toHaveLength(2);
+    expect(tabsById[firstTabId]?.url).toBe("https://example.com");
+    expect(activeTabId).not.toBe(firstTabId);
+    expect(activeTabId ? tabsById[activeTabId]?.url : null).toBe("https://bigbud.dev");
+  });
+
+  it("caps browser tabs at five", () => {
+    for (let index = 0; index < MAX_RIGHT_PANEL_BROWSER_TABS; index += 1) {
+      openNewBrowserTab({ url: `https://example.com/${index}` });
+    }
+
+    openNewBrowserTab({ url: "https://example.com/overflow" });
+
+    expect(countRightPanelTabsByKind(useRightPanelTabsStore.getState().openTabs, "browser")).toBe(
+      MAX_RIGHT_PANEL_BROWSER_TABS,
+    );
   });
 });
