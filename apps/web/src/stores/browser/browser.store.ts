@@ -22,34 +22,52 @@ export const useBrowserPanelStore = create<BrowserPanelState>((set) => ({
   tabsById: {},
   setOpen: (open) => set({ open }),
   ensureTab: (tabId, url = "") =>
-    set((state) => ({
-      tabsById: state.tabsById[tabId]
-        ? state.tabsById
-        : {
-            ...state.tabsById,
-            [tabId]: { title: "", url },
-          },
-    })),
+    set((state) => {
+      if (state.tabsById[tabId]) {
+        return state;
+      }
+
+      return {
+        tabsById: {
+          ...state.tabsById,
+          [tabId]: { title: "", url },
+        },
+      };
+    }),
   setTabTitle: (tabId, title) =>
-    set((state) => ({
-      tabsById: {
-        ...state.tabsById,
-        [tabId]: {
-          title,
-          url: state.tabsById[tabId]?.url ?? "",
+    set((state) => {
+      const currentTab = state.tabsById[tabId];
+      if (currentTab?.title === title) {
+        return state;
+      }
+
+      return {
+        tabsById: {
+          ...state.tabsById,
+          [tabId]: {
+            title,
+            url: currentTab?.url ?? "",
+          },
         },
-      },
-    })),
+      };
+    }),
   setTabUrl: (tabId, url) =>
-    set((state) => ({
-      tabsById: {
-        ...state.tabsById,
-        [tabId]: {
-          title: state.tabsById[tabId]?.title ?? "",
-          url,
+    set((state) => {
+      const currentTab = state.tabsById[tabId];
+      if (currentTab?.url === url) {
+        return state;
+      }
+
+      return {
+        tabsById: {
+          ...state.tabsById,
+          [tabId]: {
+            title: currentTab?.title ?? "",
+            url,
+          },
         },
-      },
-    })),
+      };
+    }),
   removeTab: (tabId) =>
     set((state) => {
       if (!state.tabsById[tabId]) {
