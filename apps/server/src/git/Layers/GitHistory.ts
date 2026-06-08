@@ -13,7 +13,10 @@ const DEFAULT_COMMIT_LIMIT = 50;
 const FIELD_SEPARATOR = "\u0000";
 const RECORD_SEPARATOR = "\u001e";
 
-function parseCommitSummaryRecords(stdout: string): GitListCommitsResult["commits"] {
+function parseCommitSummaryRecords(
+  stdout: string,
+  unpushedCommitShas: ReadonlySet<string>,
+): GitListCommitsResult["commits"] {
   return stdout
     .split(RECORD_SEPARATOR)
     .map((record) => record.trim())
@@ -24,7 +27,16 @@ function parseCommitSummaryRecords(stdout: string): GitListCommitsResult["commit
       if (!sha || !shortSha || !authorName || !authoredAt || !subject) {
         return [];
       }
-      return [{ sha, shortSha, authorName, authoredAt, subject }];
+      return [
+        {
+          sha,
+          shortSha,
+          authorName,
+          authoredAt,
+          subject,
+          isPushed: !unpushedCommitShas.has(sha),
+        },
+      ];
     });
 }
 
@@ -60,6 +72,36 @@ export interface GitHistoryOps {
 
 export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
   const { executeGit, runGitStdout } = helpers;
+
+  const resolveUnpushedCommitShas = Effect.fn("resolveUnpushedCommitShas")(function* (cwd: string) {
+    const upstreamResult = yield* executeGit(
+      "GitCore.listCommits.upstreamRef",
+      cwd,
+      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+      { allowNonZeroExit: true },
+    );
+
+    if (upstreamResult.code !== 0) {
+      return new Set<string>();
+    }
+
+    const upstreamRef = upstreamResult.stdout.trim();
+    if (!upstreamRef) {
+      return new Set<string>();
+    }
+
+    const revListStdout = yield* runGitStdout("GitCore.listCommits.unpushed", cwd, [
+      "rev-list",
+      `${upstreamRef}..HEAD`,
+    ]).pipe(Effect.catch(() => Effect.succeed("")));
+
+    return new Set(
+      revListStdout
+        .split(/\r?\n/g)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    );
+  });
 
   const readUntrackedPaths = Effect.fn("readUntrackedPaths")(function* (
     cwd: string,
@@ -151,9 +193,12 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
   });
 
   const listCommits: GitCoreShape["listCommits"] = Effect.fn("listCommits")(function* (input) {
+    const limit = input.limit ?? DEFAULT_COMMIT_LIMIT;
+    const skip = input.cursor ?? 0;
     const args = [
       "log",
-      `--max-count=${input.limit ?? DEFAULT_COMMIT_LIMIT}`,
+      `--max-count=${limit + 1}`,
+      ...(skip > 0 ? [`--skip=${skip}`] : []),
       `--format=%H%x00%h%x00%an%x00%aI%x00%s%x1e`,
     ];
     const result = yield* executeGit("GitCore.listCommits", input.cwd, args, {
@@ -166,7 +211,7 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
         detail.includes("does not have any commits yet") ||
         detail.includes("your current branch")
       ) {
-        return { commits: [] } satisfies GitListCommitsResult;
+        return { commits: [], nextCursor: null } satisfies GitListCommitsResult;
       }
       return yield* createGitCommandError(
         "GitCore.listCommits",
@@ -176,7 +221,15 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
       );
     }
 
-    return { commits: parseCommitSummaryRecords(result.stdout) } satisfies GitListCommitsResult;
+    const unpushedCommitShas = yield* resolveUnpushedCommitShas(input.cwd);
+
+    const commits = parseCommitSummaryRecords(result.stdout, unpushedCommitShas);
+    const pageCommits = commits.slice(0, limit);
+
+    return {
+      commits: pageCommits,
+      nextCursor: commits.length > limit ? skip + limit : null,
+    } satisfies GitListCommitsResult;
   });
 
   const getCommitDetails: GitCoreShape["getCommitDetails"] = Effect.fn("getCommitDetails")(

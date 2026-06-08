@@ -1,12 +1,12 @@
 import type { ThreadId } from "@bigbud/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { GitBranchIcon, HistoryIcon, Rows3Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
 import {
   gitCommitDetailsQueryOptions,
-  gitListCommitsQueryOptions,
+  gitListCommitsInfiniteQueryOptions,
   gitStatusQueryOptions,
   gitWorkingTreeDiffQueryOptions,
 } from "~/lib/gitReactQuery";
@@ -47,13 +47,17 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
         gitStatus?.hasWorkingTreeChanges === true,
     }),
   );
-  const commitHistoryQuery = useQuery(
-    gitListCommitsQueryOptions({
+  const commitHistoryQuery = useInfiniteQuery(
+    gitListCommitsInfiniteQueryOptions({
       cwd,
       executionTargetId,
-      limit: 50,
+      limit: 20,
       enabled: visible && activeView === "history" && isGitRepo,
     }),
+  );
+  const commitHistory = useMemo(
+    () => commitHistoryQuery.data?.pages.flatMap((page) => page.commits) ?? [],
+    [commitHistoryQuery.data],
   );
   const commitDetailsQuery = useQuery(
     gitCommitDetailsQueryOptions({
@@ -82,16 +86,15 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   }, [gitStatus?.workingTree.files, selectedFilePath]);
 
   useEffect(() => {
-    const commits = commitHistoryQuery.data?.commits ?? [];
-    if (commits.length === 0) {
+    if (commitHistory.length === 0) {
       setSelectedCommitSha(null);
       return;
     }
-    if (selectedCommitSha && commits.some((commit) => commit.sha === selectedCommitSha)) {
+    if (selectedCommitSha && commitHistory.some((commit) => commit.sha === selectedCommitSha)) {
       return;
     }
-    setSelectedCommitSha(commits[0]?.sha ?? null);
-  }, [commitHistoryQuery.data?.commits, selectedCommitSha]);
+    setSelectedCommitSha(commitHistory[0]?.sha ?? null);
+  }, [commitHistory, selectedCommitSha]);
 
   if (!cwd) {
     return (
@@ -118,7 +121,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
               <GitBranchIcon className="size-4" />
               <span className="truncate">{branchLabel}</span>
             </div>
-            <div className="mt-1 text-xs text-muted-foreground/80">
+            <div className="mt-1 text-[11px] text-muted-foreground/80">
               {gitStatus.aheadCount > 0 ? `${gitStatus.aheadCount} ahead` : "Up to date"}
               {gitStatus.behindCount > 0 ? `, ${gitStatus.behindCount} behind` : ""}
             </div>
@@ -172,6 +175,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
           isLoadingDiff={workingTreeDiffQuery.isLoading}
           onSelectFile={setSelectedFilePath}
           selectedFilePath={selectedFilePath}
+          workspaceRoot={cwd}
         />
       ) : (
         <GitPanelHistory
@@ -183,7 +187,8 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
                 ? "Failed to load commit details."
                 : null
           }
-          history={commitHistoryQuery.data?.commits ?? []}
+          hasMoreHistory={commitHistoryQuery.hasNextPage}
+          history={commitHistory}
           historyError={
             commitHistoryQuery.error instanceof Error
               ? commitHistoryQuery.error.message
@@ -192,8 +197,19 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
                 : null
           }
           isLoadingDetails={commitDetailsQuery.isLoading || commitHistoryQuery.isLoading}
+          isLoadingMoreHistory={commitHistoryQuery.isFetchingNextPage}
+          onLoadMoreHistory={() => {
+            if (!commitHistoryQuery.hasNextPage || commitHistoryQuery.isFetchingNextPage) {
+              return Promise.resolve();
+            }
+
+            return commitHistoryQuery.fetchNextPage();
+          }}
           onSelectCommit={setSelectedCommitSha}
           selectedCommitSha={selectedCommitSha}
+          selectedCommitSummary={
+            commitHistory.find((commit) => commit.sha === selectedCommitSha) ?? null
+          }
         />
       )}
     </div>

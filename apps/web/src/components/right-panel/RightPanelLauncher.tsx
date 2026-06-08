@@ -51,6 +51,7 @@ interface RightPanelLauncherProps {
   browserShortcutLabel: string | null;
   diffShortcutLabel: string | null;
   filesShortcutLabel: string | null;
+  gitShortcutLabel: string | null;
   hasActiveProject: boolean;
   isGitRepo: boolean;
   onToggleBrowser: () => void;
@@ -66,6 +67,7 @@ export function RightPanelLauncher({
   browserShortcutLabel,
   diffShortcutLabel,
   filesShortcutLabel,
+  gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
   onToggleBrowser,
@@ -106,6 +108,15 @@ export function RightPanelLauncher({
           shortcutLabel={terminalShortcutLabel}
         />
         <LauncherCard
+          description="Inspect repo changes"
+          disabled={!isGitRepo}
+          icon={GitBranchIcon}
+          kind="git"
+          label="Git"
+          onSelect={onToggleGit}
+          shortcutLabel={gitShortcutLabel}
+        />
+        <LauncherCard
           description="View code changes"
           disabled={!isGitRepo}
           icon={DiffIcon}
@@ -114,16 +125,6 @@ export function RightPanelLauncher({
           onSelect={onToggleDiff}
           shortcutLabel={diffShortcutLabel}
         />
-        {isGitRepo ? (
-          <LauncherCard
-            description="Inspect repo changes"
-            icon={GitBranchIcon}
-            kind="git"
-            label="Git"
-            onSelect={onToggleGit}
-            shortcutLabel={null}
-          />
-        ) : null}
       </div>
     </div>
   );

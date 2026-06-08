@@ -52,6 +52,7 @@ export type GitListBranchesInput = typeof GitListBranchesInput.Type;
 export const GitListCommitsInput = Schema.Struct({
   ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
+  cursor: Schema.optional(NonNegativeInt),
   limit: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(GIT_LIST_COMMITS_MAX_LIMIT))),
 });
 export type GitListCommitsInput = typeof GitListCommitsInput.Type;

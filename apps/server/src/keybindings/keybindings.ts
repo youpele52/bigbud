@@ -62,6 +62,7 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+g", command: "terminal.split", when: "terminalFocus" },
   { key: "mod+n", command: "terminal.new", when: "terminalFocus" },
   { key: "mod+w", command: "terminal.close", when: "terminalFocus" },
+  { key: "mod+g", command: "git.toggle", when: "!terminalFocus" },
   { key: "mod+shift+g", command: "diff.toggle", when: "!terminalFocus" },
   { key: "mod+shift+b", command: "browser.toggle", when: "!terminalFocus" },
   { key: "mod+shift+e", command: "files.toggle", when: "!terminalFocus" },

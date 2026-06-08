@@ -4,6 +4,7 @@ import { resolveShortcutCommand } from "../../../models/keybindings";
 import { isTerminalFocused } from "../../../lib/terminalFocus";
 import { projectScriptIdFromCommand } from "../../../logic/project-scripts";
 import type { Project } from "../../../models/types";
+import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
 
 interface TerminalState {
   terminalOpen: boolean;
@@ -99,6 +100,13 @@ export function useChatKeybindings({
         event.preventDefault();
         event.stopPropagation();
         onToggleDiff();
+        return;
+      }
+
+      if (command === "git.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleGitPanel();
         return;
       }
 
