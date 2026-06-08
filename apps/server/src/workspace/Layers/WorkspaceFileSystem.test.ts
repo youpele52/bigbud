@@ -31,7 +31,7 @@ const TestLayer = Layer.empty.pipe(
 const makeTempDir = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   return yield* fileSystem.makeTempDirectoryScoped({
-    prefix: "t3code-workspace-files-",
+    prefix: "bigbud-workspace-files-",
   });
 });
 
@@ -157,6 +157,39 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
 
         expect(result.matches).toHaveLength(1);
         expect(result.truncated).toBe(true);
+      }),
+    );
+
+    it.effect("falls back to filesystem search when rg is unavailable", () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        const previousPath = process.env.PATH;
+        process.env.PATH = "";
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            process.env.PATH = previousPath;
+          }),
+        );
+        yield* writeTextFile(cwd, "src/example.ts", "export const fallbackNeedle = true;\n");
+
+        const result = yield* workspaceFileSystem.searchFileContents({
+          cwd,
+          query: "fallbackNeedle",
+          limit: 10,
+        });
+
+        expect(result).toEqual({
+          matches: [
+            {
+              path: "src/example.ts",
+              line: 1,
+              column: 14,
+              lineText: "export const fallbackNeedle = true;",
+            },
+          ],
+          truncated: false,
+        });
       }),
     );
   });

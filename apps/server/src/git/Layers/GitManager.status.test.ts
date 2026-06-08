@@ -11,7 +11,7 @@ import { createBareRemote, initRepo, makeTempDir, runGit } from "./GitManager.te
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("status includes PR metadata when branch already has an open PR", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/status-open-pr"]);
       const remoteDir = yield* createBareRemote();
@@ -52,7 +52,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("status returns an explicit non-repo result for non-git directories", () =>
     Effect.gen(function* () {
-      const cwd = yield* makeTempDir("t3code-git-manager-non-repo-");
+      const cwd = yield* makeTempDir("bigbud-git-manager-non-repo-");
       const { manager } = yield* makeManager();
 
       const status = yield* manager.status({ cwd });
@@ -78,7 +78,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("status returns an explicit non-repo result for missing directories", () =>
     Effect.gen(function* () {
-      const parentDir = yield* makeTempDir("t3code-git-manager-missing-dir-");
+      const parentDir = yield* makeTempDir("bigbud-git-manager-missing-dir-");
       const { manager } = yield* makeManager();
 
       const cwd = path.join(parentDir, "missing");
@@ -106,7 +106,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("status briefly caches repeated lookups for the same cwd", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/status-cache"]);
       const remoteDir = yield* createBareRemote();
@@ -137,7 +137,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("status is resilient to gh lookup failures and returns pr null", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/status-no-gh"]);
       const remoteDir = yield* createBareRemote();

@@ -12,7 +12,7 @@ import {
 } from "../components/layout/desktopUpdate.logic";
 
 /** Latest releases page — opened for Linux non-AppImage builds as an install fallback. */
-const RELEASES_URL = "https://github.com/pingdotgg/t3code/releases/latest";
+const RELEASES_URL = "https://github.com/youpele52/bigbud/releases/latest";
 
 export interface UseDesktopUpdateStateResult {
   desktopUpdateState: DesktopUpdateState | null;
