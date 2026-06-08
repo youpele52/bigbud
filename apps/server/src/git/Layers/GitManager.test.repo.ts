@@ -58,7 +58,7 @@ export function createBareRemote(): Effect.Effect<
   FileSystem.FileSystem | Scope.Scope | GitCore
 > {
   return Effect.gen(function* () {
-    const remoteDir = yield* makeTempDir("t3code-git-remote-");
+    const remoteDir = yield* makeTempDir("bigbud-git-remote-");
     yield* runGit(remoteDir, ["init", "--bare"]);
     return remoteDir;
   });
