@@ -70,9 +70,10 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+t", command: "rightPanel.newTab", when: "!terminalFocus" },
   { key: "mod+p", command: "commandPalette.toggle", when: "!terminalFocus" },
   { key: "mod+n", command: "chat.new", when: "!terminalFocus" },
-  { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" },
-  { key: "mod+shift+n", command: "chat.newLocal", when: "!terminalFocus" },
-  { key: "mod+o", command: "editor.openFavorite" },
+  { key: "mod+alt+n", command: "chat.newLocal", when: "!terminalFocus" },
+  { key: "mod+shift+n", command: "notes.toggle", when: "!terminalFocus" },
+  { key: "mod+o", command: "project.open", when: "!terminalFocus" },
+  { key: "mod+shift+o", command: "editor.openFavorite", when: "!terminalFocus" },
   { key: "mod+shift+[", command: "thread.previous" },
   { key: "mod+shift+]", command: "thread.next" },
   ...THREAD_JUMP_KEYBINDING_COMMANDS.map((command, index) => ({

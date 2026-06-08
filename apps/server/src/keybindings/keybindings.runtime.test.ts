@@ -169,6 +169,58 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }).pipe(Effect.provide(makeKeybindingsLayer())),
   );
 
+  it.effect("migrates legacy default shortcuts that were reassigned to new commands", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "mod+shift+n", command: "chat.newLocal", when: "!terminalFocus" },
+        { key: "mod+o", command: "editor.openFavorite", when: "!terminalFocus" },
+        { key: "mod+shift+o", command: "chat.new", when: "!terminalFocus" },
+      ]);
+
+      yield* Effect.gen(function* () {
+        const keybindings = yield* Keybindings;
+        yield* keybindings.syncDefaultKeybindingsOnStartup;
+      });
+
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+
+      assert.isTrue(
+        persisted.some(
+          (entry) =>
+            entry.key === "mod+alt+n" &&
+            entry.command === "chat.newLocal" &&
+            entry.when === "!terminalFocus",
+        ),
+      );
+      assert.isTrue(
+        persisted.some(
+          (entry) =>
+            entry.key === "mod+shift+o" &&
+            entry.command === "editor.openFavorite" &&
+            entry.when === "!terminalFocus",
+        ),
+      );
+      assert.isTrue(
+        persisted.some(
+          (entry) =>
+            entry.key === "mod+o" &&
+            entry.command === "project.open" &&
+            entry.when === "!terminalFocus",
+        ),
+      );
+      assert.isFalse(
+        persisted.some((entry) => entry.key === "mod+shift+n" && entry.command === "chat.newLocal"),
+      );
+      assert.isFalse(
+        persisted.some((entry) => entry.key === "mod+o" && entry.command === "editor.openFavorite"),
+      );
+      assert.isFalse(
+        persisted.some((entry) => entry.key === "mod+shift+o" && entry.command === "chat.new"),
+      );
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
   it.effect("preserves custom command palette shortcuts on startup", () =>
     Effect.gen(function* () {
       const { keybindingsConfigPath } = yield* ServerConfig;
