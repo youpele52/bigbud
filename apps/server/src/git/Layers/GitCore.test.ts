@@ -1611,6 +1611,25 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("expands untracked directories into individual files in status details", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const fileSystem = yield* FileSystem.FileSystem;
+        const core = yield* GitCore;
+
+        yield* fileSystem.makeDirectory(path.join(tmp, "untracked"), { recursive: true });
+        yield* writeTextFile(path.join(tmp, "untracked", "one.ts"), "one\n");
+        yield* writeTextFile(path.join(tmp, "untracked", "two.ts"), "two\n");
+
+        const details = yield* core.statusDetails(tmp);
+
+        expect(details.workingTree.files).toHaveLength(2);
+        expect(details.workingTree.files.map((file) => file.path)).toContain("untracked/one.ts");
+        expect(details.workingTree.files.map((file) => file.path)).toContain("untracked/two.ts");
+      }),
+    );
+
     it.effect("computes ahead count against base branch when no upstream is configured", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
@@ -2225,6 +2244,69 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(result.branches.every((branch) => !branch.isRemote)).toBe(true);
         expect(didFailRemoteBranches).toBe(true);
         expect(didFailRemoteNames).toBe(true);
+      }),
+    );
+
+    it.effect("lists recent commits in reverse chronological order", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* commitWithDate(
+          tmp,
+          "second.txt",
+          "two\n",
+          "2026-06-07T10:00:00.000Z",
+          "feat: second",
+        );
+        yield* commitWithDate(
+          tmp,
+          "third.txt",
+          "three\n",
+          "2026-06-08T10:00:00.000Z",
+          "feat: third",
+        );
+
+        const result = yield* (yield* GitCore).listCommits({ cwd: tmp, limit: 2 });
+
+        expect(result.commits).toHaveLength(2);
+        expect(result.commits[0]?.subject).toBe("feat: third");
+        expect(result.commits[1]?.subject).toBe("feat: second");
+      }),
+    );
+
+    it.effect("reads commit details with file stats and patch", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* commitWithDate(
+          tmp,
+          "history.txt",
+          "alpha\nbeta\n",
+          "2026-06-08T11:00:00.000Z",
+          "feat: commit details",
+        );
+        const sha = yield* git(tmp, ["rev-parse", "HEAD"]);
+
+        const result = yield* (yield* GitCore).getCommitDetails({ cwd: tmp, commit: sha });
+
+        expect(result.commit.subject).toBe("feat: commit details");
+        expect(result.commit.files.some((file) => file.path === "history.txt")).toBe(true);
+        expect(result.commit.diff).toContain("diff --git a/history.txt b/history.txt");
+      }),
+    );
+
+    it.effect("reads working tree diff for tracked and untracked files", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+
+        yield* writeTextFile(path.join(tmp, "README.md"), "# updated\n");
+        yield* writeTextFile(path.join(tmp, "new-file.txt"), "brand new\n");
+
+        const result = yield* (yield* GitCore).readWorkingTreeDiff({ cwd: tmp });
+
+        expect(result.diff).toContain("diff --git a/README.md b/README.md");
+        expect(result.diff).toContain("diff --git a/new-file.txt b/new-file.txt");
       }),
     );
   });

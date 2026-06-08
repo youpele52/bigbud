@@ -13,15 +13,21 @@ import {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitGetCommitDetailsInput,
+  GitGetCommitDetailsResult,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitListCommitsInput,
+  GitListCommitsResult,
   GitManagerServiceError,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullInput,
   GitPullRequestRefInput,
   GitPullResult,
+  GitReadWorkingTreeDiffInput,
+  GitReadWorkingTreeDiffResult,
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
@@ -250,6 +256,24 @@ export const WsGitListBranchesRpc = Rpc.make(WS_METHODS.gitListBranches, {
   error: GitServiceError,
 });
 
+export const WsGitListCommitsRpc = Rpc.make(WS_METHODS.gitListCommits, {
+  payload: GitListCommitsInput,
+  success: GitListCommitsResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
+});
+
+export const WsGitGetCommitDetailsRpc = Rpc.make(WS_METHODS.gitGetCommitDetails, {
+  payload: GitGetCommitDetailsInput,
+  success: GitGetCommitDetailsResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
+});
+
+export const WsGitReadWorkingTreeDiffRpc = Rpc.make(WS_METHODS.gitReadWorkingTreeDiff, {
+  payload: GitReadWorkingTreeDiffInput,
+  success: GitReadWorkingTreeDiffResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
+});
+
 export const WsGitCreateWorktreeRpc = Rpc.make(WS_METHODS.gitCreateWorktree, {
   payload: GitCreateWorktreeInput,
   success: GitCreateWorktreeResult,
@@ -408,6 +432,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
   WsGitListBranchesRpc,
+  WsGitListCommitsRpc,
+  WsGitGetCommitDetailsRpc,
+  WsGitReadWorkingTreeDiffRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
   WsGitCreateBranchRpc,

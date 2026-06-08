@@ -110,6 +110,36 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
                 branch: "main",
                 upstreamBranch: "origin/main",
               }),
+            listCommits: () =>
+              Effect.succeed({
+                commits: [
+                  {
+                    sha: "abc123def456",
+                    shortSha: "abc123d",
+                    subject: "feat: history",
+                    authorName: "Test",
+                    authoredAt: "2026-06-08T00:00:00.000Z",
+                  },
+                ],
+              }),
+            getCommitDetails: () =>
+              Effect.succeed({
+                commit: {
+                  sha: "abc123def456",
+                  shortSha: "abc123d",
+                  subject: "feat: history",
+                  authorName: "Test",
+                  authoredAt: "2026-06-08T00:00:00.000Z",
+                  body: "commit body",
+                  parents: ["parent-sha"],
+                  files: [{ path: "README.md", insertions: 1, deletions: 0 }],
+                  diff: "diff --git a/README.md b/README.md\n",
+                },
+              }),
+            readWorkingTreeDiff: () =>
+              Effect.succeed({
+                diff: "diff --git a/README.md b/README.md\n",
+              }),
             listBranches: () =>
               Effect.succeed({
                 branches: [
@@ -196,6 +226,28 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
         ),
       );
       assert.equal(branches.branches[0]?.name, "main");
+
+      const commits = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) => client[WS_METHODS.gitListCommits]({ cwd: "/tmp/repo" })),
+      );
+      assert.equal(commits.commits[0]?.shortSha, "abc123d");
+
+      const commitDetails = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitGetCommitDetails]({
+            cwd: "/tmp/repo",
+            commit: "abc123def456",
+          }),
+        ),
+      );
+      assert.equal(commitDetails.commit.subject, "feat: history");
+
+      const workingTreeDiff = yield* Effect.scoped(
+        withWsRpcClient(wsUrl, (client) =>
+          client[WS_METHODS.gitReadWorkingTreeDiff]({ cwd: "/tmp/repo" }),
+        ),
+      );
+      assert.equal(workingTreeDiff.diff.includes("diff --git"), true);
 
       const worktree = yield* Effect.scoped(
         withWsRpcClient(wsUrl, (client) =>

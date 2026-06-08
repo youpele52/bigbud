@@ -1,9 +1,9 @@
-import { DiffIcon, FoldersIcon, GlobeIcon, TerminalIcon } from "lucide-react";
+import { DiffIcon, FoldersIcon, GitBranchIcon, GlobeIcon, TerminalIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Kbd, KbdGroup } from "../ui/kbd";
 
-export type LauncherToolKind = "browser" | "files" | "terminal" | "diff";
+export type LauncherToolKind = "browser" | "diff" | "files" | "git" | "terminal";
 
 interface LauncherCardProps {
   description: string;
@@ -56,6 +56,7 @@ interface RightPanelLauncherProps {
   onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
+  onToggleGit: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -70,6 +71,7 @@ export function RightPanelLauncher({
   onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
+  onToggleGit,
   onToggleTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -112,6 +114,16 @@ export function RightPanelLauncher({
           onSelect={onToggleDiff}
           shortcutLabel={diffShortcutLabel}
         />
+        {isGitRepo ? (
+          <LauncherCard
+            description="Inspect repo changes"
+            icon={GitBranchIcon}
+            kind="git"
+            label="Git"
+            onSelect={onToggleGit}
+            shortcutLabel={null}
+          />
+        ) : null}
       </div>
     </div>
   );

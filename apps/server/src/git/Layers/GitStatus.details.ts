@@ -40,18 +40,15 @@ export function makeReadStatusDetails({
   originRemoteExists,
   computeAheadCountAgainstBase,
 }: MakeStatusDetailsReaderInput) {
+  const statusArgs = ["status", "--porcelain=2", "--branch", "-uall"] as const;
+
   return Effect.fn("readStatusDetails")(function* (
     cwd: string,
     operationPrefix: "GitCore.statusDetails" | "GitCore.statusDetailsLocal",
   ) {
-    const statusResult = yield* executeGit(
-      `${operationPrefix}.status`,
-      cwd,
-      ["status", "--porcelain=2", "--branch"],
-      {
-        allowNonZeroExit: true,
-      },
-    ).pipe(Effect.catchIf(isMissingGitCwdError, () => Effect.succeed(null)));
+    const statusResult = yield* executeGit(`${operationPrefix}.status`, cwd, statusArgs, {
+      allowNonZeroExit: true,
+    }).pipe(Effect.catchIf(isMissingGitCwdError, () => Effect.succeed(null)));
 
     if (statusResult === null) {
       return NON_REPOSITORY_STATUS_DETAILS;
@@ -62,7 +59,7 @@ export function makeReadStatusDetails({
       return yield* createGitCommandError(
         `${operationPrefix}.status`,
         cwd,
-        ["status", "--porcelain=2", "--branch"],
+        statusArgs,
         stderr || "git status failed",
       );
     }

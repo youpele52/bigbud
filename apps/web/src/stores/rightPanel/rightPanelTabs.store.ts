@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { randomUUID } from "~/lib/utils";
 
-export type RightPanelTabKind = "browser" | "diff" | "files" | "terminal";
+export type RightPanelTabKind = "browser" | "diff" | "files" | "git" | "terminal";
 export type RightPanelTabId = RightPanelTabKind | `browser:${string}`;
 
 export const MAX_RIGHT_PANEL_BROWSER_TABS = 5;
