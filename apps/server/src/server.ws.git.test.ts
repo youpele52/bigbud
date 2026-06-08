@@ -119,8 +119,10 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
                     subject: "feat: history",
                     authorName: "Test",
                     authoredAt: "2026-06-08T00:00:00.000Z",
+                    isPushed: false,
                   },
                 ],
+                nextCursor: null,
               }),
             getCommitDetails: () =>
               Effect.succeed({

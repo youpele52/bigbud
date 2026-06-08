@@ -1627,6 +1627,62 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(details.workingTree.files).toHaveLength(2);
         expect(details.workingTree.files.map((file) => file.path)).toContain("untracked/one.ts");
         expect(details.workingTree.files.map((file) => file.path)).toContain("untracked/two.ts");
+        expect(
+          details.workingTree.files.find((file) => file.path === "untracked/one.ts"),
+        ).toMatchObject({
+          insertions: 1,
+          deletions: 0,
+        });
+        expect(
+          details.workingTree.files.find((file) => file.path === "untracked/two.ts"),
+        ).toMatchObject({
+          insertions: 1,
+          deletions: 0,
+        });
+        expect(details.workingTree.insertions).toBe(2);
+        expect(details.workingTree.deletions).toBe(0);
+      }),
+    );
+
+    it.effect("reports inserted lines for a new untracked file in status details", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* writeTextFile(path.join(tmp, "new-file.ts"), "one\ntwo\nthree\n");
+
+        const details = yield* core.statusDetails(tmp);
+        expect(details.workingTree.files.find((file) => file.path === "new-file.ts")).toMatchObject(
+          {
+            insertions: 3,
+            deletions: 0,
+          },
+        );
+        expect(details.workingTree.insertions).toBe(3);
+      }),
+    );
+
+    it.effect("reports deleted lines for a removed tracked file in status details", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const core = yield* GitCore;
+
+        yield* writeTextFile(path.join(tmp, "deleted-file.ts"), "one\ntwo\nthree\n");
+        yield* git(tmp, ["add", "deleted-file.ts"]);
+        yield* git(tmp, ["commit", "-m", "add deleted file fixture"]);
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.remove(path.join(tmp, "deleted-file.ts"));
+
+        const details = yield* core.statusDetails(tmp);
+        expect(
+          details.workingTree.files.find((file) => file.path === "deleted-file.ts"),
+        ).toMatchObject({
+          insertions: 0,
+          deletions: 3,
+        });
+        expect(details.workingTree.deletions).toBe(3);
       }),
     );
 
@@ -2271,6 +2327,62 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(result.commits).toHaveLength(2);
         expect(result.commits[0]?.subject).toBe("feat: third");
         expect(result.commits[1]?.subject).toBe("feat: second");
+        expect(result.nextCursor).toBe(2);
+      }),
+    );
+
+    it.effect("paginates older commits with cursor offsets", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* commitWithDate(
+          tmp,
+          "second.txt",
+          "two\n",
+          "2026-06-07T10:00:00.000Z",
+          "feat: second",
+        );
+        yield* commitWithDate(
+          tmp,
+          "third.txt",
+          "three\n",
+          "2026-06-08T10:00:00.000Z",
+          "feat: third",
+        );
+
+        const result = yield* (yield* GitCore).listCommits({ cwd: tmp, limit: 1, cursor: 1 });
+
+        expect(result.commits).toHaveLength(1);
+        expect(result.commits[0]?.subject).toBe("feat: second");
+        expect(result.nextCursor).toBe(2);
+      }),
+    );
+
+    it.effect("marks commits ahead of upstream as not pushed", () =>
+      Effect.gen(function* () {
+        const remote = yield* makeTmpDir();
+        const source = yield* makeTmpDir();
+        yield* git(remote, ["init", "--bare"]);
+
+        yield* initRepoWithCommit(source);
+        const initialBranch = (yield* (yield* GitCore).listBranches({ cwd: source })).branches.find(
+          (branch) => branch.current,
+        )!.name;
+        yield* git(source, ["remote", "add", "origin", remote]);
+        yield* git(source, ["push", "-u", "origin", initialBranch]);
+        yield* commitWithDate(
+          source,
+          "unpushed.txt",
+          "local only\n",
+          "2026-06-08T12:00:00.000Z",
+          "feat: unpushed",
+        );
+
+        const result = yield* (yield* GitCore).listCommits({ cwd: source, limit: 5 });
+
+        expect(result.commits[0]?.subject).toBe("feat: unpushed");
+        expect(result.commits[0]?.isPushed).toBe(false);
+        expect(result.commits.some((commit) => commit.isPushed)).toBe(true);
       }),
     );
 
@@ -2307,6 +2419,42 @@ it.layer(TestLayer)("git integration", (it) => {
 
         expect(result.diff).toContain("diff --git a/README.md b/README.md");
         expect(result.diff).toContain("diff --git a/new-file.txt b/new-file.txt");
+      }),
+    );
+
+    it.effect("reads file-scoped working tree diff for a new file", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "new-file.txt"), "brand new\n");
+
+        const result = yield* (yield* GitCore).readWorkingTreeDiff({
+          cwd: tmp,
+          path: "new-file.txt",
+        });
+
+        expect(result.diff).toContain("diff --git a/new-file.txt b/new-file.txt");
+        expect(result.diff).toContain("+brand new");
+      }),
+    );
+
+    it.effect("reads file-scoped working tree diff for a deleted file", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* writeTextFile(path.join(tmp, "delete-me.txt"), "remove me\n");
+        yield* git(tmp, ["add", "delete-me.txt"]);
+        yield* git(tmp, ["commit", "-m", "add delete target"]);
+        yield* fileSystem.remove(path.join(tmp, "delete-me.txt"));
+
+        const result = yield* (yield* GitCore).readWorkingTreeDiff({
+          cwd: tmp,
+          path: "delete-me.txt",
+        });
+
+        expect(result.diff).toContain("diff --git a/delete-me.txt b/delete-me.txt");
+        expect(result.diff).toContain("deleted file mode");
       }),
     );
   });

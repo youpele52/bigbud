@@ -178,23 +178,28 @@ export function gitBranchSearchInfiniteQueryOptions(input: {
   });
 }
 
-export function gitListCommitsQueryOptions(input: {
+export function gitListCommitsInfiniteQueryOptions(input: {
   cwd: string | null;
   executionTargetId?: ExecutionTargetId | null | undefined;
   limit?: number;
   enabled?: boolean;
 }) {
-  return queryOptions({
+  const limit = input.limit ?? 50;
+
+  return infiniteQueryOptions({
     queryKey: gitQueryKeys.commits(input.cwd, input.executionTargetId, input.limit),
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git history is unavailable.");
       return api.git.listCommits({
         cwd: input.cwd,
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-        ...(input.limit ? { limit: input.limit } : {}),
+        cursor: pageParam,
+        limit,
       });
     },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: input.cwd !== null && (input.enabled ?? true),
     staleTime: GIT_HISTORY_STALE_TIME_MS,
     refetchOnWindowFocus: true,

@@ -20,6 +20,7 @@ import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
 import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
 import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { RightPanelHost } from "~/components/right-panel/RightPanelHost";
@@ -120,6 +121,13 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         event.preventDefault();
         event.stopPropagation();
         toggleFilesPanel();
+        return;
+      }
+
+      if (command === "git.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleGitPanel();
         return;
       }
 
