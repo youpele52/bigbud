@@ -4,26 +4,25 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
-## v0.1.642 (7 June, 2026)
+## v0.1.642 (8 June, 2026)
+
+### Git Panel and Repo History
+
+- Added a dedicated Git tab in the right panel with separate `Changes` and `History` views, so you can inspect your repository state without leaving the app.
+- Git history now shows the author, relative time, pushed state, and older commits as you scroll, making the timeline easier to scan without hitting a hard cutoff.
+- Updated the Git changes view to handle real working-tree review better: `mod+g` now toggles the panel like other tools, large change lists reveal more files as you scroll, changed files can be dragged into the composer, and added or deleted file diffs render more reliably.
 
 ### Workspace Search Across Both Palettes
 
 - Added workspace file name and path search to the command palette, so you can quickly jump to files from the active workspace without leaving the keyboard flow.
 - Added workspace file content search to the search palette, including line and column metadata, so `mod+f` can now locate matching text inside project files instead of only searching chat content.
-- Updated both palettes to reuse the existing file-open flow: previewable files open inside bigbud's Files panel, while unsupported files fall back to the system default app.
-- Added see-more pagination for file results and kept the search scope limited to the active workspace to keep results relevant and responsive.
+- Updated both palettes to reuse the existing file-open flow and added see-more pagination, keeping results relevant while letting previewable files open directly inside bigbud's Files panel.
 
 ### Composer Slash Commands and Discovery Search
 
 - Slash commands no longer need to be typed at the very start of a prompt. Commands like `/model`, `/agents`, `/skills`, and provider-specific slash actions now work from anywhere within the active line while still ignoring slashes inside URLs and paths.
-- Added a model-search-style search bar to the `/agents`, `/skills`, and `/model` discovery menus, making large agent, skill, and model lists easier to browse.
-- Fixed the new discovery search bar so clicking anywhere inside the visible search row focuses the input, not just direct clicks on the text field.
-- Grouped discovery results under clear `Agents`, `Skills`, and `Models` headings with matching empty states for cleaner browsing.
-
-### Browser Annotation Safety and Fallbacks
-
-- Hardened browser annotation handling so malformed runtime payloads no longer crash the app when comments, page metadata, element metadata, or viewport fields are missing or incomplete.
-- Updated composer annotation previews and prompt-building logic to use safe fallbacks when browser annotations do not include selectors or other expected fields.
+- Added a search bar to the `/agents`, `/skills`, and `/model` discovery menus, making large agent, skill, and model lists easier to browse.
+- Grouped discovery results under clear `Agents`, `Skills`, and `Models` headings and fixed the search row so clicking anywhere inside it focuses the input.
 
 ### Browser Tabs and Navigation History
 
@@ -31,9 +30,19 @@ Entries below are grouped by release tag and date.
 - Updated browser tabs to show the current page title when available, with a hostname fallback and hover label for long names, making it easier to recognize each page at a glance.
 - Increased saved browser address history from 10 to 20 entries, giving the address bar more useful recent-page suggestions.
 
+### Browser Annotation Safety and Fallbacks
+
+- Hardened browser annotation handling so malformed runtime payloads no longer crash the app when comments, page metadata, element metadata, or viewport fields are missing or incomplete.
+- Updated composer annotation previews and prompt-building logic to use safe fallbacks when browser annotations do not include selectors or other expected fields.
+
+### Right Panel Shortcuts and Launcher
+
+- Added a dedicated `mod+t` shortcut for opening the right-panel new-tab launcher, so you can jump straight into Browser, Files, Terminal, Diff, or Git without reaching for the mouse.
+- Updated the right-panel launcher and tab menu ordering so Git sits alongside the other repo tools in a more predictable spot.
+
 ### Validation
 
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, and malformed browser annotation regression cases.
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, malformed browser annotation regression cases, Git panel history and diff behavior, and right-panel shortcut toggles.
 
 ## v0.1.641 (4 June, 2026)
 
