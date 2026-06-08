@@ -1,6 +1,10 @@
+import { TriangleAlertIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
+
+const CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -19,6 +23,7 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (normalizedPercentage / 100) * circumference;
+  const isOverWarningThreshold = usage.usedTokens >= CONTEXT_WINDOW_WARNING_THRESHOLD;
 
   return (
     <Popover>
@@ -55,7 +60,11 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
                   cy="12"
                   r={radius}
                   fill="none"
-                  stroke="var(--color-muted-foreground)"
+                  stroke={
+                    isOverWarningThreshold
+                      ? "var(--color-warning)"
+                      : "var(--color-muted-foreground)"
+                  }
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeDasharray={circumference}
@@ -66,7 +75,7 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
               <span
                 className={cn(
                   "relative flex h-[15px] w-[15px] items-center justify-center rounded-full bg-background text-[8px] font-medium",
-                  "text-muted-foreground",
+                  isOverWarningThreshold ? "text-warning" : "text-muted-foreground",
                 )}
               >
                 {usage.usedPercentage !== null
@@ -77,7 +86,12 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
           </button>
         }
       />
-      <PopoverPopup tooltipStyle side="top" align="end" className="w-max max-w-none px-3 py-2">
+      <PopoverPopup
+        tooltipStyle
+        side="top"
+        align="end"
+        className="w-max max-w-none min-w-[260px] px-3 py-2"
+      >
         <div className="space-y-1.5 leading-tight">
           <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
             Context window
@@ -107,6 +121,17 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
               Automatically compacts its context when needed.
             </div>
           ) : null}
+          {isOverWarningThreshold && (
+            <Alert variant="warning" className="mt-2">
+              <TriangleAlertIcon />
+              <AlertTitle>Context window warning</AlertTitle>
+              <AlertDescription>
+                Some models may start deteriorating past{" "}
+                {formatContextWindowTokens(CONTEXT_WINDOW_WARNING_THRESHOLD)} tokens. Consider using
+                a handoff skill or /compact.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </PopoverPopup>
     </Popover>
