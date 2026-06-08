@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { Effect } from "effect";
 import type { GitCommandError } from "@bigbud/contracts";
 
@@ -128,6 +130,27 @@ export function makeReadStatusDetails({
 
     const stagedEntries = parseNumstatEntries(stagedNumstatStdout);
     const unstagedEntries = parseNumstatEntries(unstagedNumstatStdout);
+    const readFallbackNumstatForPath = Effect.fn("readFallbackNumstatForPath")(function* (
+      relativePath: string,
+    ) {
+      const absolutePath = path.join(cwd, relativePath);
+      if (!existsSync(absolutePath)) {
+        return null;
+      }
+
+      const args = ["diff", "--numstat", "--no-index", "/dev/null", "--", relativePath] as const;
+      const result = yield* executeGit(`${operationPrefix}.fallbackNumstat`, cwd, args, {
+        allowNonZeroExit: true,
+      });
+
+      if (result.code !== 0 && result.code !== 1) {
+        return null;
+      }
+
+      return (
+        parseNumstatEntries(result.stdout).find((entry) => entry.path === relativePath) ?? null
+      );
+    });
     const fileStatMap = new Map<string, { insertions: number; deletions: number }>();
     for (const entry of [...stagedEntries, ...unstagedEntries]) {
       const existing = fileStatMap.get(entry.path) ?? { insertions: 0, deletions: 0 };
@@ -148,6 +171,15 @@ export function makeReadStatusDetails({
 
     for (const filePath of changedFilesWithoutNumstat) {
       if (fileStatMap.has(filePath)) continue;
+
+      const fallbackStat = yield* readFallbackNumstatForPath(filePath);
+      if (fallbackStat) {
+        insertions += fallbackStat.insertions;
+        deletions += fallbackStat.deletions;
+        files.push(fallbackStat);
+        continue;
+      }
+
       files.push({ path: filePath, insertions: 0, deletions: 0 });
     }
     files.sort((a, b) => a.path.localeCompare(b.path));

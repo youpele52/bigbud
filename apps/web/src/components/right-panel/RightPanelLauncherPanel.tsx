@@ -5,6 +5,7 @@ import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store
 import { useRightPanelWidth } from "./useRightPanelWidth";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { closeGitPanel } from "~/stores/git/gitPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useQuery } from "@tanstack/react-query";
 import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
@@ -42,6 +43,7 @@ export function RightPanelLauncherPanel({
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
+  const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
 
@@ -60,11 +62,12 @@ export function RightPanelLauncherPanel({
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
+        gitShortcutLabel={gitShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
-        onCloseGit={() => useRightPanelTabsStore.getState().closeTab("git")}
+        onCloseGit={closeGitPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
@@ -78,6 +81,7 @@ export function RightPanelLauncherPanel({
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
+        gitShortcutLabel={gitShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onToggleBrowser={openNewBrowserTab}

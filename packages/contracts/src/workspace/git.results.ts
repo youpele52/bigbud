@@ -88,6 +88,7 @@ export const GitCommitSummary = Schema.Struct({
   subject: TrimmedNonEmptyStringSchema,
   authorName: TrimmedNonEmptyStringSchema,
   authoredAt: IsoDateTime,
+  isPushed: Schema.Boolean,
 });
 export type GitCommitSummary = typeof GitCommitSummary.Type;
 
@@ -100,6 +101,7 @@ export type GitCommitFileStat = typeof GitCommitFileStat.Type;
 
 export const GitListCommitsResult = Schema.Struct({
   commits: Schema.Array(GitCommitSummary),
+  nextCursor: NonNegativeInt.pipe(Schema.NullOr),
 });
 export type GitListCommitsResult = typeof GitListCommitsResult.Type;
 

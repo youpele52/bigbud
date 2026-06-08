@@ -43,6 +43,7 @@ interface RightPanelTabsProps {
   browserShortcutLabel: string | null;
   diffShortcutLabel?: string | null;
   filesShortcutLabel: string | null;
+  gitShortcutLabel?: string | null;
   hasActiveProject: boolean;
   isGitRepo?: boolean;
   onCloseBrowserTab: (tabId: RightPanelTabId) => void;
@@ -122,6 +123,7 @@ export function RightPanelTabs({
   browserShortcutLabel,
   diffShortcutLabel,
   filesShortcutLabel,
+  gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
   onCloseBrowserTab,
@@ -257,6 +259,13 @@ export function RightPanelTabs({
             onSelect={onOpenTerminal}
             shortcutLabel={terminalShortcutLabel}
           />
+          {onOpenGit && isGitRepo ? (
+            <MenuItem onClick={onOpenGit}>
+              <GitBranchIcon className="size-3.5" />
+              <span>Git</span>
+              {gitShortcutLabel ? <MenuShortcut>{gitShortcutLabel}</MenuShortcut> : null}
+            </MenuItem>
+          ) : null}
           {onOpenDiff && (
             <MenuItem disabled={!isGitRepo} onClick={onOpenDiff}>
               <DiffIcon className="size-3.5" />
@@ -264,12 +273,6 @@ export function RightPanelTabs({
               {diffShortcutLabel ? <MenuShortcut>{diffShortcutLabel}</MenuShortcut> : null}
             </MenuItem>
           )}
-          {onOpenGit && isGitRepo ? (
-            <MenuItem onClick={onOpenGit}>
-              <GitBranchIcon className="size-3.5" />
-              <span>Git</span>
-            </MenuItem>
-          ) : null}
         </MenuPopup>
       </Menu>
     </div>
