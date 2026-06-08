@@ -1,7 +1,21 @@
 import {
   type GitActionProgressEvent,
+  type GitGetCommitDetailsInput,
+  type GitGetCommitDetailsResult,
+  type GitListCommitsInput,
+  type GitListCommitsResult,
+  type Note,
+  type NotesCreateInput,
+  type NotesDeleteInput,
+  type NotesDeleteResult,
+  type NotesGetInput,
+  type NotesListInput,
+  type NotesListResult,
+  type NotesUpdateInput,
   type ProjectDirectoryWatchEvent,
   type ProjectDirectoryWatchInput,
+  type GitReadWorkingTreeDiffInput,
+  type GitReadWorkingTreeDiffResult,
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
   type GitStatusInput,
@@ -65,8 +79,16 @@ export interface WsRpcClient {
       options?: StreamSubscriptionOptions,
     ) => () => void;
     readonly readFilePreview: RpcUnaryMethod<typeof WS_METHODS.projectsReadFilePreview>;
+    readonly searchFileContents: RpcUnaryMethod<typeof WS_METHODS.projectsSearchFileContents>;
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
+  };
+  readonly notes: {
+    readonly list: (input: NotesListInput) => Promise<NotesListResult>;
+    readonly get: (input: NotesGetInput) => Promise<Note>;
+    readonly create: (input: NotesCreateInput) => Promise<Note>;
+    readonly update: (input: NotesUpdateInput) => Promise<Note>;
+    readonly delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
   readonly shell: {
     readonly openInEditor: (input: {
@@ -80,6 +102,13 @@ export interface WsRpcClient {
   readonly git: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.gitPull>;
     readonly refreshStatus: RpcUnaryMethod<typeof WS_METHODS.gitRefreshStatus>;
+    readonly listCommits: (input: GitListCommitsInput) => Promise<GitListCommitsResult>;
+    readonly getCommitDetails: (
+      input: GitGetCommitDetailsInput,
+    ) => Promise<GitGetCommitDetailsResult>;
+    readonly readWorkingTreeDiff: (
+      input: GitReadWorkingTreeDiffInput,
+    ) => Promise<GitReadWorkingTreeDiffResult>;
     readonly onStatus: (
       input: GitStatusInput,
       listener: (event: GitStatusStreamEvent) => void,
@@ -175,10 +204,19 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
       readFilePreview: (input) =>
         transport.request((client) => client[WS_METHODS.projectsReadFilePreview](input)),
+      searchFileContents: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsSearchFileContents](input)),
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+    },
+    notes: {
+      list: (input) => transport.request((client) => client[WS_METHODS.notesList](input)),
+      get: (input) => transport.request((client) => client[WS_METHODS.notesGet](input)),
+      create: (input) => transport.request((client) => client[WS_METHODS.notesCreate](input)),
+      update: (input) => transport.request((client) => client[WS_METHODS.notesUpdate](input)),
+      delete: (input) => transport.request((client) => client[WS_METHODS.notesDelete](input)),
     },
     shell: {
       openInEditor: (input) =>
@@ -189,6 +227,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       pull: (input) => transport.request((client) => client[WS_METHODS.gitPull](input)),
       refreshStatus: (input) =>
         transport.request((client) => client[WS_METHODS.gitRefreshStatus](input)),
+      listCommits: (input) =>
+        transport.request((client) => client[WS_METHODS.gitListCommits](input)),
+      getCommitDetails: (input) =>
+        transport.request((client) => client[WS_METHODS.gitGetCommitDetails](input)),
+      readWorkingTreeDiff: (input) =>
+        transport.request((client) => client[WS_METHODS.gitReadWorkingTreeDiff](input)),
       onStatus: (input, listener) =>
         transport.subscribe((client) => client[WS_METHODS.subscribeGitStatus](input), listener),
       runStackedAction: async (input, options) => {

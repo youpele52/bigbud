@@ -4,7 +4,10 @@ import {
   isChatNewShortcut,
   isChatNewLocalShortcut,
   isDiffToggleShortcut,
+  isGitToggleShortcut,
+  isNotesToggleShortcut,
   isOpenFavoriteEditorShortcut,
+  isProjectOpenShortcut,
   isTerminalCloseShortcut,
   isTerminalNewShortcut,
   isTerminalSplitShortcut,
@@ -55,7 +58,7 @@ describe("split/new/close terminal shortcuts", () => {
       ),
     );
     assert.isFalse(
-      isTerminalNewShortcut(event({ key: "d", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
         context: { terminalFocus: false },
       }),
@@ -80,7 +83,7 @@ describe("split/new/close terminal shortcuts", () => {
       ),
     );
     assert.isTrue(
-      isTerminalNewShortcut(event({ key: "d", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      isTerminalNewShortcut(event({ key: "n", ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
@@ -172,16 +175,26 @@ describe("shortcutLabelForCommand", () => {
   it("returns effective labels for non-terminal commands", () => {
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "commandPalette.toggle", "MacIntel"),
-      "⌘K",
+      "⌘P",
     );
-    assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "chat.new", "MacIntel"), "⇧⌘O");
+    assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "chat.new", "MacIntel"), "⌘N");
     assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "diff.toggle", "Linux"),
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "git.toggle", {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+      "Ctrl+G",
+    );
+    assert.strictEqual(
+      shortcutLabelForCommand(DEFAULT_BINDINGS, "diff.toggle", {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
       "Ctrl+Shift+G",
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "editor.openFavorite", "Linux"),
-      "Ctrl+O",
+      "Ctrl+Shift+O",
     );
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.jump.3", "MacIntel"),
@@ -276,21 +289,21 @@ describe("thread navigation helpers", () => {
 describe("chat/editor shortcuts", () => {
   it("matches commandPalette.toggle shortcut", () => {
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "k", metaKey: true }), DEFAULT_BINDINGS, {
+      resolveShortcutCommand(event({ key: "p", metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
         context: { terminalFocus: false },
       }),
       "commandPalette.toggle",
     );
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "k", ctrlKey: true }), DEFAULT_BINDINGS, {
+      resolveShortcutCommand(event({ key: "p", ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
         context: { terminalFocus: false },
       }),
       "commandPalette.toggle",
     );
     assert.strictEqual(
-      resolveShortcutCommand(event({ key: "k", ctrlKey: true }), DEFAULT_BINDINGS, {
+      resolveShortcutCommand(event({ key: "p", ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
         context: { terminalFocus: true },
       }),
@@ -338,41 +351,71 @@ describe("chat/editor shortcuts", () => {
         context: { terminalFocus: true },
       }),
     );
+  });
+
+  it("matches chat.newLocal shortcut", () => {
     assert.isTrue(
-      isChatNewShortcut(event({ key: "o", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      isChatNewLocalShortcut(event({ key: "n", metaKey: true, altKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isTrue(
-      isChatNewShortcut(event({ key: "o", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      isChatNewLocalShortcut(event({ key: "n", ctrlKey: true, altKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
       }),
     );
   });
 
-  it("matches chat.newLocal shortcut", () => {
+  it("matches notes.toggle shortcut", () => {
     assert.isTrue(
-      isChatNewLocalShortcut(event({ key: "n", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+      isNotesToggleShortcut(event({ key: "n", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
+        context: { terminalFocus: false },
       }),
     );
+    assert.isFalse(
+      isNotesToggleShortcut(event({ key: "n", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
+    );
+  });
+
+  it("matches project.open shortcut", () => {
     assert.isTrue(
-      isChatNewLocalShortcut(event({ key: "n", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
-        platform: "Linux",
+      isProjectOpenShortcut(event({ key: "o", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+    );
+    assert.isFalse(
+      isProjectOpenShortcut(event({ key: "o", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
       }),
     );
   });
 
   it("matches editor.openFavorite shortcut", () => {
     assert.isTrue(
-      isOpenFavoriteEditorShortcut(event({ key: "o", metaKey: true }), DEFAULT_BINDINGS, {
-        platform: "MacIntel",
-      }),
+      isOpenFavoriteEditorShortcut(
+        event({ key: "o", metaKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "MacIntel",
+          context: { terminalFocus: false },
+        },
+      ),
     );
     assert.isTrue(
-      isOpenFavoriteEditorShortcut(event({ key: "o", ctrlKey: true }), DEFAULT_BINDINGS, {
-        platform: "Linux",
-      }),
+      isOpenFavoriteEditorShortcut(
+        event({ key: "o", ctrlKey: true, shiftKey: true }),
+        DEFAULT_BINDINGS,
+        {
+          platform: "Linux",
+          context: { terminalFocus: false },
+        },
+      ),
     );
   });
 
@@ -387,6 +430,29 @@ describe("chat/editor shortcuts", () => {
       isDiffToggleShortcut(event({ key: "g", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
         context: { terminalFocus: true },
+      }),
+    );
+  });
+
+  it("matches git.toggle shortcut outside terminal focus", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "g", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "git.toggle",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "g", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: true },
+      }),
+      null,
+    );
+    assert.isTrue(
+      isGitToggleShortcut(event({ key: "g", metaKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
       }),
     );
   });

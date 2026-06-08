@@ -8,7 +8,7 @@ interface RightPanelShellProps {
   open: boolean;
   resizeAriaLabel?: string | undefined;
   width: number;
-  onResizePointerDown?: ((event: React.PointerEvent<HTMLDivElement>) => void) | undefined;
+  onResizePointerDown?: ((event: React.PointerEvent<HTMLButtonElement>) => void) | undefined;
 }
 
 export function RightPanelShell({
@@ -35,15 +35,13 @@ export function RightPanelShell({
       >
         {children}
         {onResizePointerDown ? (
-          <div
-            className="absolute inset-y-0 left-0 z-50 hidden w-4 cursor-col-resize md:block"
-            onPointerDown={onResizePointerDown}
-            role="button"
+          <button
             aria-label={resizeAriaLabel}
-            tabIndex={0}
-          >
-            <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent hover:bg-border" />
-          </div>
+            className="absolute inset-y-0 left-0 z-50 hidden w-4 -translate-x-1/2 cursor-e-resize outline-none transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[3px] hover:after:bg-primary/30 md:block"
+            onPointerDown={onResizePointerDown}
+            tabIndex={-1}
+            type="button"
+          />
         ) : null}
       </div>
     </>

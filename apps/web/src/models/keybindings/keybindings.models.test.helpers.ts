@@ -61,18 +61,16 @@ function compile(bindings: TestBinding[]): ResolvedKeybindingsConfig {
 export const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("j"), command: "terminal.toggle" },
   { shortcut: modShortcut("j", { shiftKey: true }), command: "terminalPanel.toggle" },
-  {
-    shortcut: modShortcut("k"),
-    command: "commandPalette.toggle",
-    whenAst: whenNot(whenIdentifier("terminalFocus")),
-  },
+  { shortcut: modShortcut("b"), command: "sidebar.toggle" },
+  { shortcut: modShortcut(","), command: "settings.toggle" },
+  { shortcut: modShortcut("f"), command: "search.toggle" },
   {
     shortcut: modShortcut("g", { shiftKey: true }),
     command: "terminal.split",
     whenAst: whenIdentifier("terminalFocus"),
   },
   {
-    shortcut: modShortcut("d", { shiftKey: true }),
+    shortcut: modShortcut("n"),
     command: "terminal.new",
     whenAst: whenIdentifier("terminalFocus"),
   },
@@ -82,8 +80,38 @@ export const DEFAULT_BINDINGS = compile([
     whenAst: whenIdentifier("terminalFocus"),
   },
   {
+    shortcut: modShortcut("g"),
+    command: "git.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
     shortcut: modShortcut("g", { shiftKey: true }),
     command: "diff.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("b", { shiftKey: true }),
+    command: "browser.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("e", { shiftKey: true }),
+    command: "files.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("b", { altKey: true }),
+    command: "rightPanel.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("t"),
+    command: "rightPanel.newTab",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("p"),
+    command: "commandPalette.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
@@ -91,9 +119,22 @@ export const DEFAULT_BINDINGS = compile([
     command: "chat.new",
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
-  { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
-  { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
-  { shortcut: modShortcut("o"), command: "editor.openFavorite" },
+  { shortcut: modShortcut("n", { altKey: true }), command: "chat.newLocal" },
+  {
+    shortcut: modShortcut("n", { shiftKey: true }),
+    command: "notes.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("o"),
+    command: "project.open",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("o", { shiftKey: true }),
+    command: "editor.openFavorite",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
   { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
   { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
   { shortcut: modShortcut("1"), command: "thread.jump.1" },

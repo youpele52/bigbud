@@ -37,6 +37,7 @@ export function ChatViewComposerMenuLayer({
           resolvedTheme={resolvedTheme}
           isLoading={false}
           triggerKind={syntheticMenuKind === "skill" ? "skill" : "path"}
+          discoverySearch={null}
           activeItemId={syntheticMenuHighlightId}
           onHighlightedItemChange={onSyntheticMenuHighlight}
           onSelect={onSyntheticMenuSelect}
@@ -49,6 +50,19 @@ export function ChatViewComposerMenuLayer({
     return null;
   }
 
+  const slashDiscoverySearch = composer.slashDiscoverySearch;
+  const discoverySearch = slashDiscoverySearch
+    ? {
+        ...slashDiscoverySearch,
+        onQueryChange: (query: string) => {
+          interactions.composerCommandHandlers.onChangeComposerDiscoverySearch(
+            slashDiscoverySearch.command,
+            query,
+          );
+        },
+      }
+    : null;
+
   return (
     <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
       <ComposerCommandMenu
@@ -56,6 +70,7 @@ export function ChatViewComposerMenuLayer({
         resolvedTheme={resolvedTheme}
         isLoading={interactions.isComposerMenuLoading}
         triggerKind={composer.composerTriggerKind}
+        discoverySearch={discoverySearch}
         activeItemId={composer.activeComposerMenuItem?.id ?? null}
         onHighlightedItemChange={interactions.composerCommandHandlers.onComposerMenuItemHighlighted}
         onSelect={interactions.composerCommandHandlers.onSelectComposerItem}

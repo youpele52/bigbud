@@ -41,7 +41,12 @@ export {
   ComposerAnnotationViewport,
   ComposerBrowserAnnotationAttachment,
   ComposerCodeAnnotationAttachment,
+  isBrowserAnnotationAttachment,
   isCodeAnnotationAttachment,
+  normalizeAnnotationAttachment,
+  normalizeBrowserAnnotationElement,
+  normalizeBrowserAnnotationPage,
+  normalizeBrowserAnnotationViewport,
   type AnnotationIntent,
 } from "./types.annotation.store";
 

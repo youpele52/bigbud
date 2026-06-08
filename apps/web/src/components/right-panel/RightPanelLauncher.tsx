@@ -1,9 +1,16 @@
-import { DiffIcon, FoldersIcon, GlobeIcon, TerminalIcon } from "lucide-react";
+import {
+  DiffIcon,
+  FoldersIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  NotebookTextIcon,
+  TerminalIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Kbd, KbdGroup } from "../ui/kbd";
 
-export type LauncherToolKind = "browser" | "files" | "terminal" | "diff";
+export type LauncherToolKind = "browser" | "diff" | "files" | "git" | "notes" | "terminal";
 
 interface LauncherCardProps {
   description: string;
@@ -51,11 +58,15 @@ interface RightPanelLauncherProps {
   browserShortcutLabel: string | null;
   diffShortcutLabel: string | null;
   filesShortcutLabel: string | null;
+  gitShortcutLabel: string | null;
   hasActiveProject: boolean;
   isGitRepo: boolean;
+  notesShortcutLabel?: string | null;
   onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
+  onToggleGit: () => void;
+  onToggleNotes: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -65,11 +76,15 @@ export function RightPanelLauncher({
   browserShortcutLabel,
   diffShortcutLabel,
   filesShortcutLabel,
+  gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
+  notesShortcutLabel,
   onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
+  onToggleGit,
+  onToggleNotes,
   onToggleTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -95,6 +110,14 @@ export function RightPanelLauncher({
           shortcutLabel={filesShortcutLabel}
         />
         <LauncherCard
+          description="Write markdown notes"
+          icon={NotebookTextIcon}
+          kind="notes"
+          label="Notes"
+          onSelect={onToggleNotes}
+          shortcutLabel={notesShortcutLabel ?? null}
+        />
+        <LauncherCard
           description="Start an interactive shell"
           disabled={!terminalAvailable}
           icon={TerminalIcon}
@@ -102,6 +125,15 @@ export function RightPanelLauncher({
           label="Terminal"
           onSelect={onToggleTerminal}
           shortcutLabel={terminalShortcutLabel}
+        />
+        <LauncherCard
+          description="Inspect repo changes"
+          disabled={!isGitRepo}
+          icon={GitBranchIcon}
+          kind="git"
+          label="Git"
+          onSelect={onToggleGit}
+          shortcutLabel={gitShortcutLabel}
         />
         <LauncherCard
           description="View code changes"

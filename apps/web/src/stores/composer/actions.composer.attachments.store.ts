@@ -14,7 +14,7 @@ import {
   type ComposerThreadDraftState,
   type PersistedComposerImageAttachment,
 } from "./types.store";
-import { isCodeAnnotationAttachment } from "./types.annotation.store";
+import { isBrowserAnnotationAttachment } from "./types.annotation.store";
 
 type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 type GetFn = StoreApi<ComposerDraftStoreState>["getState"];
@@ -92,7 +92,7 @@ export function createComposerAttachmentActions(
           images: current.images.filter((image) => image.id !== imageId),
           annotations: current.annotations.filter(
             (annotation) =>
-              isCodeAnnotationAttachment(annotation) || annotation.imageId !== imageId,
+              !isBrowserAnnotationAttachment(annotation) || annotation.imageId !== imageId,
           ),
           nonPersistedImageIds: current.nonPersistedImageIds.filter((id) => id !== imageId),
           persistedAttachments: current.persistedAttachments.filter(

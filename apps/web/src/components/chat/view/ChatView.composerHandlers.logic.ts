@@ -215,7 +215,7 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       rangeStart: number,
       rangeEnd: number,
       replacement: string,
-      options?: { expectedText?: string },
+      options?: { expectedText?: string; focusComposer?: boolean },
     ): boolean => {
       const currentText = promptRef.current;
       const safeStart = Math.max(0, Math.min(currentText.length, rangeStart));
@@ -248,9 +248,11 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       setComposerTrigger(
         detectComposerTrigger(next.text, expandCollapsedComposerCursor(next.text, nextCursor)),
       );
-      window.requestAnimationFrame(() => {
-        composerEditorRef.current?.focusAt(nextCursor);
-      });
+      if (options?.focusComposer !== false) {
+        window.requestAnimationFrame(() => {
+          composerEditorRef.current?.focusAt(nextCursor);
+        });
+      }
       return true;
     },
     [

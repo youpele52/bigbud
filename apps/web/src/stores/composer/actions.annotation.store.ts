@@ -6,24 +6,30 @@ import {
   type ComposerDraftStoreState,
   type ComposerThreadDraftState,
 } from "./types.store";
-import { isCodeAnnotationAttachment } from "./types.annotation.store";
+import {
+  isBrowserAnnotationAttachment,
+  normalizeAnnotationAttachment,
+} from "./types.annotation.store";
 
 type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 
 export function createComposerAnnotationActions(set: SetFn) {
   const dedupKey = (annotation: ComposerAnnotationAttachment) =>
-    isCodeAnnotationAttachment(annotation) ? annotation.id : annotation.imageId;
+    isBrowserAnnotationAttachment(annotation) ? annotation.imageId : annotation.id;
 
   return {
     addAnnotation: (threadId: ThreadId, annotation: ComposerAnnotationAttachment) => {
       if (threadId.length === 0) {
         return;
       }
+      const normalizedAnnotation = normalizeAnnotationAttachment(annotation);
       set((state) => {
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         if (
           existing.annotations.some(
-            (entry) => entry.id === annotation.id || dedupKey(entry) === dedupKey(annotation),
+            (entry) =>
+              entry.id === normalizedAnnotation.id ||
+              dedupKey(entry) === dedupKey(normalizedAnnotation),
           )
         ) {
           return state;
@@ -33,7 +39,7 @@ export function createComposerAnnotationActions(set: SetFn) {
             ...state.draftsByThreadId,
             [threadId]: {
               ...existing,
-              annotations: [...existing.annotations, annotation],
+              annotations: [...existing.annotations, normalizedAnnotation],
             },
           },
         };
@@ -43,6 +49,9 @@ export function createComposerAnnotationActions(set: SetFn) {
       if (threadId.length === 0 || annotations.length === 0) {
         return;
       }
+      const normalizedAnnotations = annotations.map((annotation) =>
+        normalizeAnnotationAttachment(annotation),
+      );
       set((state) => {
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         const existingIds = new Set(existing.annotations.map((annotation) => annotation.id));
@@ -50,7 +59,7 @@ export function createComposerAnnotationActions(set: SetFn) {
           existing.annotations.map((annotation) => dedupKey(annotation)),
         );
         const accepted: ComposerAnnotationAttachment[] = [];
-        for (const annotation of annotations) {
+        for (const annotation of normalizedAnnotations) {
           const key = dedupKey(annotation);
           if (existingIds.has(annotation.id) || existingDedupKeys.has(key)) {
             continue;

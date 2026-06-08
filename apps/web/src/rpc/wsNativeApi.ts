@@ -59,8 +59,16 @@ export function createWsNativeApi(): NativeApi {
       onDirectoryChange: (input, callback, options) =>
         rpcClient.projects.onDirectoryChange(input, callback, options),
       readFilePreview: rpcClient.projects.readFilePreview,
+      searchFileContents: rpcClient.projects.searchFileContents,
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
+    },
+    notes: {
+      list: rpcClient.notes.list,
+      get: rpcClient.notes.get,
+      create: rpcClient.notes.create,
+      update: rpcClient.notes.update,
+      delete: rpcClient.notes.delete,
     },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
@@ -77,6 +85,9 @@ export function createWsNativeApi(): NativeApi {
     git: {
       pull: rpcClient.git.pull,
       refreshStatus: rpcClient.git.refreshStatus,
+      listCommits: rpcClient.git.listCommits,
+      getCommitDetails: rpcClient.git.getCommitDetails,
+      readWorkingTreeDiff: rpcClient.git.readWorkingTreeDiff,
       onStatus: (input, callback) => rpcClient.git.onStatus(input, callback),
       listBranches: rpcClient.git.listBranches,
       createWorktree: rpcClient.git.createWorktree,

@@ -10,10 +10,11 @@ vi.mock("../wsRpcClient", () => ({
 }));
 
 import type { InfiniteData } from "@tanstack/react-query";
-import type { GitListBranchesResult } from "@bigbud/contracts";
+import type { GitListBranchesResult, GitListCommitsResult } from "@bigbud/contracts";
 
 import {
   gitBranchSearchInfiniteQueryOptions,
+  gitListCommitsInfiniteQueryOptions,
   gitMutationKeys,
   gitQueryKeys,
   gitPreparePullRequestThreadMutationOptions,
@@ -35,6 +36,11 @@ const BRANCH_QUERY_RESULT: GitListBranchesResult = {
 const BRANCH_SEARCH_RESULT: InfiniteData<GitListBranchesResult, number> = {
   pages: [BRANCH_QUERY_RESULT],
   pageParams: [0],
+};
+
+const COMMITS_QUERY_RESULT: GitListCommitsResult = {
+  commits: [],
+  nextCursor: null,
 };
 
 describe("gitMutationKeys", () => {
@@ -100,6 +106,20 @@ describe("invalidateGitQueries", () => {
       }).queryKey,
       BRANCH_SEARCH_RESULT,
     );
+    queryClient.setQueryData(
+      gitListCommitsInfiniteQueryOptions({
+        cwd: "/repo/a",
+        limit: 20,
+      }).queryKey,
+      { pages: [COMMITS_QUERY_RESULT], pageParams: [0] },
+    );
+    queryClient.setQueryData(
+      gitListCommitsInfiniteQueryOptions({
+        cwd: "/repo/b",
+        limit: 20,
+      }).queryKey,
+      { pages: [COMMITS_QUERY_RESULT], pageParams: [0] },
+    );
 
     await invalidateGitQueries(queryClient, { cwd: "/repo/a" });
 
@@ -122,6 +142,22 @@ describe("invalidateGitQueries", () => {
         gitBranchSearchInfiniteQueryOptions({
           cwd: "/repo/b",
           query: "feature",
+        }).queryKey,
+      )?.isInvalidated,
+    ).toBe(false);
+    expect(
+      queryClient.getQueryState(
+        gitListCommitsInfiniteQueryOptions({
+          cwd: "/repo/a",
+          limit: 20,
+        }).queryKey,
+      )?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(
+        gitListCommitsInfiniteQueryOptions({
+          cwd: "/repo/b",
+          limit: 20,
         }).queryKey,
       )?.isInvalidated,
     ).toBe(false);

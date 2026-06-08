@@ -41,17 +41,35 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedDiffToggle.command, "diff.toggle");
 
+    const parsedGitToggle = yield* decode(KeybindingRule, {
+      key: "mod+g",
+      command: "git.toggle",
+    });
+    assert.strictEqual(parsedGitToggle.command, "git.toggle");
+
     const parsedCommandPalette = yield* decode(KeybindingRule, {
       key: "mod+p",
       command: "commandPalette.toggle",
     });
     assert.strictEqual(parsedCommandPalette.command, "commandPalette.toggle");
 
+    const parsedRightPanelNewTab = yield* decode(KeybindingRule, {
+      key: "mod+t",
+      command: "rightPanel.newTab",
+    });
+    assert.strictEqual(parsedRightPanelNewTab.command, "rightPanel.newTab");
+
     const parsedLocal = yield* decode(KeybindingRule, {
-      key: "mod+shift+n",
+      key: "mod+alt+n",
       command: "chat.newLocal",
     });
     assert.strictEqual(parsedLocal.command, "chat.newLocal");
+
+    const parsedNotes = yield* decode(KeybindingRule, {
+      key: "mod+shift+n",
+      command: "notes.toggle",
+    });
+    assert.strictEqual(parsedNotes.command, "notes.toggle");
 
     const parsedThreadPrevious = yield* decode(KeybindingRule, {
       key: "mod+shift+[",

@@ -4,6 +4,78 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.642 (9 June, 2026)
+
+### Git Panel and Repo History
+
+- Added a dedicated Git tab in the right panel with separate `Changes` and `History` views, so you can inspect your repository state without leaving the app.
+- Git history now shows the author, relative time, pushed state, and older commits as you scroll, making the timeline easier to scan without hitting a hard cutoff.
+- Updated the Git changes view to handle real working-tree review better: `mod+g` now toggles the panel like other tools, large change lists reveal more files as you scroll, changed files can be dragged into the composer, and added or deleted file diffs render more reliably.
+
+### Notes Panel and File Annotations
+
+- Added a Notes panel in the right panel where you can create, edit, and manage plain-text notes stored on your filesystem, organised by project or as global notes, with auto-save (300ms debounce) and polling-based refresh so changes from the AI or other tools are picked up automatically.
+- Notes support an edit/preview mode, letting you write or review content before saving, and each note includes its absolute path so the AI can read and modify the file directly when you reference it in a message.
+- Added the ability to annotate any file in the preview viewer with a two-step flow: right-click to select a range, then choose an intent (Ask, Context, or Fix) and write your comment — this works for both code files and notes, replacing the previous browser-only annotation model.
+- Fixed annotations in preview mode so selection mismatches between rendered text and raw markdown no longer silently fail — they fall back to annotating the first line instead.
+- Renamed the annotation attachment taxonomy so browser and file annotations are clearly separated in the codebase, reducing the chance of annotation conflicts in the composer.
+- Extracted a shared `BaseMarkdown` component from the chat markdown renderer with configurable line-break preservation, so the notes preview and chat messages each get the right rendering behaviour without duplicating the highlight, copy, and link-handling logic.
+
+### Workspace Search Across Both Palettes
+
+- Added workspace file name and path search to the command palette, so you can quickly jump to files from the active workspace without leaving the keyboard flow.
+- Added workspace file content search to the search palette, including line and column metadata, so `mod+f` can now locate matching text inside project files instead of only searching chat content.
+- Updated both palettes to reuse the existing file-open flow and added see-more pagination, keeping results relevant while letting previewable files open directly inside bigbud's Files panel.
+
+### Git Panel and Repo History
+
+- Added a dedicated Git tab in the right panel with separate `Changes` and `History` views, so you can inspect your repository state without leaving the app.
+- Git history now shows the author, relative time, pushed state, and older commits as you scroll, making the timeline easier to scan without hitting a hard cutoff.
+- Updated the Git changes view to handle real working-tree review better: `mod+g` now toggles the panel like other tools, large change lists reveal more files as you scroll, changed files can be dragged into the composer, and added or deleted file diffs render more reliably.
+
+### Shortcut Reorganization and Open Project
+
+- Reorganized the default keybindings to make room for new commands: `mod+shift+n` now toggles the Notes panel, `mod+alt+n` creates a new local chat, `mod+o` opens a folder as a project, and `mod+shift+o` opens the favourite editor — the new thread shortcut is now `mod+n` only, streamlined to a single chord.
+- Added an `Open Project` command bound to `mod+o` that opens your system folder picker and creates a new project from any directory, making it easy to start working in a different codebase without going through the project manager.
+- Added `notes.toggle` and `project.open` to the keybinding registry and models, and wired both into the global shortcut handler with proper terminal-focus gating, so they are reliable and consistently documented.
+- Updated the right-panel launcher and tab strip to show the Notes shortcut label alongside the other tool shortcuts.
+
+### Composer Slash Commands and Discovery Search
+
+- Slash commands no longer need to be typed at the very start of a prompt. Commands like `/model`, `/agents`, `/skills`, and provider-specific slash actions now work from anywhere within the active line while still ignoring slashes inside URLs and paths.
+- Added a search bar to the `/agents`, `/skills`, and `/model` discovery menus, making large agent, skill, and model lists easier to browse.
+- Grouped discovery results under clear `Agents`, `Skills`, and `Models` headings and fixed the search row so clicking anywhere inside it focuses the input.
+
+### Browser Tabs and Navigation History
+
+- Added support for up to five browser tabs in the right panel, so you can keep several pages open and switch between them without losing your place.
+- Updated browser tabs to show the current page title when available, with a hostname fallback and hover label for long names, making it easier to recognize each page at a glance.
+- Increased saved browser address history from 10 to 20 entries, giving the address bar more useful recent-page suggestions.
+
+### Context Window Warning Threshold
+
+- Added a visual warning indicator to the composer context window meter when token usage reaches 120k — the progress ring and percentage text switch to a warning color (amber) so you can see at a glance when you are approaching the limit.
+- Hovering the meter now shows a danger-style alert inside the tooltip explaining that some models may start deteriorating past 120k tokens, with a suggestion to use the handoff skill or the `/compact` command.
+
+### Browser Annotation Safety and Fallbacks
+
+- Hardened browser annotation handling so malformed runtime payloads no longer crash the app when comments, page metadata, element metadata, or viewport fields are missing or incomplete.
+- Updated composer annotation previews and prompt-building logic to use safe fallbacks when browser annotations do not include selectors or other expected fields.
+
+### Right Panel Shortcuts and Launcher
+
+- Added a dedicated `mod+t` shortcut for opening the right-panel new-tab launcher, so you can jump straight into Browser, Files, Terminal, Diff, or Git without reaching for the mouse.
+- Updated the right-panel launcher and tab menu ordering so Git sits alongside the other repo tools in a more predictable spot.
+
+### Maintainability
+
+- Enforced a hard 400-line limit for non-test TypeScript source files and a 500-line cap for test files, and split several oversized test files across the codebase to comply — keeping the codebase easier to navigate and reducing merge conflicts from large file changes.
+- Removed leftover `.plans` documentation files and added placeholder test-data fixtures to keep the test infrastructure self-contained.
+
+### Validation
+
+- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, malformed browser annotation regression cases, Git panel history and diff behavior, right-panel shortcut toggles, Notes panel CRUD and annotation flows, keybinding reorganizations, Open Project dialog and error handling, and context window warning threshold rendering.
+
 ## v0.1.641 (4 June, 2026)
 
 ### Files Panel Live Directory Watching for Local Workspaces

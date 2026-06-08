@@ -9,7 +9,14 @@ import { type ComposerTriggerKind } from "../../../logic/composer";
 import { BookOpenIcon, BotIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Badge } from "../../ui/badge";
-import { Command, CommandItem, CommandList } from "../../ui/command";
+import {
+  Command,
+  CommandGroup,
+  CommandGroupLabel,
+  CommandItem,
+  CommandList,
+} from "../../ui/command";
+import { Searchbar } from "../../ui/Searchbar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 
@@ -58,11 +65,17 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   resolvedTheme: "light" | "dark";
   isLoading: boolean;
   triggerKind: ComposerTriggerKind | null;
+  discoverySearch: {
+    command: "agents" | "skills" | "model";
+    query: string;
+    onQueryChange: (query: string) => void;
+  } | null;
   activeItemId: string | null;
   onHighlightedItemChange: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const discoveryInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
     if (!props.activeItemId || !listRef.current) return;
@@ -86,17 +99,73 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
         ref={listRef}
         className="relative overflow-hidden rounded-xl border border-border/80 bg-popover/96 shadow-lg/8 backdrop-blur-xs"
       >
-        <CommandList className="max-h-96">
-          {props.items.map((item) => (
-            <ComposerCommandMenuItem
-              key={item.id}
-              item={item}
-              resolvedTheme={props.resolvedTheme}
-              isActive={props.activeItemId === item.id}
-              onHighlight={props.onHighlightedItemChange}
-              onSelect={props.onSelect}
+        {props.discoverySearch ? (
+          <Searchbar
+            sticky
+            showSearchIcon={false}
+            canClear={props.discoverySearch.query.length > 0}
+            onClear={() => {
+              props.discoverySearch?.onQueryChange("");
+              discoveryInputRef.current?.focus();
+            }}
+            onClick={() => {
+              discoveryInputRef.current?.focus();
+            }}
+          >
+            <input
+              ref={discoveryInputRef}
+              type="text"
+              value={props.discoverySearch.query}
+              onChange={(event) => {
+                props.discoverySearch?.onQueryChange(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+              }}
+              placeholder={
+                props.discoverySearch.command === "agents"
+                  ? "Search agents"
+                  : props.discoverySearch.command === "skills"
+                    ? "Search skills"
+                    : "Search models"
+              }
+              className="min-w-0 flex-1 bg-transparent py-0.5 text-[11px] tracking-tight text-foreground placeholder:text-[11px] placeholder:tracking-tight placeholder:text-muted-foreground/50 focus:outline-none"
             />
-          ))}
+          </Searchbar>
+        ) : null}
+        <CommandList className="max-h-96">
+          {props.discoverySearch && props.items.length > 0 ? (
+            <CommandGroup>
+              <CommandGroupLabel>
+                {props.discoverySearch.command === "agents"
+                  ? "Agents"
+                  : props.discoverySearch.command === "skills"
+                    ? "Skills"
+                    : "Models"}
+              </CommandGroupLabel>
+              {props.items.map((item) => (
+                <ComposerCommandMenuItem
+                  key={item.id}
+                  item={item}
+                  resolvedTheme={props.resolvedTheme}
+                  isActive={props.activeItemId === item.id}
+                  onHighlight={props.onHighlightedItemChange}
+                  onSelect={props.onSelect}
+                />
+              ))}
+            </CommandGroup>
+          ) : (
+            props.items.map((item) => (
+              <ComposerCommandMenuItem
+                key={item.id}
+                item={item}
+                resolvedTheme={props.resolvedTheme}
+                isActive={props.activeItemId === item.id}
+                onHighlight={props.onHighlightedItemChange}
+                onSelect={props.onSelect}
+              />
+            ))
+          )}
         </CommandList>
         {props.items.length === 0 && (
           <p className="px-3 py-2 text-muted-foreground/70 text-xs">
@@ -106,7 +175,13 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                 ? "No matching agents, files, or folders."
                 : props.triggerKind === "skill"
                   ? "No matching skills."
-                  : "No matching command."}
+                  : props.discoverySearch?.command === "agents"
+                    ? "No matching agents."
+                    : props.discoverySearch?.command === "skills"
+                      ? "No matching skills."
+                      : props.discoverySearch?.command === "model"
+                        ? "No matching models."
+                        : "No matching command."}
           </p>
         )}
       </div>

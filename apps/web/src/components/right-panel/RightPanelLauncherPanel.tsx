@@ -3,46 +3,51 @@ import { RightPanelTabs } from "./RightPanelTabs";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { useRightPanelWidth } from "./useRightPanelWidth";
-import { closeBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { closeGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
-import { useDefaultChatCwd } from "~/rpc/serverState";
-import { useProjectById, useThreadById } from "~/stores/main";
-import { useUiStateStore } from "~/stores/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
+import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import type { ThreadId } from "@bigbud/contracts";
 
 interface RightPanelLauncherPanelProps {
   activeThreadId?: ThreadId | null;
-  onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
+  onToggleGit: () => void;
   onToggleTerminal: () => void;
 }
 
 export function RightPanelLauncherPanel({
   activeThreadId,
-  onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
+  onToggleGit,
   onToggleTerminal,
 }: RightPanelLauncherPanelProps) {
   const keybindings = useServerKeybindings();
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
+  const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
+  const workspaceRoot = cwd;
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions(cwd, executionTargetId),
+    enabled: rightPanelOpen && cwd !== null,
+  });
 
   const { panelWidth, onResizePointerDown } = useRightPanelWidth();
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
+  const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
+  const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
   const showLauncher = rightPanelOpen && activeKind === null;
 
@@ -59,15 +64,21 @@ export function RightPanelLauncherPanel({
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
+        gitShortcutLabel={gitShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={true}
-        onCloseBrowser={closeBrowserPanel}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
+        onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
+        onCloseGit={closeGitPanel}
+        onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={onToggleBrowser}
+        onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
+        onOpenGit={onToggleGit}
+        onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />
@@ -75,12 +86,16 @@ export function RightPanelLauncherPanel({
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
+        gitShortcutLabel={gitShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={true}
-        onToggleBrowser={onToggleBrowser}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
+        onToggleBrowser={openNewBrowserTab}
         onToggleDiff={onToggleDiff}
         onToggleFiles={onToggleFiles}
+        onToggleGit={onToggleGit}
+        onToggleNotes={openNotesPanel}
         onToggleTerminal={onToggleTerminal}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />

@@ -113,4 +113,54 @@ describe("ComposerAnnotationPreviews", () => {
       await screen.unmount();
     }
   });
+
+  it("falls back when an annotation comment is missing at runtime", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const malformedAnnotation = {
+      ...annotation,
+      comment: undefined,
+    } as unknown as ComposerAnnotationAttachment;
+    const screen = await render(
+      <ComposerAnnotationPreviews
+        annotations={[malformedAnnotation]}
+        images={[image]}
+        onRemoveAnnotation={vi.fn()}
+        onClearAnnotations={vi.fn()}
+      />,
+      { container: host },
+    );
+
+    try {
+      expect(document.body.textContent).toContain("No instruction provided");
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("falls back when browser annotation element metadata is missing at runtime", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const malformedAnnotation = {
+      ...annotation,
+      element: undefined,
+    } as unknown as ComposerAnnotationAttachment;
+    const screen = await render(
+      <ComposerAnnotationPreviews
+        annotations={[malformedAnnotation]}
+        images={[image]}
+        onRemoveAnnotation={vi.fn()}
+        onClearAnnotations={vi.fn()}
+      />,
+      { container: host },
+    );
+
+    try {
+      const trigger = document.querySelector('[data-slot="popover-trigger"]');
+      expect(trigger).toBeTruthy();
+      expect(document.body.textContent).toContain("1 annotation");
+    } finally {
+      await screen.unmount();
+    }
+  });
 });

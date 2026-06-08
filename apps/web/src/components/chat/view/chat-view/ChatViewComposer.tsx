@@ -22,7 +22,7 @@ import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
-import { isCodeAnnotationAttachment } from "../../../../stores/composer";
+import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -299,7 +299,7 @@ export function ChatViewComposer({
                   onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
                   onClearAnnotations={() => {
                     for (const annotation of base.composerAnnotations) {
-                      if (!isCodeAnnotationAttachment(annotation)) {
+                      if (isBrowserAnnotationAttachment(annotation)) {
                         base.removeComposerImageFromDraft(annotation.imageId);
                       }
                       base.removeComposerAnnotationFromDraft(annotation.id);

@@ -4,9 +4,11 @@ import type { ThreadId } from "@bigbud/contracts";
 import { randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { useComposerDraftStore } from "~/stores/composer";
+import { normalizeAnnotationComment } from "~/stores/composer/types.annotation.store";
+import type { RightPanelTabId } from "~/stores/rightPanel/rightPanelTabs.store";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
-import { closeBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { closeBrowserTab } from "../../stores/browser/browserPanel.actions";
 import { dataUrlToFile } from "./BrowserPanel.annotation";
 import {
   BrowserViewport,
@@ -23,12 +25,20 @@ import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 
 interface BrowserPanelProps {
   activeThreadId?: ThreadId | null;
+  tabId?: RightPanelTabId;
+  visible?: boolean;
 }
 
 export const BrowserPanelContent = memo(function BrowserPanelContent({
   activeThreadId,
+  tabId = "browser",
+  visible = true,
 }: BrowserPanelProps) {
-  const { open, url, setUrl } = useBrowserPanelStore();
+  const open = useBrowserPanelStore((state) => state.open);
+  const url = useBrowserPanelStore((state) => state.tabsById[tabId]?.url ?? "");
+  const ensureTab = useBrowserPanelStore((state) => state.ensureTab);
+  const setTabTitle = useBrowserPanelStore((state) => state.setTabTitle);
+  const setTabUrl = useBrowserPanelStore((state) => state.setTabUrl);
   const addComposerImage = useComposerDraftStore((state) => state.addImage);
   const addComposerAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const [inputUrl, setInputUrl] = useState(url);
@@ -51,6 +61,14 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     "normal" | "ignoring-cache" | null
   >(null);
 
+  useEffect(() => {
+    ensureTab(tabId, url);
+  }, [ensureTab, tabId, url]);
+
+  useEffect(() => {
+    setTabTitle(tabId, pageMetadata.title.trim());
+  }, [pageMetadata.title, setTabTitle, tabId]);
+
   const reloadViewport = useCallback((mode: "normal" | "ignoring-cache") => {
     if (mode === "ignoring-cache") {
       viewportRef.current?.reloadIgnoringCache();
@@ -67,17 +85,17 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       nextUrl = `https://${nextUrl}`;
     }
     setInputUrl(nextUrl);
-    setUrl(nextUrl);
+    setTabUrl(tabId, nextUrl);
     setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
-  }, [inputUrl, setUrl]);
+  }, [inputUrl, setTabUrl, tabId]);
 
   const handleSelectHistoryUrl = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
-      setUrl(nextUrl);
+      setTabUrl(tabId, nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
-    [setUrl],
+    [setTabUrl, tabId],
   );
 
   const handleCancelEmptyUrlEdit = useCallback(() => {
@@ -87,10 +105,10 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const handleUrlChange = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
-      setUrl(nextUrl);
+      setTabUrl(tabId, nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
-    [setUrl],
+    [setTabUrl, tabId],
   );
 
   const handleClose = useCallback(() => {
@@ -98,8 +116,8 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       void viewportRef.current?.cancelAnnotation();
       setAnnotationActive(false);
     }
-    closeBrowserPanel();
-  }, [annotationActive]);
+    closeBrowserTab(tabId);
+  }, [annotationActive, tabId]);
 
   const handleOpenInExternalBrowser = useCallback(() => {
     const externalUrl = url.trim();
@@ -162,7 +180,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       addComposerAnnotation(activeThreadId, {
         id: randomUUID(),
         imageId,
-        comment: annotation.comment,
+        comment: normalizeAnnotationComment(annotation.comment),
         intent: annotation.intent,
         page: annotation.page,
         element: annotation.element,
@@ -199,6 +217,10 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   }, [url]);
 
   useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
     const onMenuAction = window.desktopBridge?.onMenuAction;
     if (typeof onMenuAction !== "function") {
       return;
@@ -208,7 +230,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       const reloadPlan = planDesktopBrowserReload({
         action,
         browserOpen: open,
-        browserVisible: true,
+        browserVisible: visible,
       });
       if (!reloadPlan.reloadMode) {
         return;
@@ -225,7 +247,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     return () => {
       unsubscribe?.();
     };
-  }, [open, reloadViewport]);
+  }, [open, reloadViewport, visible]);
 
   useEffect(() => {
     if (!queuedDesktopReload) {

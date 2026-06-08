@@ -33,6 +33,7 @@ import { makeDispatchBootstrapThreadCommand } from "./wsBootstrap";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
+import { ProjectionNoteRepository } from "../persistence/Services/ProjectionNotes";
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -55,6 +56,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const workspaceEntries = yield* WorkspaceEntries;
   const workspaceFileSystem = yield* WorkspaceFileSystem;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
+  const projectionNotes = yield* ProjectionNoteRepository;
 
   const serverCommandId = (tag: string) =>
     CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
@@ -219,6 +221,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     open,
     orchestrationEngine,
     projectSetupScriptRunner,
+    projectionNotes,
     projectionSnapshotQuery,
     providerRegistry,
     providerService,

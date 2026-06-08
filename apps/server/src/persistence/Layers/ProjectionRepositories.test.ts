@@ -1,19 +1,73 @@
 import { LOCAL_EXECUTION_TARGET_ID, ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer, Option } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ProjectionProjectRepositoryLive } from "./ProjectionProjects.ts";
+import { ProjectionNoteRepositoryLive } from "./ProjectionNotes.ts";
 import { ProjectionThreadRepositoryLive } from "./ProjectionThreads.ts";
 import { ProjectionProjectRepository } from "../Services/ProjectionProjects.ts";
+import { ProjectionNoteRepository } from "../Services/ProjectionNotes.ts";
 import { ProjectionThreadRepository } from "../Services/ProjectionThreads.ts";
+import { ServerConfig } from "../../startup/config.ts";
+
+const baseLayer = Layer.mergeAll(NodeServices.layer, SqlitePersistenceMemory);
+const projectLayer = ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(baseLayer));
+
+const makeServerConfigLayer = (tempDir: string) =>
+  Layer.succeed(ServerConfig, {
+    logLevel: "Error" as const,
+    traceMinLevel: "Info" as const,
+    traceTimingEnabled: true,
+    traceBatchWindowMs: 200,
+    traceMaxBytes: 10 * 1024 * 1024,
+    traceMaxFiles: 10,
+    otlpTracesUrl: undefined,
+    otlpMetricsUrl: undefined,
+    otlpExportIntervalMs: 10_000,
+    otlpServiceName: "t3-server",
+    mode: "web" as const,
+    port: 0,
+    host: undefined,
+    cwd: process.cwd(),
+    baseDir: tempDir,
+    stateDir: tempDir,
+    dbPath: `${tempDir}/state.sqlite`,
+    keybindingsConfigPath: `${tempDir}/keybindings.json`,
+    settingsPath: `${tempDir}/settings.json`,
+    notesDir: `${tempDir}/notes`,
+    worktreesDir: `${tempDir}/worktrees`,
+    attachmentsDir: `${tempDir}/attachments`,
+    logsDir: `${tempDir}/logs`,
+    serverLogPath: `${tempDir}/logs/server.log`,
+    serverTracePath: `${tempDir}/logs/server.trace.ndjson`,
+    providerLogsDir: `${tempDir}/logs/provider`,
+    providerEventLogPath: `${tempDir}/logs/provider/events.log`,
+    terminalLogsDir: `${tempDir}/logs/terminals`,
+    anonymousIdPath: `${tempDir}/anonymous-id`,
+    noBrowser: true,
+    authToken: undefined,
+    autoBootstrapProjectFromCwd: false,
+    logWebSocketEvents: false,
+    staticDir: undefined,
+    devUrl: undefined,
+  });
 
 const projectionRepositoriesLayer = it.layer(
-  Layer.mergeAll(
-    ProjectionProjectRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
-    SqlitePersistenceMemory,
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-notes-test-" });
+      const serverConfigLayer = makeServerConfigLayer(tempDir);
+      const noteLayer = ProjectionNoteRepositoryLive.pipe(
+        Layer.provideMerge(baseLayer),
+        Layer.provideMerge(serverConfigLayer),
+      );
+      const threadLayer = ProjectionThreadRepositoryLive.pipe(Layer.provideMerge(baseLayer));
+      return Layer.mergeAll(projectLayer, noteLayer, threadLayer);
+    }).pipe(Effect.provide(NodeServices.layer)),
   ),
 );
 
@@ -126,6 +180,45 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
       });
+    }),
+  );
+
+  it.effect("lists project and global notes by scope", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+
+      yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "Project note",
+        content: "project",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+      yield* notes.create({
+        projectId: null,
+        title: "Global note",
+        content: "global",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T01:00:00.000Z",
+      });
+
+      const projectNotes = yield* notes.list({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        scope: "project",
+      });
+      const allNotes = yield* notes.list({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        scope: "global",
+      });
+
+      assert.deepStrictEqual(
+        projectNotes.map((note) => note.title),
+        ["Project note"],
+      );
+      assert.deepStrictEqual(
+        allNotes.map((note) => note.title),
+        ["Global note", "Project note"],
+      );
     }),
   );
 });

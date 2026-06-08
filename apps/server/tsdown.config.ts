@@ -29,6 +29,13 @@ function isExternal(id: string): boolean {
   return EXTERNAL_PACKAGES.some((pkg) => id === pkg || id.startsWith(`${pkg}/`));
 }
 
+function shouldCleanOutDir(): boolean {
+  // In desktop dev, the server watch build shares dist/ with the copied web client
+  // bundle under dist/client. Cleaning during --watch walks those static assets and
+  // triggers noisy symlink metadata warnings from rolldown/tsdown.
+  return !process.argv.includes("--watch");
+}
+
 export default defineConfig({
   entry: ["src/bin.ts"],
   format: ["esm", "cjs"],
@@ -37,7 +44,7 @@ export default defineConfig({
   },
   outDir: "dist",
   sourcemap: true,
-  clean: true,
+  clean: shouldCleanOutDir(),
   // Bundle ALL dependencies into the output except the explicitly external ones.
   // noExternal: true tells the bundler to inline everything by default.
   noExternal: (id) => !isExternal(id),

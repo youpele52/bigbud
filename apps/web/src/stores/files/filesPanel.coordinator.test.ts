@@ -15,14 +15,23 @@ describe("filesPanel.coordinator", () => {
       fileOpenRequest: null,
       directoryNavigationRequest: null,
     });
-    useBrowserPanelStore.setState({ open: false });
-    useRightPanelTabsStore.setState({ activeKind: null, openTabs: [], rightPanelOpen: false });
+    useBrowserPanelStore.setState({ open: false, tabsById: {} });
+    useRightPanelTabsStore.setState({
+      activeKind: null,
+      activeTabId: null,
+      openTabs: [],
+      rightPanelOpen: false,
+    });
     requestRightPanel(null);
   });
 
   it("keeps other tabs open and switches the active tab to files", () => {
     useBrowserPanelStore.setState({ open: true });
-    useRightPanelTabsStore.setState({ activeKind: "browser", openTabs: ["browser"] });
+    useRightPanelTabsStore.setState({
+      activeKind: "browser",
+      activeTabId: "browser",
+      openTabs: ["browser"],
+    });
 
     toggleFilesPanel();
 
@@ -39,6 +48,7 @@ describe("filesPanel.coordinator", () => {
     useFilesPanelStore.setState({ open: true });
     useRightPanelTabsStore.setState({
       activeKind: "browser",
+      activeTabId: "browser",
       openTabs: ["files", "browser"],
       rightPanelOpen: true,
     });
@@ -58,6 +68,7 @@ describe("filesPanel.coordinator", () => {
     requestRightPanel("files");
     useRightPanelTabsStore.setState({
       activeKind: "files",
+      activeTabId: "files",
       openTabs: ["files"],
       rightPanelOpen: true,
     });
@@ -71,7 +82,11 @@ describe("filesPanel.coordinator", () => {
   it("closeFilesPanel clears the requested right panel", () => {
     useFilesPanelStore.setState({ open: true });
     requestRightPanel("files");
-    useRightPanelTabsStore.setState({ activeKind: "files", openTabs: ["files"] });
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+      openTabs: ["files"],
+    });
 
     closeFilesPanel();
 
