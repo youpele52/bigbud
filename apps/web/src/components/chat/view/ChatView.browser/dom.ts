@@ -221,8 +221,8 @@ export async function waitForNewThreadShortcutLabel(): Promise<void> {
   await expect.element(newThreadButton).toBeInTheDocument();
   await newThreadButton.hover();
   const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⇧⌘O)"
-    : "New thread (Ctrl+Shift+O)";
+    ? "New thread (⌘N)"
+    : "New thread (Ctrl+N)";
   await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
 }
 
