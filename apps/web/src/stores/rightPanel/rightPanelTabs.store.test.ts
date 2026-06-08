@@ -57,6 +57,18 @@ describe("rightPanelTabs.store", () => {
     });
   });
 
+  it("opens notes tabs like other singleton right panel tabs", () => {
+    useRightPanelTabsStore.getState().openTab("notes");
+
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "notes",
+      activeTabId: "notes",
+      lastActiveKind: "notes",
+      openTabs: ["notes"],
+      rightPanelOpen: true,
+    });
+  });
+
   it("closes the active middle tab and selects the nearest left tab", () => {
     useRightPanelTabsStore.setState({
       activeKind: "files",

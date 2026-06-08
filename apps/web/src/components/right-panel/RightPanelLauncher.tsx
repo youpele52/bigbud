@@ -1,9 +1,16 @@
-import { DiffIcon, FoldersIcon, GitBranchIcon, GlobeIcon, TerminalIcon } from "lucide-react";
+import {
+  DiffIcon,
+  FoldersIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  NotebookTextIcon,
+  TerminalIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Kbd, KbdGroup } from "../ui/kbd";
 
-export type LauncherToolKind = "browser" | "diff" | "files" | "git" | "terminal";
+export type LauncherToolKind = "browser" | "diff" | "files" | "git" | "notes" | "terminal";
 
 interface LauncherCardProps {
   description: string;
@@ -54,10 +61,12 @@ interface RightPanelLauncherProps {
   gitShortcutLabel: string | null;
   hasActiveProject: boolean;
   isGitRepo: boolean;
+  notesShortcutLabel?: string | null;
   onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
   onToggleGit: () => void;
+  onToggleNotes: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -70,10 +79,12 @@ export function RightPanelLauncher({
   gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
+  notesShortcutLabel,
   onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
   onToggleGit,
+  onToggleNotes,
   onToggleTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -97,6 +108,14 @@ export function RightPanelLauncher({
           label="Files"
           onSelect={onToggleFiles}
           shortcutLabel={filesShortcutLabel}
+        />
+        <LauncherCard
+          description="Write markdown notes"
+          icon={NotebookTextIcon}
+          kind="notes"
+          label="Notes"
+          onSelect={onToggleNotes}
+          shortcutLabel={notesShortcutLabel ?? null}
         />
         <LauncherCard
           description="Start an interactive shell"

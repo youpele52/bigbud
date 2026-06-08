@@ -6,11 +6,11 @@ const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<strin
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
-    activeKind: "browser" | "diff" | "files" | "git" | "terminal" | null;
+    activeKind: "browser" | "diff" | "files" | "git" | "notes" | "terminal" | null;
     activeTabId: string | null;
     openTabs: ReadonlyArray<string>;
     rightPanelOpen: boolean;
-    lastActiveKind: "browser" | "diff" | "files" | "git" | "terminal" | null;
+    lastActiveKind: "browser" | "diff" | "files" | "git" | "notes" | "terminal" | null;
   };
 
   let state: RightPanelTabsState = {
@@ -105,6 +105,10 @@ vi.mock("../terminal/TerminalPanel", () => ({
   TerminalPanelContent: () => <div data-testid="terminal-panel">terminal</div>,
 }));
 
+vi.mock("../notes/NotesPanel", () => ({
+  NotesPanelContent: () => <div data-testid="notes-panel">notes</div>,
+}));
+
 vi.mock("../diff/DiffPanel", () => ({
   default: () => <div data-testid="diff-panel">diff</div>,
 }));
@@ -128,7 +132,7 @@ describe("RightPanelHost", () => {
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "browser",
       activeTabId: "browser:1",
-      openTabs: ["browser:1", "browser:2", "files", "terminal"],
+      openTabs: ["browser:1", "browser:2", "files", "notes", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "browser",
     });
@@ -151,6 +155,7 @@ describe("RightPanelHost", () => {
 
     expect(browserMarkup).toContain('data-testid="browser-panel"');
     expect(browserMarkup).toContain('data-testid="files-panel"');
+    expect(browserMarkup).toContain('data-testid="notes-panel"');
     expect(browserMarkup).toContain('data-testid="terminal-panel"');
     expect(browserMarkup).toContain(
       'aria-hidden="false"><div data-testid="browser-panel">browser</div>',
@@ -162,13 +167,16 @@ describe("RightPanelHost", () => {
       'aria-hidden="true"><div data-testid="files-panel">files</div>',
     );
     expect(browserMarkup).toContain(
+      'aria-hidden="true"><div data-testid="notes-panel">notes</div>',
+    );
+    expect(browserMarkup).toContain(
       'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
     );
 
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
       activeTabId: "files",
-      openTabs: ["browser:1", "browser:2", "files", "terminal"],
+      openTabs: ["browser:1", "browser:2", "files", "notes", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "files",
     });
@@ -177,6 +185,7 @@ describe("RightPanelHost", () => {
 
     expect(filesMarkup).toContain('data-testid="browser-panel"');
     expect(filesMarkup).toContain('data-testid="files-panel"');
+    expect(filesMarkup).toContain('data-testid="notes-panel"');
     expect(filesMarkup).toContain('data-testid="terminal-panel"');
     expect(filesMarkup).toContain(
       'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
@@ -191,7 +200,7 @@ describe("RightPanelHost", () => {
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: null,
       activeTabId: null,
-      openTabs: ["browser:1", "browser:2", "files", "terminal"],
+      openTabs: ["browser:1", "browser:2", "files", "notes", "terminal"],
       rightPanelOpen: true,
       lastActiveKind: "browser",
     });
@@ -201,6 +210,7 @@ describe("RightPanelHost", () => {
     expect(markup).toContain('data-testid="right-panel-launcher"');
     expect(markup).toContain('data-testid="browser-panel"');
     expect(markup).toContain('data-testid="files-panel"');
+    expect(markup).toContain('data-testid="notes-panel"');
     expect(markup).toContain('data-testid="terminal-panel"');
     expect(markup).toContain('aria-hidden="true"><div data-testid="browser-panel">browser</div>');
     expect(markup).toContain('aria-hidden="true"><div data-testid="files-panel">files</div>');

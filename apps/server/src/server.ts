@@ -57,6 +57,7 @@ import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScrip
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
+import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -184,6 +185,8 @@ const ProviderLayerLive = Layer.unwrap(
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
+const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
+
 const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
     GitManagerLive.pipe(
@@ -213,6 +216,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(NotesPersistenceLayerLive),
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),

@@ -3,6 +3,7 @@ import {
   FoldersIcon,
   GitBranchIcon,
   GlobeIcon,
+  NotebookTextIcon,
   PlusIcon,
   TerminalIcon,
   XIcon,
@@ -28,6 +29,7 @@ const TAB_LABELS: Record<RightPanelTabKind, string> = {
   diff: "Diff",
   files: "Files",
   git: "Git",
+  notes: "Notes",
   terminal: "Terminal",
 };
 
@@ -36,6 +38,7 @@ const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: str
   diff: DiffIcon,
   files: FoldersIcon,
   git: GitBranchIcon,
+  notes: NotebookTextIcon,
   terminal: TerminalIcon,
 };
 
@@ -46,15 +49,18 @@ interface RightPanelTabsProps {
   gitShortcutLabel?: string | null;
   hasActiveProject: boolean;
   isGitRepo?: boolean;
+  notesShortcutLabel?: string | null;
   onCloseBrowserTab: (tabId: RightPanelTabId) => void;
   onCloseDiff?: () => void;
   onCloseFiles: () => void;
   onCloseGit?: () => void;
+  onCloseNotes?: () => void;
   onCloseTerminal: () => void;
   onOpenNewBrowserTab: () => void;
   onOpenDiff?: () => void;
   onOpenFiles: () => void;
   onOpenGit?: () => void;
+  onOpenNotes?: () => void;
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -126,15 +132,18 @@ export function RightPanelTabs({
   gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
+  notesShortcutLabel,
   onCloseBrowserTab,
   onCloseDiff,
   onCloseFiles,
   onCloseGit,
+  onCloseNotes,
   onCloseTerminal,
   onOpenNewBrowserTab,
   onOpenDiff,
   onOpenFiles,
   onOpenGit,
+  onOpenNotes,
   onOpenTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -164,6 +173,9 @@ export function RightPanelTabs({
         break;
       case "git":
         onCloseGit?.();
+        break;
+      case "notes":
+        onCloseNotes?.();
         break;
       case "terminal":
         onCloseTerminal();
@@ -253,6 +265,13 @@ export function RightPanelTabs({
             onSelect={onOpenFiles}
             shortcutLabel={filesShortcutLabel}
           />
+          {onOpenNotes ? (
+            <TabMenuItem
+              kind="notes"
+              onSelect={onOpenNotes}
+              shortcutLabel={notesShortcutLabel ?? null}
+            />
+          ) : null}
           <TabMenuItem
             disabled={!terminalAvailable}
             kind="terminal"

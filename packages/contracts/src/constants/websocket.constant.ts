@@ -19,6 +19,13 @@ export const WS_METHODS = {
   projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
 
+  // Notes methods
+  notesList: "notes.list",
+  notesGet: "notes.get",
+  notesCreate: "notes.create",
+  notesUpdate: "notes.update",
+  notesDelete: "notes.delete",
+
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
   shellOpenPath: "shell.openPath",
