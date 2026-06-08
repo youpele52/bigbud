@@ -3,7 +3,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 
-const BANNER_THRESHOLD = 100_000;
+const BANNER_THRESHOLD = 120_000;
 
 export const ContextWindowWarningBanner = memo(function ContextWindowWarningBanner({
   usage,
