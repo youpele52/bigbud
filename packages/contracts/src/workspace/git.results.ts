@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+import { IsoDateTime, NonNegativeInt, PositiveInt } from "../core/baseSchemas";
 import {
   GitBranch,
   GitBranchStepStatus,
@@ -81,6 +81,50 @@ export const GitListBranchesResult = Schema.Struct({
   totalCount: NonNegativeInt,
 });
 export type GitListBranchesResult = typeof GitListBranchesResult.Type;
+
+export const GitCommitSummary = Schema.Struct({
+  sha: TrimmedNonEmptyStringSchema,
+  shortSha: TrimmedNonEmptyStringSchema,
+  subject: TrimmedNonEmptyStringSchema,
+  authorName: TrimmedNonEmptyStringSchema,
+  authoredAt: IsoDateTime,
+});
+export type GitCommitSummary = typeof GitCommitSummary.Type;
+
+export const GitCommitFileStat = Schema.Struct({
+  path: TrimmedNonEmptyStringSchema,
+  insertions: NonNegativeInt,
+  deletions: NonNegativeInt,
+});
+export type GitCommitFileStat = typeof GitCommitFileStat.Type;
+
+export const GitListCommitsResult = Schema.Struct({
+  commits: Schema.Array(GitCommitSummary),
+});
+export type GitListCommitsResult = typeof GitListCommitsResult.Type;
+
+export const GitCommitDetails = Schema.Struct({
+  sha: TrimmedNonEmptyStringSchema,
+  shortSha: TrimmedNonEmptyStringSchema,
+  subject: TrimmedNonEmptyStringSchema,
+  authorName: TrimmedNonEmptyStringSchema,
+  authoredAt: IsoDateTime,
+  body: Schema.String,
+  parents: Schema.Array(TrimmedNonEmptyStringSchema),
+  files: Schema.Array(GitCommitFileStat),
+  diff: Schema.String,
+});
+export type GitCommitDetails = typeof GitCommitDetails.Type;
+
+export const GitGetCommitDetailsResult = Schema.Struct({
+  commit: GitCommitDetails,
+});
+export type GitGetCommitDetailsResult = typeof GitGetCommitDetailsResult.Type;
+
+export const GitReadWorkingTreeDiffResult = Schema.Struct({
+  diff: Schema.String,
+});
+export type GitReadWorkingTreeDiffResult = typeof GitReadWorkingTreeDiffResult.Type;
 
 export const GitCreateWorktreeResult = Schema.Struct({
   worktree: GitWorktree,

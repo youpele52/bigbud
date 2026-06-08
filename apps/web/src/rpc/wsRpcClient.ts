@@ -1,7 +1,13 @@
 import {
   type GitActionProgressEvent,
+  type GitGetCommitDetailsInput,
+  type GitGetCommitDetailsResult,
+  type GitListCommitsInput,
+  type GitListCommitsResult,
   type ProjectDirectoryWatchEvent,
   type ProjectDirectoryWatchInput,
+  type GitReadWorkingTreeDiffInput,
+  type GitReadWorkingTreeDiffResult,
   type GitRunStackedActionInput,
   type GitRunStackedActionResult,
   type GitStatusInput,
@@ -81,6 +87,13 @@ export interface WsRpcClient {
   readonly git: {
     readonly pull: RpcUnaryMethod<typeof WS_METHODS.gitPull>;
     readonly refreshStatus: RpcUnaryMethod<typeof WS_METHODS.gitRefreshStatus>;
+    readonly listCommits: (input: GitListCommitsInput) => Promise<GitListCommitsResult>;
+    readonly getCommitDetails: (
+      input: GitGetCommitDetailsInput,
+    ) => Promise<GitGetCommitDetailsResult>;
+    readonly readWorkingTreeDiff: (
+      input: GitReadWorkingTreeDiffInput,
+    ) => Promise<GitReadWorkingTreeDiffResult>;
     readonly onStatus: (
       input: GitStatusInput,
       listener: (event: GitStatusStreamEvent) => void,
@@ -192,6 +205,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       pull: (input) => transport.request((client) => client[WS_METHODS.gitPull](input)),
       refreshStatus: (input) =>
         transport.request((client) => client[WS_METHODS.gitRefreshStatus](input)),
+      listCommits: (input) =>
+        transport.request((client) => client[WS_METHODS.gitListCommits](input)),
+      getCommitDetails: (input) =>
+        transport.request((client) => client[WS_METHODS.gitGetCommitDetails](input)),
+      readWorkingTreeDiff: (input) =>
+        transport.request((client) => client[WS_METHODS.gitReadWorkingTreeDiff](input)),
       onStatus: (input, listener) =>
         transport.subscribe((client) => client[WS_METHODS.subscribeGitStatus](input), listener),
       runStackedAction: async (input, options) => {

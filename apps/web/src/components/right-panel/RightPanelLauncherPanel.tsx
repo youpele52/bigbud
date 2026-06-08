@@ -6,9 +6,9 @@ import { useRightPanelWidth } from "./useRightPanelWidth";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
-import { useDefaultChatCwd } from "~/rpc/serverState";
-import { useProjectById, useThreadById } from "~/stores/main";
-import { useUiStateStore } from "~/stores/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
+import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import type { ThreadId } from "@bigbud/contracts";
@@ -17,6 +17,7 @@ interface RightPanelLauncherPanelProps {
   activeThreadId?: ThreadId | null;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
+  onToggleGit: () => void;
   onToggleTerminal: () => void;
 }
 
@@ -24,16 +25,18 @@ export function RightPanelLauncherPanel({
   activeThreadId,
   onToggleDiff,
   onToggleFiles,
+  onToggleGit,
   onToggleTerminal,
 }: RightPanelLauncherPanelProps) {
   const keybindings = useServerKeybindings();
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
+  const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
+  const workspaceRoot = cwd;
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions(cwd, executionTargetId),
+    enabled: rightPanelOpen && cwd !== null,
+  });
 
   const { panelWidth, onResizePointerDown } = useRightPanelWidth();
 
@@ -58,13 +61,15 @@ export function RightPanelLauncherPanel({
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={true}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
+        onCloseGit={() => useRightPanelTabsStore.getState().closeTab("git")}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
+        onOpenGit={onToggleGit}
         onOpenTerminal={openTerminalPanel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
@@ -74,10 +79,11 @@ export function RightPanelLauncherPanel({
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={true}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onToggleBrowser={openNewBrowserTab}
         onToggleDiff={onToggleDiff}
         onToggleFiles={onToggleFiles}
+        onToggleGit={onToggleGit}
         onToggleTerminal={onToggleTerminal}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}

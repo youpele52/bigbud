@@ -12,6 +12,7 @@ import { makeRawExecute, wrapExecuteWithMetrics, makeGitHelpers } from "./GitCor
 import { makeGitStatusOps } from "./GitStatus.ts";
 import { makeGitBranchOps } from "./GitBranches.ts";
 import { makeGitWorktreeOps } from "./GitWorktree.ts";
+import { makeGitHistoryOps } from "./GitHistory.ts";
 import {
   formatRemoteExecutionTargetDetail,
   isLocalExecutionTarget,
@@ -42,6 +43,7 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
   const branchOps = makeGitBranchOps(helpers, statusOps, fileSystem);
 
   const worktreeOps = makeGitWorktreeOps(helpers, statusOps, path, worktreesDir);
+  const historyOps = makeGitHistoryOps(helpers);
 
   const assertLocalExecutionTarget = (
     operation: string,
@@ -80,6 +82,20 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       assertLocalExecutionTarget("git.listBranches", input.cwd, input.executionTargetId).pipe(
         Effect.andThen(branchOps.listBranches(input)),
       ),
+    listCommits: (input) =>
+      assertLocalExecutionTarget("git.listCommits", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(historyOps.listCommits(input)),
+      ),
+    getCommitDetails: (input) =>
+      assertLocalExecutionTarget("git.getCommitDetails", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(historyOps.getCommitDetails(input)),
+      ),
+    readWorkingTreeDiff: (input) =>
+      assertLocalExecutionTarget(
+        "git.readWorkingTreeDiff",
+        input.cwd,
+        input.executionTargetId,
+      ).pipe(Effect.andThen(historyOps.readWorkingTreeDiff(input))),
     checkoutBranch: (input) =>
       assertLocalExecutionTarget("git.checkout", input.cwd, input.executionTargetId).pipe(
         Effect.andThen(branchOps.checkoutBranch(input)),

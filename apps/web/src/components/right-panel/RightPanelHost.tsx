@@ -6,19 +6,23 @@ import { BrowserPanelContent } from "../browser/BrowserPanel";
 import DiffPanel from "../diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../diff/DiffWorkerPoolProvider";
 import { FilesPanelContent } from "../files/FilesPanel";
+import { GitPanelContent } from "../git-panel/GitPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
-import { useDefaultChatCwd } from "~/rpc/serverState";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
-import { useProjectById, useThreadById } from "~/stores/main";
-import { closeDiffPanelIfOpen } from "~/stores/rightPanel/rightPanel.coordinator";
+import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
+import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
+import { useQuery } from "@tanstack/react-query";
+import {
+  closeDiffPanelIfOpen,
+  requestRightPanel,
+} from "~/stores/rightPanel/rightPanel.coordinator";
 import {
   getRightPanelTabKind,
   useRightPanelTabsStore,
 } from "~/stores/rightPanel/rightPanelTabs.store";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
-import { useUiStateStore } from "~/stores/ui";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
@@ -37,12 +41,14 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
+  const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
   const { panelWidth, onResizePointerDown } = useRightPanelWidth();
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions(cwd, executionTargetId),
+    enabled: rightPanelOpen && cwd !== null,
+  });
+  const workspaceRoot = cwd;
+  const isGitRepo = gitStatusQuery.data?.isRepo ?? false;
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
@@ -50,6 +56,10 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
+  const openGit = () => {
+    requestRightPanel("git");
+    useRightPanelTabsStore.getState().openTab("git");
+  };
 
   return (
     <RightPanelShell
@@ -63,14 +73,16 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={Boolean(activeThreadId)}
+        isGitRepo={isGitRepo}
         onCloseBrowserTab={closeBrowserTab}
         onCloseDiff={closeDiffPanelIfOpen}
         onCloseFiles={closeFilesPanel}
+        onCloseGit={() => useRightPanelTabsStore.getState().closeTab("git")}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
         onOpenFiles={openFilesPanel}
+        onOpenGit={openGit}
         onOpenTerminal={openTerminalPanel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
@@ -85,10 +97,11 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   diffShortcutLabel={diffShortcutLabel}
                   filesShortcutLabel={filesShortcutLabel}
                   hasActiveProject={Boolean(workspaceRoot)}
-                  isGitRepo={Boolean(activeThreadId)}
+                  isGitRepo={isGitRepo}
                   onToggleBrowser={openNewBrowserTab}
                   onToggleDiff={openDiff}
                   onToggleFiles={openFilesPanel}
+                  onToggleGit={openGit}
                   onToggleTerminal={openTerminalPanel}
                   terminalAvailable={Boolean(workspaceRoot)}
                   terminalShortcutLabel={terminalShortcutLabel}
@@ -144,6 +157,23 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     aria-hidden={!isActive}
                   >
                     <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "git") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <DiffWorkerPoolProvider>
+                      <GitPanelContent activeThreadId={activeThreadId ?? null} visible={isActive} />
+                    </DiffWorkerPoolProvider>
                   </div>
                 );
               }

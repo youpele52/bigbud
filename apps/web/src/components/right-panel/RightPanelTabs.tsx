@@ -1,4 +1,12 @@
-import { DiffIcon, FoldersIcon, GlobeIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-react";
+import {
+  DiffIcon,
+  FoldersIcon,
+  GitBranchIcon,
+  GlobeIcon,
+  PlusIcon,
+  TerminalIcon,
+  XIcon,
+} from "lucide-react";
 
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
@@ -19,6 +27,7 @@ const TAB_LABELS: Record<RightPanelTabKind, string> = {
   browser: "Browser",
   diff: "Diff",
   files: "Files",
+  git: "Git",
   terminal: "Terminal",
 };
 
@@ -26,6 +35,7 @@ const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: str
   browser: GlobeIcon,
   diff: DiffIcon,
   files: FoldersIcon,
+  git: GitBranchIcon,
   terminal: TerminalIcon,
 };
 
@@ -38,10 +48,12 @@ interface RightPanelTabsProps {
   onCloseBrowserTab: (tabId: RightPanelTabId) => void;
   onCloseDiff?: () => void;
   onCloseFiles: () => void;
+  onCloseGit?: () => void;
   onCloseTerminal: () => void;
   onOpenNewBrowserTab: () => void;
   onOpenDiff?: () => void;
   onOpenFiles: () => void;
+  onOpenGit?: () => void;
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
   terminalShortcutLabel: string | null;
@@ -115,10 +127,12 @@ export function RightPanelTabs({
   onCloseBrowserTab,
   onCloseDiff,
   onCloseFiles,
+  onCloseGit,
   onCloseTerminal,
   onOpenNewBrowserTab,
   onOpenDiff,
   onOpenFiles,
+  onOpenGit,
   onOpenTerminal,
   terminalAvailable,
   terminalShortcutLabel,
@@ -145,6 +159,9 @@ export function RightPanelTabs({
         break;
       case "files":
         onCloseFiles();
+        break;
+      case "git":
+        onCloseGit?.();
         break;
       case "terminal":
         onCloseTerminal();
@@ -247,6 +264,12 @@ export function RightPanelTabs({
               {diffShortcutLabel ? <MenuShortcut>{diffShortcutLabel}</MenuShortcut> : null}
             </MenuItem>
           )}
+          {onOpenGit && isGitRepo ? (
+            <MenuItem onClick={onOpenGit}>
+              <GitBranchIcon className="size-3.5" />
+              <span>Git</span>
+            </MenuItem>
+          ) : null}
         </MenuPopup>
       </Menu>
     </div>

@@ -6,11 +6,11 @@ const launcherPropsMock = vi.hoisted(() => ({ props: null as null | Record<strin
 
 const rightPanelTabsStoreMock = vi.hoisted(() => {
   type RightPanelTabsState = {
-    activeKind: "browser" | "diff" | "files" | "terminal" | null;
+    activeKind: "browser" | "diff" | "files" | "git" | "terminal" | null;
     activeTabId: string | null;
     openTabs: ReadonlyArray<string>;
     rightPanelOpen: boolean;
-    lastActiveKind: "browser" | "diff" | "files" | "terminal" | null;
+    lastActiveKind: "browser" | "diff" | "files" | "git" | "terminal" | null;
   };
 
   let state: RightPanelTabsState = {
@@ -35,6 +35,10 @@ const rightPanelTabsStoreMock = vi.hoisted(() => {
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: { isRepo: true } }),
 }));
 
 vi.mock("~/rpc/serverState", () => ({
@@ -97,6 +101,10 @@ vi.mock("../terminal/TerminalPanel", () => ({
 
 vi.mock("../diff/DiffPanel", () => ({
   default: () => <div data-testid="diff-panel">diff</div>,
+}));
+
+vi.mock("../git-panel/GitPanel", () => ({
+  GitPanelContent: () => <div data-testid="git-panel">git</div>,
 }));
 
 vi.mock("../diff/DiffWorkerPoolProvider", () => ({
