@@ -33,10 +33,12 @@ const STATIC_KEYBINDING_COMMANDS = [
   "terminal.split",
   "terminal.new",
   "terminal.close",
+  "git.toggle",
   "diff.toggle",
   "browser.toggle",
   "files.toggle",
   "rightPanel.toggle",
+  "rightPanel.newTab",
   "commandPalette.toggle",
   "sidebar.toggle",
   "settings.toggle",
@@ -44,6 +46,8 @@ const STATIC_KEYBINDING_COMMANDS = [
   "chat.new",
   "chat.newLocal",
   "editor.openFavorite",
+  "notes.toggle",
+  "project.open",
   ...THREAD_KEYBINDING_COMMANDS,
 ] as const;
 

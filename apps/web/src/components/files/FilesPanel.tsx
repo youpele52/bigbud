@@ -13,7 +13,11 @@ import { useUiStateStore } from "../../stores/ui";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
-import { applyDirectoryNavigationRequest, openFilesPanelEntry } from "./FilesPanel.logic";
+import {
+  applyDirectoryNavigationRequest,
+  openFilesPanelEntry,
+  reconcilePreviewPathAfterDirectoryRefresh,
+} from "./FilesPanel.logic";
 import { EMPTY_ENTRIES, makeAnnotationId, type DirectoryState } from "./FilesPanel.shared";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
 import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
@@ -52,6 +56,16 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     {},
   );
   const { contextMenuState, openContextMenu, closeContextMenu } = useFilesPanelContextMenu();
+  const previewPathRef = useRef<string | null>(previewPath);
+  const previewPositionRef = useRef(previewPosition);
+
+  useEffect(() => {
+    previewPathRef.current = previewPath;
+  }, [previewPath]);
+
+  useEffect(() => {
+    previewPositionRef.current = previewPosition;
+  }, [previewPosition]);
 
   const handleTreeResizeStart = useCallback(
     (event: React.MouseEvent) => {
@@ -121,6 +135,14 @@ export const FilesPanelContent = memo(function FilesPanelContent({
           ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
           ...(relativePath.length > 0 ? { relativePath } : {}),
         });
+        const currentPreviewPath = previewPathRef.current;
+        const nextPreviewPath = reconcilePreviewPathAfterDirectoryRefresh({
+          previewPath: currentPreviewPath,
+          refreshedRelativePath: relativePath,
+          previousEntries: existing?.entries ?? EMPTY_ENTRIES,
+          nextEntries: result.entries,
+        });
+
         setDirectoryStateByPath((current) => ({
           ...current,
           [relativePath]: {
@@ -129,6 +151,12 @@ export const FilesPanelContent = memo(function FilesPanelContent({
             error: null,
           },
         }));
+        if (nextPreviewPath !== currentPreviewPath) {
+          setPreviewPath(nextPreviewPath);
+          if (nextPreviewPath === null && previewPositionRef.current !== null) {
+            setPreviewPosition(null);
+          }
+        }
       } catch (error) {
         setDirectoryStateByPath((current) => ({
           ...current,
@@ -140,7 +168,13 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         }));
       }
     },
-    [directoryStateByPath, workspaceExecutionTargetId, workspaceRoot],
+    [
+      directoryStateByPath,
+      setPreviewPath,
+      setPreviewPosition,
+      workspaceExecutionTargetId,
+      workspaceRoot,
+    ],
   );
 
   useEffect(() => {

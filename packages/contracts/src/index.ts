@@ -16,6 +16,7 @@ export * from "./orchestration/provider";
 export * from "./orchestration/providerRuntime";
 export * from "./core/model";
 export * from "./server/keybindings";
+export * from "./server/notes";
 export * from "./server/server";
 export * from "./core/settings";
 export * from "./workspace/git";

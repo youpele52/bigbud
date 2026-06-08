@@ -13,15 +13,21 @@ import {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitGetCommitDetailsInput,
+  GitGetCommitDetailsResult,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitListCommitsInput,
+  GitListCommitsResult,
   GitManagerServiceError,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullInput,
   GitPullRequestRefInput,
   GitPullResult,
+  GitReadWorkingTreeDiffInput,
+  GitReadWorkingTreeDiffResult,
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
@@ -47,23 +53,6 @@ import {
   OrchestrationRpcSchemas,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
-import {
-  ProjectDirectoryWatchError,
-  ProjectDirectoryWatchEvent,
-  ProjectDirectoryWatchInput,
-  ProjectListDirectoryError,
-  ProjectListDirectoryInput,
-  ProjectListDirectoryResult,
-  ProjectReadFilePreviewError,
-  ProjectReadFilePreviewInput,
-  ProjectReadFilePreviewResult,
-  ProjectSearchEntriesError,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileError,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "../workspace/project";
 import {
   TerminalClearInput,
   TerminalCloseInput,
@@ -97,6 +86,19 @@ import {
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
+import {
+  WsNotesCreateRpc,
+  WsNotesDeleteRpc,
+  WsNotesGetRpc,
+  WsNotesListRpc,
+  WsNotesUpdateRpc,
+  WsProjectsListDirectoryRpc,
+  WsProjectsReadFilePreviewRpc,
+  WsProjectsSearchEntriesRpc,
+  WsProjectsSearchFileContentsRpc,
+  WsProjectsWriteFileRpc,
+  WsSubscribeProjectDirectoryChangesRpc,
+} from "./rpc.workspace";
 
 export { WS_METHODS };
 
@@ -153,40 +155,6 @@ export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocument
   error: ServerReadDocumentUrlError,
 });
 
-export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
-  payload: ProjectSearchEntriesInput,
-  success: ProjectSearchEntriesResult,
-  error: ProjectSearchEntriesError,
-});
-
-export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirectory, {
-  payload: ProjectListDirectoryInput,
-  success: ProjectListDirectoryResult,
-  error: ProjectListDirectoryError,
-});
-
-export const WsSubscribeProjectDirectoryChangesRpc = Rpc.make(
-  WS_METHODS.subscribeProjectDirectoryChanges,
-  {
-    payload: ProjectDirectoryWatchInput,
-    success: ProjectDirectoryWatchEvent,
-    error: ProjectDirectoryWatchError,
-    stream: true,
-  },
-);
-
-export const WsProjectsReadFilePreviewRpc = Rpc.make(WS_METHODS.projectsReadFilePreview, {
-  payload: ProjectReadFilePreviewInput,
-  success: ProjectReadFilePreviewResult,
-  error: ProjectReadFilePreviewError,
-});
-
-export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
-  payload: ProjectWriteFileInput,
-  success: ProjectWriteFileResult,
-  error: ProjectWriteFileError,
-});
-
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
   error: OpenError,
@@ -239,6 +207,24 @@ export const WsGitListBranchesRpc = Rpc.make(WS_METHODS.gitListBranches, {
   payload: GitListBranchesInput,
   success: GitListBranchesResult,
   error: GitServiceError,
+});
+
+export const WsGitListCommitsRpc = Rpc.make(WS_METHODS.gitListCommits, {
+  payload: GitListCommitsInput,
+  success: GitListCommitsResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
+});
+
+export const WsGitGetCommitDetailsRpc = Rpc.make(WS_METHODS.gitGetCommitDetails, {
+  payload: GitGetCommitDetailsInput,
+  success: GitGetCommitDetailsResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
+});
+
+export const WsGitReadWorkingTreeDiffRpc = Rpc.make(WS_METHODS.gitReadWorkingTreeDiff, {
+  payload: GitReadWorkingTreeDiffInput,
+  success: GitReadWorkingTreeDiffResult,
+  error: Schema.Union([GitCommandError, GitExecutionTargetError]),
 });
 
 export const WsGitCreateWorktreeRpc = Rpc.make(WS_METHODS.gitCreateWorktree, {
@@ -385,10 +371,16 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsProjectsSearchEntriesRpc,
+  WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsNotesListRpc,
+  WsNotesGetRpc,
+  WsNotesCreateRpc,
+  WsNotesUpdateRpc,
+  WsNotesDeleteRpc,
   WsShellOpenInEditorRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
@@ -398,6 +390,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
   WsGitListBranchesRpc,
+  WsGitListCommitsRpc,
+  WsGitGetCommitDetailsRpc,
+  WsGitReadWorkingTreeDiffRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
   WsGitCreateBranchRpc,

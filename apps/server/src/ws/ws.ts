@@ -6,6 +6,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
+import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
@@ -14,6 +15,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
 
     return WsRpcGroup.of({
       ...makeWsRpcOrchestrationServerHandlers(context),
+      ...makeWsRpcNotesHandlers(context),
       ...makeWsRpcGitTerminalHandlers(context),
     });
   }),

@@ -19,7 +19,7 @@ Long term maintainability is a core priority. Before adding new functionality, c
 
 **File length limit:** Non-test TypeScript source files must not exceed **400 lines**. Treat this as a hard limit for new non-test files. Existing non-test TypeScript files over 400 lines should be split by concern using dot-notation (`Foo.ts`, `Foo.logic.ts`, `Foo.utils.ts`, etc.) rather than extended inline, and files over 500 lines are priority cleanup debt that should be reduced to 400 lines or less.
 
-**Test file limit:** TypeScript test files should target **400 lines or less**. During the migration to the stricter limit, test files may remain up to **500 lines**, but new or heavily edited tests should still be kept at or below 400 lines where practical.
+**Test file limit:** TypeScript test files should target **400 lines or less**. New or heavily edited test files must stay at or below **400 lines** unless there is a concrete, documented reason they cannot be split further. No test file may exceed **500 lines** under any circumstance; files over 500 lines must be split by concern using the repo's dot-notation test pattern.
 
 **Generated files:** Generated files are exempt from the file length limit, but their generators should still prefer smaller outputs when feasible.
 

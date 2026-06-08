@@ -13,10 +13,18 @@ export const WS_METHODS = {
   projectsAdd: "projects.add",
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
+  projectsSearchFileContents: "projects.searchFileContents",
   projectsListDirectory: "projects.listDirectory",
   subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",
   projectsWriteFile: "projects.writeFile",
+
+  // Notes methods
+  notesList: "notes.list",
+  notesGet: "notes.get",
+  notesCreate: "notes.create",
+  notesUpdate: "notes.update",
+  notesDelete: "notes.delete",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -27,6 +35,9 @@ export const WS_METHODS = {
   gitRefreshStatus: "git.refreshStatus",
   gitRunStackedAction: "git.runStackedAction",
   gitListBranches: "git.listBranches",
+  gitListCommits: "git.listCommits",
+  gitGetCommitDetails: "git.getCommitDetails",
+  gitReadWorkingTreeDiff: "git.readWorkingTreeDiff",
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",

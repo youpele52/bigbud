@@ -19,7 +19,7 @@ function resetFilesPanelState() {
     fileOpenRequest: null,
     directoryNavigationRequest: null,
   });
-  useRightPanelTabsStore.setState({ activeKind: null, openTabs: [] });
+  useRightPanelTabsStore.setState({ activeKind: null, activeTabId: null, openTabs: [] });
 }
 
 describe("parsePathPositionSuffix", () => {

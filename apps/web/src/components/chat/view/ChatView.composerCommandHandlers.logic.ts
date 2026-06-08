@@ -239,6 +239,31 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     [setComposerHighlightedItemId],
   );
 
+  const onChangeComposerDiscoverySearch = useCallback(
+    (command: "agents" | "skills" | "model", query: string) => {
+      const { snapshot, trigger } = resolveActiveComposerTrigger();
+      if (!trigger) return;
+      if (command === "model") {
+        if (trigger.kind !== "slash-model") return;
+
+        const replacement = query.trim().length > 0 ? `/model ${query}` : "/model ";
+        applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, replacement, {
+          expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+          focusComposer: false,
+        });
+        return;
+      }
+      if (trigger.kind !== "slash-command") return;
+
+      const replacement = query.trim().length > 0 ? `/${command} ${query}` : `/${command} `;
+      applyPromptReplacement(trigger.rangeStart, trigger.rangeEnd, replacement, {
+        expectedText: snapshot.value.slice(trigger.rangeStart, trigger.rangeEnd),
+        focusComposer: false,
+      });
+    },
+    [applyPromptReplacement, resolveActiveComposerTrigger],
+  );
+
   const nudgeComposerMenuHighlight = useCallback(
     (key: "ArrowDown" | "ArrowUp") => {
       if (composerMenuItems.length === 0) return;
@@ -394,6 +419,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     resolveActiveComposerTrigger,
     onSelectComposerItem,
     onComposerMenuItemHighlighted,
+    onChangeComposerDiscoverySearch,
     nudgeComposerMenuHighlight,
     onPromptChange,
     onComposerCommandKey,

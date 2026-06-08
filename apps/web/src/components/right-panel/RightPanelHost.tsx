@@ -6,17 +6,24 @@ import { BrowserPanelContent } from "../browser/BrowserPanel";
 import DiffPanel from "../diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../diff/DiffWorkerPoolProvider";
 import { FilesPanelContent } from "../files/FilesPanel";
+import { GitPanelContent } from "../git-panel/GitPanel";
+import { NotesPanelContent } from "../notes/NotesPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
-import { useDefaultChatCwd } from "~/rpc/serverState";
-import { closeBrowserPanel, openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
-import { useProjectById, useThreadById } from "~/stores/main";
+import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
+import { gitStatusQueryOptions } from "~/lib/gitReactQuery";
+import { useQuery } from "@tanstack/react-query";
 import { closeDiffPanelIfOpen } from "~/stores/rightPanel/rightPanel.coordinator";
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
+import {
+  getRightPanelTabKind,
+  useRightPanelTabsStore,
+} from "~/stores/rightPanel/rightPanelTabs.store";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
-import { useUiStateStore } from "~/stores/ui";
 import { shortcutLabelForCommand } from "~/models/keybindings";
+import { closeGitPanel, openGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { RightPanelShell } from "./RightPanelShell";
@@ -31,19 +38,24 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const navigate = useNavigate();
   const keybindings = useServerKeybindings();
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
+  const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
   const activeKind = useRightPanelTabsStore((state) => state.activeKind);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
-  const thread = useThreadById(activeThreadId ?? null);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
+  const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
   const { panelWidth, onResizePointerDown } = useRightPanelWidth();
-  const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
+  const gitStatusQuery = useQuery({
+    ...gitStatusQueryOptions(cwd, executionTargetId),
+    enabled: rightPanelOpen && cwd !== null,
+  });
+  const workspaceRoot = cwd;
+  const isGitRepo = gitStatusQuery.data?.isRepo ?? false;
 
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
+  const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
+  const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
 
@@ -58,83 +70,153 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
+        gitShortcutLabel={gitShortcutLabel}
         hasActiveProject={Boolean(workspaceRoot)}
-        isGitRepo={Boolean(activeThreadId)}
-        onCloseBrowser={closeBrowserPanel}
+        isGitRepo={isGitRepo}
+        onCloseBrowserTab={closeBrowserTab}
         onCloseDiff={closeDiffPanelIfOpen}
         onCloseFiles={closeFilesPanel}
+        onCloseGit={closeGitPanel}
+        onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
-        onOpenBrowser={openBrowserPanel}
+        onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
         onOpenFiles={openFilesPanel}
+        onOpenGit={openGitPanel}
+        onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {openTabs.length === 0 ? (
-          <RightPanelLauncher
-            browserShortcutLabel={browserShortcutLabel}
-            diffShortcutLabel={diffShortcutLabel}
-            filesShortcutLabel={filesShortcutLabel}
-            hasActiveProject={Boolean(workspaceRoot)}
-            isGitRepo={Boolean(activeThreadId)}
-            onToggleBrowser={openBrowserPanel}
-            onToggleDiff={openDiff}
-            onToggleFiles={openFilesPanel}
-            onToggleTerminal={openTerminalPanel}
-            terminalAvailable={Boolean(workspaceRoot)}
-            terminalShortcutLabel={terminalShortcutLabel}
-          />
-        ) : null}
-        {openTabs.length > 0 ? (
+        {rightPanelOpen && (activeKind === null || openTabs.length > 0) ? (
           <div className="relative min-h-0 flex-1 overflow-hidden">
-            {openTabs.includes("browser") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "browser" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "browser"}
-              >
-                <BrowserPanelContent activeThreadId={activeThreadId ?? null} />
+            {activeKind === null ? (
+              <div className="absolute inset-0 flex min-h-0 flex-col overflow-auto">
+                <RightPanelLauncher
+                  browserShortcutLabel={browserShortcutLabel}
+                  diffShortcutLabel={diffShortcutLabel}
+                  filesShortcutLabel={filesShortcutLabel}
+                  gitShortcutLabel={gitShortcutLabel}
+                  hasActiveProject={Boolean(workspaceRoot)}
+                  isGitRepo={isGitRepo}
+                  onToggleBrowser={openNewBrowserTab}
+                  onToggleDiff={openDiff}
+                  onToggleFiles={openFilesPanel}
+                  onToggleGit={openGitPanel}
+                  onToggleNotes={openNotesPanel}
+                  onToggleTerminal={openTerminalPanel}
+                  notesShortcutLabel={notesShortcutLabel}
+                  terminalAvailable={Boolean(workspaceRoot)}
+                  terminalShortcutLabel={terminalShortcutLabel}
+                />
               </div>
             ) : null}
-            {openTabs.includes("files") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "files" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "files"}
-              >
-                <FilesPanelContent activeThreadId={activeThreadId ?? null} />
-              </div>
-            ) : null}
-            {openTabs.includes("terminal") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "terminal" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "terminal"}
-              >
-                <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
-              </div>
-            ) : null}
-            {openTabs.includes("diff") ? (
-              <div
-                className={cn(
-                  "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
-                  activeKind !== "diff" && "pointer-events-none invisible",
-                )}
-                aria-hidden={activeKind !== "diff"}
-              >
-                <DiffWorkerPoolProvider>
-                  <DiffPanel mode="sidebar" />
-                </DiffWorkerPoolProvider>
-              </div>
-            ) : null}
+            {openTabs.map((tabId) => {
+              const kind = getRightPanelTabKind(tabId);
+              const isActive = activeTabId === tabId && rightPanelOpen;
+
+              if (kind === "browser") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <BrowserPanelContent
+                      activeThreadId={activeThreadId ?? null}
+                      tabId={tabId}
+                      visible={isActive}
+                    />
+                  </div>
+                );
+              }
+
+              if (kind === "files") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <FilesPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "terminal") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "notes") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <NotesPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "git") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <DiffWorkerPoolProvider>
+                      <GitPanelContent activeThreadId={activeThreadId ?? null} visible={isActive} />
+                    </DiffWorkerPoolProvider>
+                  </div>
+                );
+              }
+
+              if (kind === "diff") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <DiffWorkerPoolProvider>
+                      <DiffPanel mode="sidebar" />
+                    </DiffWorkerPoolProvider>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
           </div>
         ) : null}
       </div>

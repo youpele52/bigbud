@@ -1,5 +1,6 @@
 import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { type ThreadId } from "@bigbud/contracts";
 import {
@@ -19,6 +20,7 @@ import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadSt
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import {
+  mergeRunningTerminalIds,
   prStatusIndicator,
   terminalStatusFromRunningIds,
   type ThreadPr,
@@ -75,8 +77,18 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const effectiveThreadId = thread?.id ?? props.threadId;
   const lastVisitedAt = useUiStateStore((state) => state.threadLastVisitedAtById[props.threadId]);
   const runningTerminalIds = useTerminalStateStore(
-    (state) =>
-      selectThreadTerminalState(state.terminalStateByThreadId, props.threadId).runningTerminalIds,
+    useShallow((state) => {
+      const drawerRunningTerminalIds = selectThreadTerminalState(
+        state.terminalStateByThreadId,
+        props.threadId,
+      ).runningTerminalIds;
+      const panelRunningTerminalIds = selectThreadTerminalState(
+        state.panelTerminalStateByThreadId,
+        props.threadId,
+      ).runningTerminalIds;
+
+      return mergeRunningTerminalIds(drawerRunningTerminalIds, panelRunningTerminalIds);
+    }),
   );
   // Global selector: true when session.status === "running" with an active turn.
   // Matches the same signal used by the chat view spinner.

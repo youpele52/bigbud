@@ -15,10 +15,16 @@ import type {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitGetCommitDetailsInput,
+  GitGetCommitDetailsResult,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitListCommitsInput,
+  GitListCommitsResult,
   GitPullResult,
+  GitReadWorkingTreeDiffInput,
+  GitReadWorkingTreeDiffResult,
   GitRemoveWorktreeInput,
   GitServiceError,
   GitStatusInput,
@@ -234,6 +240,27 @@ export interface GitCoreShape {
   readonly listBranches: (
     input: GitListBranchesInput,
   ) => Effect.Effect<GitListBranchesResult, GitServiceError>;
+
+  /**
+   * List recent commits for the current repository.
+   */
+  readonly listCommits: (
+    input: GitListCommitsInput,
+  ) => Effect.Effect<GitListCommitsResult, GitCommandError>;
+
+  /**
+   * Read commit metadata and patch details for a specific commit.
+   */
+  readonly getCommitDetails: (
+    input: GitGetCommitDetailsInput,
+  ) => Effect.Effect<GitGetCommitDetailsResult, GitCommandError>;
+
+  /**
+   * Read the current working tree patch, optionally scoped to a single file.
+   */
+  readonly readWorkingTreeDiff: (
+    input: GitReadWorkingTreeDiffInput,
+  ) => Effect.Effect<GitReadWorkingTreeDiffResult, GitCommandError>;
 
   /**
    * Pull current branch from upstream using fast-forward only.

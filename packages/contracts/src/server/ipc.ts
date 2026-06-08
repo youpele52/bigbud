@@ -3,6 +3,8 @@ import type {
   GitCheckoutResult,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitGetCommitDetailsInput,
+  GitGetCommitDetailsResult,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullRequestRefInput,
@@ -11,8 +13,12 @@ import type {
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
+  GitListCommitsInput,
+  GitListCommitsResult,
   GitPullInput,
   GitPullResult,
+  GitReadWorkingTreeDiffInput,
+  GitReadWorkingTreeDiffResult,
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
   GitStatusInput,
@@ -22,6 +28,8 @@ import type {
 import type {
   ProjectDirectoryWatchEvent,
   ProjectDirectoryWatchInput,
+  ProjectSearchFileContentsInput,
+  ProjectSearchFileContentsResult,
   ProjectListDirectoryInput,
   ProjectListDirectoryResult,
   ProjectReadFilePreviewInput,
@@ -31,6 +39,16 @@ import type {
   ProjectWriteFileInput,
   ProjectWriteFileResult,
 } from "../workspace/project";
+import type {
+  Note,
+  NotesCreateInput,
+  NotesDeleteInput,
+  NotesDeleteResult,
+  NotesGetInput,
+  NotesListInput,
+  NotesListResult,
+  NotesUpdateInput,
+} from "./notes";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -188,8 +206,18 @@ export interface NativeApi {
       options?: { onResubscribe?: () => void },
     ) => () => void;
     readFilePreview: (input: ProjectReadFilePreviewInput) => Promise<ProjectReadFilePreviewResult>;
+    searchFileContents: (
+      input: ProjectSearchFileContentsInput,
+    ) => Promise<ProjectSearchFileContentsResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+  };
+  notes: {
+    list: (input: NotesListInput) => Promise<NotesListResult>;
+    get: (input: NotesGetInput) => Promise<Note>;
+    create: (input: NotesCreateInput) => Promise<Note>;
+    update: (input: NotesUpdateInput) => Promise<Note>;
+    delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
@@ -199,6 +227,11 @@ export interface NativeApi {
   git: {
     // Existing branch/worktree API
     listBranches: (input: GitListBranchesInput) => Promise<GitListBranchesResult>;
+    listCommits: (input: GitListCommitsInput) => Promise<GitListCommitsResult>;
+    getCommitDetails: (input: GitGetCommitDetailsInput) => Promise<GitGetCommitDetailsResult>;
+    readWorkingTreeDiff: (
+      input: GitReadWorkingTreeDiffInput,
+    ) => Promise<GitReadWorkingTreeDiffResult>;
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;

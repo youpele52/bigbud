@@ -11,6 +11,8 @@ import {
   TrimmedNonEmptyStringSchema,
 } from "./git.shared";
 
+const GIT_LIST_COMMITS_MAX_LIMIT = 100;
+
 export const GitStatusInput = Schema.Struct({
   ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,
@@ -46,6 +48,28 @@ export const GitListBranchesInput = Schema.Struct({
   ),
 });
 export type GitListBranchesInput = typeof GitListBranchesInput.Type;
+
+export const GitListCommitsInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  cursor: Schema.optional(NonNegativeInt),
+  limit: Schema.optional(PositiveInt.check(Schema.isLessThanOrEqualTo(GIT_LIST_COMMITS_MAX_LIMIT))),
+});
+export type GitListCommitsInput = typeof GitListCommitsInput.Type;
+
+export const GitGetCommitDetailsInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  commit: TrimmedNonEmptyStringSchema,
+});
+export type GitGetCommitDetailsInput = typeof GitGetCommitDetailsInput.Type;
+
+export const GitReadWorkingTreeDiffInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  path: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type GitReadWorkingTreeDiffInput = typeof GitReadWorkingTreeDiffInput.Type;
 
 export const GitCreateWorktreeInput = Schema.Struct({
   ...ExecutionTargetInputShape,

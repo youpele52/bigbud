@@ -49,6 +49,22 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
         "rpc.aggregate": "git",
       }),
+    [WS_METHODS.gitListCommits]: (input: Parameters<WsRpcContext["git"]["listCommits"]>[0]) =>
+      observeRpcEffect(WS_METHODS.gitListCommits, context.git.listCommits(input), {
+        "rpc.aggregate": "git",
+      }),
+    [WS_METHODS.gitGetCommitDetails]: (
+      input: Parameters<WsRpcContext["git"]["getCommitDetails"]>[0],
+    ) =>
+      observeRpcEffect(WS_METHODS.gitGetCommitDetails, context.git.getCommitDetails(input), {
+        "rpc.aggregate": "git",
+      }),
+    [WS_METHODS.gitReadWorkingTreeDiff]: (
+      input: Parameters<WsRpcContext["git"]["readWorkingTreeDiff"]>[0],
+    ) =>
+      observeRpcEffect(WS_METHODS.gitReadWorkingTreeDiff, context.git.readWorkingTreeDiff(input), {
+        "rpc.aggregate": "git",
+      }),
     [WS_METHODS.gitPull]: (input: {
       readonly cwd: string;
       readonly executionTargetId?: string | undefined;
