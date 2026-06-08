@@ -15,6 +15,7 @@ import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import PlanSidebar from "../../plan/PlanSidebar";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
+import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
 import { Card } from "../../../ui/card";
@@ -167,6 +168,7 @@ export function ChatViewContent({
       </header>
 
       <ProviderStatusBanner status={composer.activeProviderStatus} />
+      <ContextWindowWarningBanner usage={thread.activeContextWindow} />
       <ThreadErrorBanner
         error={base.activeThread!.error}
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
