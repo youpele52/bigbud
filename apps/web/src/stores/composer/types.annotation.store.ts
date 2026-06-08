@@ -156,3 +156,9 @@ export function isCodeAnnotationAttachment(
 ): annotation is ComposerCodeAnnotationAttachment {
   return annotation.kind === "code";
 }
+
+export function isBrowserAnnotationAttachment(
+  annotation: ComposerAnnotationAttachment,
+): annotation is ComposerBrowserAnnotationAttachment {
+  return !isCodeAnnotationAttachment(annotation);
+}

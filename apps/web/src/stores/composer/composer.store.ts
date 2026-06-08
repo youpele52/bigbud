@@ -41,6 +41,7 @@ export {
   ComposerAnnotationViewport,
   ComposerBrowserAnnotationAttachment,
   ComposerCodeAnnotationAttachment,
+  isBrowserAnnotationAttachment,
   isCodeAnnotationAttachment,
   normalizeAnnotationAttachment,
   normalizeBrowserAnnotationElement,

@@ -6,6 +6,7 @@ import { useRightPanelWidth } from "./useRightPanelWidth";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { closeGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useQuery } from "@tanstack/react-query";
 import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
@@ -46,6 +47,7 @@ export function RightPanelLauncherPanel({
   const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
+  const notesShortcutLabel = null;
 
   const showLauncher = rightPanelOpen && activeKind === null;
 
@@ -68,12 +70,15 @@ export function RightPanelLauncherPanel({
         onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
         onCloseGit={closeGitPanel}
+        onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
         onOpenGit={onToggleGit}
+        onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />
@@ -88,7 +93,9 @@ export function RightPanelLauncherPanel({
         onToggleDiff={onToggleDiff}
         onToggleFiles={onToggleFiles}
         onToggleGit={onToggleGit}
+        onToggleNotes={openNotesPanel}
         onToggleTerminal={onToggleTerminal}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />

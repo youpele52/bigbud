@@ -4,6 +4,14 @@ import {
   type GitGetCommitDetailsResult,
   type GitListCommitsInput,
   type GitListCommitsResult,
+  type Note,
+  type NotesCreateInput,
+  type NotesDeleteInput,
+  type NotesDeleteResult,
+  type NotesGetInput,
+  type NotesListInput,
+  type NotesListResult,
+  type NotesUpdateInput,
   type ProjectDirectoryWatchEvent,
   type ProjectDirectoryWatchInput,
   type GitReadWorkingTreeDiffInput,
@@ -74,6 +82,13 @@ export interface WsRpcClient {
     readonly searchFileContents: RpcUnaryMethod<typeof WS_METHODS.projectsSearchFileContents>;
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
+  };
+  readonly notes: {
+    readonly list: (input: NotesListInput) => Promise<NotesListResult>;
+    readonly get: (input: NotesGetInput) => Promise<Note>;
+    readonly create: (input: NotesCreateInput) => Promise<Note>;
+    readonly update: (input: NotesUpdateInput) => Promise<Note>;
+    readonly delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
   readonly shell: {
     readonly openInEditor: (input: {
@@ -195,6 +210,13 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
+    },
+    notes: {
+      list: (input) => transport.request((client) => client[WS_METHODS.notesList](input)),
+      get: (input) => transport.request((client) => client[WS_METHODS.notesGet](input)),
+      create: (input) => transport.request((client) => client[WS_METHODS.notesCreate](input)),
+      update: (input) => transport.request((client) => client[WS_METHODS.notesUpdate](input)),
+      delete: (input) => transport.request((client) => client[WS_METHODS.notesDelete](input)),
     },
     shell: {
       openInEditor: (input) =>

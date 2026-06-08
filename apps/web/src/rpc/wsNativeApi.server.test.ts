@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_SETTINGS, type ServerProvider } from "@bigbud/contracts";
+import { DEFAULT_SERVER_SETTINGS, NoteId, type ServerProvider } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import { baseServerConfig, defaultProviders, rpcClientMock } from "./wsNativeApi.test.helpers";
@@ -67,6 +67,40 @@ describe("wsNativeApi — server", () => {
     ).resolves.toEqual(result);
     expect(rpcClientMock.server.readDocumentUrl).toHaveBeenCalledWith({
       url: "https://example.com/report",
+    });
+  });
+
+  it("forwards notes RPCs directly to the RPC client", async () => {
+    const note = {
+      noteId: NoteId.makeUnsafe("note-1"),
+      projectId: null,
+      title: "Untitled note",
+      absolutePath: "/tmp/notes/global/Untitled note.md",
+      content: "# Untitled note\n",
+      createdAt: "2026-06-08T00:00:00.000Z",
+      updatedAt: "2026-06-08T00:00:00.000Z",
+    };
+    rpcClientMock.notes.list.mockResolvedValue({ notes: [note] });
+    rpcClientMock.notes.get.mockResolvedValue(note);
+    rpcClientMock.notes.create.mockResolvedValue(note);
+    rpcClientMock.notes.update.mockResolvedValue(note);
+    rpcClientMock.notes.delete.mockResolvedValue({ noteId: NoteId.makeUnsafe("note-1") });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.notes.list({ projectId: null, scope: "global" })).resolves.toEqual({
+      notes: [note],
+    });
+    await expect(api.notes.get({ noteId: NoteId.makeUnsafe("note-1") })).resolves.toEqual(note);
+    await expect(
+      api.notes.create({ projectId: null, content: "# Untitled note\n" }),
+    ).resolves.toEqual(note);
+    await expect(
+      api.notes.update({ noteId: NoteId.makeUnsafe("note-1"), content: "next" }),
+    ).resolves.toEqual(note);
+    await expect(api.notes.delete({ noteId: NoteId.makeUnsafe("note-1") })).resolves.toEqual({
+      noteId: NoteId.makeUnsafe("note-1"),
     });
   });
 });

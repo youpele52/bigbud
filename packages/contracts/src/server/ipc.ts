@@ -40,6 +40,16 @@ import type {
   ProjectWriteFileResult,
 } from "../workspace/project";
 import type {
+  Note,
+  NotesCreateInput,
+  NotesDeleteInput,
+  NotesDeleteResult,
+  NotesGetInput,
+  NotesListInput,
+  NotesListResult,
+  NotesUpdateInput,
+} from "./notes";
+import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
   ServerReadDocumentUrlResult,
@@ -201,6 +211,13 @@ export interface NativeApi {
     ) => Promise<ProjectSearchFileContentsResult>;
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
     writeFile: (input: ProjectWriteFileInput) => Promise<ProjectWriteFileResult>;
+  };
+  notes: {
+    list: (input: NotesListInput) => Promise<NotesListResult>;
+    get: (input: NotesGetInput) => Promise<Note>;
+    create: (input: NotesCreateInput) => Promise<Note>;
+    update: (input: NotesUpdateInput) => Promise<Note>;
+    delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;

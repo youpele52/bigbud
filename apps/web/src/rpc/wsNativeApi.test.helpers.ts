@@ -1,6 +1,9 @@
 import {
   DEFAULT_SERVER_SETTINGS,
   type DesktopBridge,
+  type Note,
+  type NotesDeleteResult,
+  type NotesListResult,
   type OrchestrationEvent,
   type ProjectDirectoryWatchEvent,
   type ServerConfig,
@@ -65,6 +68,13 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     searchFileContents: vi.fn(),
     searchEntries: vi.fn(),
     writeFile: vi.fn(),
+  },
+  notes: {
+    list: vi.fn<(...args: any[]) => Promise<NotesListResult>>(),
+    get: vi.fn<(...args: any[]) => Promise<Note>>(),
+    create: vi.fn<(...args: any[]) => Promise<Note>>(),
+    update: vi.fn<(...args: any[]) => Promise<Note>>(),
+    delete: vi.fn<(...args: any[]) => Promise<NotesDeleteResult>>(),
   },
   shell: {
     openInEditor: vi.fn(),

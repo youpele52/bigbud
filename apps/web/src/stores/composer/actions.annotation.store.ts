@@ -7,7 +7,7 @@ import {
   type ComposerThreadDraftState,
 } from "./types.store";
 import {
-  isCodeAnnotationAttachment,
+  isBrowserAnnotationAttachment,
   normalizeAnnotationAttachment,
 } from "./types.annotation.store";
 
@@ -15,7 +15,7 @@ type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 
 export function createComposerAnnotationActions(set: SetFn) {
   const dedupKey = (annotation: ComposerAnnotationAttachment) =>
-    isCodeAnnotationAttachment(annotation) ? annotation.id : annotation.imageId;
+    isBrowserAnnotationAttachment(annotation) ? annotation.imageId : annotation.id;
 
   return {
     addAnnotation: (threadId: ThreadId, annotation: ComposerAnnotationAttachment) => {
