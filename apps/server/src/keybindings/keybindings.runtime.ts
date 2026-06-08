@@ -28,6 +28,58 @@ const DEFAULT_COMMAND_PALETTE_RULE: KeybindingRule = {
   when: "!terminalFocus",
 };
 
+const LEGACY_CHAT_NEW_LOCAL_RULE: KeybindingRule = {
+  key: "mod+shift+n",
+  command: "chat.newLocal",
+  when: "!terminalFocus",
+};
+
+const DEFAULT_CHAT_NEW_LOCAL_RULE: KeybindingRule = {
+  key: "mod+alt+n",
+  command: "chat.newLocal",
+  when: "!terminalFocus",
+};
+
+const LEGACY_OPEN_FAVORITE_EDITOR_RULE: KeybindingRule = {
+  key: "mod+o",
+  command: "editor.openFavorite",
+  when: "!terminalFocus",
+};
+
+const DEFAULT_OPEN_FAVORITE_EDITOR_RULE: KeybindingRule = {
+  key: "mod+shift+o",
+  command: "editor.openFavorite",
+  when: "!terminalFocus",
+};
+
+const LEGACY_DUPLICATE_CHAT_NEW_RULE: KeybindingRule = {
+  key: "mod+shift+o",
+  command: "chat.new",
+  when: "!terminalFocus",
+};
+
+const DEFAULT_PROJECT_OPEN_RULE: KeybindingRule = {
+  key: "mod+o",
+  command: "project.open",
+  when: "!terminalFocus",
+};
+
+function migrateLegacyDefaultShortcut(rule: KeybindingRule): KeybindingRule {
+  if (isSameKeybindingRule(rule, LEGACY_COMMAND_PALETTE_RULE)) {
+    return DEFAULT_COMMAND_PALETTE_RULE;
+  }
+  if (isSameKeybindingRule(rule, LEGACY_CHAT_NEW_LOCAL_RULE)) {
+    return DEFAULT_CHAT_NEW_LOCAL_RULE;
+  }
+  if (isSameKeybindingRule(rule, LEGACY_OPEN_FAVORITE_EDITOR_RULE)) {
+    return DEFAULT_OPEN_FAVORITE_EDITOR_RULE;
+  }
+  if (isSameKeybindingRule(rule, LEGACY_DUPLICATE_CHAT_NEW_RULE)) {
+    return DEFAULT_PROJECT_OPEN_RULE;
+  }
+  return rule;
+}
+
 type SerializeWrite = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 
 interface RuntimeCustomKeybindingsConfig {
@@ -71,11 +123,7 @@ export function makeSyncDefaultKeybindingsOnStartup(input: {
         return;
       }
 
-      const customConfig = runtimeConfig.keybindings.map((entry) =>
-        isSameKeybindingRule(entry, LEGACY_COMMAND_PALETTE_RULE)
-          ? DEFAULT_COMMAND_PALETTE_RULE
-          : entry,
-      );
+      const customConfig = runtimeConfig.keybindings.map(migrateLegacyDefaultShortcut);
       const didMigrateLegacyCommandPaletteShortcut = runtimeConfig.keybindings.some(
         (entry, index) => !isSameKeybindingRule(entry, customConfig[index] ?? entry),
       );
