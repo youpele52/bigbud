@@ -2,7 +2,9 @@ import {
   resolveExecutionTargetId,
   type ExecutionTargetId,
   type GitActionProgressEvent,
+  type GitGetCommitDetailsInput,
   type GitStackedAction,
+  type GitReadWorkingTreeDiffInput,
   type ThreadId,
 } from "@bigbud/contracts";
 import {
@@ -19,6 +21,7 @@ const GIT_STATUS_REFETCH_INTERVAL_MS = 15_000;
 const GIT_BRANCHES_STALE_TIME_MS = 15_000;
 const GIT_BRANCHES_REFETCH_INTERVAL_MS = 60_000;
 const GIT_BRANCHES_PAGE_SIZE = 100;
+const GIT_HISTORY_STALE_TIME_MS = 30_000;
 
 export const gitQueryKeys = {
   all: ["git"] as const,
@@ -26,6 +29,22 @@ export const gitQueryKeys = {
     ["git", "status", resolveExecutionTargetId(executionTargetId), cwd] as const,
   branches: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
     ["git", "branches", resolveExecutionTargetId(executionTargetId), cwd] as const,
+  commits: (
+    cwd: string | null,
+    executionTargetId?: ExecutionTargetId | null | undefined,
+    limit?: number | undefined,
+  ) => ["git", "commits", resolveExecutionTargetId(executionTargetId), cwd, limit ?? null] as const,
+  commitDetails: (
+    cwd: string | null,
+    executionTargetId: ExecutionTargetId | null | undefined,
+    commit: string | null,
+  ) => ["git", "commit-details", resolveExecutionTargetId(executionTargetId), cwd, commit] as const,
+  workingTreeDiff: (
+    cwd: string | null,
+    executionTargetId: ExecutionTargetId | null | undefined,
+    path: string | null,
+  ) =>
+    ["git", "working-tree-diff", resolveExecutionTargetId(executionTargetId), cwd, path] as const,
   branchSearch: (
     cwd: string | null,
     query: string,
@@ -69,12 +88,22 @@ export function invalidateGitQueries(
 ) {
   const cwd = input?.cwd ?? null;
   if (cwd !== null) {
+    const executionTargetKey = resolveExecutionTargetId(input?.executionTargetId);
     return Promise.all([
       queryClient.invalidateQueries({
         queryKey: gitQueryKeys.status(cwd, input?.executionTargetId),
       }),
       queryClient.invalidateQueries({
         queryKey: gitQueryKeys.branches(cwd, input?.executionTargetId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["git", "commits", executionTargetKey, cwd],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["git", "commit-details", executionTargetKey, cwd],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["git", "working-tree-diff", executionTargetKey, cwd],
       }),
     ]);
   }
@@ -146,6 +175,62 @@ export function gitBranchSearchInfiniteQueryOptions(input: {
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     refetchInterval: GIT_BRANCHES_REFETCH_INTERVAL_MS,
+  });
+}
+
+export function gitListCommitsQueryOptions(input: {
+  cwd: string | null;
+  executionTargetId?: ExecutionTargetId | null | undefined;
+  limit?: number;
+  enabled?: boolean;
+}) {
+  return queryOptions({
+    queryKey: gitQueryKeys.commits(input.cwd, input.executionTargetId, input.limit),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git history is unavailable.");
+      return api.git.listCommits({
+        cwd: input.cwd,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+        ...(input.limit ? { limit: input.limit } : {}),
+      });
+    },
+    enabled: input.cwd !== null && (input.enabled ?? true),
+    staleTime: GIT_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+}
+
+export function gitCommitDetailsQueryOptions(
+  input: GitGetCommitDetailsInput & { enabled?: boolean },
+) {
+  return queryOptions({
+    queryKey: gitQueryKeys.commitDetails(input.cwd, input.executionTargetId, input.commit),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      return api.git.getCommitDetails(input);
+    },
+    enabled: Boolean(input.cwd && input.commit) && (input.enabled ?? true),
+    staleTime: GIT_HISTORY_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+}
+
+export function gitWorkingTreeDiffQueryOptions(
+  input: GitReadWorkingTreeDiffInput & { enabled?: boolean },
+) {
+  return queryOptions({
+    queryKey: gitQueryKeys.workingTreeDiff(input.cwd, input.executionTargetId, input.path ?? null),
+    queryFn: async () => {
+      const api = ensureNativeApi();
+      return api.git.readWorkingTreeDiff(input);
+    },
+    enabled: Boolean(input.cwd) && (input.enabled ?? true),
+    staleTime: GIT_STATUS_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 

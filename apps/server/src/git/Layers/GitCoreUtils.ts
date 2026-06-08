@@ -58,8 +58,16 @@ export function splitNullSeparatedPaths(input: string, truncated: boolean): stri
 }
 
 export function parsePorcelainPath(line: string): string | null {
-  if (line.startsWith("? ") || line.startsWith("! ")) {
-    const simple = line.slice(2).trim();
+  if (
+    line.startsWith("? ") ||
+    line.startsWith("! ") ||
+    line.startsWith("?? ") ||
+    line.startsWith("!! ")
+  ) {
+    const simple =
+      line.startsWith("?? ") || line.startsWith("!! ")
+        ? line.slice(3).trim()
+        : line.slice(2).trim();
     return simple.length > 0 ? simple : null;
   }
 
