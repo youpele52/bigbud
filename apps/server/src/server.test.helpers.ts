@@ -1,7 +1,7 @@
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { DEFAULT_SERVER_SETTINGS, ProjectId, ThreadId, WsRpcGroup } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Schedule, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Schedule, Stream } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 
@@ -50,6 +50,7 @@ import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerShape,
 } from "./project/Services/ProjectSetupScriptRunner.ts";
+import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import {
   ThreadShellRunner,
   type ThreadShellRunnerShape,
@@ -276,10 +277,37 @@ export const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide(
-        Layer.mock(ProjectSetupScriptRunner)({
-          runForThread: () => Effect.succeed({ status: "no-script" as const }),
-          ...options?.layers?.projectSetupScriptRunner,
-        }),
+        Layer.mergeAll(
+          Layer.mock(ProjectionNoteRepository)({
+            list: () => Effect.succeed([]),
+            getById: () => Effect.succeed(Option.none()),
+            create: (input) =>
+              Effect.succeed({
+                noteId: "mock-note-id" as never,
+                projectId: input.projectId,
+                title: input.title,
+                absolutePath: "/mock/notes/global/mock.md",
+                content: input.content,
+                createdAt: input.createdAt,
+                updatedAt: input.updatedAt,
+              }),
+            update: (input) =>
+              Effect.succeed({
+                noteId: input.noteId,
+                projectId: null,
+                title: input.title,
+                absolutePath: "/mock/notes/global/mock.md",
+                content: input.content,
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            deleteById: () => Effect.void,
+          }),
+          Layer.mock(ProjectSetupScriptRunner)({
+            runForThread: () => Effect.succeed({ status: "no-script" as const }),
+            ...options?.layers?.projectSetupScriptRunner,
+          }),
+        ),
       ),
       Layer.provide(
         Layer.mock(ThreadShellRunner)({

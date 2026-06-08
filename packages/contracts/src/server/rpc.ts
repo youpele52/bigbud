@@ -54,26 +54,6 @@ import {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import {
-  ProjectDirectoryWatchError,
-  ProjectDirectoryWatchEvent,
-  ProjectDirectoryWatchInput,
-  ProjectListDirectoryError,
-  ProjectListDirectoryInput,
-  ProjectListDirectoryResult,
-  ProjectReadFilePreviewError,
-  ProjectReadFilePreviewInput,
-  ProjectReadFilePreviewResult,
-  ProjectSearchFileContentsError,
-  ProjectSearchFileContentsInput,
-  ProjectSearchFileContentsResult,
-  ProjectSearchEntriesError,
-  ProjectSearchEntriesInput,
-  ProjectSearchEntriesResult,
-  ProjectWriteFileError,
-  ProjectWriteFileInput,
-  ProjectWriteFileResult,
-} from "../workspace/project";
-import {
   TerminalClearInput,
   TerminalCloseInput,
   TerminalError,
@@ -106,6 +86,19 @@ import {
 } from "./server";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
+import {
+  WsNotesCreateRpc,
+  WsNotesDeleteRpc,
+  WsNotesGetRpc,
+  WsNotesListRpc,
+  WsNotesUpdateRpc,
+  WsProjectsListDirectoryRpc,
+  WsProjectsReadFilePreviewRpc,
+  WsProjectsSearchEntriesRpc,
+  WsProjectsSearchFileContentsRpc,
+  WsProjectsWriteFileRpc,
+  WsSubscribeProjectDirectoryChangesRpc,
+} from "./rpc.workspace";
 
 export { WS_METHODS };
 
@@ -160,46 +153,6 @@ export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocument
   payload: ServerReadDocumentUrlInput,
   success: ServerReadDocumentUrlResult,
   error: ServerReadDocumentUrlError,
-});
-
-export const WsProjectsSearchEntriesRpc = Rpc.make(WS_METHODS.projectsSearchEntries, {
-  payload: ProjectSearchEntriesInput,
-  success: ProjectSearchEntriesResult,
-  error: ProjectSearchEntriesError,
-});
-
-export const WsProjectsSearchFileContentsRpc = Rpc.make(WS_METHODS.projectsSearchFileContents, {
-  payload: ProjectSearchFileContentsInput,
-  success: ProjectSearchFileContentsResult,
-  error: ProjectSearchFileContentsError,
-});
-
-export const WsProjectsListDirectoryRpc = Rpc.make(WS_METHODS.projectsListDirectory, {
-  payload: ProjectListDirectoryInput,
-  success: ProjectListDirectoryResult,
-  error: ProjectListDirectoryError,
-});
-
-export const WsSubscribeProjectDirectoryChangesRpc = Rpc.make(
-  WS_METHODS.subscribeProjectDirectoryChanges,
-  {
-    payload: ProjectDirectoryWatchInput,
-    success: ProjectDirectoryWatchEvent,
-    error: ProjectDirectoryWatchError,
-    stream: true,
-  },
-);
-
-export const WsProjectsReadFilePreviewRpc = Rpc.make(WS_METHODS.projectsReadFilePreview, {
-  payload: ProjectReadFilePreviewInput,
-  success: ProjectReadFilePreviewResult,
-  error: ProjectReadFilePreviewError,
-});
-
-export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
-  payload: ProjectWriteFileInput,
-  success: ProjectWriteFileResult,
-  error: ProjectWriteFileError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -423,6 +376,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsNotesListRpc,
+  WsNotesGetRpc,
+  WsNotesCreateRpc,
+  WsNotesUpdateRpc,
+  WsNotesDeleteRpc,
   WsShellOpenInEditorRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,

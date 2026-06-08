@@ -7,6 +7,7 @@ import DiffPanel from "../diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../diff/DiffWorkerPoolProvider";
 import { FilesPanelContent } from "../files/FilesPanel";
 import { GitPanelContent } from "../git-panel/GitPanel";
+import { NotesPanelContent } from "../notes/NotesPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
@@ -22,6 +23,7 @@ import {
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import { closeGitPanel, openGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { RightPanelShell } from "./RightPanelShell";
@@ -53,6 +55,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
+  const notesShortcutLabel = null;
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
 
@@ -74,12 +77,15 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onCloseDiff={closeDiffPanelIfOpen}
         onCloseFiles={closeFilesPanel}
         onCloseGit={closeGitPanel}
+        onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
         onOpenFiles={openFilesPanel}
         onOpenGit={openGitPanel}
+        onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
+        notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
         terminalShortcutLabel={terminalShortcutLabel}
       />
@@ -99,7 +105,9 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   onToggleDiff={openDiff}
                   onToggleFiles={openFilesPanel}
                   onToggleGit={openGitPanel}
+                  onToggleNotes={openNotesPanel}
                   onToggleTerminal={openTerminalPanel}
+                  notesShortcutLabel={notesShortcutLabel}
                   terminalAvailable={Boolean(workspaceRoot)}
                   terminalShortcutLabel={terminalShortcutLabel}
                 />
@@ -154,6 +162,21 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     aria-hidden={!isActive}
                   >
                     <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "notes") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <NotesPanelContent activeThreadId={activeThreadId ?? null} />
                   </div>
                 );
               }
