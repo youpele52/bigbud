@@ -8,22 +8,35 @@ import {
   useHandleNewThread,
 } from "../hooks/useHandleNewThread";
 import { isTerminalFocused } from "../lib/terminalFocus";
+import { newCommandId, newProjectId } from "../lib/utils";
+import { buildExplicitExecutionTargets } from "../lib/providerExecutionTargets";
+import { getDefaultModelSelection } from "../models/provider/provider.models";
 import { resolveShortcutCommand } from "../models/keybindings";
+import { readNativeApi } from "../rpc/nativeApi";
+import { useServerProviders } from "../rpc/serverState";
 import { selectThreadTerminalState } from "../stores/terminal";
 import { useTerminalStateStore } from "../stores/terminal";
 import { useThreadSelectionStore } from "../stores/thread";
 import { useCommandPaletteStore, useSearchStore } from "../stores/ui";
+import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { toggleNotesPanel } from "~/stores/notes/notesPanel.coordinator";
+import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
+import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
+import { toastManager } from "~/components/ui/toast";
 import { resolveSidebarNewThreadEnvMode } from "~/components/sidebar/Sidebar.logic";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
-import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
-import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
-import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
-import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { RightPanelHost } from "~/components/right-panel/RightPanelHost";
+
+function deriveProjectTitleFromCwd(cwd: string): string {
+  const trimmed = cwd.trim();
+  const segments = trimmed.split(/[/\\]/).filter((segment) => segment.length > 0);
+  return segments.at(-1) ?? trimmed;
+}
 
 interface ChatRouteGlobalShortcutsProps {
   onToggleSearch: () => void;
@@ -44,6 +57,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
   const { toggleSidebar } = useSidebar();
   const commandPaletteOpen = useCommandPaletteStore((state) => state.open);
   const navigate = useNavigate();
+  const serverProviders = useServerProviders();
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -131,6 +145,47 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         return;
       }
 
+      if (command === "notes.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleNotesPanel();
+        return;
+      }
+
+      if (command === "project.open") {
+        event.preventDefault();
+        event.stopPropagation();
+        void (async () => {
+          const api = readNativeApi();
+          if (!api) return;
+          const pickedPath = await api.dialogs.pickFolder();
+          if (!pickedPath) return;
+          try {
+            const executionTargets = buildExplicitExecutionTargets({
+              workspaceExecutionTargetId: "local",
+              providerRuntimeLocation: "local",
+            });
+            await api.orchestration.dispatchCommand({
+              type: "project.create",
+              commandId: newCommandId(),
+              projectId: newProjectId(),
+              title: deriveProjectTitleFromCwd(pickedPath),
+              ...executionTargets,
+              workspaceRoot: pickedPath,
+              defaultModelSelection: getDefaultModelSelection(serverProviders),
+              createdAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            toastManager.add({
+              type: "error",
+              title: "Failed to open project",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            });
+          }
+        })();
+        return;
+      }
+
       if (command === "rightPanel.toggle") {
         event.preventDefault();
         event.stopPropagation();
@@ -174,6 +229,7 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     toggleSidebar,
     navigate,
     onToggleSearch,
+    serverProviders,
   ]);
 
   return null;

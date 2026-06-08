@@ -55,7 +55,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
   const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
-  const notesShortcutLabel = null;
+  const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
 
