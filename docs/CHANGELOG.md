@@ -27,12 +27,6 @@ Entries below are grouped by release tag and date.
 - Added workspace file content search to the search palette, including line and column metadata, so `mod+f` can now locate matching text inside project files instead of only searching chat content.
 - Updated both palettes to reuse the existing file-open flow and added see-more pagination, keeping results relevant while letting previewable files open directly inside bigbud's Files panel.
 
-### Git Panel and Repo History
-
-- Added a dedicated Git tab in the right panel with separate `Changes` and `History` views, so you can inspect your repository state without leaving the app.
-- Git history now shows the author, relative time, pushed state, and older commits as you scroll, making the timeline easier to scan without hitting a hard cutoff.
-- Updated the Git changes view to handle real working-tree review better: `mod+g` now toggles the panel like other tools, large change lists reveal more files as you scroll, changed files can be dragged into the composer, and added or deleted file diffs render more reliably.
-
 ### Shortcut Reorganization and Open Project
 
 - Reorganized the default keybindings to make room for new commands: `mod+shift+n` now toggles the Notes panel, `mod+alt+n` creates a new local chat, `mod+o` opens a folder as a project, and `mod+shift+o` opens the favourite editor — the new thread shortcut is now `mod+n` only, streamlined to a single chord.
