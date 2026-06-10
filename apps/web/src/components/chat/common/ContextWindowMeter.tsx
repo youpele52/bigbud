@@ -1,10 +1,9 @@
 import { TriangleAlertIcon } from "lucide-react";
+import { useSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
-
-const CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -18,12 +17,14 @@ function formatPercentage(value: number | null): string | null {
 
 export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
   const { usage } = props;
+  const settings = useSettings();
+  const warningThreshold = settings.contextWindowWarningThresholdTokens;
   const usedPercentage = formatPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
   const radius = 9.75;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference - (normalizedPercentage / 100) * circumference;
-  const isOverWarningThreshold = usage.usedTokens >= CONTEXT_WINDOW_WARNING_THRESHOLD;
+  const isOverWarningThreshold = usage.usedTokens >= warningThreshold;
 
   return (
     <Popover>
@@ -127,8 +128,8 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
               <AlertTitle>Context window warning</AlertTitle>
               <AlertDescription>
                 Some models may start deteriorating past{" "}
-                {formatContextWindowTokens(CONTEXT_WINDOW_WARNING_THRESHOLD)} tokens. Consider using
-                a handoff skill or /compact.
+                {formatContextWindowTokens(warningThreshold)} tokens. Consider using a handoff skill
+                or /compact.
               </AlertDescription>
             </Alert>
           )}

@@ -51,12 +51,18 @@ export const TERMINAL_FONT_FAMILIES = ["meslo-nerd-font-mono", "system-monospace
 export const TERMINAL_FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18] as const;
 export const TERMINAL_FONT_SIZE_MIN = TERMINAL_FONT_SIZES[0];
 export const TERMINAL_FONT_SIZE_MAX = 18;
+export const CONTEXT_WINDOW_WARNING_THRESHOLD_MIN = 60_000;
+export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
+export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
 const TerminalFontSize = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(TERMINAL_FONT_SIZE_MIN),
 ).check(Schema.isLessThanOrEqualTo(TERMINAL_FONT_SIZE_MAX));
+const ContextWindowWarningThreshold = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MIN),
+).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
@@ -76,6 +82,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(() => "meslo-nerd-font-mono" as const satisfies TerminalFontFamily),
   ),
   terminalFontSize: TerminalFontSize.pipe(Schema.withDecodingDefault(() => 12)),
+  contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(
+    Schema.withDecodingDefault(() => DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD),
+  ),
   enableTaskCompletionToasts: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(
     Schema.withDecodingDefault(() => true),
