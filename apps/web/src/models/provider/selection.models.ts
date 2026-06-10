@@ -78,9 +78,18 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-cursor-model-slug",
     example: "claude-sonnet-4-5",
   },
+  devin: {
+    provider: "devin",
+    title: "Devin",
+    description: "Save additional Devin model slugs for the picker and `/model` command.",
+    placeholder: "your-devin-model-slug",
+    example: "default",
+  },
 };
 
-export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
+export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG).toSorted(
+  (a, b) => a.title.localeCompare(b.title),
+);
 
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
@@ -230,6 +239,12 @@ export function getCustomModelOptionsByProvider(
       providers,
       "cursor",
       selectedProvider === "cursor" ? selectedModel : undefined,
+    ),
+    devin: getAppModelOptions(
+      settings,
+      providers,
+      "devin",
+      selectedProvider === "devin" ? selectedModel : undefined,
     ),
   };
 }

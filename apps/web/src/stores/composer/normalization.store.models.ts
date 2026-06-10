@@ -230,7 +230,9 @@ export function normalizeModelSelection(
             ? modelOptions?.pi
             : provider === "cursor"
               ? modelOptions?.cursor
-              : modelOptions?.copilot;
+              : provider === "devin"
+                ? modelOptions?.devin
+                : modelOptions?.copilot;
   const baseSelection = createModelSelection(provider, model, options);
   const rawSubProviderID = candidate?.subProviderID;
   return (provider === "opencode" || provider === "pi") &&

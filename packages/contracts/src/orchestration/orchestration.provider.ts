@@ -4,6 +4,7 @@ import {
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
+  DevinModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "../core/model";
@@ -80,6 +81,13 @@ export const CursorModelSelection = Schema.Struct({
 });
 export type CursorModelSelection = typeof CursorModelSelection.Type;
 
+export const DevinModelSelection = Schema.Struct({
+  provider: Schema.Literal("devin"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(DevinModelOptions),
+});
+export type DevinModelSelection = typeof DevinModelSelection.Type;
+
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
@@ -87,6 +95,7 @@ export const ModelSelection = Schema.Union([
   OpencodeModelSelection,
   PiModelSelection,
   CursorModelSelection,
+  DevinModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
 

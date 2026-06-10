@@ -37,6 +37,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
   opencode: "claude-sonnet-4-6",
   pi: "claude-sonnet-4.6",
   cursor: "claude-sonnet-4-5",
+  devin: "default",
 } as const;
 
 /**
@@ -52,6 +53,7 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   opencode: "claude-haiku-4-5",
   pi: "claude-haiku-4.5",
   cursor: "claude-haiku-4-5",
+  devin: "default",
 } as const;
 
 /**
@@ -99,4 +101,5 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
   opencode: {},
   pi: {},
   cursor: {},
+  devin: {},
 } as const;

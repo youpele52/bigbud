@@ -36,7 +36,7 @@ export interface AcpSessionRuntimeOptions {
     readonly name: string;
     readonly version: string;
   };
-  readonly authMethodId: string;
+  readonly authMethodId?: string;
   readonly requestLogger?: (event: AcpSessionRequestLogEventShape) => Effect.Effect<void, never>;
   readonly protocolLogging?: {
     readonly logIncoming?: boolean;

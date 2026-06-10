@@ -138,6 +138,27 @@ export const AntigravityIcon: Icon = (props) => (
   </svg>
 );
 
+export const DevinIcon: Icon = (props) => {
+  const id = Math.random().toString(36).slice(2);
+  const maskId = `${id}-devin-logo-mask`;
+
+  return (
+    <svg {...props} viewBox="0 0 96 96" fill="none">
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96">
+          <rect width="96" height="96" fill="black" />
+          <path d="M24 8L42 18V38L24 48L6 38V18L24 8Z" fill="white" />
+          <path d="M68 28L86 38V58L68 68L50 58V38L68 28Z" fill="white" />
+          <path d="M24 48L42 58V78L24 88L6 78V58L24 48Z" fill="white" />
+          <circle cx="44" cy="48" r="9.5" fill="black" />
+          <circle cx="52" cy="48" r="9.5" fill="black" />
+        </mask>
+      </defs>
+      <rect width="96" height="96" fill="currentColor" mask={`url(#${maskId})`} />
+    </svg>
+  );
+};
+
 export const OpenCodeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <g clipPath="url(#opencode__clip0_1311_94969)">

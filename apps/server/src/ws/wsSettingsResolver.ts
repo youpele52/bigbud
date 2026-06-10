@@ -10,20 +10,22 @@
  * snapshot and the `settingsUpdated` stream) so clients always receive a
  * consistent, probe-status-correct selection — without mutating persisted state.
  *
+ * No fallback: if the selected provider is unusable, the original selection is
+ * returned unchanged so the UI can display the error/warning state explicitly.
+ *
  * @module wsSettingsResolver
  */
-import type { ModelSelection, ServerProvider, ServerSettings } from "@bigbud/contracts";
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER, PROVIDER_KINDS } from "@bigbud/contracts";
+import type { ServerProvider, ServerSettings } from "@bigbud/contracts";
 
 /**
  * Re-resolves `settings.textGenerationModelSelection` using live probe status.
  *
  * Resolution order:
  * 1. If the currently selected provider snapshot is `enabled && status === "ready"`, keep it.
- * 2. Otherwise find the first provider (in `PROVIDER_KINDS` order) that is `enabled && status === "ready"`.
- * 3. If none are ready, fall back to the first `enabled` provider (mirrors the existing
- *    `resolveTextGenerationProvider` logic so callers see a consistent error state).
- * 4. If no providers snapshots are available (empty array), return settings unchanged —
+ * 2. Otherwise return settings unchanged — the UI will display the provider's
+ *    actual status (warning/error) and block selection rather than silently
+ *    falling back to another provider.
+ * 3. If no providers snapshots are available (empty array), return settings unchanged —
  *    probes may still be running; the client will receive an updated event once they finish.
  *
  * Persisted user choices are authoritative: this override is view-only and is never
@@ -45,44 +47,7 @@ export function resolveTextGenByProbeStatus(
     return settings;
   }
 
-  // Find the first ready provider (probe-status-gated).
-  const firstReady = PROVIDER_KINDS.map((kind) => providers.find((p) => p.provider === kind))
-    .filter((p): p is ServerProvider => p !== undefined)
-    .find((p) => p.enabled && p.status === "ready");
-
-  if (firstReady) {
-    // Prefer the provider's first model slug when available, fall back to the static default.
-    const model =
-      firstReady.models[0]?.slug ??
-      DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[firstReady.provider];
-    return {
-      ...settings,
-      textGenerationModelSelection: {
-        provider: firstReady.provider,
-        model,
-      } as ModelSelection,
-    };
-  }
-
-  // No provider is ready yet — fall back to the first enabled provider so the
-  // client can still display a meaningful "not installed / not authenticated" state.
-  const firstEnabled = PROVIDER_KINDS.map((kind) => providers.find((p) => p.provider === kind))
-    .filter((p): p is ServerProvider => p !== undefined)
-    .find((p) => p.enabled);
-
-  if (firstEnabled) {
-    const model =
-      firstEnabled.models[0]?.slug ??
-      DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[firstEnabled.provider];
-    return {
-      ...settings,
-      textGenerationModelSelection: {
-        provider: firstEnabled.provider,
-        model,
-      } as ModelSelection,
-    };
-  }
-
-  // All providers are disabled or unknown — return unchanged (callers report error state).
+  // No fallback: return unchanged so the UI can show the actual provider status
+  // (warning/error) and prevent selection rather than silently switching providers.
   return settings;
 }
