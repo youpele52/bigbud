@@ -90,6 +90,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     props.lockedProvider !== null ? "model" : "provider",
   );
   const activeProvider = props.lockedProvider ?? props.provider;
+  const activeProviderSnapshot = props.providers
+    ? getProviderSnapshot(props.providers, activeProvider)
+    : undefined;
   const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
   const selectedProviderValue = props.provider === activeProvider ? props.model : "";
   // Extract slug from model value (strip ::subProviderID suffix if present)
@@ -181,6 +184,23 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 selectedValue={selectedProviderValue}
                 options={props.modelOptionsByProvider[props.lockedProvider]}
                 recentOptions={recentOptionsByProvider[props.lockedProvider]}
+                loading={
+                  props.providers !== undefined &&
+                  props.modelOptionsByProvider[props.lockedProvider].length === 0 &&
+                  (!activeProviderSnapshot || activeProviderSnapshot.status === "warning")
+                }
+                unavailableMessage={
+                  activeProviderSnapshot &&
+                  (!activeProviderSnapshot.enabled
+                    ? "Provider is disabled"
+                    : !activeProviderSnapshot.installed
+                      ? "Provider is not installed"
+                      : activeProviderSnapshot.auth.status === "unauthenticated"
+                        ? "Provider login required"
+                        : activeProviderSnapshot.status === "error"
+                          ? (activeProviderSnapshot.message ?? "Provider unavailable")
+                          : undefined)
+                }
                 onSelect={(value) => handleModelChange(props.lockedProvider!, value)}
                 {...(props.onProviderUnlock
                   ? {
@@ -199,12 +219,34 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 const liveProvider = props.providers
                   ? getProviderSnapshot(props.providers, option.value)
                   : undefined;
-                if (liveProvider && liveProvider.status !== "ready") {
+                const isLoadingModels =
+                  props.providers !== undefined &&
+                  props.modelOptionsByProvider[option.value].length === 0 &&
+                  (!liveProvider || liveProvider.status === "warning");
+                const unavailableMessage =
+                  liveProvider && !liveProvider.enabled
+                    ? "Provider is disabled"
+                    : liveProvider && !liveProvider.installed
+                      ? "Provider is not installed"
+                      : liveProvider?.auth.status === "unauthenticated"
+                        ? "Provider login required"
+                        : liveProvider?.status === "error"
+                          ? (liveProvider.message ?? "Provider unavailable")
+                          : undefined;
+                const isUnavailable =
+                  liveProvider !== undefined &&
+                  (!liveProvider.enabled ||
+                    !liveProvider.installed ||
+                    liveProvider.auth.status === "unauthenticated" ||
+                    liveProvider.status === "error");
+                if (isUnavailable) {
                   const unavailableLabel = !liveProvider.enabled
                     ? "Disabled"
                     : !liveProvider.installed
                       ? "Not installed"
-                      : "Unavailable";
+                      : liveProvider.auth.status === "unauthenticated"
+                        ? "Login required"
+                        : "Unavailable";
                   return (
                     <MenuItem
                       key={option.value}
@@ -247,6 +289,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                           selectedValue={props.provider === option.value ? props.model : ""}
                           options={props.modelOptionsByProvider[option.value]}
                           recentOptions={recentOptionsByProvider[option.value]}
+                          loading={isLoadingModels}
+                          unavailableMessage={unavailableMessage}
                           onSelect={(value) => {
                             handleModelChange(option.value, value);
                           }}

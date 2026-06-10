@@ -81,6 +81,7 @@ function createBaseServerConfig(): ServerConfig {
         opencode: { enabled: true, binaryPath: "", customModels: [] },
         pi: { enabled: true, binaryPath: "", customModels: [] },
         cursor: { enabled: true, binaryPath: "agent", customModels: [], apiEndpoint: "" },
+        devin: { enabled: true, binaryPath: "devin", customModels: [] },
       },
     },
   };

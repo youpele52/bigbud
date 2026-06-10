@@ -50,7 +50,7 @@ describe("resolveTextGenByProbeStatus", () => {
     assert.strictEqual(result.textGenerationModelSelection.provider, "codex");
   });
 
-  it("falls through to first ready provider when selected provider status is error", () => {
+  it("returns settings unchanged when selected provider status is error (no fallback)", () => {
     const settings = makeSettings({
       textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
     });
@@ -60,12 +60,13 @@ describe("resolveTextGenByProbeStatus", () => {
       makeProvider({ provider: "copilot", status: "ready" }),
       makeProvider({ provider: "opencode", status: "ready" }),
     ];
+    // No fallback: keep the selected provider so UI can show error state
     const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "claudeAgent");
-    assert.strictEqual(result.textGenerationModelSelection.model, "haiku");
+    assert.strictEqual(result, settings);
+    assert.strictEqual(result.textGenerationModelSelection.provider, "codex");
   });
 
-  it("falls back to DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER when models array is empty", () => {
+  it("returns settings unchanged when models array is empty (no fallback)", () => {
     const settings = makeSettings({
       textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
     });
@@ -73,12 +74,13 @@ describe("resolveTextGenByProbeStatus", () => {
       makeProvider({ provider: "codex", status: "error", installed: false }),
       makeProvider({ provider: "claudeAgent", status: "ready", models: [] }),
     ];
+    // No fallback: keep the selected provider so UI can show error state
     const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "claudeAgent");
-    assert.strictEqual(result.textGenerationModelSelection.model, "haiku");
+    assert.strictEqual(result, settings);
+    assert.strictEqual(result.textGenerationModelSelection.provider, "codex");
   });
 
-  it("ignores disabled providers when searching for a ready provider", () => {
+  it("returns settings unchanged when selected provider is disabled (no fallback)", () => {
     const settings = makeSettings({
       textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
     });
@@ -87,8 +89,10 @@ describe("resolveTextGenByProbeStatus", () => {
       makeProvider({ provider: "claudeAgent", status: "ready", enabled: false }),
       makeProvider({ provider: "copilot", status: "ready" }),
     ];
+    // No fallback: keep the selected provider so UI can show error state
     const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "copilot");
+    assert.strictEqual(result, settings);
+    assert.strictEqual(result.textGenerationModelSelection.provider, "codex");
   });
 
   it("falls back to first enabled provider when no provider is ready (none installed)", () => {
@@ -121,20 +125,35 @@ describe("resolveTextGenByProbeStatus", () => {
     assert.strictEqual(result, settings);
   });
 
-  it("returns settings unchanged when selected provider has status warning (still usable)", () => {
+  it("returns settings unchanged when selected provider has status warning (no fallback)", () => {
     const settings = makeSettings({
-      textGenerationModelSelection: { provider: "copilot", model: "gpt-5-mini" },
+      textGenerationModelSelection: { provider: "devin", model: "default" },
     });
     const providers = [
       makeProvider({ provider: "codex", status: "ready" }),
-      makeProvider({ provider: "copilot", status: "warning" }),
+      makeProvider({ provider: "devin", status: "warning" }),
     ];
-    // "warning" is not "ready" so should fall through to "codex" which is first ready
+    // No fallback: keep the selected provider so UI can show warning state
     const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.strictEqual(result.textGenerationModelSelection.provider, "codex");
+    assert.strictEqual(result, settings);
+    assert.strictEqual(result.textGenerationModelSelection.provider, "devin");
   });
 
-  it("does not mutate the original settings object", () => {
+  it("returns settings unchanged when selected provider has status error (no fallback)", () => {
+    const settings = makeSettings({
+      textGenerationModelSelection: { provider: "devin", model: "default" },
+    });
+    const providers = [
+      makeProvider({ provider: "codex", status: "ready" }),
+      makeProvider({ provider: "devin", status: "error" }),
+    ];
+    // No fallback: keep the selected provider so UI can show error state
+    const result = resolveTextGenByProbeStatus(settings, providers);
+    assert.strictEqual(result, settings);
+    assert.strictEqual(result.textGenerationModelSelection.provider, "devin");
+  });
+
+  it("does not mutate the original settings object when returning unchanged", () => {
     const settings = makeSettings({
       textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
     });
@@ -143,7 +162,8 @@ describe("resolveTextGenByProbeStatus", () => {
       makeProvider({ provider: "claudeAgent", status: "ready" }),
     ];
     const result = resolveTextGenByProbeStatus(settings, providers);
-    assert.notStrictEqual(result, settings);
+    // No fallback: returns the same object when selected provider is not ready
+    assert.strictEqual(result, settings);
     assert.strictEqual(settings.textGenerationModelSelection.provider, "codex");
   });
 });

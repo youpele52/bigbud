@@ -23,6 +23,12 @@ export type InstallProviderSettings = {
 
 export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
   {
+    provider: "claudeAgent",
+    title: "Claude",
+    binaryPlaceholder: "Claude binary path",
+    binaryDescription: "Path to the Claude binary",
+  },
+  {
     provider: "codex",
     title: "Codex",
     binaryPlaceholder: "Codex binary path",
@@ -32,16 +38,22 @@ export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     homeDescription: "Optional custom Codex home and config directory.",
   },
   {
-    provider: "claudeAgent",
-    title: "Claude",
-    binaryPlaceholder: "Claude binary path",
-    binaryDescription: "Path to the Claude binary",
-  },
-  {
     provider: "copilot",
     title: "Copilot",
     binaryPlaceholder: "Copilot binary path",
     binaryDescription: "Path to the GitHub Copilot CLI binary",
+  },
+  {
+    provider: "cursor",
+    title: "Cursor",
+    binaryPlaceholder: "Cursor agent binary path",
+    binaryDescription: "Path to the Cursor agent binary (agent CLI)",
+  },
+  {
+    provider: "devin",
+    title: "Devin",
+    binaryPlaceholder: "Devin CLI binary path",
+    binaryDescription: "Path to the Devin CLI binary (devin CLI)",
   },
   {
     provider: "opencode",
@@ -54,12 +66,6 @@ export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     title: "Pi",
     binaryPlaceholder: "Pi binary path",
     binaryDescription: "Path to the Pi binary",
-  },
-  {
-    provider: "cursor",
-    title: "Cursor",
-    binaryPlaceholder: "Cursor agent binary path",
-    binaryDescription: "Path to the Cursor agent binary (agent CLI)",
   },
 ] as const;
 
@@ -156,11 +162,15 @@ export function createInitialOpenProviderDetails(settings: typeof DEFAULT_UNIFIE
         DEFAULT_UNIFIED_SETTINGS.providers.cursor.binaryPath ||
       settings.providers.cursor.customModels.length > 0,
     ),
+    devin: Boolean(
+      settings.providers.devin.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.devin.binaryPath ||
+      settings.providers.devin.customModels.length > 0,
+    ),
   };
 }
 
 export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
-  return { codex: "", claudeAgent: "", copilot: "", opencode: "", pi: "", cursor: "" };
+  return { codex: "", claudeAgent: "", copilot: "", opencode: "", pi: "", cursor: "", devin: "" };
 }
 
 export function getAddCustomModelError(input: {

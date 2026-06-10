@@ -122,6 +122,7 @@ export function useComposerProviderState(
       opencode: providerStatuses.find((provider) => provider.provider === "opencode")?.models ?? [],
       pi: providerStatuses.find((provider) => provider.provider === "pi")?.models ?? [],
       cursor: providerStatuses.find((provider) => provider.provider === "cursor")?.models ?? [],
+      devin: providerStatuses.find((provider) => provider.provider === "devin")?.models ?? [],
     }),
     [providerStatuses],
   );

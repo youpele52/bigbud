@@ -69,6 +69,14 @@ export const CursorModelOptions = Schema.Struct({
 });
 export type CursorModelOptions = typeof CursorModelOptions.Type;
 
+export const DevinModelOptions = Schema.Struct({
+  reasoning: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  contextWindow: Schema.optional(Schema.String),
+  fastMode: Schema.optional(Schema.Boolean),
+  thinking: Schema.optional(Schema.Boolean),
+});
+export type DevinModelOptions = typeof DevinModelOptions.Type;
+
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
@@ -76,6 +84,7 @@ export const ProviderModelOptions = Schema.Struct({
   opencode: Schema.optional(OpencodeModelOptions),
   pi: Schema.optional(PiModelOptions),
   cursor: Schema.optional(CursorModelOptions),
+  devin: Schema.optional(DevinModelOptions),
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
 

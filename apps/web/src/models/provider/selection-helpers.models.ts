@@ -112,6 +112,10 @@ export function createModelSelection(
       const cursorOptions = options as ProviderModelOptions["cursor"] | undefined;
       return cursorOptions ? { provider, model, options: cursorOptions } : { provider, model };
     }
+    case "devin": {
+      const devinOptions = options as ProviderModelOptions["devin"] | undefined;
+      return devinOptions ? { provider, model, options: devinOptions } : { provider, model };
+    }
   }
 }
 
