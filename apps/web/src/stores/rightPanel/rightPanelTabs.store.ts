@@ -21,6 +21,11 @@ interface RightPanelTabsState {
   closeTab: (kind: RightPanelTabKind) => void;
   closeTabById: (tabId: RightPanelTabId) => void;
   ensureTabOpen: (kind: Exclude<RightPanelTabKind, "browser">) => void;
+  moveTab: (
+    tabId: RightPanelTabId,
+    targetTabId: RightPanelTabId,
+    position: "before" | "after",
+  ) => void;
   openTab: (kind: Exclude<RightPanelTabKind, "browser">) => void;
   openBrowserTab: () => OpenBrowserTabResult;
   setActiveTab: (tabId: RightPanelTabId) => void;
@@ -66,6 +71,36 @@ function appendTabIfMissing(
   tabId: RightPanelTabId,
 ): ReadonlyArray<RightPanelTabId> {
   return openTabs.includes(tabId) ? openTabs : [...openTabs, tabId];
+}
+
+function moveTabInOrder(
+  openTabs: ReadonlyArray<RightPanelTabId>,
+  tabId: RightPanelTabId,
+  targetTabId: RightPanelTabId,
+  position: "before" | "after",
+): ReadonlyArray<RightPanelTabId> {
+  if (tabId === targetTabId) {
+    return openTabs;
+  }
+
+  const sourceIndex = openTabs.indexOf(tabId);
+  const targetIndex = openTabs.indexOf(targetTabId);
+  if (sourceIndex === -1 || targetIndex === -1) {
+    return openTabs;
+  }
+
+  const nextTabs = [...openTabs];
+  nextTabs.splice(sourceIndex, 1);
+
+  const targetIndexAfterRemoval = nextTabs.indexOf(targetTabId);
+  if (targetIndexAfterRemoval === -1) {
+    return openTabs;
+  }
+
+  const insertIndex = position === "before" ? targetIndexAfterRemoval : targetIndexAfterRemoval + 1;
+  nextTabs.splice(insertIndex, 0, tabId);
+
+  return nextTabs.every((nextTabId, index) => nextTabId === openTabs[index]) ? openTabs : nextTabs;
 }
 
 function resolveNextActiveTabId(
@@ -155,6 +190,11 @@ export const useRightPanelTabsStore = create<RightPanelTabsState>((set) => ({
         lastActiveKind: state.lastActiveKind ?? getRightPanelTabKind(activeTabId),
         rightPanelOpen: true,
       };
+    }),
+  moveTab: (tabId, targetTabId, position) =>
+    set((state) => {
+      const nextTabs = moveTabInOrder(state.openTabs, tabId, targetTabId, position);
+      return nextTabs === state.openTabs ? state : { openTabs: nextTabs };
     }),
   openTab: (kind) =>
     set((state) => ({

@@ -69,6 +69,45 @@ describe("rightPanelTabs.store", () => {
     });
   });
 
+  it("reorders tabs without changing the active tab", () => {
+    useRightPanelTabsStore.setState({
+      activeKind: "terminal",
+      activeTabId: "terminal",
+      lastActiveKind: "terminal",
+      openTabs: ["files", "terminal", "git", "browser:1"],
+      rightPanelOpen: true,
+    });
+
+    useRightPanelTabsStore.getState().moveTab("browser:1", "files", "before");
+
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "terminal",
+      activeTabId: "terminal",
+      lastActiveKind: "terminal",
+      openTabs: ["browser:1", "files", "terminal", "git"],
+      rightPanelOpen: true,
+    });
+  });
+
+  it("can move a tab after another tab", () => {
+    useRightPanelTabsStore.setState({
+      activeKind: "files",
+      activeTabId: "files",
+      lastActiveKind: "files",
+      openTabs: ["files", "terminal", "git", "browser:1"],
+      rightPanelOpen: true,
+    });
+
+    useRightPanelTabsStore.getState().moveTab("files", "git", "after");
+
+    expect(useRightPanelTabsStore.getState().openTabs).toEqual([
+      "terminal",
+      "git",
+      "files",
+      "browser:1",
+    ]);
+  });
+
   it("closes the active middle tab and selects the nearest left tab", () => {
     useRightPanelTabsStore.setState({
       activeKind: "files",
