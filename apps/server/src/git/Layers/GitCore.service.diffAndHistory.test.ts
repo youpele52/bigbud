@@ -125,12 +125,16 @@ it.layer(TestLayer)("git integration", (it) => {
           "2026-06-08T10:00:00.000Z",
           "feat: third",
         );
+        yield* git(tmp, ["tag", "v0.1.642-beta-1"]);
+        yield* git(tmp, ["tag", "release-candidate"]);
 
         const result = yield* (yield* GitCore).listCommits({ cwd: tmp, limit: 2 });
 
         expect(result.commits).toHaveLength(2);
         expect(result.commits[0]?.subject).toBe("feat: third");
         expect(result.commits[1]?.subject).toBe("feat: second");
+        expect(result.commits[0]?.tags).toEqual(["release-candidate", "v0.1.642-beta-1"]);
+        expect(result.commits[1]?.tags).toEqual([]);
         expect(result.nextCursor).toBe(2);
       }),
     );
@@ -201,11 +205,14 @@ it.layer(TestLayer)("git integration", (it) => {
           "2026-06-08T11:00:00.000Z",
           "feat: commit details",
         );
+        yield* git(tmp, ["tag", "v0.1.642-beta-1"]);
+        yield* git(tmp, ["tag", "release-candidate"]);
         const sha = yield* git(tmp, ["rev-parse", "HEAD"]);
 
         const result = yield* (yield* GitCore).getCommitDetails({ cwd: tmp, commit: sha });
 
         expect(result.commit.subject).toBe("feat: commit details");
+        expect(result.commit.tags).toEqual(["release-candidate", "v0.1.642-beta-1"]);
         expect(result.commit.files.some((file) => file.path === "history.txt")).toBe(true);
         expect(result.commit.diff).toContain("diff --git a/history.txt b/history.txt");
       }),

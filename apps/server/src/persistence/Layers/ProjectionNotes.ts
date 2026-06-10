@@ -1,3 +1,4 @@
+import { utimes } from "node:fs/promises";
 import { Effect, FileSystem, Layer, Option, Path } from "effect";
 import { NoteId, ProjectId } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -37,6 +38,11 @@ function resolveMtime(stat: { mtime: Date | Option.Option<Date> }): Date {
 
 function fileSystemError(operation: string, detail: string, cause?: unknown): PersistenceSqlError {
   return new PersistenceSqlError({ operation, detail, cause });
+}
+
+function parseTimestamp(value: string): Date | null {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 const makeProjectionNoteRepository = Effect.gen(function* () {
@@ -191,6 +197,15 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
           fileSystemError("create.writeFile", "Failed to write note file", cause),
         ),
       );
+
+    const updatedAt = parseTimestamp(input.updatedAt);
+    if (updatedAt) {
+      yield* Effect.tryPromise({
+        try: () => utimes(absolutePath, updatedAt, updatedAt),
+        catch: (cause) =>
+          fileSystemError("create.utimes", "Failed to persist note timestamp", cause),
+      });
+    }
 
     return {
       noteId: noteRelPath as NoteId,

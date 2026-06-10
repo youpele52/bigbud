@@ -37,7 +37,7 @@ export const writeTempFile = (
 ): Effect.Effect<string, TextGenerationError, Scope.Scope> =>
   fileSystem
     .makeTempFileScoped({
-      prefix: `t3code-${prefix}-${process.pid}-${randomUUID()}.tmp`,
+      prefix: `bigbud-${prefix}-${process.pid}-${randomUUID()}.tmp`,
     })
     .pipe(
       Effect.tap((filePath) => fileSystem.writeFileString(filePath, content)),
