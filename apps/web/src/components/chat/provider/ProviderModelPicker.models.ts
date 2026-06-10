@@ -4,6 +4,7 @@ import {
   ClaudeAI,
   CopilotIcon,
   CursorIcon,
+  DevinIcon,
   type Icon,
   OpenAI,
   OpenCodeIcon,
@@ -25,6 +26,7 @@ export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   opencode: OpenCodeIcon,
   pi: PiIcon,
   cursor: CursorIcon,
+  devin: DevinIcon,
 };
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);

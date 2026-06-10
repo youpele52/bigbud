@@ -13,6 +13,7 @@ export const PROVIDER_KINDS = [
   "opencode",
   "pi",
   "cursor",
+  "devin",
 ] as const;
 
 /**
@@ -27,6 +28,7 @@ export const PROVIDER_DISPLAY_NAMES = {
   opencode: "OpenCode",
   pi: "Pi",
   cursor: "Cursor",
+  devin: "Devin",
 } as const;
 
 /**

@@ -2,6 +2,7 @@ import { type ProviderKind } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
+import { Spinner } from "../../ui/spinner";
 import {
   groupModelOptions,
   modelOptionValue,
@@ -14,6 +15,8 @@ export function ModelList({
   selectedValue,
   options,
   recentOptions,
+  loading = false,
+  unavailableMessage,
   onSelect,
   onBack,
 }: {
@@ -21,6 +24,8 @@ export function ModelList({
   selectedValue: string;
   options: ReadonlyArray<ModelOption>;
   recentOptions?: ReadonlyArray<ModelOption> | undefined;
+  loading?: boolean;
+  unavailableMessage?: string | undefined;
   onSelect: (value: string) => void;
   onBack?: () => void;
 }) {
@@ -47,7 +52,10 @@ export function ModelList({
   const grouped = useMemo(() => groupModelOptions(filtered), [filtered]);
   const hasVisibleModels = grouped.length > 0;
   const hasNamedGroups = grouped.some((group) => group.kind === "named");
-  const showEmptyState = !hasVisibleModels && !showRecentOptions;
+  const showLoadingState = loading && options.length === 0;
+  const showUnavailableState = !loading && Boolean(unavailableMessage) && options.length === 0;
+  const showEmptyState =
+    !showLoadingState && !showUnavailableState && !hasVisibleModels && !showRecentOptions;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -83,6 +91,17 @@ export function ModelList({
       </Searchbar>
 
       <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
+        {showLoadingState ? (
+          <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground/70">
+            <Spinner className="size-3" />
+            <span>Loading models...</span>
+          </div>
+        ) : null}
+        {showUnavailableState ? (
+          <div className="px-3 py-4 text-center text-sm text-muted-foreground/70">
+            {unavailableMessage}
+          </div>
+        ) : null}
         {showRecentOptions && recentOptions ? (
           <MenuGroup>
             <MenuGroupLabel>Recently used</MenuGroupLabel>
@@ -98,7 +117,7 @@ export function ModelList({
         ) : null}
         {showEmptyState ? (
           <div className="px-3 py-4 text-center text-sm text-muted-foreground/60">
-            No models match &ldquo;{query}&rdquo;
+            {hasSearchQuery ? `No models match “${query}”` : "No models available"}
           </div>
         ) : hasNamedGroups ? (
           grouped.map((section) => (

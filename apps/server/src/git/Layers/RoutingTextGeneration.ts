@@ -156,6 +156,8 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
               modelSelection: input.modelSelection,
             },
           );
+        default:
+          return route("codex").generateThreadTitle(input);
       }
     },
   } satisfies TextGenerationShape;

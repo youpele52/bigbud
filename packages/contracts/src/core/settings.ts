@@ -8,6 +8,7 @@ import {
   CopilotModelOptions,
   CursorModelOptions,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  DevinModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
@@ -161,6 +162,13 @@ export const CursorSettings = Schema.Struct({
 });
 export type CursorSettings = typeof CursorSettings.Type;
 
+export const DevinSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("devin"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type DevinSettings = typeof DevinSettings.Type;
+
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
   otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
@@ -192,6 +200,7 @@ export const ServerSettings = Schema.Struct({
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
@@ -253,6 +262,13 @@ const CursorModelOptionsPatch = Schema.Struct({
   thinking: Schema.optionalKey(CursorModelOptions.fields.thinking),
 });
 
+const DevinModelOptionsPatch = Schema.Struct({
+  reasoning: Schema.optionalKey(DevinModelOptions.fields.reasoning),
+  contextWindow: Schema.optionalKey(DevinModelOptions.fields.contextWindow),
+  fastMode: Schema.optionalKey(DevinModelOptions.fields.fastMode),
+  thinking: Schema.optionalKey(DevinModelOptions.fields.thinking),
+});
+
 const ModelSelectionPatch = Schema.Union([
   Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("codex")),
@@ -283,6 +299,11 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("cursor")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(CursorModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("devin")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(DevinModelOptionsPatch),
   }),
 ]);
 
@@ -324,6 +345,12 @@ const CursorSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const DevinSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
@@ -347,6 +374,7 @@ export const ServerSettingsPatch = Schema.Struct({
       opencode: Schema.optionalKey(OpencodeSettingsPatch),
       pi: Schema.optionalKey(PiSettingsPatch),
       cursor: Schema.optionalKey(CursorSettingsPatch),
+      devin: Schema.optionalKey(DevinSettingsPatch),
     }),
   ),
 });

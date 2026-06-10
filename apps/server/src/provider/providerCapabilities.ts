@@ -46,6 +46,12 @@ const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
     toolInjectionMode: "custom-tools",
     needsBuiltinsDisabled: true,
   },
+  devin: {
+    supportsRemoteProviderRuntime: false,
+    supportsLocalRuntimeRemoteWorkspace: true,
+    toolInjectionMode: "custom-tools",
+    needsBuiltinsDisabled: false,
+  },
 };
 
 export function getProviderCapabilities(provider: ProviderKind): ProviderCapabilities {

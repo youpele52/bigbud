@@ -68,6 +68,12 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: cursorOptions })
         : createModelSelection("cursor", DEFAULT_MODEL_BY_PROVIDER.cursor, cursorOptions);
     }
+    case "devin": {
+      const devinOptions = options as NonNullable<ProviderModelOptions["devin"]>;
+      return current?.provider === "devin"
+        ? cloneModelSelection(current, { options: devinOptions })
+        : createModelSelection("devin", DEFAULT_MODEL_BY_PROVIDER.devin, devinOptions);
+    }
   }
 }
 

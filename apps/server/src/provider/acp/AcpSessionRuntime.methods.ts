@@ -42,7 +42,7 @@ interface AcpSessionRuntimeMethodsDeps {
       readonly name: string;
       readonly version: string;
     };
-    readonly authMethodId: string;
+    readonly authMethodId?: string;
     readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   };
   readonly acp: EffectAcpClient.AcpClientShape;
