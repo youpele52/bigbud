@@ -567,9 +567,9 @@ Entries below are grouped by release tag and date.
 - Added settings for API key and transcription model selection, plus composer UI states for recording, listening, and voice-only input.
 - Added desktop permission handling and entitlement changes needed for microphone access on Electron builds.
 
-### Provider and Runtime Reliability [t3code]
+### Provider and Runtime Reliability
 
-- Adapted upstream reliability fixes into bigbud's current architecture instead of copying `t3code` modules directly.
+- Adapted upstream reliability fixes into bigbud's current architecture instead of copying upstream modules directly.
 - Hardened Claude and OpenCode structured question/answer flows so newer SDK answer-key behavior continues to map correctly into bigbud UI state.
 - Improved Codex runtime compatibility with newer event names, child-conversation routing, turn policy handling, and transcript event mapping.
 - Refined provider session lifecycle handling so stale sessions are cleaned up more predictably when switching providers.
@@ -610,7 +610,7 @@ Entries below are grouped by release tag and date.
 - Swapped brand-heavy blue accents for more neutral primary theme tokens while keeping informational blue for status-oriented UI.
 - Updated activity indicators so agent-working states still read clearly after the theme token shift.
 
-### Git, PR, and Terminal Improvements [t3code]
+### Git, PR, and Terminal Improvements
 
 - Hid merged or closed PRs from branch status when viewing the default branch to reduce stale PR context.
 - Prevented non-approval user-input activities from creating pending approval projection rows.

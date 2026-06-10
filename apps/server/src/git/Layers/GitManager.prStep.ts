@@ -90,7 +90,7 @@ export function makePrStep(
       modelSelection,
     });
 
-    const bodyFile = path.join(tempDir, `t3code-pr-body-${process.pid}-${randomUUID()}.md`);
+    const bodyFile = path.join(tempDir, `bigbud-pr-body-${process.pid}-${randomUUID()}.md`);
     yield* fileSystem
       .writeFileString(bodyFile, generated.body)
       .pipe(

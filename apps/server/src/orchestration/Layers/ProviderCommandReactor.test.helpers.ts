@@ -113,7 +113,7 @@ export async function createHarness(input?: {
   readonly terminalCloseFailure?: string;
 }) {
   const now = new Date().toISOString();
-  const baseDir = input?.baseDir ?? makeTrackedTempDir("t3code-reactor-");
+  const baseDir = input?.baseDir ?? makeTrackedTempDir("bigbud-reactor-");
   trackedDirs.add(baseDir);
   const { stateDir } = deriveServerPathsSync(baseDir, undefined);
   trackedDirs.add(stateDir);

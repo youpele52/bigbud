@@ -22,8 +22,14 @@ function parseCommitSummaryRecords(
     .map((record) => record.trim())
     .filter((record) => record.length > 0)
     .flatMap((record) => {
-      const [sha = "", shortSha = "", authorName = "", authoredAt = "", subject = ""] =
-        record.split(FIELD_SEPARATOR);
+      const [
+        sha = "",
+        shortSha = "",
+        authorName = "",
+        authoredAt = "",
+        subject = "",
+        decorations = "",
+      ] = record.split(FIELD_SEPARATOR);
       if (!sha || !shortSha || !authorName || !authoredAt || !subject) {
         return [];
       }
@@ -35,9 +41,23 @@ function parseCommitSummaryRecords(
           authoredAt,
           subject,
           isPushed: !unpushedCommitShas.has(sha),
+          tags: parseGitTagDecorations(decorations),
         },
       ];
     });
+}
+
+function parseGitTagDecorations(decorations: string): string[] {
+  return [
+    ...new Set(
+      decorations
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.startsWith("tag: "))
+        .map((entry) => entry.slice("tag: ".length).trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  ].toSorted((left, right) => left.localeCompare(right));
 }
 
 function parseCommitDetails(stdout: string) {
@@ -47,6 +67,7 @@ function parseCommitDetails(stdout: string) {
     authorName = "",
     authoredAt = "",
     subject = "",
+    decorations = "",
     body = "",
     parentsRaw = "",
   ] = stdout.split(FIELD_SEPARATOR);
@@ -56,6 +77,7 @@ function parseCommitDetails(stdout: string) {
     authorName,
     authoredAt,
     subject,
+    tags: parseGitTagDecorations(decorations),
     body,
     parents: parentsRaw
       .split(" ")
@@ -199,7 +221,7 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
       "log",
       `--max-count=${limit + 1}`,
       ...(skip > 0 ? [`--skip=${skip}`] : []),
-      `--format=%H%x00%h%x00%an%x00%aI%x00%s%x1e`,
+      `--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%D%x1e`,
     ];
     const result = yield* executeGit("GitCore.listCommits", input.cwd, args, {
       allowNonZeroExit: true,
@@ -239,7 +261,7 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
           runGitStdout("GitCore.getCommitDetails.summary", input.cwd, [
             "show",
             "-s",
-            `--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%B%x00%P`,
+            `--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%D%x00%B%x00%P`,
             input.commit,
           ]),
           runGitStdout("GitCore.getCommitDetails.numstat", input.cwd, [

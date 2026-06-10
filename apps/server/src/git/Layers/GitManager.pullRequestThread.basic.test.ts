@@ -17,7 +17,7 @@ import { createBareRemote, initRepo, makeTempDir, runGit } from "./GitManager.te
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("prepares pull request threads in local mode by checking out the PR branch", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-local"]);
       fs.writeFileSync(path.join(repoDir, "local.txt"), "local\n");
@@ -53,7 +53,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("prepares pull request threads in worktree mode on the PR head branch", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
@@ -98,7 +98,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("launches setup only when creating a new PR worktree", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
@@ -151,7 +151,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("reuses an existing dedicated worktree for the PR head branch", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-existing-worktree"]);
       fs.writeFileSync(path.join(repoDir, "existing.txt"), "existing\n");
@@ -199,7 +199,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("does not fail PR worktree prep when setup terminal startup fails", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       const remoteDir = yield* createBareRemote();
       yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
@@ -243,7 +243,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
 
   it.effect("rejects worktree prep when the PR head branch is checked out in the main repo", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/pr-root-only"]);
 

@@ -17,7 +17,7 @@ import {
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("returns existing PR metadata for commit/push/pr action", () =>
     Effect.gen(function* () {
-      const repoDir = yield* makeTempDir("t3code-git-manager-");
+      const repoDir = yield* makeTempDir("bigbud-git-manager-");
       yield* initRepo(repoDir);
       yield* runGit(repoDir, ["checkout", "-b", "feature/existing-pr"]);
       const remoteDir = yield* createBareRemote();
@@ -64,7 +64,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     "returns existing cross-repo PR metadata using the fork owner selector",
     () =>
       Effect.gen(function* () {
-        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        const repoDir = yield* makeTempDir("bigbud-git-manager-");
         yield* initRepo(repoDir);
         yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
         const forkDir = yield* createBareRemote();
@@ -122,7 +122,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     "returns the correct existing PR when a slash remote checks out to a synthetic local alias",
     () =>
       Effect.gen(function* () {
-        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        const repoDir = yield* makeTempDir("bigbud-git-manager-");
         yield* initRepo(repoDir);
         const originDir = yield* createBareRemote();
         const upstreamDir = yield* createBareRemote();
@@ -214,13 +214,13 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     "prefers owner-qualified selectors before bare branch names for cross-repo PRs",
     () =>
       Effect.gen(function* () {
-        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        const repoDir = yield* makeTempDir("bigbud-git-manager-");
         yield* initRepo(repoDir);
         yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
         const forkDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-142/statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "bigbud/pr-142/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
         yield* runGit(repoDir, [
           "config",
@@ -231,7 +231,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         const { manager, ghCalls } = yield* makeManager({
           ghScenario: {
             prListByHeadSelector: {
-              "t3code/pr-142/statemachine": JSON.stringify([]),
+              "bigbud/pr-142/statemachine": JSON.stringify([]),
               statemachine: JSON.stringify([
                 {
                   number: 41,
@@ -284,13 +284,13 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     "stops probing head selectors after finding an existing PR",
     () =>
       Effect.gen(function* () {
-        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        const repoDir = yield* makeTempDir("bigbud-git-manager-");
         yield* initRepo(repoDir);
         yield* runGit(repoDir, ["checkout", "-b", "statemachine"]);
         const forkDir = yield* createBareRemote();
         yield* runGit(repoDir, ["remote", "add", "fork-seed", forkDir]);
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
-        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-142/statemachine"]);
+        yield* runGit(repoDir, ["checkout", "-b", "bigbud/pr-142/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
         yield* runGit(repoDir, [
           "config",
@@ -319,7 +319,7 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
                 },
               ]),
               "fork-seed:statemachine": JSON.stringify([]),
-              "t3code/pr-142/statemachine": JSON.stringify([]),
+              "bigbud/pr-142/statemachine": JSON.stringify([]),
               statemachine: JSON.stringify([]),
             },
           },

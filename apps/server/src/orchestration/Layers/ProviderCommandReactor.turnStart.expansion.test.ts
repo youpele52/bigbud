@@ -18,7 +18,7 @@ describe("ProviderCommandReactor", () => {
   registerProviderCommandReactorTestCleanup();
 
   it("expands compact agent mentions for provider input while keeping stored user text compact", async () => {
-    const baseDir = makeTrackedTempDir("t3code-reactor-agent-");
+    const baseDir = makeTrackedTempDir("bigbud-reactor-agent-");
     const agentDir = path.join(baseDir, ".codex", "agents");
     fs.mkdirSync(agentDir, { recursive: true });
     fs.writeFileSync(
@@ -66,7 +66,7 @@ describe("ProviderCommandReactor", () => {
   });
 
   it("expands referenced workspace files for provider input", async () => {
-    const baseDir = makeTrackedTempDir("t3code-reactor-path-");
+    const baseDir = makeTrackedTempDir("bigbud-reactor-path-");
     const srcDir = path.join(baseDir, "src");
     fs.mkdirSync(srcDir, { recursive: true });
     fs.writeFileSync(path.join(srcDir, "demo.ts"), "export const demo = 42;\n", "utf8");
