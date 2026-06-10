@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   DiffIcon,
   FoldersIcon,
@@ -125,6 +126,8 @@ function getTabLabel(
   return browserIndex > 1 ? `${resolvedLabel} ${browserIndex}` : resolvedLabel;
 }
 
+type DragEdge = "before" | "after";
+
 export function RightPanelTabs({
   browserShortcutLabel,
   diffShortcutLabel,
@@ -148,8 +151,14 @@ export function RightPanelTabs({
   terminalAvailable,
   terminalShortcutLabel,
 }: RightPanelTabsProps) {
+  const [draggedTabId, setDraggedTabId] = React.useState<RightPanelTabId | null>(null);
+  const [dropTarget, setDropTarget] = React.useState<{
+    edge: DragEdge;
+    tabId: RightPanelTabId;
+  } | null>(null);
   const activeTabId = useRightPanelTabsStore((state) => state.activeTabId);
   const openTabs = useRightPanelTabsStore((state) => state.openTabs);
+  const moveTab = useRightPanelTabsStore((state) => state.moveTab);
   const setActiveTab = useRightPanelTabsStore((state) => state.setActiveTab);
   const browserTabsById = useBrowserPanelStore((state) => state.tabsById);
   const browserTabLimitReached =
@@ -183,6 +192,11 @@ export function RightPanelTabs({
     }
   };
 
+  const clearDragState = () => {
+    setDraggedTabId(null);
+    setDropTarget(null);
+  };
+
   return (
     <div
       className={cn(
@@ -200,17 +214,65 @@ export function RightPanelTabs({
           return (
             <div
               key={tabId}
+              draggable
               className={cn(
-                "group grid h-9 w-[168px] max-w-[168px] shrink-0 grid-cols-[24px_minmax(0,1fr)_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
+                "group relative grid h-9 w-[168px] max-w-[168px] shrink-0 grid-cols-[24px_minmax(0,1fr)_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
                 index > 0 && "-ml-px",
                 isActive
                   ? "-mb-px border-border bg-background text-foreground"
-                  : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-accent/30 hover:text-foreground cursor-pointer",
+                  : "cursor-pointer border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-accent/30 hover:text-foreground",
+                draggedTabId === tabId && "opacity-55",
               )}
+              onDragEnd={clearDragState}
+              onDragOver={(event) => {
+                if (draggedTabId === null || draggedTabId === tabId) {
+                  return;
+                }
+
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+
+                const { left, width } = event.currentTarget.getBoundingClientRect();
+                const edge: DragEdge = event.clientX - left < width / 2 ? "before" : "after";
+
+                setDropTarget((current) =>
+                  current?.tabId === tabId && current.edge === edge ? current : { tabId, edge },
+                );
+              }}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", tabId);
+                setDraggedTabId(tabId);
+                setDropTarget(null);
+              }}
+              onDrop={(event) => {
+                if (
+                  draggedTabId === null ||
+                  draggedTabId === tabId ||
+                  dropTarget?.tabId !== tabId
+                ) {
+                  clearDragState();
+                  return;
+                }
+
+                event.preventDefault();
+                moveTab(draggedTabId, tabId, dropTarget.edge);
+                clearDragState();
+              }}
             >
+              {dropTarget?.tabId === tabId ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none absolute bottom-1 top-1 z-10 w-0.5 rounded-full bg-primary/85",
+                    dropTarget.edge === "before" ? "left-0" : "right-0",
+                  )}
+                />
+              ) : null}
               <span aria-hidden="true" className="block size-4 justify-self-center" />
               <button
                 type="button"
+                draggable={false}
                 className="flex min-w-0 items-center justify-center gap-1.5 px-1.5"
                 title={label}
                 onClick={() => {
@@ -224,6 +286,7 @@ export function RightPanelTabs({
               <span className="flex items-center justify-center">
                 <button
                   type="button"
+                  draggable={false}
                   aria-label={`Close ${label} tab`}
                   className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground/70 opacity-0 hover:bg-accent hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100"
                   onClick={(event) => {
