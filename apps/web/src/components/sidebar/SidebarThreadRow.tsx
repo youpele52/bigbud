@@ -14,6 +14,7 @@ import { useTerminalStateStore } from "../../stores/terminal";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { resolveThreadStatusPill, resolveThreadRowClassName } from "./Sidebar.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
@@ -102,11 +103,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const isActive = props.routeThreadId === effectiveThreadId;
   const isSelected = props.selectedThreadIds.has(effectiveThreadId);
   const isHighlighted = isActive || isSelected;
-  const activityDotClassName = isThreadCompacting
-    ? "bg-warning"
-    : isThreadRunning
-      ? "bg-info-foreground"
-      : null;
   const threadStatus = thread
     ? resolveThreadStatusPill({
         thread: {
@@ -155,6 +151,15 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   if (!thread) {
     return null;
   }
+
+  const providerIconColor =
+    thread.session?.status === "error"
+      ? "text-destructive"
+      : isThreadCompacting
+        ? "text-warning"
+        : isThreadRunning
+          ? "text-info-foreground"
+          : "text-muted-foreground";
 
   return (
     <SidebarMenuSubItem className="w-full" data-thread-item>
@@ -266,15 +271,16 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
               </Tooltip>
             )}
-            {visibleThreadStatus && <ThreadStatusLabel status={visibleThreadStatus} />}
-            {activityDotClassName && (
-              <span
-                aria-hidden="true"
-                title={isThreadCompacting ? "Compacting context" : "Agent is working"}
-                className="inline-flex shrink-0 items-center justify-center"
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${activityDotClassName}`} />
-              </span>
+            {thread.session?.provider &&
+              (() => {
+                const Icon = PROVIDER_ICON_BY_PROVIDER[thread.session.provider];
+                return <Icon className={`size-3 shrink-0 ${providerIconColor}`} />;
+              })()}
+            {visibleThreadStatus && (
+              <ThreadStatusLabel
+                status={visibleThreadStatus}
+                hideDot={visibleThreadStatus.label === "Completed"}
+              />
             )}
             {props.renamingThreadId === thread.id ? (
               <input
