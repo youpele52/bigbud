@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 
 import { formatRelativeTimeLabel } from "~/utils/timestamp/timestamp.utils";
 import { cn } from "~/lib/utils";
+import { Badge } from "../ui/badge";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -85,6 +86,19 @@ export function GitPanelHistory({
                 onClick={() => onSelectCommit(commit.sha)}
               >
                 <span className="truncate text-sm font-medium">{commit.subject}</span>
+                {commit.tags.length > 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {commit.tags.map((tag) => (
+                      <Badge
+                        key={`${commit.sha}:${tag}`}
+                        variant="outline"
+                        className="px-1.5 py-0 text-[10px]"
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <span className="truncate">
                     {commit.shortSha} by {commit.authorName},{" "}
@@ -125,6 +139,19 @@ export function GitPanelHistory({
           <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <div className="border-b border-border/60 px-3 py-3">
               <div className="text-sm font-medium text-foreground">{commitDetails.subject}</div>
+              {commitDetails.tags.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {commitDetails.tags.map((tag) => (
+                    <Badge
+                      key={`${commitDetails.sha}:${tag}`}
+                      variant="outline"
+                      className="px-1.5 py-0 text-[10px]"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
               <div className="mt-1 text-xs text-muted-foreground">
                 {commitDetails.shortSha} by {commitDetails.authorName},{" "}
                 {formatRelativeTimeLabel(commitDetails.authoredAt)}
