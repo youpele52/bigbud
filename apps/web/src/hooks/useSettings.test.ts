@@ -34,4 +34,12 @@ describe("buildLegacyClientSettingsMigrationPatch", () => {
       }),
     ).toEqual({});
   });
+
+  it("does not include the context window warning threshold (no legacy migration)", () => {
+    const patch = buildLegacyClientSettingsMigrationPatch({
+      contextWindowWarningThresholdTokens: 200_000,
+    });
+
+    expect(patch).not.toHaveProperty("contextWindowWarningThresholdTokens");
+  });
 });

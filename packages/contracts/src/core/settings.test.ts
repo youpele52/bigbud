@@ -3,7 +3,14 @@ import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { describe, expect, test } from "vitest";
 
-import { ClientSettingsSchema, DEFAULT_CLIENT_SETTINGS, DEFAULT_SERVER_SETTINGS } from "./settings";
+import {
+  ClientSettingsSchema,
+  CONTEXT_WINDOW_WARNING_THRESHOLD_MAX,
+  CONTEXT_WINDOW_WARNING_THRESHOLD_MIN,
+  DEFAULT_CLIENT_SETTINGS,
+  DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD,
+  DEFAULT_SERVER_SETTINGS,
+} from "./settings";
 
 const decodeClientSettings = Schema.decodeUnknownEffect(ClientSettingsSchema);
 
@@ -11,6 +18,12 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
   test("defaults terminal appearance settings for client settings", () => {
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("meslo-nerd-font-mono");
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontSize).toBe(12);
+  });
+
+  test("defaults the context window warning threshold", () => {
+    expect(DEFAULT_CLIENT_SETTINGS.contextWindowWarningThresholdTokens).toBe(
+      DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD,
+    );
   });
 });
 
@@ -47,6 +60,31 @@ it.effect("rejects out-of-range terminal font sizes", () =>
       decodeClientSettings({
         terminalFontFamily: "meslo-nerd-font-mono",
         terminalFontSize: 22,
+      }),
+    );
+
+    assert.strictEqual(result._tag, "Failure");
+  }),
+);
+
+it.effect("decodes valid context window warning thresholds", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeClientSettings({
+      contextWindowWarningThresholdTokens: CONTEXT_WINDOW_WARNING_THRESHOLD_MAX,
+    });
+
+    assert.strictEqual(
+      parsed.contextWindowWarningThresholdTokens,
+      CONTEXT_WINDOW_WARNING_THRESHOLD_MAX,
+    );
+  }),
+);
+
+it.effect("rejects out-of-range context window warning thresholds", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(
+      decodeClientSettings({
+        contextWindowWarningThresholdTokens: CONTEXT_WINDOW_WARNING_THRESHOLD_MIN - 1,
       }),
     );
 

@@ -56,6 +56,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.enableSystemTaskCompletionNotifications
         ? ["System notifications"]
         : []),
+      ...(settings.contextWindowWarningThresholdTokens !==
+      DEFAULT_UNIFIED_SETTINGS.contextWindowWarningThresholdTokens
+        ? ["Context window warning threshold"]
+        : []),
     ],
     [
       areProviderSettingsDirty,
@@ -66,6 +70,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffWordWrap,
       settings.enableAssistantStreaming,
       settings.enableThinkingStreaming,
+      settings.contextWindowWarningThresholdTokens,
       settings.enableTaskCompletionToasts,
       settings.enableSystemTaskCompletionNotifications,
       settings.timestampFormat,
