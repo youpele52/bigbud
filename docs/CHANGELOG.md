@@ -4,6 +4,35 @@ This document tracks notable project changes in a format that is useful for deve
 
 Entries below are grouped by release tag and date.
 
+## v0.1.643 (12 June, 2026)
+
+### Devin Provider
+
+- Added a new Devin provider powered by Devin's CLI (ACP mode), giving you an additional AI coding assistant option alongside Codex, Claude, Copilot, and OpenCode.
+- Devin uses its own ACP-based session runtime with configurable model selection and handles authentication through the Devin CLI credentials file, so no separate login flow is needed inside the app.
+- Fixed a related issue where the app would silently fall back to Codex when the selected provider had a warning or error state — now the app shows the warning state explicitly instead of switching providers without notifying you.
+
+### Right Panel Tab Reordering
+
+- Added drag-and-drop reordering for right panel tabs, so you can rearrange Browser, Files, Git, Terminal, Diff, and Notes tabs into whatever order suits your workflow.
+
+### Context Window Warning Threshold
+
+- Added a configurable threshold setting under Settings → Notifications that lets you adjust when the context window warning appears (default 120k, range 60k–1M tokens), replacing the previously hardcoded 120k limit.
+- The context window meter and warning banner both update reactively when you change the threshold, so you get immediate feedback on how your setting affects the display.
+
+### Sidebar Thread Status Icons
+
+- Replaced the sidebar activity dot with a monochrome provider icon that communicates thread state at a glance: blue while the AI is working, amber during compaction, red on errors, and muted grey when idle.
+
+### Git Panel Enhancements
+
+- Added a vertical resize handle between the commit details header and the diff viewer in the Git history panel, letting you adjust how much space the commit message and file changes each get — defaults to a 1/3–2/3 split.
+
+### Validation
+
+- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
+
 ## v0.1.642 (9 June, 2026)
 
 ### Git Panel and Repo History
