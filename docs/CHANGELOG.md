@@ -6,11 +6,12 @@ Entries below are grouped by release tag and date.
 
 ## v0.1.643 (12 June, 2026)
 
-### Devin Provider
+### New AI Providers
 
-- Added a new Devin provider powered by Devin's CLI (ACP mode), giving you an additional AI coding assistant option alongside Codex, Claude, Copilot, and OpenCode.
-- Devin uses its own ACP-based session runtime with configurable model selection and handles authentication through the Devin CLI credentials file, so no separate login flow is needed inside the app.
-- Fixed a related issue where the app would silently fall back to Codex when the selected provider had a warning or error state — now the app shows the warning state explicitly instead of switching providers without notifying you.
+- Added two new AI coding assistant providers: **Devin**, powered by Devin's CLI in ACP mode, and **KiloCode**, powered by the KiloCode CLI and sharing the OpenCode SDK infrastructure — both joining Codex, Claude, Copilot, and OpenCode.
+- Both handle authentication through their own CLI credentials outside the app, so no separate login flow is needed inside bigbud.
+- Devin offers an ACP-based session runtime with configurable model selection; KiloCode supports Claude Sonnet, Haiku, and Opus models with reasoning support, plus any custom models from its providers system.
+- Fixed a bug where warning or error states on a provider would silently switch you to Codex — now the app shows them explicitly. Refactored the OpenCode event pipeline to be provider-aware throughout, preventing sessions from switching provider after the first message and enabling reliable multi-provider operation.
 
 ### Right Panel Tab Reordering
 
@@ -31,7 +32,7 @@ Entries below are grouped by release tag and date.
 
 ### Validation
 
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
+- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
 
 ## v0.1.642 (9 June, 2026)
 
