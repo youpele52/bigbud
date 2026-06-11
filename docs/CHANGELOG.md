@@ -36,10 +36,15 @@ Entries below are grouped by release tag and date.
 ### Git Panel Enhancements
 
 - Added a vertical resize handle between the commit details header and the diff viewer in the Git history panel, letting you adjust how much space the commit message and file changes each get — defaults to a 1/3–2/3 split.
+- Fixed the changes view's diff viewer so it scrolls vertically and horizontally when content overflows, matching the scrolling behavior that already worked in the history view.
+
+### Composer
+
+- Added a search bar to the + button → "Call agent" and "Use skill" picker dropdowns, so you can type to find the agent or skill you want — matching the existing search experience from the /agents and /skills slash commands.
 
 ### Validation
 
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
+- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; Git panel resize interaction and changes-view diff scrolling; and composer + button agent/skill picker search bar.
 
 ## v0.1.642 (9 June, 2026)
 
