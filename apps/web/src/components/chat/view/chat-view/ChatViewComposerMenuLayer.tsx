@@ -9,12 +9,14 @@ interface ChatViewComposerMenuLayerProps {
   syntheticMenuRef: RefObject<HTMLDivElement | null>;
   syntheticMenuItems: ComposerCommandItem[];
   syntheticMenuHighlightId: string | null;
+  syntheticMenuSearch: string;
   composer: ChatViewComposerDerivedState;
   interactions: ChatViewInteractionsState;
   resolvedTheme: "light" | "dark";
   disabled: boolean;
   onSyntheticMenuHighlight: (itemId: string | null) => void;
   onSyntheticMenuSelect: (item: ComposerCommandItem) => void;
+  onSyntheticMenuSearchChange: (query: string) => void;
 }
 
 export function ChatViewComposerMenuLayer({
@@ -22,14 +24,21 @@ export function ChatViewComposerMenuLayer({
   syntheticMenuRef,
   syntheticMenuItems,
   syntheticMenuHighlightId,
+  syntheticMenuSearch,
   composer,
   interactions,
   resolvedTheme,
   disabled,
   onSyntheticMenuHighlight,
   onSyntheticMenuSelect,
+  onSyntheticMenuSearchChange,
 }: ChatViewComposerMenuLayerProps) {
   if (syntheticMenuKind && !disabled) {
+    const discoverySearch = {
+      command: (syntheticMenuKind === "agent" ? "agents" : "skills") as "agents" | "skills",
+      query: syntheticMenuSearch,
+      onQueryChange: onSyntheticMenuSearchChange,
+    };
     return (
       <div ref={syntheticMenuRef} className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
         <ComposerCommandMenu
@@ -37,7 +46,7 @@ export function ChatViewComposerMenuLayer({
           resolvedTheme={resolvedTheme}
           isLoading={false}
           triggerKind={syntheticMenuKind === "skill" ? "skill" : "path"}
-          discoverySearch={null}
+          discoverySearch={discoverySearch}
           activeItemId={syntheticMenuHighlightId}
           onHighlightedItemChange={onSyntheticMenuHighlight}
           onSelect={onSyntheticMenuSelect}
