@@ -21,6 +21,10 @@ export function getProviderModelOptions(
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["opencode"] | undefined;
 export function getProviderModelOptions(
+  provider: "kilocode",
+  options: ProviderModelOptions | null | undefined,
+): ProviderModelOptions["kilocode"] | undefined;
+export function getProviderModelOptions(
   provider: "cursor",
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["cursor"] | undefined;
@@ -45,6 +49,8 @@ export function getProviderModelOptions(
       return options?.copilot;
     case "opencode":
       return options?.opencode;
+    case "kilocode":
+      return options?.kilocode;
     case "cursor":
       return options?.cursor;
     case "pi":
@@ -72,6 +78,11 @@ export function createModelSelection(
   model: string,
   options?: ProviderModelOptions["opencode"],
 ): Extract<ModelSelection, { provider: "opencode" }>;
+export function createModelSelection(
+  provider: "kilocode",
+  model: string,
+  options?: ProviderModelOptions["kilocode"],
+): Extract<ModelSelection, { provider: "kilocode" }>;
 export function createModelSelection(
   provider: "pi",
   model: string,
@@ -103,6 +114,10 @@ export function createModelSelection(
     case "opencode": {
       const opencodeOptions = options as ProviderModelOptions["opencode"] | undefined;
       return opencodeOptions ? { provider, model, options: opencodeOptions } : { provider, model };
+    }
+    case "kilocode": {
+      const kilocodeOptions = options as ProviderModelOptions["kilocode"] | undefined;
+      return kilocodeOptions ? { provider, model, options: kilocodeOptions } : { provider, model };
     }
     case "pi": {
       const piOptions = options as ProviderModelOptions["pi"] | undefined;

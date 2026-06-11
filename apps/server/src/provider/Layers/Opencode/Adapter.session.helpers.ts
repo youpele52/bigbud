@@ -15,17 +15,18 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 // ── Model selection type guard ────────────────────────────────────────
 
-export function isOpencodeModelSelection(
+export function isProviderModelSelection(
   value: unknown,
+  provider: string,
 ): value is Extract<
   NonNullable<ProviderSendTurnInput["modelSelection"]>,
-  { provider: "opencode" }
+  { provider: typeof provider }
 > {
   return (
     typeof value === "object" &&
     value !== null &&
     "provider" in value &&
-    value.provider === "opencode" &&
+    value.provider === provider &&
     "model" in value &&
     typeof value.model === "string"
   );

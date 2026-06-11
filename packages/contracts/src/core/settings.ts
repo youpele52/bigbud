@@ -7,12 +7,13 @@ import {
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DevinModelOptions,
+  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
 import { ModelSelection } from "../orchestration/orchestration";
+import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -147,6 +148,13 @@ export const OpencodeSettings = Schema.Struct({
 });
 export type OpencodeSettings = typeof OpencodeSettings.Type;
 
+export const KilocodeSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("kilo"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type KilocodeSettings = typeof KilocodeSettings.Type;
+
 export const PiSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("pi"),
@@ -197,6 +205,7 @@ export const ServerSettings = Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -251,6 +260,10 @@ const OpencodeModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(OpencodeModelOptions.fields.reasoningEffort),
 });
 
+const KilocodeModelOptionsPatch = Schema.Struct({
+  reasoningEffort: Schema.optionalKey(KilocodeModelOptions.fields.reasoningEffort),
+});
+
 const PiModelOptionsPatch = Schema.Struct({
   thinkingLevel: Schema.optionalKey(PiModelOptions.fields.thinkingLevel),
 });
@@ -291,6 +304,11 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(OpencodeModelOptionsPatch),
   }),
   Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("kilocode")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(KilocodeModelOptionsPatch),
+  }),
+  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("pi")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(PiModelOptionsPatch),
@@ -327,6 +345,12 @@ const CopilotSettingsPatch = Schema.Struct({
 });
 
 const OpencodeSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const KilocodeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
@@ -371,6 +395,7 @@ export const ServerSettingsPatch = Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
       copilot: Schema.optionalKey(CopilotSettingsPatch),
+      kilocode: Schema.optionalKey(KilocodeSettingsPatch),
       opencode: Schema.optionalKey(OpencodeSettingsPatch),
       pi: Schema.optionalKey(PiSettingsPatch),
       cursor: Schema.optionalKey(CursorSettingsPatch),

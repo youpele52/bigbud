@@ -1,5 +1,6 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
+  type ProviderKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
 } from "@bigbud/contracts";
@@ -10,12 +11,11 @@ import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerManager.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 import type { SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import {
   buildOpenCodePermissionRules,
-  isOpencodeModelSelection,
+  isProviderModelSelection,
   resolveProviderIDForModel,
 } from "./Adapter.session.helpers.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
@@ -26,6 +26,7 @@ import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarg
 import { startEventStream, toMessage } from "./Adapter.stream.ts";
 
 export interface StartSessionDeps {
+  readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
   readonly sessions: Map<string, ActiveOpencodeSession>;
   readonly serverManager: OpencodeServerManagerShape;
   readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
@@ -41,18 +42,18 @@ export interface StartSessionDeps {
 export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["startSession"] {
   return (input) =>
     Effect.gen(function* () {
-      if (input.provider !== undefined && input.provider !== PROVIDER) {
+      if (input.provider !== undefined && input.provider !== deps.provider) {
         return yield* new ProviderAdapterValidationError({
-          provider: PROVIDER,
+          provider: deps.provider,
           operation: "startSession",
-          issue: `Expected provider '${PROVIDER}' but received '${input.provider}'.`,
+          issue: `Expected provider '${deps.provider}' but received '${input.provider}'.`,
         });
       }
 
       const existing = deps.sessions.get(input.threadId);
       if (existing) {
         return {
-          provider: PROVIDER,
+          provider: deps.provider,
           status: existing.activeTurnId ? "running" : "ready",
           runtimeMode: existing.runtimeMode,
           ...(existing.providerRuntimeExecutionTargetId
@@ -72,14 +73,19 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         } satisfies ProviderSession;
       }
 
-      const opencodeSettings = yield* deps.serverSettings.getSettings.pipe(
-        Effect.map((settings) => settings.providers.opencode),
+      const settings = yield* deps.serverSettings.getSettings.pipe(
+        Effect.map(
+          (s) =>
+            (s.providers as Record<string, { binaryPath: string } | undefined>)[deps.provider] ?? {
+              binaryPath: deps.provider,
+            },
+        ),
         Effect.mapError(
           (cause) =>
             new ProviderAdapterProcessError({
-              provider: PROVIDER,
+              provider: deps.provider,
               threadId: input.threadId,
-              detail: toMessage(cause, "Failed to read OpenCode settings."),
+              detail: toMessage(cause, `Failed to read ${deps.provider} settings.`),
               cause,
             }),
         ),
@@ -89,7 +95,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         workspaceExecutionTargetId: input.workspaceExecutionTargetId,
         executionTargetId: input.executionTargetId,
         cwd: input.cwd,
-        defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(PROVIDER)
+        defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(deps.provider)
           .supportsLocalRuntimeRemoteWorkspace
           ? LOCAL_EXECUTION_TARGET_ID
           : undefined,
@@ -102,9 +108,12 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
               try: () => createOpencodeRemoteWorkspaceBridge(executionContext.workspaceTarget),
               catch: (cause) =>
                 new ProviderAdapterProcessError({
-                  provider: PROVIDER,
+                  provider: deps.provider as Extract<ProviderKind, "opencode" | "kilocode">,
                   threadId: input.threadId,
-                  detail: toMessage(cause, "Failed to prepare OpenCode remote workspace bridge."),
+                  detail: toMessage(
+                    cause,
+                    `Failed to prepare ${deps.provider} remote workspace bridge.`,
+                  ),
                   cause,
                 }),
             })
@@ -113,7 +122,8 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       const serverHandle = yield* Effect.tryPromise({
         try: () =>
           deps.serverManager.acquire({
-            binaryPath: opencodeSettings.binaryPath,
+            provider: deps.provider,
+            binaryPath: settings.binaryPath,
             ...(remoteWorkspaceBridge?.cwd
               ? { directory: remoteWorkspaceBridge.cwd }
               : input.cwd
@@ -123,9 +133,9 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
-            provider: PROVIDER,
+            provider: deps.provider,
             threadId: input.threadId,
-            detail: toMessage(cause, "Failed to start OpenCode server."),
+            detail: toMessage(cause, `Failed to start ${deps.provider} server.`),
             cause,
           }),
       }).pipe(
@@ -139,7 +149,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
 
       let modelID: string | undefined;
       let providerID: string | undefined;
-      if (isOpencodeModelSelection(input.modelSelection)) {
+      if (isProviderModelSelection(input.modelSelection, deps.provider)) {
         modelID = input.modelSelection.model;
         const selectionProviderID =
           "subProviderID" in input.modelSelection
@@ -161,9 +171,9 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
-            provider: PROVIDER,
+            provider: deps.provider,
             threadId: input.threadId,
-            detail: toMessage(cause, "Failed to create OpenCode session."),
+            detail: toMessage(cause, `Failed to create ${deps.provider} session.`),
             cause,
           }),
       });
@@ -172,9 +182,9 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         serverHandle.release();
         void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
         return yield* new ProviderAdapterProcessError({
-          provider: PROVIDER,
+          provider: deps.provider,
           threadId: input.threadId,
-          detail: `Failed to create OpenCode session: ${String(sessionResp.error)}`,
+          detail: `Failed to create ${deps.provider} session: ${String(sessionResp.error)}`,
         });
       }
 
@@ -234,7 +244,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       ]);
 
       return {
-        provider: PROVIDER,
+        provider: deps.provider,
         status: "ready",
         runtimeMode: input.runtimeMode,
         providerRuntimeExecutionTargetId:

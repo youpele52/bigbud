@@ -10,7 +10,6 @@ import { Effect } from "effect";
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import { buildThreadSnapshot, toMessage } from "./Adapter.stream.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import type { QueryMethodDeps } from "./Adapter.session.ts";
 
@@ -18,6 +17,7 @@ import type { QueryMethodDeps } from "./Adapter.session.ts";
 
 export function makeStopSessionRecord(
   sessions: Map<string, ActiveOpencodeSession>,
+  provider: string,
 ): (record: ActiveOpencodeSession) => Effect.Effect<void, ProviderAdapterRequestError> {
   return (record) =>
     Effect.tryPromise({
@@ -48,9 +48,9 @@ export function makeStopSessionRecord(
       },
       catch: (cause) =>
         new ProviderAdapterRequestError({
-          provider: PROVIDER,
+          provider,
           method: "session.stop",
-          detail: toMessage(cause, "Failed to stop OpenCode session."),
+          detail: toMessage(cause, `Failed to stop ${provider} session.`),
           cause,
         }),
     });
@@ -59,9 +59,9 @@ export function makeStopSessionRecord(
 // ── Query/stop method factories ───────────────────────────────────────
 
 export function makeQueryMethods(deps: QueryMethodDeps) {
-  const { sessions, requireSession, syntheticEventFn, emitFn } = deps;
+  const { provider, sessions, requireSession, syntheticEventFn, emitFn } = deps;
 
-  const stopSessionRecord = makeStopSessionRecord(sessions);
+  const stopSessionRecord = makeStopSessionRecord(sessions, provider);
 
   const stopSession: OpencodeAdapterShape["stopSession"] = (threadId) =>
     Effect.gen(function* () {
@@ -97,7 +97,7 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
       Array.from(sessions.values()).map((record) => {
         return Object.assign(
           {
-            provider: PROVIDER,
+            provider,
             status: record.activeTurnId ? ("running" as const) : ("ready" as const),
             runtimeMode: record.runtimeMode,
             ...(record.providerRuntimeExecutionTargetId
@@ -131,9 +131,9 @@ export function makeQueryMethods(deps: QueryMethodDeps) {
   const rollbackThread: OpencodeAdapterShape["rollbackThread"] = (threadId, _numTurns) =>
     Effect.fail(
       new ProviderAdapterValidationError({
-        provider: PROVIDER,
+        provider,
         operation: "rollbackThread",
-        issue: "OpenCode sessions do not support rolling back conversation state.",
+        issue: `${provider} sessions do not support rolling back conversation state.`,
       }),
     ).pipe(Effect.annotateLogs({ threadId }));
 

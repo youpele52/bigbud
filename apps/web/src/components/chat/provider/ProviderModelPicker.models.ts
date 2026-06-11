@@ -6,6 +6,7 @@ import {
   CursorIcon,
   DevinIcon,
   type Icon,
+  KilocodeIcon,
   OpenAI,
   OpenCodeIcon,
   PiIcon,
@@ -24,6 +25,7 @@ export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   claudeAgent: ClaudeAI,
   copilot: CopilotIcon,
   opencode: OpenCodeIcon,
+  kilocode: KilocodeIcon,
   pi: PiIcon,
   cursor: CursorIcon,
   devin: DevinIcon,
@@ -68,7 +70,7 @@ export function modelOptionValue(option: ModelOption): string {
 }
 
 export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "pi";
+  return provider === "opencode" || provider === "kilocode" || provider === "pi";
 }
 
 export function visibleModelOptionsForPicker(

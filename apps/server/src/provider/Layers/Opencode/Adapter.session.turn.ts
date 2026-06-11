@@ -11,7 +11,6 @@ import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import { toMessage } from "./Adapter.stream.ts";
 import { approvalDecisionToOpencodeResponse } from "./Adapter.session.helpers.ts";
 import { openCodeQuestionId } from "./Adapter.stream.mapEvent.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import { makeSendTurnMethod } from "./Adapter.session.turn.sendTurn.ts";
 
 import type { TurnMethodDeps } from "./Adapter.session.ts";
@@ -44,7 +43,7 @@ function toOpencodeQuestionAnswers(
 // ── Turn method factories ─────────────────────────────────────────────
 
 export function makeTurnMethods(deps: TurnMethodDeps) {
-  const { requireSession, syntheticEventFn, emitFn } = deps;
+  const { provider, requireSession, syntheticEventFn, emitFn } = deps;
 
   const sendTurn = makeSendTurnMethod(deps);
 
@@ -58,9 +57,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
           }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
-            provider: PROVIDER,
+            provider,
             method: "session.abort",
-            detail: toMessage(cause, "Failed to interrupt OpenCode turn."),
+            detail: toMessage(cause, `Failed to interrupt ${provider} turn.`),
             cause,
           }),
       });
@@ -76,9 +75,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
       const pending = record.pendingPermissions.get(requestId);
       if (!pending) {
         return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
+          provider,
           method: "session.permission.respond",
-          detail: `Unknown pending OpenCode permission request '${requestId}'.`,
+          detail: `Unknown pending ${provider} permission request '${requestId}'.`,
         });
       }
 
@@ -97,9 +96,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
           }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
-            provider: PROVIDER,
+            provider,
             method: "session.permission.respond",
-            detail: toMessage(cause, "Failed to respond to OpenCode permission request."),
+            detail: toMessage(cause, `Failed to respond to ${provider} permission request.`),
             cause,
           }),
       }).pipe(
@@ -138,9 +137,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
 
       if (!pending) {
         return yield* new ProviderAdapterRequestError({
-          provider: PROVIDER,
+          provider,
           method: "session.userInput.respond",
-          detail: `Unknown pending OpenCode user-input request '${requestId}'.`,
+          detail: `Unknown pending ${provider} user-input request '${requestId}'.`,
         });
       }
 
@@ -171,9 +170,9 @@ export function makeTurnMethods(deps: TurnMethodDeps) {
           }),
         catch: (cause) =>
           new ProviderAdapterRequestError({
-            provider: PROVIDER,
+            provider,
             method: "session.userInput.respond",
-            detail: toMessage(cause, "Failed to reply to OpenCode question request."),
+            detail: toMessage(cause, `Failed to reply to ${provider} question request.`),
             cause,
           }),
       });

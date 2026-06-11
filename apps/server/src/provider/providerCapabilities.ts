@@ -40,6 +40,12 @@ const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
     toolInjectionMode: "builtin-override",
     needsBuiltinsDisabled: false,
   },
+  kilocode: {
+    supportsRemoteProviderRuntime: true,
+    supportsLocalRuntimeRemoteWorkspace: true,
+    toolInjectionMode: "builtin-override",
+    needsBuiltinsDisabled: false,
+  },
   pi: {
     supportsRemoteProviderRuntime: true,
     supportsLocalRuntimeRemoteWorkspace: true,
