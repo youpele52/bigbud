@@ -30,30 +30,61 @@ const LOCAL_HOST = "127.0.0.1";
 const LOCAL_OPENCODE_START_TIMEOUT_MS = 5_000;
 const REMOTE_OPENCODE_START_TIMEOUT_MS = 8_000;
 const REMOTE_OPENCODE_PORT = 4096;
-const DEFAULT_OPENCODE_BINARY = "opencode";
+type ManagedServerProvider = "opencode" | "kilocode";
+const SERVER_CONFIGS = {
+  opencode: {
+    provider: "opencode",
+    displayName: "OpenCode",
+    defaultBinary: "opencode",
+    configContentEnvKey: "OPENCODE_CONFIG_CONTENT",
+  },
+  kilocode: {
+    provider: "kilocode",
+    displayName: "KiloCode",
+    defaultBinary: "kilo",
+    configContentEnvKey: "KILO_CONFIG_CONTENT",
+    directoryHeader: "x-kilo-directory",
+  },
+} as const;
+type ManagedServerConfig = (typeof SERVER_CONFIGS)[ManagedServerProvider];
 
 function stopSpawnedChild(child: ReturnType<typeof spawn>): void {
   killChildTree(child as Parameters<typeof killChildTree>[0]);
 }
 
-function readListeningUrl(line: string): string | null {
-  if (!line.startsWith("opencode server listening")) {
+export function readManagedServerListeningUrl(line: string): string | null {
+  if (!/^(?:opencode|kilo) server listening\b/.test(line)) {
     return null;
   }
   const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
   return match?.[1] ?? null;
 }
 
-function resolveBinaryPath(binaryPath: string | undefined): string {
+function resolveBinaryPath(config: ManagedServerConfig, binaryPath: string | undefined): string {
   const trimmed = binaryPath?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : DEFAULT_OPENCODE_BINARY;
+  return trimmed && trimmed.length > 0 ? trimmed : config.defaultBinary;
+}
+
+function buildClientOptions(
+  config: ManagedServerConfig,
+  url: string,
+  directory: string | undefined,
+): Parameters<typeof createOpencodeClient>[0] {
+  const base: Parameters<typeof createOpencodeClient>[0] = { baseUrl: url };
+  if (!directory) return base;
+  if ("directoryHeader" in config) {
+    return { ...base, headers: { [config.directoryHeader]: encodeURIComponent(directory) } };
+  }
+  return { ...base, directory };
 }
 
 export function formatMissingOpencodeBinaryDetail(input: {
+  readonly provider?: ManagedServerProvider;
   readonly binaryPath: string;
   readonly executionTargetId: string;
   readonly detail: string;
 }): string | null {
+  const config = SERVER_CONFIGS[input.provider ?? "opencode"];
   const normalizedDetail = input.detail.trim();
   if (
     normalizedDetail.length === 0 ||
@@ -68,18 +99,19 @@ export function formatMissingOpencodeBinaryDetail(input: {
   }
 
   const remote = input.executionTargetId !== LOCAL_EXECUTION_TARGET_ID;
-  if (input.binaryPath === DEFAULT_OPENCODE_BINARY) {
+  if (input.binaryPath === config.defaultBinary) {
     return remote
-      ? "Remote OpenCode CLI is not installed or not available on PATH. Install 'opencode' on the remote host or set Providers > OpenCode > Binary path to the remote executable path."
-      : "OpenCode CLI is not installed or not available on PATH. Install 'opencode' locally or set Providers > OpenCode > Binary path to the local executable path.";
+      ? `Remote ${config.displayName} CLI is not installed or not available on PATH. Install '${config.defaultBinary}' on the remote host or set Providers > ${config.displayName} > Binary path to the remote executable path.`
+      : `${config.displayName} CLI is not installed or not available on PATH. Install '${config.defaultBinary}' locally or set Providers > ${config.displayName} > Binary path to the local executable path.`;
   }
 
   return remote
-    ? `Remote OpenCode binary was not found at '${input.binaryPath}'. Update Providers > OpenCode > Binary path to the correct remote executable path.`
-    : `OpenCode binary was not found at '${input.binaryPath}'. Update Providers > OpenCode > Binary path to the correct local executable path.`;
+    ? `Remote ${config.displayName} binary was not found at '${input.binaryPath}'. Update Providers > ${config.displayName} > Binary path to the correct remote executable path.`
+    : `${config.displayName} binary was not found at '${input.binaryPath}'. Update Providers > ${config.displayName} > Binary path to the correct local executable path.`;
 }
 
 function normalizeOpencodeStartError(input: {
+  readonly config: ManagedServerConfig;
   readonly binaryPath: string;
   readonly executionTargetId: string;
   readonly error: unknown;
@@ -89,6 +121,7 @@ function normalizeOpencodeStartError(input: {
     const errnoCode = "code" in input.error ? input.error.code : undefined;
     if (errnoCode === "ENOENT") {
       const missingBinaryDetail = formatMissingOpencodeBinaryDetail({
+        provider: input.config.provider,
         binaryPath: input.binaryPath,
         executionTargetId: input.executionTargetId,
         detail: input.error.message,
@@ -99,6 +132,7 @@ function normalizeOpencodeStartError(input: {
     }
 
     const missingBinaryDetail = formatMissingOpencodeBinaryDetail({
+      provider: input.config.provider,
       binaryPath: input.binaryPath,
       executionTargetId: input.executionTargetId,
       detail: `${input.error.message}\n${input.output}`,
@@ -109,7 +143,7 @@ function normalizeOpencodeStartError(input: {
     return input.error;
   }
 
-  return new Error(`Failed to start OpenCode server: ${String(input.error)}`);
+  return new Error(`Failed to start ${input.config.displayName} server: ${String(input.error)}`);
 }
 
 async function allocateLocalPort(): Promise<number> {
@@ -138,6 +172,7 @@ async function waitForOpencodeServer(
   child: ReturnType<typeof spawn>,
   timeoutMs: number,
   input: {
+    readonly config: ManagedServerConfig;
     readonly binaryPath: string;
     readonly executionTargetId: string;
     readonly resolvedUrl?: string | null;
@@ -167,6 +202,7 @@ async function waitForOpencodeServer(
         stopSpawnedChild(child);
         reject(
           normalizeOpencodeStartError({
+            config: input.config,
             binaryPath: input.binaryPath,
             executionTargetId: input.executionTargetId,
             error,
@@ -177,7 +213,7 @@ async function waitForOpencodeServer(
 
     const onLine = (line: string) => {
       output += `${line}\n`;
-      const parsedUrl = readListeningUrl(line);
+      const parsedUrl = readManagedServerListeningUrl(line);
       if (!parsedUrl) {
         return;
       }
@@ -186,7 +222,9 @@ async function waitForOpencodeServer(
 
     const timer = setTimeout(() => {
       fail(
-        new Error(`Timeout waiting for OpenCode server to start after ${timeoutMs}ms.\n${output}`),
+        new Error(
+          `Timeout waiting for ${input.config.displayName} server to start after ${timeoutMs}ms.\n${output}`,
+        ),
       );
     }, timeoutMs);
 
@@ -201,25 +239,29 @@ async function waitForOpencodeServer(
       fail(
         new Error(
           detail.length > 0
-            ? `OpenCode server exited with code ${code ?? "null"}.\n${detail}`
-            : `OpenCode server exited with code ${code ?? "null"}.`,
+            ? `${input.config.displayName} server exited with code ${code ?? "null"}.\n${detail}`
+            : `${input.config.displayName} server exited with code ${code ?? "null"}.`,
         ),
       );
     });
   });
 }
 
-async function startLocalOpencodeServer(binaryPath: string): Promise<RunningServer> {
+async function startLocalOpencodeServer(
+  config: ManagedServerConfig,
+  binaryPath: string,
+): Promise<RunningServer> {
   const child = spawn(binaryPath, ["serve", `--hostname=${LOCAL_HOST}`, "--port=0"], {
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify({}),
+      [config.configContentEnvKey]: JSON.stringify({}),
     },
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32",
   });
 
   const url = await waitForOpencodeServer(child, LOCAL_OPENCODE_START_TIMEOUT_MS, {
+    config,
     binaryPath,
     executionTargetId: LOCAL_EXECUTION_TARGET_ID,
   });
@@ -232,6 +274,7 @@ async function startLocalOpencodeServer(binaryPath: string): Promise<RunningServ
 }
 
 async function startRemoteOpencodeServer(
+  config: ManagedServerConfig,
   executionTargetId: string,
   binaryPath: string,
 ): Promise<RunningServer> {
@@ -254,13 +297,14 @@ async function startRemoteOpencodeServer(
   const child = spawn(invocation.command, invocation.args, {
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify({}),
+      [config.configContentEnvKey]: JSON.stringify({}),
     },
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32",
   });
 
   await waitForOpencodeServer(child, REMOTE_OPENCODE_START_TIMEOUT_MS, {
+    config,
     binaryPath,
     executionTargetId,
     resolvedUrl: localUrl,
@@ -293,27 +337,28 @@ function makeOpencodeServerManager(): {
   };
 
   const acquire = async (input?: OpencodeServerAcquireInput): Promise<OpencodeServerHandle> => {
+    const config = SERVER_CONFIGS[input?.provider ?? "opencode"];
     const executionTargetId = resolveExecutionTargetId(input?.executionTargetId);
-    const binaryPath = resolveBinaryPath(input?.binaryPath);
-    const targetKey = JSON.stringify([executionTargetId, binaryPath]);
+    const binaryPath = resolveBinaryPath(config, input?.binaryPath);
+    const targetKey = JSON.stringify([config.provider, executionTargetId, binaryPath]);
     const state = readState(targetKey);
 
     if (state.serverHandle !== null) {
       state.refCount += 1;
-      return makeHandle(state.serverHandle, input?.directory, targetKey);
+      return makeHandle(state.serverHandle, input?.directory, targetKey, config);
     }
 
     if (state.startPromise === null) {
       state.startPromise = Promise.resolve()
         .then(() =>
           executionTargetId === LOCAL_EXECUTION_TARGET_ID
-            ? startLocalOpencodeServer(binaryPath)
-            : startRemoteOpencodeServer(executionTargetId, binaryPath),
+            ? startLocalOpencodeServer(config, binaryPath)
+            : startRemoteOpencodeServer(config, executionTargetId, binaryPath),
         )
         .catch((error) => {
           state.startPromise = null;
           console.error(
-            `[opencode-server-manager] Failed to start OpenCode server for target '${targetKey}':`,
+            `[opencode-server-manager] Failed to start ${config.displayName} server for target '${targetKey}':`,
             error,
           );
           throw error;
@@ -324,19 +369,16 @@ function makeOpencodeServerManager(): {
     state.serverHandle = serverHandle;
     state.startPromise = null;
     state.refCount += 1;
-    return makeHandle(serverHandle, input?.directory, targetKey);
+    return makeHandle(serverHandle, input?.directory, targetKey, config);
   };
-
   const makeHandle = (
     serverHandle: RunningServer,
     directory: string | undefined,
     targetKey: string,
+    config: ManagedServerConfig,
   ): OpencodeServerHandle => {
     let released = false;
-    const client = createOpencodeClient({
-      baseUrl: serverHandle.url,
-      ...(directory ? { directory } : {}),
-    });
+    const client = createOpencodeClient(buildClientOptions(config, serverHandle.url, directory));
 
     return {
       client,

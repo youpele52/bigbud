@@ -36,6 +36,7 @@ it.effect("maps OpenCode user-input answers from stable, header, and question ke
 
   const emitted: Array<unknown> = [];
   const { respondToUserInput } = makeTurnMethods({
+    provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
     syntheticEventFn: (threadId, type, payload, extra) =>
       Effect.succeed({

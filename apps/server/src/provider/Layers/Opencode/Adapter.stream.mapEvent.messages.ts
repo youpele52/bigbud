@@ -13,6 +13,7 @@ type MapEventContext = {
   readonly stamp: { readonly eventId: EventId; readonly createdAt: string };
   readonly raw: { source: "opencode.sdk.session-event"; method: string; payload: unknown };
   readonly turnId: TurnId | undefined;
+  readonly provider: import("@bigbud/contracts").ProviderKind;
 };
 
 export function mapMessagePartDelta(
@@ -51,6 +52,7 @@ export function mapMessagePartDelta(
         eventId: context.stamp.eventId,
         createdAt: context.stamp.createdAt,
         threadId: session.threadId,
+        provider: context.provider,
         ...(context.turnId ? { turnId: context.turnId } : {}),
         itemId,
         raw: context.raw,
@@ -111,6 +113,7 @@ export function mapMessagePartUpdated(
           eventId: context.stamp.eventId,
           createdAt: context.stamp.createdAt,
           threadId: session.threadId,
+          provider: context.provider,
           ...(context.turnId ? { turnId: context.turnId } : {}),
           itemId: toolPart.id,
           raw: context.raw,
@@ -133,6 +136,7 @@ export function mapMessagePartUpdated(
           eventId: context.stamp.eventId,
           createdAt: context.stamp.createdAt,
           threadId: session.threadId,
+          provider: context.provider,
           ...(context.turnId ? { turnId: context.turnId } : {}),
           itemId: toolPart.id,
           raw: context.raw,
@@ -209,6 +213,7 @@ export function mapMessageUpdated(
             eventId: context.stamp.eventId,
             createdAt: context.stamp.createdAt,
             threadId: session.threadId,
+            provider: context.provider,
             ...(context.turnId ? { turnId: context.turnId } : {}),
             itemId: assistantMsg.id,
             raw: context.raw,
@@ -227,6 +232,7 @@ export function mapMessageUpdated(
           eventId: context.stamp.eventId,
           createdAt: context.stamp.createdAt,
           threadId: session.threadId,
+          provider: context.provider,
           ...(context.turnId ? { turnId: context.turnId } : {}),
           itemId: assistantMsg.id,
           raw: context.raw,

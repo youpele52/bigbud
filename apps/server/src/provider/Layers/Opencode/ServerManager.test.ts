@@ -1,6 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMissingOpencodeBinaryDetail } from "./ServerManager.ts";
+import {
+  formatMissingOpencodeBinaryDetail,
+  readManagedServerListeningUrl,
+} from "./ServerManager.ts";
+
+describe("readManagedServerListeningUrl", () => {
+  it("reads OpenCode and KiloCode server startup lines", () => {
+    expect(
+      readManagedServerListeningUrl("opencode server listening on http://127.0.0.1:4321"),
+    ).toBe("http://127.0.0.1:4321");
+    expect(readManagedServerListeningUrl("kilo server listening on http://127.0.0.1:4322")).toBe(
+      "http://127.0.0.1:4322",
+    );
+  });
+
+  it("ignores unrelated output", () => {
+    expect(readManagedServerListeningUrl("Warning: KILO_SERVER_PASSWORD is not set")).toBeNull();
+  });
+});
 
 describe("formatMissingOpencodeBinaryDetail", () => {
   it("formats a local PATH-missing OpenCode binary error", () => {
@@ -36,5 +54,18 @@ describe("formatMissingOpencodeBinaryDetail", () => {
         detail: "OpenCode server exited with code 1.\npermission denied",
       }),
     ).toBeNull();
+  });
+
+  it("formats a local PATH-missing KiloCode binary error", () => {
+    expect(
+      formatMissingOpencodeBinaryDetail({
+        provider: "kilocode",
+        binaryPath: "kilo",
+        executionTargetId: "local",
+        detail: "KiloCode server exited with code 127.\nsh: 1: exec: kilo: not found",
+      }),
+    ).toBe(
+      "KiloCode CLI is not installed or not available on PATH. Install 'kilo' locally or set Providers > KiloCode > Binary path to the local executable path.",
+    );
   });
 });

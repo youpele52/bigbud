@@ -23,6 +23,8 @@ const EXTERNAL_PACKAGES = [
   "@earendil-works/pi-coding-agent",
   "@effect/sql-sqlite-bun",
   "@effect/platform-bun",
+  "playwright",
+  "playwright-core",
 ];
 
 function isExternal(id: string): boolean {
@@ -38,10 +40,7 @@ function shouldCleanOutDir(): boolean {
 
 export default defineConfig({
   entry: ["src/bin.ts"],
-  format: ["esm", "cjs"],
-  checks: {
-    legacyCjs: false,
-  },
+  format: ["esm"],
   outDir: "dist",
   sourcemap: true,
   clean: shouldCleanOutDir(),

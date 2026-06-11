@@ -48,6 +48,7 @@ export const PROVIDER_OPTIONS: Array<{
   { value: "copilot", label: "Copilot", available: true },
   { value: "cursor", label: "Cursor", available: true },
   { value: "devin", label: "Devin", available: true },
+  { value: "kilocode", label: "KiloCode", available: true },
   { value: "opencode", label: "OpenCode", available: true },
   { value: "pi", label: "Pi", available: true },
 ];

@@ -62,6 +62,12 @@ export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
     binaryDescription: "Path to the OpenCode binary",
   },
   {
+    provider: "kilocode",
+    title: "KiloCode",
+    binaryPlaceholder: "KiloCode binary path",
+    binaryDescription: "Path to the KiloCode binary",
+  },
+  {
     provider: "pi",
     title: "Pi",
     binaryPlaceholder: "Pi binary path",
@@ -153,6 +159,11 @@ export function createInitialOpenProviderDetails(settings: typeof DEFAULT_UNIFIE
         DEFAULT_UNIFIED_SETTINGS.providers.opencode.binaryPath ||
       settings.providers.opencode.customModels.length > 0,
     ),
+    kilocode: Boolean(
+      settings.providers.kilocode.binaryPath !==
+        DEFAULT_UNIFIED_SETTINGS.providers.kilocode.binaryPath ||
+      settings.providers.kilocode.customModels.length > 0,
+    ),
     pi: Boolean(
       settings.providers.pi.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.pi.binaryPath ||
       settings.providers.pi.customModels.length > 0,
@@ -170,7 +181,16 @@ export function createInitialOpenProviderDetails(settings: typeof DEFAULT_UNIFIE
 }
 
 export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
-  return { codex: "", claudeAgent: "", copilot: "", opencode: "", pi: "", cursor: "", devin: "" };
+  return {
+    codex: "",
+    claudeAgent: "",
+    copilot: "",
+    opencode: "",
+    kilocode: "",
+    pi: "",
+    cursor: "",
+    devin: "",
+  };
 }
 
 export function getAddCustomModelError(input: {

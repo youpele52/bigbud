@@ -33,8 +33,9 @@ export function makeHandleEvent(
   nativeEventLogger: EventNdjsonLogger | undefined,
   emitFn: (events: ReadonlyArray<ProviderRuntimeEvent>) => Effect.Effect<void>,
   scheduleAutoApprovePendingPermission: (session: ActiveOpencodeSession, requestId: string) => void,
+  provider: import("@bigbud/contracts").ProviderKind,
 ) {
-  const mapEventFn = makeMapEvent(nextEventId, makeEventStamp);
+  const mapEventFn = makeMapEvent(nextEventId, makeEventStamp, provider);
   return Effect.fn("handleEvent")(function* (session: ActiveOpencodeSession, event: OpencodeEvent) {
     session.updatedAt = new Date().toISOString();
 
