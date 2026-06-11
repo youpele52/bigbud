@@ -64,6 +64,13 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-opencode-model-slug",
     example: "claude-sonnet-4-6",
   },
+  kilocode: {
+    provider: "kilocode",
+    title: "KiloCode",
+    description: "Save additional KiloCode model slugs for the picker and `/model` command.",
+    placeholder: "your-kilocode-model-slug",
+    example: "claude-sonnet-4-6",
+  },
   pi: {
     provider: "pi",
     title: "Pi",
@@ -228,6 +235,12 @@ export function getCustomModelOptionsByProvider(
       "opencode",
       selectedProvider === "opencode" ? selectedModel : undefined,
     ),
+    kilocode: getAppModelOptions(
+      settings,
+      providers,
+      "kilocode",
+      selectedProvider === "kilocode" ? selectedModel : undefined,
+    ),
     pi: getAppModelOptions(
       settings,
       providers,
@@ -275,7 +288,7 @@ export function resolveAppModelSelectionState(
 
   if (provider === selection.provider) {
     const baseSelection = createModelSelection(provider, model, modelOptionsForDispatch);
-    return (provider === "opencode" || provider === "pi") &&
+    return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
       "subProviderID" in selection &&
       selection.subProviderID
       ? cloneModelSelection(baseSelection, {

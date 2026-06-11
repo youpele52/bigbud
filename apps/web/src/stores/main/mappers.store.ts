@@ -68,6 +68,7 @@ export function toLegacyProvider(providerName: string | null): ProviderKind {
     providerName === "copilot" ||
     providerName === "cursor" ||
     providerName === "devin" ||
+    providerName === "kilocode" ||
     providerName === "opencode" ||
     providerName === "pi"
   ) {

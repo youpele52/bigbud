@@ -46,6 +46,11 @@ export const OpencodeModelOptions = Schema.Struct({
 });
 export type OpencodeModelOptions = typeof OpencodeModelOptions.Type;
 
+export const KilocodeModelOptions = Schema.Struct({
+  reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+});
+export type KilocodeModelOptions = typeof KilocodeModelOptions.Type;
+
 export const PI_THINKING_LEVEL_OPTIONS = [
   "off",
   "minimal",
@@ -81,6 +86,7 @@ export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
   copilot: Schema.optional(CopilotModelOptions),
+  kilocode: Schema.optional(KilocodeModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),
   pi: Schema.optional(PiModelOptions),
   cursor: Schema.optional(CursorModelOptions),

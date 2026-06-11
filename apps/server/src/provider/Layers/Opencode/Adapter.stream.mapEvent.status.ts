@@ -21,6 +21,7 @@ export function handleSessionIdle(
   stamp: { eventId: EventId; createdAt: string },
   raw: RawOpencodeEvent,
   nextEventId: Effect.Effect<EventId>,
+  provider: import("@bigbud/contracts").ProviderKind,
 ): Effect.Effect<ReadonlyArray<ProviderRuntimeEvent>> {
   return Effect.gen(function* () {
     const completedTurnId = turnId;
@@ -35,6 +36,7 @@ export function handleSessionIdle(
           eventId: stamp.eventId,
           createdAt: stamp.createdAt,
           threadId: session.threadId,
+          provider,
           ...(completedTurnId ? { turnId: completedTurnId } : {}),
           raw,
         }),
@@ -49,6 +51,7 @@ export function handleSessionIdle(
           eventId: readyEventId,
           createdAt: stamp.createdAt,
           threadId: session.threadId,
+          provider,
           raw,
         }),
         type: "session.state.changed",
@@ -65,6 +68,7 @@ export function handleSessionStatus(
   stamp: { eventId: EventId; createdAt: string },
   raw: RawOpencodeEvent,
   nextEventId: Effect.Effect<EventId>,
+  provider: import("@bigbud/contracts").ProviderKind,
 ): Effect.Effect<ReadonlyArray<ProviderRuntimeEvent>> {
   return Effect.gen(function* () {
     if (status.type === "busy") {
@@ -79,6 +83,7 @@ export function handleSessionStatus(
                 eventId: compactionEventId,
                 createdAt: stamp.createdAt,
                 threadId: session.threadId,
+                provider,
                 turnId: existingTurnId,
                 raw,
               }),
@@ -97,6 +102,7 @@ export function handleSessionStatus(
                 eventId: resumeEventId,
                 createdAt: stamp.createdAt,
                 threadId: session.threadId,
+                provider,
                 turnId: existingTurnId,
                 raw,
               }),
@@ -119,6 +125,7 @@ export function handleSessionStatus(
             eventId: stamp.eventId,
             createdAt: stamp.createdAt,
             threadId: session.threadId,
+            provider,
             turnId: newTurnId,
             raw,
           }),
@@ -129,7 +136,7 @@ export function handleSessionStatus(
     }
 
     if (status.type === "idle") {
-      return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId);
+      return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId, provider);
     }
 
     if (status.type === "retry") {
@@ -144,6 +151,7 @@ export function handleSessionStatus(
             eventId: stamp.eventId,
             createdAt: stamp.createdAt,
             threadId: session.threadId,
+            provider,
             ...(turnId ? { turnId } : {}),
             raw,
           }),

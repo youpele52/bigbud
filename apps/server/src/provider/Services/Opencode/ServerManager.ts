@@ -1,6 +1,6 @@
 import { ServiceMap } from "effect";
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
-import type { ExecutionTargetId } from "@bigbud/contracts";
+import type { ExecutionTargetId, ProviderKind } from "@bigbud/contracts";
 
 export interface OpencodeServerHandle {
   /** The connected client ready to use. */
@@ -15,6 +15,7 @@ export interface OpencodeServerAcquireInput {
   readonly directory?: string;
   readonly executionTargetId?: ExecutionTargetId;
   readonly binaryPath?: string;
+  readonly provider?: Extract<ProviderKind, "opencode" | "kilocode">;
 }
 
 export interface OpencodeServerManagerShape {

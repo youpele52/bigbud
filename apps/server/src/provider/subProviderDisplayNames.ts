@@ -43,6 +43,7 @@ const SUB_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   "mistral-ai": "Mistral",
   mistral_ai: "Mistral",
   opencode: "OpenCode",
+  kilocode: "KiloCode",
   "opencode-go": "OpenCode Go",
   "openai-codex": "OpenAI",
   azure_openai: "Azure",

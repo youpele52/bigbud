@@ -56,6 +56,12 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: opencodeOptions })
         : createModelSelection("opencode", DEFAULT_MODEL_BY_PROVIDER.opencode, opencodeOptions);
     }
+    case "kilocode": {
+      const kilocodeOptions = options as NonNullable<ProviderModelOptions["kilocode"]>;
+      return current?.provider === "kilocode"
+        ? cloneModelSelection(current, { options: kilocodeOptions })
+        : createModelSelection("kilocode", DEFAULT_MODEL_BY_PROVIDER.kilocode, kilocodeOptions);
+    }
     case "pi": {
       const piOptions = options as NonNullable<ProviderModelOptions["pi"]>;
       return current?.provider === "pi"

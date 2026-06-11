@@ -14,7 +14,6 @@ import {
 } from "@bigbud/contracts";
 
 import type { MutableTurnSnapshot } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import type {
   ProviderThreadSnapshot,
   ProviderThreadTurnSnapshot,
@@ -99,6 +98,7 @@ export function eventBase(input: {
   eventId: EventId;
   createdAt: string;
   threadId: ThreadId;
+  provider: import("@bigbud/contracts").ProviderKind;
   turnId?: TurnId;
   itemId?: string;
   requestId?: string;
@@ -110,7 +110,7 @@ export function eventBase(input: {
 
   return {
     eventId: input.eventId,
-    provider: PROVIDER,
+    provider: input.provider,
     threadId: input.threadId,
     createdAt: input.createdAt,
     ...(input.turnId ? { turnId: input.turnId } : {}),
