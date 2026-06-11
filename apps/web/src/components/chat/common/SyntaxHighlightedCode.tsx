@@ -36,8 +36,13 @@ class CodeHighlightErrorBoundary extends React.Component<
   }
 }
 
-function createHighlightCacheKey(code: string, language: string, themeName: DiffThemeName): string {
-  return `${fnv1a32(code).toString(36)}:${code.length}:${language}:${themeName}`;
+function createHighlightCacheKey(
+  code: string,
+  language: string,
+  themeName: DiffThemeName,
+  bgTransparent?: boolean,
+): string {
+  return `${fnv1a32(code).toString(36)}:${code.length}:${language}:${themeName}${bgTransparent ? ":tb" : ""}`;
 }
 
 function estimateHighlightedSize(html: string, code: string): number {
@@ -63,10 +68,19 @@ function getHighlighterPromise(language: string): Promise<DiffsHighlighter> {
   return promise;
 }
 
-function RenderedHighlightedCode({ html }: { html: string }) {
+function RenderedHighlightedCode({
+  html,
+  className,
+}: {
+  html: string;
+  className?: string | undefined;
+}) {
   return (
     // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki renders trusted syntax-highlighted HTML.
-    <div className="chat-markdown-shiki" dangerouslySetInnerHTML={{ __html: html }} />
+    <div
+      className={`chat-markdown-shiki${className ? ` ${className}` : ""}`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }
 
@@ -76,19 +90,26 @@ function RenderedShikiCodeBlock(props: {
   isStreaming: boolean;
   language: string;
   themeName: DiffThemeName;
+  className?: string | undefined;
+  bgTransparent?: boolean | undefined;
 }) {
   const highlighter = use(getHighlighterPromise(props.language));
   const highlightedHtml = useMemo(() => {
+    let html: string;
     try {
-      return highlighter.codeToHtml(props.code, { lang: props.language, theme: props.themeName });
+      html = highlighter.codeToHtml(props.code, { lang: props.language, theme: props.themeName });
     } catch (error) {
       console.warn(
         `Code highlighting failed for language "${props.language}", falling back to plain text.`,
         error instanceof Error ? error.message : error,
       );
-      return highlighter.codeToHtml(props.code, { lang: "text", theme: props.themeName });
+      html = highlighter.codeToHtml(props.code, { lang: "text", theme: props.themeName });
     }
-  }, [highlighter, props.code, props.language, props.themeName]);
+    if (props.bgTransparent) {
+      html = html.replace(/background-color:[^;]+;?/, "");
+    }
+    return html;
+  }, [highlighter, props.code, props.language, props.themeName, props.bgTransparent]);
 
   useEffect(() => {
     if (!props.isStreaming) {
@@ -100,7 +121,7 @@ function RenderedShikiCodeBlock(props: {
     }
   }, [highlightedHtml, props.cacheKey, props.code, props.isStreaming]);
 
-  return <RenderedHighlightedCode html={highlightedHtml} />;
+  return <RenderedHighlightedCode html={highlightedHtml} className={props.className} />;
 }
 
 function SuspenseShikiCodeBlock(props: {
@@ -108,12 +129,19 @@ function SuspenseShikiCodeBlock(props: {
   language: string;
   themeName: DiffThemeName;
   isStreaming: boolean;
+  className?: string | undefined;
+  bgTransparent?: boolean | undefined;
 }) {
-  const cacheKey = createHighlightCacheKey(props.code, props.language, props.themeName);
+  const cacheKey = createHighlightCacheKey(
+    props.code,
+    props.language,
+    props.themeName,
+    props.bgTransparent,
+  );
   const cachedHighlightedHtml = !props.isStreaming ? highlightedCodeCache.get(cacheKey) : null;
 
   if (cachedHighlightedHtml != null) {
-    return <RenderedHighlightedCode html={cachedHighlightedHtml} />;
+    return <RenderedHighlightedCode html={cachedHighlightedHtml} className={props.className} />;
   }
 
   return <RenderedShikiCodeBlock cacheKey={cacheKey} {...props} />;
@@ -125,6 +153,8 @@ export function SyntaxHighlightedCode(props: {
   themeName: DiffThemeName;
   isStreaming?: boolean;
   fallback: ReactNode;
+  className?: string | undefined;
+  bgTransparent?: boolean | undefined;
 }) {
   return (
     <CodeHighlightErrorBoundary fallback={props.fallback}>
@@ -134,6 +164,8 @@ export function SyntaxHighlightedCode(props: {
           language={props.language}
           themeName={props.themeName}
           isStreaming={props.isStreaming ?? false}
+          className={props.className}
+          bgTransparent={props.bgTransparent}
         />
       </Suspense>
     </CodeHighlightErrorBoundary>

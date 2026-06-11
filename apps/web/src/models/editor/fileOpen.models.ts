@@ -21,6 +21,7 @@ const CODE_RELATED_EXTENSIONS = new Set([
   ".hh",
   ".hpp",
   ".html",
+  ".ipynb",
   ".java",
   ".js",
   ".json",
