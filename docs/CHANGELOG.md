@@ -13,6 +13,13 @@ Entries below are grouped by release tag and date.
 - Devin offers an ACP-based session runtime with configurable model selection; KiloCode supports Claude Sonnet, Haiku, and Opus models with reasoning support, plus any custom models from its providers system.
 - Fixed a bug where warning or error states on a provider would silently switch you to Codex — now the app shows them explicitly. Refactored the OpenCode event pipeline to be provider-aware throughout, preventing sessions from switching provider after the first message and enabling reliable multi-provider operation.
 
+### Notebook Preview in Files Panel
+
+- Added support for viewing Jupyter notebook (.ipynb) files directly in the Files panel, so you can browse notebook content — including code, markdown, and output cells — without opening a separate editor.
+- Code cells are syntax-highlighted in the same style as regular code files, and markdown cells reuse the app's existing markdown renderer for consistent styling and file-link handling.
+- All notebook outputs — plain text, HTML, images, SVG graphics, stream output, and error tracebacks — are rendered inline, so you can read the full notebook in one view without switching tools.
+- Notebook cells support the same annotation flow as regular code files: right-click to select a range, add a note, and send it to the AI with the notebook path and line references.
+
 ### Right Panel Tab Reordering
 
 - Added drag-and-drop reordering for right panel tabs, so you can rearrange Browser, Files, Git, Terminal, Diff, and Notes tabs into whatever order suits your workflow.
@@ -32,7 +39,7 @@ Entries below are grouped by release tag and date.
 
 ### Validation
 
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
+- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; and Git panel resize interaction.
 
 ## v0.1.642 (9 June, 2026)
 

@@ -12,6 +12,7 @@ import { useProjectById, useThreadById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
+import { IpynbPreview } from "./IpynbPreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
 import {
   applyDirectoryNavigationRequest,
@@ -308,21 +309,35 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     if (!previewPath) {
       return <div className="h-full overflow-y-auto">{treeBody}</div>;
     }
+    const isIpynb = previewPath.toLowerCase().endsWith(".ipynb");
+    const handleBack = () => {
+      setPreviewPath(null);
+      setPreviewPosition(null);
+    };
     return (
       <div ref={fileTreeContainerRef} className="flex h-full min-h-0">
         <div className="min-h-0 min-w-0 flex-1">
-          <FilePreview
-            cwd={workspaceRoot}
-            relativePath={previewPath}
-            targetLine={previewTargetLine}
-            executionTargetId={workspaceExecutionTargetId}
-            projectName={project?.name}
-            onBack={() => {
-              setPreviewPath(null);
-              setPreviewPosition(null);
-            }}
-            onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
-          />
+          {isIpynb ? (
+            <IpynbPreview
+              cwd={workspaceRoot}
+              relativePath={previewPath}
+              targetLine={previewTargetLine}
+              executionTargetId={workspaceExecutionTargetId}
+              projectName={project?.name}
+              onBack={handleBack}
+              onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
+            />
+          ) : (
+            <FilePreview
+              cwd={workspaceRoot}
+              relativePath={previewPath}
+              targetLine={previewTargetLine}
+              executionTargetId={workspaceExecutionTargetId}
+              projectName={project?.name}
+              onBack={handleBack}
+              onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
+            />
+          )}
         </div>
         <div
           className="z-10 w-[3px] shrink-0 cursor-col-resize select-none hover:bg-primary/30"
