@@ -252,7 +252,7 @@ export const IpynbPreview = memo(function IpynbPreview({
                   <div key={cellKey} className="notebook-cell-code">
                     <div className="rounded-md overflow-hidden">
                       <div
-                        className="min-w-0 px-16 py-8"
+                        className="min-w-0 bg-muted/50 px-16 py-8"
                         {...(hasAnnotation ? { onContextMenu: handleNotebookContextMenu } : {})}
                       >
                         <SyntaxHighlightedCode
