@@ -320,7 +320,7 @@ export function CommandPaletteDialogContent() {
                 )}
               >
                 <CommandInput
-                  placeholder="Search commands, projects, and threads..."
+                  placeholder="Search files, projects, and threads..."
                   className="h-8 px-0 text-sm placeholder:text-muted-foreground/65"
                 />
               </div>
