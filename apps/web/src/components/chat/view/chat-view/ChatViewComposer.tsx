@@ -84,7 +84,13 @@ export function ChatViewComposer({
   // Synthetic composer menu (opened from the + button, not from typed triggers)
   const [syntheticMenuKind, setSyntheticMenuKind] = useState<"agent" | "skill" | null>(null);
   const [syntheticMenuHighlightId, setSyntheticMenuHighlightId] = useState<string | null>(null);
+  const [syntheticMenuSearch, setSyntheticMenuSearch] = useState("");
   const syntheticMenuRef = useRef<HTMLDivElement>(null);
+
+  // Reset search when menu opens or closes
+  useEffect(() => {
+    setSyntheticMenuSearch("");
+  }, [syntheticMenuKind]);
 
   // Dismiss synthetic menu on Escape
   useEffect(() => {
@@ -139,29 +145,47 @@ export function ChatViewComposer({
     [base, runtime],
   );
 
-  const syntheticAgentItems = useMemo<ComposerCommandItem[]>(
-    () =>
-      composer.discoveredAgents.map((agent) => ({
+  const syntheticAgentItems = useMemo<ComposerCommandItem[]>(() => {
+    const query = syntheticMenuSearch.toLowerCase().trim();
+    return composer.discoveredAgents
+      .filter((agent) => {
+        if (!query) return true;
+        return (
+          agent.name.toLowerCase().includes(query) ||
+          agent.provider.toLowerCase().includes(query) ||
+          (agent.description?.toLowerCase().includes(query) ?? false)
+        );
+      })
+      .map((agent) => ({
         id: `agent:${agent.provider}:${agent.id}`,
         type: "agent" as const,
         agent,
         label: `@${agent.name}`,
         description: agent.description ?? "",
-      })),
-    [composer.discoveredAgents],
-  );
+      }));
+  }, [composer.discoveredAgents, syntheticMenuSearch]);
 
-  const syntheticSkillItems = useMemo<ComposerCommandItem[]>(
-    () =>
-      composer.discoveredSkills.map((skill) => ({
+  const syntheticSkillItems = useMemo<ComposerCommandItem[]>(() => {
+    const query = syntheticMenuSearch.toLowerCase().trim();
+    return composer.discoveredSkills
+      .filter((skill) => {
+        if (!query) return true;
+        const skillLabel = skill.displayName ?? skill.name;
+        return (
+          skill.name.toLowerCase().includes(query) ||
+          skillLabel.toLowerCase().includes(query) ||
+          skill.provider.toLowerCase().includes(query) ||
+          (skill.description?.toLowerCase().includes(query) ?? false)
+        );
+      })
+      .map((skill) => ({
         id: `provider-skill:${skill.provider}:${skill.id}`,
         type: "skill" as const,
         skill,
         label: `$${skill.displayName ?? skill.name}`,
         description: skill.description ?? "",
-      })),
-    [composer.discoveredSkills],
-  );
+      }));
+  }, [composer.discoveredSkills, syntheticMenuSearch]);
 
   const syntheticMenuItems =
     syntheticMenuKind === "agent"
@@ -185,6 +209,11 @@ export function ChatViewComposer({
 
   const onSyntheticMenuHighlight = useCallback((itemId: string | null) => {
     setSyntheticMenuHighlightId(itemId);
+  }, []);
+
+  const onSyntheticMenuSearchChange = useCallback((query: string) => {
+    setSyntheticMenuSearch(query);
+    setSyntheticMenuHighlightId(null);
   }, []);
 
   const onCallAgent = useCallback(() => {
@@ -268,12 +297,14 @@ export function ChatViewComposer({
               syntheticMenuRef={syntheticMenuRef}
               syntheticMenuItems={syntheticMenuItems}
               syntheticMenuHighlightId={syntheticMenuHighlightId}
+              syntheticMenuSearch={syntheticMenuSearch}
               composer={composer}
               interactions={interactions}
               resolvedTheme={base.resolvedTheme}
               disabled={thread.isComposerApprovalState}
               onSyntheticMenuHighlight={onSyntheticMenuHighlight}
               onSyntheticMenuSelect={onSyntheticMenuSelect}
+              onSyntheticMenuSearchChange={onSyntheticMenuSearchChange}
             />
 
             {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (

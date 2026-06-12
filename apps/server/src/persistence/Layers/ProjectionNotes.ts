@@ -178,9 +178,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
 
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (exists) {
-      return yield* Effect.fail(
-        fileSystemError("create", `A note named "${safeTitle}.md" already exists.`),
-      );
+      return yield* fileSystemError("create", `A note named "${safeTitle}.md" already exists.`);
     }
 
     yield* fs
@@ -228,7 +226,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     const absolutePath = path.join(config.stateDir, input.noteId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
-      return yield* Effect.fail(fileSystemError("update", "Note not found"));
+      return yield* fileSystemError("update", "Note not found");
     }
 
     const currentBasename = input.noteId.split("/").pop() ?? input.noteId;
@@ -247,9 +245,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
 
       const exists = yield* fs.exists(newAbsolutePath).pipe(Effect.orElseSucceed(() => false));
       if (exists) {
-        return yield* Effect.fail(
-          fileSystemError("update", `A note named "${safeTitle}.md" already exists.`),
-        );
+        return yield* fileSystemError("update", `A note named "${safeTitle}.md" already exists.`);
       }
 
       yield* fs

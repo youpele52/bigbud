@@ -120,8 +120,10 @@ export function useComposerProviderState(
         providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
       copilot: providerStatuses.find((provider) => provider.provider === "copilot")?.models ?? [],
       opencode: providerStatuses.find((provider) => provider.provider === "opencode")?.models ?? [],
+      kilocode: providerStatuses.find((provider) => provider.provider === "kilocode")?.models ?? [],
       pi: providerStatuses.find((provider) => provider.provider === "pi")?.models ?? [],
       cursor: providerStatuses.find((provider) => provider.provider === "cursor")?.models ?? [],
+      devin: providerStatuses.find((provider) => provider.provider === "devin")?.models ?? [],
     }),
     [providerStatuses],
   );

@@ -19,6 +19,8 @@ import { ClaudeAdapter } from "../Services/Claude/Adapter.ts";
 import { CopilotAdapter } from "../Services/Copilot/Adapter.ts";
 import { CodexAdapter } from "../Services/Codex/Adapter.ts";
 import { CursorAdapter } from "../Services/Cursor/Adapter.ts";
+import { DevinAdapter } from "../Services/Devin/Adapter.ts";
+import { KilocodeAdapter } from "../Services/Kilocode/Adapter.ts";
 import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../Services/Pi/Adapter.ts";
 
@@ -37,6 +39,8 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
           yield* ClaudeAdapter,
           yield* CopilotAdapter,
           yield* CursorAdapter,
+          yield* DevinAdapter,
+          yield* KilocodeAdapter,
           yield* OpencodeAdapter,
           yield* PiAdapter,
         ];

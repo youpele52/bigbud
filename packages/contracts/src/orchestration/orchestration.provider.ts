@@ -4,6 +4,8 @@ import {
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
+  DevinModelOptions,
+  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "../core/model";
@@ -64,6 +66,15 @@ export const OpencodeModelSelection = Schema.Struct({
 });
 export type OpencodeModelSelection = typeof OpencodeModelSelection.Type;
 
+export const KilocodeModelSelection = Schema.Struct({
+  provider: Schema.Literal("kilocode"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(KilocodeModelOptions),
+  /** Sub-provider ID for routing (e.g. "openrouter", "google"). Resolved at model enumeration time and sent back to the adapter. */
+  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type KilocodeModelSelection = typeof KilocodeModelSelection.Type;
+
 export const PiModelSelection = Schema.Struct({
   provider: Schema.Literal("pi"),
   model: TrimmedNonEmptyString,
@@ -80,13 +91,22 @@ export const CursorModelSelection = Schema.Struct({
 });
 export type CursorModelSelection = typeof CursorModelSelection.Type;
 
+export const DevinModelSelection = Schema.Struct({
+  provider: Schema.Literal("devin"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(DevinModelOptions),
+});
+export type DevinModelSelection = typeof DevinModelSelection.Type;
+
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
   CopilotModelSelection,
+  KilocodeModelSelection,
   OpencodeModelSelection,
   PiModelSelection,
   CursorModelSelection,
+  DevinModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
 

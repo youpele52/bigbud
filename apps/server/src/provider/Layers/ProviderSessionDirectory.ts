@@ -1,4 +1,4 @@
-import type { ProviderKind, ThreadId } from "@bigbud/contracts";
+import { PROVIDER_KINDS, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -23,15 +23,8 @@ function decodeProviderKind(
   providerName: string,
   operation: string,
 ): Effect.Effect<ProviderKind, ProviderSessionDirectoryPersistenceError> {
-  if (
-    providerName === "codex" ||
-    providerName === "claudeAgent" ||
-    providerName === "copilot" ||
-    providerName === "cursor" ||
-    providerName === "opencode" ||
-    providerName === "pi"
-  ) {
-    return Effect.succeed(providerName);
+  if (PROVIDER_KINDS.includes(providerName as ProviderKind)) {
+    return Effect.succeed(providerName as ProviderKind);
   }
   return Effect.fail(
     new ProviderSessionDirectoryPersistenceError({

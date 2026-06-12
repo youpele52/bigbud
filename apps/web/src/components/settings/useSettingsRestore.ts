@@ -1,11 +1,10 @@
+import { PROVIDER_KINDS } from "@bigbud/contracts";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { Equal } from "effect";
 import { useCallback, useMemo } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureNativeApi, readNativeApi } from "../../rpc/nativeApi";
-
-const PROVIDER_KEYS = ["codex", "claudeAgent", "copilot", "opencode", "pi", "cursor"] as const;
 
 export function useSettingsRestore(onRestored?: () => void) {
   const { theme, setTheme } = useTheme();
@@ -16,7 +15,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
-  const areProviderSettingsDirty = PROVIDER_KEYS.some((provider) => {
+  const areProviderSettingsDirty = PROVIDER_KINDS.some((provider) => {
     const currentSettings = settings.providers[provider];
     const defaultSettings = DEFAULT_UNIFIED_SETTINGS.providers[provider];
     return !Equal.equals(currentSettings, defaultSettings);
@@ -56,6 +55,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       DEFAULT_UNIFIED_SETTINGS.enableSystemTaskCompletionNotifications
         ? ["System notifications"]
         : []),
+      ...(settings.contextWindowWarningThresholdTokens !==
+      DEFAULT_UNIFIED_SETTINGS.contextWindowWarningThresholdTokens
+        ? ["Context window warning threshold"]
+        : []),
     ],
     [
       areProviderSettingsDirty,
@@ -66,6 +69,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffWordWrap,
       settings.enableAssistantStreaming,
       settings.enableThinkingStreaming,
+      settings.contextWindowWarningThresholdTokens,
       settings.enableTaskCompletionToasts,
       settings.enableSystemTaskCompletionNotifications,
       settings.timestampFormat,

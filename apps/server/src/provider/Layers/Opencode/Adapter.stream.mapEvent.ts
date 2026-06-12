@@ -42,6 +42,7 @@ export function openCodeQuestionId(index: number, header: string): string {
 export function makeMapEvent(
   nextEventId: Effect.Effect<EventId>,
   makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>,
+  provider: import("@bigbud/contracts").ProviderKind,
 ) {
   return (
     session: ActiveOpencodeSession,
@@ -58,7 +59,7 @@ export function makeMapEvent(
         payload: event,
       };
 
-      const context = { stamp, raw, turnId };
+      const context = { stamp, raw, turnId, provider };
 
       if (eventType === "message.part.delta") {
         return mapMessagePartDelta(session, event, context);
@@ -79,13 +80,21 @@ export function makeMapEvent(
             }
           ).status;
 
-          return yield* handleSessionStatus(session, status, turnId, stamp, raw, nextEventId);
+          return yield* handleSessionStatus(
+            session,
+            status,
+            turnId,
+            stamp,
+            raw,
+            nextEventId,
+            provider,
+          );
         }
 
         case "session.idle": {
           // Top-level session.idle event — treat identically to
           // session.status { type: "idle" }.
-          return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId);
+          return yield* handleSessionIdle(session, turnId, stamp, raw, nextEventId, provider);
         }
 
         case "session.compacted": {
@@ -95,6 +104,7 @@ export function makeMapEvent(
                 eventId: stamp.eventId,
                 createdAt,
                 threadId: session.threadId,
+                provider,
                 ...(turnId ? { turnId } : {}),
                 raw,
               }),
@@ -133,6 +143,7 @@ export function makeMapEvent(
                   eventId: stamp.eventId,
                   createdAt,
                   threadId: session.threadId,
+                  provider,
                   ...(turnId ? { turnId } : {}),
                   requestId: permission.id,
                   raw,
@@ -191,6 +202,7 @@ export function makeMapEvent(
                   eventId: stamp.eventId,
                   createdAt,
                   threadId: session.threadId,
+                  provider,
                   ...(turnId ? { turnId } : {}),
                   requestId: questionReq.id,
                   raw,
@@ -224,6 +236,7 @@ export function makeMapEvent(
                 eventId: stamp.eventId,
                 createdAt,
                 threadId: session.threadId,
+                provider,
                 ...(turnId ? { turnId } : {}),
                 raw,
               }),
@@ -270,6 +283,7 @@ export function makeMapEvent(
                 eventId: stamp.eventId,
                 createdAt,
                 threadId: session.threadId,
+                provider,
                 ...(turnId ? { turnId } : {}),
                 raw,
               }),

@@ -21,6 +21,8 @@ import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
+import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
+import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
 import { makeOpencodeAdapterLive } from "./provider/Layers/Opencode/Adapter";
 import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
@@ -164,6 +166,12 @@ const ProviderLayerLive = Layer.unwrap(
     const cursorAdapterLayer = makeCursorAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
+    const devinAdapterLayer = makeDevinAdapterLive(
+      nativeEventLogger ? { nativeEventLogger } : undefined,
+    );
+    const kilocodeAdapterLayer = makeKilocodeAdapterLive(
+      nativeEventLogger ? { nativeEventLogger } : undefined,
+    );
     const opencodeAdapterLayer = makeOpencodeAdapterLive(
       nativeEventLogger ? { nativeEventLogger } : undefined,
     );
@@ -173,6 +181,8 @@ const ProviderLayerLive = Layer.unwrap(
       Layer.provide(claudeAdapterLayer),
       Layer.provide(copilotAdapterLayer),
       Layer.provide(cursorAdapterLayer),
+      Layer.provide(devinAdapterLayer),
+      Layer.provide(kilocodeAdapterLayer),
       Layer.provide(opencodeAdapterLayer),
       Layer.provide(piAdapterLayer),
       Layer.provideMerge(providerSessionDirectoryLayer),

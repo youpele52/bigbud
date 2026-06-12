@@ -58,6 +58,30 @@ describe("incremental orchestration updates", () => {
     expect(next.threads[0]?.messages).toHaveLength(1);
   });
 
+  it("preserves devin as the mapped session provider", () => {
+    const thread = makeThread();
+    const state = makeState(thread);
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.session-set", {
+        threadId: thread.id,
+        session: {
+          threadId: thread.id,
+          status: "ready",
+          providerName: "devin",
+          runtimeMode: "full-access",
+          activeTurnId: null,
+          reason: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:02.000Z",
+        },
+      }),
+    );
+
+    expect(next.threads[0]?.session?.provider).toBe("devin");
+  });
+
   it("does not regress latestTurn when an older turn diff completes late", () => {
     const state = makeState(
       makeThread({

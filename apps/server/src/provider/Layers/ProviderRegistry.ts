@@ -15,12 +15,16 @@ import { ClaudeProviderLive } from "./Claude/Provider";
 import { CopilotProviderLive } from "./Copilot/Provider";
 import { CodexProviderLive } from "./Codex/Provider";
 import { CursorProviderLive } from "./Cursor/Provider";
+import { DevinProviderLive } from "./Devin/Provider";
+import { KilocodeProviderLive } from "./Kilocode/Provider";
 import { OpencodeProviderLive } from "./Opencode/Provider";
 import { PiProviderLive } from "./Pi/Provider";
 import { ClaudeProvider } from "../Services/Claude/Provider";
 import { CopilotProvider } from "../Services/Copilot/Provider";
 import { CodexProvider } from "../Services/Codex/Provider";
 import { CursorProvider } from "../Services/Cursor/Provider";
+import { DevinProvider } from "../Services/Devin/Provider";
+import { KilocodeProvider } from "../Services/Kilocode/Provider";
 import { OpencodeProvider } from "../Services/Opencode/Provider";
 import { PiProvider } from "../Services/Pi/Provider";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
@@ -59,6 +63,8 @@ const makeProviderRegistryLayer = Layer.effect(
     const claudeProvider = yield* ClaudeProvider;
     const copilotProvider = yield* CopilotProvider;
     const cursorProvider = yield* CursorProvider;
+    const devinProvider = yield* DevinProvider;
+    const kilocodeProvider = yield* KilocodeProvider;
     const opencodeProvider = yield* OpencodeProvider;
     const piProvider = yield* PiProvider;
     const registrations: ReadonlyArray<ProviderRegistration> = [
@@ -66,6 +72,8 @@ const makeProviderRegistryLayer = Layer.effect(
       { provider: "claudeAgent", service: claudeProvider },
       { provider: "copilot", service: copilotProvider },
       { provider: "cursor", service: cursorProvider },
+      { provider: "devin", service: devinProvider },
+      { provider: "kilocode", service: kilocodeProvider },
       { provider: "opencode", service: opencodeProvider },
       { provider: "pi", service: piProvider },
     ];
@@ -155,6 +163,8 @@ export const ProviderRegistryLive = makeProviderRegistryLayer.pipe(
   Layer.provideMerge(ClaudeProviderLive),
   Layer.provideMerge(CopilotProviderLive),
   Layer.provideMerge(CursorProviderLive),
+  Layer.provideMerge(DevinProviderLive),
+  Layer.provideMerge(KilocodeProviderLive),
   Layer.provideMerge(OpencodeProviderLive),
   Layer.provideMerge(PiProviderLive),
 );
@@ -167,6 +177,8 @@ export function makeProviderRegistryLive(options?: {
     Layer.provideMerge(ClaudeProviderLive),
     Layer.provideMerge(CopilotProviderLive),
     Layer.provideMerge(CursorProviderLive),
+    Layer.provideMerge(DevinProviderLive),
+    Layer.provideMerge(KilocodeProviderLive),
     Layer.provideMerge(OpencodeProviderLive),
     Layer.provideMerge(options?.piProviderLayer ?? PiProviderLive),
   );

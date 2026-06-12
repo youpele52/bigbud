@@ -42,13 +42,15 @@ export function resolveSelectableProvider(
   providers: ReadonlyArray<ServerProvider>,
   provider: ProviderKind | null | undefined,
 ): ProviderKind {
-  if (provider && isProviderEnabled(providers, provider)) {
+  // If user explicitly selected a provider, keep it even if unusable —
+  // the UI will display the error/warning state and block selection.
+  if (provider) {
     return provider;
   }
-  // Fall back to the first enabled provider in snapshot order, then PROVIDER_KINDS order.
+  // Only fall back when no provider was explicitly selected.
   const fromSnapshot = providers.find((candidate) => candidate.enabled)?.provider;
   if (fromSnapshot) return fromSnapshot;
-  return provider ?? PROVIDER_KINDS[0];
+  return PROVIDER_KINDS[0];
 }
 
 export function getProviderModelCapabilities(
@@ -113,8 +115,7 @@ function buildModelSelection(
   model: string,
   subProviderID: string | undefined,
 ): ModelSelection {
-  // Include subProviderID for providers that support it (pi, opencode)
-  if ((provider === "pi" || provider === "opencode") && subProviderID) {
+  if ((provider === "pi" || provider === "opencode" || provider === "kilocode") && subProviderID) {
     return { provider, model, subProviderID } as ModelSelection;
   }
   return { provider, model };

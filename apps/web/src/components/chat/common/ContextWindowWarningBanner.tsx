@@ -1,19 +1,20 @@
+import { useSettings } from "~/hooks/useSettings";
 import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
-
-const BANNER_THRESHOLD = 120_000;
 
 export const ContextWindowWarningBanner = memo(function ContextWindowWarningBanner({
   usage,
 }: {
   usage: ContextWindowSnapshot | null;
 }) {
+  const settings = useSettings();
+  const warningThreshold = settings.contextWindowWarningThresholdTokens;
   const [dismissed, setDismissed] = useState(false);
   const prevKeyRef = useRef<string | null>(null);
 
-  const isOverThreshold = (usage?.usedTokens ?? 0) >= BANNER_THRESHOLD;
+  const isOverThreshold = (usage?.usedTokens ?? 0) >= warningThreshold;
   const key = usage ? `${usage.usedTokens}:${usage.maxTokens ?? 0}` : null;
 
   // Re-show the banner when the token count changes significantly (crosses the threshold)
@@ -34,7 +35,7 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
         <TriangleAlertIcon />
         <AlertTitle>Context window warning</AlertTitle>
         <AlertDescription>
-          Some models may start deteriorating past {formatContextWindowTokens(BANNER_THRESHOLD)}{" "}
+          Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
           tokens. Consider using a handoff skill or /compact.
         </AlertDescription>
         <AlertAction>

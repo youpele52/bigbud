@@ -10,6 +10,8 @@ import { CodexAdapter, CodexAdapterShape } from "../Services/Codex/Adapter.ts";
 import { OpencodeAdapter, OpencodeAdapterShape } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter, PiAdapterShape } from "../Services/Pi/Adapter.ts";
 import { CursorAdapter, CursorAdapterShape } from "../Services/Cursor/Adapter.ts";
+import { DevinAdapter, DevinAdapterShape } from "../Services/Devin/Adapter.ts";
+import { KilocodeAdapter, KilocodeAdapterShape } from "../Services/Kilocode/Adapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { ProviderAdapterRegistryLive } from "./ProviderAdapterRegistry.ts";
 import { ProviderUnsupportedError } from "../Errors.ts";
@@ -83,6 +85,23 @@ const fakeOpencodeAdapter: OpencodeAdapterShape = {
   streamEvents: Stream.empty,
 };
 
+const fakeKilocodeAdapter: KilocodeAdapterShape = {
+  provider: "kilocode",
+  capabilities: { sessionModelSwitch: "in-session" },
+  startSession: vi.fn(),
+  sendTurn: vi.fn(),
+  interruptTurn: vi.fn(),
+  respondToRequest: vi.fn(),
+  respondToUserInput: vi.fn(),
+  stopSession: vi.fn(),
+  listSessions: vi.fn(),
+  hasSession: vi.fn(),
+  readThread: vi.fn(),
+  rollbackThread: vi.fn(),
+  stopAll: vi.fn(),
+  streamEvents: Stream.empty,
+};
+
 const fakePiAdapter: PiAdapterShape = {
   provider: "pi",
   capabilities: { sessionModelSwitch: "in-session" },
@@ -117,6 +136,23 @@ const fakeCursorAdapter: CursorAdapterShape = {
   streamEvents: Stream.empty,
 };
 
+const fakeDevinAdapter: DevinAdapterShape = {
+  provider: "devin",
+  capabilities: { sessionModelSwitch: "in-session" },
+  startSession: vi.fn(),
+  sendTurn: vi.fn(),
+  interruptTurn: vi.fn(),
+  respondToRequest: vi.fn(),
+  respondToUserInput: vi.fn(),
+  stopSession: vi.fn(),
+  listSessions: vi.fn(),
+  hasSession: vi.fn(),
+  readThread: vi.fn(),
+  rollbackThread: vi.fn(),
+  stopAll: vi.fn(),
+  streamEvents: Stream.empty,
+};
+
 const layer = it.layer(
   Layer.mergeAll(
     Layer.provide(
@@ -128,6 +164,8 @@ const layer = it.layer(
         Layer.succeed(OpencodeAdapter, fakeOpencodeAdapter),
         Layer.succeed(PiAdapter, fakePiAdapter),
         Layer.succeed(CursorAdapter, fakeCursorAdapter),
+        Layer.succeed(DevinAdapter, fakeDevinAdapter),
+        Layer.succeed(KilocodeAdapter, fakeKilocodeAdapter),
       ),
     ),
     NodeServices.layer,
@@ -142,15 +180,26 @@ layer("ProviderAdapterRegistryLive", (it) => {
       const claude = yield* registry.getByProvider("claudeAgent");
       const copilot = yield* registry.getByProvider("copilot");
       const opencode = yield* registry.getByProvider("opencode");
+      const kilocode = yield* registry.getByProvider("kilocode");
       const pi = yield* registry.getByProvider("pi");
       assert.equal(codex, fakeCodexAdapter);
       assert.equal(claude, fakeClaudeAdapter);
       assert.equal(copilot, fakeCopilotAdapter);
       assert.equal(opencode, fakeOpencodeAdapter);
+      assert.equal(kilocode, fakeKilocodeAdapter);
       assert.equal(pi, fakePiAdapter);
 
       const providers = yield* registry.listProviders();
-      assert.deepEqual(providers, ["codex", "claudeAgent", "copilot", "cursor", "opencode", "pi"]);
+      assert.deepEqual(providers, [
+        "codex",
+        "claudeAgent",
+        "copilot",
+        "cursor",
+        "devin",
+        "kilocode",
+        "opencode",
+        "pi",
+      ]);
     }),
   );
 

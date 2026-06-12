@@ -472,6 +472,45 @@ label:has(> select#reasoning-effort) select {
   text-align: left;
 }
 
+/* Notebook markdown rendering */
+.notebook-cell-markdown h1,
+.notebook-cell-markdown h2,
+.notebook-cell-markdown h3,
+.notebook-cell-markdown h4,
+.notebook-cell-markdown h5,
+.notebook-cell-markdown h6 {
+  margin: 1.5rem 0 0.5rem;
+  font-weight: 700;
+}
+
+.notebook-cell-markdown h1 {
+  font-size: 1.4375rem;
+}
+.notebook-cell-markdown h2 {
+  font-size: 1.3125rem;
+}
+.notebook-cell-markdown h3 {
+  font-size: 1.1875rem;
+}
+.notebook-cell-markdown h4 {
+  font-size: 1.0625rem;
+}
+.notebook-cell-markdown h5 {
+  font-size: 0.9375rem;
+}
+
+.notebook-cell-markdown strong {
+  font-weight: 700;
+}
+
+.notebook-cell-markdown > :first-child {
+  margin-top: 0;
+}
+
+.notebook-cell-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 /* Diffs theme bridge (match diff surfaces to app palette) */
 .diff-panel-viewport {
   background: color-mix(in srgb, var(--background) 94%, var(--card));

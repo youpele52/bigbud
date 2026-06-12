@@ -78,6 +78,7 @@ describe("Opencode session lifecycle", () => {
         };
 
         const methods = makeSessionMethods({
+          provider: "opencode",
           sessions: new Map(),
           runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
           serverManager: {
@@ -145,6 +146,7 @@ describe("Opencode session lifecycle", () => {
       };
 
       const methods = makeSessionMethods({
+        provider: "opencode",
         sessions: new Map(),
         runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
         serverManager: {

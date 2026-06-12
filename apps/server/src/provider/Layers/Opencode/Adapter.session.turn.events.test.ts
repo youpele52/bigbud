@@ -77,6 +77,7 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
   };
 
   const { sendTurn } = makeTurnMethods({
+    provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
     syntheticEventFn: (_threadId, type, payload, extra) =>
       Effect.succeed({

@@ -76,6 +76,7 @@ it.effect(
         (_session, requestId) => {
           scheduled.push(requestId);
         },
+        "opencode",
       );
 
       yield* handleEvent(session, makePermissionAskedEvent(session));
@@ -108,6 +109,7 @@ it.effect("still emits OpenCode permission requests outside full-access", () => 
       (_session, requestId) => {
         scheduled.push(requestId);
       },
+      "opencode",
     );
 
     yield* handleEvent(session, makePermissionAskedEvent(session));

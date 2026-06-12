@@ -130,6 +130,19 @@ export function normalizeProviderModelOptions(
       ? { reasoningEffort: opencodeReasoningEffort }
       : undefined;
 
+  const kilocodeCandidate = normalizeProviderOptionsCandidate(candidate?.kilocode);
+  const kilocodeReasoningEffort: CodexReasoningEffort | undefined =
+    kilocodeCandidate?.reasoningEffort === "low" ||
+    kilocodeCandidate?.reasoningEffort === "medium" ||
+    kilocodeCandidate?.reasoningEffort === "high" ||
+    kilocodeCandidate?.reasoningEffort === "xhigh"
+      ? kilocodeCandidate.reasoningEffort
+      : undefined;
+  const kilocode =
+    kilocodeReasoningEffort !== undefined
+      ? { reasoningEffort: kilocodeReasoningEffort }
+      : undefined;
+
   const piCandidate = normalizeProviderOptionsCandidate(candidate?.pi);
   const piThinkingLevel: PiThinkingLevel | undefined =
     typeof piCandidate?.thinkingLevel === "string" &&
@@ -175,7 +188,7 @@ export function normalizeProviderModelOptions(
         }
       : undefined;
 
-  if (!codex && !claude && !copilot && !opencode && !pi && !cursor) {
+  if (!codex && !claude && !copilot && !opencode && !kilocode && !pi && !cursor) {
     return null;
   }
   return {
@@ -183,6 +196,7 @@ export function normalizeProviderModelOptions(
     ...(claude ? { claudeAgent: claude } : {}),
     ...(copilot ? { copilot } : {}),
     ...(opencode ? { opencode } : {}),
+    ...(kilocode ? { kilocode } : {}),
     ...(pi ? { pi } : {}),
     ...(cursor ? { cursor } : {}),
   };
@@ -226,14 +240,18 @@ export function normalizeModelSelection(
         ? modelOptions?.claudeAgent
         : provider === "opencode"
           ? modelOptions?.opencode
-          : provider === "pi"
-            ? modelOptions?.pi
-            : provider === "cursor"
-              ? modelOptions?.cursor
-              : modelOptions?.copilot;
+          : provider === "kilocode"
+            ? modelOptions?.kilocode
+            : provider === "pi"
+              ? modelOptions?.pi
+              : provider === "cursor"
+                ? modelOptions?.cursor
+                : provider === "devin"
+                  ? modelOptions?.devin
+                  : modelOptions?.copilot;
   const baseSelection = createModelSelection(provider, model, options);
   const rawSubProviderID = candidate?.subProviderID;
-  return (provider === "opencode" || provider === "pi") &&
+  return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
     typeof rawSubProviderID === "string" &&
     rawSubProviderID.length > 0
     ? ({ ...baseSelection, subProviderID: rawSubProviderID } as ModelSelection)

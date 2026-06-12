@@ -108,6 +108,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
 
     const events: Array<unknown> = [];
     const { sendTurn } = makeTurnMethods({
+      provider: "opencode",
       requireSession: () => Effect.succeed(record as never),
       syntheticEventFn: (threadId, type, payload, extra) =>
         Effect.succeed({
@@ -257,6 +258,7 @@ endobj
     };
 
     const { sendTurn } = makeTurnMethods({
+      provider: "opencode",
       requireSession: () => Effect.succeed(record as never),
       syntheticEventFn: (threadId, type, payload, extra) =>
         Effect.succeed({

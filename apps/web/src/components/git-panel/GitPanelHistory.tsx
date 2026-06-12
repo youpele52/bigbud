@@ -4,7 +4,7 @@ import type {
   GitListCommitsResult,
 } from "@bigbud/contracts";
 import { CloudUploadIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { formatRelativeTimeLabel } from "~/utils/timestamp/timestamp.utils";
 import { cn } from "~/lib/utils";
@@ -41,6 +41,51 @@ export function GitPanelHistory({
   selectedCommitSha,
 }: GitPanelHistoryProps) {
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const detailContainerRef = useRef<HTMLDivElement>(null);
+  const [detailHeaderHeight, setDetailHeaderHeight] = useState(200);
+
+  const handleDetailResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const startY = event.clientY;
+      const startHeight = detailHeaderHeight;
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const delta = moveEvent.clientY - startY;
+        const nextHeight = Math.max(60, startHeight + delta);
+        setDetailHeaderHeight(nextHeight);
+      };
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    },
+    [detailHeaderHeight],
+  );
+
+  useLayoutEffect(() => {
+    const container = detailContainerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.contentRect.height;
+        if (height > 0) {
+          setDetailHeaderHeight((prev) => {
+            if (prev === 200) return Math.round(height / 3);
+            return prev;
+          });
+        }
+      }
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -136,8 +181,11 @@ export function GitPanelHistory({
         ) : isLoadingDetails ? (
           <div className="p-4 text-sm text-muted-foreground">Loading commit...</div>
         ) : commitDetails ? (
-          <div className="flex h-full min-h-0 flex-col overflow-hidden">
-            <div className="border-b border-border/60 px-3 py-3">
+          <div ref={detailContainerRef} className="flex h-full min-h-0 flex-col overflow-hidden">
+            <div
+              className="border-b border-border/60 px-3 py-3"
+              style={{ height: detailHeaderHeight, overflow: "auto" }}
+            >
               <div className="text-sm font-medium text-foreground">{commitDetails.subject}</div>
               {commitDetails.tags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -163,6 +211,13 @@ export function GitPanelHistory({
                 </pre>
               ) : null}
             </div>
+            <div
+              className="z-10 h-[3px] shrink-0 cursor-row-resize select-none hover:bg-primary/30"
+              role="separator"
+              aria-label="Resize commit details"
+              aria-orientation="horizontal"
+              onPointerDown={handleDetailResizePointerDown}
+            />
             <GitPatchViewer
               emptyLabel="No patch available for this commit."
               patch={commitDetails.diff}
