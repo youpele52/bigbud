@@ -1,8 +1,16 @@
 # Changelog
 
-This document tracks notable project changes in a format that is useful for developers, users, AI assistants, and public release sharing.
+Hey there! 👋 Welcome to the bigbud changelog — your friendly record of everything we've been up to. Every release brings new features, thoughtful improvements, and the occasional bug squish, all documented here so you can see what's changed and why. Thanks for being along for the ride!
 
-Entries below are grouped by release tag and date.
+## v0.1.644 (14 June, 2026)
+
+### Settings
+
+- Added a "Changelog" button in Settings → About that opens the bigbud changelog directly in the in-app browser, so you can see what's changed without leaving the app.
+
+### Notebook Preview
+
+- Fixed notebook preview cell widths so code and markdown cells size independently — code cells share a consistent width based on the widest cell, and markdown cells wrap cleanly at the viewport width. This fixes text bleeding on smaller windows.
 
 ## v0.1.643 (12 June, 2026)
 
@@ -41,10 +49,6 @@ Entries below are grouped by release tag and date.
 ### Composer
 
 - Added a search bar to the + button → "Call agent" and "Use skill" picker dropdowns, so you can type to find the agent or skill you want — matching the existing search experience from the /agents and /skills slash commands.
-
-### Validation
-
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; Git panel resize interaction and changes-view diff scrolling; and composer + button agent/skill picker search bar.
 
 ## v0.1.642 (9 June, 2026)
 
@@ -108,10 +112,6 @@ Entries below are grouped by release tag and date.
 - Enforced a hard 400-line limit for non-test TypeScript source files and a 500-line cap for test files, and split several oversized test files across the codebase to comply — keeping the codebase easier to navigate and reducing merge conflicts from large file changes.
 - Removed leftover `.plans` documentation files and added placeholder test-data fixtures to keep the test infrastructure self-contained.
 
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, malformed browser annotation regression cases, Git panel history and diff behavior, right-panel shortcut toggles, Notes panel CRUD and annotation flows, keybinding reorganizations, Open Project dialog and error handling, and context window warning threshold rendering.
-
 ## v0.1.641 (4 June, 2026)
 
 ### Files Panel Live Directory Watching for Local Workspaces
@@ -145,10 +145,6 @@ Entries below are grouped by release tag and date.
 ### Route Helper File Renaming
 
 - Renamed `__root.bootstrap.tsx`, `__root.logic.tsx`, and `__root.recovery.ts` to `-__root.bootstrap.tsx`, `-__root.logic.tsx`, and `-__root.recovery.ts` following TanStack Router's ignore convention (files prefixed with `-` are excluded from route detection). This eliminates the startup warnings about non-route helper files not exporting a Route.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the workspace directory watcher (root-level watching, path escape rejection), scoped project-directory WebSocket subscriptions, server and client RPC routing, Files panel directory refresh hook, route regression (diff=1 does not mount standalone diff UI), and prompt queue formatting and thread affinity behavior.
 
 ## v0.1.640 (3 June, 2026)
 
@@ -205,10 +201,7 @@ Entries below are grouped by release tag and date.
 - Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
 - When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
 
-### Validation
-
 - Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, editor routing, and chat file-path preview targeting.
 
 ### Browser Reload Actions
 
@@ -261,9 +254,6 @@ Entries below are grouped by release tag and date.
 - Tuned shared Input and Textarea focus styling to remove the overly shiny halo.
 - Reduced resize-time “white bar” flashes by explicitly setting renderer root backgrounds and syncing the Electron `BrowserWindow` background color with the active light/dark theme.
 
-### Validation
-
-- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`.
 - Added focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell and path-quoting regression tests, and sidebar/layout UI behavior.
 
 ## v0.1.637 (29 May, 2026)
@@ -288,10 +278,6 @@ Entries below are grouped by release tag and date.
 - Pinned `electron-builder` resolution to the local package before falling back to bunx for reproducible CI builds. Re-enabled the typecheck step in the release workflow.
 - Skipped AppImage smoke tests in headless CI environments and fixed an `afterExtract.cjs` type check that broke on electron-builder versions that pass platform as a string.
 
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for Linux runtime startup, provider model discovery, and shell environment hydration.
-
 ## v0.1.636 (26 May, 2026)
 
 ### Composer Redesign
@@ -315,10 +301,6 @@ Entries below are grouped by release tag and date.
 
 - Replaced the standalone "New project" button in the branch toolbar with a full project dropdown menu that shows the current project name, recent threads for quick navigation, a full project switcher, and an "Add new project" option — so you can switch projects or jump to a recent thread without leaving the toolbar.
 - Tightened the branch selector chevron icon sizing for a more consistent toolbar look.
-
-### Validation
-
-- Validated this release with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused integration test coverage for multi-provider skill discovery, Cursor and OpenCode agent parsing, and JSON nested config scenarios.
 
 ## v0.1.635 (22 May, 2026)
 
@@ -359,10 +341,6 @@ Entries below are grouped by release tag and date.
 ### Developer Tooling
 
 - Removed the deprecated `--parallel` flag from the dev-runner's `MODE_ARGS` for `dev` and `dev:desktop` modes, since `persistent: true` in `turbo.json` already handles concurrent task execution and `--parallel` has been deprecated upstream.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused checks on the macOS signing and notarization workflow, dev-runner unit tests, and file access permission dialog behaviour.
 
 ## v0.1.628 (18 May, 2026)
 
@@ -405,8 +383,6 @@ Entries below are grouped by release tag and date.
 - Improved `/skills` browsing so partial command input like `/sk` now enters the skill discovery flow earlier instead of staying in the generic slash-command list.
 - Refined the `/skills` and `@agent` suggestion menus to show name, provider, and a short inline description more clearly, with a top-positioned tooltip for the full details on hover.
 
-### Validation
-
 - Added focused server, unit, and browser coverage for remote project routing, SSH reconnect and verification flows, Copilot prompt recovery, and the new realtime voice transcription handshake and error handling paths.
 - Revalidated recent work in this window with `bun fmt`, `bun lint`, targeted Vitest and browser runs, and `bun typecheck`.
 
@@ -440,8 +416,6 @@ Entries below are grouped by release tag and date.
 - Added clearer approval context, including the source chat, project, and folder, plus an explicit action to open that thread when you want to inspect it.
 - Tightened approval availability so session-level approval controls are shown only when the connected AI service actually supports them.
 - Hardened OpenCode session handling so prompts recover more gracefully from broken transport state and stream results more reliably.
-
-### Validation
 
 - Added focused unit, integration, and browser coverage for replies, thinking visibility, title generation, sidebar pinning, approvals, and OpenCode session recovery.
 - Revalidated this work with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
@@ -500,10 +474,6 @@ Entries below are grouped by release tag and date.
 - Removed the marketing download page's client-side release cache so it always fetches the latest published GitHub release metadata on load.
 - Fixed a stale-version issue where the download UI could keep showing and linking an older release like `v0.1.620` after a newer release such as `v0.1.621` had already been published.
 
-### Validation
-
-- Validated this release metadata fix with `bun fmt`, `bun lint`, and `bun typecheck`.
-
 ## v0.1.621 (11 May, 2026)
 
 ### Reliability
@@ -511,8 +481,6 @@ Entries below are grouped by release tag and date.
 - Fixed a broken OpenCode turn path where the app could emit `turn.started` and then appear to hang because the current OpenCode `promptAsync` flow returned without producing follow-up session events.
 - Switched OpenCode turn execution to a background `prompt` flow and mapped the final response back into canonical runtime events so completions, token usage, and upstream provider failures are surfaced predictably again.
 - Made the PDF extraction test self-contained by generating a valid PDF fixture instead of depending on a user-specific local file path.
-
-### Validation
 
 - Recent work in this window included validation with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`, plus focused provider verification for the OpenCode fix.
 
@@ -554,10 +522,7 @@ Entries below are grouped by release tag and date.
 - Refined OpenCode provider session handling and event mapping for better answer flow compatibility.
 - Improved Pi adapter session helpers and method handling.
 
-### Validation
-
 - Added focused tests for OpenCode event mapping, document text extraction, browser panel coordination, thread fork seed preparation, and provider command reactor handlers.
-- Validated with `bun fmt`, `bun lint`, `bun run test`, and `bun typecheck`.
 
 ## v0.1.618 (2 May, 2026)
 
@@ -580,8 +545,6 @@ Entries below are grouped by release tag and date.
 - Added a grouped annotation attachment pill in the composer, with structured annotation cards in its details view and an inline remove action that clears the linked annotation screenshots as well.
 - Updated sent user messages so annotation metadata is rendered as a compact attachment-style disclosure in chat instead of a raw block of visible prompt text.
 - Matched annotation pills in both composer and chat to the existing neutral document/file attachment styling while keeping the annotation icon blue for recognition.
-
-### Validation
 
 - Added focused unit and browser-mode tests for embedded-browser link routing, browser toolbar actions, and annotation mode lifecycle and capture helper behavior.
 - Added focused tests for composer annotation attachment styling and removal, sent-message annotation rendering, annotation prompt formatting, persisted composer annotation state, and browser-annotation parsing behavior.
@@ -662,7 +625,5 @@ Entries below are grouped by release tag and date.
 
 - Added the browser integration planning document under `docs/browser-integration-plan.md` to capture the intended Chromium/browser workflow direction.
 - Added this `docs/CHANGELOG.md` so the recent cross-branch development work has a documented narrative instead of being discoverable only through commit history.
-
-### Validation
 
 - Recent work in this window included repeated validation with `bun fmt`, `bun lint`, `bun typecheck`, and targeted Vitest coverage where behavior or provider/runtime handling changed.
