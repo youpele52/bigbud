@@ -64,6 +64,13 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-opencode-model-slug",
     example: "claude-sonnet-4-6",
   },
+  kilocode: {
+    provider: "kilocode",
+    title: "KiloCode",
+    description: "Save additional KiloCode model slugs for the picker and `/model` command.",
+    placeholder: "your-kilocode-model-slug",
+    example: "claude-sonnet-4-6",
+  },
   pi: {
     provider: "pi",
     title: "Pi",
@@ -78,9 +85,18 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-cursor-model-slug",
     example: "claude-sonnet-4-5",
   },
+  devin: {
+    provider: "devin",
+    title: "Devin",
+    description: "Save additional Devin model slugs for the picker and `/model` command.",
+    placeholder: "your-devin-model-slug",
+    example: "default",
+  },
 };
 
-export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG);
+export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG).toSorted(
+  (a, b) => a.title.localeCompare(b.title),
+);
 
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
@@ -219,6 +235,12 @@ export function getCustomModelOptionsByProvider(
       "opencode",
       selectedProvider === "opencode" ? selectedModel : undefined,
     ),
+    kilocode: getAppModelOptions(
+      settings,
+      providers,
+      "kilocode",
+      selectedProvider === "kilocode" ? selectedModel : undefined,
+    ),
     pi: getAppModelOptions(
       settings,
       providers,
@@ -230,6 +252,12 @@ export function getCustomModelOptionsByProvider(
       providers,
       "cursor",
       selectedProvider === "cursor" ? selectedModel : undefined,
+    ),
+    devin: getAppModelOptions(
+      settings,
+      providers,
+      "devin",
+      selectedProvider === "devin" ? selectedModel : undefined,
     ),
   };
 }
@@ -260,7 +288,7 @@ export function resolveAppModelSelectionState(
 
   if (provider === selection.provider) {
     const baseSelection = createModelSelection(provider, model, modelOptionsForDispatch);
-    return (provider === "opencode" || provider === "pi") &&
+    return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
       "subProviderID" in selection &&
       selection.subProviderID
       ? cloneModelSelection(baseSelection, {

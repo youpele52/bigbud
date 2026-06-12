@@ -10,23 +10,22 @@ export const PROVIDER_KINDS = [
   "codex",
   "claudeAgent",
   "copilot",
+  "kilocode",
   "opencode",
   "pi",
   "cursor",
+  "devin",
 ] as const;
 
-/**
- * Human-readable display names for each provider.
- *
- * Used in UI components, settings panels, and user-facing messages.
- */
 export const PROVIDER_DISPLAY_NAMES = {
   codex: "Codex",
   claudeAgent: "Claude",
   copilot: "Copilot",
+  kilocode: "KiloCode",
   opencode: "OpenCode",
   pi: "Pi",
   cursor: "Cursor",
+  devin: "Devin",
 } as const;
 
 /**

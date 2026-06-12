@@ -117,7 +117,9 @@ export function GitPanelChanges({
         ) : isLoadingDiff ? (
           <div className="p-4 text-sm text-muted-foreground">Loading diff...</div>
         ) : (
-          <GitPatchViewer emptyLabel="No diff available for this file." patch={diffPatch} />
+          <div className="flex h-full min-h-0 flex-col overflow-hidden">
+            <GitPatchViewer emptyLabel="No diff available for this file." patch={diffPatch} />
+          </div>
         )
       }
     />

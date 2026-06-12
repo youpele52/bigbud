@@ -49,6 +49,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
   const makeEventStamp = makeEventStampFactory(nextEventId);
 
   const deps: SessionMethodDeps = {
+    provider: PROVIDER,
     sessions,
     runtimeEventQueue,
     serverManager,

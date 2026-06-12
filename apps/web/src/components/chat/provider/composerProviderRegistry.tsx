@@ -13,6 +13,7 @@ import {
   normalizeCopilotModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
   normalizeCursorModelOptionsWithCapabilities,
+  normalizeDevinModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
 } from "@bigbud/shared/model";
@@ -68,11 +69,15 @@ function getProviderStateFromCapabilities(
         ? modelOptions?.claudeAgent
         : provider === "cursor"
           ? modelOptions?.cursor
-          : provider === "opencode"
-            ? modelOptions?.opencode
-            : provider === "pi"
-              ? modelOptions?.pi
-              : modelOptions?.copilot;
+          : provider === "devin"
+            ? modelOptions?.devin
+            : provider === "opencode"
+              ? modelOptions?.opencode
+              : provider === "kilocode"
+                ? modelOptions?.kilocode
+                : provider === "pi"
+                  ? modelOptions?.pi
+                  : modelOptions?.copilot;
   const rawEffort = providerOptions
     ? "effort" in providerOptions
       ? providerOptions.effort
@@ -94,8 +99,12 @@ function getProviderStateFromCapabilities(
     );
   } else if (provider === "cursor") {
     normalizedOptions = normalizeCursorModelOptionsWithCapabilities(caps, modelOptions?.cursor);
+  } else if (provider === "devin") {
+    normalizedOptions = normalizeDevinModelOptionsWithCapabilities(caps, modelOptions?.devin);
   } else if (provider === "opencode") {
     normalizedOptions = normalizeOpencodeModelOptionsWithCapabilities(caps, modelOptions?.opencode);
+  } else if (provider === "kilocode") {
+    normalizedOptions = normalizeOpencodeModelOptionsWithCapabilities(caps, modelOptions?.kilocode);
   } else if (provider === "pi") {
     normalizedOptions = normalizePiModelOptionsWithCapabilities(caps, modelOptions?.pi);
   } else {
@@ -247,6 +256,38 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
       />
     ),
   },
+  kilocode: {
+    getState: (input) => getProviderStateFromCapabilities(input),
+    renderTraitsMenuContent: ({
+      threadId,
+      model,
+      models,
+      modelOptions,
+      prompt,
+      onPromptChange,
+    }) => (
+      <TraitsMenuContent
+        provider="kilocode"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+      <TraitsPicker
+        provider="kilocode"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+  },
   pi: {
     getState: (input) => getProviderStateFromCapabilities(input),
     renderTraitsMenuContent: ({
@@ -302,6 +343,38 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
     renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
       <TraitsPicker
         provider="cursor"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+  },
+  devin: {
+    getState: (input) => getProviderStateFromCapabilities(input),
+    renderTraitsMenuContent: ({
+      threadId,
+      model,
+      models,
+      modelOptions,
+      prompt,
+      onPromptChange,
+    }) => (
+      <TraitsMenuContent
+        provider="devin"
+        models={models}
+        threadId={threadId}
+        model={model}
+        modelOptions={modelOptions}
+        prompt={prompt}
+        onPromptChange={onPromptChange}
+      />
+    ),
+    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
+      <TraitsPicker
+        provider="devin"
         models={models}
         threadId={threadId}
         model={model}

@@ -40,11 +40,14 @@ function makeSession(): ActiveOpencodeSession {
 function makeMapEventUnderTest() {
   let stampIndex = 0;
 
-  return makeMapEvent(Effect.succeed(EventId.makeUnsafe("evt-next")), () =>
-    Effect.succeed({
-      eventId: EventId.makeUnsafe(`evt-${++stampIndex}`),
-      createdAt: CREATED_AT,
-    }),
+  return makeMapEvent(
+    Effect.succeed(EventId.makeUnsafe("evt-next")),
+    () =>
+      Effect.succeed({
+        eventId: EventId.makeUnsafe(`evt-${++stampIndex}`),
+        createdAt: CREATED_AT,
+      }),
+    "opencode",
   );
 }
 

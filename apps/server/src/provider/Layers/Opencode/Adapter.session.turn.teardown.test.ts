@@ -44,6 +44,7 @@ it.effect("tears down broken OpenCode sessions when prompt transport fails", () 
   };
 
   const { sendTurn } = makeTurnMethods({
+    provider: "opencode",
     requireSession: () => Effect.succeed(record as never),
     syntheticEventFn: (_threadId, type, payload) =>
       Effect.succeed({

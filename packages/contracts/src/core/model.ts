@@ -46,6 +46,11 @@ export const OpencodeModelOptions = Schema.Struct({
 });
 export type OpencodeModelOptions = typeof OpencodeModelOptions.Type;
 
+export const KilocodeModelOptions = Schema.Struct({
+  reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+});
+export type KilocodeModelOptions = typeof KilocodeModelOptions.Type;
+
 export const PI_THINKING_LEVEL_OPTIONS = [
   "off",
   "minimal",
@@ -69,13 +74,23 @@ export const CursorModelOptions = Schema.Struct({
 });
 export type CursorModelOptions = typeof CursorModelOptions.Type;
 
+export const DevinModelOptions = Schema.Struct({
+  reasoning: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
+  contextWindow: Schema.optional(Schema.String),
+  fastMode: Schema.optional(Schema.Boolean),
+  thinking: Schema.optional(Schema.Boolean),
+});
+export type DevinModelOptions = typeof DevinModelOptions.Type;
+
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
   copilot: Schema.optional(CopilotModelOptions),
+  kilocode: Schema.optional(KilocodeModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),
   pi: Schema.optional(PiModelOptions),
   cursor: Schema.optional(CursorModelOptions),
+  devin: Schema.optional(DevinModelOptions),
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
 

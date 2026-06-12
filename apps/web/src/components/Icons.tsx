@@ -123,7 +123,7 @@ export const OpenAI: Icon = (props) => (
 export const ClaudeAI: Icon = (props) => (
   <svg {...props} preserveAspectRatio="xMidYMid" viewBox="0 0 256 257">
     <path
-      fill="#D97757"
+      fill="currentColor"
       d="m50.228 170.321 50.357-28.257.843-2.463-.843-1.361h-2.462l-8.426-.518-28.775-.778-24.952-1.037-24.175-1.296-6.092-1.297L0 125.796l.583-3.759 5.12-3.434 7.324.648 16.202 1.101 24.304 1.685 17.629 1.037 26.118 2.722h4.148l.583-1.685-1.426-1.037-1.101-1.037-25.147-17.045-27.22-18.017-14.258-10.37-7.713-5.25-3.888-4.925-1.685-10.758 7-7.713 9.397.649 2.398.648 9.527 7.323 20.35 15.75L94.817 91.9l3.889 3.24 1.555-1.102.195-.777-1.75-2.917-14.453-26.118-15.425-26.572-6.87-11.018-1.814-6.61c-.648-2.723-1.102-4.991-1.102-7.778l7.972-10.823L71.42 0 82.05 1.426l4.472 3.888 6.61 15.101 10.694 23.786 16.591 32.34 4.861 9.592 2.592 8.879.973 2.722h1.685v-1.556l1.36-18.211 2.528-22.36 2.463-28.776.843-8.1 4.018-9.722 7.971-5.25 6.222 2.981 5.12 7.324-.713 4.73-3.046 19.768-5.962 30.98-3.889 20.739h2.268l2.593-2.593 10.499-13.934 17.628-22.036 7.778-8.749 9.073-9.657 5.833-4.601h11.018l8.1 12.055-3.628 12.443-11.342 14.388-9.398 12.184-13.48 18.147-8.426 14.518.778 1.166 2.01-.194 30.46-6.481 16.462-2.982 19.637-3.37 8.88 4.148.971 4.213-3.5 8.62-20.998 5.184-24.628 4.926-36.682 8.685-.454.324.519.648 16.526 1.555 7.065.389h17.304l32.21 2.398 8.426 5.574 5.055 6.805-.843 5.184-12.962 6.611-17.498-4.148-40.83-9.721-14-3.5h-1.944v1.167l11.666 11.406 21.387 19.314 26.767 24.887 1.36 6.157-3.434 4.86-3.63-.518-23.526-17.693-9.073-7.972-20.545-17.304h-1.36v1.814l4.73 6.935 25.017 37.59 1.296 11.536-1.814 3.76-6.481 2.268-7.13-1.297-14.647-20.544-15.1-23.138-12.185-20.739-1.49.843-7.194 77.448-3.37 3.953-7.778 2.981-6.48-4.925-3.436-7.972 3.435-15.749 4.148-20.544 3.37-16.333 3.046-20.285 1.815-6.74-.13-.454-1.49.194-15.295 20.999-23.267 31.433-18.406 19.702-4.407 1.75-7.648-3.954.713-7.064 4.277-6.286 25.47-32.405 15.36-20.092 9.917-11.6-.065-1.686h-.583L44.07 198.125l-12.055 1.555-5.185-4.86.648-7.972 2.463-2.593 20.35-13.999-.064.065Z"
     />
   </svg>
@@ -138,6 +138,27 @@ export const AntigravityIcon: Icon = (props) => (
   </svg>
 );
 
+export const DevinIcon: Icon = (props) => {
+  const id = Math.random().toString(36).slice(2);
+  const maskId = `${id}-devin-logo-mask`;
+
+  return (
+    <svg {...props} viewBox="0 0 96 96" fill="none">
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="96">
+          <rect width="96" height="96" fill="black" />
+          <path d="M24 8L42 18V38L24 48L6 38V18L24 8Z" fill="white" />
+          <path d="M68 28L86 38V58L68 68L50 58V38L68 28Z" fill="white" />
+          <path d="M24 48L42 58V78L24 88L6 78V58L24 48Z" fill="white" />
+          <circle cx="44" cy="48" r="9.5" fill="black" />
+          <circle cx="52" cy="48" r="9.5" fill="black" />
+        </mask>
+      </defs>
+      <rect width="96" height="96" fill="currentColor" mask={`url(#${maskId})`} />
+    </svg>
+  );
+};
+
 export const OpenCodeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
     <g clipPath="url(#opencode__clip0_1311_94969)">
@@ -151,6 +172,25 @@ export const OpenCodeIcon: Icon = (props) => (
     </defs>
   </svg>
 );
+
+const KILOCODE_ICON_DATA_URL =
+  "data:image/png;base64,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";
+
+export const KilocodeIcon: Icon = (props) => {
+  const id = Math.random().toString(36).slice(2);
+  const maskId = `${id}-kilocode-logo-mask`;
+
+  return (
+    <svg {...props} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+          <image href={KILOCODE_ICON_DATA_URL} width="64" height="64" />
+        </mask>
+      </defs>
+      <rect width="64" height="64" fill="currentColor" mask={`url(#${maskId})`} />
+    </svg>
+  );
+};
 
 export const PiIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 800 800" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -30,7 +30,7 @@ interface AcpSessionRuntimeStartDeps {
       readonly name: string;
       readonly version: string;
     };
-    readonly authMethodId: string;
+    readonly authMethodId?: string;
     readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   };
   readonly acp: {
@@ -93,15 +93,18 @@ export function makeStartMethods(
       deps.acp.agent.initialize(initializePayload),
     );
 
-    const authenticatePayload = {
-      methodId: deps.options.authMethodId,
-    } satisfies EffectAcpSchema.AuthenticateRequest;
+    const authMethodId = resolveAuthMethodId(initializeResult, deps.options.authMethodId);
+    if (authMethodId) {
+      const authenticatePayload = {
+        methodId: authMethodId,
+      } satisfies EffectAcpSchema.AuthenticateRequest;
 
-    yield* runLoggedRequest(
-      "authenticate",
-      authenticatePayload,
-      deps.acp.agent.authenticate(authenticatePayload),
-    );
+      yield* runLoggedRequest(
+        "authenticate",
+        authenticatePayload,
+        deps.acp.agent.authenticate(authenticatePayload),
+      );
+    }
 
     const { sessionId, sessionSetupResult } = yield* loadOrCreateSession(deps, runLoggedRequest);
     yield* Ref.set(deps.modeStateRef, parseSessionModeState(sessionSetupResult));
@@ -145,6 +148,19 @@ export function makeStartMethods(
   });
 
   return { start };
+}
+
+function resolveAuthMethodId(
+  initializeResult: EffectAcpSchema.InitializeResponse,
+  preferredAuthMethodId: string | undefined,
+): string | undefined {
+  if (!preferredAuthMethodId) {
+    return undefined;
+  }
+  const authMethods = initializeResult.authMethods ?? [];
+  return (
+    authMethods.find((method) => method.id === preferredAuthMethodId)?.id ?? authMethods[0]?.id
+  );
 }
 
 function sessionConfigOptionsFromSetup(

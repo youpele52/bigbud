@@ -13,7 +13,7 @@ import {
 import { ProviderAdapterRequestError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
 import { toMessage } from "./Adapter.stream.ts";
-import { isOpencodeModelSelection, resolveProviderIDForModel } from "./Adapter.session.helpers.ts";
+import { isProviderModelSelection, resolveProviderIDForModel } from "./Adapter.session.helpers.ts";
 import {
   isOpencodeTransportFailure,
   sendPromptAsyncAndWaitForCompletion,
@@ -21,13 +21,11 @@ import {
   type PromptResultPart,
   type StreamedPromptDelta,
 } from "./Adapter.session.prompt.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import { toPromptTurnEvents } from "./Adapter.session.turn.sendTurn.events.ts";
-
 import type { TurnMethodDeps } from "./Adapter.session.ts";
 
 export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["sendTurn"] {
-  const { requireSession, syntheticEventFn, emitFn, teardownSessionRecord } = deps;
+  const { provider, requireSession, syntheticEventFn, emitFn, teardownSessionRecord } = deps;
 
   return (input) =>
     Effect.gen(function* () {
@@ -35,7 +33,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       const effectServices = yield* Effect.services();
       const runPromise = Effect.runPromiseWith(effectServices);
 
-      if (isOpencodeModelSelection(input.modelSelection)) {
+      if (isProviderModelSelection(input.modelSelection, provider)) {
         record.model = input.modelSelection.model;
         const selectionProviderID =
           "subProviderID" in input.modelSelection
@@ -82,7 +80,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
               });
         if (!sourcePath) {
           return yield* new ProviderAdapterRequestError({
-            provider: PROVIDER,
+            provider,
             method: "session.prompt",
             detail: `Invalid attachment id '${attachment.id}'.`,
           });
@@ -98,9 +96,9 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
               }),
             catch: (cause) =>
               new ProviderAdapterRequestError({
-                provider: PROVIDER,
+                provider,
                 method: "session.prompt",
-                detail: `Failed to extract text from file attachment '${attachment.name}' for OpenCode.`,
+                detail: `Failed to extract text from file attachment '${attachment.name}' for ${provider}.`,
                 cause,
               }),
           });
@@ -136,9 +134,9 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       if (record.model && !record.providerID) {
         record.activeTurnId = undefined;
         return yield* new ProviderAdapterValidationError({
-          provider: PROVIDER,
+          provider,
           operation: "sendTurn",
-          issue: `Unable to resolve OpenCode provider for model '${record.model}'.`,
+          issue: `Unable to resolve ${provider} provider for model '${record.model}'.`,
         });
       }
 
@@ -179,9 +177,9 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
             }),
           catch: (cause) =>
             new ProviderAdapterRequestError({
-              provider: PROVIDER,
+              provider,
               method: "session.prompt",
-              detail: toMessage(cause, "Failed to send OpenCode turn."),
+              detail: toMessage(cause, `Failed to send ${provider} turn.`),
               cause,
             }),
         });
@@ -204,7 +202,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
       }).pipe(
         Effect.catch((error) =>
           Effect.gen(function* () {
-            const errorMessage = toMessage(error, "Failed to send OpenCode turn.");
+            const errorMessage = toMessage(error, `Failed to send ${provider} turn.`);
             record.lastError = errorMessage;
             record.activeTurnId = undefined;
             record.updatedAt = new Date().toISOString();

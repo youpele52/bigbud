@@ -59,6 +59,7 @@ export const logNativeEvent = Effect.fn("logNativeEvent")(function* (
 export function makeSyntheticEventFn(
   nextEventId: Effect.Effect<EventId>,
   makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>,
+  provider: import("@bigbud/contracts").ProviderKind,
 ) {
   const fn = <TType extends ProviderRuntimeEvent["type"]>(
     threadId: import("@bigbud/contracts").ThreadId,
@@ -73,6 +74,7 @@ export function makeSyntheticEventFn(
           eventId: stamp.eventId,
           createdAt: stamp.createdAt,
           threadId,
+          provider,
           ...(extra?.turnId ? { turnId: extra.turnId } : {}),
           ...(extra?.itemId ? { itemId: extra.itemId } : {}),
           ...(extra?.requestId ? { requestId: extra.requestId } : {}),

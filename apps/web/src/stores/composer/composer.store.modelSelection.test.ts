@@ -1,5 +1,6 @@
-import { ThreadId } from "@bigbud/contracts";
+import { DEFAULT_UNIFIED_SETTINGS, ThreadId, type ServerProvider } from "@bigbud/contracts";
 import { beforeEach, describe, expect, it } from "vitest";
+import { deriveEffectiveComposerModelState } from "./composer.store";
 import { useComposerDraftStore } from "./composer.store";
 import { normalizeCurrentPersistedComposerDraftStoreState } from "./migration.store";
 import {
@@ -356,5 +357,34 @@ describe("composerDraftStore setModelSelection", () => {
     expect(
       useComposerDraftStore.getState().draftsByThreadId[threadId]?.modelSelectionByProvider.codex,
     ).toEqual(modelSelection("codex", "gpt-5.3-codex"));
+  });
+
+  it("does not carry a previous provider model across provider fallback", () => {
+    const providers = [
+      {
+        provider: "codex",
+        enabled: true,
+        installed: true,
+        version: "1.0.0",
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: "2026-01-01T00:00:00.000Z",
+        message: undefined,
+        models: [{ slug: "gpt-5.4", name: "GPT-5.4", isCustom: false, capabilities: null }],
+        slashCommands: [],
+        skills: [],
+      },
+    ] satisfies ReadonlyArray<ServerProvider>;
+
+    const result = deriveEffectiveComposerModelState({
+      draft: null,
+      providers,
+      selectedProvider: "codex",
+      threadModelSelection: { provider: "devin", model: "default" },
+      projectModelSelection: null,
+      settings: DEFAULT_UNIFIED_SETTINGS,
+    });
+
+    expect(result.selectedModel).toBe("gpt-5.4");
   });
 });

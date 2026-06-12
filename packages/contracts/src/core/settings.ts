@@ -7,11 +7,13 @@ import {
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  DevinModelOptions,
+  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
 import { ModelSelection } from "../orchestration/orchestration";
+import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -51,12 +53,18 @@ export const TERMINAL_FONT_FAMILIES = ["meslo-nerd-font-mono", "system-monospace
 export const TERMINAL_FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18] as const;
 export const TERMINAL_FONT_SIZE_MIN = TERMINAL_FONT_SIZES[0];
 export const TERMINAL_FONT_SIZE_MAX = 18;
+export const CONTEXT_WINDOW_WARNING_THRESHOLD_MIN = 60_000;
+export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
+export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
 const TerminalFontSize = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(TERMINAL_FONT_SIZE_MIN),
 ).check(Schema.isLessThanOrEqualTo(TERMINAL_FONT_SIZE_MAX));
+const ContextWindowWarningThreshold = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MIN),
+).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
@@ -76,6 +84,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(() => "meslo-nerd-font-mono" as const satisfies TerminalFontFamily),
   ),
   terminalFontSize: TerminalFontSize.pipe(Schema.withDecodingDefault(() => 12)),
+  contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(
+    Schema.withDecodingDefault(() => DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD),
+  ),
   enableTaskCompletionToasts: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(
     Schema.withDecodingDefault(() => true),
@@ -137,6 +148,13 @@ export const OpencodeSettings = Schema.Struct({
 });
 export type OpencodeSettings = typeof OpencodeSettings.Type;
 
+export const KilocodeSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("kilo"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type KilocodeSettings = typeof KilocodeSettings.Type;
+
 export const PiSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("pi"),
@@ -151,6 +169,13 @@ export const CursorSettings = Schema.Struct({
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
 });
 export type CursorSettings = typeof CursorSettings.Type;
+
+export const DevinSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  binaryPath: makeBinaryPathSetting("devin"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type DevinSettings = typeof DevinSettings.Type;
 
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
@@ -180,9 +205,11 @@ export const ServerSettings = Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
@@ -233,6 +260,10 @@ const OpencodeModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(OpencodeModelOptions.fields.reasoningEffort),
 });
 
+const KilocodeModelOptionsPatch = Schema.Struct({
+  reasoningEffort: Schema.optionalKey(KilocodeModelOptions.fields.reasoningEffort),
+});
+
 const PiModelOptionsPatch = Schema.Struct({
   thinkingLevel: Schema.optionalKey(PiModelOptions.fields.thinkingLevel),
 });
@@ -242,6 +273,13 @@ const CursorModelOptionsPatch = Schema.Struct({
   contextWindow: Schema.optionalKey(CursorModelOptions.fields.contextWindow),
   fastMode: Schema.optionalKey(CursorModelOptions.fields.fastMode),
   thinking: Schema.optionalKey(CursorModelOptions.fields.thinking),
+});
+
+const DevinModelOptionsPatch = Schema.Struct({
+  reasoning: Schema.optionalKey(DevinModelOptions.fields.reasoning),
+  contextWindow: Schema.optionalKey(DevinModelOptions.fields.contextWindow),
+  fastMode: Schema.optionalKey(DevinModelOptions.fields.fastMode),
+  thinking: Schema.optionalKey(DevinModelOptions.fields.thinking),
 });
 
 const ModelSelectionPatch = Schema.Union([
@@ -266,6 +304,11 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(OpencodeModelOptionsPatch),
   }),
   Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("kilocode")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(KilocodeModelOptionsPatch),
+  }),
+  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("pi")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(PiModelOptionsPatch),
@@ -274,6 +317,11 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("cursor")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(CursorModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("devin")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(DevinModelOptionsPatch),
   }),
 ]);
 
@@ -302,6 +350,12 @@ const OpencodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const KilocodeSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
 const PiSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
@@ -312,6 +366,12 @@ const CursorSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   apiEndpoint: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const DevinSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
@@ -335,9 +395,11 @@ export const ServerSettingsPatch = Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
       copilot: Schema.optionalKey(CopilotSettingsPatch),
+      kilocode: Schema.optionalKey(KilocodeSettingsPatch),
       opencode: Schema.optionalKey(OpencodeSettingsPatch),
       pi: Schema.optionalKey(PiSettingsPatch),
       cursor: Schema.optionalKey(CursorSettingsPatch),
+      devin: Schema.optionalKey(DevinSettingsPatch),
     }),
   ),
 });

@@ -12,6 +12,7 @@
 import {
   ApprovalRequestId,
   ThreadId,
+  type ProviderKind,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
   type EventId,
@@ -22,7 +23,6 @@ import { ProviderAdapterSessionNotFoundError } from "../../Errors.ts";
 import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerManager.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
-import { PROVIDER } from "./Adapter.types.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
 import {
   FULL_ACCESS_AUTO_APPROVE_AFTER_MS,
@@ -35,8 +35,11 @@ import { makeStartSession } from "./Adapter.session.start.ts";
 
 // ── Shared dep interfaces (used by sub-modules) ───────────────────────
 
+type NarrowProvider = Extract<ProviderKind, "opencode" | "kilocode">;
+
 /** Deps required by turn methods. */
 export interface TurnMethodDeps {
+  readonly provider: NarrowProvider;
   readonly requireSession: (
     threadId: ThreadId,
   ) => Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError>;
@@ -48,6 +51,7 @@ export interface TurnMethodDeps {
 
 /** Deps required by query/stop methods. */
 export interface QueryMethodDeps {
+  readonly provider: NarrowProvider;
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
   readonly requireSession: (
     threadId: ThreadId,
@@ -59,6 +63,7 @@ export interface QueryMethodDeps {
 // ── Top-level deps ────────────────────────────────────────────────────
 
 export interface SessionMethodDeps {
+  readonly provider: NarrowProvider;
   readonly sessions: Map<ThreadId, ActiveOpencodeSession>;
   readonly runtimeEventQueue: Queue.Queue<ProviderRuntimeEvent>;
   readonly serverManager: OpencodeServerManagerShape;
@@ -74,6 +79,7 @@ export interface SessionMethodDeps {
 
 export function makeSessionMethods(deps: SessionMethodDeps) {
   const {
+    provider,
     sessions,
     runtimeEventQueue,
     serverManager,
@@ -88,24 +94,25 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
   const emitFn = (events: ReadonlyArray<ProviderRuntimeEvent>) =>
     Queue.offerAll(runtimeEventQueue, events).pipe(Effect.asVoid);
 
-  const syntheticEventFn = makeSyntheticEventFn(nextEventId, makeEventStamp);
+  const syntheticEventFn = makeSyntheticEventFn(nextEventId, makeEventStamp, provider);
   const requireSession = (
     threadId: ThreadId,
   ): Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError> => {
     const session = sessions.get(threadId);
     return session
       ? Effect.succeed(session)
-      : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }));
+      : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider, threadId }));
   };
 
   const queryDeps = {
+    provider,
     sessions,
     requireSession,
     syntheticEventFn,
     emitFn,
   } satisfies QueryMethodDeps;
 
-  const stopSessionRecord = makeStopSessionRecord(sessions);
+  const stopSessionRecord = makeStopSessionRecord(sessions, provider);
   const teardownSessionRecord = (record: ActiveOpencodeSession) =>
     stopSessionRecord(record).pipe(
       Effect.catch(() =>
@@ -120,6 +127,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     );
 
   const turnMethodDeps: TurnMethodDeps = {
+    provider,
     requireSession,
     syntheticEventFn,
     emitFn,
@@ -194,11 +202,13 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     nativeEventLogger,
     emitFn,
     scheduleAutoApprovePendingPermission,
+    provider,
   );
 
   // ── startSession ──────────────────────────────────────────────────
 
   const startSession = makeStartSession({
+    provider,
     sessions,
     serverManager,
     serverSettings,

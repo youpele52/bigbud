@@ -23,4 +23,5 @@ __screenshots__/
 .tanstack
 .codex-snapshots/
 docs/ideas/
+docs/handoff/
 build-certs/

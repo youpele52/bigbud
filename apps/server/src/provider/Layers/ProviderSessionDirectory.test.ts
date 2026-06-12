@@ -210,6 +210,46 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       }
     }));
 
+  it("accepts persisted devin bindings", () =>
+    Effect.gen(function* () {
+      const directory = yield* ProviderSessionDirectory;
+      const threadId = ThreadId.makeUnsafe("thread-devin");
+
+      yield* directory.upsert({
+        provider: "devin",
+        threadId,
+      });
+
+      const provider = yield* directory.getProvider(threadId);
+      assert.equal(provider, "devin");
+
+      const binding = yield* directory.getBinding(threadId);
+      assert.equal(Option.isSome(binding), true);
+      if (Option.isSome(binding)) {
+        assert.equal(binding.value.provider, "devin");
+      }
+    }));
+
+  it("accepts persisted kilocode bindings", () =>
+    Effect.gen(function* () {
+      const directory = yield* ProviderSessionDirectory;
+      const threadId = ThreadId.makeUnsafe("thread-kilocode");
+
+      yield* directory.upsert({
+        provider: "kilocode",
+        threadId,
+      });
+
+      const provider = yield* directory.getProvider(threadId);
+      assert.equal(provider, "kilocode");
+
+      const binding = yield* directory.getBinding(threadId);
+      assert.equal(Option.isSome(binding), true);
+      if (Option.isSome(binding)) {
+        assert.equal(binding.value.provider, "kilocode");
+      }
+    }));
+
   it("rehydrates persisted mappings across layer restart", () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-directory-"));
