@@ -216,7 +216,7 @@ export function RightPanelTabs({
               key={tabId}
               draggable
               className={cn(
-                "group relative grid h-9 w-[168px] max-w-[168px] shrink-0 grid-cols-[24px_minmax(0,1fr)_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
+                "group relative grid h-9 w-[145px] max-w-[145px] shrink-0 grid-cols-[24px_minmax(0,1fr)_24px] items-center rounded-t-xl border border-b-0 px-1.5 text-xs shadow-sm",
                 index > 0 && "-ml-px",
                 isActive
                   ? "-mb-px border-border bg-background text-foreground"
