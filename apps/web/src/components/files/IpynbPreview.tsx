@@ -1,5 +1,5 @@
 import { AlertCircleIcon, XIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { cn } from "~/lib/utils";
@@ -50,6 +50,10 @@ function buildBreadcrumb(projectName: string | undefined, cwd: string, relativeP
   }));
 }
 
+function notebookSizerCellKey(source: string, executionCount: number | null | undefined) {
+  return `${executionCount ?? "none"}:${source}`;
+}
+
 export const IpynbPreview = memo(function IpynbPreview({
   cwd,
   relativePath,
@@ -65,7 +69,10 @@ export const IpynbPreview = memo(function IpynbPreview({
     executionTargetId,
   });
   const [selectedRange, setSelectedRange] = useState<LineRange | null>(null);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const [codeCellWidth, setCodeCellWidth] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
 
@@ -79,6 +86,18 @@ export const IpynbPreview = memo(function IpynbPreview({
     executionTargetId,
     refreshPreview,
   });
+
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     setSelectedRange(null);
@@ -165,8 +184,57 @@ export const IpynbPreview = memo(function IpynbPreview({
     );
   }, [selectedRange, onCreateAnnotation, selectedFlatText]);
 
+  const measureSizer = useMemo(() => {
+    if (!notebook) return null;
+    const codeCells = notebook.cells.filter((c) => c.cell_type === "code");
+    if (codeCells.length === 0) return null;
+
+    return (
+      <div ref={measureRef} aria-hidden="true" className="absolute invisible top-0 left-0 w-max">
+        {codeCells.map((cell) => {
+          const source = cellSource(cell);
+          return (
+            <div
+              key={notebookSizerCellKey(source, cell.execution_count)}
+              className="notebook-cell-code w-full"
+            >
+              <div className="rounded-md w-full">
+                <div className="w-full bg-muted/50 px-16 py-8">
+                  <SyntaxHighlightedCode
+                    code={source}
+                    language={language}
+                    themeName={themeName}
+                    bgTransparent
+                    fallback={
+                      <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85 whitespace-pre">
+                        {source}
+                      </pre>
+                    }
+                  />
+                </div>
+                <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
+                  <span className="text-xs text-muted-foreground/60 font-mono">{language}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }, [notebook, language, themeName]);
+
+  useLayoutEffect(() => {
+    if (!measureRef.current) {
+      setCodeCellWidth(null);
+      return;
+    }
+    const w = measureRef.current.scrollWidth;
+    if (w > 0) setCodeCellWidth(w);
+  }, [measureSizer]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
+      {measureSizer}
       <div className="flex items-center gap-2 border-b border-border px-2 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs">
@@ -214,7 +282,7 @@ export const IpynbPreview = memo(function IpynbPreview({
               Notebook truncated. Content may be incomplete.
             </div>
           ) : null}
-          <div className="notebook-cells space-y-4 p-4">
+          <div className="notebook-cells min-w-full space-y-4 p-4">
             {notebook.cells.map((cell, cellIndex) => {
               const cellKey = `cell-${cellIndex}`;
               if (cell.cell_type === "markdown") {
@@ -222,6 +290,7 @@ export const IpynbPreview = memo(function IpynbPreview({
                   <div
                     key={cellKey}
                     className="notebook-cell-markdown text-sm leading-relaxed text-foreground/80"
+                    style={containerWidth != null ? { maxWidth: containerWidth } : undefined}
                     {...(onCreateAnnotation ? { onContextMenu: handleNotebookContextMenu } : {})}
                   >
                     <BaseMarkdown text={cellSource(cell)} cwd={cwd} />
@@ -233,7 +302,7 @@ export const IpynbPreview = memo(function IpynbPreview({
                 return (
                   <pre
                     key={cellKey}
-                    className="notebook-cell-raw m-0 whitespace-pre-wrap font-mono text-xs leading-5 text-foreground/70"
+                    className="notebook-cell-raw m-0 whitespace-pre-wrap font-mono text-xs leading-5 text-foreground/70 min-w-0"
                     {...(onCreateAnnotation ? { onContextMenu: handleNotebookContextMenu } : {})}
                   >
                     {cellSource(cell)}
@@ -249,10 +318,14 @@ export const IpynbPreview = memo(function IpynbPreview({
                 const hasAnnotation = onCreateAnnotation != null;
 
                 return (
-                  <div key={cellKey} className="notebook-cell-code">
-                    <div className="rounded-md overflow-hidden">
+                  <div
+                    key={cellKey}
+                    className="notebook-cell-code"
+                    style={codeCellWidth != null ? { width: codeCellWidth } : undefined}
+                  >
+                    <div className="rounded-md w-full">
                       <div
-                        className="min-w-0 bg-muted/50 px-16 py-8"
+                        className="w-full bg-muted/50 px-16 py-8"
                         {...(hasAnnotation ? { onContextMenu: handleNotebookContextMenu } : {})}
                       >
                         <SyntaxHighlightedCode
@@ -261,13 +334,13 @@ export const IpynbPreview = memo(function IpynbPreview({
                           themeName={themeName}
                           bgTransparent
                           fallback={
-                            <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85">
+                            <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85 whitespace-pre">
                               {source}
                             </pre>
                           }
                         />
                       </div>
-                      <div className="flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
+                      <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
                         <span className="text-xs text-muted-foreground/60 font-mono">
                           {language}
                         </span>

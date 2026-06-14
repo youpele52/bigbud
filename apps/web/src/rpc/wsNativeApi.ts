@@ -84,6 +84,8 @@ export function createWsNativeApi(): NativeApi {
     },
     git: {
       pull: rpcClient.git.pull,
+      fetch: rpcClient.git.fetch,
+      discardChanges: rpcClient.git.discardChanges,
       refreshStatus: rpcClient.git.refreshStatus,
       listCommits: rpcClient.git.listCommits,
       getCommitDetails: rpcClient.git.getCommitDetails,

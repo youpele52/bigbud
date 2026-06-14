@@ -104,9 +104,12 @@ export function getMenuActionDisabledReason({
 
   const hasBranch = gitStatus.branch !== null;
   const hasChanges = gitStatus.hasWorkingTreeChanges;
-  const hasOpenPr = gitStatus.pr?.state === "open";
   const isAhead = gitStatus.aheadCount > 0;
   const isBehind = gitStatus.behindCount > 0;
+
+  if (item.id === "initialize_git") {
+    return "Initializing Git...";
+  }
 
   if (item.id === "commit") {
     return hasChanges
@@ -123,12 +126,24 @@ export function getMenuActionDisabledReason({
     return "Push is currently unavailable.";
   }
 
-  if (hasOpenPr) return "View PR is currently unavailable.";
-  if (!hasBranch) return "Detached HEAD: checkout a branch before creating a PR.";
-  if (hasChanges) return "Commit local changes before creating a PR.";
-  if (!gitStatus.hasUpstream && !hasOriginRemote)
-    return 'Add an "origin" remote before creating a PR.';
-  if (!isAhead) return "No local commits to include in a PR.";
-  if (isBehind) return "Branch is behind upstream. Pull/rebase before creating a PR.";
-  return "Create PR is currently unavailable.";
+  if (item.id === "pull") {
+    if (!hasBranch) return "Detached HEAD: checkout a branch before pulling.";
+    if (hasChanges) return "Commit or stash local changes before pulling.";
+    if (!isBehind) return "Branch is up to date. Nothing to pull.";
+    if (!gitStatus.hasUpstream && !hasOriginRemote) return 'Add an "origin" remote before pulling.';
+    return "Pull is currently unavailable.";
+  }
+
+  if (item.id === "fetch") {
+    if (!hasOriginRemote) return 'Add an "origin" remote before fetching.';
+    return "Fetch is currently unavailable.";
+  }
+
+  if (item.id === "discard_changes") {
+    return hasChanges
+      ? "Discard changes is currently unavailable."
+      : "Worktree is clean. Nothing to discard.";
+  }
+
+  return null;
 }

@@ -2,12 +2,21 @@ import { useSettings } from "~/hooks/useSettings";
 import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
+import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 
 export const ContextWindowWarningBanner = memo(function ContextWindowWarningBanner({
   usage,
+  handoffAvailable,
+  compactAvailable,
+  onUseHandoff,
+  onCompact,
 }: {
   usage: ContextWindowSnapshot | null;
+  handoffAvailable: boolean;
+  compactAvailable: boolean;
+  onUseHandoff: () => void;
+  onCompact: () => void;
 }) {
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
@@ -37,6 +46,12 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
         <AlertDescription>
           Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
           tokens. Consider using a handoff skill or /compact.
+          <ContextWindowRecoveryActions
+            handoffAvailable={handoffAvailable}
+            compactAvailable={compactAvailable}
+            onUseHandoff={onUseHandoff}
+            onCompact={onCompact}
+          />
         </AlertDescription>
         <AlertAction>
           <button

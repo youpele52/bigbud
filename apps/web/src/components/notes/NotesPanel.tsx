@@ -4,7 +4,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
 import { Textarea } from "~/components/ui/textarea";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
-import { AnnotationComposerPanel } from "~/components/annotations/AnnotationComposerPanel";
+import {
+  AnnotationComposerPanel,
+  formatAnnotationTargetLabel,
+} from "~/components/annotations/AnnotationComposerPanel";
 import { useComposerDraftStore } from "~/stores/composer";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useDefaultChatCwd } from "~/rpc/serverState";
@@ -610,14 +613,9 @@ export const NotesPanelContent = memo(function NotesPanelContent({
               />
             )}
             {annotationRange && activeThreadId ? (
-              <div className="sticky bottom-3 mx-auto mt-3 w-[min(36rem,calc(100%-1.5rem))]">
+              <div className="sticky bottom-3 mx-auto mt-3">
                 <AnnotationComposerPanel
-                  title="Note annotation"
-                  targetLabel={
-                    annotationRange.startLine === annotationRange.endLine
-                      ? `Line ${annotationRange.startLine}`
-                      : `Lines ${annotationRange.startLine}-${annotationRange.endLine}`
-                  }
+                  targetLabel={formatAnnotationTargetLabel(annotationRange)}
                   onCancel={() => setAnnotationRange(null)}
                   onSubmit={handleCreateAnnotation}
                 />

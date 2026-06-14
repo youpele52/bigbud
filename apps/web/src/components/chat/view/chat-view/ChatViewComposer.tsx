@@ -260,6 +260,27 @@ export function ChatViewComposer({
     [base, interactions],
   );
 
+  const onUseHandoffFromMeter = useCallback(() => {
+    const nextPrompt = "/skills handoff";
+    base.promptRef.current = nextPrompt;
+    base.setPrompt(nextPrompt);
+    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+    interactions.onSend();
+  }, [base, interactions]);
+
+  const onCompactFromMeter = useCallback(() => {
+    const nextPrompt = "/compact";
+    base.promptRef.current = nextPrompt;
+    base.setPrompt(nextPrompt);
+    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+    interactions.onSend();
+  }, [base, interactions]);
+
+  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const compactAvailable = composer.supportsCompact;
+
   return (
     <form
       ref={base.composerFormRef}
@@ -437,7 +458,13 @@ export function ChatViewComposer({
                 ) : (
                   <>
                     {thread.activeContextWindow ? (
-                      <ContextWindowMeter usage={thread.activeContextWindow} />
+                      <ContextWindowMeter
+                        usage={thread.activeContextWindow}
+                        handoffAvailable={handoffAvailable}
+                        compactAvailable={compactAvailable}
+                        onUseHandoff={onUseHandoffFromMeter}
+                        onCompact={onCompactFromMeter}
+                      />
                     ) : null}
                     {thread.isPreparingWorktree ? (
                       <span className="text-muted-foreground/70 text-xs">

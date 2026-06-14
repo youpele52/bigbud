@@ -7,11 +7,16 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { providerSupportsSubProviderID } from "../ChatView.modelSelection.logic";
 import { useThreadActions } from "~/hooks/useThreadActions";
+import { dispatchHandoffSkillTurn, HandoffError, waitForHandoffSummary } from "~/lib/handoff";
+import { newMessageId } from "~/lib/utils";
+import { toastManager } from "~/components/ui/toast";
 
 export interface PendingProviderSwitchConfirmation {
   targetLabel: string;
   nextModelSelection: ModelSelection;
 }
+
+export type ProviderSwitchBranchMode = "handoff" | "conversation";
 
 interface UseChatViewProviderSwitchInput {
   base: ChatViewBaseState;
@@ -41,6 +46,9 @@ export function useChatViewProviderSwitch({
 }: UseChatViewProviderSwitchInput) {
   const [pendingProviderSwitchConfirmation, setPendingProviderSwitchConfirmation] =
     useState<PendingProviderSwitchConfirmation | null>(null);
+  const [branchMode, setBranchMode] = useState<ProviderSwitchBranchMode>("handoff");
+  const [isGeneratingHandoff, setIsGeneratingHandoff] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const { branchThread } = useThreadActions();
 
   const branchThreadForProviderChange = useCallback(
@@ -59,6 +67,61 @@ export function useChatViewProviderSwitch({
         base.setStickyComposerModelSelection(nextModelSelection);
       }
 
+      runtime.scheduleComposerFocus();
+    },
+    [base, branchThread, runtime],
+  );
+
+  const branchThreadWithHandoff = useCallback(
+    async (nextModelSelection: ModelSelection) => {
+      if (!base.activeThread || !base.isServerThread) {
+        runtime.scheduleComposerFocus();
+        return;
+      }
+
+      setIsGeneratingHandoff(true);
+      setHandoffError(null);
+
+      try {
+        await dispatchHandoffSkillTurn({
+          threadId: base.activeThread.id,
+          runtimeMode: base.activeThread.runtimeMode,
+          interactionMode: base.activeThread.interactionMode,
+        });
+        const handoffSummary = await waitForHandoffSummary(base.activeThread.id);
+        const handoffSeedMessage = {
+          id: newMessageId(),
+          role: "assistant" as const,
+          text: handoffSummary,
+          turnId: null,
+          streaming: false as const,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        const branchedThreadId = await branchThread(base.activeThread.id, {
+          modelSelection: nextModelSelection,
+          navigateToBranch: true,
+          seedMessages: [handoffSeedMessage],
+        });
+
+        if (branchedThreadId) {
+          base.setStickyComposerModelSelection(nextModelSelection);
+        }
+      } catch (err) {
+        const message = err instanceof HandoffError ? err.message : "Could not generate handoff.";
+        setHandoffError(message);
+        toastManager.add({
+          type: "error",
+          title: "Handoff failed",
+          description: message,
+        });
+        setIsGeneratingHandoff(false);
+        return;
+      }
+
+      setIsGeneratingHandoff(false);
+      setPendingProviderSwitchConfirmation(null);
       runtime.scheduleComposerFocus();
     },
     [base, branchThread, runtime],
@@ -92,6 +155,8 @@ export function useChatViewProviderSwitch({
         composer.hasThreadStarted && boundProvider !== null && resolvedProvider !== boundProvider;
 
       if (shouldBranchOnProviderChange) {
+        setBranchMode("handoff");
+        setHandoffError(null);
         setPendingProviderSwitchConfirmation({
           targetLabel: providerSwitchTargetLabel(resolvedProvider),
           nextModelSelection,
@@ -113,17 +178,34 @@ export function useChatViewProviderSwitch({
     }
 
     const nextModelSelection = pendingProviderSwitchConfirmation.nextModelSelection;
-    setPendingProviderSwitchConfirmation(null);
-    void branchThreadForProviderChange(nextModelSelection);
-  }, [branchThreadForProviderChange, pendingProviderSwitchConfirmation]);
+
+    if (branchMode === "conversation") {
+      setPendingProviderSwitchConfirmation(null);
+      void branchThreadForProviderChange(nextModelSelection);
+      return;
+    }
+
+    void branchThreadWithHandoff(nextModelSelection);
+  }, [
+    branchMode,
+    branchThreadForProviderChange,
+    branchThreadWithHandoff,
+    pendingProviderSwitchConfirmation,
+  ]);
 
   const onDismissPendingProviderSwitch = useCallback(() => {
     setPendingProviderSwitchConfirmation(null);
+    setHandoffError(null);
+    setIsGeneratingHandoff(false);
     runtime.scheduleComposerFocus();
   }, [runtime]);
 
   return {
     pendingProviderSwitchConfirmation,
+    branchMode,
+    setBranchMode,
+    isGeneratingHandoff,
+    handoffError,
     onProviderModelSelect,
     onConfirmPendingProviderSwitch,
     onDismissPendingProviderSwitch,

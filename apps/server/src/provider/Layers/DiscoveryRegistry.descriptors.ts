@@ -1,12 +1,17 @@
 import * as OS from "node:os";
 
-import type { ProviderKind, ServerDiscoveredAgent, ServerSettings } from "@bigbud/contracts";
+import type {
+  ServerDiscoveredAgent,
+  ServerDiscoveryProviderLabel,
+  ServerSettings,
+} from "@bigbud/contracts";
 import type { Path } from "effect";
 
 type DiscoverySource = ServerDiscoveredAgent["source"];
+type DiscoveryProviderLabel = ServerDiscoveryProviderLabel;
 
 export interface DiscoveryFileDescriptor {
-  readonly provider: ProviderKind;
+  readonly provider: DiscoveryProviderLabel;
   readonly kind: "agent" | "skill";
   readonly source: DiscoverySource;
   readonly path: string;
@@ -282,6 +287,18 @@ export function buildDiscoveryFileDescriptors(input: {
       kind: "skill",
       source: "user",
       path: input.path.join(OS.homedir(), ".agents/skills"),
+    },
+    {
+      provider: "bigbud",
+      kind: "skill",
+      source: "project",
+      path: input.path.join(input.cwd, ".bigbud/skills"),
+    },
+    {
+      provider: "bigbud",
+      kind: "skill",
+      source: "user",
+      path: input.path.join(OS.homedir(), ".bigbud/skills"),
     },
   ] satisfies ReadonlyArray<DiscoveryFileDescriptor>;
 }

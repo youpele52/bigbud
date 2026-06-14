@@ -13,6 +13,9 @@ import {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardChangesInput,
+  GitFetchInput,
+  GitFetchResult,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
   GitInitInput,
@@ -255,6 +258,17 @@ export const WsGitInitRpc = Rpc.make(WS_METHODS.gitInit, {
   error: GitServiceError,
 });
 
+export const WsGitFetchRpc = Rpc.make(WS_METHODS.gitFetch, {
+  payload: GitFetchInput,
+  success: GitFetchResult,
+  error: GitServiceError,
+});
+
+export const WsGitDiscardChangesRpc = Rpc.make(WS_METHODS.gitDiscardChanges, {
+  payload: GitDiscardChangesInput,
+  error: GitServiceError,
+});
+
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -398,6 +412,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateBranchRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
+  WsGitFetchRpc,
+  WsGitDiscardChangesRpc,
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,

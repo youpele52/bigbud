@@ -2,8 +2,8 @@ import { AlertCircleIcon, XIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
-import { AnnotationComposerPanel } from "../annotations/AnnotationComposerPanel";
 import { Button } from "../ui/button";
+import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
@@ -89,6 +89,7 @@ export const FilePreview = memo(function FilePreview({
     null,
   );
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const linesContainerRef = useRef<HTMLDivElement>(null);
   const previewRequestIdRef = useRef(0);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
@@ -334,13 +335,16 @@ export const FilePreview = memo(function FilePreview({
           <span>{state.error}</span>
         </div>
       ) : (
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto">
+        <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-auto">
           {state.truncated ? (
             <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
               Preview truncated.
             </div>
           ) : null}
-          <div className="flex w-max min-w-full select-text font-mono text-xs leading-5">
+          <div
+            ref={linesContainerRef}
+            className="flex w-max min-w-full select-text font-mono text-xs leading-5"
+          >
             <div className="shrink-0 select-none border-r border-border/70">
               {lines.map((line) => (
                 <button
@@ -374,27 +378,14 @@ export const FilePreview = memo(function FilePreview({
             </div>
           </div>
           {selectedRange && onCreateAnnotation ? (
-            <div className="sticky bottom-3 mx-auto mt-3 w-[min(36rem,calc(100%-1.5rem))]">
-              <AnnotationComposerPanel
-                title="Code comment"
-                targetLabel={
-                  selectedRange.startLine === selectedRange.endLine
-                    ? `Line ${selectedRange.startLine}`
-                    : `Lines ${selectedRange.startLine}-${selectedRange.endLine}`
-                }
-                onCancel={() => setSelectedRange(null)}
-                onSubmit={({ intent, comment }) => {
-                  onCreateAnnotation({
-                    intent,
-                    comment,
-                    startLine: selectedRange.startLine,
-                    endLine: selectedRange.endLine,
-                    text: selectedText,
-                  });
-                  setSelectedRange(null);
-                }}
-              />
-            </div>
+            <FilePreviewAnnotationComposer
+              scrollContainerRef={scrollContainerRef}
+              linesContainerRef={linesContainerRef}
+              selectedRange={selectedRange}
+              selectedText={selectedText}
+              onCreateAnnotation={onCreateAnnotation}
+              onCancel={() => setSelectedRange(null)}
+            />
           ) : null}
         </div>
       )}
