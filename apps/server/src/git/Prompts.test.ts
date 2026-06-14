@@ -49,6 +49,36 @@ describe("buildCommitMessagePrompt", () => {
 
     expect(result.prompt).toContain("Branch: (detached)");
   });
+
+  it("uses provided skill content as the prompt instructions", () => {
+    const skillContent = "Write commit messages in past tense with a detailed body.";
+    const result = buildCommitMessagePrompt({
+      branch: "main",
+      stagedSummary: "M README.md",
+      stagedPatch: "diff --git a/README.md b/README.md\n+hello",
+      includeBranch: false,
+      skillContent,
+    });
+
+    expect(result.prompt).toContain(skillContent);
+    expect(result.prompt).not.toContain("imperative mood");
+    expect(result.prompt).toContain("Staged files:");
+    expect(result.prompt).toContain("Staged patch:");
+    expect(result.prompt).toContain("Return a JSON object with keys: subject, body.");
+  });
+
+  it("includes branch generation instruction when skill content is used and includeBranch is true", () => {
+    const result = buildCommitMessagePrompt({
+      branch: "feature/foo",
+      stagedSummary: "M README.md",
+      stagedPatch: "diff",
+      includeBranch: true,
+      skillContent: "Custom commit message guidelines.",
+    });
+
+    expect(result.prompt).toContain("Custom commit message guidelines.");
+    expect(result.prompt).toContain("Return a JSON object with keys: subject, body, branch.");
+  });
 });
 
 describe("buildPrContentPrompt", () => {

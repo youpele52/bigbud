@@ -13,6 +13,8 @@ import type { ModelSelection } from "@bigbud/contracts";
 import type { GitActionProgressEvent } from "@bigbud/contracts";
 import { resolveAutoFeatureBranchName, sanitizeFeatureBranchName } from "@bigbud/shared/git";
 
+import { FileSystem } from "effect";
+
 import type { GitCoreShape } from "../Services/GitCore.ts";
 import type { TextGenerationShape } from "../Services/TextGeneration.ts";
 import type { GitActionProgressReporter } from "../Services/GitManager.ts";
@@ -24,10 +26,15 @@ import {
   sanitizeCommitMessage,
   sanitizeProgressText,
 } from "./GitManager.commitUtils.ts";
+import { loadSkillPrompt } from "../Utils.ts";
 import { gitManagerError } from "./GitManager.prUtils.ts";
 import type { CommitAndBranchSuggestion, GitActionProgressPayload } from "./GitManager.types.ts";
 
-export function makeCommitStep(gitCore: GitCoreShape, textGeneration: TextGenerationShape) {
+export function makeCommitStep(
+  gitCore: GitCoreShape,
+  textGeneration: TextGenerationShape,
+  fileSystem: FileSystem.FileSystem,
+) {
   const resolveCommitAndBranchSuggestion = Effect.fn("resolveCommitAndBranchSuggestion")(
     function* (input: {
       cwd: string;
@@ -55,6 +62,11 @@ export function makeCommitStep(gitCore: GitCoreShape, textGeneration: TextGenera
         };
       }
 
+      const gitCommitSkillContent = yield* loadSkillPrompt({
+        skillName: "git-commit",
+        fileSystem,
+      });
+
       const generated = yield* textGeneration
         .generateCommitMessage({
           cwd: input.cwd,
@@ -62,6 +74,7 @@ export function makeCommitStep(gitCore: GitCoreShape, textGeneration: TextGenera
           stagedSummary: limitContext(context.stagedSummary, 8_000),
           stagedPatch: limitContext(context.stagedPatch, 50_000),
           ...(input.includeBranch ? { includeBranch: true } : {}),
+          ...(gitCommitSkillContent ? { skillContent: gitCommitSkillContent } : {}),
           modelSelection: input.modelSelection,
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
