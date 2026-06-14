@@ -26,7 +26,20 @@ export const PROVIDER_DISPLAY_NAMES = {
   pi: "Pi",
   cursor: "Cursor",
   devin: "Devin",
+  bigbud: "bigbud",
 } as const;
+
+/**
+ * Labels that may appear in the `provider` field of a `ServerDiscoveredSkill`
+ * or `ServerDiscoveredAgent`. Extends `PROVIDER_KINDS` with `bigbud`, the
+ * pseudo-label used for skills discovered under `.bigbud/skills/` — a directory
+ * the bigbud app itself ships with (or that the user adds to a bigbud project).
+ *
+ * The runtime provider system (model selection, capabilities, adapters) only
+ * uses `PROVIDER_KINDS`; `bigbud` is purely a discovery label that has no
+ * associated AI runtime.
+ */
+export const SERVER_DISCOVERY_PROVIDER_LABELS = [...PROVIDER_KINDS, "bigbud"] as const;
 
 /**
  * Default provider used when no preference is set.
