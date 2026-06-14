@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
+import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ChatHeader } from "../../common/ChatHeader";
-import { ConfirmationPanel } from "../../../common/ConfirmationPanel";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
+import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { WorkingIndicator } from "../../common/WorkingIndicator";
@@ -18,7 +19,6 @@ import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
-import { Card } from "../../../ui/card";
 import { useSearchStore } from "../../../../stores/ui";
 import { useRightPanelTabsStore } from "../../../../stores/rightPanel/rightPanelTabs.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
@@ -65,6 +65,27 @@ export function ChatViewContent({
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
+
+  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const compactAvailable = composer.supportsCompact;
+
+  const onUseHandoffFromBanner = useCallback(() => {
+    const nextPrompt = "/skills handoff";
+    base.promptRef.current = nextPrompt;
+    base.setPrompt(nextPrompt);
+    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+    interactions.onSend();
+  }, [base, interactions]);
+
+  const onCompactFromBanner = useCallback(() => {
+    const nextPrompt = "/compact";
+    base.promptRef.current = nextPrompt;
+    base.setPrompt(nextPrompt);
+    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
+    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
+    interactions.onSend();
+  }, [base, interactions]);
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
     : undefined;
@@ -168,7 +189,13 @@ export function ChatViewContent({
       </header>
 
       <ProviderStatusBanner status={composer.activeProviderStatus} />
-      <ContextWindowWarningBanner usage={thread.activeContextWindow} />
+      <ContextWindowWarningBanner
+        usage={thread.activeContextWindow}
+        handoffAvailable={handoffAvailable}
+        compactAvailable={compactAvailable}
+        onUseHandoff={onUseHandoffFromBanner}
+        onCompact={onCompactFromBanner}
+      />
       <ThreadErrorBanner
         error={base.activeThread!.error}
         onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
@@ -250,24 +277,15 @@ export function ChatViewContent({
             </div>
 
             {interactions.pendingProviderSwitchConfirmation ? (
-              <div className="absolute inset-0 z-20 flex items-center justify-center px-4 py-6">
-                <button
-                  type="button"
-                  aria-label="Dismiss provider switch confirmation"
-                  className="absolute inset-0 bg-background/60 backdrop-blur-[1px]"
-                  onClick={interactions.onDismissPendingProviderSwitch}
-                />
-                <Card className="relative w-full max-w-sm border-border/80 bg-background/96 shadow-lg/10">
-                  <ConfirmationPanel
-                    title={`Start a new ${interactions.pendingProviderSwitchConfirmation.targetLabel} branch?`}
-                    description="Switching providers after a thread has started creates a branch so the current conversation stays on its existing provider."
-                    cancelLabel="Cancel"
-                    confirmLabel="Create branch"
-                    onCancel={interactions.onDismissPendingProviderSwitch}
-                    onConfirm={interactions.onConfirmPendingProviderSwitch}
-                  />
-                </Card>
-              </div>
+              <ProviderSwitchBranchModal
+                targetLabel={interactions.pendingProviderSwitchConfirmation.targetLabel}
+                selectedMode={interactions.branchMode}
+                onSelectMode={interactions.setBranchMode}
+                isGeneratingHandoff={interactions.isGeneratingHandoff}
+                handoffError={interactions.handoffError}
+                onCancel={interactions.onDismissPendingProviderSwitch}
+                onConfirm={interactions.onConfirmPendingProviderSwitch}
+              />
             ) : null}
 
             {runtime.scrollBehavior.showScrollToBottom ? (

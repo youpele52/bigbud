@@ -22,6 +22,8 @@ export interface CommitMessageGenerationInput {
   stagedPatch: string;
   /** When true, the model also returns a semantic branch name for the change. */
   includeBranch?: boolean;
+  /** Optional skill content to use as the prompt instructions instead of the built-in prompt. */
+  skillContent?: string;
   /** What model and provider to use for generation. */
   modelSelection: ModelSelection;
 }

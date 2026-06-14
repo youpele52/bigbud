@@ -32,6 +32,17 @@ const BASE_USAGE = {
   updatedAt: "2024-01-01T00:00:00Z",
 } satisfies ContextWindowSnapshot;
 
+function makeProps(overrides: Partial<React.ComponentProps<typeof ContextWindowMeter>> = {}) {
+  return {
+    usage: BASE_USAGE,
+    handoffAvailable: true,
+    compactAvailable: true,
+    onUseHandoff: vi.fn(),
+    onCompact: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("ContextWindowMeter", () => {
   afterEach(() => {
     mockSettings.contextWindowWarningThresholdTokens = 120_000;
@@ -41,7 +52,9 @@ describe("ContextWindowMeter", () => {
     mockSettings.contextWindowWarningThresholdTokens = 100_000;
 
     const markup = renderToStaticMarkup(
-      <ContextWindowMeter usage={{ ...BASE_USAGE, usedTokens: 120_000, usedPercentage: 60 }} />,
+      <ContextWindowMeter
+        {...makeProps({ usage: { ...BASE_USAGE, usedTokens: 120_000, usedPercentage: 60 } })}
+      />,
     );
 
     expect(markup).toContain("text-warning");
@@ -51,7 +64,7 @@ describe("ContextWindowMeter", () => {
   it("hides warning styling when usedTokens is below threshold", () => {
     mockSettings.contextWindowWarningThresholdTokens = 200_000;
 
-    const markup = renderToStaticMarkup(<ContextWindowMeter usage={BASE_USAGE} />);
+    const markup = renderToStaticMarkup(<ContextWindowMeter {...makeProps()} />);
 
     expect(markup).not.toContain("text-warning");
     expect(markup).toContain("text-muted-foreground");

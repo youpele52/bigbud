@@ -19,7 +19,12 @@ import {
   openFilesPanelEntry,
   reconcilePreviewPathAfterDirectoryRefresh,
 } from "./FilesPanel.logic";
-import { EMPTY_ENTRIES, makeAnnotationId, type DirectoryState } from "./FilesPanel.shared";
+import {
+  EMPTY_ENTRIES,
+  FILE_PREVIEW_MIN_WIDTH,
+  makeAnnotationId,
+  type DirectoryState,
+} from "./FilesPanel.shared";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
 import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
 import { useFilesPanelDirectoryRefresh } from "./useFilesPanelDirectoryRefresh";
@@ -316,7 +321,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     };
     return (
       <div ref={fileTreeContainerRef} className="flex h-full min-h-0">
-        <div className="min-h-0 min-w-0 flex-1">
+        <div className="min-h-0 flex-1" style={{ minWidth: FILE_PREVIEW_MIN_WIDTH }}>
           {isIpynb ? (
             <IpynbPreview
               cwd={workspaceRoot}

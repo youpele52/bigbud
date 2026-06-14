@@ -4,6 +4,7 @@ import type {
   ServerDiscoveredAgent,
   ServerDiscoveredSkill,
   ServerDiscoveryCatalog,
+  ServerDiscoveryProviderLabel,
 } from "@bigbud/contracts";
 import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
 
@@ -58,7 +59,11 @@ function inferNameFromPath(filePath: string): string {
   return lastSegment.replace(/\.(md|markdown|ya?ml|toml|json)$/i, "");
 }
 
-function buildDiscoveryId(provider: ProviderKind, kind: "agent" | "skill", name: string): string {
+function buildDiscoveryId(
+  provider: ServerDiscoveryProviderLabel,
+  kind: "agent" | "skill",
+  name: string,
+): string {
   return `${provider}:${kind}:${name.trim().toLowerCase()}`;
 }
 

@@ -50,6 +50,10 @@ function buildBreadcrumb(projectName: string | undefined, cwd: string, relativeP
   }));
 }
 
+function notebookSizerCellKey(source: string, executionCount: number | null | undefined) {
+  return `${executionCount ?? "none"}:${source}`;
+}
+
 export const IpynbPreview = memo(function IpynbPreview({
   cwd,
   relativePath,
@@ -187,28 +191,34 @@ export const IpynbPreview = memo(function IpynbPreview({
 
     return (
       <div ref={measureRef} aria-hidden="true" className="absolute invisible top-0 left-0 w-max">
-        {codeCells.map((cell, ci) => (
-          <div key={`sizer-cell-${ci}`} className="notebook-cell-code w-full">
-            <div className="rounded-md w-full">
-              <div className="w-full bg-muted/50 px-16 py-8">
-                <SyntaxHighlightedCode
-                  code={cellSource(cell)}
-                  language={language}
-                  themeName={themeName}
-                  bgTransparent
-                  fallback={
-                    <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85 whitespace-pre">
-                      {cellSource(cell)}
-                    </pre>
-                  }
-                />
-              </div>
-              <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
-                <span className="text-xs text-muted-foreground/60 font-mono">{language}</span>
+        {codeCells.map((cell) => {
+          const source = cellSource(cell);
+          return (
+            <div
+              key={notebookSizerCellKey(source, cell.execution_count)}
+              className="notebook-cell-code w-full"
+            >
+              <div className="rounded-md w-full">
+                <div className="w-full bg-muted/50 px-16 py-8">
+                  <SyntaxHighlightedCode
+                    code={source}
+                    language={language}
+                    themeName={themeName}
+                    bgTransparent
+                    fallback={
+                      <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85 whitespace-pre">
+                        {source}
+                      </pre>
+                    }
+                  />
+                </div>
+                <div className="w-full flex items-center justify-end px-3 py-1.5 bg-muted/50 border-t border-border/20">
+                  <span className="text-xs text-muted-foreground/60 font-mono">{language}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }, [notebook, language, themeName]);
