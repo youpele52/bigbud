@@ -187,3 +187,8 @@ export const GitPullResult = Schema.Struct({
   upstreamBranch: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
 });
 export type GitPullResult = typeof GitPullResult.Type;
+
+export const GitFetchResult = Schema.Struct({
+  status: Schema.Literal("fetched"),
+});
+export type GitFetchResult = typeof GitFetchResult.Type;

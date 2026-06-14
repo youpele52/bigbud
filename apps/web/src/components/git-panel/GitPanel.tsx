@@ -10,6 +10,7 @@ import {
   gitStatusQueryOptions,
   gitWorkingTreeDiffQueryOptions,
 } from "~/lib/gitReactQuery";
+import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
@@ -20,11 +21,10 @@ interface GitPanelProps {
   visible?: boolean;
 }
 
-type GitPanelView = "changes" | "history";
-
 export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProps) {
   const { cwd, executionTargetId } = useResolvedGitWorkspace(activeThreadId);
-  const [activeView, setActiveView] = useState<GitPanelView>("changes");
+  const activeView = useGitPanelViewStore((state) => state.activeView);
+  const setActiveView = useGitPanelViewStore((state) => state.setActiveView);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(null);
 
