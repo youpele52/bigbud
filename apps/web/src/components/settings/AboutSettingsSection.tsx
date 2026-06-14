@@ -1,6 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { APP_VERSION } from "../../config/branding";
 import {
   canCheckForUpdate,
@@ -208,6 +210,7 @@ function ManualInstallRow() {
 }
 
 export function AboutSettingsSection() {
+  const navigate = useNavigate();
   const observability = useServerObservability();
   const availableEditors = useServerAvailableEditors();
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
@@ -261,6 +264,24 @@ export function AboutSettingsSection() {
           description="Current version of the application."
         />
       )}
+      <SettingsRow
+        title="Changelog"
+        description="See what changed in recent updates."
+        control={
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              void navigate({ to: "/" }).then(() => {
+                openBrowserPanel({ url: "https://bigbud.app/changelog/" });
+              });
+            }}
+          >
+            View changelog
+            <ExternalLinkIcon className="size-3.5" />
+          </Button>
+        }
+      />
       {isElectron && <ManualInstallRow />}
       <SettingsRow
         title="Diagnostics"

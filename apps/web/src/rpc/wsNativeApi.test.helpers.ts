@@ -82,6 +82,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   },
   git: {
     pull: vi.fn(),
+    fetch: vi.fn(),
+    discardChanges: vi.fn(),
     refreshStatus: vi.fn(),
     listCommits: vi.fn(),
     getCommitDetails: vi.fn(),

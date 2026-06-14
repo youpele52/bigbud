@@ -98,7 +98,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const prHelpers = makePrHelpers(gitCore, gitHubCli);
   const branchContext = makeBranchContext(gitCore, gitHubCli);
   const prLookup = makePrLookup(gitCore, gitHubCli, branchContext);
-  const commitStep = makeCommitStep(gitCore, textGeneration);
+  const commitStep = makeCommitStep(gitCore, textGeneration, fileSystem);
   const prStep = makePrStep(
     gitCore,
     gitHubCli,

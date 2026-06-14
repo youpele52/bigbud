@@ -11,6 +11,7 @@ import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings";
 import { EditorId } from "../workspace/editor";
 import { ModelCapabilities } from "../core/model";
 import { ProviderKind } from "../orchestration/orchestration";
+import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
 import { ServerSettings } from "../core/settings";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -117,9 +118,18 @@ export const ServerDiscoverySource = Schema.Literals([
 ]);
 export type ServerDiscoverySource = typeof ServerDiscoverySource.Type;
 
+/**
+ * Provider label attached to a discovered skill or agent. Extends
+ * `ProviderKind` with the `bigbud` pseudo-label so skills discovered under
+ * `.bigbud/skills/` are surfaced and labelled consistently alongside the
+ * other providers, without participating in the runtime provider system.
+ */
+export const ServerDiscoveryProviderLabel = Schema.Literals(SERVER_DISCOVERY_PROVIDER_LABELS);
+export type ServerDiscoveryProviderLabel = typeof ServerDiscoveryProviderLabel.Type;
+
 const ServerDiscoveredEntryBase = Schema.Struct({
   id: TrimmedNonEmptyString,
-  provider: ProviderKind,
+  provider: ServerDiscoveryProviderLabel,
   name: TrimmedNonEmptyString,
   source: ServerDiscoverySource,
   description: Schema.optional(TrimmedNonEmptyString),
@@ -133,12 +143,7 @@ export const ServerDiscoveredAgents = Schema.Array(ServerDiscoveredAgent);
 export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 
 export const ServerDiscoveredSkill = Schema.Struct({
-  id: TrimmedNonEmptyString,
-  provider: ProviderKind,
-  name: TrimmedNonEmptyString,
-  source: ServerDiscoverySource,
-  description: Schema.optional(TrimmedNonEmptyString),
-  sourcePath: Schema.optional(TrimmedNonEmptyString),
+  ...ServerDiscoveredEntryBase.fields,
   displayName: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;

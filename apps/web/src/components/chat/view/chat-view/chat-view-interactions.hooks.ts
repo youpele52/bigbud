@@ -55,6 +55,10 @@ export function useChatViewInteractions({
 
   const {
     pendingProviderSwitchConfirmation,
+    branchMode,
+    setBranchMode,
+    isGeneratingHandoff,
+    handoffError,
     onProviderModelSelect,
     onConfirmPendingProviderSwitch,
     onDismissPendingProviderSwitch,
@@ -282,6 +286,10 @@ export function useChatViewInteractions({
     providerTraitsMenuContent,
     providerTraitsPicker,
     pendingProviderSwitchConfirmation,
+    branchMode,
+    setBranchMode,
+    isGeneratingHandoff,
+    handoffError,
     onConfirmPendingProviderSwitch,
     onDismissPendingProviderSwitch,
     planHandlers,

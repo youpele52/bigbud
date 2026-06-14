@@ -22,14 +22,54 @@ export interface CommitMessagePromptInput {
   includeBranch: boolean;
 }
 
-export function buildCommitMessagePrompt(input: CommitMessagePromptInput) {
+export function buildCommitMessagePrompt(
+  input: CommitMessagePromptInput & { readonly skillContent?: string },
+) {
   const wantsBranch = input.includeBranch;
+  const outputInstruction = wantsBranch
+    ? "Return a JSON object with keys: subject, body, branch."
+    : "Return a JSON object with keys: subject, body.";
+
+  if (input.skillContent) {
+    const prompt = [
+      input.skillContent,
+      "",
+      "Apply the guidelines above to the following staged changes, but return the result as JSON instead of plain text.",
+      "",
+      outputInstruction,
+      "",
+      `Branch: ${input.branch ?? "(detached)"}`,
+      "",
+      "Staged files:",
+      limitSection(input.stagedSummary, 6_000),
+      "",
+      "Staged patch:",
+      limitSection(input.stagedPatch, 40_000),
+    ].join("\n");
+
+    if (wantsBranch) {
+      return {
+        prompt,
+        outputSchema: Schema.Struct({
+          subject: Schema.String,
+          body: Schema.String,
+          branch: Schema.String,
+        }),
+      };
+    }
+
+    return {
+      prompt,
+      outputSchema: Schema.Struct({
+        subject: Schema.String,
+        body: Schema.String,
+      }),
+    };
+  }
 
   const prompt = [
     "You write high-quality git commit messages for a professional codebase.",
-    wantsBranch
-      ? "Return a JSON object with keys: subject, body, branch."
-      : "Return a JSON object with keys: subject, body.",
+    outputInstruction,
     "Rules:",
     "- subject must use common git commit conventions: imperative mood, <= 72 characters, and no trailing period",
     "- subject must describe the primary change clearly and specifically",

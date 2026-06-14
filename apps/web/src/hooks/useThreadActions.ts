@@ -14,7 +14,11 @@ import { useStore } from "../stores/main";
 import { formatWorktreePathForDisplay, getOrphanedWorktreePathForThread } from "../utils/worktree";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
-import { prepareSeedMessagesForBranch, ThreadBranchError } from "../lib/threadBranch";
+import {
+  prepareSeedMessagesForBranch,
+  ThreadBranchError,
+  type SeedMessageOutput,
+} from "../lib/threadBranch";
 import {
   waitForThreadToDisappear,
   waitForThreadToExist,
@@ -223,6 +227,7 @@ export function useThreadActions() {
         upToMessageId?: MessageId;
         modelSelection?: ModelSelection;
         navigateToBranch?: boolean;
+        seedMessages?: ReadonlyArray<SeedMessageOutput>;
       },
     ) => {
       const api = readNativeApi();
@@ -243,12 +248,14 @@ export function useThreadActions() {
       const createdAt = new Date().toISOString();
       let seedMessages;
       try {
-        seedMessages = prepareSeedMessagesForBranch(
-          sourceThread.messages,
-          options?.upToMessageId !== undefined
-            ? { upToMessageId: options.upToMessageId }
-            : undefined,
-        );
+        seedMessages =
+          options?.seedMessages ??
+          prepareSeedMessagesForBranch(
+            sourceThread.messages,
+            options?.upToMessageId !== undefined
+              ? { upToMessageId: options.upToMessageId }
+              : undefined,
+          );
       } catch (err) {
         toastManager.add({
           type: "error",
