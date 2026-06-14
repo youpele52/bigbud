@@ -4,6 +4,20 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 
 ## v0.1.644 (14 June, 2026)
 
+### Introducing bigbud Curated Native Skills
+
+- bigbud now ships with a curated library of **native skills** baked right into the app under `.bigbud/skills/`, auto-discovered the moment you launch bigbud, with no setup, no configuration, and no extra install required. Kicking off the library: `handoff`, a skill for compacting the current conversation into a clean handoff document for a fresh agent (by [mattpocockuk](https://x.com/mattpocockuk)), and `git-commit`, a skill for writing well-formatted, review-friendly commit messages.
+- These bundled skills are surfaced through the `/skills` slash command and the agent/skill picker, tagged with a dedicated `bigbud` discovery label that keeps them clearly separate from the runtime providers like Codex, Claude, and OpenCode that power your AI sessions.
+- This is just the start: `.bigbud/skills/` is now the canonical home for skills that feel native to bigbud, and more curated skills are on the way.
+
+### Git Menu
+
+- Replaced the toolbar's quick-action buttons and GitHub PR dropdown with a single Git icon that adapts to repository state, showing all available actions — Init, Commit, Push, Pull, Fetch, Discard changes, View changes, and View history — in one compact menu.
+- View history and View changes now open the Git panel to the requested view instead of blindly toggling it, and re-selecting the same view when it is already open closes it — giving you predictable navigation.
+- Added git fetch and discard-changes actions with a confirmation dialog before discarding, so you can sync remote changes and clean up working-tree changes without leaving the app.
+- Leaving the commit message blank in the commit dialog now auto-generates the message using the bundled `git-commit` skill, so the result follows bigbud's commit conventions — past-tense verbs, a clear subject line, and a descriptive body.
+- Extended auto-generated commit message support to all eight providers — Devin and KiloCode now join Codex, Claude, Cursor, Copilot, OpenCode, and Pi — so the bundled `git-commit` skill works with any AI provider powering your session.
+
 ### Settings
 
 - Added a "Changelog" button in Settings → About that opens the bigbud changelog directly in the in-app browser, so you can see what's changed without leaving the app.
@@ -11,6 +25,15 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 ### Notebook Preview
 
 - Fixed notebook preview cell widths so code and markdown cells size independently — code cells share a consistent width based on the widest cell, and markdown cells wrap cleanly at the viewport width. This fixes text bleeding on smaller windows.
+
+### Right Panel
+
+- Reduced the right panel tab width so more tabs stay visible without overflowing the tab strip, especially on smaller screens.
+
+### Maintainability
+
+- Replaced array-index React keys with stable content-derived identifiers in the notebook preview cells, removing a React key warning and making cell rendering more robust during re-renders.
+- Aligned git status error handling with the broader Effect codebase conventions, cleaning up a TypeScript advisory for tighter type-checking across the git layer.
 
 ## v0.1.643 (12 June, 2026)
 

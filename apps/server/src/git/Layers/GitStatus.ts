@@ -243,14 +243,12 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
   const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(function* (cwd) {
     const hasOrigin = yield* originRemoteExists(cwd);
     if (!hasOrigin) {
-      return yield* Effect.fail(
-        new GitCommandError({
-          operation: "GitCore.fetch",
-          command: "fetch",
-          cwd,
-          detail: 'No "origin" remote configured.',
-        }),
-      );
+      return yield* new GitCommandError({
+        operation: "GitCore.fetch",
+        command: "fetch",
+        cwd,
+        detail: 'No "origin" remote configured.',
+      });
     }
 
     yield* executeGit("GitCore.fetch", cwd, ["fetch", "--quiet"], {

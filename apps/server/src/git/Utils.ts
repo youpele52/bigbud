@@ -3,15 +3,54 @@
  *
  * @module textGenerationUtils
  */
-import { Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 
 import { TextGenerationError } from "@bigbud/contracts";
 
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
+
+/** Regex matching YAML frontmatter at the start of a skill file. */
+const SKILL_FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/;
 
 export function isGitRepository(cwd: string): boolean {
   return existsSync(join(cwd, ".git"));
+}
+
+/** Remove YAML frontmatter from a skill file's markdown body. */
+export function stripSkillFrontmatter(content: string): string {
+  return content.replace(SKILL_FRONTMATTER_REGEX, "").trim();
+}
+
+/** Candidate paths to look for a named bundled skill under `~/.bigbud/skills/`. */
+export function skillPromptPaths(skillName: string): ReadonlyArray<string> {
+  return [join(homedir(), ".bigbud/skills", skillName, "SKILL.md")];
+}
+
+/**
+ * Load a bundled skill prompt from `~/.bigbud/skills/`.
+ *
+ * Returns the markdown body with frontmatter stripped, or `null` if the skill
+ * file cannot be read.
+ */
+export function loadSkillPrompt(input: {
+  skillName: string;
+  fileSystem: FileSystem.FileSystem;
+}): Effect.Effect<string | null> {
+  return Effect.gen(function* () {
+    for (const filePath of skillPromptPaths(input.skillName)) {
+      const content = yield* input.fileSystem.readFileString(filePath).pipe(
+        Effect.map((text) => stripSkillFrontmatter(text)),
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (content !== null) {
+        return content;
+      }
+    }
+
+    return null;
+  });
 }
 
 /** Convert an Effect Schema to a flat JSON Schema object, inlining `$defs` when present. */

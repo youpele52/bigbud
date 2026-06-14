@@ -15,6 +15,9 @@ import {
 } from "@bigbud/contracts";
 
 import {
+  type BranchNameGenerationInput,
+  type CommitMessageGenerationInput,
+  type PrContentGenerationInput,
   TextGeneration,
   type TextGenerationProvider,
   type TextGenerationShape,
@@ -55,11 +58,13 @@ export function normalizeTextGenerationModelSelection(
     case "cursor":
       return modelSelection;
     case "pi":
+    case "kilocode":
     case "opencode":
       return {
         provider: "claudeAgent",
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
       };
+    case "devin":
     case "copilot":
     default:
       return {
@@ -73,6 +78,33 @@ export function normalizeGitTextGenerationModelSelection(
   modelSelection: ModelSelection,
 ): ModelSelection {
   return normalizeTextGenerationModelSelection(modelSelection);
+}
+
+export function normalizeGitCommitMessageGenerationInput(
+  input: CommitMessageGenerationInput,
+): CommitMessageGenerationInput {
+  return {
+    ...input,
+    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
+  };
+}
+
+export function normalizeGitPrContentGenerationInput(
+  input: PrContentGenerationInput,
+): PrContentGenerationInput {
+  return {
+    ...input,
+    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
+  };
+}
+
+export function normalizeGitBranchNameGenerationInput(
+  input: BranchNameGenerationInput,
+): BranchNameGenerationInput {
+  return {
+    ...input,
+    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -91,25 +123,16 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
 
   return {
     generateCommitMessage: (input) => {
-      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
-      return route(modelSelection.provider).generateCommitMessage({
-        ...input,
-        modelSelection,
-      });
+      const normalizedInput = normalizeGitCommitMessageGenerationInput(input);
+      return route(normalizedInput.modelSelection.provider).generateCommitMessage(normalizedInput);
     },
     generatePrContent: (input) => {
-      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
-      return route(modelSelection.provider).generatePrContent({
-        ...input,
-        modelSelection,
-      });
+      const normalizedInput = normalizeGitPrContentGenerationInput(input);
+      return route(normalizedInput.modelSelection.provider).generatePrContent(normalizedInput);
     },
     generateBranchName: (input) => {
-      const modelSelection = normalizeGitTextGenerationModelSelection(input.modelSelection);
-      return route(modelSelection.provider).generateBranchName({
-        ...input,
-        modelSelection,
-      });
+      const normalizedInput = normalizeGitBranchNameGenerationInput(input);
+      return route(normalizedInput.modelSelection.provider).generateBranchName(normalizedInput);
     },
     generateThreadTitle: (input) => {
       switch (input.modelSelection.provider) {
