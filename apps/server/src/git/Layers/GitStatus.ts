@@ -7,6 +7,7 @@ import { Effect, Path } from "effect";
 
 import { type GitCoreShape } from "../Services/GitCore.ts";
 import { type GitHelpers } from "./GitCoreExecutor.ts";
+import { GitCommandError } from "@bigbud/contracts";
 import { createGitCommandError, isMissingGitCwdError } from "./GitCoreUtils.ts";
 import { makeRemoteOps } from "./GitStatus.remotes.ts";
 import { makeUpstreamOps } from "./GitStatus.upstream.ts";
@@ -21,6 +22,8 @@ export interface GitStatusOps {
   commit: GitCoreShape["commit"];
   pushCurrentBranch: GitCoreShape["pushCurrentBranch"];
   pullCurrentBranch: GitCoreShape["pullCurrentBranch"];
+  fetch: GitCoreShape["fetch"];
+  discardChanges: GitCoreShape["discardChanges"];
   readRangeContext: GitCoreShape["readRangeContext"];
   readConfigValue: GitCoreShape["readConfigValue"];
 }
@@ -237,6 +240,36 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     },
   );
 
+  const fetch: GitCoreShape["fetch"] = Effect.fn("fetch")(function* (cwd) {
+    const hasOrigin = yield* originRemoteExists(cwd);
+    if (!hasOrigin) {
+      return yield* Effect.fail(
+        new GitCommandError({
+          operation: "GitCore.fetch",
+          command: "fetch",
+          cwd,
+          detail: 'No "origin" remote configured.',
+        }),
+      );
+    }
+
+    yield* executeGit("GitCore.fetch", cwd, ["fetch", "--quiet"], {
+      timeoutMs: 30_000,
+      fallbackErrorMessage: "git fetch failed",
+    });
+
+    return { status: "fetched" as const };
+  });
+
+  const discardChanges: GitCoreShape["discardChanges"] = Effect.fn("discardChanges")(
+    function* (cwd) {
+      yield* executeGit("GitCore.discardChanges", cwd, ["checkout", "--", "."], {
+        timeoutMs: 15_000,
+        fallbackErrorMessage: "Failed to discard working tree changes",
+      });
+    },
+  );
+
   return {
     statusDetails,
     statusDetailsLocal,
@@ -245,6 +278,8 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
     commit,
     pushCurrentBranch,
     pullCurrentBranch,
+    fetch,
+    discardChanges,
     readRangeContext,
     readConfigValue,
     // Expose helpers needed by other modules

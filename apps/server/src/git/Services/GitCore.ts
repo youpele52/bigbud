@@ -15,6 +15,7 @@ import type {
   GitCreateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitFetchResult,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
   GitInitInput,
@@ -266,6 +267,16 @@ export interface GitCoreShape {
    * Pull current branch from upstream using fast-forward only.
    */
   readonly pullCurrentBranch: (cwd: string) => Effect.Effect<GitPullResult, GitCommandError>;
+
+  /**
+   * Fetch from the origin remote for the current repository.
+   */
+  readonly fetch: (cwd: string) => Effect.Effect<GitFetchResult, GitCommandError>;
+
+  /**
+   * Discard all working tree changes (reset to HEAD).
+   */
+  readonly discardChanges: (cwd: string) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a worktree and branch from a base branch.

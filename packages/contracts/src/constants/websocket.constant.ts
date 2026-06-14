@@ -43,6 +43,8 @@ export const WS_METHODS = {
   gitCreateBranch: "git.createBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
+  gitFetch: "git.fetch",
+  gitDiscardChanges: "git.discardChanges",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 

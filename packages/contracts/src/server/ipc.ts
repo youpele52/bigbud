@@ -10,6 +10,9 @@ import type {
   GitPullRequestRefInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
+  GitDiscardChangesInput,
+  GitFetchInput,
+  GitFetchResult,
   GitInitInput,
   GitListBranchesInput,
   GitListBranchesResult,
@@ -243,6 +246,8 @@ export interface NativeApi {
     ) => Promise<GitPreparePullRequestThreadResult>;
     // Stacked action API
     pull: (input: GitPullInput) => Promise<GitPullResult>;
+    fetch: (input: GitFetchInput) => Promise<GitFetchResult>;
+    discardChanges: (input: GitDiscardChangesInput) => Promise<void>;
     refreshStatus: (input: GitStatusInput) => Promise<GitStatusResult>;
     onStatus: (
       input: GitStatusInput,
