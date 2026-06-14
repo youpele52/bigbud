@@ -4,6 +4,7 @@ import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
+import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -15,8 +16,14 @@ function formatPercentage(value: number | null): string | null {
   return `${Math.round(value)}%`;
 }
 
-export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
-  const { usage } = props;
+export function ContextWindowMeter(props: {
+  usage: ContextWindowSnapshot;
+  handoffAvailable: boolean;
+  compactAvailable: boolean;
+  onUseHandoff: () => void;
+  onCompact: () => void;
+}) {
+  const { usage, handoffAvailable, compactAvailable, onUseHandoff, onCompact } = props;
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
   const usedPercentage = formatPercentage(usage.usedPercentage);
@@ -130,6 +137,12 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
                 Some models may start deteriorating past{" "}
                 {formatContextWindowTokens(warningThreshold)} tokens. Consider using a handoff skill
                 or /compact.
+                <ContextWindowRecoveryActions
+                  handoffAvailable={handoffAvailable}
+                  compactAvailable={compactAvailable}
+                  onUseHandoff={onUseHandoff}
+                  onCompact={onCompact}
+                />
               </AlertDescription>
             </Alert>
           )}

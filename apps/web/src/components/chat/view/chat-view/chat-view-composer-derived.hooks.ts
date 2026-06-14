@@ -265,6 +265,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     activeComposerMenuItem,
     nonPersistedComposerImageIdSet,
     activeProviderStatus,
+    supportsCompact,
     isGitRepo,
     terminalToggleShortcutLabel,
     terminalPanelToggleShortcutLabel,
