@@ -49,6 +49,12 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Replaced array-index React keys with stable content-derived identifiers in the notebook preview cells, removing a React key warning and making cell rendering more robust during re-renders.
 - Aligned git status error handling with the broader Effect codebase conventions, cleaning up a TypeScript advisory for tighter type-checking across the git layer.
 
+### File Annotation
+
+- The annotation composer in the file preview now appears right next to the selected lines — 8px above or below — instead of sticking to the bottom of the file, keeping your selected code visible while you write a note.
+- Updated the file annotation panel to match the browser annotation panel's visual style, with the title and submit button label changing based on the selected intent ("Add to chat", "Add as context", or "Add task") and a 420px base width.
+- Set a 452px minimum width for the file preview so the annotation card always has room to render at its full size.
+
 ## v0.1.643 (12 June, 2026)
 
 ### New AI Providers

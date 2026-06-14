@@ -1,6 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 
-import { AnnotationComposerPanel } from "../annotations/AnnotationComposerPanel";
+import {
+  AnnotationComposerPanel,
+  formatAnnotationTargetLabel,
+} from "../annotations/AnnotationComposerPanel";
 import { type CodeAnnotationDraft } from "./FilePreview";
 
 interface LineRange {
@@ -24,14 +27,9 @@ export function NotebookAnnotationComposer({
   if (!selectedRange || !onCreateAnnotation) return null;
 
   return (
-    <div className="sticky bottom-3 mx-auto mt-3 w-[min(36rem,calc(100%-1.5rem))]">
+    <div className="sticky bottom-3 mx-auto mt-3">
       <AnnotationComposerPanel
-        title="Code comment"
-        targetLabel={
-          selectedRange.startLine === selectedRange.endLine
-            ? `Line ${selectedRange.startLine}`
-            : `Lines ${selectedRange.startLine}-${selectedRange.endLine}`
-        }
+        targetLabel={formatAnnotationTargetLabel(selectedRange)}
         onCancel={() => setSelectedRange(null)}
         onSubmit={({ intent, comment }) => {
           onCreateAnnotation({
