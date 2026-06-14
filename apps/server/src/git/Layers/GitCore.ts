@@ -76,6 +76,8 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     commit: statusOps.commit,
     pushCurrentBranch: statusOps.pushCurrentBranch,
     pullCurrentBranch: statusOps.pullCurrentBranch,
+    fetch: statusOps.fetch,
+    discardChanges: statusOps.discardChanges,
     readRangeContext: statusOps.readRangeContext,
     readConfigValue: statusOps.readConfigValue,
     listBranches: (input) =>

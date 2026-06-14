@@ -11,6 +11,18 @@ import {
   TrimmedNonEmptyStringSchema,
 } from "./git.shared";
 
+export const GitFetchInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitFetchInput = typeof GitFetchInput.Type;
+
+export const GitDiscardChangesInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+});
+export type GitDiscardChangesInput = typeof GitDiscardChangesInput.Type;
+
 const GIT_LIST_COMMITS_MAX_LIMIT = 100;
 
 export const GitStatusInput = Schema.Struct({

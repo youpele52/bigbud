@@ -56,6 +56,16 @@ export const gitQueryKeys = {
 export const gitMutationKeys = {
   init: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
     ["git", "mutation", "init", resolveExecutionTargetId(executionTargetId), cwd] as const,
+  fetch: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
+    ["git", "mutation", "fetch", resolveExecutionTargetId(executionTargetId), cwd] as const,
+  discardChanges: (cwd: string | null, executionTargetId?: ExecutionTargetId | null | undefined) =>
+    [
+      "git",
+      "mutation",
+      "discard-changes",
+      resolveExecutionTargetId(executionTargetId),
+      cwd,
+    ] as const,
   runStackedAction: (
     cwd: string | null,
     executionTargetId?: ExecutionTargetId | null | undefined,
@@ -344,6 +354,48 @@ export function gitPullMutationOptions(input: {
       const api = ensureNativeApi();
       if (!input.cwd) throw new Error("Git pull is unavailable.");
       return api.git.pull({
+        cwd: input.cwd,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+      });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient);
+    },
+  });
+}
+
+export function gitFetchMutationOptions(input: {
+  cwd: string | null;
+  executionTargetId?: ExecutionTargetId | null | undefined;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.fetch(input.cwd, input.executionTargetId),
+    mutationFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Git fetch is unavailable.");
+      return api.git.fetch({
+        cwd: input.cwd,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+      });
+    },
+    onSettled: async () => {
+      await invalidateGitQueries(input.queryClient);
+    },
+  });
+}
+
+export function gitDiscardChangesMutationOptions(input: {
+  cwd: string | null;
+  executionTargetId?: ExecutionTargetId | null | undefined;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.discardChanges(input.cwd, input.executionTargetId),
+    mutationFn: async () => {
+      const api = ensureNativeApi();
+      if (!input.cwd) throw new Error("Discard changes is unavailable.");
+      return api.git.discardChanges({
         cwd: input.cwd,
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
       });

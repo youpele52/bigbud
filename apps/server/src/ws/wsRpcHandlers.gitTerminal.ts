@@ -79,6 +79,36 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
           "rpc.aggregate": "git",
         },
       ),
+    [WS_METHODS.gitFetch]: (input: {
+      readonly cwd: string;
+      readonly executionTargetId?: string | undefined;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.gitFetch,
+        context.assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.fetch").pipe(
+          Effect.andThen(context.git.fetch(input.cwd)),
+          Effect.tap(() => context.refreshGitStatus(input.cwd)),
+        ),
+        {
+          "rpc.aggregate": "git",
+        },
+      ),
+    [WS_METHODS.gitDiscardChanges]: (input: {
+      readonly cwd: string;
+      readonly executionTargetId?: string | undefined;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.gitDiscardChanges,
+        context
+          .assertLocalGitExecutionTarget(input.cwd, input.executionTargetId, "git.discardChanges")
+          .pipe(
+            Effect.andThen(context.git.discardChanges(input.cwd)),
+            Effect.tap(() => context.refreshGitStatus(input.cwd)),
+          ),
+        {
+          "rpc.aggregate": "git",
+        },
+      ),
     [WS_METHODS.gitRunStackedAction]: (
       input: Parameters<WsRpcContext["gitManager"]["runStackedAction"]>[0] & {
         readonly actionId: string;

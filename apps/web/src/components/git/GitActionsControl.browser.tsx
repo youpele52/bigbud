@@ -182,6 +182,16 @@ function findButtonByText(text: string): HTMLButtonElement | null {
   ) ?? null) as HTMLButtonElement | null;
 }
 
+function findMenuTrigger(): HTMLButtonElement | null {
+  return (document.querySelector('[aria-label="Git actions"]') ?? null) as HTMLButtonElement | null;
+}
+
+function findMenuItemByText(text: string): HTMLElement | null {
+  return (Array.from(document.querySelectorAll('[role="menuitem"]')).find((element) =>
+    element.textContent?.includes(text),
+  ) ?? null) as HTMLElement | null;
+}
+
 function Harness() {
   const [activeThreadId, setActiveThreadId] = useState(THREAD_A);
 
@@ -212,12 +222,19 @@ describe("GitActionsControl thread-scoped progress toast", () => {
     const screen = await render(<Harness />, { container: host });
 
     try {
-      const quickActionButton = findButtonByText("Push & create PR");
-      expect(quickActionButton, 'Unable to find button containing "Push & create PR"').toBeTruthy();
-      if (!(quickActionButton instanceof HTMLButtonElement)) {
-        throw new Error('Unable to find button containing "Push & create PR"');
+      const menuTrigger = findMenuTrigger();
+      expect(menuTrigger, "Unable to find Git actions menu trigger").toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error("Unable to find Git actions menu trigger");
       }
-      quickActionButton.click();
+      menuTrigger.click();
+
+      const pushMenuItem = findMenuItemByText("Push");
+      expect(pushMenuItem, 'Unable to find "Push" menu item').toBeTruthy();
+      if (!pushMenuItem) {
+        throw new Error('Unable to find "Push" menu item');
+      }
+      pushMenuItem.click();
 
       expect(toastAddSpy).toHaveBeenCalledWith(
         expect.objectContaining({

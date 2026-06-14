@@ -3,11 +3,10 @@ import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/
 import { useCallback, useMemo, useState } from "react";
 import {
   buildMenuItems,
-  type GitActionMenuItem,
   type DefaultBranchConfirmableAction,
+  type GitActionMenuItem,
   resolveDefaultBranchActionDialogCopy,
   resolveLiveThreadBranchUpdate,
-  resolveQuickAction,
 } from "./GitActionsControl.logic";
 import { GitActionsControlActions } from "./GitActionsControl.actions";
 import { CommitDialog } from "./GitActionsControl.commitDialog";
@@ -16,13 +15,26 @@ import { useGitActionRunner } from "./GitActionsControl.runner";
 import { toastManager } from "~/components/ui/toast";
 import { openInPreferredEditor } from "../../models/editor";
 import {
+  gitDiscardChangesMutationOptions,
+  gitFetchMutationOptions,
   gitInitMutationOptions,
   gitMutationKeys,
   gitPullMutationOptions,
   gitStatusQueryOptions,
 } from "~/lib/gitReactQuery";
 import { resolvePathLinkTarget } from "../../utils/terminal";
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "~/components/ui/dialog";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { openGitPanelToView } from "~/stores/git/gitPanel.coordinator";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
 import { useEffect } from "react";
@@ -62,6 +74,7 @@ export default function GitActionsControl({
   const [dialogCommitMessage, setDialogCommitMessage] = useState("");
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
   const [isEditingFiles, setIsEditingFiles] = useState(false);
+  const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false);
   const [pendingDefaultBranchAction, setPendingDefaultBranchAction] =
     useState<PendingDefaultBranchAction | null>(null);
 
@@ -87,12 +100,23 @@ export default function GitActionsControl({
   const pullMutation = useMutation(
     gitPullMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
   );
+  const fetchMutation = useMutation(
+    gitFetchMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
+  );
+  const discardMutation = useMutation(
+    gitDiscardChangesMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
+  );
 
   const isRunStackedActionRunning =
     useIsMutating({ mutationKey: gitMutationKeys.runStackedAction(gitCwd, executionTargetId) }) > 0;
   const isPullRunning =
     useIsMutating({ mutationKey: gitMutationKeys.pull(gitCwd, executionTargetId) }) > 0;
-  const isGitActionRunning = isRunStackedActionRunning || isPullRunning;
+  const isFetchRunning =
+    useIsMutating({ mutationKey: gitMutationKeys.fetch(gitCwd, executionTargetId) }) > 0;
+  const isDiscardRunning =
+    useIsMutating({ mutationKey: gitMutationKeys.discardChanges(gitCwd, executionTargetId) }) > 0;
+  const isGitActionRunning =
+    isRunStackedActionRunning || isPullRunning || isFetchRunning || isDiscardRunning;
 
   const isDefaultBranch = useMemo(() => {
     return gitStatusForActions?.isDefaultBranch ?? false;
@@ -135,14 +159,6 @@ export default function GitActionsControl({
     () => buildMenuItems(gitStatusForActions, isGitActionRunning, hasOriginRemote),
     [gitStatusForActions, hasOriginRemote, isGitActionRunning],
   );
-  const quickAction = useMemo(
-    () =>
-      resolveQuickAction(gitStatusForActions, isGitActionRunning, isDefaultBranch, hasOriginRemote),
-    [gitStatusForActions, hasOriginRemote, isDefaultBranch, isGitActionRunning],
-  );
-  const quickActionDisabledReason = quickAction.disabled
-    ? (quickAction.hint ?? "This action is currently unavailable.")
-    : null;
   const pendingDefaultBranchActionCopy = pendingDefaultBranchAction
     ? resolveDefaultBranchActionDialogCopy({
         action: pendingDefaultBranchAction.action,
@@ -151,34 +167,62 @@ export default function GitActionsControl({
       })
     : null;
 
-  const openExistingPr = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api) {
-      toastManager.add({
-        type: "error",
-        title: "Link opening is unavailable.",
+  const runPull = useCallback(() => {
+    const promise = pullMutation.mutateAsync();
+    toastManager.promise(promise, {
+      loading: { title: "Pulling...", data: threadToastData },
+      success: (result) => ({
+        title: result.status === "pulled" ? "Pulled" : "Already up to date",
+        description:
+          result.status === "pulled"
+            ? `Updated ${result.branch} from ${result.upstreamBranch ?? "upstream"}`
+            : `${result.branch} is already synchronized.`,
         data: threadToastData,
-      });
-      return;
-    }
-    const prUrl = gitStatusForActions?.pr?.state === "open" ? gitStatusForActions.pr.url : null;
-    if (!prUrl) {
-      toastManager.add({
-        type: "error",
-        title: "No open PR found.",
-        data: threadToastData,
-      });
-      return;
-    }
-    void api.shell.openExternal(prUrl).catch((err) => {
-      toastManager.add({
-        type: "error",
-        title: "Unable to open PR link",
+      }),
+      error: (err) => ({
+        title: "Pull failed",
         description: err instanceof Error ? err.message : "An error occurred.",
         data: threadToastData,
-      });
+      }),
     });
-  }, [gitStatusForActions, threadToastData]);
+    void promise.catch(() => undefined);
+  }, [pullMutation, threadToastData]);
+
+  const runFetch = useCallback(() => {
+    const promise = fetchMutation.mutateAsync();
+    toastManager.promise(promise, {
+      loading: { title: "Fetching...", data: threadToastData },
+      success: () => ({
+        title: "Fetched",
+        description: "Remote refs are up to date.",
+        data: threadToastData,
+      }),
+      error: (err) => ({
+        title: "Fetch failed",
+        description: err instanceof Error ? err.message : "An error occurred.",
+        data: threadToastData,
+      }),
+    });
+    void promise.catch(() => undefined);
+  }, [fetchMutation, threadToastData]);
+
+  const runDiscard = useCallback(() => {
+    const promise = discardMutation.mutateAsync();
+    toastManager.promise(promise, {
+      loading: { title: "Discarding changes...", data: threadToastData },
+      success: () => ({
+        title: "Discarded changes",
+        description: "Working tree has been reset to HEAD.",
+        data: threadToastData,
+      }),
+      error: (err) => ({
+        title: "Discard failed",
+        description: err instanceof Error ? err.message : "An error occurred.",
+        data: threadToastData,
+      }),
+    });
+    void promise.catch(() => undefined);
+  }, [discardMutation, threadToastData]);
 
   const continuePendingDefaultBranchAction = () => {
     if (!pendingDefaultBranchAction) return;
@@ -223,65 +267,6 @@ export default function GitActionsControl({
     });
   };
 
-  const runQuickAction = () => {
-    if (quickAction.kind === "open_pr") {
-      void openExistingPr();
-      return;
-    }
-    if (quickAction.kind === "run_pull") {
-      const promise = pullMutation.mutateAsync();
-      toastManager.promise(promise, {
-        loading: { title: "Pulling...", data: threadToastData },
-        success: (result) => ({
-          title: result.status === "pulled" ? "Pulled" : "Already up to date",
-          description:
-            result.status === "pulled"
-              ? `Updated ${result.branch} from ${result.upstreamBranch ?? "upstream"}`
-              : `${result.branch} is already synchronized.`,
-          data: threadToastData,
-        }),
-        error: (err) => ({
-          title: "Pull failed",
-          description: err instanceof Error ? err.message : "An error occurred.",
-          data: threadToastData,
-        }),
-      });
-      void promise.catch(() => undefined);
-      return;
-    }
-    if (quickAction.kind === "show_hint") {
-      toastManager.add({
-        type: "info",
-        title: quickAction.label,
-        description: quickAction.hint,
-        data: threadToastData,
-      });
-      return;
-    }
-    if (quickAction.action) {
-      void runGitActionWithToast({ action: quickAction.action });
-    }
-  };
-
-  const openDialogForMenuItem = (item: GitActionMenuItem) => {
-    if (item.disabled) return;
-    if (item.kind === "open_pr") {
-      void openExistingPr();
-      return;
-    }
-    if (item.dialogAction === "push") {
-      void runGitActionWithToast({ action: "push" });
-      return;
-    }
-    if (item.dialogAction === "create_pr") {
-      void runGitActionWithToast({ action: "create_pr" });
-      return;
-    }
-    setExcludedFiles(new Set());
-    setIsEditingFiles(false);
-    setIsCommitDialogOpen(true);
-  };
-
   const runDialogAction = () => {
     if (!isCommitDialogOpen) return;
     const commitMessage = dialogCommitMessage.trim();
@@ -295,6 +280,48 @@ export default function GitActionsControl({
       ...(!allSelected ? { filePaths: selectedFiles.map((f) => f.path) } : {}),
     });
   };
+
+  const handleMenuItemSelect = useCallback(
+    (item: GitActionMenuItem) => {
+      if (item.disabled) return;
+
+      if (item.id === "initialize_git") {
+        initMutation.mutate();
+        return;
+      }
+
+      if (item.kind === "open_panel") {
+        openGitPanelToView(item.panelAction ?? "changes");
+        return;
+      }
+
+      if (item.action === "pull") {
+        runPull();
+        return;
+      }
+
+      if (item.action === "fetch") {
+        runFetch();
+        return;
+      }
+
+      if (item.action === "discard") {
+        setIsDiscardConfirmOpen(true);
+        return;
+      }
+
+      if (item.dialogAction === "push") {
+        void runGitActionWithToast({ action: "push" });
+        return;
+      }
+
+      // Default to opening the commit dialog for commit or any other dialog action.
+      setExcludedFiles(new Set());
+      setIsEditingFiles(false);
+      setIsCommitDialogOpen(true);
+    },
+    [initMutation, runPull, runFetch, runGitActionWithToast],
+  );
 
   const openChangedFileInEditor = useCallback(
     (filePath: string) => {
@@ -341,11 +368,7 @@ export default function GitActionsControl({
         gitStatusForActions={gitStatusForActions}
         gitStatusError={gitStatusError}
         gitActionMenuItems={gitActionMenuItems}
-        quickAction={quickAction}
-        quickActionDisabledReason={quickActionDisabledReason}
-        onInit={() => initMutation.mutate()}
-        onRunQuickAction={runQuickAction}
-        onOpenDialogForMenuItem={openDialogForMenuItem}
+        onMenuItemSelect={handleMenuItemSelect}
       />
 
       <CommitDialog
@@ -377,6 +400,35 @@ export default function GitActionsControl({
         onContinueOnDefaultBranch={continuePendingDefaultBranchAction}
         onCheckoutFeatureBranch={checkoutFeatureBranchAndContinuePendingAction}
       />
+
+      <Dialog open={isDiscardConfirmOpen} onOpenChange={setIsDiscardConfirmOpen}>
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>Discard all changes?</DialogTitle>
+            <DialogDescription>
+              This will reset the working tree to the last commit. All uncommitted changes will be
+              permanently lost. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setIsDiscardConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setIsDiscardConfirmOpen(false);
+                  runDiscard();
+                }}
+              >
+                Discard changes
+              </Button>
+            </DialogFooter>
+          </DialogPanel>
+        </DialogPopup>
+      </Dialog>
     </>
   );
 }
