@@ -13,10 +13,10 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 ### Git Menu
 
 - Replaced the toolbar's quick-action buttons and GitHub PR dropdown with a single Git icon that adapts to repository state, showing all available actions — Init, Commit, Push, Pull, Fetch, Discard changes, View changes, and View history — in one compact menu.
-- View history and View changes now open the Git panel to the requested view instead of blindly toggling it, and re-selecting the same view when it is already open closes it — giving you predictable navigation.
+- Leaving the commit message blank in the commit dialog now auto-generates the message using the bigbud curated native `git-commit` skill, so the result follows bigbud's commit conventions — past-tense verbs, a clear subject line, and a descriptive body.
+- Auto-generated commit messages work across all providers — Codex, Claude, and Copilot included — so the bundled `git-commit` skill generates messages no matter which provider powers your session.
 - Added git fetch and discard-changes actions with a confirmation dialog before discarding, so you can sync remote changes and clean up working-tree changes without leaving the app.
-- Leaving the commit message blank in the commit dialog now auto-generates the message using the bundled `git-commit` skill, so the result follows bigbud's commit conventions — past-tense verbs, a clear subject line, and a descriptive body.
-- Extended auto-generated commit message support to all eight providers — Devin and KiloCode now join Codex, Claude, Cursor, Copilot, OpenCode, and Pi — so the bundled `git-commit` skill works with any AI provider powering your session.
+- View history and View changes now open the Git panel to the requested view instead of blindly toggling it, and re-selecting the same view when it is already open closes it — giving you predictable navigation.
 
 ### Settings
 
