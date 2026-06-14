@@ -18,6 +18,20 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Added git fetch and discard-changes actions with a confirmation dialog before discarding, so you can sync remote changes and clean up working-tree changes without leaving the app.
 - View history and View changes now open the Git panel to the requested view instead of blindly toggling it, and re-selecting the same view when it is already open closes it — giving you predictable navigation.
 
+### Provider Switching
+
+- Switching providers mid-thread now opens a choice dialog instead of silently branching, so you decide how the new provider thread starts.
+- Choose **Start with handoff summary** to run the curated bigbud `handoff` skill on the current thread, then branch into the new provider with only that summary as context. The summary lands as a clear assistant message, giving the new provider the distilled state without dragging the entire conversation history along.
+- Choose **Continue with conversation context** to keep today's behavior: copy the existing conversation into the new branch unchanged.
+- The handoff option is the default, because switching providers is exactly the kind of moment where a clean, compact handoff saves tokens and keeps the new session focused.
+
+### Context Window Recovery
+
+- The context-window warning banner and the composer context-meter popover now surface actionable **Use handoff** and **Compact** buttons when you cross the configured warning threshold, so you do not have to remember the slash commands yourself.
+- **Use handoff** inserts and sends `/skills handoff` in one step, kicking off the curated handoff skill to compact your conversation.
+- **Compact** inserts and sends `/compact` in one step, triggering the provider's own context compaction.
+- Buttons only appear when the action is actually available for the current provider and project, so the UI stays honest and never promises something it cannot do.
+
 ### Settings
 
 - Added a "Changelog" button in Settings → About that opens the bigbud changelog directly in the in-app browser, so you can see what's changed without leaving the app.
