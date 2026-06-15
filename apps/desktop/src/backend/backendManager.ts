@@ -11,6 +11,7 @@ import {
   resolveBackendCwd,
   resolveBackendEntry,
   resolveBackendLauncherPath,
+  resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
 } from "../env/pathResolver";
 import type { RotatingFileSink } from "@bigbud/shared/logging";
@@ -166,6 +167,7 @@ export function startBackend(): void {
   const backendLogSink = _deps.getBackendLogSink();
   const captureBackendLogs = backendLogSink !== null;
   const packagedOpencodeBinDir = resolvePackagedOpencodeBinaryDir();
+  const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
 
   // Ensure _modules → node_modules link exists for ESM resolution of
@@ -188,6 +190,9 @@ export function startBackend(): void {
                 .filter((entry): entry is string => Boolean(entry && entry.length > 0))
                 .join(process.platform === "win32" ? ";" : ":"),
             }
+          : {}),
+        ...(packagedBundledSkillsDir
+          ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
           : {}),
         ELECTRON_RUN_AS_NODE: "1",
       },

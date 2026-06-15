@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 
 import { isElectron } from "~/config/env";
+import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 import { cn } from "~/lib/utils";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
@@ -70,7 +71,7 @@ export function ChatViewContent({
   const compactAvailable = composer.supportsCompact;
 
   const onUseHandoffFromBanner = useCallback(() => {
-    const nextPrompt = "/skills handoff";
+    const nextPrompt = HANDOFF_SKILL_PROMPT;
     base.promptRef.current = nextPrompt;
     base.setPrompt(nextPrompt);
     base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));

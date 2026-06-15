@@ -5,6 +5,8 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
 } from "~/logic/composer";
+import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
+import { buildSkillMentionPrompt } from "~/lib/skillMentions";
 import { cn } from "~/lib/utils";
 
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
@@ -199,7 +201,7 @@ export function ChatViewComposer({
       if (item.type === "agent") {
         insertMention(`@agent::${item.agent.name} `);
       } else if (item.type === "skill") {
-        insertMention(`@skill::${item.skill.name} `);
+        insertMention(`${buildSkillMentionPrompt(item.skill.name)} `);
       }
       setSyntheticMenuKind(null);
       setSyntheticMenuHighlightId(null);
@@ -261,7 +263,7 @@ export function ChatViewComposer({
   );
 
   const onUseHandoffFromMeter = useCallback(() => {
-    const nextPrompt = "/skills handoff";
+    const nextPrompt = HANDOFF_SKILL_PROMPT;
     base.promptRef.current = nextPrompt;
     base.setPrompt(nextPrompt);
     base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));

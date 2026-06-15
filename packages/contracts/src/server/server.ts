@@ -210,6 +210,25 @@ export class ServerReadDocumentUrlError extends Schema.TaggedErrorClass<ServerRe
   },
 ) {}
 
+export const ServerWriteHandoffDocumentInput = Schema.Struct({
+  title: Schema.optional(TrimmedNonEmptyString),
+  content: TrimmedNonEmptyString,
+});
+export type ServerWriteHandoffDocumentInput = typeof ServerWriteHandoffDocumentInput.Type;
+
+export const ServerWriteHandoffDocumentResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+});
+export type ServerWriteHandoffDocumentResult = typeof ServerWriteHandoffDocumentResult.Type;
+
+export class ServerWriteHandoffDocumentError extends Schema.TaggedErrorClass<ServerWriteHandoffDocumentError>()(
+  "ServerWriteHandoffDocumentError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ServerVerifyExecutionTargetInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,
   cwd: Schema.optional(TrimmedNonEmptyString),

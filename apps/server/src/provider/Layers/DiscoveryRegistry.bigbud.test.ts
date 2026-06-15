@@ -95,6 +95,47 @@ describe("DiscoveryRegistry — .bigbud/skills discovery", () => {
           );
         }),
       );
+
+      it.effect("discovers packaged bundled skills from BIGBUD_BUNDLED_SKILLS_DIR", () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-bigbud-cwd-" });
+          const bundledSkillsDir = yield* fs.makeTempDirectoryScoped({
+            prefix: "disc-bigbud-bundled-",
+          });
+          const previousBundledSkillsDir = process.env.BIGBUD_BUNDLED_SKILLS_DIR;
+
+          try {
+            process.env.BIGBUD_BUNDLED_SKILLS_DIR = bundledSkillsDir;
+            yield* writeFile(
+              path.join(bundledSkillsDir, "handoff/SKILL.md"),
+              [
+                "---",
+                "name: handoff",
+                "description: Summarize a thread for handoff",
+                "---",
+                "",
+                "# Handoff",
+              ].join("\n"),
+            );
+
+            const catalog = yield* getCatalog(cwd);
+            const skill = catalog.skills.find((s) => s.sourcePath?.startsWith(bundledSkillsDir));
+
+            assert.isDefined(skill, "packaged bundled skill should be discovered");
+            assert.strictEqual(skill?.provider, "bigbud");
+            assert.strictEqual(skill?.source, "system");
+            assert.strictEqual(skill?.name, "handoff");
+          } finally {
+            if (previousBundledSkillsDir === undefined) {
+              delete process.env.BIGBUD_BUNDLED_SKILLS_DIR;
+            } else {
+              process.env.BIGBUD_BUNDLED_SKILLS_DIR = previousBundledSkillsDir;
+            }
+          }
+        }),
+      );
     },
   );
 });
