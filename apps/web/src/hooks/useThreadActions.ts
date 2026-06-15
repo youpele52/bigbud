@@ -352,8 +352,6 @@ export function useThreadActions() {
         }
       }
 
-      useComposerDraftStore.getState().setBootstrapSourceThreadId(branchedThreadId, sourceThreadId);
-
       const threadExists = await waitForThreadToExist(branchedThreadId);
       if (!threadExists) {
         toastManager.add({
@@ -371,15 +369,10 @@ export function useThreadActions() {
         });
       }
 
-      const branchedFromMessage = options?.upToMessageId !== undefined;
       toastManager.add({
         type: "success",
         title: "Thread branched",
-        ...(branchedFromMessage
-          ? {
-              description: `${seedMessages.length} message${seedMessages.length === 1 ? "" : "s"} copied.`,
-            }
-          : {}),
+        description: `${seedMessages.length} message${seedMessages.length === 1 ? "" : "s"} copied.`,
       });
 
       return branchedThreadId;

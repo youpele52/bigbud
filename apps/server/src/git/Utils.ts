@@ -23,13 +23,18 @@ export function stripSkillFrontmatter(content: string): string {
   return content.replace(SKILL_FRONTMATTER_REGEX, "").trim();
 }
 
-/** Candidate paths to look for a named bundled skill under `~/.bigbud/skills/`. */
+/** Candidate paths to look for a named bundled skill. */
 export function skillPromptPaths(skillName: string): ReadonlyArray<string> {
-  return [join(homedir(), ".bigbud/skills", skillName, "SKILL.md")];
+  const bundledSkillsDir = process.env.BIGBUD_BUNDLED_SKILLS_DIR?.trim();
+  return [
+    ...(bundledSkillsDir ? [join(bundledSkillsDir, skillName, "SKILL.md")] : []),
+    join(homedir(), ".bigbud/skills", skillName, "SKILL.md"),
+  ];
 }
 
 /**
- * Load a bundled skill prompt from `~/.bigbud/skills/`.
+ * Load a bundled skill prompt from the packaged skills directory or
+ * `~/.bigbud/skills/`.
  *
  * Returns the markdown body with frontmatter stripped, or `null` if the skill
  * file cannot be read.

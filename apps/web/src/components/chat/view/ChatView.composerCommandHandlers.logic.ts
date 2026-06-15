@@ -6,6 +6,7 @@ import {
   expandCollapsedComposerCursor,
 } from "../../../logic/composer";
 import type { ComposerCommandItem } from "../composer/ComposerCommandMenu";
+import { buildSkillMentionPrompt } from "../../../lib/skillMentions";
 import { readBangShellInput } from "./ChatView.logic";
 import {
   extendReplacementRangeForTrailingSpace,
@@ -119,7 +120,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
         return;
       }
       if (item.type === "skill") {
-        const replacement = `@skill::${item.skill.name} `;
+        const replacement = `${buildSkillMentionPrompt(item.skill.name)} `;
         const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
           snapshot.value,
           trigger.rangeEnd,

@@ -109,6 +109,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
     readDocumentUrl: vi.fn(),
+    writeHandoffDocument: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
   },

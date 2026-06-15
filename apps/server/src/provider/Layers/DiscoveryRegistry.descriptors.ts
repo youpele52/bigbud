@@ -32,6 +32,20 @@ function expandTildePath(path: Path.Path, input: string): string {
   return input;
 }
 
+function bundledSkillsDescriptor(): DiscoveryFileDescriptor | null {
+  const bundledSkillsDir = process.env.BIGBUD_BUNDLED_SKILLS_DIR?.trim();
+  if (!bundledSkillsDir) {
+    return null;
+  }
+
+  return {
+    provider: "bigbud",
+    kind: "skill",
+    source: "system",
+    path: bundledSkillsDir,
+  };
+}
+
 export function buildDiscoveryFileDescriptors(input: {
   readonly path: Path.Path;
   readonly cwd: string;
@@ -41,7 +55,7 @@ export function buildDiscoveryFileDescriptors(input: {
     ? expandTildePath(input.path, input.settings.providers.codex.homePath)
     : input.path.join(OS.homedir(), ".codex");
 
-  return [
+  const descriptors = [
     {
       provider: "claudeAgent",
       kind: "agent",
@@ -301,6 +315,9 @@ export function buildDiscoveryFileDescriptors(input: {
       path: input.path.join(OS.homedir(), ".bigbud/skills"),
     },
   ] satisfies ReadonlyArray<DiscoveryFileDescriptor>;
+
+  const bundled = bundledSkillsDescriptor();
+  return bundled ? [...descriptors, bundled] : descriptors;
 }
 
 export function buildDiscoveryConfigDescriptors(input: {

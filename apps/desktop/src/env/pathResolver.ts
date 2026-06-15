@@ -201,6 +201,13 @@ export function resolvePackagedOpencodeBinaryDir(): string | null {
   return FS.existsSync(plan.binaryPath) ? plan.binDir : null;
 }
 
+export function resolvePackagedBundledSkillsDir(): string | null {
+  if (!app.isPackaged) return null;
+
+  const skillsDir = Path.join(process.resourcesPath, "server/bundled-skills");
+  return FS.existsSync(skillsDir) ? skillsDir : null;
+}
+
 /**
  * Ensures native/external modules are resolvable in packaged builds.
  *

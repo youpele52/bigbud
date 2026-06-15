@@ -66,6 +66,7 @@ export const WS_METHODS = {
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
   serverReadDocumentUrl: "server.readDocumentUrl",
+  serverWriteHandoffDocument: "server.writeHandoffDocument",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

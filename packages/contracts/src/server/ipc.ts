@@ -64,6 +64,8 @@ import type {
   ServerUpsertKeybindingResult,
   ServerVerifyExecutionTargetInput,
   ServerVerifyExecutionTargetResult,
+  ServerWriteHandoffDocumentInput,
+  ServerWriteHandoffDocumentResult,
 } from "./server";
 import type {
   TerminalClearInput,
@@ -274,6 +276,9 @@ export interface NativeApi {
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
+    writeHandoffDocument: (
+      input: ServerWriteHandoffDocumentInput,
+    ) => Promise<ServerWriteHandoffDocumentResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
