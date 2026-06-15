@@ -73,6 +73,9 @@ import {
   ServerReadDocumentUrlError,
   ServerReadDocumentUrlInput,
   ServerReadDocumentUrlResult,
+  ServerWriteHandoffDocumentError,
+  ServerWriteHandoffDocumentInput,
+  ServerWriteHandoffDocumentResult,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
@@ -156,6 +159,12 @@ export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocument
   payload: ServerReadDocumentUrlInput,
   success: ServerReadDocumentUrlResult,
   error: ServerReadDocumentUrlError,
+});
+
+export const WsServerWriteHandoffDocumentRpc = Rpc.make(WS_METHODS.serverWriteHandoffDocument, {
+  payload: ServerWriteHandoffDocumentInput,
+  success: ServerWriteHandoffDocumentResult,
+  error: ServerWriteHandoffDocumentError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -384,6 +393,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
+  WsServerWriteHandoffDocumentRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,

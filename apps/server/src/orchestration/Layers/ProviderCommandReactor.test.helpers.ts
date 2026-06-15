@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import type { ModelSelection, ProviderRuntimeEvent, ProviderSession } from "@bigbud/contracts";
+import type {
+  ModelSelection,
+  ProviderRuntimeEvent,
+  ProviderSession,
+  ServerDiscoveryCatalog,
+} from "@bigbud/contracts";
 import {
   ApprovalRequestId,
   CommandId,
@@ -111,6 +116,7 @@ export async function createHarness(input?: {
   readonly stopSessionFailure?: string;
   readonly browserCloseFailure?: string;
   readonly terminalCloseFailure?: string;
+  readonly discoveryCatalog?: ServerDiscoveryCatalog;
 }) {
   const now = new Date().toISOString();
   const baseDir = input?.baseDir ?? makeTrackedTempDir("bigbud-reactor-");
@@ -256,6 +262,7 @@ export async function createHarness(input?: {
   );
 
   const unsupported = () => Effect.die(new Error("Unsupported provider call in test")) as never;
+  const discoveryCatalog = input?.discoveryCatalog ?? { agents: [], skills: [] };
   const service: ProviderServiceShape = {
     startSession: startSession as ProviderServiceShape["startSession"],
     startSessionFresh: startSession as ProviderServiceShape["startSessionFresh"],
@@ -304,8 +311,8 @@ export async function createHarness(input?: {
     Layer.provideMerge(Layer.succeed(ProviderService, service)),
     Layer.provideMerge(
       Layer.succeed(DiscoveryRegistry, {
-        getCatalog: Effect.succeed({ agents: [], skills: [] }),
-        refresh: () => Effect.succeed({ agents: [], skills: [] }),
+        getCatalog: Effect.succeed(discoveryCatalog),
+        refresh: () => Effect.succeed(discoveryCatalog),
         streamChanges: Stream.empty,
       }),
     ),
