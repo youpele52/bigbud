@@ -1,5 +1,5 @@
 import type { ModelSelection, ProviderKind } from "@bigbud/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -7,8 +7,13 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { providerSupportsSubProviderID } from "../ChatView.modelSelection.logic";
 import { useThreadActions } from "~/hooks/useThreadActions";
-import { dispatchHandoffSkillTurn, HandoffError, waitForHandoffSummary } from "~/lib/handoff";
-import { newMessageId } from "~/lib/utils";
+import {
+  buildHandoffSeedMessage,
+  dispatchHandoffSkillTurn,
+  HandoffError,
+  waitForHandoffDocument,
+} from "~/lib/handoff";
+import { readNativeApi } from "~/rpc/nativeApi";
 import { toastManager } from "~/components/ui/toast";
 
 export interface PendingProviderSwitchConfirmation {
@@ -49,6 +54,7 @@ export function useChatViewProviderSwitch({
   const [branchMode, setBranchMode] = useState<ProviderSwitchBranchMode>("handoff");
   const [isGeneratingHandoff, setIsGeneratingHandoff] = useState(false);
   const [handoffError, setHandoffError] = useState<string | null>(null);
+  const handoffInProgressRef = useRef(false);
   const { branchThread } = useThreadActions();
 
   const branchThreadForProviderChange = useCallback(
@@ -78,26 +84,31 @@ export function useChatViewProviderSwitch({
         runtime.scheduleComposerFocus();
         return;
       }
-
+      if (handoffInProgressRef.current) {
+        return;
+      }
+      handoffInProgressRef.current = true;
       setIsGeneratingHandoff(true);
       setHandoffError(null);
 
       try {
-        await dispatchHandoffSkillTurn({
+        const api = readNativeApi();
+        if (!api) {
+          throw new HandoffError("Native API is not available.");
+        }
+        const requestMessageId = await dispatchHandoffSkillTurn({
           threadId: base.activeThread.id,
           runtimeMode: base.activeThread.runtimeMode,
           interactionMode: base.activeThread.interactionMode,
         });
-        const handoffSummary = await waitForHandoffSummary(base.activeThread.id);
-        const handoffSeedMessage = {
-          id: newMessageId(),
-          role: "assistant" as const,
-          text: handoffSummary,
-          turnId: null,
-          streaming: false as const,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+        const handoffDocument = await waitForHandoffDocument(base.activeThread.id, {
+          requestMessageId,
+        });
+        const { path: handoffFilePath } = await api.server.writeHandoffDocument({
+          title: base.activeThread.title,
+          content: handoffDocument,
+        });
+        const handoffSeedMessage = buildHandoffSeedMessage(handoffFilePath);
 
         const branchedThreadId = await branchThread(base.activeThread.id, {
           modelSelection: nextModelSelection,
@@ -117,10 +128,12 @@ export function useChatViewProviderSwitch({
           description: message,
         });
         setIsGeneratingHandoff(false);
+        handoffInProgressRef.current = false;
         return;
       }
 
       setIsGeneratingHandoff(false);
+      handoffInProgressRef.current = false;
       setPendingProviderSwitchConfirmation(null);
       runtime.scheduleComposerFocus();
     },

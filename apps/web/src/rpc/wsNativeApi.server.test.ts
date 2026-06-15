@@ -70,6 +70,27 @@ describe("wsNativeApi — server", () => {
     });
   });
 
+  it("forwards handoff document writes directly to the RPC client", async () => {
+    const result = {
+      path: "/Users/test/.bigbud/skills/handoff/tmp/handoff.md",
+    };
+    rpcClientMock.server.writeHandoffDocument.mockResolvedValue(result);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(
+      api.server.writeHandoffDocument({
+        title: "Thread title",
+        content: "# Handoff\n\nBody",
+      }),
+    ).resolves.toEqual(result);
+    expect(rpcClientMock.server.writeHandoffDocument).toHaveBeenCalledWith({
+      title: "Thread title",
+      content: "# Handoff\n\nBody",
+    });
+  });
+
   it("forwards notes RPCs directly to the RPC client", async () => {
     const note = {
       noteId: NoteId.makeUnsafe("note-1"),

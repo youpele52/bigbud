@@ -121,6 +121,7 @@ export function createWsNativeApi(): NativeApi {
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
+      writeHandoffDocument: rpcClient.server.writeHandoffDocument,
     },
     orchestration: {
       getSnapshot: rpcClient.orchestration.getSnapshot,

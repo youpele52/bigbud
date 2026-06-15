@@ -2,7 +2,7 @@
 
 Hey there! 👋 Welcome to the bigbud changelog — your friendly record of everything we've been up to. Every release brings new features, thoughtful improvements, and the occasional bug squish, all documented here so you can see what's changed and why. Thanks for being along for the ride!
 
-## v0.1.644 (14 June, 2026)
+## v0.1.645 (15 June, 2026)
 
 ### Introducing bigbud Curated Native Skills
 

@@ -11,6 +11,7 @@ import type { DiscoveryRegistryShape } from "../../provider/Services/DiscoveryRe
 import type { WorkspacePathsShape } from "../../workspace/Services/WorkspacePaths.ts";
 
 const COMPACT_MENTION_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
+const SLASH_SKILL_COMMAND_REGEX = /^\/skills?\s+([^\s]+)(?:\s+[\s\S]*)?$/i;
 const MAX_REFERENCE_BLOCKS = 12;
 const MAX_DIRECTORY_ENTRIES = 80;
 const MAX_TEXT_BLOCK_CHARS = 16_000;
@@ -50,28 +51,49 @@ function trimToUndefined(value: string): string | undefined {
 function collectCompactMentions(messageText: string): Array<CompactMention> {
   const mentions: Array<CompactMention> = [];
   const seen = new Set<string>();
+  const addMention = (mention: CompactMention) => {
+    const key =
+      mention.kind === "path"
+        ? `${mention.kind}:${mention.path}`
+        : `${mention.kind}:${mention.name.trim().toLowerCase()}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    mentions.push(mention);
+  };
+
+  const slashSkillMatch = SLASH_SKILL_COMMAND_REGEX.exec(messageText.trim());
+  const slashSkillName =
+    slashSkillMatch?.[1] !== undefined ? trimToUndefined(slashSkillMatch[1]) : undefined;
+  if (slashSkillName) {
+    addMention({
+      kind: "skill",
+      rawValue: slashSkillMatch?.[0] ?? messageText.trim(),
+      name: slashSkillName,
+    });
+  }
 
   for (const match of messageText.matchAll(COMPACT_MENTION_REGEX)) {
     const rawValue = match[2]?.trim();
-    if (!rawValue || seen.has(rawValue)) {
+    if (!rawValue) {
       continue;
     }
-    seen.add(rawValue);
     if (rawValue.startsWith("agent:") || rawValue.startsWith("agent::")) {
       const name = trimToUndefined(rawValue.replace(/^agent::?/, ""));
       if (name) {
-        mentions.push({ kind: "agent", rawValue, name });
+        addMention({ kind: "agent", rawValue, name });
       }
       continue;
     }
     if (rawValue.startsWith("skill:") || rawValue.startsWith("skill::")) {
       const name = trimToUndefined(rawValue.replace(/^skill::?/, ""));
       if (name) {
-        mentions.push({ kind: "skill", rawValue, name });
+        addMention({ kind: "skill", rawValue, name });
       }
       continue;
     }
-    mentions.push({ kind: "path", rawValue, path: rawValue });
+    addMention({ kind: "path", rawValue, path: rawValue });
   }
 
   return mentions;
@@ -105,6 +127,11 @@ function resolveDiscoveryEntry<T extends DiscoveryEntry>(input: {
   );
   if (matching.length === 0) {
     return { status: "missing" };
+  }
+
+  const bigbudEntry = matching.find((entry) => entry.provider === "bigbud");
+  if (bigbudEntry) {
+    return { status: "resolved", entry: bigbudEntry };
   }
 
   const preferredEntry = matching.find((entry) => entry.provider === input.preferredProvider);
