@@ -220,6 +220,54 @@ interface GenerateHandoffSummaryInput {
 }
 
 /**
+ * Simpler wait that resolves with the text of the first non-streaming assistant
+ * message after a handoff skill turn completes. Rejects if the thread
+ * disappears or the timeout is reached.
+ */
+export function waitForHandoffSummary(
+  threadId: ThreadId,
+  options?: WaitForHandoffSummaryOptions,
+): Promise<string> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_HANDOFF_TIMEOUT_MS;
+
+  return new Promise((resolve, reject) => {
+    let intervalHandle: ReturnType<typeof setInterval> | null = null;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = (onComplete: () => void) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (intervalHandle) clearInterval(intervalHandle);
+      onComplete();
+    };
+
+    const check = () => {
+      const state = useStore.getState();
+      const thread = selectThreadById(threadId)(state);
+      if (!thread) {
+        cleanup(() =>
+          reject(new HandoffError("Source thread disappeared while generating handoff.")),
+        );
+        return;
+      }
+
+      const assistantMessage = [...thread.messages]
+        .toReversed()
+        .find((message) => message.role === "assistant" && !message.streaming && message.text);
+      if (assistantMessage) {
+        cleanup(() => resolve(assistantMessage.text));
+        return;
+      }
+    };
+
+    intervalHandle = setInterval(check, HANDOFF_POLL_INTERVAL_MS);
+    timeoutHandle = setTimeout(() => {
+      cleanup(() => reject(new HandoffError("Handoff generation timed out.")));
+    }, timeoutMs);
+    check();
+  });
+}
+
+/**
  * Convenience helper that runs the handoff skill on the source thread and
  * returns the generated handoff document text.
  */

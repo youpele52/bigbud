@@ -146,7 +146,6 @@ jobs:
       - name: Build desktop artifact
         shell: bash
         env:
-          CSC_NAME: ${{ secrets.CSC_NAME }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -176,11 +175,11 @@ jobs:
           }
 
           if [[ "${{ matrix.platform }}" == "mac" ]]; then
-            if has_all "$CSC_NAME" "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
+            if has_all "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
               echo "macOS signing enabled."
               args+=(--signed)
             else
-              echo "macOS signing disabled (missing one or more Apple signing secrets)."
+              echo "macOS signing disabled (missing one or more Apple notarization secrets)."
             fi
           elif [[ "${{ matrix.platform }}" == "win" ]]; then
             if has_all \
