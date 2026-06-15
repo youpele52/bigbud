@@ -61,7 +61,7 @@ describe("handoff", () => {
   });
 
   describe("dispatchHandoffSkillTurn", () => {
-    it("dispatches a thread.turn.start with /skills handoff", async () => {
+    it("dispatches a thread.turn.start with @skill::handoff", async () => {
       await dispatchHandoffSkillTurn({
         threadId: THREAD_ID,
         runtimeMode: "full-access",
@@ -73,7 +73,7 @@ describe("handoff", () => {
       expect(command?.type).toBe("thread.turn.start");
       expect(command?.threadId).toBe(THREAD_ID);
       expect(command?.message.role).toBe("user");
-      expect(command?.message.text).toBe("/skills handoff");
+      expect(command?.message.text).toBe("@skill::handoff");
       expect(command?.runtimeMode).toBe("full-access");
       expect(command?.interactionMode).toBe("default");
     });

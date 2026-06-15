@@ -251,7 +251,7 @@ export function waitForHandoffSummary(
       }
 
       const assistantMessage = [...thread.messages]
-        .reverse()
+        .toReversed()
         .find((message) => message.role === "assistant" && !message.streaming && message.text);
       if (assistantMessage) {
         cleanup(() => resolve(assistantMessage.text));
