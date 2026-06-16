@@ -1,4 +1,12 @@
 import {
+  type ServerAutomationResult,
+  type ServerCreateAutomationInput,
+  type ServerDeleteAutomationInput,
+  type ServerListAutomationRunsInput,
+  type ServerListAutomationRunsResult,
+  type ServerListAutomationsInput,
+  type ServerListAutomationsResult,
+  type ServerPauseAutomationInput,
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
   type GitGetCommitDetailsResult,
@@ -24,6 +32,10 @@ import {
   ORCHESTRATION_WS_METHODS,
   type ThinkingActivityDeltaEvent,
   type ServerSettingsPatch,
+  type ServerResumeAutomationInput,
+  type ServerTriggerAutomationInput,
+  type ServerTriggerAutomationResult,
+  type ServerUpdateAutomationInput,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
@@ -143,6 +155,24 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly listAutomations: (
+      input: ServerListAutomationsInput,
+    ) => Promise<ServerListAutomationsResult>;
+    readonly createAutomation: (
+      input: ServerCreateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly updateAutomation: (
+      input: ServerUpdateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly pauseAutomation: (input: ServerPauseAutomationInput) => Promise<void>;
+    readonly resumeAutomation: (input: ServerResumeAutomationInput) => Promise<void>;
+    readonly deleteAutomation: (input: ServerDeleteAutomationInput) => Promise<void>;
+    readonly triggerAutomation: (
+      input: ServerTriggerAutomationInput,
+    ) => Promise<ServerTriggerAutomationResult>;
+    readonly listAutomationRuns: (
+      input: ServerListAutomationRunsInput,
+    ) => Promise<ServerListAutomationRunsResult>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };
@@ -294,6 +324,22 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      listAutomations: (input) =>
+        transport.request((client) => client[WS_METHODS.serverListAutomations](input)),
+      createAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateAutomation](input)),
+      updateAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverUpdateAutomation](input)),
+      pauseAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverPauseAutomation](input)),
+      resumeAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverResumeAutomation](input)),
+      deleteAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverDeleteAutomation](input)),
+      triggerAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTriggerAutomation](input)),
+      listAutomationRuns: (input) =>
+        transport.request((client) => client[WS_METHODS.serverListAutomationRuns](input)),
       subscribeConfig: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeServerConfig]({}),

@@ -3,6 +3,7 @@ import { isElectron } from "../../config/env";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
+import { useState } from "react";
 import {
   SidebarContent,
   SidebarFooter,
@@ -22,6 +23,7 @@ import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
+import { SidebarAutomationsDialog } from "./SidebarAutomationsDialog";
 import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
@@ -29,6 +31,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const s = useSidebarState();
+  const [automationsOpen, setAutomationsOpen] = useState(false);
   const remoteExecutionAccess = useRemoteExecutionAccessGate();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -46,6 +49,10 @@ export default function Sidebar() {
             onNewChat={() => {
               closeMobileSidebar();
               void s.handleNewChat();
+            }}
+            onOpenAutomations={() => {
+              closeMobileSidebar();
+              setAutomationsOpen(true);
             }}
             newThreadShortcutLabel={s.newThreadShortcutLabel}
           />
@@ -296,6 +303,12 @@ export default function Sidebar() {
             onSubmit={() => {
               void remoteExecutionAccess.submitRemoteExecutionAuth();
             }}
+          />
+
+          <SidebarAutomationsDialog
+            open={automationsOpen}
+            threadId={s.sharedProjectItemProps.routeThreadId}
+            onOpenChange={setAutomationsOpen}
           />
         </>
       )}

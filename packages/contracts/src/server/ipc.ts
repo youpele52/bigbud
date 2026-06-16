@@ -68,6 +68,20 @@ import type {
   ServerWriteHandoffDocumentResult,
 } from "./server";
 import type {
+  ServerAutomationResult,
+  ServerCreateAutomationInput,
+  ServerDeleteAutomationInput,
+  ServerListAutomationRunsInput,
+  ServerListAutomationRunsResult,
+  ServerListAutomationsInput,
+  ServerListAutomationsResult,
+  ServerPauseAutomationInput,
+  ServerResumeAutomationInput,
+  ServerTriggerAutomationInput,
+  ServerTriggerAutomationResult,
+  ServerUpdateAutomationInput,
+} from "./automation";
+import type {
   TerminalClearInput,
   TerminalCloseInput,
   TerminalEvent,
@@ -279,6 +293,18 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    listAutomations: (input: ServerListAutomationsInput) => Promise<ServerListAutomationsResult>;
+    createAutomation: (input: ServerCreateAutomationInput) => Promise<ServerAutomationResult>;
+    updateAutomation: (input: ServerUpdateAutomationInput) => Promise<ServerAutomationResult>;
+    pauseAutomation: (input: ServerPauseAutomationInput) => Promise<void>;
+    resumeAutomation: (input: ServerResumeAutomationInput) => Promise<void>;
+    deleteAutomation: (input: ServerDeleteAutomationInput) => Promise<void>;
+    triggerAutomation: (
+      input: ServerTriggerAutomationInput,
+    ) => Promise<ServerTriggerAutomationResult>;
+    listAutomationRuns: (
+      input: ServerListAutomationRunsInput,
+    ) => Promise<ServerListAutomationRunsResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
