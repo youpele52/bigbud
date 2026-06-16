@@ -17,7 +17,7 @@ import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarAppHeader } from "./SidebarHeader";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
-import { SidebarSearchSection } from "./Sidebar.searchSection";
+import { SidebarActionsSection } from "./Sidebar.actionsSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
@@ -42,7 +42,13 @@ export default function Sidebar() {
         <SettingsSidebarNav pathname={s.pathname} />
       ) : (
         <>
-          <SidebarSearchSection />
+          <SidebarActionsSection
+            onNewChat={() => {
+              closeMobileSidebar();
+              void s.handleNewChat();
+            }}
+            newThreadShortcutLabel={s.newThreadShortcutLabel}
+          />
 
           <SidebarContent className="gap-0">
             <SidebarFavoritesSection
@@ -59,11 +65,6 @@ export default function Sidebar() {
               onExpandedChange={s.setAreChatsExpanded}
               showAll={s.showAllChats}
               onShowAllChange={s.setShowAllChats}
-              onNewChat={() => {
-                closeMobileSidebar();
-                void s.handleNewChat();
-              }}
-              newThreadShortcutLabel={s.newThreadShortcutLabel}
               sharedProjectItemProps={s.sharedProjectItemProps}
               chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
               onChatsSortOrderChange={(sortOrder) => {
