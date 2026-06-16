@@ -105,6 +105,16 @@ import {
   WsProjectsWriteFileRpc,
   WsSubscribeProjectDirectoryChangesRpc,
 } from "./rpc.workspace";
+import {
+  WsServerCreateAutomationRpc,
+  WsServerDeleteAutomationRpc,
+  WsServerListAutomationRunsRpc,
+  WsServerListAutomationsRpc,
+  WsServerPauseAutomationRpc,
+  WsServerResumeAutomationRpc,
+  WsServerTriggerAutomationRpc,
+  WsServerUpdateAutomationRpc,
+} from "./rpc.automation";
 
 export { WS_METHODS };
 
@@ -394,6 +404,14 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
+  WsServerListAutomationsRpc,
+  WsServerCreateAutomationRpc,
+  WsServerUpdateAutomationRpc,
+  WsServerPauseAutomationRpc,
+  WsServerResumeAutomationRpc,
+  WsServerDeleteAutomationRpc,
+  WsServerTriggerAutomationRpc,
+  WsServerListAutomationRunsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,

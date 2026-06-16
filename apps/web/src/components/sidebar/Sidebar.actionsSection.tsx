@@ -8,11 +8,13 @@ import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 
 interface SidebarActionsSectionProps {
   onNewChat: () => void;
+  onOpenAutomations: () => void;
   newThreadShortcutLabel: string | null | undefined;
 }
 
 export function SidebarActionsSection({
   onNewChat,
+  onOpenAutomations,
   newThreadShortcutLabel,
 }: SidebarActionsSectionProps) {
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
@@ -80,9 +82,7 @@ export function SidebarActionsSection({
               type="button"
               aria-label="Open automations"
               className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => {
-                /* TODO: wire up automations */
-              }}
+              onClick={onOpenAutomations}
             />
           }
         >
@@ -91,7 +91,7 @@ export function SidebarActionsSection({
           />
           <span className="flex-1">Automations</span>
         </TooltipTrigger>
-        <TooltipPopup side="right">Automations (coming soon)</TooltipPopup>
+        <TooltipPopup side="right">Automations</TooltipPopup>
       </Tooltip>
     </div>
   );

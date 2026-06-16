@@ -34,7 +34,11 @@ import { SidebarActionsSection } from "./Sidebar.actionsSection";
 
 function renderActions(newThreadShortcutLabel: string | null = null) {
   return renderToStaticMarkup(
-    <SidebarActionsSection onNewChat={vi.fn()} newThreadShortcutLabel={newThreadShortcutLabel} />,
+    <SidebarActionsSection
+      onNewChat={vi.fn()}
+      onOpenAutomations={vi.fn()}
+      newThreadShortcutLabel={newThreadShortcutLabel}
+    />,
   );
 }
 

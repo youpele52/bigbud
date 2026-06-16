@@ -17,6 +17,7 @@ import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
 import { Keybindings, type KeybindingsShape } from "./keybindings/keybindings.ts";
 import { BrowserTraceCollector } from "./observability/Services/BrowserTraceCollector.ts";
+import { AutomationScheduleRepository } from "./persistence/Services/AutomationScheduleRepository.ts";
 import { Open, type OpenShape } from "./utils/open.ts";
 import {
   OrchestrationEngineService,
@@ -26,6 +27,7 @@ import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { SchedulerReactor } from "./orchestration/Services/SchedulerReactor.ts";
 import {
   ProviderRegistry,
   type ProviderRegistryShape,
@@ -335,10 +337,31 @@ export const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide(
-        Layer.mock(ProjectionSnapshotQuery)({
-          getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
-          ...options?.layers?.projectionSnapshotQuery,
-        }),
+        Layer.mergeAll(
+          Layer.mock(ProjectionSnapshotQuery)({
+            getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
+            ...options?.layers?.projectionSnapshotQuery,
+          }),
+          Layer.mock(AutomationScheduleRepository)({
+            create: () => Effect.die("not implemented"),
+            getById: () => Effect.succeed(Option.none()),
+            listByThread: () => Effect.succeed([]),
+            claimDue: () => Effect.succeed([]),
+            update: () => Effect.die("not implemented"),
+            updateNextRun: () => Effect.void,
+            pause: () => Effect.void,
+            resume: () => Effect.void,
+            delete: () => Effect.void,
+            recordRunStarted: () => Effect.void,
+            recordRunFinished: () => Effect.void,
+            recordRunFailed: () => Effect.void,
+            listRuns: () => Effect.succeed([]),
+          }),
+          Layer.mock(SchedulerReactor)({
+            start: () => Effect.void,
+            triggerNow: () => Effect.void,
+          }),
+        ),
       ),
       Layer.provide(
         Layer.mock(CheckpointDiffQuery)({

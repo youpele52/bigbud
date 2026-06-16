@@ -34,6 +34,8 @@ import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import { ProjectionNoteRepository } from "../persistence/Services/ProjectionNotes";
+import { AutomationScheduleRepository } from "../persistence/Services/AutomationScheduleRepository.ts";
+import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts";
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -57,6 +59,8 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const workspaceFileSystem = yield* WorkspaceFileSystem;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
   const projectionNotes = yield* ProjectionNoteRepository;
+  const automationScheduleRepository = yield* AutomationScheduleRepository;
+  const schedulerReactor = yield* SchedulerReactor;
 
   const serverCommandId = (tag: string) =>
     CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
@@ -206,6 +210,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
 
   return {
     assertLocalGitExecutionTarget,
+    automationScheduleRepository,
     checkpointDiffQuery,
     config,
     dispatchNormalizedCommand,
@@ -226,6 +231,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     providerRegistry,
     providerService,
     refreshGitStatus,
+    schedulerReactor,
     serverSettings,
     startup,
     terminalManager,

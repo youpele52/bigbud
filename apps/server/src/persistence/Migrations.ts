@@ -44,6 +44,7 @@ import Migration0028 from "./Migrations/028_ExecutionTargets.ts";
 import Migration0029 from "./Migrations/029_ProviderRuntimeWorkspaceExecutionTargets.ts";
 import Migration0030 from "./Migrations/030_ProjectionRuntimeWorkspaceExecutionTargets.ts";
 import Migration0031 from "./Migrations/031_ProjectionNotes.ts";
+import Migration0032 from "./Migrations/032_AutomationSchedules.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -87,6 +88,7 @@ export const migrationEntries = [
   [29, "ProviderRuntimeWorkspaceExecutionTargets", Migration0029],
   [30, "ProjectionRuntimeWorkspaceExecutionTargets", Migration0030],
   [31, "ProjectionNotes", Migration0031],
+  [32, "AutomationSchedules", Migration0032],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

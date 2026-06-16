@@ -67,6 +67,14 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
+  serverListAutomations: "server.listAutomations",
+  serverCreateAutomation: "server.createAutomation",
+  serverUpdateAutomation: "server.updateAutomation",
+  serverPauseAutomation: "server.pauseAutomation",
+  serverResumeAutomation: "server.resumeAutomation",
+  serverDeleteAutomation: "server.deleteAutomation",
+  serverTriggerAutomation: "server.triggerAutomation",
+  serverListAutomationRuns: "server.listAutomationRuns",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
