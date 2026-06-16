@@ -131,7 +131,7 @@ describe("PiAdapter stream ingestion — turn deferral", () => {
     expect(session.pendingTurnEnd).toBeUndefined();
     expect(session.completedTurnBoundary).toBeDefined();
     expect(provider.emittedEvents.map((event) => event.type)).toContain("item.completed");
-    expect(provider.emittedEvents.map((event) => event.type)).toContain("turn.completed");
+    expect(provider.emittedEvents.map((event) => event.type)).not.toContain("turn.completed");
     expect(
       provider.emittedEvents.some(
         (event) =>
@@ -149,6 +149,7 @@ describe("PiAdapter stream ingestion — turn deferral", () => {
 
     expect(session.activeTurnId).toBeUndefined();
     expect(session.completedTurnBoundary).toBeUndefined();
+    expect(provider.emittedEvents.some((event) => event.type === "turn.completed")).toBe(true);
     expect(
       provider.emittedEvents.some(
         (event) => event.type === "session.state.changed" && event.payload.state === "ready",
@@ -241,14 +242,6 @@ describe("PiAdapter stream ingestion — turn queuing", () => {
 
     expect(session.activeTurnId).toBe(asTurnId("turn-current"));
     expect(session.queuedTurnIds).toEqual([asTurnId("turn-next")]);
-    expect(
-      provider.emittedEvents.some(
-        (event) =>
-          event.type === "turn.completed" &&
-          event.turnId === asTurnId("turn-current") &&
-          event.payload.state === "completed",
-      ),
-    ).toBe(true);
     expect(
       provider.emittedEvents.some(
         (event) =>
