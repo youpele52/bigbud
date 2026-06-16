@@ -115,7 +115,7 @@ export function buildPiSkills(
     }
 
     const name = normalizePiSkillName(command.name);
-    const sourcePath = command.sourceInfo?.path?.trim();
+    const sourcePath = command.path?.trim();
     if (!name || !sourcePath) {
       continue;
     }
@@ -137,7 +137,7 @@ export function buildPiSkills(
       path: sourcePath,
       enabled: true,
       ...(command.description?.trim() ? { description: command.description.trim() } : {}),
-      ...(command.sourceInfo?.scope ? { scope: command.sourceInfo.scope } : {}),
+      ...(command.location ? { scope: command.location } : {}),
     } satisfies ServerProviderSkill);
   }
 
