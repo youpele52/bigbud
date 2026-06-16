@@ -1,6 +1,11 @@
-import { ChevronRightIcon, MessageSquareIcon, MessageSquareTextIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  MessageSquareIcon,
+  MessageSquareTextIcon,
+  SquarePenIcon,
+} from "lucide-react";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
-import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { ChatSortMenu } from "./SidebarChatSortMenu";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
@@ -13,6 +18,7 @@ import {
   SidebarMenuSubItem,
 } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
 
 export const RECENT_CHAT_INITIAL_VISIBLE_COUNT = 4;
@@ -23,6 +29,8 @@ interface SidebarChatsSectionProps {
   onExpandedChange: (expanded: boolean) => void;
   showAll: boolean;
   onShowAllChange: (showAll: boolean) => void;
+  onNewChat: () => void;
+  newThreadShortcutLabel: string | null | undefined;
   sharedProjectItemProps: SharedProjectItemProps;
   chatsSortOrder?: SidebarThreadSortOrder;
   onChatsSortOrderChange?: (sortOrder: SidebarThreadSortOrder) => void;
@@ -35,6 +43,8 @@ export function SidebarChatsSection({
   onExpandedChange,
   showAll,
   onShowAllChange,
+  onNewChat,
+  newThreadShortcutLabel,
   sharedProjectItemProps,
   chatsSortOrder = "updated_at",
   onChatsSortOrderChange,
@@ -50,12 +60,31 @@ export function SidebarChatsSection({
     <SidebarGroup className="px-2 py-2">
       <SidebarSectionLabel
         actions={
-          onChatsSortOrderChange ? (
-            <ChatSortMenu
-              chatsSortOrder={chatsSortOrder}
-              onChatsSortOrderChange={onChatsSortOrderChange}
-            />
-          ) : null
+          <>
+            {onChatsSortOrderChange && (
+              <ChatSortMenu
+                chatsSortOrder={chatsSortOrder}
+                onChatsSortOrderChange={onChatsSortOrderChange}
+              />
+            )}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label="New chat"
+                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+                    onClick={onNewChat}
+                  />
+                }
+              >
+                <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+              </TooltipTrigger>
+              <TooltipPopup side="right">
+                {newThreadShortcutLabel ? `New chat (${newThreadShortcutLabel})` : "New chat"}
+              </TooltipPopup>
+            </Tooltip>
+          </>
         }
       >
         Chats

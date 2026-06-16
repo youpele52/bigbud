@@ -3,7 +3,6 @@ import { isElectron } from "../../config/env";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
-import { useState } from "react";
 import {
   SidebarContent,
   SidebarFooter,
@@ -23,7 +22,6 @@ import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
-import { SidebarAutomationsDialog } from "./SidebarAutomationsDialog";
 import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
@@ -31,7 +29,6 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const s = useSidebarState();
-  const [automationsOpen, setAutomationsOpen] = useState(false);
   const remoteExecutionAccess = useRemoteExecutionAccessGate();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -52,7 +49,7 @@ export default function Sidebar() {
             }}
             onOpenAutomations={() => {
               closeMobileSidebar();
-              setAutomationsOpen(true);
+              void navigate({ to: "/automations" });
             }}
             newThreadShortcutLabel={s.newThreadShortcutLabel}
           />
@@ -72,6 +69,11 @@ export default function Sidebar() {
               onExpandedChange={s.setAreChatsExpanded}
               showAll={s.showAllChats}
               onShowAllChange={s.setShowAllChats}
+              onNewChat={() => {
+                closeMobileSidebar();
+                void s.handleNewChat();
+              }}
+              newThreadShortcutLabel={s.newThreadShortcutLabel}
               sharedProjectItemProps={s.sharedProjectItemProps}
               chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
               onChatsSortOrderChange={(sortOrder) => {
@@ -229,12 +231,12 @@ export default function Sidebar() {
             description={
               s.remoteProjectUnlockMode === "password" ? (
                 <>
-                  BigBud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
+                  bigbud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
                   before it can verify and add this remote project.
                 </>
               ) : (
                 <>
-                  BigBud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
+                  bigbud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
                   it can verify and add this remote project.
                 </>
               )
@@ -279,13 +281,13 @@ export default function Sidebar() {
             description={
               remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
                 <>
-                  BigBud needs the SSH password for{" "}
+                  bigbud needs the SSH password for{" "}
                   <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
                   access this remote project.
                 </>
               ) : (
                 <>
-                  BigBud needs the passphrase for{" "}
+                  bigbud needs the passphrase for{" "}
                   <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
                   access this remote project.
                 </>
@@ -303,12 +305,6 @@ export default function Sidebar() {
             onSubmit={() => {
               void remoteExecutionAccess.submitRemoteExecutionAuth();
             }}
-          />
-
-          <SidebarAutomationsDialog
-            open={automationsOpen}
-            threadId={s.sharedProjectItemProps.routeThreadId}
-            onOpenChange={setAutomationsOpen}
           />
         </>
       )}

@@ -5,6 +5,7 @@
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
   --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-success-foreground: var(--success-foreground);
@@ -46,6 +47,15 @@
     0%,
     100% {
       opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes breathe {
+    0%,
+    100% {
+      opacity: 0.55;
     }
     50% {
       opacity: 1;
