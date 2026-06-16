@@ -186,7 +186,7 @@ describe("GitPanelContent", () => {
       />,
     );
 
-    expect(markup).toContain("abc123 by Youpele Michael, 2m ago");
+    expect(markup).toContain("abc123 by Youpele Michael, 2m");
     expect(markup).toContain("v0.1.642-beta-2");
     expect(markup).toContain("latest");
     expect(markup).toContain('aria-label="Not pushed"');
