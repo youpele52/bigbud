@@ -112,7 +112,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       })
     : null;
   const visibleThreadStatus =
-    threadStatus?.label === "Working" || threadStatus?.label === "Compacting" ? null : threadStatus;
+    threadStatus?.label === "Working" ||
+    threadStatus?.label === "Compacting" ||
+    threadStatus?.label === "Completed"
+      ? null
+      : threadStatus;
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
@@ -152,6 +156,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     return null;
   }
 
+  const isThreadCompleted = threadStatus?.label === "Completed";
   const providerIconColor =
     thread.session?.status === "error"
       ? "text-destructive"
@@ -159,7 +164,10 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         ? "text-warning"
         : isThreadRunning
           ? "text-info-foreground"
-          : "text-muted-foreground";
+          : isThreadCompleted
+            ? "text-success"
+            : "text-muted-foreground";
+  const providerIconAnimationClass = isThreadRunning ? "animate-breathe" : "";
 
   return (
     <SidebarMenuSubItem className="w-full" data-thread-item>
@@ -274,7 +282,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             {thread.session?.provider &&
               (() => {
                 const Icon = PROVIDER_ICON_BY_PROVIDER[thread.session.provider];
-                return <Icon className={`size-3 shrink-0 ${providerIconColor}`} />;
+                return (
+                  <Icon
+                    className={`size-3 shrink-0 ${providerIconColor} ${providerIconAnimationClass}`.trim()}
+                  />
+                );
               })()}
             {visibleThreadStatus && (
               <ThreadStatusLabel
