@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ShieldIcon,
   FolderOpenIcon,
@@ -28,27 +28,20 @@ const COMMON_FOLDERS = [
   { key: "Pictures", label: "Pictures" },
 ] as const;
 
-async function checkFolderAccess(): Promise<Record<string, boolean>> {
-  const api = readNativeApi();
-  if (!api) {
-    return Object.fromEntries(COMMON_FOLDERS.map((f) => [f.key, false]));
-  }
-
-  const result = await api.fileAccess.request("common-folders");
-  const accessMap: Record<string, boolean> = {};
-  for (const folder of COMMON_FOLDERS) {
-    accessMap[folder.key] = result.granted.some((g) => g.includes(folder.key));
-  }
-  return accessMap;
+function getFolderAccessMap(
+  permissionLevel: "none" | "common-folders" | "unrestricted",
+): Record<string, boolean> {
+  const hasCommonFolderAccess =
+    permissionLevel === "common-folders" || permissionLevel === "unrestricted";
+  return Object.fromEntries(COMMON_FOLDERS.map((folder) => [folder.key, hasCommonFolderAccess]));
 }
 
 export function FileAccessSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
-  const [accessMap, setAccessMap] = useState<Record<string, boolean> | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const accessMap = getFolderAccessMap(settings.fileAccessPermissionLevel);
 
   const handlePickDefaultChatFolder = useCallback(async () => {
     const api = readNativeApi();
@@ -65,41 +58,14 @@ export function FileAccessSettingsSection() {
     setIsPickingFolder(false);
   }, [isPickingFolder, updateSettings]);
 
-  const refreshAccess = useCallback(async () => {
-    setIsChecking(true);
-    try {
-      const map = await checkFolderAccess();
-      setAccessMap(map);
-    } catch {
-      setAccessMap(Object.fromEntries(COMMON_FOLDERS.map((f) => [f.key, false])));
-    }
-    setIsChecking(false);
-  }, []);
-
-  useEffect(() => {
-    void refreshAccess();
-  }, [refreshAccess]);
-
   const handleResetPermissions = useCallback(async () => {
     setIsResetting(true);
     updateSettings({
       hasSeenFileAccessPrompt: false,
       fileAccessPermissionLevel: "none",
     });
-
-    // Re-request the current level to trigger dialogs again
-    const api = readNativeApi();
-    if (api) {
-      const level =
-        settings.fileAccessPermissionLevel === "none"
-          ? "common-folders"
-          : settings.fileAccessPermissionLevel;
-      await api.fileAccess.request(level);
-    }
-
-    await refreshAccess();
     setIsResetting(false);
-  }, [refreshAccess, settings.fileAccessPermissionLevel, updateSettings]);
+  }, [updateSettings]);
 
   const handleOpenSystemSettings = useCallback(() => {
     const api = readNativeApi();
@@ -174,23 +140,11 @@ export function FileAccessSettingsSection() {
       {settings.fileAccessPermissionLevel !== "none" && (
         <SettingsRow
           title="Folder access status"
-          description="Current access status for commonly used folders."
-          control={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 text-xs"
-              disabled={isChecking}
-              onClick={() => void refreshAccess()}
-            >
-              <RotateCcwIcon className="size-3" />
-              Refresh
-            </Button>
-          }
+          description="Saved access scope for commonly used folders. macOS may still prompt when protected folders are first accessed."
         >
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {COMMON_FOLDERS.map((folder) => {
-              const hasAccess = accessMap?.[folder.key] ?? false;
+              const hasAccess = accessMap[folder.key] ?? false;
               return (
                 <div
                   key={folder.key}
@@ -212,7 +166,7 @@ export function FileAccessSettingsSection() {
 
       <SettingsRow
         title="Reset permissions"
-        description="Clear saved permissions and re-trigger system access dialogs."
+        description="Clear the saved preference so bigbud asks you again before using expanded file access."
         control={
           <Button
             variant="outline"
