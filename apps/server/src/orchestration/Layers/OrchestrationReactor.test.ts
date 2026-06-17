@@ -56,7 +56,7 @@ describe("OrchestrationReactor", () => {
               started.push("scheduler-reactor");
               return Effect.void;
             },
-            triggerNow: () => Effect.void,
+            triggerNow: () => Effect.succeed({ status: "dispatched" as const }),
           }),
         ),
       ),

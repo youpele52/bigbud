@@ -1,3 +1,20 @@
+/**
+ * Minimal 5-field cron scheduler used by automation recurring schedules.
+ *
+ * Supported syntax:
+ * - Five fields only: minute hour day-of-month month day-of-week
+ * - Numeric ranges, lists, and steps (star, star-slash-n, a-b, a,b)
+ * - Day-of-week 0 or 7 for Sunday
+ * - IANA timezone via Intl (invalid zones throw CronParseError)
+ *
+ * Semantics:
+ * - Day-of-month and day-of-week both apply with AND logic (both must match)
+ * - No named months/weekdays, no seconds/year fields
+ *
+ * DST:
+ * - Spring-forward gaps skip non-existent local times (next valid minute is returned)
+ * - Fall-back duplicate local times can match twice (one UTC instant per minute step)
+ */
 export class CronParseError extends Error {
   constructor(message: string) {
     super(message);

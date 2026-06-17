@@ -1,61 +1,114 @@
-import {
-  AutomationId,
-  AutomationRunId,
-  CommandId,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
-  MessageId,
-  ThreadId,
-} from "@bigbud/contracts";
-import { Data, Duration, Effect, Layer, Option, Schedule } from "effect";
+import { type AutomationSchedule } from "@bigbud/contracts";
+import { Duration, Effect, Layer, Option, Schedule, Stream } from "effect";
 
 import { AutomationScheduleRepository } from "../../persistence/Services/AutomationScheduleRepository.ts";
+import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
+import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { SchedulerConfig } from "../Services/SchedulerConfig.ts";
-import { SchedulerReactor, type SchedulerReactorShape } from "../Services/SchedulerReactor.ts";
-import { getNextCronTime } from "../Scheduler/cron.ts";
-
-function makeCommandId(): CommandId {
-  return CommandId.makeUnsafe(`server:automation:${crypto.randomUUID()}`);
-}
-
-function makeMessageId(): MessageId {
-  return MessageId.makeUnsafe(crypto.randomUUID());
-}
-
-function makeRunId(): AutomationRunId {
-  return AutomationRunId.makeUnsafe(crypto.randomUUID());
-}
-
-function buildAutomationExecutionPrompt(prompt: string, now: string): string {
-  return [
-    "[Automated scheduled task]",
-    `Triggered at: ${now}`,
-    "Execute the following task immediately without asking for clarification.",
-    "",
-    prompt,
-  ].join("\n");
-}
-
-class AutomationCronError extends Data.TaggedError("AutomationCronError")<{
-  readonly message: string;
-}> {}
+import {
+  SchedulerReactor,
+  type AutomationTriggerResult,
+  type SchedulerReactorShape,
+} from "../Services/SchedulerReactor.ts";
+import {
+  computeNextRunAt,
+  dispatchAutomationRun,
+  makeCommandId,
+  makeMessageId,
+  makeRunId,
+  readScheduleDispatchContext,
+} from "./SchedulerReactor.logic.ts";
+import {
+  handleAutomationTerminalEvent,
+  makeLoadScheduleKind,
+  reconcileFromConfig,
+} from "./SchedulerReactor.reconcile.ts";
 
 const makeSchedulerReactor = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const repository = yield* AutomationScheduleRepository;
+  const projectionTurnRepository = yield* ProjectionTurnRepository;
   const config = yield* SchedulerConfig;
 
   const leaseDurationMs = Duration.toMillis(config.leaseDuration);
+  const loadScheduleKind = makeLoadScheduleKind(repository);
 
-  const dispatchSchedule = Effect.fn("dispatchSchedule")(function* (schedule: {
-    readonly automationId: AutomationId;
-    readonly targetThreadId: ThreadId;
-    readonly prompt: string;
-    readonly scheduleKind: "custom" | "once";
-    readonly cronExpression: string;
-    readonly timezone: string;
-  }) {
+  const processClaimedSchedule = Effect.fn("processClaimedSchedule")(function* (
+    schedule: AutomationSchedule,
+  ) {
+    const scheduledFor = schedule.nextRunAt;
+    if (scheduledFor === null) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextRunResult = yield* computeNextRunAt({
+      scheduleKind: schedule.scheduleKind,
+      cronExpression: schedule.cronExpression,
+      timezone: schedule.timezone,
+      now,
+    });
+
+    if (!nextRunResult.ok) {
+      yield* repository
+        .pause({
+          automationId: schedule.automationId,
+          pausedAt: now,
+          updatedAt: now,
+        })
+        .pipe(Effect.ignore);
+      yield* repository.releaseLease({
+        automationId: schedule.automationId,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const runOption = yield* repository.claimOccurrence({
+      automationId: schedule.automationId,
+      scheduledFor,
+      nextRunAt: nextRunResult.nextRunAt,
+      runId: makeRunId(),
+      threadId: schedule.targetThreadId,
+      messageId: makeMessageId(),
+      commandId: makeCommandId(),
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    if (Option.isNone(runOption)) {
+      yield* repository.releaseLease({
+        automationId: schedule.automationId,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const dispatchContext = readScheduleDispatchContext(schedule);
+    const dispatchResult = yield* dispatchAutomationRun({
+      repository,
+      orchestrationEngine,
+      run: runOption.value,
+      prompt: dispatchContext.prompt,
+      scheduleKind: dispatchContext.scheduleKind,
+      automationId: dispatchContext.automationId,
+    });
+
+    if (!dispatchResult.ok && !dispatchResult.skipped && schedule.scheduleKind === "custom") {
+      yield* repository
+        .updateNextRun({
+          automationId: schedule.automationId,
+          nextRunAt: scheduledFor,
+          updatedAt: now,
+        })
+        .pipe(Effect.ignore);
+    }
+  });
+
+  const dispatchManualRun = Effect.fn("dispatchManualRun")(function* (
+    schedule: AutomationSchedule,
+  ) {
     const now = new Date().toISOString();
     const runId = makeRunId();
     const messageId = makeMessageId();
@@ -67,110 +120,37 @@ const makeSchedulerReactor = Effect.gen(function* () {
       threadId: schedule.targetThreadId,
       messageId,
       commandId,
+      triggerKind: "manual",
+      scheduledFor: null,
       startedAt: now,
     });
 
-    const executionPrompt = buildAutomationExecutionPrompt(schedule.prompt, now);
-
-    const dispatchResult = yield* Effect.matchEffect(
-      orchestrationEngine.dispatch({
-        type: "thread.turn.start",
-        commandId,
+    const dispatchResult = yield* dispatchAutomationRun({
+      repository,
+      orchestrationEngine,
+      run: {
+        runId,
+        automationId: schedule.automationId,
         threadId: schedule.targetThreadId,
-        message: {
-          messageId,
-          role: "user",
-          text: executionPrompt,
-          attachments: [],
-        },
-        runtimeMode: DEFAULT_RUNTIME_MODE,
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        createdAt: now,
-      }),
-      {
-        onFailure: () => Effect.succeed({ ok: false as const }),
-        onSuccess: () => Effect.succeed({ ok: true as const }),
+        messageId,
+        commandId,
+        triggerKind: "manual",
+        scheduledFor: null,
+        status: "started",
+        startedAt: now,
+        dispatchedAt: null,
+        finishedAt: null,
+        providerTerminalEventId: null,
+        errorMessage: null,
       },
-    );
-
-    const nextRunResult =
-      schedule.scheduleKind === "once"
-        ? { ok: true as const, nextRunAt: null }
-        : yield* Effect.matchEffect(
-            Effect.try({
-              try: () => getNextCronTime(schedule.cronExpression, new Date(now), schedule.timezone),
-              catch: (error) =>
-                new AutomationCronError({
-                  message: error instanceof Error ? error.message : String(error),
-                }),
-            }),
-            {
-              onFailure: (error) =>
-                Effect.succeed({
-                  ok: false as const,
-                  error: error.message,
-                }),
-              onSuccess: (date) =>
-                Effect.succeed({ ok: true as const, nextRunAt: date.toISOString() }),
-            },
-          );
-
-    if (!nextRunResult.ok) {
-      yield* repository.recordRunFailed({
-        runId,
-        finishedAt: new Date().toISOString(),
-        errorMessage: nextRunResult.error,
-      });
-      yield* repository
-        .pause({
-          automationId: schedule.automationId,
-          pausedAt: now,
-          updatedAt: new Date().toISOString(),
-        })
-        .pipe(Effect.ignore);
-      return;
-    }
-
-    if (!dispatchResult.ok) {
-      yield* repository.recordRunFailed({
-        runId,
-        finishedAt: new Date().toISOString(),
-        errorMessage: "Failed to dispatch automation turn",
-      });
-      if (schedule.scheduleKind === "once") {
-        yield* repository
-          .pause({
-            automationId: schedule.automationId,
-            pausedAt: now,
-            updatedAt: new Date().toISOString(),
-          })
-          .pipe(Effect.ignore);
-        return;
-      }
-    } else {
-      yield* repository.recordRunFinished({
-        runId,
-        finishedAt: new Date().toISOString(),
-      });
-      if (schedule.scheduleKind === "once") {
-        yield* repository.complete({
-          automationId: schedule.automationId,
-          completedAt: now,
-          updatedAt: new Date().toISOString(),
-        });
-        return;
-      }
-    }
-
-    if (nextRunResult.nextRunAt === null) {
-      return;
-    }
-
-    yield* repository.updateNextRun({
+      prompt: schedule.prompt,
+      scheduleKind: schedule.scheduleKind,
       automationId: schedule.automationId,
-      nextRunAt: nextRunResult.nextRunAt,
-      updatedAt: new Date().toISOString(),
     });
+
+    return dispatchResult.ok
+      ? ({ status: "dispatched", triggeredAt: now, runId } satisfies AutomationTriggerResult)
+      : ({ status: "dispatch_failed" } satisfies AutomationTriggerResult);
   });
 
   const tick = Effect.fn("tick")(function* () {
@@ -193,7 +173,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
     yield* Effect.forEach(
       dueSchedules,
       (schedule) =>
-        dispatchSchedule(schedule).pipe(
+        processClaimedSchedule(schedule).pipe(
           Effect.catchCause((cause) =>
             Effect.logWarning("automation dispatch failed", {
               automationId: schedule.automationId,
@@ -208,6 +188,13 @@ const makeSchedulerReactor = Effect.gen(function* () {
   const start: SchedulerReactorShape["start"] = Effect.fn("start")(function* () {
     yield* Effect.logDebug("scheduler reactor starting");
 
+    yield* reconcileFromConfig({
+      repository,
+      projectionTurnRepository,
+      orchestrationEngine,
+      config,
+    }).pipe(Effect.ignore);
+
     yield* Effect.forkScoped(
       Effect.repeat(
         tick().pipe(
@@ -218,22 +205,56 @@ const makeSchedulerReactor = Effect.gen(function* () {
         Schedule.fixed(config.tickInterval),
       ),
     );
+
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        reconcileFromConfig({
+          repository,
+          projectionTurnRepository,
+          orchestrationEngine,
+          config,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("automation reconciliation failed", { cause: cause.toString() }),
+          ),
+        ),
+        Schedule.fixed(config.reconcileInterval),
+      ),
+    );
+
+    yield* Effect.forkScoped(
+      Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) =>
+        handleAutomationTerminalEvent({
+          repository,
+          projectionTurnRepository,
+          event,
+          loadScheduleKind,
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("automation terminal event handling failed", {
+              eventType: event.type,
+              cause: cause.toString(),
+            }),
+          ),
+        ),
+      ),
+    );
   });
 
   const triggerNow: SchedulerReactorShape["triggerNow"] = Effect.fn("triggerNow")(
     function* (automationId) {
-      yield* repository.getById({ automationId }).pipe(
-        Effect.flatMap((scheduleOption) => {
-          if (Option.isNone(scheduleOption) || scheduleOption.value.deletedAt !== null) {
-            return Effect.void;
-          }
-          return dispatchSchedule(scheduleOption.value);
-        }),
-        Effect.catchCause((cause) =>
-          Effect.logWarning("automation trigger failed", {
-            automationId,
-            cause: cause.toString(),
-          }),
+      const scheduleOption = yield* repository
+        .getById({ automationId })
+        .pipe(Effect.catch(() => Effect.succeed(Option.none())));
+      if (Option.isNone(scheduleOption) || scheduleOption.value.deletedAt !== null) {
+        return { status: "not_found" } satisfies AutomationTriggerResult;
+      }
+
+      const schedule = scheduleOption.value;
+
+      return yield* dispatchManualRun(schedule).pipe(
+        Effect.catch(() =>
+          Effect.succeed({ status: "dispatch_failed" } satisfies AutomationTriggerResult),
         ),
       );
     },
@@ -245,11 +266,16 @@ const makeSchedulerReactor = Effect.gen(function* () {
   } satisfies SchedulerReactorShape;
 });
 
-export const SchedulerReactorLive = Layer.effect(SchedulerReactor, makeSchedulerReactor);
+export const SchedulerReactorLive = Layer.effect(SchedulerReactor, makeSchedulerReactor).pipe(
+  Layer.provide(ProjectionTurnRepositoryLive),
+);
 
 export const DefaultSchedulerConfigLive = Layer.succeed(SchedulerConfig, {
   tickInterval: Duration.seconds(5),
   leaseDuration: Duration.minutes(5),
   claimBatchSize: 10,
   maxConcurrency: 3,
+  staleRunTimeout: Duration.hours(2),
+  reconcileInterval: Duration.seconds(30),
+  reconcileBatchSize: 50,
 });

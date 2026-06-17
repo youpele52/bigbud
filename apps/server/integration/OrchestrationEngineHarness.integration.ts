@@ -220,7 +220,7 @@ export const makeOrchestrationIntegrationHarness = (
     });
     const schedulerReactorLayer = Layer.succeed(SchedulerReactor, {
       start: () => Effect.void,
-      triggerNow: () => Effect.void,
+      triggerNow: () => Effect.succeed({ status: "dispatched" as const }),
     });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
