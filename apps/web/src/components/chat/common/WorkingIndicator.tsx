@@ -20,7 +20,7 @@ export function WorkingIndicator({ verb, activeWorkStartedAt, nowIso }: WorkingI
   return (
     <div className="pointer-events-none absolute bottom-1 left-0 right-0 flex justify-center px-5">
       <div className="mx-auto w-full max-w-3xl px-1 py-0.5">
-        <div className="flex items-center gap-2 rounded-md bg-background px-7 pt-1 pb-1 text-[11px] text-muted-foreground/70">
+        <div className="flex items-center gap-2 rounded-md bg-transparent px-7 pt-1 pb-1 text-[11px] text-muted-foreground/70">
           <span className="leading-none">{verb}</span>
           <WorkingDots />
           <span className="flex-1" />
