@@ -1,4 +1,11 @@
 import type { Thread } from "../models/types";
+import {
+  derivePendingApprovals,
+  derivePendingUserInputs,
+  findLatestProposedPlan,
+  hasActionableProposedPlan,
+} from "../logic/session";
+import { isThreadCompletedStatus } from "../logic/thread/threadCompletion.logic";
 
 export interface CompletedThreadCandidate {
   threadId: string;
@@ -9,6 +16,19 @@ export interface CompletedThreadCandidate {
 }
 
 const ASSISTANT_SUMMARY_MAX_LENGTH = 140;
+
+function isCompletedThreadStatusFromThread(thread: Thread): boolean {
+  return isThreadCompletedStatus({
+    interactionMode: thread.interactionMode,
+    latestTurn: thread.latestTurn,
+    session: thread.session,
+    hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
+    hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
+    hasActionableProposedPlan: hasActionableProposedPlan(
+      findLatestProposedPlan(thread.proposedPlans, thread.latestTurn?.turnId ?? null),
+    ),
+  });
+}
 
 /**
  * Extracts the last assistant message text from a thread and trims it to a
@@ -33,9 +53,9 @@ export function summarizeLatestAssistantMessage(thread: Thread): string | null {
  * Diffs two thread snapshots and returns candidates for completed-task
  * notifications. A candidate is emitted when:
  *   - The thread exists in both snapshots.
- *   - The previous latestTurn.state was "running" (or the turn was absent).
- *   - The next latestTurn.state is "completed".
- *   - The next latestTurn.completedAt is non-null and differs from the previous.
+ *   - The thread exists in both snapshots.
+ *   - The next thread has entered the same "Completed" state used by the sidebar.
+ *   - The previous thread was not already in that state.
  */
 export function collectCompletedThreadCandidates(
   previousThreads: Thread[],
@@ -46,25 +66,16 @@ export function collectCompletedThreadCandidates(
 
   for (const next of nextThreads) {
     const nextTurn = next.latestTurn;
-    if (!nextTurn || nextTurn.state !== "completed" || !nextTurn.completedAt) {
+    if (!nextTurn?.completedAt) {
       continue;
     }
 
     const previous = previousById.get(next.id);
-    const previousTurn = previous?.latestTurn ?? null;
-
-    // Skip if the completedAt hasn't changed — this avoids re-firing on re-renders.
-    if (previousTurn?.completedAt === nextTurn.completedAt) {
+    if (!previous) {
       continue;
     }
 
-    // Only fire when transitioning from a running/pending state.
-    const wasRunning =
-      previousTurn === null ||
-      previousTurn.state === "running" ||
-      previousTurn.completedAt !== nextTurn.completedAt;
-
-    if (!wasRunning) {
+    if (!isCompletedThreadStatusFromThread(next) || isCompletedThreadStatusFromThread(previous)) {
       continue;
     }
 
