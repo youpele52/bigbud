@@ -4,6 +4,7 @@ import type { SelectedLineRange } from "@pierre/diffs";
 
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { DIFF_PANEL_UNSAFE_CSS } from "./DiffPanel.styles";
+import { isDiffFileTitleClick } from "./diffPanelFileOpen.logic";
 import type { DiffRenderMode } from "./DiffPanel.logic";
 
 type DiffThemeType = "light" | "dark";
@@ -37,13 +38,7 @@ export function DiffPanelFile({
       data-diff-file-path={filePath}
       className="diff-render-file mb-3 rounded-md first:mt-3 last:mb-0"
       onClickCapture={(event) => {
-        const nativeEvent = event.nativeEvent as MouseEvent;
-        const composedPath = nativeEvent.composedPath?.() ?? [];
-        const clickedHeader = composedPath.some((node) => {
-          if (!(node instanceof Element)) return false;
-          return node.hasAttribute("data-title");
-        });
-        if (!clickedHeader) return;
+        if (!isDiffFileTitleClick(event)) return;
         onOpenInFilesPanel(filePath);
       }}
     >

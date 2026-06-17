@@ -3,6 +3,9 @@ import { useMemo } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
+import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
+import { DIFF_PANEL_UNSAFE_CSS } from "../diff/DiffPanel.styles";
+import { isDiffFileTitleClick } from "../diff/diffPanelFileOpen.logic";
 import {
   buildFileDiffRenderKey,
   getRenderablePatch,
@@ -49,23 +52,31 @@ export function GitPatchViewer({ emptyLabel, patch }: GitPatchViewerProps) {
           intersectionObserverMargin: 800,
         }}
       >
-        {renderablePatch.files.map((file) => (
-          <section key={buildFileDiffRenderKey(file)} className="overflow-hidden">
-            <div className="border-b border-border/50 px-1 py-2 text-xs font-medium text-foreground">
-              <span>{resolveFileDiffPath(file)}</span>
-            </div>
-            <FileDiff
-              fileDiff={file}
-              options={{
-                diffStyle: "unified",
-                lineDiffType: "none",
-                overflow: "scroll",
-                theme: resolveDiffThemeName(resolvedTheme),
-                themeType: resolvedTheme,
+        {renderablePatch.files.map((file) => {
+          const filePath = resolveFileDiffPath(file);
+          return (
+            <section
+              key={buildFileDiffRenderKey(file)}
+              className="overflow-hidden"
+              onClickCapture={(event) => {
+                if (!isDiffFileTitleClick(event)) return;
+                openFileInFilesPanel(filePath);
               }}
-            />
-          </section>
-        ))}
+            >
+              <FileDiff
+                fileDiff={file}
+                options={{
+                  diffStyle: "unified",
+                  lineDiffType: "none",
+                  overflow: "scroll",
+                  theme: resolveDiffThemeName(resolvedTheme),
+                  themeType: resolvedTheme,
+                  unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
+                }}
+              />
+            </section>
+          );
+        })}
       </Virtualizer>
     </div>
   );
