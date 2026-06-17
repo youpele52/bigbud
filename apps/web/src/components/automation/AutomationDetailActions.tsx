@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { toastManager } from "~/components/ui/toast";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { invalidateAutomationThreadIds } from "./automationThreadIds.store";
 
@@ -89,9 +90,43 @@ async function handleTrigger(
   reload: () => Promise<void>,
   navigate: ReturnType<typeof useNavigate>,
 ) {
-  await api.server.triggerAutomation({ automationId: automation.automationId });
-  await reload();
-  await navigate({ to: "/$threadId", params: { threadId: automation.targetThreadId } });
+  try {
+    const result = await api.server.triggerAutomation({ automationId: automation.automationId });
+    if ("status" in result) {
+      if (result.status === "paused_or_completed") {
+        toastManager.add({
+          type: "error",
+          title: "Failed to run automation",
+          description: "This automation has already completed.",
+        });
+        return;
+      }
+      if (result.status !== "dispatched") {
+        toastManager.add({
+          type: "error",
+          title: "Failed to run automation",
+          description:
+            "The automation could not be dispatched. Check that it is active and try again.",
+        });
+        return;
+      }
+    }
+
+    toastManager.add({
+      type: "success",
+      title: "Automation started",
+      description: "Opening the automation thread.",
+    });
+    await reload();
+    await navigate({ to: "/$threadId", params: { threadId: automation.targetThreadId } });
+  } catch (error) {
+    const description = error instanceof Error ? error.message : "An error occurred.";
+    toastManager.add({
+      type: "error",
+      title: "Failed to run automation",
+      description,
+    });
+  }
 }
 
 async function handlePauseResume(
@@ -99,12 +134,22 @@ async function handlePauseResume(
   automation: AutomationDetail,
   reload: () => Promise<void>,
 ) {
-  if (automation.pausedAt === null) {
-    await api.server.pauseAutomation({ automationId: automation.automationId });
-  } else {
-    await api.server.resumeAutomation({ automationId: automation.automationId });
+  try {
+    if (automation.pausedAt === null) {
+      await api.server.pauseAutomation({ automationId: automation.automationId });
+    } else {
+      await api.server.resumeAutomation({ automationId: automation.automationId });
+    }
+    await reload();
+  } catch (error) {
+    const description = error instanceof Error ? error.message : "An error occurred.";
+    toastManager.add({
+      type: "error",
+      title:
+        automation.pausedAt === null ? "Failed to pause automation" : "Failed to resume automation",
+      description,
+    });
   }
-  await reload();
 }
 
 async function handleDelete(
@@ -112,7 +157,16 @@ async function handleDelete(
   automationId: AutomationId,
   navigate: ReturnType<typeof useNavigate>,
 ) {
-  await api.server.deleteAutomation({ automationId });
-  invalidateAutomationThreadIds();
-  await navigate({ to: "/automations" });
+  try {
+    await api.server.deleteAutomation({ automationId });
+    invalidateAutomationThreadIds();
+    await navigate({ to: "/automations" });
+  } catch (error) {
+    const description = error instanceof Error ? error.message : "An error occurred.";
+    toastManager.add({
+      type: "error",
+      title: "Failed to delete automation",
+      description,
+    });
+  }
 }
