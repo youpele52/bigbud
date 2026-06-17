@@ -1,6 +1,6 @@
 import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
-import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect, useCallback } from "react";
 
 import {
   resolveContextualNewThreadOptions,
@@ -31,6 +31,9 @@ import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
 import { SearchPalette } from "~/components/layout/SearchPalette";
 import { RightPanelHost } from "~/components/right-panel/RightPanelHost";
+import { isAutomationRoute } from "~/lib/automationRoute";
+import { useStore } from "~/stores/main";
+import { navigateToMostRecentThread } from "./-_chat.automationRightPanel.logic";
 
 function deriveProjectTitleFromCwd(cwd: string): string {
   const trimmed = cwd.trim();
@@ -57,7 +60,20 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
   const { toggleSidebar } = useSidebar();
   const commandPaletteOpen = useCommandPaletteStore((state) => state.open);
   const navigate = useNavigate();
+  const location = useLocation();
   const serverProviders = useServerProviders();
+  const threads = useStore((state) => state.threads);
+
+  const exitAutomationForRightPanel = useCallback(
+    (openPanel: () => void) => {
+      void navigateToMostRecentThread({
+        navigate,
+        sortOrder: appSettings.sidebarThreadSortOrder,
+        threads,
+      }).then(openPanel);
+    },
+    [navigate, appSettings.sidebarThreadSortOrder, threads],
+  );
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -189,6 +205,15 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "rightPanel.toggle") {
         event.preventDefault();
         event.stopPropagation();
+        if (isAutomationRoute(location.pathname)) {
+          const rightPanelState = useRightPanelTabsStore.getState();
+          if (!rightPanelState.rightPanelOpen) {
+            exitAutomationForRightPanel(() => {
+              useRightPanelTabsStore.getState().openRightPanel();
+            });
+            return;
+          }
+        }
         useRightPanelTabsStore.getState().toggleRightPanel();
         return;
       }
@@ -196,6 +221,12 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
       if (command === "rightPanel.newTab") {
         event.preventDefault();
         event.stopPropagation();
+        if (isAutomationRoute(location.pathname)) {
+          exitAutomationForRightPanel(() => {
+            useRightPanelTabsStore.getState().showLauncher();
+          });
+          return;
+        }
         useRightPanelTabsStore.getState().showLauncher();
         return;
       }
@@ -230,6 +261,8 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
     navigate,
     onToggleSearch,
     serverProviders,
+    location.pathname,
+    exitAutomationForRightPanel,
   ]);
 
   return null;

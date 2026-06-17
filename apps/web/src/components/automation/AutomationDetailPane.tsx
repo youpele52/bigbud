@@ -47,8 +47,8 @@ export function AutomationDetailPane({
 }: AutomationDetailPaneProps) {
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-[2] flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex-[2]">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading automation...</p>
@@ -100,7 +100,7 @@ export function AutomationDetailPane({
         </div>
 
         {!loading && automation ? (
-          <aside className="min-h-0 min-w-0 flex-1 overflow-y-auto border-t border-border/70 px-4 py-6 sm:px-6 xl:border-t-0 xl:border-l">
+          <aside className="min-h-0 min-w-0 flex-1 overflow-y-auto border-l border-border/70 px-4 py-6 sm:px-6">
             <div className="space-y-6">
               <DetailCard title="Status">
                 <DetailRow
