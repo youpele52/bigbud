@@ -80,3 +80,23 @@ export function configureRemote(
     ]);
   });
 }
+
+function toFileUrlLocalBarePath(localBarePath: string): string {
+  const normalized = localBarePath.endsWith("/") ? localBarePath : `${localBarePath}/`;
+  return `file://${normalized}`;
+}
+
+/** Point a GitHub-style remote URL at a local bare repo for fetch/push without network I/O. */
+export function configureGitHubRemoteMirror(
+  cwd: string,
+  remoteName: string,
+  localBarePath: string,
+  githubUrl: string,
+): Effect.Effect<void, GitCommandError, GitCore> {
+  return Effect.gen(function* () {
+    const insteadOfTarget = toFileUrlLocalBarePath(localBarePath);
+    yield* runGit(cwd, ["config", `url.${insteadOfTarget}.insteadOf`, githubUrl]);
+    yield* runGit(cwd, ["config", `remote.${remoteName}.url`, githubUrl]);
+    yield* runGit(cwd, ["config", `remote.${remoteName}.pushurl`, localBarePath]);
+  });
+}
