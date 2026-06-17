@@ -16,6 +16,7 @@ import {
   updateThreadState,
 } from "./helpers.store";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
+import { isStaleRunningSessionUpdate } from "./events.store.threads.runtime.logic";
 
 export function applyThreadRuntimeEvent(
   state: AppState,
@@ -72,12 +73,13 @@ export function applyThreadRuntimeEvent(
               msg.streaming === false,
           );
 
-        const isStaleRunningSession =
-          incomingSession.status === "running" &&
-          incomingActiveTurnId !== null &&
-          thread.latestTurn !== null &&
-          thread.latestTurn.turnId === incomingActiveTurnId &&
-          (thread.latestTurn.completedAt !== null || hasNonStreamingAssistantMessageForTurn);
+        const isStaleRunningSession = isStaleRunningSessionUpdate({
+          incomingStatus: incomingSession.status,
+          incomingActiveTurnId,
+          incomingReason: incomingSession.reason,
+          latestTurn: thread.latestTurn,
+          hasNonStreamingAssistantMessageForTurn,
+        });
 
         const normalizedSession = isStaleRunningSession
           ? { ...incomingSession, status: "ready" as const, activeTurnId: null, reason: null }
