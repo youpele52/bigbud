@@ -2,6 +2,7 @@ import type { GitStatusResult } from "@bigbud/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
+import { openFileInFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import {
   BIGBUD_FILES_PANEL_DRAG_MIME,
   joinWorkspaceEntryPath,
@@ -94,9 +95,19 @@ export function GitPanelChanges({
                     );
                     event.dataTransfer.setData("text/plain", absolutePath);
                   }}
-                  onClick={() => onSelectFile(file.path)}
+                  onClick={(event) => {
+                    onSelectFile(file.path);
+                    if ((event.target as HTMLElement).closest("[data-git-file-path]")) {
+                      openFileInFilesPanel(file.path);
+                    }
+                  }}
                 >
-                  <span className="truncate text-sm font-medium">{file.path}</span>
+                  <span
+                    data-git-file-path
+                    className="truncate text-sm font-medium underline-offset-2 hover:underline"
+                  >
+                    {file.path}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     +{file.insertions} -{file.deletions}
                   </span>
