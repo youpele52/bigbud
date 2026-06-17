@@ -21,6 +21,7 @@ import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/Projectio
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import { createEmptyReadModel } from "../projectorReadModel.ts";
 import {
   handleAutomationTerminalEvent,
   makeLoadScheduleKind,
@@ -77,7 +78,8 @@ reconcileTestLayer("SchedulerReactor reconciliation", (it) => {
       });
 
       const dispatchCount = yield* Ref.make(0);
-      const orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch"> = {
+      const orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch" | "getReadModel"> = {
+        getReadModel: () => Effect.succeed(createEmptyReadModel(new Date().toISOString())),
         dispatch: () =>
           Ref.update(dispatchCount, (count) => count + 1).pipe(Effect.as({ sequence: 1 })),
       };

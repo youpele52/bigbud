@@ -252,6 +252,10 @@ const makeSchedulerReactor = Effect.gen(function* () {
 
       const schedule = scheduleOption.value;
 
+      if (schedule.completedAt !== null) {
+        return { status: "paused_or_completed" } satisfies AutomationTriggerResult;
+      }
+
       return yield* dispatchManualRun(schedule).pipe(
         Effect.catch(() =>
           Effect.succeed({ status: "dispatch_failed" } satisfies AutomationTriggerResult),
