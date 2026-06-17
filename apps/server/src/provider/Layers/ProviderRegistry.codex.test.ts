@@ -287,13 +287,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
           assert.strictEqual(status.auth.status, "unknown");
           assert.strictEqual(
             status.message,
-            "Codex CLI v0.36.0 is too old for bigbud. Upgrade to v0.37.0 or newer and restart bigbud.",
+            "Codex CLI v0.99.0 is too old for bigbud. Upgrade to v0.100.0 or newer and restart bigbud.",
           );
         }).pipe(
           Effect.provide(
             mockSpawnerLayer((args) => {
               const joined = args.join(" ");
-              if (joined === "--version") return { stdout: "codex 0.36.0\n", stderr: "", code: 0 };
+              if (joined === "--version") return { stdout: "codex 0.99.0\n", stderr: "", code: 0 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),

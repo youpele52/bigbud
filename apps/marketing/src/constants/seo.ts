@@ -38,8 +38,8 @@ export const DOWNLOAD_METADATA = {
 } as const;
 
 export const CHANGELOG_METADATA = {
-  title: formatPageTitle("changelog"),
-  description: `See notable ${APP_NAME} updates, releases, and product improvements in one place.`,
+  title: formatPageTitle("changelog & release notes"),
+  description: `Stay up to date with the latest ${APP_NAME} releases — new features, UX improvements, bug fixes, and product updates for your AI workspace.`,
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: `${APP_NAME} changelog preview`,
 } as const;
