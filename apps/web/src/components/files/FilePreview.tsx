@@ -4,14 +4,22 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnnotationIntent } from "../../stores/composer";
 import { Button } from "../ui/button";
 import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
+import {
+  FilePreviewMarkdownToggle,
+  FilePreviewMarkdownView,
+  type MarkdownFileViewMode,
+} from "./FilePreview.markdown";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import {
+  buildFilePreviewBreadcrumb,
   FILE_PREVIEW_LINE_HEIGHT,
   getPreviewScrollTop,
+  inferPreviewLanguage,
+  isMarkdownFilePath,
   shouldShowPreviewLoading,
 } from "./FilePreview.logic";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
@@ -50,31 +58,6 @@ const INITIAL_STATE: PreviewState = {
   error: null,
 };
 
-function fileNameFromPath(pathValue: string): string {
-  const segments = pathValue.split("/");
-  return segments.at(-1) ?? pathValue;
-}
-
-function inferPreviewLanguage(pathValue: string): string {
-  const name = fileNameFromPath(pathValue).toLowerCase();
-  if (name === "dockerfile") return "dockerfile";
-  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "text";
-  if (extension === "cts" || extension === "mts") return "ts";
-  if (extension === "mdx") return "md";
-  if (extension === "yml") return "yaml";
-  if (extension === "ps1") return "powershell";
-  if (extension === "sh" || extension === "bash" || extension === "zsh") return "shellscript";
-  return extension || "text";
-}
-
-function buildBreadcrumb(projectName: string | undefined, cwd: string, relativePath: string) {
-  const rootName = projectName ?? fileNameFromPath(cwd);
-  return [rootName, ...relativePath.split("/").filter(Boolean)].map((label, index, parts) => ({
-    id: parts.slice(0, index + 1).join("/"),
-    label,
-  }));
-}
-
 export const FilePreview = memo(function FilePreview({
   cwd,
   relativePath,
@@ -88,6 +71,7 @@ export const FilePreview = memo(function FilePreview({
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
   );
+  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownFileViewMode>("raw");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
   const previewRequestIdRef = useRef(0);
@@ -199,6 +183,7 @@ export const FilePreview = memo(function FilePreview({
 
   useEffect(() => {
     setSelectedRange(null);
+    setMarkdownViewMode("raw");
   }, [relativePath]);
 
   useEffect(() => {
@@ -233,8 +218,9 @@ export const FilePreview = memo(function FilePreview({
     [state.contents],
   );
   const language = useMemo(() => inferPreviewLanguage(relativePath), [relativePath]);
+  const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
   const breadcrumb = useMemo(
-    () => buildBreadcrumb(projectName, cwd, relativePath),
+    () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
     [cwd, projectName, relativePath],
   );
   const plainFallback = useMemo(
@@ -320,11 +306,28 @@ export const FilePreview = memo(function FilePreview({
             ))}
           </div>
         </div>
-        {onBack ? (
-          <Button type="button" variant="ghost" size="icon-xs" onClick={onBack} aria-label="Close">
-            <XIcon />
-          </Button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-8">
+          {isMarkdownFile ? (
+            <FilePreviewMarkdownToggle
+              viewMode={markdownViewMode}
+              onViewModeChange={(mode) => {
+                setSelectedRange(null);
+                setMarkdownViewMode(mode);
+              }}
+            />
+          ) : null}
+          {onBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={onBack}
+              aria-label="Close"
+            >
+              <XIcon />
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {shouldShowPreviewLoading(state) ? (
@@ -334,6 +337,18 @@ export const FilePreview = memo(function FilePreview({
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
           <span>{state.error}</span>
         </div>
+      ) : isMarkdownFile && markdownViewMode === "preview" ? (
+        <FilePreviewMarkdownView
+          contents={state.contents}
+          cwd={cwd}
+          scrollContainerRef={scrollContainerRef}
+          linesContainerRef={linesContainerRef}
+          selectedRange={selectedRange}
+          selectedText={selectedText}
+          onContextMenu={handleCodeContextMenu}
+          onCreateAnnotation={onCreateAnnotation}
+          onCancelAnnotation={() => setSelectedRange(null)}
+        />
       ) : (
         <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-auto">
           {state.truncated ? (
