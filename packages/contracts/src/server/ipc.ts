@@ -71,8 +71,12 @@ import type {
   ServerAutomationResult,
   ServerCreateAutomationInput,
   ServerDeleteAutomationInput,
+  ServerGetAutomationInput,
+  ServerGetAutomationResult,
   ServerListAutomationRunsInput,
   ServerListAutomationRunsResult,
+  ServerListAllAutomationsInput,
+  ServerListAllAutomationsResult,
   ServerListAutomationsInput,
   ServerListAutomationsResult,
   ServerPauseAutomationInput,
@@ -293,7 +297,11 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
     listAutomations: (input: ServerListAutomationsInput) => Promise<ServerListAutomationsResult>;
+    listAllAutomations: (
+      input?: ServerListAllAutomationsInput,
+    ) => Promise<ServerListAllAutomationsResult>;
     createAutomation: (input: ServerCreateAutomationInput) => Promise<ServerAutomationResult>;
     updateAutomation: (input: ServerUpdateAutomationInput) => Promise<ServerAutomationResult>;
     pauseAutomation: (input: ServerPauseAutomationInput) => Promise<void>;

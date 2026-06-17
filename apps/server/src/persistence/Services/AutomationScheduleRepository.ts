@@ -17,12 +17,15 @@ import type { PersistenceDecodeError, PersistenceSqlError } from "../Errors.ts";
 
 export const CreateAutomationScheduleInput = Schema.Struct({
   automationId: AutomationId,
-  projectId: Schema.NullOr(ProjectId),
+  projectId: ProjectId,
   targetThreadId: ThreadId,
   title: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
+  scheduleKind: Schema.Literals(["custom", "once"]),
+  scheduleLabel: TrimmedNonEmptyString,
   cronExpression: TrimmedNonEmptyString,
   timezone: TrimmedNonEmptyString,
+  runAt: Schema.NullOr(IsoDateTime),
   nextRunAt: Schema.NullOr(IsoDateTime),
 });
 export type CreateAutomationScheduleInput = typeof CreateAutomationScheduleInput.Type;
@@ -32,10 +35,11 @@ export const GetAutomationScheduleInput = Schema.Struct({
 });
 export type GetAutomationScheduleInput = typeof GetAutomationScheduleInput.Type;
 
-export const ListAutomationSchedulesByThreadInput = Schema.Struct({
-  threadId: ThreadId,
+export const ListAutomationSchedulesByProjectInput = Schema.Struct({
+  projectId: ProjectId,
 });
-export type ListAutomationSchedulesByThreadInput = typeof ListAutomationSchedulesByThreadInput.Type;
+export type ListAutomationSchedulesByProjectInput =
+  typeof ListAutomationSchedulesByProjectInput.Type;
 
 export const ClaimDueAutomationSchedulesInput = Schema.Struct({
   now: IsoDateTime,
@@ -48,8 +52,11 @@ export const UpdateAutomationScheduleInput = Schema.Struct({
   automationId: AutomationId,
   title: Schema.optional(TrimmedNonEmptyString),
   prompt: Schema.optional(TrimmedNonEmptyString),
+  scheduleKind: Schema.optional(Schema.Literals(["custom", "once"])),
+  scheduleLabel: Schema.optional(TrimmedNonEmptyString),
   cronExpression: Schema.optional(TrimmedNonEmptyString),
   timezone: Schema.optional(TrimmedNonEmptyString),
+  runAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   nextRunAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   updatedAt: IsoDateTime,
 });
@@ -75,6 +82,13 @@ export const ResumeAutomationScheduleInput = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 export type ResumeAutomationScheduleInput = typeof ResumeAutomationScheduleInput.Type;
+
+export const CompleteAutomationScheduleInput = Schema.Struct({
+  automationId: AutomationId,
+  completedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type CompleteAutomationScheduleInput = typeof CompleteAutomationScheduleInput.Type;
 
 export const DeleteAutomationScheduleInput = Schema.Struct({
   automationId: AutomationId,
@@ -121,9 +135,13 @@ export interface AutomationScheduleRepositoryShape {
   readonly getById: (
     input: GetAutomationScheduleInput,
   ) => Effect.Effect<Option.Option<AutomationSchedule>, AutomationScheduleRepositoryError>;
-  readonly listByThread: (
-    input: ListAutomationSchedulesByThreadInput,
+  readonly listByProject: (
+    input: ListAutomationSchedulesByProjectInput,
   ) => Effect.Effect<ReadonlyArray<AutomationSchedule>, AutomationScheduleRepositoryError>;
+  readonly listAll: () => Effect.Effect<
+    ReadonlyArray<AutomationSchedule>,
+    AutomationScheduleRepositoryError
+  >;
   readonly claimDue: (
     input: ClaimDueAutomationSchedulesInput,
   ) => Effect.Effect<ReadonlyArray<AutomationSchedule>, AutomationScheduleRepositoryError>;
@@ -138,6 +156,9 @@ export interface AutomationScheduleRepositoryShape {
   ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
   readonly resume: (
     input: ResumeAutomationScheduleInput,
+  ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
+  readonly complete: (
+    input: CompleteAutomationScheduleInput,
   ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
   readonly delete: (
     input: DeleteAutomationScheduleInput,

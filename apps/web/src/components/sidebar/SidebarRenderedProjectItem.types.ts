@@ -41,6 +41,7 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   hasRenameCommitted: () => boolean;
   markRenameCommitted: () => void;
   favoriteThreadIds: ReadonlySet<ThreadId>;
+  automationThreadIds: ReadonlySet<ThreadId>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   activeThread: {
     projectId: ProjectId;

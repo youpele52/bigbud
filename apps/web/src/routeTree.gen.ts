@@ -19,7 +19,10 @@ import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as SettingsAiRouteImport } from './routes/settings.ai'
 import { Route as SettingsAboutRouteImport } from './routes/settings.about'
+import { Route as ChatAutomationsRouteImport } from './routes/_chat.automations'
 import { Route as ChatThreadIdRouteImport } from './routes/_chat.$threadId'
+import { Route as ChatAutomationsIndexRouteImport } from './routes/_chat.automations.index'
+import { Route as ChatAutomationsAutomationIdRouteImport } from './routes/_chat.automations.$automationId'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -70,16 +73,33 @@ const SettingsAboutRoute = SettingsAboutRouteImport.update({
   path: '/about',
   getParentRoute: () => SettingsRoute,
 } as any)
+const ChatAutomationsRoute = ChatAutomationsRouteImport.update({
+  id: '/automations',
+  path: '/automations',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatThreadIdRoute = ChatThreadIdRouteImport.update({
   id: '/$threadId',
   path: '/$threadId',
   getParentRoute: () => ChatRoute,
 } as any)
+const ChatAutomationsIndexRoute = ChatAutomationsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ChatAutomationsRoute,
+} as any)
+const ChatAutomationsAutomationIdRoute =
+  ChatAutomationsAutomationIdRouteImport.update({
+    id: '/$automationId',
+    path: '/$automationId',
+    getParentRoute: () => ChatAutomationsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/settings': typeof SettingsRouteWithChildren
   '/$threadId': typeof ChatThreadIdRoute
+  '/automations': typeof ChatAutomationsRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
   '/settings/ai': typeof SettingsAiRoute
   '/settings/archived': typeof SettingsArchivedRoute
@@ -87,6 +107,8 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
+  '/automations/': typeof ChatAutomationsIndexRoute
 }
 export interface FileRoutesByTo {
   '/settings': typeof SettingsRouteWithChildren
@@ -99,12 +121,15 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/': typeof ChatIndexRoute
+  '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
+  '/automations': typeof ChatAutomationsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
   '/_chat/$threadId': typeof ChatThreadIdRoute
+  '/_chat/automations': typeof ChatAutomationsRouteWithChildren
   '/settings/about': typeof SettingsAboutRoute
   '/settings/ai': typeof SettingsAiRoute
   '/settings/archived': typeof SettingsArchivedRoute
@@ -113,6 +138,8 @@ export interface FileRoutesById {
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/_chat/': typeof ChatIndexRoute
+  '/_chat/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
+  '/_chat/automations/': typeof ChatAutomationsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,6 +147,7 @@ export interface FileRouteTypes {
     | '/'
     | '/settings'
     | '/$threadId'
+    | '/automations'
     | '/settings/about'
     | '/settings/ai'
     | '/settings/archived'
@@ -127,6 +155,8 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/notifications'
     | '/settings/providers'
+    | '/automations/$automationId'
+    | '/automations/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/settings'
@@ -139,11 +169,14 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/providers'
     | '/'
+    | '/automations/$automationId'
+    | '/automations'
   id:
     | '__root__'
     | '/_chat'
     | '/settings'
     | '/_chat/$threadId'
+    | '/_chat/automations'
     | '/settings/about'
     | '/settings/ai'
     | '/settings/archived'
@@ -152,6 +185,8 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/providers'
     | '/_chat/'
+    | '/_chat/automations/$automationId'
+    | '/_chat/automations/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -231,6 +266,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsAboutRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/_chat/automations': {
+      id: '/_chat/automations'
+      path: '/automations'
+      fullPath: '/automations'
+      preLoaderRoute: typeof ChatAutomationsRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/$threadId': {
       id: '/_chat/$threadId'
       path: '/$threadId'
@@ -238,16 +280,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/automations/': {
+      id: '/_chat/automations/'
+      path: '/'
+      fullPath: '/automations/'
+      preLoaderRoute: typeof ChatAutomationsIndexRouteImport
+      parentRoute: typeof ChatAutomationsRoute
+    }
+    '/_chat/automations/$automationId': {
+      id: '/_chat/automations/$automationId'
+      path: '/$automationId'
+      fullPath: '/automations/$automationId'
+      preLoaderRoute: typeof ChatAutomationsAutomationIdRouteImport
+      parentRoute: typeof ChatAutomationsRoute
+    }
   }
 }
 
+interface ChatAutomationsRouteChildren {
+  ChatAutomationsAutomationIdRoute: typeof ChatAutomationsAutomationIdRoute
+  ChatAutomationsIndexRoute: typeof ChatAutomationsIndexRoute
+}
+
+const ChatAutomationsRouteChildren: ChatAutomationsRouteChildren = {
+  ChatAutomationsAutomationIdRoute: ChatAutomationsAutomationIdRoute,
+  ChatAutomationsIndexRoute: ChatAutomationsIndexRoute,
+}
+
+const ChatAutomationsRouteWithChildren = ChatAutomationsRoute._addFileChildren(
+  ChatAutomationsRouteChildren,
+)
+
 interface ChatRouteChildren {
   ChatThreadIdRoute: typeof ChatThreadIdRoute
+  ChatAutomationsRoute: typeof ChatAutomationsRouteWithChildren
   ChatIndexRoute: typeof ChatIndexRoute
 }
 
 const ChatRouteChildren: ChatRouteChildren = {
   ChatThreadIdRoute: ChatThreadIdRoute,
+  ChatAutomationsRoute: ChatAutomationsRouteWithChildren,
   ChatIndexRoute: ChatIndexRoute,
 }
 

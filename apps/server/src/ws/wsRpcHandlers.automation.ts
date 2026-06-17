@@ -1,9 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import {
   AutomationId,
+  CommandId,
   ServerAutomationError,
   ServerCreateAutomationInput,
   ServerDeleteAutomationInput,
+  ServerGetAutomationInput,
   ServerListAutomationRunsInput,
   ServerListAutomationsInput,
   ServerPauseAutomationInput,
@@ -30,9 +32,40 @@ function toAutomationError(cause: unknown, message: string) {
 
 function resolveNextRunAt(input: {
   readonly cronExpression: string;
+  readonly runAt?: string | null;
+  readonly scheduleKind: "custom" | "once";
   readonly timezone: string;
   readonly now: Date;
 }) {
+  if (input.scheduleKind === "once") {
+    if (!input.runAt) {
+      return Effect.fail(
+        new ServerAutomationError({
+          message: "One-time automations must include a run time",
+        }),
+      );
+    }
+
+    const runAtMs = Date.parse(input.runAt);
+    if (Number.isNaN(runAtMs)) {
+      return Effect.fail(
+        new ServerAutomationError({
+          message: "One-time automations must include a valid run time",
+        }),
+      );
+    }
+
+    if (runAtMs <= input.now.getTime()) {
+      return Effect.fail(
+        new ServerAutomationError({
+          message: "One-time automations must be scheduled in the future",
+        }),
+      );
+    }
+
+    return Effect.succeed(input.runAt);
+  }
+
   return Effect.try({
     try: () => getNextCronTime(input.cronExpression, input.now, input.timezone).toISOString(),
     catch: (cause) =>
@@ -45,14 +78,40 @@ function resolveNextRunAt(input: {
 
 export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
   return {
+    [WS_METHODS.serverGetAutomation]: (input: typeof ServerGetAutomationInput.Type) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetAutomation,
+        context.automationScheduleRepository.getById(input).pipe(
+          Effect.flatMap((automation) =>
+            Option.isNone(automation) || automation.value.deletedAt !== null
+              ? Effect.fail(
+                  new ServerAutomationError({
+                    message: "Automation not found",
+                  }),
+                )
+              : Effect.succeed({ automation: automation.value }),
+          ),
+          Effect.mapError((cause) => toAutomationError(cause, "Failed to load automation")),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverListAutomations]: (input: typeof ServerListAutomationsInput.Type) =>
       observeRpcEffect(
         WS_METHODS.serverListAutomations,
-        context.automationScheduleRepository.listByThread(input).pipe(
+        context.automationScheduleRepository.listByProject(input).pipe(
           Effect.map((automations) => ({ automations })),
           Effect.mapError((cause) =>
-            toAutomationError(cause, "Failed to list automations for this thread"),
+            toAutomationError(cause, "Failed to list automations for this project"),
           ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverListAllAutomations]: () =>
+      observeRpcEffect(
+        WS_METHODS.serverListAllAutomations,
+        context.automationScheduleRepository.listAll().pipe(
+          Effect.map((automations) => ({ automations })),
+          Effect.mapError((cause) => toAutomationError(cause, "Failed to list automations")),
         ),
         { "rpc.aggregate": "server" },
       ),
@@ -60,9 +119,14 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverCreateAutomation,
         Effect.gen(function* () {
-          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot();
-          const thread = snapshot.threads.find((candidate) => candidate.id === input.threadId);
-          if (!thread) {
+          const thread = yield* context.projectionThreadRepository.getById({
+            threadId: input.targetThreadId,
+          });
+          if (
+            Option.isNone(thread) ||
+            thread.value.deletedAt !== null ||
+            thread.value.projectId !== input.projectId
+          ) {
             return yield* new ServerAutomationError({
               message: "Automation thread not found",
             });
@@ -71,20 +135,36 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
           const timezone = input.timezone ?? DEFAULT_AUTOMATION_TIMEZONE;
           const nextRunAt = yield* resolveNextRunAt({
             cronExpression: input.cronExpression,
+            runAt: input.runAt ?? null,
+            scheduleKind: input.scheduleKind,
             timezone,
             now: new Date(),
           });
 
           const automation = yield* context.automationScheduleRepository.create({
             automationId: AutomationId.makeUnsafe(crypto.randomUUID()),
-            projectId: thread.projectId,
-            targetThreadId: input.threadId,
+            projectId: input.projectId,
+            targetThreadId: input.targetThreadId,
             title: input.title,
             prompt: input.prompt,
+            scheduleKind: input.scheduleKind,
+            scheduleLabel: input.scheduleLabel,
             cronExpression: input.cronExpression,
             timezone,
+            runAt: input.runAt ?? null,
             nextRunAt,
           });
+
+          yield* context
+            .dispatchNormalizedCommand({
+              type: "thread.meta.update",
+              commandId: CommandId.makeUnsafe(
+                `server:automation-thread-title:${crypto.randomUUID()}`,
+              ),
+              threadId: input.targetThreadId,
+              title: input.title,
+            })
+            .pipe(Effect.ignore);
 
           return { automation };
         }).pipe(
@@ -107,22 +187,48 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
 
           const timezone = input.timezone ?? current.value.timezone;
           const cronExpression = input.cronExpression ?? current.value.cronExpression;
+          const scheduleKind = input.scheduleKind ?? current.value.scheduleKind;
           const shouldRecalculate =
-            input.cronExpression !== undefined || input.timezone !== undefined;
+            input.cronExpression !== undefined ||
+            input.timezone !== undefined ||
+            input.scheduleKind !== undefined ||
+            input.runAt !== undefined;
           const nextRunAt =
             shouldRecalculate && current.value.pausedAt === null
-              ? yield* resolveNextRunAt({ cronExpression, timezone, now: new Date() })
+              ? yield* resolveNextRunAt({
+                  cronExpression,
+                  runAt: input.runAt ?? current.value.runAt,
+                  scheduleKind,
+                  timezone,
+                  now: new Date(),
+                })
               : undefined;
 
           const automation = yield* context.automationScheduleRepository.update({
             automationId: input.automationId,
             title: input.title,
             prompt: input.prompt,
+            scheduleKind,
+            scheduleLabel: input.scheduleLabel,
             cronExpression: input.cronExpression,
             timezone: input.timezone,
+            runAt: input.runAt,
             nextRunAt,
             updatedAt: new Date().toISOString(),
           });
+
+          if (input.title !== undefined) {
+            yield* context
+              .dispatchNormalizedCommand({
+                type: "thread.meta.update",
+                commandId: CommandId.makeUnsafe(
+                  `server:automation-thread-title:${crypto.randomUUID()}`,
+                ),
+                threadId: current.value.targetThreadId,
+                title: input.title,
+              })
+              .pipe(Effect.ignore);
+          }
 
           return { automation };
         }).pipe(
@@ -157,6 +263,8 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
 
           const nextRunAt = yield* resolveNextRunAt({
             cronExpression: current.value.cronExpression,
+            runAt: current.value.runAt,
+            scheduleKind: current.value.scheduleKind,
             timezone: current.value.timezone,
             now: new Date(),
           });

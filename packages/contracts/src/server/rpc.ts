@@ -108,7 +108,9 @@ import {
 import {
   WsServerCreateAutomationRpc,
   WsServerDeleteAutomationRpc,
+  WsServerGetAutomationRpc,
   WsServerListAutomationRunsRpc,
+  WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
   WsServerPauseAutomationRpc,
   WsServerResumeAutomationRpc,
@@ -404,6 +406,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
+  WsServerGetAutomationRpc,
+  WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
   WsServerCreateAutomationRpc,
   WsServerUpdateAutomationRpc,

@@ -10,7 +10,12 @@ import {
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
 
-export const AutomationScheduleStatus = Schema.Literals(["active", "paused", "deleted"]);
+export const AutomationScheduleStatus = Schema.Literals([
+  "active",
+  "completed",
+  "paused",
+  "deleted",
+]);
 export type AutomationScheduleStatus = typeof AutomationScheduleStatus.Type;
 
 export const AutomationRunStatus = Schema.Literals(["started", "finished", "failed"]);
@@ -18,14 +23,18 @@ export type AutomationRunStatus = typeof AutomationRunStatus.Type;
 
 export const AutomationSchedule = Schema.Struct({
   automationId: AutomationId,
-  projectId: Schema.NullOr(ProjectId),
+  projectId: ProjectId,
   targetThreadId: ThreadId,
   title: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
+  scheduleKind: Schema.Literals(["custom", "once"]),
+  scheduleLabel: TrimmedNonEmptyString,
   cronExpression: TrimmedNonEmptyString,
   timezone: TrimmedNonEmptyString,
+  runAt: Schema.NullOr(IsoDateTime),
   nextRunAt: Schema.NullOr(IsoDateTime),
   pausedAt: Schema.NullOr(IsoDateTime),
+  completedAt: Schema.NullOr(IsoDateTime),
   deletedAt: Schema.NullOr(IsoDateTime),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

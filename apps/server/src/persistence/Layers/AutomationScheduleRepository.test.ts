@@ -1,6 +1,7 @@
 import {
   AutomationId,
   AutomationRunId,
+  BUILT_IN_CHATS_PROJECT_ID,
   CommandId,
   MessageId,
   ProjectId,
@@ -36,12 +37,15 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
 
       yield* repository.create({
         automationId,
-        projectId: null,
+        projectId: ProjectId.makeUnsafe("project-1"),
         targetThreadId: threadId,
         title: "Daily summary",
         prompt: "Summarize yesterday's work",
+        scheduleKind: "custom",
+        scheduleLabel: "Every day at 9:00 AM",
         cronExpression: "0 9 * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T09:00:00.000Z",
       });
 
@@ -53,31 +57,38 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
     }),
   );
 
-  it.effect("lists schedules by thread excluding deleted", () =>
+  it.effect("lists schedules by project excluding deleted", () =>
     Effect.gen(function* () {
       yield* clearAutomationTables;
       const repository = yield* AutomationScheduleRepository;
+      const projectId = ProjectId.makeUnsafe("project-2");
       const threadId = ThreadId.makeUnsafe("thread-2");
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-2a"),
-        projectId: null,
+        projectId,
         targetThreadId: threadId,
         title: "A",
         prompt: "Prompt A",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T10:00:00.000Z",
       });
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-2b"),
-        projectId: null,
+        projectId,
         targetThreadId: threadId,
         title: "B",
         prompt: "Prompt B",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T10:00:00.000Z",
       });
 
@@ -87,9 +98,112 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
         updatedAt: "2026-06-16T00:00:00.000Z",
       });
 
-      const schedules = yield* repository.listByThread({ threadId });
+      const schedules = yield* repository.listByProject({ projectId });
       assert.strictEqual(schedules.length, 1);
       assert.strictEqual(schedules[0]?.title, "A");
+    }),
+  );
+
+  it.effect("lists all schedules excluding deleted", () =>
+    Effect.gen(function* () {
+      yield* clearAutomationTables;
+      const repository = yield* AutomationScheduleRepository;
+      const projectA = ProjectId.makeUnsafe("project-a");
+      const projectB = ProjectId.makeUnsafe("project-b");
+      const threadId = ThreadId.makeUnsafe("thread-all");
+
+      yield* repository.create({
+        automationId: AutomationId.makeUnsafe("auto-all-a"),
+        projectId: projectA,
+        targetThreadId: threadId,
+        title: "A",
+        prompt: "Prompt A",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
+        cronExpression: "0 * * * *",
+        timezone: "UTC",
+        runAt: null,
+        nextRunAt: "2026-06-16T10:00:00.000Z",
+      });
+
+      yield* repository.create({
+        automationId: AutomationId.makeUnsafe("auto-all-b"),
+        projectId: projectB,
+        targetThreadId: threadId,
+        title: "B",
+        prompt: "Prompt B",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
+        cronExpression: "0 * * * *",
+        timezone: "UTC",
+        runAt: null,
+        nextRunAt: "2026-06-16T10:00:00.000Z",
+      });
+
+      yield* repository.delete({
+        automationId: AutomationId.makeUnsafe("auto-all-b"),
+        deletedAt: "2026-06-16T00:00:00.000Z",
+        updatedAt: "2026-06-16T00:00:00.000Z",
+      });
+
+      const schedules = yield* repository.listAll();
+      assert.strictEqual(schedules.length, 1);
+      assert.strictEqual(schedules[0]?.title, "A");
+    }),
+  );
+
+  it.effect("lists schedules with a missing project id", () =>
+    Effect.gen(function* () {
+      yield* clearAutomationTables;
+      const repository = yield* AutomationScheduleRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("thread-null-project");
+
+      yield* sql`
+        INSERT INTO automation_schedules (
+          automation_id,
+          project_id,
+          target_thread_id,
+          title,
+          prompt,
+          schedule_kind,
+          schedule_label,
+          cron_expression,
+          timezone,
+          run_at,
+          next_run_at,
+          paused_at,
+          completed_at,
+          deleted_at,
+          lease_until,
+          created_at,
+          updated_at
+        )
+        VALUES (
+          ${AutomationId.makeUnsafe("auto-null-project")},
+          NULL,
+          ${threadId},
+          'Legacy automation',
+          'Prompt',
+          'custom',
+          'Hourly',
+          '0 * * * *',
+          'UTC',
+          NULL,
+          '2026-06-16T10:00:00.000Z',
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          '2026-06-16T09:00:00.000Z',
+          '2026-06-16T09:00:00.000Z'
+        )
+      `;
+
+      const schedules = yield* repository.listAll();
+      assert.strictEqual(schedules.length, 1);
+      assert.strictEqual(schedules[0]?.targetThreadId, threadId);
+      assert.strictEqual(schedules[0]?.projectId, BUILT_IN_CHATS_PROJECT_ID);
     }),
   );
 
@@ -106,8 +220,11 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
         targetThreadId: threadId,
         title: "Due",
         prompt: "Run now",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T12:00:00.000Z",
       });
 
@@ -148,12 +265,15 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-paused"),
-        projectId: null,
+        projectId: ProjectId.makeUnsafe("project-paused"),
         targetThreadId: ThreadId.makeUnsafe("thread-paused"),
         title: "Paused",
         prompt: "Run later",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T10:00:00.000Z",
       });
       yield* repository.pause({
@@ -164,12 +284,15 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
 
       yield* repository.create({
         automationId: AutomationId.makeUnsafe("auto-deleted"),
-        projectId: null,
+        projectId: ProjectId.makeUnsafe("project-deleted"),
         targetThreadId: ThreadId.makeUnsafe("thread-deleted"),
         title: "Deleted",
         prompt: "Never run",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T10:00:00.000Z",
       });
       yield* repository.delete({
@@ -196,12 +319,15 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
 
       yield* repository.create({
         automationId,
-        projectId: null,
+        projectId: ProjectId.makeUnsafe("project-4"),
         targetThreadId: threadId,
         title: "Run history",
         prompt: "Test",
+        scheduleKind: "custom",
+        scheduleLabel: "Hourly",
         cronExpression: "0 * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: "2026-06-16T10:00:00.000Z",
       });
 

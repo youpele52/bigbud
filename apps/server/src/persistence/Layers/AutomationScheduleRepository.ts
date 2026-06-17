@@ -1,18 +1,19 @@
-import { AutomationRun, AutomationSchedule } from "@bigbud/contracts";
+import { AutomationRun, AutomationSchedule, BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import {
   AutomationScheduleRepository,
   type AutomationScheduleRepositoryShape,
   ClaimDueAutomationSchedulesInput,
+  CompleteAutomationScheduleInput,
   CreateAutomationScheduleInput,
   DeleteAutomationScheduleInput,
   GetAutomationScheduleInput,
   ListAutomationRunsInput,
-  ListAutomationSchedulesByThreadInput,
+  ListAutomationSchedulesByProjectInput,
   PauseAutomationScheduleInput,
   RecordAutomationRunFailedInput,
   RecordAutomationRunFinishedInput,
@@ -39,10 +40,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id,
           title,
           prompt,
+          schedule_kind,
+          schedule_label,
           cron_expression,
           timezone,
+          run_at,
           next_run_at,
           paused_at,
+          completed_at,
           deleted_at,
           lease_until,
           created_at,
@@ -54,9 +59,13 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           ${input.targetThreadId},
           ${input.title},
           ${input.prompt},
+          ${input.scheduleKind},
+          ${input.scheduleLabel},
           ${input.cronExpression},
           ${input.timezone},
+          ${input.runAt},
           ${input.nextRunAt},
+          NULL,
           NULL,
           NULL,
           NULL,
@@ -69,10 +78,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id AS "targetThreadId",
           title,
           prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
           cron_expression AS "cronExpression",
           timezone,
+          run_at AS "runAt",
           next_run_at AS "nextRunAt",
           paused_at AS "pausedAt",
+          completed_at AS "completedAt",
           deleted_at AS "deletedAt",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -91,10 +104,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id AS "targetThreadId",
           title,
           prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
           cron_expression AS "cronExpression",
           timezone,
+          run_at AS "runAt",
           next_run_at AS "nextRunAt",
           paused_at AS "pausedAt",
+          completed_at AS "completedAt",
           deleted_at AS "deletedAt",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -103,10 +120,10 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
       `,
   });
 
-  const listSchedulesByThread = SqlSchema.findAll({
-    Request: ListAutomationSchedulesByThreadInput,
+  const listSchedulesByProject = SqlSchema.findAll({
+    Request: ListAutomationSchedulesByProjectInput,
     Result: AutomationSchedule,
-    execute: ({ threadId }) =>
+    execute: ({ projectId }) =>
       sql`
         SELECT
           automation_id AS "automationId",
@@ -114,16 +131,57 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id AS "targetThreadId",
           title,
           prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
           cron_expression AS "cronExpression",
           timezone,
+          run_at AS "runAt",
           next_run_at AS "nextRunAt",
           paused_at AS "pausedAt",
+          completed_at AS "completedAt",
           deleted_at AS "deletedAt",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
         FROM automation_schedules
-        WHERE target_thread_id = ${threadId}
+        WHERE project_id = ${projectId}
           AND deleted_at IS NULL
+        ORDER BY created_at ASC, automation_id ASC
+      `,
+  });
+
+  const listAllSchedules = SqlSchema.findAll({
+    Request: Schema.Struct({}),
+    Result: AutomationSchedule,
+    execute: () =>
+      sql`
+        SELECT
+          automation_id AS "automationId",
+          COALESCE(
+            automation_schedules.project_id,
+            (
+              SELECT projection_threads.project_id
+              FROM projection_threads
+              WHERE projection_threads.thread_id = automation_schedules.target_thread_id
+              LIMIT 1
+            ),
+            ${BUILT_IN_CHATS_PROJECT_ID}
+          ) AS "projectId",
+          target_thread_id AS "targetThreadId",
+          title,
+          prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
+          cron_expression AS "cronExpression",
+          timezone,
+          run_at AS "runAt",
+          next_run_at AS "nextRunAt",
+          paused_at AS "pausedAt",
+          completed_at AS "completedAt",
+          deleted_at AS "deletedAt",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+        FROM automation_schedules
+        WHERE deleted_at IS NULL
         ORDER BY created_at ASC, automation_id ASC
       `,
   });
@@ -141,6 +199,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           WHERE next_run_at IS NOT NULL
             AND next_run_at <= ${now}
             AND paused_at IS NULL
+            AND completed_at IS NULL
             AND deleted_at IS NULL
             AND (lease_until IS NULL OR lease_until < ${now})
           ORDER BY next_run_at ASC, automation_id ASC
@@ -152,10 +211,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id AS "targetThreadId",
           title,
           prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
           cron_expression AS "cronExpression",
           timezone,
+          run_at AS "runAt",
           next_run_at AS "nextRunAt",
           paused_at AS "pausedAt",
+          completed_at AS "completedAt",
           deleted_at AS "deletedAt",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -171,9 +234,13 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
         SET
           title = COALESCE(${input.title ?? null}, title),
           prompt = COALESCE(${input.prompt ?? null}, prompt),
+          schedule_kind = COALESCE(${input.scheduleKind ?? null}, schedule_kind),
+          schedule_label = COALESCE(${input.scheduleLabel ?? null}, schedule_label),
           cron_expression = COALESCE(${input.cronExpression ?? null}, cron_expression),
           timezone = COALESCE(${input.timezone ?? null}, timezone),
+          run_at = CASE WHEN ${input.runAt === undefined ? 0 : 1} = 1 THEN ${input.runAt ?? null} ELSE run_at END,
           next_run_at = COALESCE(${input.nextRunAt ?? null}, next_run_at),
+          completed_at = CASE WHEN ${input.nextRunAt === undefined ? 1 : 0} = 1 THEN completed_at ELSE NULL END,
           updated_at = ${input.updatedAt}
         WHERE automation_id = ${input.automationId}
           AND deleted_at IS NULL
@@ -183,10 +250,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           target_thread_id AS "targetThreadId",
           title,
           prompt,
+          schedule_kind AS "scheduleKind",
+          schedule_label AS "scheduleLabel",
           cron_expression AS "cronExpression",
           timezone,
+          run_at AS "runAt",
           next_run_at AS "nextRunAt",
           paused_at AS "pausedAt",
+          completed_at AS "completedAt",
           deleted_at AS "deletedAt",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -198,7 +269,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
     execute: ({ automationId, nextRunAt, updatedAt }) =>
       sql`
         UPDATE automation_schedules
-        SET next_run_at = ${nextRunAt}, lease_until = NULL, updated_at = ${updatedAt}
+        SET next_run_at = ${nextRunAt}, completed_at = NULL, lease_until = NULL, updated_at = ${updatedAt}
         WHERE automation_id = ${automationId}
           AND deleted_at IS NULL
       `,
@@ -220,7 +291,18 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
     execute: ({ automationId, nextRunAt, updatedAt }) =>
       sql`
         UPDATE automation_schedules
-        SET paused_at = NULL, next_run_at = ${nextRunAt}, lease_until = NULL, updated_at = ${updatedAt}
+        SET paused_at = NULL, completed_at = NULL, next_run_at = ${nextRunAt}, lease_until = NULL, updated_at = ${updatedAt}
+        WHERE automation_id = ${automationId}
+          AND deleted_at IS NULL
+      `,
+  });
+
+  const completeSchedule = SqlSchema.void({
+    Request: CompleteAutomationScheduleInput,
+    execute: ({ automationId, completedAt, updatedAt }) =>
+      sql`
+        UPDATE automation_schedules
+        SET completed_at = ${completedAt}, next_run_at = NULL, lease_until = NULL, updated_at = ${updatedAt}
         WHERE automation_id = ${automationId}
           AND deleted_at IS NULL
       `,
@@ -317,10 +399,17 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
       ),
     );
 
-  const listByThread: AutomationScheduleRepositoryShape["listByThread"] = (input) =>
-    listSchedulesByThread(input).pipe(
+  const listByProject: AutomationScheduleRepositoryShape["listByProject"] = (input) =>
+    listSchedulesByProject(input).pipe(
       Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.listByThread:query")(cause),
+        toPersistenceSqlError("AutomationScheduleRepository.listByProject:query")(cause),
+      ),
+    );
+
+  const listAll: AutomationScheduleRepositoryShape["listAll"] = () =>
+    listAllSchedules({}).pipe(
+      Effect.mapError((cause) =>
+        toPersistenceSqlError("AutomationScheduleRepository.listAll:query")(cause),
       ),
     );
 
@@ -359,6 +448,13 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
       ),
     );
 
+  const complete: AutomationScheduleRepositoryShape["complete"] = (input) =>
+    completeSchedule(input).pipe(
+      Effect.mapError((cause) =>
+        toPersistenceSqlError("AutomationScheduleRepository.complete:query")(cause),
+      ),
+    );
+
   const deleteScheduleById: AutomationScheduleRepositoryShape["delete"] = (input) =>
     deleteSchedule(input).pipe(
       Effect.mapError((cause) =>
@@ -393,12 +489,14 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
   return {
     create,
     getById,
-    listByThread,
+    listByProject,
+    listAll,
     claimDue,
     update,
     updateNextRun,
     pause,
     resume,
+    complete,
     delete: deleteScheduleById,
     recordRunStarted,
     recordRunFinished,

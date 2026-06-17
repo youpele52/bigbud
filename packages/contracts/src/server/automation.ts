@@ -1,10 +1,16 @@
 import { Schema } from "effect";
 
 import { AutomationRun, AutomationSchedule } from "../orchestration/automation";
-import { AutomationId, IsoDateTime, ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import {
+  AutomationId,
+  IsoDateTime,
+  ProjectId,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "../core/baseSchemas";
 
 export const ServerListAutomationsInput = Schema.Struct({
-  threadId: ThreadId,
+  projectId: ProjectId,
 });
 export type ServerListAutomationsInput = typeof ServerListAutomationsInput.Type;
 
@@ -13,12 +19,32 @@ export const ServerListAutomationsResult = Schema.Struct({
 });
 export type ServerListAutomationsResult = typeof ServerListAutomationsResult.Type;
 
+export const ServerListAllAutomationsInput = Schema.Struct({});
+export type ServerListAllAutomationsInput = typeof ServerListAllAutomationsInput.Type;
+
+export const ServerListAllAutomationsResult = ServerListAutomationsResult;
+export type ServerListAllAutomationsResult = typeof ServerListAllAutomationsResult.Type;
+
+export const ServerGetAutomationInput = Schema.Struct({
+  automationId: AutomationId,
+});
+export type ServerGetAutomationInput = typeof ServerGetAutomationInput.Type;
+
+export const ServerGetAutomationResult = Schema.Struct({
+  automation: AutomationSchedule,
+});
+export type ServerGetAutomationResult = typeof ServerGetAutomationResult.Type;
+
 export const ServerCreateAutomationInput = Schema.Struct({
-  threadId: ThreadId,
+  projectId: ProjectId,
+  targetThreadId: ThreadId,
   title: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
+  scheduleKind: Schema.Literals(["custom", "once"]),
+  scheduleLabel: TrimmedNonEmptyString,
   cronExpression: TrimmedNonEmptyString,
   timezone: Schema.optional(TrimmedNonEmptyString),
+  runAt: Schema.optional(IsoDateTime),
 });
 export type ServerCreateAutomationInput = typeof ServerCreateAutomationInput.Type;
 
@@ -26,8 +52,11 @@ export const ServerUpdateAutomationInput = Schema.Struct({
   automationId: AutomationId,
   title: Schema.optional(TrimmedNonEmptyString),
   prompt: Schema.optional(TrimmedNonEmptyString),
+  scheduleKind: Schema.optional(Schema.Literals(["custom", "once"])),
+  scheduleLabel: Schema.optional(TrimmedNonEmptyString),
   cronExpression: Schema.optional(TrimmedNonEmptyString),
   timezone: Schema.optional(TrimmedNonEmptyString),
+  runAt: Schema.optional(Schema.NullOr(IsoDateTime)),
 });
 export type ServerUpdateAutomationInput = typeof ServerUpdateAutomationInput.Type;
 

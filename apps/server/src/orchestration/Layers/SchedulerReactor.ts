@@ -27,6 +27,16 @@ function makeRunId(): AutomationRunId {
   return AutomationRunId.makeUnsafe(crypto.randomUUID());
 }
 
+function buildAutomationExecutionPrompt(prompt: string, now: string): string {
+  return [
+    "[Automated scheduled task]",
+    `Triggered at: ${now}`,
+    "Execute the following task immediately without asking for clarification.",
+    "",
+    prompt,
+  ].join("\n");
+}
+
 class AutomationCronError extends Data.TaggedError("AutomationCronError")<{
   readonly message: string;
 }> {}
@@ -42,6 +52,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
     readonly automationId: AutomationId;
     readonly targetThreadId: ThreadId;
     readonly prompt: string;
+    readonly scheduleKind: "custom" | "once";
     readonly cronExpression: string;
     readonly timezone: string;
   }) {
@@ -59,6 +70,8 @@ const makeSchedulerReactor = Effect.gen(function* () {
       startedAt: now,
     });
 
+    const executionPrompt = buildAutomationExecutionPrompt(schedule.prompt, now);
+
     const dispatchResult = yield* Effect.matchEffect(
       orchestrationEngine.dispatch({
         type: "thread.turn.start",
@@ -67,7 +80,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
         message: {
           messageId,
           role: "user",
-          text: schedule.prompt,
+          text: executionPrompt,
           attachments: [],
         },
         runtimeMode: DEFAULT_RUNTIME_MODE,
@@ -80,23 +93,27 @@ const makeSchedulerReactor = Effect.gen(function* () {
       },
     );
 
-    const nextRunResult = yield* Effect.matchEffect(
-      Effect.try({
-        try: () => getNextCronTime(schedule.cronExpression, new Date(now), schedule.timezone),
-        catch: (error) =>
-          new AutomationCronError({
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      }),
-      {
-        onFailure: (error) =>
-          Effect.succeed({
-            ok: false as const,
-            error: error.message,
-          }),
-        onSuccess: (date) => Effect.succeed({ ok: true as const, nextRunAt: date.toISOString() }),
-      },
-    );
+    const nextRunResult =
+      schedule.scheduleKind === "once"
+        ? { ok: true as const, nextRunAt: null }
+        : yield* Effect.matchEffect(
+            Effect.try({
+              try: () => getNextCronTime(schedule.cronExpression, new Date(now), schedule.timezone),
+              catch: (error) =>
+                new AutomationCronError({
+                  message: error instanceof Error ? error.message : String(error),
+                }),
+            }),
+            {
+              onFailure: (error) =>
+                Effect.succeed({
+                  ok: false as const,
+                  error: error.message,
+                }),
+              onSuccess: (date) =>
+                Effect.succeed({ ok: true as const, nextRunAt: date.toISOString() }),
+            },
+          );
 
     if (!nextRunResult.ok) {
       yield* repository.recordRunFailed({
@@ -120,11 +137,33 @@ const makeSchedulerReactor = Effect.gen(function* () {
         finishedAt: new Date().toISOString(),
         errorMessage: "Failed to dispatch automation turn",
       });
+      if (schedule.scheduleKind === "once") {
+        yield* repository
+          .pause({
+            automationId: schedule.automationId,
+            pausedAt: now,
+            updatedAt: new Date().toISOString(),
+          })
+          .pipe(Effect.ignore);
+        return;
+      }
     } else {
       yield* repository.recordRunFinished({
         runId,
         finishedAt: new Date().toISOString(),
       });
+      if (schedule.scheduleKind === "once") {
+        yield* repository.complete({
+          automationId: schedule.automationId,
+          completedAt: now,
+          updatedAt: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    if (nextRunResult.nextRunAt === null) {
+      return;
     }
 
     yield* repository.updateNextRun({
@@ -209,7 +248,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
 export const SchedulerReactorLive = Layer.effect(SchedulerReactor, makeSchedulerReactor);
 
 export const DefaultSchedulerConfigLive = Layer.succeed(SchedulerConfig, {
-  tickInterval: Duration.seconds(60),
+  tickInterval: Duration.seconds(5),
   leaseDuration: Duration.minutes(5),
   claimBatchSize: 10,
   maxConcurrency: 3,
