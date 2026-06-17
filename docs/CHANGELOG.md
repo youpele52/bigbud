@@ -25,10 +25,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Updated changelog page SEO title and description copy on the marketing site.
 
-### Validation
-
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused tests for Pi stale-session handling, Git panel file-open clicks, markdown preview toggling, and Codex version gating.
-
 ## v0.1.646 (20 June, 2026)
 
 ### Automations
@@ -74,10 +70,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Maintainability
 
 - Refactored the automation scheduler into separate logic and reconciliation modules with focused test coverage for cron edge cases, occurrence claiming, stale-run recovery, manual triggers, and terminal-event completion.
-
-### Validation
-
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for automation scheduling, automation page routing and right-panel behavior, sidebar actions section rendering, diff panel code annotation selection, approval dialog failure dismissal, completion toast timing, Pi multi-turn agent loop completion, and relative time formatting.
 
 ## v0.1.645 (15 June, 2026)
 
@@ -304,6 +296,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - The plan sidebar now shows active tasks in a more compact layout, so you can see what the AI is implementing at a glance without scrolling.
 - Tuned the chat view so new content scrolling into view feels smoother and more natural as responses stream in.
+- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
 
 ### Right Panel Launcher and Tabs
 
@@ -320,8 +313,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Clicking a supported file path in chat now opens that file in bigbud's own file viewer instead of immediately jumping out to your editor, so reading referenced code stays inside the app when possible.
 - Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
 - When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
-
-- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
 
 ### Browser Reload Actions
 
@@ -436,10 +427,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Added a search bar to the + button → "Call agent" and "Use skill" picker dropdowns, so you can type to find the agent or skill you want — matching the existing search experience from the /agents and /skills slash commands.
 
-### Validation
-
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; Git panel resize interaction and changes-view diff scrolling; and composer + button agent/skill picker search bar.
-
 ## v0.1.642 (9 June, 2026)
 
 ### Git Panel and Repo History
@@ -502,10 +489,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Enforced a hard 400-line limit for non-test TypeScript source files and a 500-line cap for test files, and split several oversized test files across the codebase to comply — keeping the codebase easier to navigate and reducing merge conflicts from large file changes.
 - Removed leftover `.plans` documentation files and added placeholder test-data fixtures to keep the test infrastructure self-contained.
 
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, malformed browser annotation regression cases, Git panel history and diff behavior, right-panel shortcut toggles, Notes panel CRUD and annotation flows, keybinding reorganizations, Open Project dialog and error handling, and context window warning threshold rendering.
-
 ## v0.1.641 (4 June, 2026)
 
 ### Files Panel Live Directory Watching for Local Workspaces
@@ -539,10 +522,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Route Helper File Renaming
 
 - Renamed `__root.bootstrap.tsx`, `__root.logic.tsx`, and `__root.recovery.ts` to `-__root.bootstrap.tsx`, `-__root.logic.tsx`, and `-__root.recovery.ts` following TanStack Router's ignore convention (files prefixed with `-` are excluded from route detection). This eliminates the startup warnings about non-route helper files not exporting a Route.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the workspace directory watcher (root-level watching, path escape rejection), scoped project-directory WebSocket subscriptions, server and client RPC routing, Files panel directory refresh hook, route regression (diff=1 does not mount standalone diff UI), and prompt queue formatting and thread affinity behavior.
 
 ## v0.1.640 (3 June, 2026)
 
@@ -599,11 +578,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
 - When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
 
-### Validation
-
-- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, editor routing, and chat file-path preview targeting.
-
 ### Browser Reload Actions
 
 - Changed the desktop View menu reload shortcuts so they target the embedded browser panel instead of reloading the whole app window.
@@ -654,10 +628,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Refined sidebar accordion layout and spacing for a more consistent, less cramped appearance.
 - Tuned shared Input and Textarea focus styling to remove the overly shiny halo.
 - Reduced resize-time “white bar” flashes by explicitly setting renderer root backgrounds and syncing the Electron `BrowserWindow` background color with the active light/dark theme.
-
-### Validation
-
-- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`.
 - Added focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell and path-quoting regression tests, and sidebar/layout UI behavior.
 
 ## v0.1.637 (29 May, 2026)
@@ -681,10 +651,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Pinned `electron-builder` resolution to the local package before falling back to bunx for reproducible CI builds. Re-enabled the typecheck step in the release workflow.
 - Skipped AppImage smoke tests in headless CI environments and fixed an `afterExtract.cjs` type check that broke on electron-builder versions that pass platform as a string.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for Linux runtime startup, provider model discovery, and shell environment hydration.
 
 ## v0.1.636 (26 May, 2026)
 
