@@ -8,11 +8,9 @@ import {
   TextWrapIcon,
   XIcon,
 } from "lucide-react";
-import { openInPreferredEditor } from "../../models/editor";
 import { cn } from "~/lib/utils";
-import { readNativeApi } from "../../rpc/nativeApi";
-import { resolvePathLinkTarget } from "../../utils/terminal";
 import { useTheme } from "../../hooks/useTheme";
+import { openFileInFilesPanel } from "../../stores/files/filesPanel.coordinator";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useSettings } from "../../hooks/useSettings";
 import { formatShortTimestamp } from "../../utils/timestamp";
@@ -57,7 +55,6 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const {
     diffOpen,
     activeThread,
-    activeCwd,
     isGitRepo,
     orderedTurnDiffSummaries,
     inferredCheckpointTurnCountByTurnId,
@@ -109,17 +106,9 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     target?.scrollIntoView({ block: "nearest" });
   }, [selectedFilePath, renderableFiles]);
 
-  const openDiffFileInEditor = useCallback(
-    (filePath: string) => {
-      const api = readNativeApi();
-      if (!api) return;
-      const targetPath = activeCwd ? resolvePathLinkTarget(filePath, activeCwd) : filePath;
-      void openInPreferredEditor(api, targetPath).catch((error) => {
-        console.warn("Failed to open diff file in editor.", error);
-      });
-    },
-    [activeCwd],
-  );
+  const openDiffFileInViewer = useCallback((filePath: string) => {
+    openFileInFilesPanel(filePath);
+  }, []);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => updateTurnStripScrollState());
@@ -331,7 +320,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                           return node.hasAttribute("data-title");
                         });
                         if (!clickedHeader) return;
-                        openDiffFileInEditor(filePath);
+                        openDiffFileInViewer(filePath);
                       }}
                     >
                       <FileDiff

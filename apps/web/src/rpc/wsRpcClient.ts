@@ -1,9 +1,13 @@
 import {
+  type ServerGetAutomationInput,
+  type ServerGetAutomationResult,
   type ServerAutomationResult,
   type ServerCreateAutomationInput,
   type ServerDeleteAutomationInput,
   type ServerListAutomationRunsInput,
   type ServerListAutomationRunsResult,
+  type ServerListAllAutomationsInput,
+  type ServerListAllAutomationsResult,
   type ServerListAutomationsInput,
   type ServerListAutomationsResult,
   type ServerPauseAutomationInput,
@@ -155,9 +159,13 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
     readonly listAutomations: (
       input: ServerListAutomationsInput,
     ) => Promise<ServerListAutomationsResult>;
+    readonly listAllAutomations: (
+      input?: ServerListAllAutomationsInput,
+    ) => Promise<ServerListAllAutomationsResult>;
     readonly createAutomation: (
       input: ServerCreateAutomationInput,
     ) => Promise<ServerAutomationResult>;
@@ -324,8 +332,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      getAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetAutomation](input)),
       listAutomations: (input) =>
         transport.request((client) => client[WS_METHODS.serverListAutomations](input)),
+      listAllAutomations: (input = {}) =>
+        transport.request((client) => client[WS_METHODS.serverListAllAutomations](input)),
       createAutomation: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateAutomation](input)),
       updateAutomation: (input) =>

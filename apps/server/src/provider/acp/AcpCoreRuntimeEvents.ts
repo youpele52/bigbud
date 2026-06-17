@@ -88,6 +88,7 @@ export function makeAcpRequestOpenedEvent(input: {
   readonly source: AcpAdapterRawSource;
   readonly method: string;
   readonly rawPayload: unknown;
+  readonly autoApproveAfterMs?: number;
 }): ProviderRuntimeEvent {
   return {
     type: "request.opened",
@@ -100,6 +101,9 @@ export function makeAcpRequestOpenedEvent(input: {
       requestType: canonicalRequestTypeFromAcpKind(input.permissionRequest.kind),
       detail: input.detail,
       args: input.args,
+      ...(input.autoApproveAfterMs !== undefined
+        ? { autoApproveAfterMs: input.autoApproveAfterMs }
+        : {}),
     },
     raw: {
       source: input.source,

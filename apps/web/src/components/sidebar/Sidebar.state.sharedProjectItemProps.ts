@@ -18,6 +18,7 @@ interface BuildSharedProjectItemPropsInput {
   readonly activeDraftThread: SharedProjectItemProps["activeDraftThread"];
   readonly projectActions: SidebarProjectActionsOutput;
   readonly favoriteThreadIds: ReadonlySet<ThreadId>;
+  readonly automationThreadIds: ReadonlySet<ThreadId>;
   readonly prByThreadId: Map<ThreadId, ThreadPr>;
   readonly handleNewThread: SharedProjectItemProps["handleNewThread"];
   readonly renderedProjectsState: Pick<
@@ -44,6 +45,7 @@ export function buildSharedProjectItemProps(
     hasRenameCommitted: input.threadActions.hasRenameCommitted,
     markRenameCommitted: input.threadActions.markRenameCommitted,
     favoriteThreadIds: input.favoriteThreadIds,
+    automationThreadIds: input.automationThreadIds,
     toggleFavoriteThread: input.threadActions.toggleFavoriteThread,
     activeThread: input.activeThread,
     activeDraftThread: input.activeDraftThread,

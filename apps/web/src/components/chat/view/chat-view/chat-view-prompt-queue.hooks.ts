@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import type { MessageId } from "@bigbud/contracts";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
@@ -16,7 +17,9 @@ interface UseChatViewPromptQueueInput {
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   envMode: DraftThreadEnvMode;
+  onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   planHandlers: Pick<ReturnType<typeof usePlanHandlers>, "onSubmitPlanFollowUp">;
+  transformPromptForSend?: ((prompt: string) => string) | undefined;
 }
 
 export function shouldQueuePromptWhileWorking(input: {
@@ -46,7 +49,9 @@ export function useChatViewPromptQueue({
   thread,
   runtime,
   envMode,
+  onOptimisticUserMessage,
   planHandlers,
+  transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
   const queueComposerPromptRef = useRef<(prompt: string) => QueuePromptResult>(() => "full");
   const forceSendQueuedPromptRef = useRef(false);
@@ -120,7 +125,9 @@ export function useChatViewPromptQueue({
     onSubmitPlanFollowUp: planHandlers.onSubmitPlanFollowUp,
     handleInteractionModeChange: runtime.handleInteractionModeChange,
     onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
+    onOptimisticUserMessage,
     queueComposerPrompt: (prompt) => queueComposerPromptRef.current(prompt),
+    transformPromptForSend,
   });
 
   const promptQueue = usePromptQueue({

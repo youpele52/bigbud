@@ -18,6 +18,7 @@ import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
+import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import {
@@ -69,6 +70,7 @@ export interface SidebarThreadRowProps {
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   pr: ThreadPr | null;
+  automationThreadIds?: ReadonlySet<ThreadId>;
   /** Optional render slot for extra status icons (e.g. compact ThreadStatusLabel for hidden threads). */
   hiddenThreadStatusSlot?: ReactNode;
 }
@@ -120,6 +122,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const prStatus = prStatusIndicator(props.pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
+  const isAutomationThread = props.automationThreadIds?.has(effectiveThreadId) ?? false;
   const threadMetaClassName =
     "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0";
 
@@ -294,6 +297,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                 hideDot={visibleThreadStatus.label === "Completed"}
               />
             )}
+            {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}
             {props.renamingThreadId === thread.id ? (
               <input
                 ref={props.onRenamingInputMount}

@@ -1,4 +1,4 @@
-import { AutomationId, ThreadId, type OrchestrationEvent } from "@bigbud/contracts";
+import { AutomationId, ProjectId, ThreadId, type OrchestrationEvent } from "@bigbud/contracts";
 import { Duration, Effect, Exit, Layer, ManagedRuntime, Scope, Stream } from "effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, describe, expect, it } from "vitest";
@@ -71,12 +71,15 @@ describe("SchedulerReactor", () => {
     await runtime.runPromise(
       repository.create({
         automationId: AutomationId.makeUnsafe("auto-reactor-1"),
-        projectId: null,
+        projectId: ProjectId.makeUnsafe("project-reactor-1"),
         targetThreadId: ThreadId.makeUnsafe("thread-reactor-1"),
         title: "Reactor test",
         prompt: "Run from reactor",
+        scheduleKind: "custom",
+        scheduleLabel: "Every minute",
         cronExpression: "* * * * *",
         timezone: "UTC",
+        runAt: null,
         nextRunAt: new Date(Date.now() - 1000).toISOString(),
       }),
     );
@@ -92,7 +95,7 @@ describe("SchedulerReactor", () => {
     expect(dispatchedCommands[0]).toMatchObject({
       type: "thread.turn.start",
       threadId: "thread-reactor-1",
-      text: "Run from reactor",
     });
+    expect(dispatchedCommands[0]!.text).toContain("Run from reactor");
   });
 });

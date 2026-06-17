@@ -7,8 +7,12 @@ import {
   ServerAutomationResult,
   ServerCreateAutomationInput,
   ServerDeleteAutomationInput,
+  ServerGetAutomationInput,
+  ServerGetAutomationResult,
   ServerListAutomationRunsInput,
   ServerListAutomationRunsResult,
+  ServerListAllAutomationsInput,
+  ServerListAllAutomationsResult,
   ServerListAutomationsInput,
   ServerListAutomationsResult,
   ServerPauseAutomationInput,
@@ -21,6 +25,18 @@ import {
 export const WsServerListAutomationsRpc = Rpc.make(WS_METHODS.serverListAutomations, {
   payload: ServerListAutomationsInput,
   success: ServerListAutomationsResult,
+  error: ServerAutomationError,
+});
+
+export const WsServerListAllAutomationsRpc = Rpc.make(WS_METHODS.serverListAllAutomations, {
+  payload: ServerListAllAutomationsInput,
+  success: ServerListAllAutomationsResult,
+  error: ServerAutomationError,
+});
+
+export const WsServerGetAutomationRpc = Rpc.make(WS_METHODS.serverGetAutomation, {
+  payload: ServerGetAutomationInput,
+  success: ServerGetAutomationResult,
   error: ServerAutomationError,
 });
 

@@ -54,6 +54,10 @@ import {
 } from "./project/Services/ProjectSetupScriptRunner.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import {
+  ProjectionThreadRepository,
+  type ProjectionThreadRepositoryShape,
+} from "./persistence/Services/ProjectionThreads.ts";
+import {
   ThreadShellRunner,
   type ThreadShellRunnerShape,
 } from "./shell/Services/ThreadShellRunner.ts";
@@ -156,6 +160,7 @@ export const buildAppUnderTest = (options?: {
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
+    projectionThreadRepository?: Partial<ProjectionThreadRepositoryShape>;
     checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
     serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
     serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
@@ -342,15 +347,51 @@ export const buildAppUnderTest = (options?: {
             getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
             ...options?.layers?.projectionSnapshotQuery,
           }),
+          Layer.mock(ProjectionThreadRepository)({
+            getById: ({ threadId }) => {
+              const thread = makeDefaultOrchestrationReadModel().threads.find(
+                (candidate) => candidate.id === threadId,
+              );
+              return Effect.succeed(
+                thread
+                  ? Option.some({
+                      threadId: thread.id,
+                      projectId: thread.projectId,
+                      title: thread.title,
+                      providerRuntimeExecutionTargetId: "local",
+                      workspaceExecutionTargetId: "local",
+                      executionTargetId: "local",
+                      modelSelection: thread.modelSelection,
+                      runtimeMode: thread.runtimeMode,
+                      interactionMode: thread.interactionMode,
+                      branch: thread.branch,
+                      worktreePath: thread.worktreePath,
+                      latestTurnId: null,
+                      createdAt: thread.createdAt,
+                      updatedAt: thread.updatedAt,
+                      archivedAt: thread.archivedAt,
+                      deletingAt: null,
+                      deletedAt: thread.deletedAt,
+                    })
+                  : Option.none(),
+              );
+            },
+            listByProjectId: () => Effect.succeed([]),
+            upsert: () => Effect.void,
+            deleteById: () => Effect.void,
+            ...options?.layers?.projectionThreadRepository,
+          }),
           Layer.mock(AutomationScheduleRepository)({
             create: () => Effect.die("not implemented"),
             getById: () => Effect.succeed(Option.none()),
-            listByThread: () => Effect.succeed([]),
+            listByProject: () => Effect.succeed([]),
+            listAll: () => Effect.succeed([]),
             claimDue: () => Effect.succeed([]),
             update: () => Effect.die("not implemented"),
             updateNextRun: () => Effect.void,
             pause: () => Effect.void,
             resume: () => Effect.void,
+            complete: () => Effect.void,
             delete: () => Effect.void,
             recordRunStarted: () => Effect.void,
             recordRunFinished: () => Effect.void,

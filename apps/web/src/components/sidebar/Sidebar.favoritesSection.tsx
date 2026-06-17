@@ -93,6 +93,7 @@ export function SidebarFavoritesSection({
                     openPrLink={sharedProjectItemProps.openPrLink}
                     pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}
                     favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
+                    automationThreadIds={sharedProjectItemProps.automationThreadIds}
                     toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
                   />
                 ))

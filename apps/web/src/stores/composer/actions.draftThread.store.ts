@@ -139,31 +139,33 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
       }
       set((state) => {
         const existing = state.draftThreadsByThreadId[threadId];
-        if (!existing) {
-          return state;
-        }
-        const nextProjectId = options.projectId ?? existing.projectId;
-        if (nextProjectId.length === 0) {
+        const nextProjectId = options.projectId ?? existing?.projectId;
+        if (!nextProjectId || nextProjectId.length === 0) {
           return state;
         }
         const nextWorktreePath =
           options.worktreePath === undefined
-            ? existing.worktreePath
+            ? (existing?.worktreePath ?? null)
             : (options.worktreePath ?? null);
         const nextDraftThread: DraftThreadState = {
           projectId: nextProjectId,
           createdAt:
             options.createdAt === undefined
-              ? existing.createdAt
-              : options.createdAt || existing.createdAt,
-          runtimeMode: options.runtimeMode ?? existing.runtimeMode,
-          interactionMode: options.interactionMode ?? existing.interactionMode,
-          branch: options.branch === undefined ? existing.branch : (options.branch ?? null),
+              ? (existing?.createdAt ?? new Date().toISOString())
+              : options.createdAt || existing?.createdAt || new Date().toISOString(),
+          runtimeMode: options.runtimeMode ?? existing?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+          interactionMode:
+            options.interactionMode ??
+            existing?.interactionMode ??
+            DEFAULT_PROVIDER_INTERACTION_MODE,
+          branch:
+            options.branch === undefined ? (existing?.branch ?? null) : (options.branch ?? null),
           worktreePath: nextWorktreePath,
           envMode:
-            options.envMode ?? (nextWorktreePath ? "worktree" : (existing.envMode ?? "local")),
+            options.envMode ?? (nextWorktreePath ? "worktree" : (existing?.envMode ?? "local")),
         };
         const isUnchanged =
+          existing !== undefined &&
           nextDraftThread.projectId === existing.projectId &&
           nextDraftThread.createdAt === existing.createdAt &&
           nextDraftThread.runtimeMode === existing.runtimeMode &&
@@ -176,9 +178,8 @@ export function createDraftThreadActions(set: SetFn, get: GetFn) {
         }
         const nextProjectDraftThreadIdByProjectId: Record<ProjectId, ThreadId> = {
           ...state.projectDraftThreadIdByProjectId,
-          [nextProjectId]: threadId,
         };
-        if (existing.projectId !== nextProjectId) {
+        if (existing && existing.projectId !== nextProjectId) {
           if (nextProjectDraftThreadIdByProjectId[existing.projectId] === threadId) {
             delete nextProjectDraftThreadIdByProjectId[existing.projectId];
           }
