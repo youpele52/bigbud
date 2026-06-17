@@ -23,6 +23,7 @@ export {
   getProjectSortTimestamp,
   truncateThreadName,
   sortProjectsForSidebar,
+  resolveMostRecentThreadId,
 } from "./Sidebar.sort.logic";
 
 export type ThreadTraversalDirection = "previous" | "next";

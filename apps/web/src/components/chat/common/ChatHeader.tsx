@@ -17,8 +17,7 @@ import { OpenInPicker } from "./OpenInPicker";
 import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
-import { isElectron } from "~/config/env";
-import { cn } from "~/lib/utils";
+import { ContentPanelHeaderBar } from "../../layout/ContentPanelHeaderBar";
 import { ThreadActivityDots, threadActivityLabel } from "./threadActivityIndicator";
 
 interface ChatHeaderProps {
@@ -68,17 +67,8 @@ export const ChatHeader = memo(function ChatHeader({
   const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
 
   return (
-    <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
-      {/* Sidebar width spacer when closed to maintain layout balance */}
-      {!sidebarOpen && (
-        <div
-          className={cn(
-            "hidden shrink-0 md:block",
-            isElectron ? "w-20" : "h-0 w-[calc(3rem+1rem)]",
-          )}
-        />
-      )}
-      <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2 overflow-hidden sm:gap-3">
+    <ContentPanelHeaderBar
+      title={
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
           title={activeThreadTitle}
@@ -99,63 +89,65 @@ export const ChatHeader = memo(function ChatHeader({
             </span>
           </span>
         </h2>
-      </div>
-      <div className="flex shrink-0 items-center justify-end gap-2 @3xl/header-actions:gap-3">
-        {activeProjectScripts && activeProjectScripts.length > 0 && openInCwd && (
-          <ProjectScriptsControl
-            scripts={activeProjectScripts}
-            keybindings={keybindings}
-            preferredScriptId={preferredScriptId}
-            onRunScript={onRunProjectScript}
-            onAddScript={onAddProjectScript}
-            onUpdateScript={onUpdateProjectScript}
-            onDeleteScript={onDeleteProjectScript}
+      }
+      actions={
+        <>
+          {activeProjectScripts && activeProjectScripts.length > 0 && openInCwd && (
+            <ProjectScriptsControl
+              scripts={activeProjectScripts}
+              keybindings={keybindings}
+              preferredScriptId={preferredScriptId}
+              onRunScript={onRunProjectScript}
+              onAddScript={onAddProjectScript}
+              onUpdateScript={onUpdateProjectScript}
+              onDeleteScript={onDeleteProjectScript}
+            />
+          )}
+          {activeProjectName && openInCwd && (
+            <OpenInPicker
+              keybindings={keybindings}
+              availableEditors={availableEditors}
+              openInCwd={openInCwd}
+            />
+          )}
+          {activeProjectName && gitCwd && (
+            <GitActionsControl
+              gitCwd={gitCwd}
+              executionTargetId={executionTargetId}
+              activeThreadId={activeThreadId}
+            />
+          )}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Toggle
+                  className="shrink-0"
+                  pressed={sidebarOpen}
+                  onPressedChange={toggleSidebar}
+                  aria-label="Toggle sidebar"
+                  variant="toolbar"
+                  size="xs"
+                >
+                  {sidebarOpen ? (
+                    <PanelLeftCloseIcon className="size-3" />
+                  ) : (
+                    <PanelLeftIcon className="size-3" />
+                  )}
+                </Toggle>
+              }
+            />
+            <TooltipPopup side="bottom">
+              {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+              {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
+            </TooltipPopup>
+          </Tooltip>
+          <RightPanelToggleButton
+            rightPanelOpen={rightPanelOpen}
+            rightPanelToggleShortcutLabel={rightPanelToggleShortcutLabel}
+            onToggle={onToggleRightPanel}
           />
-        )}
-        {activeProjectName && openInCwd && (
-          <OpenInPicker
-            keybindings={keybindings}
-            availableEditors={availableEditors}
-            openInCwd={openInCwd}
-          />
-        )}
-        {activeProjectName && gitCwd && (
-          <GitActionsControl
-            gitCwd={gitCwd}
-            executionTargetId={executionTargetId}
-            activeThreadId={activeThreadId}
-          />
-        )}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className="shrink-0"
-                pressed={sidebarOpen}
-                onPressedChange={toggleSidebar}
-                aria-label="Toggle sidebar"
-                variant="toolbar"
-                size="xs"
-              >
-                {sidebarOpen ? (
-                  <PanelLeftCloseIcon className="size-3" />
-                ) : (
-                  <PanelLeftIcon className="size-3" />
-                )}
-              </Toggle>
-            }
-          />
-          <TooltipPopup side="bottom">
-            {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
-          </TooltipPopup>
-        </Tooltip>
-        <RightPanelToggleButton
-          rightPanelOpen={rightPanelOpen}
-          rightPanelToggleShortcutLabel={rightPanelToggleShortcutLabel}
-          onToggle={onToggleRightPanel}
-        />
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 });
