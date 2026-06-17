@@ -337,6 +337,8 @@ repositoryTestLayer("AutomationScheduleRepository", (it) => {
         threadId,
         messageId: MessageId.makeUnsafe("msg-1"),
         commandId: CommandId.makeUnsafe("cmd-1"),
+        triggerKind: "scheduled",
+        scheduledFor: "2026-06-16T10:00:00.000Z",
         startedAt: "2026-06-16T10:00:00.000Z",
       });
 

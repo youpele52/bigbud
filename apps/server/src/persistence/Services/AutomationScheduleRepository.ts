@@ -4,6 +4,7 @@ import {
   AutomationRunId,
   AutomationSchedule,
   CommandId,
+  EventId,
   IsoDateTime,
   MessageId,
   ProjectId,
@@ -14,6 +15,7 @@ import { Schema, ServiceMap } from "effect";
 import type { Effect, Option } from "effect";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../Errors.ts";
+import { AutomationScheduleNotFoundError } from "../Errors.ts";
 
 export const CreateAutomationScheduleInput = Schema.Struct({
   automationId: AutomationId,
@@ -103,13 +105,22 @@ export const RecordAutomationRunStartedInput = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   commandId: CommandId,
+  triggerKind: Schema.Literals(["scheduled", "manual"]),
+  scheduledFor: Schema.NullOr(IsoDateTime),
   startedAt: IsoDateTime,
 });
 export type RecordAutomationRunStartedInput = typeof RecordAutomationRunStartedInput.Type;
 
+export const RecordAutomationRunDispatchedInput = Schema.Struct({
+  runId: AutomationRunId,
+  dispatchedAt: IsoDateTime,
+});
+export type RecordAutomationRunDispatchedInput = typeof RecordAutomationRunDispatchedInput.Type;
+
 export const RecordAutomationRunFinishedInput = Schema.Struct({
   runId: AutomationRunId,
   finishedAt: IsoDateTime,
+  providerTerminalEventId: Schema.optional(EventId),
 });
 export type RecordAutomationRunFinishedInput = typeof RecordAutomationRunFinishedInput.Type;
 
@@ -126,7 +137,47 @@ export const ListAutomationRunsInput = Schema.Struct({
 });
 export type ListAutomationRunsInput = typeof ListAutomationRunsInput.Type;
 
-export type AutomationScheduleRepositoryError = PersistenceSqlError | PersistenceDecodeError;
+export const ClaimAutomationOccurrenceInput = Schema.Struct({
+  automationId: AutomationId,
+  scheduledFor: IsoDateTime,
+  nextRunAt: Schema.NullOr(IsoDateTime),
+  runId: AutomationRunId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  commandId: CommandId,
+  startedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type ClaimAutomationOccurrenceInput = typeof ClaimAutomationOccurrenceInput.Type;
+
+export const GetAutomationRunByOccurrenceInput = Schema.Struct({
+  automationId: AutomationId,
+  scheduledFor: IsoDateTime,
+  triggerKind: Schema.Literals(["scheduled", "manual"]),
+});
+export type GetAutomationRunByOccurrenceInput = typeof GetAutomationRunByOccurrenceInput.Type;
+
+export const GetStartedAutomationRunByMessageIdInput = Schema.Struct({
+  messageId: MessageId,
+});
+export type GetStartedAutomationRunByMessageIdInput =
+  typeof GetStartedAutomationRunByMessageIdInput.Type;
+
+export const ListStartedAutomationRunsInput = Schema.Struct({
+  limit: Schema.Number,
+});
+export type ListStartedAutomationRunsInput = typeof ListStartedAutomationRunsInput.Type;
+
+export const ReleaseAutomationScheduleLeaseInput = Schema.Struct({
+  automationId: AutomationId,
+  updatedAt: IsoDateTime,
+});
+export type ReleaseAutomationScheduleLeaseInput = typeof ReleaseAutomationScheduleLeaseInput.Type;
+
+export type AutomationScheduleRepositoryError =
+  | PersistenceSqlError
+  | PersistenceDecodeError
+  | AutomationScheduleNotFoundError;
 
 export interface AutomationScheduleRepositoryShape {
   readonly create: (
@@ -166,6 +217,9 @@ export interface AutomationScheduleRepositoryShape {
   readonly recordRunStarted: (
     input: RecordAutomationRunStartedInput,
   ) => Effect.Effect<void, PersistenceSqlError>;
+  readonly recordRunDispatched: (
+    input: RecordAutomationRunDispatchedInput,
+  ) => Effect.Effect<void, PersistenceSqlError>;
   readonly recordRunFinished: (
     input: RecordAutomationRunFinishedInput,
   ) => Effect.Effect<void, PersistenceSqlError>;
@@ -175,6 +229,21 @@ export interface AutomationScheduleRepositoryShape {
   readonly listRuns: (
     input: ListAutomationRunsInput,
   ) => Effect.Effect<ReadonlyArray<AutomationRun>, AutomationScheduleRepositoryError>;
+  readonly claimOccurrence: (
+    input: ClaimAutomationOccurrenceInput,
+  ) => Effect.Effect<Option.Option<AutomationRun>, AutomationScheduleRepositoryError>;
+  readonly getRunByOccurrence: (
+    input: GetAutomationRunByOccurrenceInput,
+  ) => Effect.Effect<Option.Option<AutomationRun>, AutomationScheduleRepositoryError>;
+  readonly getStartedRunByMessageId: (
+    input: GetStartedAutomationRunByMessageIdInput,
+  ) => Effect.Effect<Option.Option<AutomationRun>, AutomationScheduleRepositoryError>;
+  readonly listStartedRuns: (
+    input: ListStartedAutomationRunsInput,
+  ) => Effect.Effect<ReadonlyArray<AutomationRun>, AutomationScheduleRepositoryError>;
+  readonly releaseLease: (
+    input: ReleaseAutomationScheduleLeaseInput,
+  ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
 }
 
 export class AutomationScheduleRepository extends ServiceMap.Service<
