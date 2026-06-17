@@ -3,6 +3,7 @@ import {
   AutomationId,
   AutomationRunId,
   CommandId,
+  EventId,
   IsoDateTime,
   MessageId,
   ProjectId,
@@ -20,6 +21,9 @@ export type AutomationScheduleStatus = typeof AutomationScheduleStatus.Type;
 
 export const AutomationRunStatus = Schema.Literals(["started", "finished", "failed"]);
 export type AutomationRunStatus = typeof AutomationRunStatus.Type;
+
+export const AutomationRunTriggerKind = Schema.Literals(["scheduled", "manual"]);
+export type AutomationRunTriggerKind = typeof AutomationRunTriggerKind.Type;
 
 export const AutomationSchedule = Schema.Struct({
   automationId: AutomationId,
@@ -47,9 +51,13 @@ export const AutomationRun = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   commandId: CommandId,
+  triggerKind: AutomationRunTriggerKind,
+  scheduledFor: Schema.NullOr(IsoDateTime),
   status: AutomationRunStatus,
   startedAt: IsoDateTime,
+  dispatchedAt: Schema.NullOr(IsoDateTime),
   finishedAt: Schema.NullOr(IsoDateTime),
+  providerTerminalEventId: Schema.NullOr(EventId),
   errorMessage: Schema.NullOr(TrimmedNonEmptyString),
 });
 export type AutomationRun = typeof AutomationRun.Type;

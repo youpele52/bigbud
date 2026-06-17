@@ -3,6 +3,7 @@ import { Schema } from "effect";
 import { AutomationRun, AutomationSchedule } from "../orchestration/automation";
 import {
   AutomationId,
+  AutomationRunId,
   IsoDateTime,
   ProjectId,
   ThreadId,
@@ -96,8 +97,18 @@ export const ServerListAutomationRunsResult = Schema.Struct({
 });
 export type ServerListAutomationRunsResult = typeof ServerListAutomationRunsResult.Type;
 
+export const ServerAutomationTriggerStatus = Schema.Literals([
+  "dispatched",
+  "not_found",
+  "paused_or_completed",
+  "dispatch_failed",
+]);
+export type ServerAutomationTriggerStatus = typeof ServerAutomationTriggerStatus.Type;
+
 export const ServerTriggerAutomationResult = Schema.Struct({
-  triggeredAt: IsoDateTime,
+  status: ServerAutomationTriggerStatus,
+  triggeredAt: Schema.optional(IsoDateTime),
+  runId: Schema.optional(AutomationRunId),
 });
 export type ServerTriggerAutomationResult = typeof ServerTriggerAutomationResult.Type;
 

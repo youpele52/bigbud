@@ -1,9 +1,10 @@
-import { AutomationRun, AutomationSchedule, BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
+import { AutomationSchedule, BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Schema } from "effect";
 
-import { toPersistenceSqlError } from "../Errors.ts";
+import { toPersistenceSqlError, AutomationScheduleNotFoundError } from "../Errors.ts";
+import { makeAutomationRunQueries } from "./AutomationScheduleRepository.runs.ts";
 import {
   AutomationScheduleRepository,
   type AutomationScheduleRepositoryShape,
@@ -12,12 +13,8 @@ import {
   CreateAutomationScheduleInput,
   DeleteAutomationScheduleInput,
   GetAutomationScheduleInput,
-  ListAutomationRunsInput,
   ListAutomationSchedulesByProjectInput,
   PauseAutomationScheduleInput,
-  RecordAutomationRunFailedInput,
-  RecordAutomationRunFinishedInput,
-  RecordAutomationRunStartedInput,
   ResumeAutomationScheduleInput,
   UpdateAutomationScheduleInput,
   UpdateAutomationScheduleNextRunInput,
@@ -27,6 +24,7 @@ const timestampNow = () => new Date().toISOString();
 
 const makeAutomationScheduleRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const runQueries = yield* makeAutomationRunQueries;
 
   const createSchedule = SqlSchema.findOne({
     Request: CreateAutomationScheduleInput,
@@ -275,27 +273,37 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
       `,
   });
 
-  const pauseSchedule = SqlSchema.void({
-    Request: PauseAutomationScheduleInput,
-    execute: ({ automationId, pausedAt, updatedAt }) =>
-      sql`
+  const pauseSchedule = (input: typeof PauseAutomationScheduleInput.Type) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<{ readonly automationId: string }>`
         UPDATE automation_schedules
-        SET paused_at = ${pausedAt}, lease_until = NULL, updated_at = ${updatedAt}
-        WHERE automation_id = ${automationId}
+        SET paused_at = ${input.pausedAt}, lease_until = NULL, updated_at = ${input.updatedAt}
+        WHERE automation_id = ${input.automationId}
           AND deleted_at IS NULL
-      `,
-  });
+          AND paused_at IS NULL
+          AND completed_at IS NULL
+        RETURNING automation_id AS "automationId"
+      `;
+      if (rows.length === 0) {
+        return yield* new AutomationScheduleNotFoundError({ automationId: input.automationId });
+      }
+    });
 
-  const resumeSchedule = SqlSchema.void({
-    Request: ResumeAutomationScheduleInput,
-    execute: ({ automationId, nextRunAt, updatedAt }) =>
-      sql`
+  const resumeSchedule = (input: typeof ResumeAutomationScheduleInput.Type) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<{ readonly automationId: string }>`
         UPDATE automation_schedules
-        SET paused_at = NULL, completed_at = NULL, next_run_at = ${nextRunAt}, lease_until = NULL, updated_at = ${updatedAt}
-        WHERE automation_id = ${automationId}
+        SET paused_at = NULL, completed_at = NULL, next_run_at = ${input.nextRunAt}, lease_until = NULL, updated_at = ${input.updatedAt}
+        WHERE automation_id = ${input.automationId}
           AND deleted_at IS NULL
-      `,
-  });
+          AND paused_at IS NOT NULL
+          AND completed_at IS NULL
+        RETURNING automation_id AS "automationId"
+      `;
+      if (rows.length === 0) {
+        return yield* new AutomationScheduleNotFoundError({ automationId: input.automationId });
+      }
+    });
 
   const completeSchedule = SqlSchema.void({
     Request: CompleteAutomationScheduleInput,
@@ -308,82 +316,19 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
       `,
   });
 
-  const deleteSchedule = SqlSchema.void({
-    Request: DeleteAutomationScheduleInput,
-    execute: ({ automationId, deletedAt, updatedAt }) =>
-      sql`
+  const deleteSchedule = (input: typeof DeleteAutomationScheduleInput.Type) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<{ readonly automationId: string }>`
         UPDATE automation_schedules
-        SET deleted_at = ${deletedAt}, lease_until = NULL, updated_at = ${updatedAt}
-        WHERE automation_id = ${automationId}
-      `,
-  });
-
-  const insertRunStarted = SqlSchema.void({
-    Request: RecordAutomationRunStartedInput,
-    execute: (input) =>
-      sql`
-        INSERT INTO automation_runs (
-          run_id,
-          automation_id,
-          thread_id,
-          message_id,
-          command_id,
-          status,
-          started_at
-        )
-        VALUES (
-          ${input.runId},
-          ${input.automationId},
-          ${input.threadId},
-          ${input.messageId},
-          ${input.commandId},
-          'started',
-          ${input.startedAt}
-        )
-      `,
-  });
-
-  const markRunFinished = SqlSchema.void({
-    Request: RecordAutomationRunFinishedInput,
-    execute: ({ runId, finishedAt }) =>
-      sql`
-        UPDATE automation_runs
-        SET status = 'finished', finished_at = ${finishedAt}
-        WHERE run_id = ${runId}
-      `,
-  });
-
-  const markRunFailed = SqlSchema.void({
-    Request: RecordAutomationRunFailedInput,
-    execute: ({ runId, finishedAt, errorMessage }) =>
-      sql`
-        UPDATE automation_runs
-        SET status = 'failed', finished_at = ${finishedAt}, error_message = ${errorMessage}
-        WHERE run_id = ${runId}
-      `,
-  });
-
-  const listRunRows = SqlSchema.findAll({
-    Request: ListAutomationRunsInput,
-    Result: AutomationRun,
-    execute: ({ automationId, limit }) =>
-      sql`
-        SELECT
-          run_id AS "runId",
-          automation_id AS "automationId",
-          thread_id AS "threadId",
-          message_id AS "messageId",
-          command_id AS "commandId",
-          status,
-          started_at AS "startedAt",
-          finished_at AS "finishedAt",
-          error_message AS "errorMessage"
-        FROM automation_runs
-        WHERE automation_id = ${automationId}
-        ORDER BY started_at DESC, run_id DESC
-        LIMIT ${limit}
-      `,
-  });
+        SET deleted_at = ${input.deletedAt}, lease_until = NULL, updated_at = ${input.updatedAt}
+        WHERE automation_id = ${input.automationId}
+          AND deleted_at IS NULL
+        RETURNING automation_id AS "automationId"
+      `;
+      if (rows.length === 0) {
+        return yield* new AutomationScheduleNotFoundError({ automationId: input.automationId });
+      }
+    });
 
   const create: AutomationScheduleRepositoryShape["create"] = (input) =>
     createSchedule(input).pipe(
@@ -437,14 +382,18 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
   const pause: AutomationScheduleRepositoryShape["pause"] = (input) =>
     pauseSchedule(input).pipe(
       Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.pause:query")(cause),
+        Schema.is(AutomationScheduleNotFoundError)(cause)
+          ? cause
+          : toPersistenceSqlError("AutomationScheduleRepository.pause:query")(cause),
       ),
     );
 
   const resume: AutomationScheduleRepositoryShape["resume"] = (input) =>
     resumeSchedule(input).pipe(
       Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.resume:query")(cause),
+        Schema.is(AutomationScheduleNotFoundError)(cause)
+          ? cause
+          : toPersistenceSqlError("AutomationScheduleRepository.resume:query")(cause),
       ),
     );
 
@@ -458,31 +407,9 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
   const deleteScheduleById: AutomationScheduleRepositoryShape["delete"] = (input) =>
     deleteSchedule(input).pipe(
       Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.delete:query")(cause),
-      ),
-    );
-
-  const recordRunStarted: AutomationScheduleRepositoryShape["recordRunStarted"] = (input) =>
-    insertRunStarted(input).pipe(
-      Effect.mapError(toPersistenceSqlError("AutomationScheduleRepository.recordRunStarted:query")),
-    );
-
-  const recordRunFinished: AutomationScheduleRepositoryShape["recordRunFinished"] = (input) =>
-    markRunFinished(input).pipe(
-      Effect.mapError(
-        toPersistenceSqlError("AutomationScheduleRepository.recordRunFinished:query"),
-      ),
-    );
-
-  const recordRunFailed: AutomationScheduleRepositoryShape["recordRunFailed"] = (input) =>
-    markRunFailed(input).pipe(
-      Effect.mapError(toPersistenceSqlError("AutomationScheduleRepository.recordRunFailed:query")),
-    );
-
-  const listRuns: AutomationScheduleRepositoryShape["listRuns"] = (input) =>
-    listRunRows(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.listRuns:query")(cause),
+        Schema.is(AutomationScheduleNotFoundError)(cause)
+          ? cause
+          : toPersistenceSqlError("AutomationScheduleRepository.delete:query")(cause),
       ),
     );
 
@@ -498,10 +425,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
     resume,
     complete,
     delete: deleteScheduleById,
-    recordRunStarted,
-    recordRunFinished,
-    recordRunFailed,
-    listRuns,
+    ...runQueries,
   } satisfies AutomationScheduleRepositoryShape;
 });
 
