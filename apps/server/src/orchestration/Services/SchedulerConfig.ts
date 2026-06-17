@@ -24,6 +24,21 @@ export interface SchedulerConfigShape {
    * Maximum concurrent dispatches per tick.
    */
   readonly maxConcurrency: number;
+
+  /**
+   * Maximum age for a started run before it is marked failed.
+   */
+  readonly staleRunTimeout: Duration.Duration;
+
+  /**
+   * Interval between reconciliation passes for started runs.
+   */
+  readonly reconcileInterval: Duration.Duration;
+
+  /**
+   * Maximum started runs to reconcile per pass.
+   */
+  readonly reconcileBatchSize: number;
 }
 
 /**

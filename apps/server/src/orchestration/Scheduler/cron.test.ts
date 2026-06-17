@@ -66,4 +66,37 @@ describe("cron", () => {
   it("rejects invalid timezones", () => {
     expect(() => getNextCronTime("* * * * *", new Date(), "Mars/Olympus")).toThrow(CronParseError);
   });
+
+  it("handles Sunday as 0 and 7 in day-of-week field", () => {
+    const after = new Date("2026-06-16T00:00:00.000Z"); // Tuesday
+    const sundayZero = getNextCronTime("0 9 * * 0", after, "UTC");
+    const sundaySeven = getNextCronTime("0 9 * * 7", after, "UTC");
+    expect(sundayZero.toISOString()).toBe(sundaySeven.toISOString());
+  });
+
+  it("rejects impossible day-of-month values", () => {
+    expect(() => getNextCronTime("0 9 31 2 *", new Date("2026-01-01T00:00:00.000Z"))).toThrow(
+      CronParseError,
+    );
+  });
+
+  it("advances across a spring-forward DST gap in America/New_York", () => {
+    const after = new Date("2026-03-08T06:30:00.000Z"); // 1:30 AM EST
+    const next = getNextCronTime("30 2 * * *", after, "America/New_York");
+    expect(next.toISOString()).toBe("2026-03-09T06:30:00.000Z");
+  });
+
+  it("matches both occurrences of a fall-back duplicate local time", () => {
+    const after = new Date("2026-11-01T05:29:00.000Z"); // 1:29 AM EDT
+    const first = getNextCronTime("30 1 * * *", after, "America/New_York");
+    const second = getNextCronTime("30 1 * * *", first, "America/New_York");
+    expect(first.toISOString()).toBe("2026-11-01T05:30:00.000Z");
+    expect(second.toISOString()).toBe("2026-11-01T06:30:00.000Z");
+  });
+
+  it("requires day-of-month and day-of-week to both match", () => {
+    const after = new Date("2026-06-01T00:00:00.000Z"); // Monday June 1
+    const next = getNextCronTime("0 9 15 * 1", after, "UTC");
+    expect(next.toISOString()).toBe("2026-06-15T09:00:00.000Z"); // Monday June 15
+  });
 });

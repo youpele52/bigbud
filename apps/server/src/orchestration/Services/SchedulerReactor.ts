@@ -1,6 +1,16 @@
-import { type AutomationId } from "@bigbud/contracts";
+import {
+  type AutomationId,
+  type AutomationRunId,
+  type ServerAutomationTriggerStatus,
+} from "@bigbud/contracts";
 import { ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
+
+export type AutomationTriggerResult = {
+  readonly status: ServerAutomationTriggerStatus;
+  readonly triggeredAt?: string;
+  readonly runId?: AutomationRunId;
+};
 
 /**
  * SchedulerReactorShape - Service API for the automation scheduler lifecycle.
@@ -18,7 +28,7 @@ export interface SchedulerReactorShape {
   /**
    * Dispatch a specific automation immediately.
    */
-  readonly triggerNow: (automationId: AutomationId) => Effect.Effect<void>;
+  readonly triggerNow: (automationId: AutomationId) => Effect.Effect<AutomationTriggerResult>;
 }
 
 /**

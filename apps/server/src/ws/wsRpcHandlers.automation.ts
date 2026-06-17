@@ -17,11 +17,17 @@ import {
 
 import { getNextCronTime } from "../orchestration/Scheduler/cron.ts";
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
+import { AutomationScheduleNotFoundError } from "../persistence/Errors.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 
 const DEFAULT_AUTOMATION_TIMEZONE = "UTC";
 
 function toAutomationError(cause: unknown, message: string) {
+  if (Schema.is(AutomationScheduleNotFoundError)(cause)) {
+    return new ServerAutomationError({
+      message: "Automation not found",
+    });
+  }
   return Schema.is(ServerAutomationError)(cause)
     ? cause
     : new ServerAutomationError({
@@ -239,13 +245,27 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
     [WS_METHODS.serverPauseAutomation]: (input: typeof ServerPauseAutomationInput.Type) =>
       observeRpcEffect(
         WS_METHODS.serverPauseAutomation,
-        context.automationScheduleRepository
-          .pause({
+        Effect.gen(function* () {
+          const current = yield* context.automationScheduleRepository.getById({
+            automationId: input.automationId,
+          });
+          if (Option.isNone(current) || current.value.deletedAt !== null) {
+            return yield* new ServerAutomationError({
+              message: "Automation not found",
+            });
+          }
+          if (current.value.pausedAt !== null || current.value.completedAt !== null) {
+            return yield* new ServerAutomationError({
+              message: "Automation not found",
+            });
+          }
+
+          yield* context.automationScheduleRepository.pause({
             automationId: input.automationId,
             pausedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-          })
-          .pipe(Effect.mapError((cause) => toAutomationError(cause, "Failed to pause automation"))),
+          });
+        }).pipe(Effect.mapError((cause) => toAutomationError(cause, "Failed to pause automation"))),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverResumeAutomation]: (input: typeof ServerResumeAutomationInput.Type) =>
@@ -256,6 +276,11 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
             automationId: input.automationId,
           });
           if (Option.isNone(current) || current.value.deletedAt !== null) {
+            return yield* new ServerAutomationError({
+              message: "Automation not found",
+            });
+          }
+          if (current.value.pausedAt === null || current.value.completedAt !== null) {
             return yield* new ServerAutomationError({
               message: "Automation not found",
             });
@@ -282,15 +307,24 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
     [WS_METHODS.serverDeleteAutomation]: (input: typeof ServerDeleteAutomationInput.Type) =>
       observeRpcEffect(
         WS_METHODS.serverDeleteAutomation,
-        context.automationScheduleRepository
-          .delete({
+        Effect.gen(function* () {
+          const current = yield* context.automationScheduleRepository.getById({
+            automationId: input.automationId,
+          });
+          if (Option.isNone(current) || current.value.deletedAt !== null) {
+            return yield* new ServerAutomationError({
+              message: "Automation not found",
+            });
+          }
+
+          yield* context.automationScheduleRepository.delete({
             automationId: input.automationId,
             deletedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-          })
-          .pipe(
-            Effect.mapError((cause) => toAutomationError(cause, "Failed to delete automation")),
-          ),
+          });
+        }).pipe(
+          Effect.mapError((cause) => toAutomationError(cause, "Failed to delete automation")),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverTriggerAutomation]: (input: typeof ServerTriggerAutomationInput.Type) =>
@@ -306,8 +340,27 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
             });
           }
 
-          yield* context.schedulerReactor.triggerNow(input.automationId);
-          return { triggeredAt: new Date().toISOString() };
+          const result = yield* context.schedulerReactor.triggerNow(input.automationId);
+          if (result.status === "not_found") {
+            return yield* new ServerAutomationError({
+              message: "Automation not found",
+            });
+          }
+          if (result.status === "paused_or_completed") {
+            return yield* new ServerAutomationError({
+              message: "Automation has already completed",
+            });
+          }
+          if (result.status === "dispatch_failed") {
+            return yield* new ServerAutomationError({
+              message: "Failed to trigger automation",
+            });
+          }
+          return {
+            status: result.status,
+            triggeredAt: result.triggeredAt,
+            runId: result.runId,
+          };
         }).pipe(
           Effect.mapError((cause) => toAutomationError(cause, "Failed to trigger automation")),
         ),
