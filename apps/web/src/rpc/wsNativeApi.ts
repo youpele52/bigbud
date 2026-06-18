@@ -70,6 +70,9 @@ export function createWsNativeApi(): NativeApi {
       update: rpcClient.notes.update,
       delete: rpcClient.notes.delete,
     },
+    teach: {
+      listProjects: () => rpcClient.teach.listProjects({}),
+    },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openPath: (path) => rpcClient.shell.openPath({ path }),

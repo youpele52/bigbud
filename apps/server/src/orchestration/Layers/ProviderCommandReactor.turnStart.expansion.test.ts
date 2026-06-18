@@ -130,6 +130,73 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.messages.at(-1)?.text).toBe("/skills handoff");
   });
 
+  it("injects teach runtime context with default chat folder paths", async () => {
+    const baseDir = makeTrackedTempDir("bigbud-reactor-teach-expand-");
+    const defaultChatCwd = path.join(baseDir, "Documents");
+    fs.mkdirSync(defaultChatCwd, { recursive: true });
+    const skillDir = path.join(baseDir, ".bigbud", "skills", "teach");
+    const skillPath = path.join(skillDir, "SKILL.md");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      skillPath,
+      [
+        "---",
+        "name: teach",
+        "description: Structured multi-session learning.",
+        "---",
+        "Guide the user through a learning project.",
+      ].join("\n"),
+      "utf8",
+    );
+    const harness = await createHarness({
+      baseDir,
+      workspaceRoot: defaultChatCwd,
+      serverSettingsOverrides: { defaultChatCwd },
+      discoveryCatalog: {
+        agents: [],
+        skills: [
+          {
+            id: "bigbud:skill:teach",
+            provider: "bigbud",
+            name: "teach",
+            source: "system",
+            description: "Structured multi-session learning.",
+            sourcePath: skillPath,
+          },
+        ],
+      },
+    });
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-teach-expand"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-teach-expand"),
+          role: "user",
+          text: "/skills teach budgeting",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("bigbud teach runtime context");
+    expect(sendInput?.input).toContain(`Default chat folder: ${defaultChatCwd}`);
+    expect(sendInput?.input).toContain(path.join(defaultChatCwd, "bigbud-learn"));
+    expect(sendInput?.input).toContain("Active learning project folder for this turn");
+    expect(sendInput?.input).toContain(path.join(defaultChatCwd, "bigbud-learn", "budgeting"));
+    expect(sendInput?.input).toContain("That folder is NOT a learning project");
+    expect(fs.existsSync(path.join(defaultChatCwd, "bigbud-learn", "budgeting"))).toBe(true);
+  });
+
   it("prefers bigbud skills over same-named provider skills", async () => {
     const baseDir = makeTrackedTempDir("bigbud-reactor-bigbud-priority-");
     const bundledSkillDir = path.join(baseDir, ".bigbud", "skills", "handoff");

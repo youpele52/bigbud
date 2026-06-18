@@ -76,6 +76,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     update: vi.fn<(...args: any[]) => Promise<Note>>(),
     delete: vi.fn<(...args: any[]) => Promise<NotesDeleteResult>>(),
   },
+  teach: {
+    listProjects: vi.fn(),
+  },
   shell: {
     openInEditor: vi.fn(),
     openPath: vi.fn(),
