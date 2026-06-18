@@ -7,6 +7,8 @@ import {
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   staticAndDevRouteLayer,
+  workspacePdfViewerRouteLayer,
+  workspaceFilePreviewRouteLayer,
 } from "./ws/http";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
@@ -269,6 +271,8 @@ export const makeRoutesLayer = Layer.mergeAll(
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
+  workspacePdfViewerRouteLayer,
+  workspaceFilePreviewRouteLayer,
   staticAndDevRouteLayer,
   websocketRpcRouteLayer,
 );

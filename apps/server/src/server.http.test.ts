@@ -62,6 +62,79 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("serves workspace PDF previews before the dev URL redirect", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-router-workspace-preview-",
+      });
+      const pdfPath = path.join(projectDir, "docs", "report.pdf");
+      yield* fileSystem.makeDirectory(path.dirname(pdfPath), { recursive: true });
+      yield* fileSystem.writeFileString(pdfPath, "%PDF-1.4\npreview-ok");
+
+      yield* buildAppUnderTest({
+        config: { devUrl: new URL("http://127.0.0.1:5173") },
+      });
+
+      const response = yield* HttpClient.get(
+        `/api/workspace-file-preview?cwd=${encodeURIComponent(projectDir)}&relativePath=${encodeURIComponent("docs/report.pdf")}`,
+      );
+
+      assert.equal(response.status, 200);
+      assert.include(yield* response.text, "preview-ok");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("serves workspace PDF previews for unicode filenames", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-router-workspace-preview-unicode-",
+      });
+      const pdfPath = path.join(projectDir, "docs", "Auftrag für ein neues Passwort.pdf");
+      yield* fileSystem.makeDirectory(path.dirname(pdfPath), { recursive: true });
+      yield* fileSystem.writeFileString(pdfPath, "%PDF-1.4\nunicode-preview-ok");
+
+      yield* buildAppUnderTest({
+        config: { devUrl: new URL("http://127.0.0.1:5173") },
+      });
+
+      const response = yield* HttpClient.get(
+        `/api/workspace-file-preview?cwd=${encodeURIComponent(projectDir)}&relativePath=${encodeURIComponent("docs/Auftrag für ein neues Passwort.pdf")}`,
+      );
+
+      assert.equal(response.status, 200);
+      assert.include(yield* response.text, "unicode-preview-ok");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("serves workspace PDF viewer pages before the dev URL redirect", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-router-workspace-pdf-viewer-",
+      });
+      const pdfPath = path.join(projectDir, "docs", "report.pdf");
+      yield* fileSystem.makeDirectory(path.dirname(pdfPath), { recursive: true });
+      yield* fileSystem.writeFileString(pdfPath, "%PDF-1.4\nviewer-ok");
+
+      yield* buildAppUnderTest({
+        config: { devUrl: new URL("http://127.0.0.1:5173") },
+      });
+
+      const response = yield* HttpClient.get(
+        `/api/workspace-pdf-viewer?cwd=${encodeURIComponent(projectDir)}&relativePath=${encodeURIComponent("docs/report.pdf")}`,
+      );
+
+      assert.equal(response.status, 200);
+      assert.include(yield* response.text, 'type="application/pdf"');
+      assert.include(yield* response.text, "/api/workspace-file-preview?");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("serves the fallback project favicon when no icon exists", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -79,6 +152,23 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 200);
       assert.include(yield* response.text, 'data-fallback="project-favicon"');
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("rejects workspace preview path traversal", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const projectDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-router-workspace-preview-invalid-",
+      });
+
+      yield* buildAppUnderTest();
+
+      const response = yield* HttpClient.get(
+        `/api/workspace-file-preview?cwd=${encodeURIComponent(projectDir)}&relativePath=${encodeURIComponent("../secret.pdf")}`,
+      );
+
+      assert.equal(response.status, 400);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 

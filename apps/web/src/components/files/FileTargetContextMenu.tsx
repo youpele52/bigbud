@@ -4,7 +4,7 @@ import { openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
 import {
   canOpenDirectoryInFilesPanel,
-  canOpenPathInFilesPanel,
+  canOpenPathInternally,
   openDirectoryInFilesPanelIfSupported,
 } from "../../stores/files/filesPanel.open";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
@@ -67,7 +67,7 @@ export function FileTargetContextMenu({
     if (!targetPath || !workspaceRoot || !kind) return false;
     return kind === "directory"
       ? canOpenDirectoryInFilesPanel(targetPath, workspaceRoot)
-      : canOpenPathInFilesPanel(targetPath, workspaceRoot);
+      : canOpenPathInternally(targetPath, workspaceRoot);
   }, [kind, targetPath, workspaceRoot]);
 
   const handleOpenInternally = useCallback(() => {
