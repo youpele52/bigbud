@@ -1,5 +1,6 @@
 import type * as React from "react";
 
+import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
 
 interface RightPanelShellProps {
@@ -33,6 +34,7 @@ export function RightPanelShell({
         )}
         style={{ width, transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
+        {isElectron ? <div className="drag-region h-3 shrink-0" /> : null}
         {children}
         {onResizePointerDown ? (
           <button
