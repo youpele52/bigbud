@@ -8,6 +8,7 @@ import {
   joinWorkspaceEntryPath,
   serializeFilesPanelDragEntry,
 } from "../files/filesPanel.dnd";
+import { showGitChangedFileCopyMenu } from "./GitPanel.copy";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 
@@ -71,12 +72,13 @@ export function GitPanelChanges({
             {visibleFiles.map((file) => {
               const isSelected = file.path === selectedFilePath;
               return (
-                <button
+                <div
                   key={file.path}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   draggable
                   className={cn(
-                    "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors",
+                    "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors select-text outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                     isSelected
                       ? "bg-accent text-accent-foreground"
                       : "text-foreground hover:bg-accent/40",
@@ -101,6 +103,19 @@ export function GitPanelChanges({
                       openFileInFilesPanel(file.path);
                     }
                   }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    void showGitChangedFileCopyMenu({
+                      path: file.path,
+                      position: { x: event.clientX, y: event.clientY },
+                    });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelectFile(file.path);
+                    }
+                  }}
                 >
                   <span
                     data-git-file-path
@@ -111,7 +126,7 @@ export function GitPanelChanges({
                   <span className="text-xs text-muted-foreground">
                     +{file.insertions} -{file.deletions}
                   </span>
-                </button>
+                </div>
               );
             })}
             {visibleCount < files.length ? (

@@ -36,7 +36,7 @@ export function GitPatchViewer({ emptyLabel, patch }: GitPatchViewerProps) {
     return (
       <div className="min-h-0 flex-1 overflow-auto p-3">
         <div className="mb-2 text-xs text-muted-foreground">{renderablePatch.reason}</div>
-        <pre className="overflow-x-auto rounded-md border border-border/60 bg-card/30 p-3 text-xs whitespace-pre-wrap text-foreground">
+        <pre className="overflow-x-auto rounded-md border border-border/60 bg-card/30 p-3 text-xs whitespace-pre-wrap text-foreground select-text">
           {renderablePatch.text}
         </pre>
       </div>
