@@ -125,7 +125,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <BrowserPanelContent
                       activeThreadId={activeThreadId ?? null}
@@ -144,7 +144,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <FilesPanelContent activeThreadId={activeThreadId ?? null} />
                   </div>
@@ -159,7 +159,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
                   </div>
@@ -174,7 +174,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <NotesPanelContent activeThreadId={activeThreadId ?? null} />
                   </div>
@@ -189,7 +189,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <DiffWorkerPoolProvider>
                       <GitPanelContent activeThreadId={activeThreadId ?? null} visible={isActive} />
@@ -206,7 +206,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                       "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
                       !isActive && "pointer-events-none invisible",
                     )}
-                    aria-hidden={!isActive}
+                    inert={!isActive ? true : undefined}
                   >
                     <DiffWorkerPoolProvider>
                       <DiffPanel mode="sidebar" />
