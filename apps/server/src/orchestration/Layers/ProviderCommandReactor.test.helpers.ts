@@ -8,6 +8,7 @@ import type {
   ProviderRuntimeEvent,
   ProviderSession,
   ServerDiscoveryCatalog,
+  ServerSettings,
 } from "@bigbud/contracts";
 import {
   ApprovalRequestId,
@@ -22,6 +23,7 @@ import { TextGenerationError } from "@bigbud/contracts";
 import { Effect, Exit, Layer, ManagedRuntime, PubSub, Scope, Stream } from "effect";
 import { afterEach, vi } from "vitest";
 
+import type { DeepPartial } from "@bigbud/shared/Struct";
 import {
   BrowserManager,
   BrowserManagerError,
@@ -117,6 +119,7 @@ export async function createHarness(input?: {
   readonly browserCloseFailure?: string;
   readonly terminalCloseFailure?: string;
   readonly discoveryCatalog?: ServerDiscoveryCatalog;
+  readonly serverSettingsOverrides?: DeepPartial<ServerSettings>;
 }) {
   const now = new Date().toISOString();
   const baseDir = input?.baseDir ?? makeTrackedTempDir("bigbud-reactor-");
@@ -330,7 +333,7 @@ export async function createHarness(input?: {
     ),
     Layer.provideMerge(Layer.succeed(BrowserManager, browserService)),
     Layer.provideMerge(Layer.succeed(TerminalManager, terminalService)),
-    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(ServerSettingsService.layerTest(input?.serverSettingsOverrides ?? {})),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
     Layer.provideMerge(WorkspacePathsLive),
     Layer.provideMerge(NodeServices.layer),

@@ -52,6 +52,7 @@ import type {
   NotesListResult,
   NotesUpdateInput,
 } from "./notes";
+import type { TeachListProjectsInput, TeachListProjectsResult } from "./teach";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -241,6 +242,9 @@ export interface NativeApi {
     create: (input: NotesCreateInput) => Promise<Note>;
     update: (input: NotesUpdateInput) => Promise<Note>;
     delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
+  };
+  teach: {
+    listProjects: (input?: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;

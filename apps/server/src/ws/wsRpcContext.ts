@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import {
   CommandId,
   EventId,
@@ -63,6 +63,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const projectionThreadRepository = yield* ProjectionThreadRepository;
   const automationScheduleRepository = yield* AutomationScheduleRepository;
   const schedulerReactor = yield* SchedulerReactor;
+  const fileSystem = yield* FileSystem.FileSystem;
 
   const serverCommandId = (tag: string) =>
     CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
@@ -218,6 +219,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     dispatchNormalizedCommand,
     dispatchShellCommand,
     discoveryRegistry,
+    fileSystem,
     git,
     gitManager,
     gitStatusBroadcaster,

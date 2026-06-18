@@ -24,6 +24,8 @@ import {
   type NotesListInput,
   type NotesListResult,
   type NotesUpdateInput,
+  type TeachListProjectsInput,
+  type TeachListProjectsResult,
   type ProjectDirectoryWatchEvent,
   type ProjectDirectoryWatchInput,
   type GitReadWorkingTreeDiffInput,
@@ -105,6 +107,9 @@ export interface WsRpcClient {
     readonly create: (input: NotesCreateInput) => Promise<Note>;
     readonly update: (input: NotesUpdateInput) => Promise<Note>;
     readonly delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
+  };
+  readonly teach: {
+    readonly listProjects: (input: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
   };
   readonly shell: {
     readonly openInEditor: (input: {
@@ -258,6 +263,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       create: (input) => transport.request((client) => client[WS_METHODS.notesCreate](input)),
       update: (input) => transport.request((client) => client[WS_METHODS.notesUpdate](input)),
       delete: (input) => transport.request((client) => client[WS_METHODS.notesDelete](input)),
+    },
+    teach: {
+      listProjects: (input) =>
+        transport.request((client) => client[WS_METHODS.teachListProjects](input)),
     },
     shell: {
       openInEditor: (input) =>
