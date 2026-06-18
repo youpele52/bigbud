@@ -2,6 +2,16 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.648 (18 June, 2026)
+
+### Files Panel
+
+- Fixed the Files panel tree so it refreshes when folders are created, deleted, renamed, or converted between files and directories, removing the need for a manual reload after nested workspace changes.
+
+### Reliability
+
+- Hardened directory watching so the Files panel stays in sync with the underlying workspace even when the operating system reports a change indirectly, such as a new folder created inside another open folder.
+
 ## v0.1.647 (17 June, 2026)
 
 ### File Viewer
