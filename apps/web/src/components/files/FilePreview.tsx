@@ -71,7 +71,7 @@ export const FilePreview = memo(function FilePreview({
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
   );
-  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownFileViewMode>("raw");
+  const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownFileViewMode>("preview");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
   const previewRequestIdRef = useRef(0);
@@ -183,7 +183,7 @@ export const FilePreview = memo(function FilePreview({
 
   useEffect(() => {
     setSelectedRange(null);
-    setMarkdownViewMode("raw");
+    setMarkdownViewMode("preview");
   }, [relativePath]);
 
   useEffect(() => {

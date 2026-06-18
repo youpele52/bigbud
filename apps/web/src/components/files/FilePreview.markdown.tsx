@@ -51,7 +51,13 @@ export function FilePreviewMarkdownContent({
 }: FilePreviewMarkdownContentProps) {
   return (
     <div className="p-3" onContextMenu={onContextMenu}>
-      <BaseMarkdown text={contents} cwd={cwd} isStreaming={false} preserveLineBreaks />
+      <BaseMarkdown
+        text={contents}
+        cwd={cwd}
+        isStreaming={false}
+        className="file-preview-markdown"
+        preserveLineBreaks
+      />
     </div>
   );
 }
