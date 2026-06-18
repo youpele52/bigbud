@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import { copyTextToClipboard } from "~/lib/clipboard/copyText";
+
 export function useCopyToClipboard<TContext = void>({
   timeout = 2000,
   onCopy,
@@ -46,26 +48,9 @@ export function useCopyToClipboard<TContext = void>({
       }
     };
 
-    if (typeof window !== "undefined" && window.desktopBridge?.copyToClipboard) {
-      window.desktopBridge
-        .copyToClipboard(value)
-        .then(onSuccess)
-        .catch((error: unknown) =>
-          onFailure(error instanceof Error ? error : new Error(String(error))),
-        );
-      return;
-    }
-
-    if (typeof window === "undefined" || !navigator.clipboard?.writeText) {
-      onErrorRef.current?.(new Error("Clipboard API unavailable."), ctx);
-      return;
-    }
-
-    navigator.clipboard
-      .writeText(value)
-      .then(onSuccess, (error: unknown) =>
-        onFailure(error instanceof Error ? error : new Error(String(error))),
-      );
+    copyTextToClipboard(value).then(onSuccess, (error: unknown) =>
+      onFailure(error instanceof Error ? error : new Error(String(error))),
+    );
   }, []);
 
   // Cleanup timeout on unmount
