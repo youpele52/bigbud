@@ -1,13 +1,13 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it, describe, expect } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
 
 import { ServerConfig } from "../../startup/config.ts";
 import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { WorkspaceEntries } from "../Services/WorkspaceEntries.ts";
 import { WorkspaceFileSystem } from "../Services/WorkspaceFileSystem.ts";
 import { WorkspaceEntriesLive } from "./WorkspaceEntries.ts";
-import { WorkspaceFileSystemLive } from "./WorkspaceFileSystem.ts";
+import { createDirectoryChangedStream, WorkspaceFileSystemLive } from "./WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./WorkspacePaths.ts";
 
 const ProjectLayer = WorkspaceFileSystemLive.pipe(
@@ -287,6 +287,52 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
         const stream = yield* workspaceFileSystem.watchDirectory({ cwd });
 
         expect(stream).toBeDefined();
+      }),
+    );
+
+    it.effect("maps mkdir-style watcher events to a directory refresh", () =>
+      Effect.gen(function* () {
+        const stream = createDirectoryChangedStream({
+          cwd: "/tmp/project",
+          relativePath: "docs",
+          watcher: async function* (_signal) {
+            yield { eventType: "rename", filename: "plans" };
+          },
+        });
+
+        const event = yield* Stream.runHead(stream);
+        expect(Option.isSome(event)).toBe(true);
+        if (!Option.isSome(event)) {
+          throw new Error("Expected a directoryChanged event for mkdir-style watcher events.");
+        }
+        expect(event.value).toEqual({
+          version: 1,
+          type: "directoryChanged",
+          relativePath: "docs",
+        });
+      }),
+    );
+
+    it.effect("maps child type changes to a directory refresh", () =>
+      Effect.gen(function* () {
+        const stream = createDirectoryChangedStream({
+          cwd: "/tmp/project",
+          relativePath: "docs",
+          watcher: async function* (_signal) {
+            yield { eventType: "change", filename: "item" };
+          },
+        });
+
+        const event = yield* Stream.runHead(stream);
+        expect(Option.isSome(event)).toBe(true);
+        if (!Option.isSome(event)) {
+          throw new Error("Expected a directoryChanged event for child type changes.");
+        }
+        expect(event.value).toEqual({
+          version: 1,
+          type: "directoryChanged",
+          relativePath: "docs",
+        });
       }),
     );
 
