@@ -57,6 +57,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      plugins: true,
       spellcheck: deps.spellcheckEnabled,
       webviewTag: true,
     },

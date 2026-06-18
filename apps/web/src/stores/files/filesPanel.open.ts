@@ -4,6 +4,8 @@ import {
   openPathInPreferredApp,
   stripPathPositionSuffix,
 } from "../../models/editor";
+import { openNewBrowserTab } from "../browser/browserPanel.actions";
+import { buildWorkspaceFilePreviewUrl, isPdfFilePath } from "../../lib/workspaceFilePreview";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
 
@@ -53,11 +55,47 @@ export function canOpenPathInFilesPanel(
   );
 }
 
+export function canOpenPathInBrowserPanel(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): boolean {
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  return relativePath !== null && isPdfFilePath(relativePath);
+}
+
+export function canOpenPathInternally(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): boolean {
+  return (
+    canOpenPathInBrowserPanel(targetPath, workspaceRoot) ||
+    canOpenPathInFilesPanel(targetPath, workspaceRoot)
+  );
+}
+
 export function canOpenDirectoryInFilesPanel(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
   return resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot) !== null;
+}
+
+export function openPathInBrowserPanelIfSupported(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): boolean {
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  if (!relativePath || !workspaceRoot || !isPdfFilePath(relativePath)) {
+    return false;
+  }
+
+  openNewBrowserTab({
+    url: buildWorkspaceFilePreviewUrl({
+      cwd: workspaceRoot,
+      relativePath,
+    }),
+  });
+  return true;
 }
 
 export function openPathInFilesPanelIfSupported(
@@ -90,6 +128,10 @@ export async function openPathFromChat(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): Promise<void> {
+  if (openPathInBrowserPanelIfSupported(targetPath, workspaceRoot)) {
+    return;
+  }
+
   if (openPathInFilesPanelIfSupported(targetPath, workspaceRoot)) {
     return;
   }

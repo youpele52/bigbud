@@ -97,7 +97,9 @@ describe("windowManager context menu", () => {
     const window = mockWindowInstances.at(-1);
     expect(window?.options).toMatchObject({
       webPreferences: expect.objectContaining({
+        plugins: true,
         spellcheck: false,
+        webviewTag: true,
       }),
     });
   });

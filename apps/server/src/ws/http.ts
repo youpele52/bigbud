@@ -20,9 +20,122 @@ import { ServerConfig } from "../startup/config";
 import { decodeOtlpTraceRecords } from "../observability/TraceRecord.ts";
 import { BrowserTraceCollector } from "../observability/Services/BrowserTraceCollector.ts";
 import { ProjectFaviconResolver } from "../project/Services/ProjectFaviconResolver";
+import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
 
 const PROJECT_FAVICON_CACHE_CONTROL = "public, max-age=3600";
 const FALLBACK_PROJECT_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#6b728080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-fallback="project-favicon"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>`;
+const WORKSPACE_FILE_PREVIEW_CACHE_CONTROL = "no-store";
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildWorkspacePdfViewerHtml(input: { title: string; pdfUrl: string }): string {
+  const escapedTitle = escapeHtml(input.title);
+  const escapedPdfUrl = escapeHtml(input.pdfUrl);
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapedTitle}</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0f0f10;
+      }
+      .viewer {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+        background: #161617;
+      }
+      .fallback {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        color: #e6e6e6;
+        font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+      }
+      .fallback-inner {
+        max-width: 32rem;
+        text-align: center;
+      }
+      .fallback a {
+        color: #9ecbff;
+      }
+    </style>
+  </head>
+  <body>
+    <embed class="viewer" src="${escapedPdfUrl}#toolbar=0&navpanes=0&scrollbar=1" type="application/pdf" />
+    <div class="fallback">
+      <div class="fallback-inner">
+        <p>This PDF could not be displayed in the embedded viewer.</p>
+        <p><a href="${escapedPdfUrl}" target="_self" rel="noreferrer">Open the raw PDF</a></p>
+      </div>
+    </div>
+    <script>
+      const viewer = document.querySelector(".viewer");
+      const fallback = document.querySelector(".fallback");
+      const showFallback = () => {
+        if (!(fallback instanceof HTMLElement) || !(viewer instanceof HTMLElement)) return;
+        viewer.style.display = "none";
+        fallback.style.display = "flex";
+      };
+      window.setTimeout(showFallback, 1500);
+      viewer?.addEventListener?.("load", () => {
+        if (!(fallback instanceof HTMLElement)) return;
+        fallback.style.display = "none";
+      });
+    </script>
+  </body>
+</html>`;
+}
+
+const resolveWorkspacePreviewFile = Effect.fn("http.resolveWorkspacePreviewFile")(function* (
+  projectCwd: string,
+  relativePath: string,
+) {
+  const workspacePaths = yield* WorkspacePaths;
+  const resolvedPath = yield* workspacePaths.normalizeWorkspaceRoot(projectCwd).pipe(
+    Effect.flatMap((workspaceRoot) =>
+      workspacePaths.resolveRelativePathWithinRoot({
+        workspaceRoot,
+        relativePath,
+      }),
+    ),
+    Effect.catch(() => Effect.succeed(null)),
+  );
+
+  if (!resolvedPath) {
+    return null;
+  }
+
+  const fileSystem = yield* FileSystem.FileSystem;
+  const fileInfo = yield* fileSystem
+    .stat(resolvedPath.absolutePath)
+    .pipe(Effect.catch(() => Effect.succeed(null)));
+  if (!fileInfo || fileInfo.type !== "File") {
+    return null;
+  }
+
+  return resolvedPath;
+});
 
 export const attachmentsRouteLayer = HttpRouter.add(
   "GET",
@@ -115,6 +228,80 @@ export const projectFaviconRouteLayer = HttpRouter.add(
       Effect.catch(() =>
         Effect.succeed(HttpServerResponse.text("Internal Server Error", { status: 500 })),
       ),
+    );
+  }),
+);
+
+export const workspaceFilePreviewRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/workspace-file-preview",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const projectCwd = url.value.searchParams.get("cwd");
+    const relativePath = url.value.searchParams.get("relativePath");
+    if (!projectCwd || !relativePath) {
+      return HttpServerResponse.text("Missing cwd or relativePath parameter", { status: 400 });
+    }
+
+    const resolvedPath = yield* resolveWorkspacePreviewFile(projectCwd, relativePath);
+    if (!resolvedPath) {
+      return HttpServerResponse.text("Invalid workspace file path", { status: 400 });
+    }
+
+    return yield* HttpServerResponse.file(resolvedPath.absolutePath, {
+      status: 200,
+      headers: {
+        "Cache-Control": WORKSPACE_FILE_PREVIEW_CACHE_CONTROL,
+        "Content-Type": Mime.getType(resolvedPath.absolutePath) ?? "application/octet-stream",
+      },
+    }).pipe(
+      Effect.catch(() =>
+        Effect.succeed(HttpServerResponse.text("Internal Server Error", { status: 500 })),
+      ),
+    );
+  }),
+);
+
+export const workspacePdfViewerRouteLayer = HttpRouter.add(
+  "GET",
+  "/api/workspace-pdf-viewer",
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const url = HttpServerRequest.toURL(request);
+    if (Option.isNone(url)) {
+      return HttpServerResponse.text("Bad Request", { status: 400 });
+    }
+
+    const projectCwd = url.value.searchParams.get("cwd");
+    const relativePath = url.value.searchParams.get("relativePath");
+    if (!projectCwd || !relativePath) {
+      return HttpServerResponse.text("Missing cwd or relativePath parameter", { status: 400 });
+    }
+
+    const resolvedPath = yield* resolveWorkspacePreviewFile(projectCwd, relativePath);
+    if (!resolvedPath) {
+      return HttpServerResponse.text("Invalid workspace file path", { status: 400 });
+    }
+
+    const pdfUrl = `/api/workspace-file-preview?cwd=${encodeURIComponent(projectCwd)}&relativePath=${encodeURIComponent(relativePath)}`;
+    const path = yield* Path.Path;
+    return HttpServerResponse.text(
+      buildWorkspacePdfViewerHtml({
+        title: path.basename(resolvedPath.absolutePath),
+        pdfUrl,
+      }),
+      {
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        headers: {
+          "Cache-Control": WORKSPACE_FILE_PREVIEW_CACHE_CONTROL,
+        },
+      },
     );
   }),
 );

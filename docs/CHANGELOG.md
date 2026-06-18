@@ -6,7 +6,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Teach Skill
 
-- Introduced the curated native **teach** skill — type `/skills teach` followed by a topic (like "photography" or "budgeting") to start a guided, multi-session learning journey that saves your progress and picks up where you left off.
+- Introduced the curated native **teach** skill (by [mattpocockuk](https://x.com/mattpocockuk)) — type `/skills teach` followed by a topic (like "photography" or "budgeting") to start a guided, multi-session learning journey that saves your progress and picks up where you left off.
 - Each subject you learn gets its own project folder under `<default-chat-folder>/bigbud-learn/`, keeping missions, lessons, and reference materials organised so you can switch between topics without losing your place.
 - Added a **Learning projects** section in Settings that shows all active projects and their locations, with a button to open the learning folder in your file manager.
 
@@ -17,32 +17,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Scheduled and manual runs execute through the same orchestration flow as chat turns, appear in the target thread's timeline, and maintain an inspectable run history on the detail page.
 - The background scheduler tracks runs atomically, reconciles stale work on startup, and completes runs from provider terminal events — navigating to an automation page closes the right panel and restores your chat thread when you leave.
 
-### Sidebar
+### Browser and PDF Preview
 
-- Consolidated **New chat**, **Search**, and **Automations** into a single action palette at the top of the sidebar, replacing scattered shortcuts with one coherent column.
-- Hovering a sidebar action hides the icon and label and shows only the keyboard shortcut centered in the row for easier reading in the compact layout.
-- Re-enabled the sidebar hover-and-scroll scrollbar overlay for long thread lists, and restored the compose button next to the Chats section header alongside the sort menu.
-- Thread status is now communicated through the provider icon alone — breathing animation while working, green on success, amber during compaction, red on errors, muted grey when idle — replacing the old "Completed" text pill.
-- Fixed Pi agent threads losing the blue breathing animation mid-loop — the client no longer treats in-progress Pi session updates as stale once an assistant message has landed, so the provider icon stays animated until the agent actually finishes.
-
-### Notifications and Thread State
-
-- Fixed completion toasts so they fire only after the thread has fully settled, preventing premature "done" notifications while the assistant message is still being written.
-- Fixed approval dialogs getting stuck open when the provider returns a non-stale error (like a missing session) — failures now dismiss the dialog and re-enable the buttons instead of leaving you with a permanently disabled prompt.
-- Added a 15-second timeout on approval response calls so buttons never stay disabled indefinitely if the connection hangs.
-
-### Relative Time
-
-- Removed the redundant "ago" suffix from relative time labels across the app (Git commit timestamps, provider "last checked" footers, and similar), yielding tighter labels like `2m` and `1h` that match the convention used by GitHub and most modern tooling.
-
-### File Viewer
-
-- Added a **Raw | Preview** toggle for markdown files in the Files panel viewer, placed near the close button so you can switch between source and rendered markdown without leaving the panel.
-- Preview mode still supports code annotations — select text, right-click, and add an annotation chip to the composer the same way you can in raw view.
-
-### Files Panel
-
-- Fixed the Files panel tree so it refreshes when folders are created, deleted, renamed, or converted between files and directories, removing the need for a manual reload after nested workspace changes.
+- Added support for opening workspace PDF files in the Browser's native PDF viewer, so opening a `.pdf` from the Files panel or an internal file link now uses the browser's built-in PDF rendering instead of treating it like a text file.
+- Desktop PDF preview now uses the browser's native PDF viewer directly for better compatibility across supported platforms.
+- Multiple PDF files can now be opened in the Browser at once, up to the existing five-tab limit, without closing the current document.
 
 ### Git Panel
 
@@ -56,14 +35,33 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Added right-click code annotation in the Diff panel — select lines in a diff view, choose **Annotate selection** from the context menu, and drop a code annotation chip straight into the composer, matching the annotation flow already available in the Files panel.
 
+### Sidebar
+
+- Consolidated **New chat**, **Search**, and **Automations** into a single action palette at the top of the sidebar, replacing scattered shortcuts with one coherent column.
+- Hovering a sidebar action hides the icon and label and shows only the keyboard shortcut centered in the row for easier reading in the compact layout.
+- Re-enabled the sidebar hover-and-scroll scrollbar overlay for long thread lists, and restored the compose button next to the Chats section header alongside the sort menu.
+- Thread status is now communicated through the provider icon alone — breathing animation while working, green on success, amber during compaction, red on errors, muted grey when idle — replacing the old "Completed" text pill.
+- Fixed Pi agent threads losing the blue breathing animation mid-loop — the client no longer treats in-progress Pi session updates as stale once an assistant message has landed, so the provider icon stays animated until the agent actually finishes.
+
+### Files Panel
+
+- Fixed the Files panel tree so it refreshes when folders are created, deleted, renamed, or converted between files and directories, removing the need for a manual reload after nested workspace changes.
+
+### File Viewer
+
+- Added a **Raw | Preview** toggle for markdown files in the Files panel viewer, placed near the close button so you can switch between source and rendered markdown without leaving the panel.
+- Preview mode still supports code annotations — select text, right-click, and add an annotation chip to the composer the same way you can in raw view.
+
+### Notifications and Thread State
+
+- Fixed completion toasts so they fire only after the thread has fully settled, preventing premature "done" notifications while the assistant message is still being written.
+- Fixed approval dialogs getting stuck open when the provider returns a non-stale error (like a missing session) — failures now dismiss the dialog and re-enable the buttons instead of leaving you with a permanently disabled prompt.
+- Added a 15-second timeout on approval response calls so buttons never stay disabled indefinitely if the connection hangs.
+
 ### Reliability
 
 - Fixed Pi multi-turn agent loops being marked complete mid-loop — intermediate turns no longer emit a premature completion event, so long-running agent sessions stay in the "running" state until the agent actually finishes.
 - Hardened directory watching so the Files panel stays in sync with the underlying workspace even when the operating system reports a change indirectly, such as a new folder created inside another open folder.
-
-### Annotations
-
-- Softened annotation composer focus styles to match the chat composer's subtle border-only treatment, and made the working-indicator pill background transparent so the spinner sits cleanly over the conversation.
 
 ### Settings
 
@@ -72,6 +70,14 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Providers
 
 - Raised the minimum supported Codex CLI version from `0.37.0` to `0.100.0` to match modern `codex app-server` capabilities used for live model discovery and session runtime.
+
+### Relative Time
+
+- Removed the redundant "ago" suffix from relative time labels across the app (Git commit timestamps, provider "last checked" footers, and similar), yielding tighter labels like `2m` and `1h` that match the convention used by GitHub and most modern tooling.
+
+### Annotations
+
+- Softened annotation composer focus styles to match the chat composer's subtle border-only treatment, and made the working-indicator pill background transparent so the spinner sits cleanly over the conversation.
 
 ### Marketing
 

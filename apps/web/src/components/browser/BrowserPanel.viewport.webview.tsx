@@ -7,6 +7,7 @@ import {
   browserAnnotationPrepareCaptureScript,
   type BrowserAnnotationSelection,
 } from "./BrowserPanel.annotation";
+import { browserPdfAnnotationPickerScript } from "./BrowserPanel.annotation.pdf";
 import type {
   BrowserPageMetadata,
   BrowserViewportProps,
@@ -68,9 +69,26 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         const webview = webviewRef.current;
         if (!webview || !readyRef.current) return null;
         const theme = JSON.stringify(readAnnotationTheme());
+        const isPdfDocument = await webview
+          .executeJavaScript<boolean>(
+            `(() => {
+              const href = (location.href || "").toLowerCase();
+              const contentType =
+                typeof document.contentType === "string" ? document.contentType.toLowerCase() : "";
+              if (contentType === "application/pdf") return true;
+              if (href.endsWith(".pdf") || href.includes(".pdf?")) return true;
+              return Boolean(
+                document.querySelector(
+                  'embed[type="application/pdf"], object[type="application/pdf"], iframe[src*=".pdf"]',
+                ),
+              );
+            })()`,
+            false,
+          )
+          .catch(() => false);
         annotationActiveRef.current = true;
         const selection = await webview.executeJavaScript<BrowserAnnotationSelection>(
-          `(${browserAnnotationPickerScript.toString()})(${theme})`,
+          `(${(isPdfDocument ? browserPdfAnnotationPickerScript : browserAnnotationPickerScript).toString()})(${theme})`,
           true,
         );
         annotationActiveRef.current = false;
@@ -115,6 +133,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         webview.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;";
         webview.setAttribute("allowpopups", "");
         webview.setAttribute("nodeintegration", "false");
+        webview.setAttribute("plugins", "");
         webview.setAttribute("webpreferences", "contextIsolation=yes");
         webview.setAttribute(
           "useragent",
