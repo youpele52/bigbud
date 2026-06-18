@@ -482,6 +482,109 @@ label:has(> select#reasoning-effort) select {
   text-align: left;
 }
 
+/* File preview markdown rendering */
+.file-preview-markdown.chat-markdown {
+  max-width: 72ch;
+  margin: 0 auto;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground));
+}
+
+.file-preview-markdown.chat-markdown h1,
+.file-preview-markdown.chat-markdown h2,
+.file-preview-markdown.chat-markdown h3,
+.file-preview-markdown.chat-markdown h4,
+.file-preview-markdown.chat-markdown h5,
+.file-preview-markdown.chat-markdown h6 {
+  letter-spacing: -0.02em;
+  color: color-mix(in srgb, var(--foreground) 94%, var(--muted-foreground));
+}
+
+.file-preview-markdown.chat-markdown h1 {
+  margin: 0 0 1.5rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  font-size: 1.625rem;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.file-preview-markdown.chat-markdown h2 {
+  margin: 2rem 0 1.15rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  font-size: 1.35rem;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.file-preview-markdown.chat-markdown h3 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1.125rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.file-preview-markdown.chat-markdown h4,
+.file-preview-markdown.chat-markdown h5,
+.file-preview-markdown.chat-markdown h6 {
+  margin: 1.25rem 0 0.65rem;
+  font-size: 1rem;
+  line-height: 1.25;
+  font-weight: 650;
+}
+
+.file-preview-markdown.chat-markdown p {
+  margin: 0.85rem 0;
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground));
+}
+
+.file-preview-markdown.chat-markdown ul,
+.file-preview-markdown.chat-markdown ol {
+  margin: 0.95rem 0;
+  padding-left: 1.55rem;
+}
+
+.file-preview-markdown.chat-markdown li {
+  padding-left: 0.2rem;
+}
+
+.file-preview-markdown.chat-markdown li::marker {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground));
+}
+
+.file-preview-markdown.chat-markdown li + li {
+  margin-top: 0.55rem;
+}
+
+.file-preview-markdown.chat-markdown hr {
+  margin: 1.8rem 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.file-preview-markdown.chat-markdown blockquote {
+  border-left-color: color-mix(in srgb, var(--border) 85%, var(--foreground));
+  background: color-mix(in srgb, var(--muted) 52%, transparent);
+  border-radius: 0 0.6rem 0.6rem 0;
+  padding: 0.75rem 0.9rem;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
+}
+
+.file-preview-markdown.chat-markdown :not(pre) > code {
+  border-color: color-mix(in srgb, var(--border) 88%, var(--foreground));
+  background: color-mix(in srgb, var(--muted) 82%, var(--background));
+  color: color-mix(in srgb, var(--foreground) 92%, var(--muted-foreground) 8%);
+}
+
+.file-preview-markdown.chat-markdown pre {
+  border-color: color-mix(in srgb, var(--border) 88%, var(--foreground));
+  background: color-mix(in srgb, var(--muted) 82%, var(--background));
+}
+
+.file-preview-markdown.chat-markdown strong {
+  color: color-mix(in srgb, var(--foreground) 96%, var(--muted-foreground));
+}
+
 /* Notebook markdown rendering */
 .notebook-cell-markdown h1,
 .notebook-cell-markdown h2,
