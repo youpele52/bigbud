@@ -10,6 +10,7 @@ import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { closeBrowserTab } from "../../stores/browser/browserPanel.actions";
 import { dataUrlToFile } from "./BrowserPanel.annotation";
+import { cropBrowserAnnotationImage } from "./BrowserPanel.annotation.image";
 import {
   BrowserViewport,
   type BrowserPageMetadata,
@@ -156,8 +157,15 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       setAnnotationActive(false);
       if (!annotation) return;
 
+      const screenshotDataUrl =
+        (await cropBrowserAnnotationImage({
+          dataUrl: annotation.screenshot.dataUrl,
+          element: annotation.element,
+          viewport: annotation.viewport,
+        })) ?? annotation.screenshot.dataUrl;
+
       const file = dataUrlToFile(
-        annotation.screenshot.dataUrl,
+        screenshotDataUrl,
         "browser-annotation.png",
         annotation.screenshot.mime,
       );

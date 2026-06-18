@@ -22,6 +22,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added support for opening workspace PDF files in the Browser's native PDF viewer, so opening a `.pdf` from the Files panel or an internal file link now uses the browser's built-in PDF rendering instead of treating it like a text file.
 - Desktop PDF preview now uses the browser's native PDF viewer directly for better compatibility across supported platforms.
 - Multiple PDF files can now be opened in the Browser at once, up to the existing five-tab limit, without closing the current document.
+- Added PDF region annotations in the Browser, with tightly cropped captures that keep the selected area as the primary focus while still allowing broader document context when it helps.
 
 ### Git Panel
 
