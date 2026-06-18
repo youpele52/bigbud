@@ -201,10 +201,11 @@ export function RightPanelTabs({
     <div
       className={cn(
         "flex items-center overflow-hidden border-b border-border bg-card/95 px-3",
+        isElectron && "drag-region",
         isElectron ? "h-[52px] pt-2" : "pt-2",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-webkit-app-region:no-drag] [&::-webkit-scrollbar]:hidden">
         {openTabs.map((tabId, index) => {
           const kind = getRightPanelTabKind(tabId);
           const Icon = TAB_ICONS[kind];
@@ -306,7 +307,7 @@ export function RightPanelTabs({
           render={
             <Button
               aria-label="Open another right panel tab"
-              className="mb-1 ml-2 rounded-md border border-transparent hover:border-border/60 hover:bg-accent/40"
+              className="mb-1 ml-2 rounded-md border border-transparent [-webkit-app-region:no-drag] hover:border-border/60 hover:bg-accent/40"
               size="icon-xs"
               variant="ghost"
             >

@@ -3,7 +3,9 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { GitBranchIcon, HistoryIcon, Rows3Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { isElectron } from "~/config/env";
 import { useResolvedGitWorkspace } from "~/hooks/useResolvedGitWorkspace";
+import { cn } from "~/lib/utils";
 import {
   gitCommitDetailsQueryOptions,
   gitListCommitsInfiniteQueryOptions,
@@ -114,7 +116,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      <div className="border-b border-border/60 px-3 py-2">
+      <div className={cn("border-b border-border/60 px-3 py-2", isElectron && "drag-region")}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -128,6 +130,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
           </div>
           <ToggleGroup
             aria-label="Switch Git panel view"
+            className={cn(isElectron && "[-webkit-app-region:no-drag]")}
             variant="toolbar"
             size="xs"
             value={[activeView]}
