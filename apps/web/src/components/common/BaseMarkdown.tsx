@@ -14,11 +14,14 @@ import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+import { copyTextToClipboard } from "~/lib/clipboard/copyText";
+import { cn } from "~/lib/utils";
+
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useTheme } from "../../hooks/useTheme";
 import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../utils/markdown";
-import { cn } from "~/lib/utils";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
 
@@ -96,19 +99,7 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
       }, 1200);
     };
 
-    if (typeof window !== "undefined" && window.desktopBridge?.copyToClipboard) {
-      void window.desktopBridge
-        .copyToClipboard(code)
-        .then(onSuccess)
-        .catch(() => undefined);
-      return;
-    }
-
-    if (typeof navigator === "undefined" || navigator.clipboard == null) {
-      return;
-    }
-    void navigator.clipboard
-      .writeText(code)
+    void copyTextToClipboard(code)
       .then(onSuccess)
       .catch(() => undefined);
   }, [code]);
