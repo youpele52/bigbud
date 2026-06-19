@@ -143,11 +143,12 @@
 .hero-features-inner {
   width: min(100%, var(--marketing-max-width));
   margin: 0 auto;
-  padding: clamp(3rem, 6vw, 5rem) 2.25rem;
+  padding: 0 2.25rem;
 }
 
 .hero-features-heading {
   max-width: 18ch;
+  margin-top: 4rem;
   margin-bottom: clamp(2rem, 4vw, 3rem);
   font-size: clamp(2rem, 4.5vw, 3.25rem);
   font-weight: 400;
@@ -156,54 +157,176 @@
   text-wrap: pretty;
 }
 
-.feature-list {
+.feature-showcases {
+  display: flex;
+  flex-direction: column;
+}
+
+.feature-showcase {
+  position: relative;
+  min-height: 100dvh;
   display: grid;
-  gap: 0;
+  grid-template-columns: 1fr 2fr;
+  gap: clamp(2rem, 4vw, 4rem);
+  align-items: center;
+  padding: clamp(2rem, 3vw, 3rem) 0;
 }
 
-.feature {
-  display: grid;
-  grid-template-columns: 1.55rem 1fr;
-  gap: 1.1rem;
-  align-items: start;
-  padding: 0;
+.feature-showcase--with-drop {
+  padding-bottom: clamp(8rem, 10vw, 10rem);
+  overflow: hidden;
 }
 
-.feature + .feature {
-  padding-top: 1rem;
+.feature-showcase-content {
+  max-width: 30rem;
 }
 
-.feature-icon {
-  width: 1.55rem;
-  height: 1.55rem;
-  display: grid;
-  place-items: center;
-  color: var(--fg);
-  font-size: 1.55rem;
-  line-height: 1;
-}
-
-.feature-icon--earth svg {
-  width: 1.38rem;
-  height: 1.38rem;
-  display: block;
-  stroke: currentColor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.feature h2 {
-  font-size: 1rem;
-  font-weight: 600;
+.showcase-title {
+  font-size: clamp(1.6rem, 2.4vw, 2.2rem);
+  font-weight: 500;
   letter-spacing: -0.03em;
+  line-height: 1.2;
+  margin: 0;
 }
 
-.feature p {
-  margin-top: 0.25rem;
+.showcase-desc {
+  margin-top: 0.65rem;
   color: var(--fg-dim);
-  font-size: 0.95rem;
-  line-height: 1.38;
+  font-size: clamp(0.92rem, 1vw, 1rem);
+  line-height: 1.45;
+}
+
+.feature-showcase-visual {
+  opacity: 0;
+  filter: blur(8px);
+  transform: scale(0.97);
+  transition:
+    opacity 0.75s ease,
+    filter 0.75s ease,
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: filter, transform, opacity;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow:
+    0 12px 40px rgb(0 0 0 / 0.25),
+    0 0 0 1px rgb(255 255 255 / 0.03);
+  width: calc(100% - clamp(5rem, 6vw, 6rem));
+  margin: 0 auto;
+}
+
+.feature-showcase-visual.is-visible {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+
+.feature-showcase-visual img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.feature-showcase-slider {
+  overflow: hidden;
+}
+
+.slider-track {
+  display: flex;
+  width: 200%;
+  animation: slide-infinitely 6s ease-in-out infinite;
+}
+
+.slider-track img {
+  width: 50%;
+  height: auto;
+  display: block;
+  flex-shrink: 0;
+}
+
+@keyframes slide-infinitely {
+  0%,
+  40% {
+    transform: translateX(0);
+  }
+
+  50%,
+  90% {
+    transform: translateX(-50%);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.provider-drop-stage {
+  position: absolute;
+  right: clamp(1rem, 4vw, 4rem);
+  bottom: clamp(2rem, 4vw, 3.5rem);
+  left: clamp(1rem, 4vw, 4rem);
+  height: clamp(6rem, 9vw, 8rem);
+  pointer-events: none;
+  isolation: isolate;
+}
+
+.provider-drop-logo {
+  --drop-left: 50%;
+  --drop-delay: 0s;
+  --drop-duration: 10s;
+  --drop-rotate: 0deg;
+  --drop-end-rotate: 0deg;
+  --drop-scale: 1;
+
+  position: absolute;
+  bottom: 0.55rem;
+  left: var(--drop-left);
+  z-index: 1;
+  transform: translate(-50%, -120vh) rotate(var(--drop-rotate)) scale(var(--drop-scale));
+  opacity: 0;
+  animation: provider-logo-drop var(--drop-duration) linear infinite;
+  animation-delay: var(--drop-delay);
+  will-change: transform, opacity;
+}
+.provider-drop-mark {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  object-fit: contain;
+  opacity: 0.85;
+  filter: invert(1);
+}
+
+@keyframes provider-logo-drop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -120vh) rotate(var(--drop-rotate)) scale(var(--drop-scale));
+  }
+
+  4% {
+    opacity: 1;
+  }
+
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -0.05rem) rotate(var(--drop-end-rotate)) scale(var(--drop-scale));
+  }
+
+  65% {
+    transform: translate(-50%, -0.65rem) rotate(var(--drop-end-rotate)) scale(var(--drop-scale));
+  }
+
+  72%,
+  92% {
+    opacity: 1;
+    transform: translate(-50%, 0) rotate(var(--drop-end-rotate)) scale(var(--drop-scale));
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 0) rotate(var(--drop-end-rotate)) scale(var(--drop-scale));
+  }
 }
 
 /* ── Desktop wide: headline on one line ── */
@@ -252,8 +375,7 @@
   }
 
   .hero-features-inner {
-    padding-right: 1.25rem;
-    padding-left: 1.25rem;
+    padding: 0 1.25rem;
   }
 
   .hero-features-heading {
@@ -274,30 +396,28 @@
     margin-top: 1.6rem;
   }
 
-  .feature-list {
-    gap: 1.25rem;
+  .feature-showcase {
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    gap: 1.75rem;
+    align-content: center;
   }
 
-  .feature {
-    grid-template-columns: 3rem 1fr;
-    gap: 1rem;
+  .feature-showcase-content {
+    max-width: 32rem;
   }
 
-  .feature-icon {
-    width: 3rem;
-    height: 3rem;
-    border-radius: 0.9rem;
-    font-size: 1.05rem;
+  .feature-showcase-visual {
+    max-width: 100%;
   }
 
-  .feature h2 {
-    font-size: 1.04rem;
+  .feature-showcase--with-drop {
+    padding-bottom: 9rem;
   }
 
-  .feature p {
-    margin-top: 0.3rem;
-    font-size: 0.95rem;
-    line-height: 1.4;
+  .provider-drop-stage {
+    right: 1.25rem;
+    left: 1.25rem;
   }
 }
 
@@ -311,7 +431,7 @@
   }
 
   .hero-features-inner {
-    padding: 2.75rem 1.25rem;
+    padding: 0 1.25rem;
   }
 
   .tagline {
@@ -337,13 +457,31 @@
     width: auto;
   }
 
-  .feature {
-    grid-template-columns: 2.8rem 1fr;
-    gap: 0.85rem;
+  .feature-showcase {
+    min-height: 55dvh;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
   }
 
-  .feature-icon {
-    width: 2.8rem;
-    height: 2.8rem;
+  .feature-showcase-content {
+    max-width: none;
+  }
+
+  .feature-showcase-visual {
+    max-width: none;
+  }
+
+  .feature-showcase--with-drop {
+    min-height: 75dvh;
+    padding-bottom: 8rem;
+  }
+
+  .provider-drop-stage {
+    height: 5.5rem;
+  }
+
+  .provider-drop-mark {
+    width: 1.6rem;
+    height: 1.6rem;
   }
 }

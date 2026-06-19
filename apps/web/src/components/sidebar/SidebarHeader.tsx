@@ -18,9 +18,12 @@ function SidebarWordmark() {
               to="/"
             >
               <BigbudLogo />
-              <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium tracking-[0.18em] text-muted-foreground/60">
-                {APP_STAGE_LABEL.toLowerCase()}
-              </span>
+              {/* TODO: re-enable the stage badge for local dev — currently hidden so the local app shows logo only. */}
+              {!import.meta.env.DEV && (
+                <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium tracking-[0.18em] text-muted-foreground/60">
+                  {APP_STAGE_LABEL.toLowerCase()}
+                </span>
+              )}
             </Link>
           }
         />

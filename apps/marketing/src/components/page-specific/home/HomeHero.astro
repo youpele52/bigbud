@@ -1,41 +1,60 @@
 ---
-import {
-    APP_NAME,
-    MARKETING_ASSETS,
-} from "../../../constants/app";
+import { APP_NAME, MARKETING_ASSETS } from "../../../constants/app";
 import { HOME_METADATA } from "../../../constants/seo";
 import Button from "../../shared/Button.astro";
-import FeatureItem from "../../shared/FeatureItem.astro";
 import PlatformIcon from "../../shared/PlatformIcon.astro";
 import "./HomeHero.css";
 import "./HomeHero.visual.css";
 
-const features = [
+const showcaseFeatures = [
     {
-        icon: "▷",
-        title: "Use the best fit",
+        title: "Everything you're working on, in one place.",
         description:
-            "Move between AI harnesses such as Claude, Codex, Copilot, OpenCode, Pi, etc. as the work changes, so you are never stuck with just one.",
+            "Move between projects, chats, and ideas without losing the thread.",
+        image: "/screenshots/one-workspace.webp",
     },
     {
-        icon: "↔",
-        title: "Switch gears easily",
+        title: "Look things up without breaking focus.",
         description:
-            "Move between chats, projects, and ideas without losing the thread.",
+            "Browse, research, and pull what you need into your work — all without leaving the workspace.",
+        images: [
+            "/screenshots/research-slide-1.webp",
+            "/screenshots/research-slide-2.webp",
+        ],
     },
+    {
+        title: "Use the right AI for the step you're on.",
+        description:
+            "Switch between providers, harnesses, and models — so you're never stuck with just one.",
+        image: "/screenshots/switch-ai.webp",
+        showProviderDrop: true,
+    },
+    {
+        title: "Stay in control as your work evolves.",
+        description:
+            "Review every change, keep longer projects on track, and always know what moved.",
+        images: [
+            "/screenshots/stay-in-control-slide-1.webp",
+            "/screenshots/stay-in-control-2.webp",
+        ],
+    },
+    {
+        title: "Pick up where you left off.",
+        description:
+            "Threads, context, and progress are always there when you return.",
+        image: "/screenshots/pick-up-where-you-left.webp",
+    },
+] as const;
 
-    {
-        icon: "✓",
-        title: "See what changed",
-        description:
-            "Check every edit, keep longer work on track, and always know what moved.",
-    },
-    {
-        icon: "earth",
-        title: "Research without context switching",
-        description:
-            "Use the built-in browser to look things up, annotate pages, and bring useful context into your work without breaking your flow.",
-    },
+const providerDrops = [
+    { icon: "/provider-icons/claude.svg" },
+    { icon: "/provider-icons/codex.svg" },
+    { icon: "/provider-icons/copilot.svg" },
+    { icon: "/provider-icons/cursor.svg" },
+    { icon: "/provider-icons/devin.svg" },
+    { icon: "/provider-icons/kilocode.svg" },
+    { icon: "/provider-icons/opencode.svg" },
+    { icon: "/provider-icons/pi.svg" },
 ] as const;
 ---
 
@@ -106,8 +125,77 @@ const features = [
             <h2 id="hero-features-heading" class="hero-features-heading">
                 built for work that keeps moving.
             </h2>
-            <div class="feature-list">
-                {features.map((feature) => <FeatureItem {...feature} />)}
+            <div class="feature-showcases">
+                {
+                    showcaseFeatures.map((feature) => (
+                        <div
+                            class:list={[
+                                "feature-showcase",
+                                "showProviderDrop" in feature &&
+                                    "feature-showcase--with-drop",
+                            ]}
+                        >
+                            <div class="feature-showcase-content">
+                                <h3 class="showcase-title">
+                                    {feature.title}
+                                </h3>
+                                <p class="showcase-desc">
+                                    {feature.description}
+                                </p>
+                            </div>
+                            {
+                                "images" in feature ? (
+                                    <div
+                                        class="feature-showcase-visual feature-showcase-slider"
+                                        data-animate="dissolve"
+                                    >
+                                        <div class="slider-track">
+                                            {feature.images.map((src) => (
+                                                <img
+                                                    src={src}
+                                                    alt={feature.title}
+                                                    loading="lazy"
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div
+                                        class="feature-showcase-visual"
+                                        data-animate="dissolve"
+                                    >
+                                        <img
+                                            src={feature.image}
+                                            alt={feature.title}
+                                            loading="lazy"
+                                        />
+                                    </div>
+                                )
+                            }
+                            {
+                                "showProviderDrop" in feature && (
+                                    <div
+                                        class="provider-drop-stage"
+                                        aria-hidden="true"
+                                    >
+                                        {providerDrops.map((provider) => (
+                                            <div
+                                                class="provider-drop-logo"
+                                            >
+                                                <img
+                                                    src={provider.icon}
+                                                    alt=""
+                                                    class="provider-drop-mark"
+                                                    loading="lazy"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            }
+                        </div>
+                    ))
+                }
             </div>
         </div>
     </section>
@@ -117,4 +205,38 @@ const features = [
     import { initHomeHero } from "./HomeHero.client";
 
     initHomeHero();
+
+    const visuals = document.querySelectorAll("[data-animate='dissolve']");
+    if (visuals.length && "IntersectionObserver" in window) {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                for (const entry of entries) {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("is-visible");
+                    } else {
+                        entry.target.classList.remove("is-visible");
+                    }
+                }
+            },
+            { threshold: 0.3 },
+        );
+        for (const el of visuals) {
+            observer.observe(el);
+        }
+    }
+</script>
+
+<script>
+    const dropLogos = document.querySelectorAll(".provider-drop-logo");
+    const randomInRange = (min: number, max: number) =>
+        Math.random() * (max - min) + min;
+    for (const logo of dropLogos) {
+        if (!(logo instanceof HTMLElement)) continue;
+        logo.style.setProperty("--drop-left", `${randomInRange(5, 90)}%`);
+        logo.style.setProperty("--drop-delay", `${-randomInRange(0, 8)}s`);
+        logo.style.setProperty("--drop-duration", `${randomInRange(8, 16)}s`);
+        logo.style.setProperty("--drop-rotate", `${randomInRange(-28, 28)}deg`);
+        logo.style.setProperty("--drop-end-rotate", `${randomInRange(-8, 8)}deg`);
+        logo.style.setProperty("--drop-scale", `${randomInRange(0.85, 1.15)}`);
+    }
 </script>

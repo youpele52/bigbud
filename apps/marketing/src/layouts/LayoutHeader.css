@@ -18,6 +18,11 @@
   opacity: 1;
 }
 
+.nav-links {
+  display: flex;
+  gap: 1.25rem;
+}
+
 .nav-brand {
   display: flex;
   align-items: center;
