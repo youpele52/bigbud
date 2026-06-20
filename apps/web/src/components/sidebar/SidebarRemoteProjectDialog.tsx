@@ -100,7 +100,7 @@ export function SidebarRemoteProjectDialog({
         <DialogHeader>
           <DialogTitle>Add SSH remote project</DialogTitle>
           <DialogDescription>
-            BigBud verifies the SSH target before it creates the remote project. You can keep the
+            bigbud verifies the SSH target before it creates the remote project. You can keep the
             provider runtime local or run it on the remote host.
           </DialogDescription>
         </DialogHeader>
@@ -223,7 +223,7 @@ export function SidebarRemoteProjectDialog({
                 onChange={(event) => onFieldChange("sshKeyPath", event.target.value)}
               />
               <p className="mt-1.5 text-muted-foreground text-xs leading-4">
-                Optional. When set, BigBud uses only this key for the connection.
+                Optional. When set, bigbud uses only this key for the connection.
               </p>
             </label>
           ) : null}

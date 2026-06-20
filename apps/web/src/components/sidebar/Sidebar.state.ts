@@ -39,6 +39,7 @@ import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
 import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
 import { buildSidebarStateResult } from "./Sidebar.state.result";
 import { useSidebarRecentSections } from "./Sidebar.state.sections";
+import { useAutomationThreadIds } from "../automation/useAutomationThreadIds";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
 export function useSidebarState(): SidebarState {
@@ -314,6 +315,8 @@ export function useSidebarState(): SidebarState {
     };
   }, [threadActions]);
 
+  const automationThreadIds = useAutomationThreadIds();
+
   const showArm64IntelBuildWarning =
     isElectron && shouldShowArm64IntelBuildWarning(desktopUpdateState);
   const arm64IntelBuildWarningDescription =
@@ -335,6 +338,7 @@ export function useSidebarState(): SidebarState {
         activeDraftThread,
         projectActions,
         favoriteThreadIds,
+        automationThreadIds,
         prByThreadId,
         handleNewThread,
         renderedProjectsState,
@@ -349,6 +353,7 @@ export function useSidebarState(): SidebarState {
       activeDraftThread,
       projectActions,
       favoriteThreadIds,
+      automationThreadIds,
       prByThreadId,
       handleNewThread,
     ],

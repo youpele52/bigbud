@@ -13,7 +13,6 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { useUpdateSettings } from "../../hooks/useSettings";
-import { readNativeApi } from "../../rpc/nativeApi";
 
 interface FileAccessPermissionDialogProps {
   open: boolean;
@@ -32,11 +31,6 @@ export function FileAccessPermissionDialog({
 
   const handleAllow = useCallback(async () => {
     setIsRequesting(true);
-
-    const api = readNativeApi();
-    if (api) {
-      await api.fileAccess.request(selectedLevel);
-    }
 
     updateSettings({
       fileAccessPermissionLevel: selectedLevel,
@@ -153,7 +147,7 @@ export function FileAccessPermissionDialog({
                 {isRequesting ? (
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Requesting...
+                    Saving...
                   </span>
                 ) : (
                   <span className="flex items-center gap-1.5">

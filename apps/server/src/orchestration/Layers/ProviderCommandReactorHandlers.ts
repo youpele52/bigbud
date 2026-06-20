@@ -185,6 +185,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     discoveryRegistry,
     fileSystem,
     workspacePaths,
+    resolveDefaultChatCwd: () =>
+      serverSettingsService.getSettings.pipe(
+        Effect.map(resolveDefaultChatCwd),
+        Effect.catch(() => Effect.succeed(resolveDefaultChatCwd(DEFAULT_SERVER_SETTINGS))),
+      ),
   });
 
   const processTurnStartRequested = Effect.fn("processTurnStartRequested")(function* (

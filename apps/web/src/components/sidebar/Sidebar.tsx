@@ -17,7 +17,7 @@ import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarAppHeader } from "./SidebarHeader";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
-import { SidebarSearchSection } from "./Sidebar.searchSection";
+import { SidebarActionsSection } from "./Sidebar.actionsSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
@@ -42,7 +42,17 @@ export default function Sidebar() {
         <SettingsSidebarNav pathname={s.pathname} />
       ) : (
         <>
-          <SidebarSearchSection />
+          <SidebarActionsSection
+            onNewChat={() => {
+              closeMobileSidebar();
+              void s.handleNewChat();
+            }}
+            onOpenAutomations={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/automations" });
+            }}
+            newThreadShortcutLabel={s.newThreadShortcutLabel}
+          />
 
           <SidebarContent className="gap-0">
             <SidebarFavoritesSection
@@ -221,12 +231,12 @@ export default function Sidebar() {
             description={
               s.remoteProjectUnlockMode === "password" ? (
                 <>
-                  BigBud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
+                  bigbud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
                   before it can verify and add this remote project.
                 </>
               ) : (
                 <>
-                  BigBud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
+                  bigbud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
                   it can verify and add this remote project.
                 </>
               )
@@ -271,13 +281,13 @@ export default function Sidebar() {
             description={
               remoteExecutionAccess.remoteExecutionAuthMode === "password" ? (
                 <>
-                  BigBud needs the SSH password for{" "}
+                  bigbud needs the SSH password for{" "}
                   <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
                   access this remote project.
                 </>
               ) : (
                 <>
-                  BigBud needs the passphrase for{" "}
+                  bigbud needs the passphrase for{" "}
                   <code>{remoteExecutionAccess.remoteExecutionAuthPromptLabel}</code> before it can
                   access this remote project.
                 </>

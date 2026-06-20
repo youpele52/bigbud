@@ -405,6 +405,17 @@ export function browserAnnotationPickerScript(
     function onCancelRequest() {
       finish({ cancelled: true });
     }
+    const resetTextareaFocusStyle = () => {
+      textarea.style.borderColor = theme.border;
+      textarea.style.boxShadow = `inset 0 0 0 1px ${mix(theme.ring, 0)}`;
+    };
+    textarea.addEventListener("focus", () => {
+      textarea.style.borderColor = mix(theme.ring, 45);
+      textarea.style.boxShadow = "none";
+    });
+    textarea.addEventListener("blur", resetTextareaFocusStyle);
+    resetTextareaFocusStyle();
+
     cancel.addEventListener("click", () => finish({ cancelled: true }));
     submit.addEventListener("click", send);
     document.addEventListener("mousemove", onMouseMove, true);

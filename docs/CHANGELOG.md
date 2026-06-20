@@ -1,6 +1,88 @@
 # Changelog
 
-Hey there! 👋 Welcome to the bigbud changelog — your friendly record of everything we've been up to. Every release brings new features, thoughtful improvements, and the occasional bug squish, all documented here so you can see what's changed and why. Thanks for being along for the ride!
+Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
+
+## v0.1.646 (20 June, 2026)
+
+### Teach Skill
+
+- Introduced the curated native **teach** skill (by [mattpocockuk](https://x.com/mattpocockuk)) — type `/skills teach` followed by a topic (like "photography" or "budgeting") to start a guided, multi-session learning journey that saves your progress and picks up where you left off.
+- Each subject you learn gets its own project folder under `<default-chat-folder>/bigbud-learn/`, keeping missions, lessons, and reference materials organised so you can switch between topics without losing your place.
+- Added a **Learning projects** section in Settings that shows all active projects and their locations, with a button to open the learning folder in your file manager.
+
+### Automations
+
+- Added **Automations** — schedule recurring AI work on any thread using cron expressions, accessible from the sidebar action row or the dedicated `/automations` list page, with a floating composer for creating new schedules.
+- Each automation has its own detail page for editing the schedule, prompt, and target thread, with pause, resume, delete, and **Run now** controls that surface success and error toasts.
+- Scheduled and manual runs execute through the same orchestration flow as chat turns, appear in the target thread's timeline, and maintain an inspectable run history on the detail page.
+- The background scheduler tracks runs atomically, reconciles stale work on startup, and completes runs from provider terminal events — navigating to an automation page closes the right panel and restores your chat thread when you leave.
+
+### Browser and PDF Preview
+
+- Added support for opening workspace PDF files in the Browser's native PDF viewer, so opening a `.pdf` from the Files panel or an internal file link now uses the browser's built-in PDF rendering instead of treating it like a text file.
+- Desktop PDF preview now uses the browser's native PDF viewer directly for better compatibility across supported platforms.
+- Multiple PDF files can now be opened in the Browser at once, up to the existing five-tab limit, without closing the current document.
+- Added PDF region annotations in the Browser, with tightly cropped captures that keep the selected area as the primary focus while still allowing broader document context when it helps.
+
+### Git Panel
+
+- Clicking a changed file path in the Git panel **Changes** list or diff header now opens that file in the Files panel viewer, matching the behavior already available from the Diff tab.
+- Right-click a changed file in the Changes list to copy its full path or just the filename — useful when you need to paste a file path into a terminal or a search.
+- Right-click a commit in the History view to copy its SHA, subject, tags, author, or body — no more reaching for the terminal to grab a commit identifier.
+- Made commit details, patch content, and file paths selectable across the Git panel for easier copying of text.
+- Added keyboard navigation (Enter and Space) and visible focus rings to Git panel items for a more accessible keyboard-driven workflow.
+
+### Diff Panel
+
+- Added right-click code annotation in the Diff panel — select lines in a diff view, choose **Annotate selection** from the context menu, and drop a code annotation chip straight into the composer, matching the annotation flow already available in the Files panel.
+
+### Sidebar
+
+- Consolidated **New chat**, **Search**, and **Automations** into a single action palette at the top of the sidebar, replacing scattered shortcuts with one coherent column.
+- Hovering a sidebar action hides the icon and label and shows only the keyboard shortcut centered in the row for easier reading in the compact layout.
+- Re-enabled the sidebar hover-and-scroll scrollbar overlay for long thread lists, and restored the compose button next to the Chats section header alongside the sort menu.
+- Thread status is now communicated through the provider icon alone — breathing animation while working, green on success, amber during compaction, red on errors, muted grey when idle — replacing the old "Completed" text pill.
+- Fixed Pi agent threads losing the blue breathing animation mid-loop — the client no longer treats in-progress Pi session updates as stale once an assistant message has landed, so the provider icon stays animated until the agent actually finishes.
+
+### Files Panel
+
+- Fixed the Files panel tree so it refreshes when folders are created, deleted, renamed, or converted between files and directories, removing the need for a manual reload after nested workspace changes.
+
+### File Viewer
+
+- Added a **Raw | Preview** toggle for markdown files in the Files panel viewer, placed near the close button so you can switch between source and rendered markdown without leaving the panel.
+- Preview mode still supports code annotations — select text, right-click, and add an annotation chip to the composer the same way you can in raw view.
+
+### Notifications and Thread State
+
+- Fixed completion toasts so they fire only after the thread has fully settled, preventing premature "done" notifications while the assistant message is still being written.
+- Fixed approval dialogs getting stuck open when the provider returns a non-stale error (like a missing session) — failures now dismiss the dialog and re-enable the buttons instead of leaving you with a permanently disabled prompt.
+- Added a 15-second timeout on approval response calls so buttons never stay disabled indefinitely if the connection hangs.
+
+### Reliability
+
+- Fixed Pi multi-turn agent loops being marked complete mid-loop — intermediate turns no longer emit a premature completion event, so long-running agent sessions stay in the "running" state until the agent actually finishes.
+- Hardened directory watching so the Files panel stays in sync with the underlying workspace even when the operating system reports a change indirectly, such as a new folder created inside another open folder.
+
+### Settings
+
+- Stopped file-access settings from re-triggering macOS privacy prompts — saving your folder preference no longer probes protected directories and reopens the system permission dialog.
+
+### Providers
+
+- Raised the minimum supported Codex CLI version from `0.37.0` to `0.100.0` to match modern `codex app-server` capabilities used for live model discovery and session runtime.
+
+### Relative Time
+
+- Removed the redundant "ago" suffix from relative time labels across the app (Git commit timestamps, provider "last checked" footers, and similar), yielding tighter labels like `2m` and `1h` that match the convention used by GitHub and most modern tooling.
+
+### Annotations
+
+- Softened annotation composer focus styles to match the chat composer's subtle border-only treatment, and made the working-indicator pill background transparent so the spinner sits cleanly over the conversation.
+
+### Marketing
+
+- Updated changelog page SEO title and description copy on the marketing site.
 
 ## v0.1.645 (15 June, 2026)
 
@@ -227,6 +309,7 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 
 - The plan sidebar now shows active tasks in a more compact layout, so you can see what the AI is implementing at a glance without scrolling.
 - Tuned the chat view so new content scrolling into view feels smoother and more natural as responses stream in.
+- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
 
 ### Right Panel Launcher and Tabs
 
@@ -243,8 +326,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Clicking a supported file path in chat now opens that file in bigbud's own file viewer instead of immediately jumping out to your editor, so reading referenced code stays inside the app when possible.
 - Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
 - When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
-
-- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
 
 ### Browser Reload Actions
 
@@ -359,10 +440,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 
 - Added a search bar to the + button → "Call agent" and "Use skill" picker dropdowns, so you can type to find the agent or skill you want — matching the existing search experience from the /agents and /skills slash commands.
 
-### Validation
-
-- Validated with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for Devin provider session lifecycle, adapter registration, model selection, and ACP startup flows; KiloCode provider adapter startup, session methods, and layer wiring; notebook preview rendering, markdown cell reuse, output cell rendering, and annotation support; right-panel tab drag-and-drop reordering; configurable context window warning threshold rendering and settings UI; sidebar thread status icon colors and dot suppression; Git panel resize interaction and changes-view diff scrolling; and composer + button agent/skill picker search bar.
-
 ## v0.1.642 (9 June, 2026)
 
 ### Git Panel and Repo History
@@ -425,10 +502,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Enforced a hard 400-line limit for non-test TypeScript source files and a 500-line cap for test files, and split several oversized test files across the codebase to comply — keeping the codebase easier to navigate and reducing merge conflicts from large file changes.
 - Removed leftover `.plans` documentation files and added placeholder test-data fixtures to keep the test infrastructure self-contained.
 
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for workspace palette search, slash-command detection, discovery search behavior, malformed browser annotation regression cases, Git panel history and diff behavior, right-panel shortcut toggles, Notes panel CRUD and annotation flows, keybinding reorganizations, Open Project dialog and error handling, and context window warning threshold rendering.
-
 ## v0.1.641 (4 June, 2026)
 
 ### Files Panel Live Directory Watching for Local Workspaces
@@ -462,10 +535,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 ### Route Helper File Renaming
 
 - Renamed `__root.bootstrap.tsx`, `__root.logic.tsx`, and `__root.recovery.ts` to `-__root.bootstrap.tsx`, `-__root.logic.tsx`, and `-__root.recovery.ts` following TanStack Router's ignore convention (files prefixed with `-` are excluded from route detection). This eliminates the startup warnings about non-route helper files not exporting a Route.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the workspace directory watcher (root-level watching, path escape rejection), scoped project-directory WebSocket subscriptions, server and client RPC routing, Files panel directory refresh hook, route regression (diff=1 does not mount standalone diff UI), and prompt queue formatting and thread affinity behavior.
 
 ## v0.1.640 (3 June, 2026)
 
@@ -522,11 +591,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Right-clicking a supported chat file path now gives you both `Open in file viewer` and `Open externally`, while unsupported files still fall back to your usual external app or editor.
 - When a chat file path includes a line reference like `:16` or `:16:23`, the in-app viewer now opens the file and scrolls to the referenced line as a best-effort target, while external open remains available when you want exact editor positioning.
 
-### Validation
-
-- Stabilized long-thread chat scrolling while responses are still streaming by keeping the active turn, recent completed turns, and expanded work rows mounted before virtualizing older history, which prevents older rows from disappearing as the timeline boundary moves.
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused automated test coverage for the files panel, drag-and-drop file handling, right-panel coordination, file preview, annotation logic, editor routing, and chat file-path preview targeting.
-
 ### Browser Reload Actions
 
 - Changed the desktop View menu reload shortcuts so they target the embedded browser panel instead of reloading the whole app window.
@@ -577,10 +641,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 - Refined sidebar accordion layout and spacing for a more consistent, less cramped appearance.
 - Tuned shared Input and Textarea focus styling to remove the overly shiny halo.
 - Reduced resize-time “white bar” flashes by explicitly setting renderer root backgrounds and syncing the Electron `BrowserWindow` background color with the active light/dark theme.
-
-### Validation
-
-- Validated this window with `bun fmt`, `bun lint`, and `bun typecheck`.
 - Added focused Vitest coverage for document extraction (OCR, office, URL), Pi RPC process shell and path-quoting regression tests, and sidebar/layout UI behavior.
 
 ## v0.1.637 (29 May, 2026)
@@ -604,10 +664,6 @@ Hey there! 👋 Welcome to the bigbud changelog — your friendly record of ever
 
 - Pinned `electron-builder` resolution to the local package before falling back to bunx for reproducible CI builds. Re-enabled the typecheck step in the release workflow.
 - Skipped AppImage smoke tests in headless CI environments and fixed an `afterExtract.cjs` type check that broke on electron-builder versions that pass platform as a string.
-
-### Validation
-
-- Validated this release window with `bun fmt`, `bun lint`, and `bun typecheck`, plus focused Vitest coverage for Linux runtime startup, provider model discovery, and shell environment hydration.
 
 ## v0.1.636 (26 May, 2026)
 

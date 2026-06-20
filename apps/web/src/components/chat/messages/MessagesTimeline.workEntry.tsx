@@ -240,7 +240,7 @@ export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props
           keyPath={sshKeyPath}
           description={
             <>
-              BigBud needs the passphrase for <code>{sshKeyPath}</code> before it can start provider
+              bigbud needs the passphrase for <code>{sshKeyPath}</code> before it can start provider
               sessions on this remote target.
             </>
           }

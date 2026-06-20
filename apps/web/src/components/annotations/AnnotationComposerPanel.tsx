@@ -83,7 +83,7 @@ export function AnnotationComposerPanel({
         onChange={(event) => setComment(event.target.value)}
         placeholder={PLACEHOLDER_BY_INTENT[intent]}
         aria-labelledby="annotation-composer-title annotation-composer-target"
-        className="field-sizing-content min-h-[120px] w-full rounded-2xl border border-border bg-card p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 focus-visible:ring-2 focus-visible:ring-ring"
+        className="field-sizing-content min-h-[120px] w-full rounded-2xl border border-border bg-card p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45"
       />
       <div className="mt-3 flex justify-end gap-2">
         <Button

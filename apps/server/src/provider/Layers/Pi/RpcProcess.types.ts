@@ -20,13 +20,8 @@ export interface PiRpcSlashCommand {
   readonly name: string;
   readonly description?: string;
   readonly source?: "extension" | "prompt" | "skill";
-  readonly sourceInfo?: {
-    readonly path: string;
-    readonly source: string;
-    readonly scope: "user" | "project" | "temporary";
-    readonly origin: "package" | "top-level";
-    readonly baseDir?: string;
-  };
+  readonly path?: string;
+  readonly location?: "user" | "project" | "path";
 }
 
 export interface PiRpcSessionState {

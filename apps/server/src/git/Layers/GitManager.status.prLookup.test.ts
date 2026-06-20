@@ -7,6 +7,7 @@ import { expect } from "vitest";
 
 import { GitManagerTestLayer, makeManager } from "./GitManager.test.helpers.ts";
 import {
+  configureGitHubRemoteMirror,
   configureRemote,
   createBareRemote,
   initRepo,
@@ -71,11 +72,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
         yield* runGit(repoDir, ["checkout", "-b", "bigbud/pr-488/statemachine"]);
         yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
-        yield* runGit(repoDir, [
-          "config",
-          "remote.fork-seed.url",
+        yield* configureGitHubRemoteMirror(
+          repoDir,
+          "fork-seed",
+          forkDir,
           "git@github.com:jasonLaster/codething-mvp.git",
-        ]);
+        );
 
         const { manager, ghCalls } = yield* makeManager({
           ghScenario: {
@@ -135,18 +137,18 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
         yield* runGit(repoDir, ["checkout", "-b", "effect-atom"]);
         yield* runGit(repoDir, ["push", "-u", "origin", "effect-atom"]);
         yield* runGit(repoDir, ["push", "-u", "my-org/upstream", "effect-atom"]);
-        yield* runGit(repoDir, [
-          "config",
-          "remote.origin.url",
+        yield* configureGitHubRemoteMirror(
+          repoDir,
+          "origin",
+          originDir,
           "git@github.com:pingdotgg/codething-mvp.git",
-        ]);
-        yield* runGit(repoDir, ["config", "remote.origin.pushurl", originDir]);
-        yield* runGit(repoDir, [
-          "config",
-          "remote.my-org/upstream.url",
+        );
+        yield* configureGitHubRemoteMirror(
+          repoDir,
+          "my-org/upstream",
+          upstreamDir,
           "git@github.com:pingdotgg/codething-mvp.git",
-        ]);
-        yield* runGit(repoDir, ["config", "remote.my-org/upstream.pushurl", upstreamDir]);
+        );
         yield* runGit(repoDir, ["checkout", "main"]);
         yield* runGit(repoDir, ["branch", "-D", "effect-atom"]);
         yield* runGit(repoDir, ["checkout", "--track", "my-org/upstream/effect-atom"]);

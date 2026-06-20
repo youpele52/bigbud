@@ -1,5 +1,7 @@
 import { Schema, SchemaIssue } from "effect";
 
+import { AutomationId } from "@bigbud/contracts";
+
 // ===============================
 // Core Persistence Errors
 // ===============================
@@ -59,6 +61,17 @@ export function toPersistenceDecodeCauseError(operation: string) {
 
 export const isPersistenceError = (u: unknown) =>
   Schema.is(PersistenceSqlError)(u) || Schema.is(PersistenceDecodeError)(u);
+
+export class AutomationScheduleNotFoundError extends Schema.TaggedErrorClass<AutomationScheduleNotFoundError>()(
+  "AutomationScheduleNotFoundError",
+  {
+    automationId: AutomationId,
+  },
+) {
+  override get message(): string {
+    return `Automation schedule not found: ${this.automationId}`;
+  }
+}
 
 // ===============================
 // Provider Session Repository Errors

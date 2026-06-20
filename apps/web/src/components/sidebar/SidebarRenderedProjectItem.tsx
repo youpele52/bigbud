@@ -51,6 +51,7 @@ export function SidebarRenderedProjectItem({
   hasRenameCommitted,
   markRenameCommitted,
   favoriteThreadIds,
+  automationThreadIds,
   toggleFavoriteThread,
   activeThread,
   activeDraftThread,
@@ -377,6 +378,7 @@ export function SidebarRenderedProjectItem({
         cancelRename={cancelRename}
         branchThread={branchThread}
         favoriteThreadIds={favoriteThreadIds}
+        automationThreadIds={automationThreadIds}
         toggleFavoriteThread={toggleFavoriteThread}
         requestThreadDelete={requestThreadDelete}
         openPrLink={openPrLink}

@@ -1,5 +1,7 @@
 export const FILE_PREVIEW_LINE_HEIGHT = 20;
 
+const MARKDOWN_FILE_EXTENSIONS = new Set([".md", ".mdx"]);
+
 interface PreviewLoadingState {
   loading: boolean;
   loaded: boolean;
@@ -42,4 +44,43 @@ export function getPreviewScrollTop(
   }
 
   return Math.max(0, clampedLine * lineHeight - containerHeight / 2);
+}
+
+function fileNameFromPath(pathValue: string): string {
+  const segments = pathValue.split("/");
+  return segments.at(-1) ?? pathValue;
+}
+
+export function inferPreviewLanguage(pathValue: string): string {
+  const name = fileNameFromPath(pathValue).toLowerCase();
+  if (name === "dockerfile") return "dockerfile";
+  const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "text";
+  if (extension === "cts" || extension === "mts") return "ts";
+  if (extension === "mdx") return "md";
+  if (extension === "yml") return "yaml";
+  if (extension === "ps1") return "powershell";
+  if (extension === "sh" || extension === "bash" || extension === "zsh") return "shellscript";
+  return extension || "text";
+}
+
+export function buildFilePreviewBreadcrumb(
+  projectName: string | undefined,
+  cwd: string,
+  relativePath: string,
+) {
+  const rootName = projectName ?? fileNameFromPath(cwd);
+  return [rootName, ...relativePath.split("/").filter(Boolean)].map((label, index, parts) => ({
+    id: parts.slice(0, index + 1).join("/"),
+    label,
+  }));
+}
+
+export function isMarkdownFilePath(pathValue: string): boolean {
+  const name = fileNameFromPath(pathValue).toLowerCase();
+  for (const extension of MARKDOWN_FILE_EXTENSIONS) {
+    if (name.endsWith(extension)) {
+      return true;
+    }
+  }
+  return false;
 }

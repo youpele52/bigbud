@@ -12,6 +12,7 @@ interface FilePreviewAnnotationComposerProps {
   linesContainerRef: React.RefObject<HTMLDivElement | null>;
   selectedRange: { startLine: number; endLine: number };
   selectedText: string;
+  placement?: "anchored" | "sticky";
   onCreateAnnotation: (annotation: CodeAnnotationDraft) => void;
   onCancel: () => void;
 }
@@ -23,6 +24,7 @@ export function FilePreviewAnnotationComposer({
   linesContainerRef,
   selectedRange,
   selectedText,
+  placement = "anchored",
   onCreateAnnotation,
   onCancel,
 }: FilePreviewAnnotationComposerProps) {
@@ -30,6 +32,10 @@ export function FilePreviewAnnotationComposer({
   const [panelTop, setPanelTop] = useState<number | null>(null);
 
   useLayoutEffect(() => {
+    if (placement === "sticky") {
+      return;
+    }
+
     const container = scrollContainerRef.current;
     const linesContainer = linesContainerRef.current;
     if (!container || !linesContainer) return;
@@ -59,7 +65,28 @@ export function FilePreviewAnnotationComposer({
     }
 
     setPanelTop(belowTop);
-  }, [scrollContainerRef, linesContainerRef, selectedRange]);
+  }, [placement, scrollContainerRef, linesContainerRef, selectedRange]);
+
+  const panel = (
+    <AnnotationComposerPanel
+      targetLabel={formatAnnotationTargetLabel(selectedRange)}
+      onCancel={onCancel}
+      onSubmit={({ intent, comment }) => {
+        onCreateAnnotation({
+          intent,
+          comment,
+          startLine: selectedRange.startLine,
+          endLine: selectedRange.endLine,
+          text: selectedText,
+        });
+        onCancel();
+      }}
+    />
+  );
+
+  if (placement === "sticky") {
+    return <div className="sticky bottom-3 z-10 mx-auto mt-3 w-fit">{panel}</div>;
+  }
 
   return (
     <div
@@ -67,20 +94,7 @@ export function FilePreviewAnnotationComposer({
       className="absolute left-1/2 z-10 -translate-x-1/2"
       style={{ top: panelTop ?? 0 }}
     >
-      <AnnotationComposerPanel
-        targetLabel={formatAnnotationTargetLabel(selectedRange)}
-        onCancel={onCancel}
-        onSubmit={({ intent, comment }) => {
-          onCreateAnnotation({
-            intent,
-            comment,
-            startLine: selectedRange.startLine,
-            endLine: selectedRange.endLine,
-            text: selectedText,
-          });
-          onCancel();
-        }}
-      />
+      {panel}
     </div>
   );
 }

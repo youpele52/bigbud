@@ -297,6 +297,7 @@ export function useDiffPanelData() {
     diffOpen,
     activeThread,
     activeThreadId,
+    activeProject,
     activeCwd,
     isGitRepo,
     orderedTurnDiffSummaries,

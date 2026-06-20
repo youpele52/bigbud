@@ -47,6 +47,7 @@ export interface SharedProjectItemProps {
   /** Marks the rename as committed to prevent double-commit on blur. */
   markRenameCommitted: () => void;
   favoriteThreadIds: ReadonlySet<ThreadId>;
+  automationThreadIds: ReadonlySet<ThreadId>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   activeThread: { projectId: ProjectId; branch: string | null; worktreePath: string | null } | null;
   activeDraftThread: {

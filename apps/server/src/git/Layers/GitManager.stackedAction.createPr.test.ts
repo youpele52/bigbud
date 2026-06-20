@@ -12,7 +12,13 @@ import {
   resolvePullRequest,
   runStackedAction,
 } from "./GitManager.test.helpers.ts";
-import { createBareRemote, initRepo, makeTempDir, runGit } from "./GitManager.test.repo.ts";
+import {
+  configureGitHubRemoteMirror,
+  createBareRemote,
+  initRepo,
+  makeTempDir,
+  runGit,
+} from "./GitManager.test.repo.ts";
 
 it.layer(GitManagerTestLayer)("GitManager", (it) => {
   it.effect("creates PR when one does not already exist", () =>
@@ -145,11 +151,12 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
       yield* runGit(repoDir, ["push", "-u", "fork-seed", "statemachine"]);
       yield* runGit(repoDir, ["checkout", "-b", "bigbud/pr-91/statemachine"]);
       yield* runGit(repoDir, ["branch", "--set-upstream-to", "fork-seed/statemachine"]);
-      yield* runGit(repoDir, [
-        "config",
-        "remote.fork-seed.url",
+      yield* configureGitHubRemoteMirror(
+        repoDir,
+        "fork-seed",
+        forkDir,
         "git@github.com:octocat/codething-mvp.git",
-      ]);
+      );
 
       const { manager, ghCalls } = yield* makeManager({
         ghScenario: {

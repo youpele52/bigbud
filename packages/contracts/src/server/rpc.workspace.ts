@@ -16,6 +16,7 @@ import {
   NotesUpdateError,
   NotesUpdateInput,
 } from "./notes";
+import { TeachListProjectsError, TeachListProjectsInput, TeachListProjectsResult } from "./teach";
 import {
   ProjectDirectoryWatchError,
   ProjectDirectoryWatchEvent,
@@ -105,4 +106,10 @@ export const WsNotesDeleteRpc = Rpc.make(WS_METHODS.notesDelete, {
   payload: NotesDeleteInput,
   success: NotesDeleteResult,
   error: NotesDeleteError,
+});
+
+export const WsTeachListProjectsRpc = Rpc.make(WS_METHODS.teachListProjects, {
+  payload: TeachListProjectsInput,
+  success: TeachListProjectsResult,
+  error: TeachListProjectsError,
 });

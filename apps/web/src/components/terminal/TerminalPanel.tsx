@@ -1,7 +1,8 @@
 import { type ThreadId } from "@bigbud/contracts";
 import { memo, useCallback, useEffect } from "react";
 
-import { randomUUID } from "~/lib/utils";
+import { isElectron } from "~/config/env";
+import { cn, randomUUID } from "~/lib/utils";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -93,7 +94,7 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
 
   return (
     <>
-      <div className="border-b border-border px-3 py-3">
+      <div className={cn("border-b border-border px-3 py-3", isElectron && "drag-region")}>
         <p className="text-sm font-medium text-foreground">Terminal</p>
       </div>
       <div className="min-h-0 flex-1">{body}</div>

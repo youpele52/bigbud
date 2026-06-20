@@ -70,6 +70,9 @@ export function createWsNativeApi(): NativeApi {
       update: rpcClient.notes.update,
       delete: rpcClient.notes.delete,
     },
+    teach: {
+      listProjects: () => rpcClient.teach.listProjects({}),
+    },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openPath: (path) => rpcClient.shell.openPath({ path }),
@@ -122,6 +125,16 @@ export function createWsNativeApi(): NativeApi {
       updateSettings: rpcClient.server.updateSettings,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
+      getAutomation: rpcClient.server.getAutomation,
+      listAutomations: rpcClient.server.listAutomations,
+      listAllAutomations: rpcClient.server.listAllAutomations,
+      createAutomation: rpcClient.server.createAutomation,
+      updateAutomation: rpcClient.server.updateAutomation,
+      pauseAutomation: rpcClient.server.pauseAutomation,
+      resumeAutomation: rpcClient.server.resumeAutomation,
+      deleteAutomation: rpcClient.server.deleteAutomation,
+      triggerAutomation: rpcClient.server.triggerAutomation,
+      listAutomationRuns: rpcClient.server.listAutomationRuns,
     },
     orchestration: {
       getSnapshot: rpcClient.orchestration.getSnapshot,

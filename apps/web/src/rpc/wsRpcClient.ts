@@ -1,4 +1,16 @@
 import {
+  type ServerGetAutomationInput,
+  type ServerGetAutomationResult,
+  type ServerAutomationResult,
+  type ServerCreateAutomationInput,
+  type ServerDeleteAutomationInput,
+  type ServerListAutomationRunsInput,
+  type ServerListAutomationRunsResult,
+  type ServerListAllAutomationsInput,
+  type ServerListAllAutomationsResult,
+  type ServerListAutomationsInput,
+  type ServerListAutomationsResult,
+  type ServerPauseAutomationInput,
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
   type GitGetCommitDetailsResult,
@@ -12,6 +24,8 @@ import {
   type NotesListInput,
   type NotesListResult,
   type NotesUpdateInput,
+  type TeachListProjectsInput,
+  type TeachListProjectsResult,
   type ProjectDirectoryWatchEvent,
   type ProjectDirectoryWatchInput,
   type GitReadWorkingTreeDiffInput,
@@ -24,6 +38,10 @@ import {
   ORCHESTRATION_WS_METHODS,
   type ThinkingActivityDeltaEvent,
   type ServerSettingsPatch,
+  type ServerResumeAutomationInput,
+  type ServerTriggerAutomationInput,
+  type ServerTriggerAutomationResult,
+  type ServerUpdateAutomationInput,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
@@ -90,6 +108,9 @@ export interface WsRpcClient {
     readonly update: (input: NotesUpdateInput) => Promise<Note>;
     readonly delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
+  readonly teach: {
+    readonly listProjects: (input: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
+  };
   readonly shell: {
     readonly openInEditor: (input: {
       readonly cwd: Parameters<NativeApi["shell"]["openInEditor"]>[0];
@@ -143,6 +164,28 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
+    readonly listAutomations: (
+      input: ServerListAutomationsInput,
+    ) => Promise<ServerListAutomationsResult>;
+    readonly listAllAutomations: (
+      input?: ServerListAllAutomationsInput,
+    ) => Promise<ServerListAllAutomationsResult>;
+    readonly createAutomation: (
+      input: ServerCreateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly updateAutomation: (
+      input: ServerUpdateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly pauseAutomation: (input: ServerPauseAutomationInput) => Promise<void>;
+    readonly resumeAutomation: (input: ServerResumeAutomationInput) => Promise<void>;
+    readonly deleteAutomation: (input: ServerDeleteAutomationInput) => Promise<void>;
+    readonly triggerAutomation: (
+      input: ServerTriggerAutomationInput,
+    ) => Promise<ServerTriggerAutomationResult>;
+    readonly listAutomationRuns: (
+      input: ServerListAutomationRunsInput,
+    ) => Promise<ServerListAutomationRunsResult>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };
@@ -221,6 +264,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       update: (input) => transport.request((client) => client[WS_METHODS.notesUpdate](input)),
       delete: (input) => transport.request((client) => client[WS_METHODS.notesDelete](input)),
     },
+    teach: {
+      listProjects: (input) =>
+        transport.request((client) => client[WS_METHODS.teachListProjects](input)),
+    },
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
@@ -294,6 +341,26 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      getAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetAutomation](input)),
+      listAutomations: (input) =>
+        transport.request((client) => client[WS_METHODS.serverListAutomations](input)),
+      listAllAutomations: (input = {}) =>
+        transport.request((client) => client[WS_METHODS.serverListAllAutomations](input)),
+      createAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateAutomation](input)),
+      updateAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverUpdateAutomation](input)),
+      pauseAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverPauseAutomation](input)),
+      resumeAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverResumeAutomation](input)),
+      deleteAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverDeleteAutomation](input)),
+      triggerAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTriggerAutomation](input)),
+      listAutomationRuns: (input) =>
+        transport.request((client) => client[WS_METHODS.serverListAutomationRuns](input)),
       subscribeConfig: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeServerConfig]({}),

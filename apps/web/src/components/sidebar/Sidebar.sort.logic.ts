@@ -8,7 +8,7 @@ type SidebarProject = {
   updatedAt?: string | undefined;
 };
 
-type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt"> & {
+export type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt"> & {
   latestUserMessageAt?: string | null;
   messages?: Pick<Thread["messages"][number], "createdAt" | "role">[];
 };
@@ -64,6 +64,18 @@ export function sortThreadsForSidebar<
     if (byTimestamp !== 0) return byTimestamp;
     return right.id.localeCompare(left.id);
   });
+}
+
+export function resolveMostRecentThreadId<
+  T extends Pick<Thread, "id" | "createdAt" | "updatedAt" | "archivedAt" | "deletingAt"> &
+    SidebarThreadSortInput,
+>(threads: readonly T[], sortOrder: SidebarThreadSortOrder): T["id"] | null {
+  return (
+    sortThreadsForSidebar(
+      threads.filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
+      sortOrder,
+    )[0]?.id ?? null
+  );
 }
 
 export function getFallbackThreadIdAfterDelete<

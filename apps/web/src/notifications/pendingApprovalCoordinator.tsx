@@ -50,21 +50,27 @@ export function PendingApprovalCoordinator() {
       setRespondingRequestIds((existing) =>
         existing.includes(requestId) ? existing : [...existing, requestId],
       );
-      await api.orchestration
-        .dispatchCommand({
+      await Promise.race([
+        api.orchestration.dispatchCommand({
           type: "thread.approval.respond",
           commandId: newCommandId(),
           threadId,
           requestId,
           decision,
           createdAt: new Date().toISOString(),
-        })
-        .catch((err: unknown) => {
-          setStoreThreadError(
-            threadId,
-            err instanceof Error ? err.message : "Failed to submit approval decision.",
-          );
-        });
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Approval response timed out. Please try again.")),
+            15_000,
+          ),
+        ),
+      ]).catch((err: unknown) => {
+        setStoreThreadError(
+          threadId,
+          err instanceof Error ? err.message : "Failed to submit approval decision.",
+        );
+      });
       setRespondingRequestIds((existing) => existing.filter((id) => id !== requestId));
     },
     [setStoreThreadError],

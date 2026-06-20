@@ -5,6 +5,7 @@ import { CheckpointReactor } from "../Services/CheckpointReactor.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
+import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
 describe("OrchestrationReactor", () => {
@@ -49,6 +50,15 @@ describe("OrchestrationReactor", () => {
             drain: Effect.void,
           }),
         ),
+        Layer.provideMerge(
+          Layer.succeed(SchedulerReactor, {
+            start: () => {
+              started.push("scheduler-reactor");
+              return Effect.void;
+            },
+            triggerNow: () => Effect.succeed({ status: "dispatched" as const }),
+          }),
+        ),
       ),
     );
 
@@ -60,6 +70,7 @@ describe("OrchestrationReactor", () => {
       "provider-runtime-ingestion",
       "provider-command-reactor",
       "checkpoint-reactor",
+      "scheduler-reactor",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));

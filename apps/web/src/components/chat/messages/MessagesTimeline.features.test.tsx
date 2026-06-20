@@ -215,6 +215,61 @@ describe("MessagesTimeline message features", () => {
     );
   });
 
+  it("renders automation requests as a compact summary instead of inline raw JSON", async () => {
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-automation-1",
+            kind: "message",
+            createdAt: "2026-06-16T20:39:00.000Z",
+            message: {
+              id: MessageId.makeUnsafe("assistant-automation-1"),
+              role: "assistant",
+              text: [
+                "I have enough information. Here's your automation request:",
+                "",
+                "<automation_request>",
+                '{ "title": "World Cup Score Check", "prompt": "Check the latest score", "scheduleKind": "once", "scheduleLabel": "Once on June 16, 2026 at approximately 22:40 (Europe/Berlin)", "cronExpression": "40 22 16 6 *", "timezone": "Europe/Berlin", "runAt": "2026-06-16T20:40:12.000Z" }',
+                "</automation_request>",
+              ].join("\n"),
+              createdAt: "2026-06-16T20:39:00.000Z",
+              completedAt: "2026-06-16T20:39:30.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-06-16T20:39:31.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd={undefined}
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot={undefined}
+      />,
+    );
+
+    expect(markup).toContain("Automation request");
+    expect(markup).toContain("World Cup Score Check");
+    expect(markup).toContain("Once on June 16, 2026 at approximately 22:40 (Europe/Berlin)");
+    expect(markup).toContain("Automation request data");
+    expect(markup).not.toContain("&lt;automation_request&gt;");
+  });
+
   it("renders shell output messages as a shell block", async () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
