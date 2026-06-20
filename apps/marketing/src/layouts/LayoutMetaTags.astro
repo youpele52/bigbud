@@ -13,9 +13,11 @@ interface Props {
   description?: string;
   image?: string;
   imageAlt?: string;
+  keywords?: string[];
   noindex?: boolean;
   type?: "website";
   preloadImage?: string;
+  structuredData?: unknown | unknown[];
 }
 
 const {
@@ -23,9 +25,11 @@ const {
   description = DEFAULT_METADATA.description,
   image = DEFAULT_METADATA.image,
   imageAlt = DEFAULT_METADATA.imageAlt,
+  keywords = DEFAULT_METADATA.keywords,
   noindex = false,
   type = DEFAULT_METADATA.type,
   preloadImage,
+  structuredData,
 } = Astro.props;
 
 const canonicalUrl = Astro.site
@@ -35,16 +39,27 @@ const metadataImage = image.startsWith("http")
   ? image
   : (Astro.site ? new URL(image, Astro.site) : new URL(image, Astro.url)).toString();
 const robots = noindex ? ROBOTS_CONTENT.noindex : ROBOTS_CONTENT.index;
+const schemaEntries = Array.isArray(structuredData)
+  ? structuredData
+  : structuredData
+    ? [structuredData]
+    : [];
 ---
 
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>{title}</title>
 <meta name="description" content={description} />
+<meta name="keywords" content={keywords.join(", ")} />
 <meta name="robots" content={robots} />
 <meta name="theme-color" content={MARKETING_THEME_COLOR} />
 <meta name="application-name" content={APP_NAME} />
 <meta name="apple-mobile-web-app-title" content={APP_NAME} />
+<meta name="author" content={APP_NAME} />
+<meta name="creator" content={APP_NAME} />
+<meta name="publisher" content={APP_NAME} />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
+<meta name="format-detection" content="telephone=no" />
 <link rel="canonical" href={canonicalUrl} />
 <meta property="og:site_name" content={APP_NAME} />
 <meta property="og:locale" content={OG_LOCALE} />
@@ -73,3 +88,8 @@ const robots = noindex ? ROBOTS_CONTENT.noindex : ROBOTS_CONTENT.index;
 <link rel="icon" type="image/png" href="/favicons/favicon-16x16.png" sizes="16x16" />
 <link rel="apple-touch-icon" href="/favicons/apple-touch-icon.png" />
 {preloadImage && <link rel="preload" as="image" href={preloadImage} />}
+{
+  schemaEntries.map((entry) => (
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(entry)} />
+  ))
+}

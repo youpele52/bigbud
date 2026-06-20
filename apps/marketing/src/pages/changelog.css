@@ -8,6 +8,64 @@
   padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
 }
 
+.changelog-seo-summary {
+  display: grid;
+  gap: 1.4rem;
+  margin-bottom: clamp(2.4rem, 4vw, 3.5rem);
+}
+
+.changelog-seo-summary__card,
+.changelog-seo-summary__panel,
+.changelog-seo-summary__faq-item {
+  border: 1px solid color-mix(in srgb, var(--border) 85%, white 15%);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.02)),
+    color-mix(in srgb, var(--panel) 92%, black 8%);
+  border-radius: 1.5rem;
+  padding: 1.3rem 1.4rem;
+}
+
+.changelog-seo-summary__eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.changelog-seo-summary__title,
+.changelog-seo-summary__panel h3,
+.changelog-seo-summary__faq-item h3 {
+  margin: 0 0 0.65rem;
+  color: var(--text);
+}
+
+.changelog-seo-summary__body,
+.changelog-seo-summary__panel p,
+.changelog-seo-summary__faq-item p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 82%, white 18%);
+  line-height: 1.7;
+}
+
+.changelog-seo-summary__grid,
+.changelog-seo-summary__faq-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.changelog-seo-summary__faq {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .changelog-seo-summary__grid,
+  .changelog-seo-summary__faq-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .changelog-page::before {
   content: "";
   position: absolute;
