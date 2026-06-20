@@ -1,5 +1,10 @@
 ---
-import { APP_NAME, MARKETING_ASSETS } from "../../../constants/app";
+import {
+    APP_NAME,
+    EXTERNAL_LINK_INDICATOR,
+    MARKETING_ASSETS,
+    X_POST_URL,
+} from "../../../constants/app";
 import { HOME_METADATA } from "../../../constants/seo";
 import Button from "../../shared/Button.astro";
 import PlatformIcon from "../../shared/PlatformIcon.astro";
@@ -288,6 +293,35 @@ const providerDrops = [
                     fill="currentColor"
                 />
             </svg>
+        </div>
+    </section>
+
+    <section class="hero-community" aria-labelledby="community-heading">
+        <div class="hero-community-inner">
+            <p class="hero-community-eyebrow">build with us</p>
+            <h2 id="community-heading" class="hero-community-heading">
+                bigbud is ours.
+            </h2>
+            <p class="hero-community-copy">
+                Have a feature request, bug report, or idea?<br />
+                bigbud is ours, and we&apos;re building it together.<br />
+                Help shape it around your workflow by <a
+                    href={X_POST_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Post to X with a message to @bigbudapp"
+                >writing us <span aria-hidden="true">{EXTERNAL_LINK_INDICATOR}</span></a>.
+            </p>
+            <div class="hero-community-actions">
+                <Button
+                    href={X_POST_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    ariaLabel="Post about bigbud on X"
+                >
+                    <span>Post on X</span>
+                </Button>
+            </div>
         </div>
     </section>
 </div>
