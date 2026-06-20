@@ -157,6 +157,15 @@
   text-wrap: pretty;
 }
 
+.hero-features-subheading {
+  max-width: 48ch;
+  margin-bottom: 3rem;
+  color: var(--fg-dim);
+  font-size: clamp(1.05rem, 1.4vw, 1.2rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
 .feature-showcases {
   display: flex;
   flex-direction: column;
@@ -164,12 +173,13 @@
 
 .feature-showcase {
   position: relative;
-  min-height: 100dvh;
+  min-height: 70dvh;
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: clamp(2rem, 4vw, 4rem);
   align-items: center;
   padding: clamp(2rem, 3vw, 3rem) 0;
+  perspective: 1200px;
 }
 
 .feature-showcase--with-drop {
@@ -199,7 +209,7 @@
 .feature-showcase-visual {
   opacity: 0;
   filter: blur(8px);
-  transform: scale(0.97);
+  transform: scale(0.97) rotateY(3deg);
   transition:
     opacity 0.75s ease,
     filter 0.75s ease,
@@ -219,7 +229,7 @@
 .feature-showcase-visual.is-visible {
   opacity: 1;
   filter: blur(0);
-  transform: scale(1);
+  transform: scale(1) rotateY(3deg);
 }
 
 .feature-showcase-visual img {
@@ -397,7 +407,7 @@
   }
 
   .feature-showcase {
-    min-height: 100dvh;
+    min-height: 70dvh;
     grid-template-columns: 1fr;
     gap: 1.75rem;
     align-content: center;
@@ -409,6 +419,11 @@
 
   .feature-showcase-visual {
     max-width: 100%;
+    transform: scale(0.97);
+  }
+
+  .feature-showcase-visual.is-visible {
+    transform: scale(1);
   }
 
   .feature-showcase--with-drop {
@@ -421,7 +436,6 @@
   }
 }
 
-/* ── Mobile ── */
 @media (max-width: 640px) {
   .hero-copy {
     height: auto;
@@ -458,9 +472,10 @@
   }
 
   .feature-showcase {
-    min-height: 55dvh;
+    min-height: auto;
+    padding: 4rem 0;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    gap: 3rem;
   }
 
   .feature-showcase-content {
@@ -469,11 +484,16 @@
 
   .feature-showcase-visual {
     max-width: none;
+    transform: scale(0.97);
+  }
+
+  .feature-showcase-visual.is-visible {
+    transform: scale(1);
   }
 
   .feature-showcase--with-drop {
-    min-height: 75dvh;
-    padding-bottom: 8rem;
+    min-height: auto;
+    padding: 4rem 0 8rem;
   }
 
   .provider-drop-stage {

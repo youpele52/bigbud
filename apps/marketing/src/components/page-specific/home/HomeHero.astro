@@ -70,8 +70,15 @@ const providerDrops = [
                 <span class="hero-brand-name">{APP_NAME}</span>
             </div>
             <h1 class="tagline">
-                <span class="tagline-line"><span class="tagline-word">all</span> <span class="tagline-word">your</span> <span class="tagline-word">work.</span></span>
-                <span class="tagline-line"><span class="tagline-word">one</span> <span class="tagline-word">workspace.</span></span>
+                <span class="tagline-line"
+                    ><span class="tagline-word">all</span>
+                    <span class="tagline-word">your</span>
+                    <span class="tagline-word">work.</span></span
+                >
+                <span class="tagline-line"
+                    ><span class="tagline-word">one</span>
+                    <span class="tagline-word">workspace.</span></span
+                >
             </h1>
             <p class="tagline-copy">
                 bigbud brings your projects, ideas, and creative work into one
@@ -125,6 +132,10 @@ const providerDrops = [
             <h2 id="hero-features-heading" class="hero-features-heading">
                 built for work that keeps moving.
             </h2>
+            <p class="hero-features-subheading">
+                A workspace that fits itself to your rhythm, equips you for the
+                task at hand, and knows when to get out of your way.
+            </p>
             <div class="feature-showcases">
                 {
                     showcaseFeatures.map((feature) => (
@@ -136,63 +147,55 @@ const providerDrops = [
                             ]}
                         >
                             <div class="feature-showcase-content">
-                                <h3 class="showcase-title">
-                                    {feature.title}
-                                </h3>
+                                <h3 class="showcase-title">{feature.title}</h3>
                                 <p class="showcase-desc">
                                     {feature.description}
                                 </p>
                             </div>
-                            {
-                                "images" in feature ? (
-                                    <div
-                                        class="feature-showcase-visual feature-showcase-slider"
-                                        data-animate="dissolve"
-                                    >
-                                        <div class="slider-track">
-                                            {feature.images.map((src) => (
-                                                <img
-                                                    src={src}
-                                                    alt={feature.title}
-                                                    loading="lazy"
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div
-                                        class="feature-showcase-visual"
-                                        data-animate="dissolve"
-                                    >
-                                        <img
-                                            src={feature.image}
-                                            alt={feature.title}
-                                            loading="lazy"
-                                        />
-                                    </div>
-                                )
-                            }
-                            {
-                                "showProviderDrop" in feature && (
-                                    <div
-                                        class="provider-drop-stage"
-                                        aria-hidden="true"
-                                    >
-                                        {providerDrops.map((provider) => (
-                                            <div
-                                                class="provider-drop-logo"
-                                            >
-                                                <img
-                                                    src={provider.icon}
-                                                    alt=""
-                                                    class="provider-drop-mark"
-                                                    loading="lazy"
-                                                />
-                                            </div>
+                            {"images" in feature ? (
+                                <div
+                                    class="feature-showcase-visual feature-showcase-slider"
+                                    data-animate="dissolve"
+                                >
+                                    <div class="slider-track">
+                                        {feature.images.map((src) => (
+                                            <img
+                                                src={src}
+                                                alt={feature.title}
+                                                loading="lazy"
+                                            />
                                         ))}
                                     </div>
-                                )
-                            }
+                                </div>
+                            ) : (
+                                <div
+                                    class="feature-showcase-visual"
+                                    data-animate="dissolve"
+                                >
+                                    <img
+                                        src={feature.image}
+                                        alt={feature.title}
+                                        loading="lazy"
+                                    />
+                                </div>
+                            )}
+                            {"showProviderDrop" in feature && (
+                                <div
+                                    class="provider-drop-stage"
+                                    aria-hidden="true"
+                                >
+                                    {providerDrops.map((provider) => (
+                                        <div class="provider-drop-logo">
+                                            <img
+                                                src={provider.icon}
+                                                alt=""
+                                                class="provider-drop-mark"
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))
                 }
@@ -236,7 +239,10 @@ const providerDrops = [
         logo.style.setProperty("--drop-delay", `${-randomInRange(0, 8)}s`);
         logo.style.setProperty("--drop-duration", `${randomInRange(8, 16)}s`);
         logo.style.setProperty("--drop-rotate", `${randomInRange(-28, 28)}deg`);
-        logo.style.setProperty("--drop-end-rotate", `${randomInRange(-8, 8)}deg`);
+        logo.style.setProperty(
+            "--drop-end-rotate",
+            `${randomInRange(-8, 8)}deg`,
+        );
         logo.style.setProperty("--drop-scale", `${randomInRange(0.85, 1.15)}`);
     }
 </script>
