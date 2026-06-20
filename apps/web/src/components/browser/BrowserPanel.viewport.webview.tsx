@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import {
   browserAnnotationCancelScript,
@@ -7,6 +7,7 @@ import {
   browserAnnotationPrepareCaptureScript,
   type BrowserAnnotationSelection,
 } from "./BrowserPanel.annotation";
+import { BrowserPdfAnnotationOverlay } from "./BrowserPanel.annotation.pdfOverlay";
 import type {
   BrowserPageMetadata,
   BrowserViewportProps,
@@ -24,6 +25,13 @@ import {
   normalizeBrowserUrl,
   readAnnotationTheme,
 } from "./BrowserPanel.viewport.webview.utils";
+import {
+  captureBrowserAnnotation,
+  readIsPdfDocument,
+  waitForNextPaint,
+  waitForPdfAnnotationSelection,
+  type PendingPdfAnnotation,
+} from "./BrowserPanel.viewport.webview.annotation";
 
 export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function BrowserWebviewViewport(
@@ -40,6 +48,10 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     const onContextMenuRef = useRef(onContextMenu);
     const pageMetadataRef = useRef<BrowserPageMetadata>({ title: "", faviconUrl: null });
     const annotationActiveRef = useRef(false);
+    const pendingPdfAnnotationRef = useRef<PendingPdfAnnotation | null>(null);
+    const [pendingPdfAnnotation, setPendingPdfAnnotation] = useState<PendingPdfAnnotation | null>(
+      null,
+    );
 
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
@@ -62,46 +74,54 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         const webview = webviewRef.current;
         if (!webview || !annotationActiveRef.current) return;
         annotationActiveRef.current = false;
+        const pendingPdfAnnotation = pendingPdfAnnotationRef.current;
+        if (pendingPdfAnnotation) {
+          pendingPdfAnnotationRef.current = null;
+          setPendingPdfAnnotation(null);
+          pendingPdfAnnotation.resolve({ cancelled: true });
+          return;
+        }
         await webview.executeJavaScript(`(${browserAnnotationCancelScript.toString()})()`, false);
       },
       startAnnotation: async () => {
         const webview = webviewRef.current;
         if (!webview || !readyRef.current) return null;
-        const theme = JSON.stringify(readAnnotationTheme());
+        const theme = readAnnotationTheme();
+        const isPdfDocument = await readIsPdfDocument(webview, url);
         annotationActiveRef.current = true;
-        const selection = await webview.executeJavaScript<BrowserAnnotationSelection>(
-          `(${browserAnnotationPickerScript.toString()})(${theme})`,
-          true,
-        );
-        annotationActiveRef.current = false;
-        if (!selection || selection.cancelled) return null;
-
         try {
-          await webview.executeJavaScript(
-            `(${browserAnnotationPrepareCaptureScript.toString()})()`,
-            false,
-          );
-          const screenshot = await webview.capturePage();
-          return {
-            comment: selection.comment,
-            intent: selection.intent,
-            page: {
-              url: webview.getURL(),
-              title: webview.getTitle(),
-            },
-            element: selection.element,
-            viewport: selection.viewport,
-            screenshot: {
-              mime: "image/png",
-              dataUrl: screenshot.toDataURL(),
-            },
-          };
+          const selection = isPdfDocument
+            ? await waitForPdfAnnotationSelection(theme, pendingPdfAnnotationRef, (next) =>
+                setPendingPdfAnnotation(next),
+              )
+            : await webview.executeJavaScript<BrowserAnnotationSelection>(
+                `(${browserAnnotationPickerScript.toString()})(${JSON.stringify(theme)})`,
+                true,
+              );
+
+          if (!selection || selection.cancelled) return null;
+
+          if (isPdfDocument) {
+            await waitForNextPaint();
+          } else {
+            await webview.executeJavaScript(
+              `(${browserAnnotationPrepareCaptureScript.toString()})()`,
+              false,
+            );
+          }
+
+          return await captureBrowserAnnotation(webview, selection);
         } finally {
-          void webview
-            .executeJavaScript(`(${browserAnnotationCleanupScript.toString()})()`, false)
-            .catch(() => {
-              // Ignore transient cleanup failures after capture.
-            });
+          annotationActiveRef.current = false;
+          pendingPdfAnnotationRef.current = null;
+          setPendingPdfAnnotation(null);
+          if (!isPdfDocument) {
+            void webview
+              .executeJavaScript(`(${browserAnnotationCleanupScript.toString()})()`, false)
+              .catch(() => {
+                // Ignore transient cleanup failures after capture.
+              });
+          }
         }
       },
     }));
@@ -115,6 +135,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         webview.style.cssText = "position:absolute;inset:0;width:100%;height:100%;border:0;";
         webview.setAttribute("allowpopups", "");
         webview.setAttribute("nodeintegration", "false");
+        webview.setAttribute("plugins", "");
         webview.setAttribute("webpreferences", "contextIsolation=yes");
         webview.setAttribute(
           "useragent",
@@ -261,6 +282,9 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);
         webview.removeEventListener("context-menu", handleContextMenu as EventListener);
         annotationActiveRef.current = false;
+        pendingPdfAnnotationRef.current?.resolve({ cancelled: true });
+        pendingPdfAnnotationRef.current = null;
+        setPendingPdfAnnotation(null);
         readyRef.current = false;
         try {
           webview.remove();
@@ -284,7 +308,21 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
       }
     }, [url]);
 
-    return <div ref={containerRef} className="absolute inset-0" />;
+    return (
+      <div ref={containerRef} className="absolute inset-0">
+        {pendingPdfAnnotation && (
+          <BrowserPdfAnnotationOverlay
+            theme={pendingPdfAnnotation.theme}
+            onResolve={(selection) => {
+              const pending = pendingPdfAnnotationRef.current;
+              pendingPdfAnnotationRef.current = null;
+              setPendingPdfAnnotation(null);
+              pending?.resolve(selection);
+            }}
+          />
+        )}
+      </div>
+    );
   },
 );
 

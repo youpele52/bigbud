@@ -37,6 +37,7 @@ import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hook
 
 interface ChatViewComposerProps {
   base: ChatViewBaseState;
+  className?: string;
   composer: ChatViewComposerDerivedState;
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
@@ -46,6 +47,7 @@ interface ChatViewComposerProps {
 
 export function ChatViewComposer({
   base,
+  className,
   composer,
   thread,
   runtime,
@@ -287,7 +289,7 @@ export function ChatViewComposer({
     <form
       ref={base.composerFormRef}
       onSubmit={interactions.onSend}
-      className="mx-auto w-full min-w-0 max-w-[52rem]"
+      className={cn("mx-auto w-full min-w-0 max-w-[52rem]", className)}
       data-chat-composer-form="true"
       onDragEnter={interactions.onComposerDragEnter}
       onDragOver={interactions.onComposerDragOver}

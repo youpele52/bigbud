@@ -224,6 +224,29 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
     message: deps.message,
   };
 
+  const sessionStateChangedEvent = {
+    ...eventBase({
+      eventId: EventId.makeUnsafe(randomUUID()),
+      createdAt: deps.stamp.createdAt,
+      threadId: deps.session.threadId,
+      raw: deps.raw,
+    }),
+    type: "session.state.changed" as const,
+    payload: {
+      state: deps.session.agentRunning ? "running" : "ready",
+      reason: deps.session.agentRunning ? "turn.completed.awaiting_agent_end" : "turn.completed",
+    },
+  } satisfies ProviderRuntimeEvent;
+
+  if (deps.session.agentRunning) {
+    yield* emitWithTurnAppend({
+      emit: deps.emit,
+      session: deps.session,
+      events: [sessionStateChangedEvent],
+    });
+    return;
+  }
+
   yield* emitWithTurnAppend({
     emit: deps.emit,
     session: deps.session,
@@ -249,21 +272,7 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
           ...(errorMessage ? { errorMessage } : {}),
         },
       },
-      {
-        ...eventBase({
-          eventId: EventId.makeUnsafe(randomUUID()),
-          createdAt: deps.stamp.createdAt,
-          threadId: deps.session.threadId,
-          raw: deps.raw,
-        }),
-        type: "session.state.changed",
-        payload: {
-          state: deps.session.agentRunning ? "running" : "ready",
-          reason: deps.session.agentRunning
-            ? "turn.completed.awaiting_agent_end"
-            : "turn.completed",
-        },
-      },
+      sessionStateChangedEvent,
     ],
   });
 });

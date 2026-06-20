@@ -52,6 +52,7 @@ import type {
   NotesListResult,
   NotesUpdateInput,
 } from "./notes";
+import type { TeachListProjectsInput, TeachListProjectsResult } from "./teach";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -67,6 +68,24 @@ import type {
   ServerWriteHandoffDocumentInput,
   ServerWriteHandoffDocumentResult,
 } from "./server";
+import type {
+  ServerAutomationResult,
+  ServerCreateAutomationInput,
+  ServerDeleteAutomationInput,
+  ServerGetAutomationInput,
+  ServerGetAutomationResult,
+  ServerListAutomationRunsInput,
+  ServerListAutomationRunsResult,
+  ServerListAllAutomationsInput,
+  ServerListAllAutomationsResult,
+  ServerListAutomationsInput,
+  ServerListAutomationsResult,
+  ServerPauseAutomationInput,
+  ServerResumeAutomationInput,
+  ServerTriggerAutomationInput,
+  ServerTriggerAutomationResult,
+  ServerUpdateAutomationInput,
+} from "./automation";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -224,6 +243,9 @@ export interface NativeApi {
     update: (input: NotesUpdateInput) => Promise<Note>;
     delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
+  teach: {
+    listProjects: (input?: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
+  };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
     openPath: (path: string) => Promise<void>;
@@ -279,6 +301,22 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
+    listAutomations: (input: ServerListAutomationsInput) => Promise<ServerListAutomationsResult>;
+    listAllAutomations: (
+      input?: ServerListAllAutomationsInput,
+    ) => Promise<ServerListAllAutomationsResult>;
+    createAutomation: (input: ServerCreateAutomationInput) => Promise<ServerAutomationResult>;
+    updateAutomation: (input: ServerUpdateAutomationInput) => Promise<ServerAutomationResult>;
+    pauseAutomation: (input: ServerPauseAutomationInput) => Promise<void>;
+    resumeAutomation: (input: ServerResumeAutomationInput) => Promise<void>;
+    deleteAutomation: (input: ServerDeleteAutomationInput) => Promise<void>;
+    triggerAutomation: (
+      input: ServerTriggerAutomationInput,
+    ) => Promise<ServerTriggerAutomationResult>;
+    listAutomationRuns: (
+      input: ServerListAutomationRunsInput,
+    ) => Promise<ServerListAutomationRunsResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

@@ -2,11 +2,10 @@ import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 
-import { isElectron } from "~/config/env";
 import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
-import { cn } from "~/lib/utils";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
+import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
 import { ChatHeader } from "../../common/ChatHeader";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
@@ -159,12 +158,7 @@ export function ChatViewContent({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
-      <header
-        className={cn(
-          "border-b border-border px-3 sm:px-5",
-          isElectron ? "drag-region flex h-[52px] items-center" : "py-2 sm:py-3",
-        )}
-      >
+      <ContentPanelHeader>
         <ChatHeader
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
@@ -187,7 +181,7 @@ export function ChatViewContent({
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
-      </header>
+      </ContentPanelHeader>
 
       <ProviderStatusBanner status={composer.activeProviderStatus} />
       <ContextWindowWarningBanner

@@ -4,8 +4,8 @@ import {
   MessageSquareTextIcon,
   SquarePenIcon,
 } from "lucide-react";
-import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { ChatSortMenu } from "./SidebarChatSortMenu";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
@@ -169,6 +169,7 @@ export function SidebarChatsSection({
                       cancelRename={sharedProjectItemProps.cancelRename}
                       branchThread={sharedProjectItemProps.branchThread}
                       favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
+                      automationThreadIds={sharedProjectItemProps.automationThreadIds}
                       toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
                       requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
                       openPrLink={sharedProjectItemProps.openPrLink}

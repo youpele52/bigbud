@@ -157,21 +157,13 @@ describe("RightPanelHost", () => {
     expect(browserMarkup).toContain('data-testid="files-panel"');
     expect(browserMarkup).toContain('data-testid="notes-panel"');
     expect(browserMarkup).toContain('data-testid="terminal-panel"');
-    expect(browserMarkup).toContain(
-      'aria-hidden="false"><div data-testid="browser-panel">browser</div>',
+    expect(browserMarkup).toMatch(
+      /<div class="[^"]*"><div data-testid="browser-panel">browser<\/div>/,
     );
-    expect(browserMarkup).toContain(
-      'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
-    );
-    expect(browserMarkup).toContain(
-      'aria-hidden="true"><div data-testid="files-panel">files</div>',
-    );
-    expect(browserMarkup).toContain(
-      'aria-hidden="true"><div data-testid="notes-panel">notes</div>',
-    );
-    expect(browserMarkup).toContain(
-      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
-    );
+    expect(browserMarkup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
+    expect(browserMarkup).toContain('inert=""><div data-testid="files-panel">files</div>');
+    expect(browserMarkup).toContain('inert=""><div data-testid="notes-panel">notes</div>');
+    expect(browserMarkup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
 
     rightPanelTabsStoreMock.useRightPanelTabsStore.setState({
       activeKind: "files",
@@ -187,13 +179,9 @@ describe("RightPanelHost", () => {
     expect(filesMarkup).toContain('data-testid="files-panel"');
     expect(filesMarkup).toContain('data-testid="notes-panel"');
     expect(filesMarkup).toContain('data-testid="terminal-panel"');
-    expect(filesMarkup).toContain(
-      'aria-hidden="true"><div data-testid="browser-panel">browser</div>',
-    );
-    expect(filesMarkup).toContain('aria-hidden="false"><div data-testid="files-panel">files</div>');
-    expect(filesMarkup).toContain(
-      'aria-hidden="true"><div data-testid="terminal-panel">terminal</div>',
-    );
+    expect(filesMarkup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
+    expect(filesMarkup).toMatch(/<div class="[^"]*"><div data-testid="files-panel">files<\/div>/);
+    expect(filesMarkup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
   });
 
   it("shows the launcher while preserving existing tab bodies when no tab is active", () => {
@@ -212,9 +200,9 @@ describe("RightPanelHost", () => {
     expect(markup).toContain('data-testid="files-panel"');
     expect(markup).toContain('data-testid="notes-panel"');
     expect(markup).toContain('data-testid="terminal-panel"');
-    expect(markup).toContain('aria-hidden="true"><div data-testid="browser-panel">browser</div>');
-    expect(markup).toContain('aria-hidden="true"><div data-testid="files-panel">files</div>');
-    expect(markup).toContain('aria-hidden="true"><div data-testid="terminal-panel">terminal</div>');
+    expect(markup).toContain('inert=""><div data-testid="browser-panel">browser</div>');
+    expect(markup).toContain('inert=""><div data-testid="files-panel">files</div>');
+    expect(markup).toContain('inert=""><div data-testid="terminal-panel">terminal</div>');
   });
 
   it("wires the launcher browser action to open a new browser tab", () => {

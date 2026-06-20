@@ -5,6 +5,7 @@
  */
 import * as nodePath from "node:path";
 
+import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
 import {
   ApprovalRequestId,
   type CursorModelOptions,
@@ -278,6 +279,23 @@ export function selectAutoApprovedPermissionOption(
   }
 
   return undefined;
+}
+
+export function scheduleFullAccessPermissionAutoApproval(input: {
+  readonly requestId: ApprovalRequestId;
+  readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
+  readonly stopped: () => boolean;
+  readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
+}): void {
+  void Effect.gen(function* () {
+    yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
+    if (input.stopped() || !input.pendingApprovals.has(input.requestId)) {
+      return;
+    }
+    yield* Deferred.succeed(input.decision, "acceptForSession");
+  })
+    .pipe(Effect.runPromise)
+    .catch(() => undefined);
 }
 
 // Re-export everything needed by CursorAdapter.ts

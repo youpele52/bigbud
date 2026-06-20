@@ -26,6 +26,9 @@ export const WS_METHODS = {
   notesUpdate: "notes.update",
   notesDelete: "notes.delete",
 
+  // Teach / learning projects
+  teachListProjects: "teach.listProjects",
+
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
   shellOpenPath: "shell.openPath",
@@ -67,6 +70,16 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
+  serverGetAutomation: "server.getAutomation",
+  serverListAutomations: "server.listAutomations",
+  serverListAllAutomations: "server.listAllAutomations",
+  serverCreateAutomation: "server.createAutomation",
+  serverUpdateAutomation: "server.updateAutomation",
+  serverPauseAutomation: "server.pauseAutomation",
+  serverResumeAutomation: "server.resumeAutomation",
+  serverDeleteAutomation: "server.deleteAutomation",
+  serverTriggerAutomation: "server.triggerAutomation",
+  serverListAutomationRuns: "server.listAutomationRuns",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

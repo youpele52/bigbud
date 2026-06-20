@@ -98,6 +98,7 @@ import {
   WsNotesGetRpc,
   WsNotesListRpc,
   WsNotesUpdateRpc,
+  WsTeachListProjectsRpc,
   WsProjectsListDirectoryRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsSearchEntriesRpc,
@@ -105,6 +106,18 @@ import {
   WsProjectsWriteFileRpc,
   WsSubscribeProjectDirectoryChangesRpc,
 } from "./rpc.workspace";
+import {
+  WsServerCreateAutomationRpc,
+  WsServerDeleteAutomationRpc,
+  WsServerGetAutomationRpc,
+  WsServerListAutomationRunsRpc,
+  WsServerListAllAutomationsRpc,
+  WsServerListAutomationsRpc,
+  WsServerPauseAutomationRpc,
+  WsServerResumeAutomationRpc,
+  WsServerTriggerAutomationRpc,
+  WsServerUpdateAutomationRpc,
+} from "./rpc.automation";
 
 export { WS_METHODS };
 
@@ -394,6 +407,16 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
+  WsServerGetAutomationRpc,
+  WsServerListAllAutomationsRpc,
+  WsServerListAutomationsRpc,
+  WsServerCreateAutomationRpc,
+  WsServerUpdateAutomationRpc,
+  WsServerPauseAutomationRpc,
+  WsServerResumeAutomationRpc,
+  WsServerDeleteAutomationRpc,
+  WsServerTriggerAutomationRpc,
+  WsServerListAutomationRunsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,
@@ -405,6 +428,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsNotesCreateRpc,
   WsNotesUpdateRpc,
   WsNotesDeleteRpc,
+  WsTeachListProjectsRpc,
   WsShellOpenInEditorRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,

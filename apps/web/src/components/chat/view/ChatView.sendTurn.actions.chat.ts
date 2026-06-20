@@ -12,6 +12,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   deriveComposerSendState,
   formatOutgoingPrompt,
+  revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import {
@@ -133,6 +134,9 @@ export async function sendChatTurn({
   if (!promptTextForSend) {
     return;
   }
+  const transformedPromptTextForSend = input.transformPromptForSend
+    ? input.transformPromptForSend(promptTextForSend)
+    : promptTextForSend;
 
   const sendContext = await prepareSendContext({
     input,
@@ -152,7 +156,7 @@ export async function sendChatTurn({
   const composerAnnotationsSnapshot = [...composerAnnotations];
   const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
   const messageTextWithTerminalContexts = appendTerminalContextsToPrompt(
-    promptTextForSend,
+    transformedPromptTextForSend,
     composerTerminalContextsSnapshot,
   );
   const messageTextForSend = appendBrowserAnnotationsToPrompt(
@@ -188,6 +192,7 @@ export async function sendChatTurn({
       streaming: false,
     },
   ]);
+  input.onOptimisticUserMessage?.(messageIdForSend);
   shouldAutoScrollRef.current = true;
   input.forceStickToBottom();
 
@@ -219,14 +224,14 @@ export async function sendChatTurn({
     const turnAttachments = await turnAttachmentsPromise;
     const seededTitle =
       isFirstMessage && (isDraft || thread.title.trim() === DEFAULT_THREAD_TITLE)
-        ? draftTitleFromMessage(promptForSend)
+        ? draftTitleFromMessage(transformedPromptTextForSend)
         : undefined;
     const bootstrap = buildThreadBootstrap({
       thread,
       project,
       isDraft,
       isFirstMessage,
-      promptText: promptTextForSend,
+      promptText: transformedPromptTextForSend,
       modelSelection: selectedModelSelection,
       runtimeMode,
       interactionMode,
@@ -262,7 +267,6 @@ export async function sendChatTurn({
       "subProviderID" in selectedModelSelection ? selectedModelSelection.subProviderID : undefined,
     );
   })().catch(async (err: unknown) => {
-    const { revokeUserMessagePreviewUrls } = await import("./ChatView.logic");
     restoreMessageComposerDraftAfterFailure({
       currentDraftEmpty:
         !turnStartSucceeded &&

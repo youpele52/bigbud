@@ -1,4 +1,5 @@
 import { type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
+import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
 import { Effect, Exit, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -32,6 +33,7 @@ import {
   PROVIDER,
   applyRequestedSessionConfiguration,
   parseCursorResume,
+  scheduleFullAccessPermissionAutoApproval,
   selectAutoApprovedPermissionOption,
 } from "./Adapter.helpers.ts";
 import { emitPlanUpdate, forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
@@ -207,6 +209,8 @@ export function makeStartSessionEffect(
           const decision =
             yield* Deferred.make<import("@bigbud/contracts").ProviderApprovalDecision>();
           pendingApprovals.set(requestId, { decision, kind: permissionRequest.kind });
+          const autoApproveAfterMs =
+            input.runtimeMode === "full-access" ? FULL_ACCESS_AUTO_APPROVE_AFTER_MS : undefined;
           yield* deps.offerRuntimeEvent(
             makeAcpRequestOpenedEvent({
               stamp: yield* deps.makeEventStamp(),
@@ -220,8 +224,17 @@ export function makeStartSessionEffect(
               source: "acp.jsonrpc",
               method: "session/request_permission",
               rawPayload: params,
+              ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
             }),
           );
+          if (autoApproveAfterMs !== undefined) {
+            scheduleFullAccessPermissionAutoApproval({
+              requestId,
+              pendingApprovals,
+              stopped: () => ctx?.stopped ?? false,
+              decision,
+            });
+          }
           const resolved = yield* Deferred.await(decision);
           pendingApprovals.delete(requestId);
           yield* deps.offerRuntimeEvent(

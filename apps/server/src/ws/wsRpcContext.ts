@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import {
   CommandId,
   EventId,
@@ -34,6 +34,9 @@ import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import { ProjectionNoteRepository } from "../persistence/Services/ProjectionNotes";
+import { AutomationScheduleRepository } from "../persistence/Services/AutomationScheduleRepository.ts";
+import { ProjectionThreadRepository } from "../persistence/Services/ProjectionThreads.ts";
+import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts";
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -57,6 +60,10 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const workspaceFileSystem = yield* WorkspaceFileSystem;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
   const projectionNotes = yield* ProjectionNoteRepository;
+  const projectionThreadRepository = yield* ProjectionThreadRepository;
+  const automationScheduleRepository = yield* AutomationScheduleRepository;
+  const schedulerReactor = yield* SchedulerReactor;
+  const fileSystem = yield* FileSystem.FileSystem;
 
   const serverCommandId = (tag: string) =>
     CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
@@ -206,11 +213,13 @@ export const makeWsRpcContext = Effect.gen(function* () {
 
   return {
     assertLocalGitExecutionTarget,
+    automationScheduleRepository,
     checkpointDiffQuery,
     config,
     dispatchNormalizedCommand,
     dispatchShellCommand,
     discoveryRegistry,
+    fileSystem,
     git,
     gitManager,
     gitStatusBroadcaster,
@@ -222,10 +231,12 @@ export const makeWsRpcContext = Effect.gen(function* () {
     orchestrationEngine,
     projectSetupScriptRunner,
     projectionNotes,
+    projectionThreadRepository,
     projectionSnapshotQuery,
     providerRegistry,
     providerService,
     refreshGitStatus,
+    schedulerReactor,
     serverSettings,
     startup,
     terminalManager,

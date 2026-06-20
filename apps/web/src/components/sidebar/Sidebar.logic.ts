@@ -1,7 +1,9 @@
 import type { SidebarThreadSummary, Thread } from "../../models/types";
 import { cn } from "../../lib/utils";
 import { isLatestTurnSettled } from "../../logic/session";
+import { isThreadCompletedStatus } from "../../logic/thread/threadCompletion.logic";
 import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
+export { hasUnseenCompletion } from "../../logic/thread/threadCompletion.logic";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
@@ -21,6 +23,7 @@ export {
   getProjectSortTimestamp,
   truncateThreadName,
   sortProjectsForSidebar,
+  resolveMostRecentThreadId,
 } from "./Sidebar.sort.logic";
 
 export type ThreadTraversalDirection = "previous" | "next";
@@ -60,17 +63,6 @@ type ThreadStatusInput = Pick<
 > & {
   lastVisitedAt?: string | undefined;
 };
-
-export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
-  if (!thread.latestTurn?.completedAt) return false;
-  const completedAt = Date.parse(thread.latestTurn.completedAt);
-  if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return true;
-
-  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
-  if (Number.isNaN(lastVisitedAt)) return true;
-  return completedAt > lastVisitedAt;
-}
 
 export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
@@ -321,7 +313,7 @@ export function resolveThreadStatusPill(input: {
     };
   }
 
-  if (hasUnseenCompletion(thread)) {
+  if (isThreadCompletedStatus(thread)) {
     return {
       label: "Completed",
       colorClass: "text-primary",

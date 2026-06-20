@@ -9,6 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { formatRelativeTimeLabel } from "~/utils/timestamp/timestamp.utils";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
+import { showGitCommitCopyMenu } from "./GitPanel.copy";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -119,16 +120,30 @@ export function GitPanelHistory({
           {history.map((commit) => {
             const isSelected = commit.sha === selectedCommitSha;
             return (
-              <button
+              <div
                 key={commit.sha}
-                type="button"
+                role="button"
+                tabIndex={0}
                 className={cn(
-                  "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors",
+                  "flex w-full flex-col border-b border-border/40 px-3 py-2 text-left transition-colors select-text outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
                   isSelected
                     ? "bg-accent text-accent-foreground"
                     : "text-foreground hover:bg-accent/40",
                 )}
                 onClick={() => onSelectCommit(commit.sha)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  void showGitCommitCopyMenu({
+                    commit,
+                    position: { x: event.clientX, y: event.clientY },
+                  });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectCommit(commit.sha);
+                  }
+                }}
               >
                 <span className="truncate text-sm font-medium">{commit.subject}</span>
                 {commit.tags.length > 0 ? (
@@ -165,7 +180,7 @@ export function GitPanelHistory({
                     </Tooltip>
                   ) : null}
                 </span>
-              </button>
+              </div>
             );
           })}
           {hasMoreHistory ? (
@@ -183,8 +198,16 @@ export function GitPanelHistory({
         ) : commitDetails ? (
           <div ref={detailContainerRef} className="flex h-full min-h-0 flex-col overflow-hidden">
             <div
-              className="border-b border-border/60 px-3 py-3"
+              className="border-b border-border/60 px-3 py-3 select-text"
               style={{ height: detailHeaderHeight, overflow: "auto" }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                void showGitCommitCopyMenu({
+                  commit: commitDetails,
+                  body: commitDetails.body,
+                  position: { x: event.clientX, y: event.clientY },
+                });
+              }}
             >
               <div className="text-sm font-medium text-foreground">{commitDetails.subject}</div>
               {commitDetails.tags.length > 0 ? (
@@ -206,7 +229,7 @@ export function GitPanelHistory({
                 {!selectedCommitSummary?.isPushed ? ", not pushed" : ""}
               </div>
               {commitDetails.body.trim() ? (
-                <pre className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground">
+                <pre className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground select-text">
                   {commitDetails.body.trim()}
                 </pre>
               ) : null}

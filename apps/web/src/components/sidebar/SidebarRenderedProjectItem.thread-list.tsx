@@ -34,6 +34,7 @@ interface SidebarRenderedProjectItemThreadListProps {
   cancelRename: () => void;
   branchThread: (threadId: ThreadId) => Promise<void>;
   favoriteThreadIds: ReadonlySet<ThreadId>;
+  automationThreadIds: ReadonlySet<ThreadId>;
   toggleFavoriteThread: (threadId: ThreadId) => Promise<void>;
   requestThreadDelete: (threadId: ThreadId) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
@@ -72,6 +73,7 @@ export function SidebarRenderedProjectItemThreadList({
   cancelRename,
   branchThread,
   favoriteThreadIds,
+  automationThreadIds,
   toggleFavoriteThread,
   requestThreadDelete,
   openPrLink,
@@ -126,6 +128,7 @@ export function SidebarRenderedProjectItemThreadList({
             cancelRename={cancelRename}
             branchThread={branchThread}
             favoriteThreadIds={favoriteThreadIds}
+            automationThreadIds={automationThreadIds}
             toggleFavoriteThread={toggleFavoriteThread}
             requestThreadDelete={requestThreadDelete}
             openPrLink={openPrLink}

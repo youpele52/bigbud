@@ -185,6 +185,25 @@ describe("composerDraftStore project draft thread mapping", () => {
     });
   });
 
+  it("creates a standalone draft thread when setDraftThreadContext is used first", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setDraftThreadContext(threadId, {
+      projectId,
+      branch: "feature/standalone",
+      runtimeMode: "approval-required",
+    });
+
+    expect(useComposerDraftStore.getState().getDraftThread(threadId)).toMatchObject({
+      projectId,
+      branch: "feature/standalone",
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      envMode: "local",
+    });
+    expect(useComposerDraftStore.getState().getDraftThreadByProjectId(projectId)).toBeNull();
+  });
+
   it("preserves existing branch and worktree when setProjectDraftThreadId receives undefined", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectId, threadId, {

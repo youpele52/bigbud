@@ -59,9 +59,15 @@ export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttac
   const rect = element.rect;
   const userInstruction = normalizeAnnotationComment(annotation.comment).trim();
   const normalizedInstruction = userInstruction || "(no instruction provided)";
+  const isPdfRegion = element.tag === "pdf-region";
 
-  const closingLine =
-    intent === "fix"
+  const closingLine = isPdfRegion
+    ? intent === "fix"
+      ? "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first and make the appropriate code or content change only if the user asked for one. Only use broader document context when it materially helps answer the user's question."
+      : intent === "context"
+        ? "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first when responding. Only use broader document context when it materially helps answer the user's question."
+        : "The attached screenshot is tightly cropped to the selected PDF region. Focus your answer on that selected region first. Only use broader document context when it materially helps answer the user's question."
+    : intent === "fix"
       ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
       : intent === "context"
         ? "Refer to the attached screenshot and selected element metadata when responding."

@@ -1,4 +1,5 @@
-import { FileDiff, Virtualizer } from "@pierre/diffs/react";
+import { Virtualizer } from "@pierre/diffs/react";
+import type { SelectedLineRange } from "@pierre/diffs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeftIcon,
@@ -8,18 +9,14 @@ import {
   TextWrapIcon,
   XIcon,
 } from "lucide-react";
-import { openInPreferredEditor } from "../../models/editor";
 import { cn } from "~/lib/utils";
-import { readNativeApi } from "../../rpc/nativeApi";
-import { resolvePathLinkTarget } from "../../utils/terminal";
 import { useTheme } from "../../hooks/useTheme";
-import { resolveDiffThemeName } from "../../lib/diffRendering";
+import { openFileInFilesPanel } from "../../stores/files/filesPanel.coordinator";
 import { useSettings } from "../../hooks/useSettings";
 import { formatShortTimestamp } from "../../utils/timestamp";
 import { DiffPanelLoadingState, DiffPanelShell, type DiffPanelMode } from "./DiffPanelShell";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
 import { Button } from "../ui/button";
-import { DIFF_PANEL_UNSAFE_CSS } from "./DiffPanel.styles";
 import {
   type DiffRenderMode,
   getRenderablePatch,
@@ -28,8 +25,12 @@ import {
   useTurnStripScroll,
   useDiffPanelData,
 } from "./DiffPanel.logic";
-
-type DiffThemeType = "light" | "dark";
+import { useComposerDraftStore } from "../../stores/composer";
+import { makeAnnotationId } from "../files/FilesPanel.shared";
+import type { CodeAnnotationDraft } from "../files/FilePreview";
+import { DiffPanelAnnotationComposer, type PendingDiffAnnotation } from "./DiffPanel.annotations";
+import { DiffPanelFile } from "./DiffPanelFile";
+import { useDiffAnnotateContextMenu } from "./useDiffAnnotateContextMenu";
 
 interface DiffPanelProps {
   mode?: DiffPanelMode;
@@ -42,8 +43,11 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const settings = useSettings();
   const [diffRenderMode, setDiffRenderMode] = useState<DiffRenderMode>("stacked");
   const [diffWordWrap, setDiffWordWrap] = useState(settings.diffWordWrap);
+  const [pendingAnnotation, setPendingAnnotation] = useState<PendingDiffAnnotation | null>(null);
   const patchViewportRef = useRef<HTMLDivElement>(null);
+  const pierreLineSelectionsRef = useRef(new Map<string, SelectedLineRange | null>());
   const previousDiffOpenRef = useRef(false);
+  const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
 
   const {
     turnStripRef,
@@ -57,6 +61,8 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
   const {
     diffOpen,
     activeThread,
+    activeThreadId,
+    activeProject,
     activeCwd,
     isGitRepo,
     orderedTurnDiffSummaries,
@@ -72,6 +78,8 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     selectWholeConversation,
     closeDiff,
   } = useDiffPanelData();
+
+  const canAnnotate = Boolean(activeThreadId && activeCwd);
 
   const selectedPatch = selectedTurn ? selectedTurnCheckpointDiff : conversationCheckpointDiff;
   const hasResolvedPatch = typeof selectedPatch === "string";
@@ -92,6 +100,29 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     );
   }, [renderablePatch]);
 
+  const fileDiffByPath = useMemo(() => {
+    const map = new Map<string, (typeof renderableFiles)[number]>();
+    for (const fileDiff of renderableFiles) {
+      map.set(resolveFileDiffPath(fileDiff), fileDiff);
+    }
+    return map;
+  }, [renderableFiles]);
+
+  const handlePierreLineSelectionChange = useCallback(
+    (filePath: string, range: SelectedLineRange | null) => {
+      pierreLineSelectionsRef.current.set(filePath, range);
+    },
+    [],
+  );
+
+  useDiffAnnotateContextMenu({
+    viewportRef: patchViewportRef,
+    canAnnotate,
+    fileDiffByPath,
+    pierreLineSelectionsRef,
+    onAnnotateRequest: setPendingAnnotation,
+  });
+
   useEffect(() => {
     if (diffOpen && !previousDiffOpenRef.current) {
       setDiffWordWrap(settings.diffWordWrap);
@@ -109,17 +140,40 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     target?.scrollIntoView({ block: "nearest" });
   }, [selectedFilePath, renderableFiles]);
 
-  const openDiffFileInEditor = useCallback(
-    (filePath: string) => {
-      const api = readNativeApi();
-      if (!api) return;
-      const targetPath = activeCwd ? resolvePathLinkTarget(filePath, activeCwd) : filePath;
-      void openInPreferredEditor(api, targetPath).catch((error) => {
-        console.warn("Failed to open diff file in editor.", error);
+  const openDiffFileInViewer = useCallback((filePath: string) => {
+    openFileInFilesPanel(filePath);
+  }, []);
+
+  const handleCreateCodeAnnotation = useCallback(
+    (annotation: CodeAnnotationDraft, filePath: string) => {
+      if (!activeThreadId || !activeCwd) {
+        return;
+      }
+      addAnnotation(activeThreadId, {
+        id: makeAnnotationId(),
+        kind: "code",
+        comment: annotation.comment,
+        intent: annotation.intent,
+        createdAt: new Date().toISOString(),
+        file: {
+          ...(activeProject?.name ? { projectName: activeProject.name } : {}),
+          cwd: activeCwd,
+          relativePath: filePath,
+        },
+        selection: {
+          startLine: annotation.startLine,
+          endLine: annotation.endLine,
+          text: annotation.text,
+        },
       });
     },
-    [activeCwd],
+    [activeCwd, activeProject?.name, activeThreadId, addAnnotation],
   );
+
+  useEffect(() => {
+    setPendingAnnotation(null);
+    pierreLineSelectionsRef.current.clear();
+  }, [selectedTurnId, selectedPatch]);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => updateTurnStripScrollState());
@@ -285,7 +339,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
         <>
           <div
             ref={patchViewportRef}
-            className="diff-panel-viewport min-h-0 min-w-0 flex-1 overflow-hidden"
+            className="diff-panel-viewport relative min-h-0 min-w-0 flex-1 overflow-hidden"
           >
             {checkpointDiffError && !renderablePatch && (
               <div className="px-3">
@@ -319,33 +373,18 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                   const fileKey = buildFileDiffRenderKey(fileDiff);
                   const themedFileKey = `${fileKey}:${resolvedTheme}`;
                   return (
-                    <div
+                    <DiffPanelFile
                       key={themedFileKey}
-                      data-diff-file-path={filePath}
-                      className="diff-render-file mb-3 rounded-md first:mt-3 last:mb-0"
-                      onClickCapture={(event) => {
-                        const nativeEvent = event.nativeEvent as MouseEvent;
-                        const composedPath = nativeEvent.composedPath?.() ?? [];
-                        const clickedHeader = composedPath.some((node) => {
-                          if (!(node instanceof Element)) return false;
-                          return node.hasAttribute("data-title");
-                        });
-                        if (!clickedHeader) return;
-                        openDiffFileInEditor(filePath);
-                      }}
-                    >
-                      <FileDiff
-                        fileDiff={fileDiff}
-                        options={{
-                          diffStyle: diffRenderMode === "split" ? "split" : "unified",
-                          lineDiffType: "none",
-                          overflow: diffWordWrap ? "wrap" : "scroll",
-                          theme: resolveDiffThemeName(resolvedTheme),
-                          themeType: resolvedTheme as DiffThemeType,
-                          unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
-                        }}
-                      />
-                    </div>
+                      fileDiff={fileDiff}
+                      filePath={filePath}
+                      themedFileKey={themedFileKey}
+                      diffRenderMode={diffRenderMode}
+                      diffWordWrap={diffWordWrap}
+                      resolvedTheme={resolvedTheme}
+                      canAnnotate={canAnnotate}
+                      onOpenInFilesPanel={openDiffFileInViewer}
+                      onPierreLineSelectionChange={handlePierreLineSelectionChange}
+                    />
                   );
                 })}
               </Virtualizer>
@@ -366,6 +405,15 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
                 </div>
               </div>
             )}
+            {pendingAnnotation ? (
+              <DiffPanelAnnotationComposer
+                pendingAnnotation={pendingAnnotation}
+                onCreateAnnotation={(annotation) =>
+                  handleCreateCodeAnnotation(annotation, pendingAnnotation.filePath)
+                }
+                onCancel={() => setPendingAnnotation(null)}
+              />
+            ) : null}
           </div>
         </>
       )}

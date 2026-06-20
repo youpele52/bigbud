@@ -33,16 +33,20 @@ import { useChatViewProviderSwitch } from "./chat-view-provider-switch.hooks";
 interface ChatViewInteractionsInput {
   base: ChatViewBaseState;
   composer: ChatViewComposerDerivedState;
+  onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   thread: ChatViewThreadDerivedState;
   timeline: ChatViewTimelineState;
+  transformPromptForSend?: ((prompt: string) => string) | undefined;
   runtime: ChatViewRuntimeState;
 }
 
 export function useChatViewInteractions({
   base,
   composer,
+  onOptimisticUserMessage,
   thread,
   timeline,
+  transformPromptForSend,
   runtime,
 }: ChatViewInteractionsInput) {
   const { closeExpandedImage, navigateExpandedImage } = useChatViewExpandedImage(base);
@@ -162,6 +166,8 @@ export function useChatViewInteractions({
     runtime,
     envMode,
     planHandlers,
+    onOptimisticUserMessage,
+    transformPromptForSend,
   });
 
   const {

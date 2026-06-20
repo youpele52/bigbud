@@ -1,8 +1,10 @@
 import type { ProjectEntry } from "@bigbud/contracts";
 import type { Dispatch, SetStateAction } from "react";
 
+import { buildWorkspaceFilePreviewUrl, isPdfFilePath } from "../../lib/workspaceFilePreview";
 import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
 import { joinWorkspaceEntryPath } from "./filesPanel.dnd";
 
 interface ReconcilePreviewPathAfterDirectoryRefreshInput {
@@ -80,6 +82,16 @@ export function openFilesPanelEntry(
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
 ): void {
+  if (isPdfFilePath(entry.path)) {
+    openNewBrowserTab({
+      url: buildWorkspaceFilePreviewUrl({
+        cwd: workspaceRoot,
+        relativePath: entry.path,
+      }),
+    });
+    return;
+  }
+
   if (isCodeRelatedFilePath(entry.path)) {
     setPreviewPath(entry.path);
     setPreviewPosition(null);

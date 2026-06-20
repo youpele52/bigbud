@@ -7,6 +7,8 @@ import {
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
   staticAndDevRouteLayer,
+  workspacePdfViewerRouteLayer,
+  workspaceFilePreviewRouteLayer,
 } from "./ws/http";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
@@ -32,6 +34,7 @@ import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEng
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
 import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/OrchestrationCommandReceipts";
+import { AutomationScheduleRepositoryLive } from "./persistence/Layers/AutomationScheduleRepository";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
 import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
@@ -44,6 +47,10 @@ import { GitStatusBroadcasterLive } from "./git/Layers/GitStatusBroadcaster";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
 import { OrchestrationReactorLive } from "./orchestration/Layers/OrchestrationReactor";
+import {
+  DefaultSchedulerConfigLive,
+  SchedulerReactorLive,
+} from "./orchestration/Layers/SchedulerReactor";
 import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus";
 import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
@@ -60,6 +67,7 @@ import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
+import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -114,13 +122,17 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
+  Layer.provideMerge(SchedulerReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
+  Layer.provideMerge(DefaultSchedulerConfigLive),
 );
 
 const OrchestrationEventInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationEventStoreLive,
   OrchestrationCommandReceiptRepositoryLive,
 );
+
+const AutomationInfrastructureLayerLive = AutomationScheduleRepositoryLive;
 
 const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipelineLive.pipe(
   Layer.provide(OrchestrationEventStoreLive),
@@ -129,6 +141,7 @@ const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipeline
 const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionSnapshotQueryLive,
   OrchestrationEventInfrastructureLayerLive,
+  AutomationInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
 );
 
@@ -196,6 +209,7 @@ const ProviderLayerLive = Layer.unwrap(
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
+const ThreadProjectionPersistenceLayerLive = ProjectionThreadRepositoryLive;
 
 const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -227,6 +241,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(NotesPersistenceLayerLive),
+  Layer.provideMerge(ThreadProjectionPersistenceLayerLive),
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
@@ -256,6 +271,8 @@ export const makeRoutesLayer = Layer.mergeAll(
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
+  workspacePdfViewerRouteLayer,
+  workspaceFilePreviewRouteLayer,
   staticAndDevRouteLayer,
   websocketRpcRouteLayer,
 );

@@ -18,8 +18,10 @@ import { useMemo } from "react";
 import { useSettings } from "../../../hooks/useSettings";
 import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypography";
 import { cn } from "~/lib/utils";
+import { deriveAutomationAssistantDisplayState } from "~/lib/automation";
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
+import { MessagesTimelineAutomationRequest } from "./MessagesTimeline.automationRequest";
 
 const SHELL_OUTPUT_MIN_WIDTH = "48rem";
 const SHELL_OUTPUT_MAX_WIDTH = "960px";
@@ -107,6 +109,10 @@ export function AssistantMessageBody({
 }: AssistantMessageBodyProps) {
   const messageText =
     row.message.text || (row.message.streaming ? "" : `(${stableVerbFromId(row.message.id)}...)`);
+  const automationDisplay = deriveAutomationAssistantDisplayState(messageText);
+  const renderedMessageText = automationDisplay.request
+    ? automationDisplay.visibleText
+    : messageText;
   const shellOutputMessage = isShellOutputMessage(row);
   const replyTarget = row.message.replyTo;
   const settings = useSettings();
@@ -146,11 +152,22 @@ export function AssistantMessageBody({
         {shellOutputMessage ? (
           <ShellOutputCard messageText={messageText} terminalTypography={terminalTypography} />
         ) : (
-          <ChatMarkdown
-            text={messageText}
-            cwd={markdownCwd}
-            isStreaming={Boolean(row.message.streaming)}
-          />
+          <>
+            <ChatMarkdown
+              text={renderedMessageText}
+              cwd={markdownCwd}
+              isStreaming={Boolean(row.message.streaming)}
+            />
+            {automationDisplay.request ? (
+              <MessagesTimelineAutomationRequest
+                messageCreatedAt={row.message.createdAt}
+                messageId={row.message.id}
+                request={automationDisplay.request}
+                requestPayload={automationDisplay.requestPayload}
+                streaming={Boolean(row.message.streaming)}
+              />
+            ) : null}
+          </>
         )}
         <AssistantTurnDiffCard
           messageId={row.message.id}

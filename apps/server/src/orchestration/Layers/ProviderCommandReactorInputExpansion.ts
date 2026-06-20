@@ -9,6 +9,7 @@ import { Effect, FileSystem } from "effect";
 
 import type { DiscoveryRegistryShape } from "../../provider/Services/DiscoveryRegistry.ts";
 import type { WorkspacePathsShape } from "../../workspace/Services/WorkspacePaths.ts";
+import { appendTeachSkillRuntimeContext } from "./ProviderCommandReactorInputExpansion.teach.ts";
 
 const COMPACT_MENTION_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
 const SLASH_SKILL_COMMAND_REGEX = /^\/skills?\s+([^\s]+)(?:\s+[\s\S]*)?$/i;
@@ -33,6 +34,7 @@ export type ProviderCommandReactorInputExpansionServices = {
   readonly discoveryRegistry: DiscoveryRegistryShape;
   readonly fileSystem: FileSystem.FileSystem;
   readonly workspacePaths: WorkspacePathsShape;
+  readonly resolveDefaultChatCwd: () => Effect.Effect<string>;
 };
 
 function truncateText(value: string, maxChars: number): string {
@@ -217,6 +219,8 @@ const buildDiscoveryReferenceBlock = Effect.fn("buildDiscoveryReferenceBlock")(f
   input: {
     readonly kind: "agent" | "skill";
     readonly entry: DiscoveryEntry;
+    readonly messageText: string;
+    readonly threadWorkspaceRoot?: string;
   },
 ) {
   const sourceText = yield* loadDiscoverySourceText(services, input.entry);
@@ -224,6 +228,17 @@ const buildDiscoveryReferenceBlock = Effect.fn("buildDiscoveryReferenceBlock")(f
 
   if (sourceText) {
     lines.push("", "Instructions:", truncateText(sourceText, MAX_TEXT_BLOCK_CHARS));
+  }
+
+  if (input.kind === "skill") {
+    const teachContext = yield* appendTeachSkillRuntimeContext(services, {
+      skillName: input.entry.name,
+      messageText: input.messageText,
+      ...(input.threadWorkspaceRoot ? { threadWorkspaceRoot: input.threadWorkspaceRoot } : {}),
+    });
+    if (teachContext) {
+      lines.push("", teachContext);
+    }
   }
 
   return lines.join("\n");
@@ -355,6 +370,8 @@ export const expandProviderInputMentions = (
       return buildDiscoveryReferenceBlock(services, {
         kind: mention.kind,
         entry: resolution.entry,
+        messageText: input.messageText,
+        ...(input.workspaceRoot ? { threadWorkspaceRoot: input.workspaceRoot } : {}),
       });
     });
 

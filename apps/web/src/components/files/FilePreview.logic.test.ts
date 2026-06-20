@@ -4,6 +4,7 @@ import {
   clampPreviewTargetLine,
   getFilePreviewWatchRelativePath,
   getPreviewScrollTop,
+  isMarkdownFilePath,
   shouldShowPreviewLoading,
 } from "./FilePreview.logic";
 
@@ -54,5 +55,17 @@ describe("getPreviewScrollTop", () => {
 
   it("uses the last available line when the request exceeds file length", () => {
     expect(getPreviewScrollTop(50, 12, 200)).toBe(140);
+  });
+});
+
+describe("isMarkdownFilePath", () => {
+  it("returns true for markdown file paths", () => {
+    expect(isMarkdownFilePath("docs/CHANGELOG.md")).toBe(true);
+    expect(isMarkdownFilePath("README.MDX")).toBe(true);
+  });
+
+  it("returns false for non-markdown file paths", () => {
+    expect(isMarkdownFilePath("src/index.ts")).toBe(false);
+    expect(isMarkdownFilePath("docs/readme.markdown")).toBe(false);
   });
 });
