@@ -1,6 +1,6 @@
 # bigbud
 
-bigbud is an AI workspace for developers. It brings chats, browser research, files, git workflows, and multiple AI providers into one place so work can continue without losing context.
+bigbud is an AI workspace for everyone. It keeps your research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.
 
 ## Canonical pages
 - Home: https://bigbud.app/
@@ -9,9 +9,9 @@ bigbud is an AI workspace for developers. It brings chats, browser research, fil
 - GitHub: https://github.com/youpele52/bigbud
 
 ## Product summary
-- Category: AI workspace, developer productivity software
+- Category: AI workspace, productivity software
 - Platforms: macOS, Windows, Linux
-- Core use cases: coding, research, writing, project work, switching between AI providers
+- Core use cases: research, writing, coding, file review, git workflows, switching between AI providers
 - Key workflows: browser research, file previews, git review, automations, persistent threads
 
 ## Recent product direction

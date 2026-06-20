@@ -81,37 +81,3 @@ export function summarizeChangelog(markdown: string): ChangelogSummary {
     recurringTopics: getRecurringTopics(releases),
   };
 }
-
-export function buildChangelogFaq(
-  summary: ChangelogSummary,
-): Array<{ question: string; answer: string }> {
-  const latestReleaseLabel = summary.latestRelease
-    ? `${summary.latestRelease.version} on ${summary.latestRelease.publishedAt}`
-    : "the latest release";
-  const latestTopics =
-    summary.latestRelease?.sections.slice(0, 4).join(", ") ??
-    "AI workspace improvements, provider support, and reliability fixes";
-  const recurringTopics =
-    summary.recurringTopics.slice(0, 5).join(", ") ||
-    "providers, browser tooling, git workflows, automation, and reliability";
-
-  return [
-    {
-      question: "What is bigbud?",
-      answer:
-        "bigbud is an AI workspace that brings chats, files, browser research, git workflows, and multiple AI providers into one place so you can keep work moving without constantly switching tools.",
-    },
-    {
-      question: "What is included in the bigbud changelog?",
-      answer: `The bigbud changelog tracks ${summary.releaseCount} documented releases${summary.dateRangeLabel ? ` from ${summary.dateRangeLabel}` : ""}, covering new features, UI changes, provider updates, workflow improvements, and reliability fixes.`,
-    },
-    {
-      question: "What is new in the latest bigbud release?",
-      answer: `The latest documented release is ${latestReleaseLabel}. It highlights ${latestTopics}, showing that bigbud is actively shipping workflow, platform, and usability improvements.`,
-    },
-    {
-      question: "What kinds of updates does bigbud ship most often?",
-      answer: `Across the changelog, recurring update areas include ${recurringTopics}. That pattern shows a product focus on multi-provider AI work, in-app tooling, and predictable day-to-day workflows.`,
-    },
-  ];
-}

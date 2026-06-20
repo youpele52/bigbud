@@ -11,10 +11,12 @@ function uniqueKeywords(...keywordGroups: string[][]): string[] {
 const CORE_KEYWORDS = [
   "bigbud",
   "AI workspace",
-  "AI app for developers",
+  "AI app for everyone",
   "multi-provider AI workspace",
   "AI coding workspace",
   "desktop AI workspace",
+  "AI workspace for work",
+  "AI workspace for teams",
 ];
 
 const PROVIDER_KEYWORDS = [
@@ -51,7 +53,7 @@ export const ROBOTS_CONTENT = {
 export const DEFAULT_METADATA = {
   title: APP_NAME,
   description:
-    "An AI companion workspace for getting things done. Built for developers and designed for everyone.",
+    "An AI workspace for everyone. It keeps your research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.",
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: "bigbud workspace preview",
   keywords: uniqueKeywords(CORE_KEYWORDS, PROVIDER_KEYWORDS, MODEL_KEYWORDS),
@@ -61,7 +63,7 @@ export const DEFAULT_METADATA = {
 export const HOME_METADATA = {
   title: formatPageTitle("Your AI workspace for getting things done"),
   description:
-    "An AI companion workspace for getting things done — whether you're coding, writing, analyzing, or exploring ideas. Built for developers and designed for everyone.",
+    "An AI workspace for everyone. It keeps your research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.",
   image: MARKETING_ASSETS.socialImagePath,
   imageAlt: "bigbud workspace on desktop",
   keywords: uniqueKeywords(CORE_KEYWORDS, PROVIDER_KEYWORDS, MODEL_KEYWORDS, [
@@ -69,6 +71,7 @@ export const HOME_METADATA = {
     "AI browser workspace",
     "AI git workspace",
     "bring your own AI provider",
+    "AI workspace for everyone",
   ]),
 } as const;
 
@@ -94,6 +97,6 @@ export const CHANGELOG_METADATA = {
     "bigbud changelog",
     "bigbud release notes",
     "AI workspace updates",
-    "developer tool changelog",
+    "AI app changelog",
   ]),
 } as const;

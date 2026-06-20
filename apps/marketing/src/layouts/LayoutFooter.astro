@@ -3,6 +3,7 @@ import {
   APP_NAME,
   EXTERNAL_LINK_INDICATOR,
   GITHUB_REPO_URL,
+  X_PROFILE_URL,
 } from "../constants/app";
 import "./LayoutFooter.css";
 ---
@@ -22,6 +23,23 @@ import "./LayoutFooter.css";
       <span>{APP_NAME}</span>
     </span>
     <div class="footer-links">
+      <a
+        href={X_PROFILE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Visit bigbud on X"
+      >
+        <svg
+          class="footer-social-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path fill="currentColor" d="M3.5 3.75h3.73l13.27 16.5H16.77z" />
+          <path fill="currentColor" d="M20.5 3.75h-3.73L3.5 20.25h3.73z" />
+        </svg>
+        <span aria-hidden="true"> {EXTERNAL_LINK_INDICATOR}</span>
+      </a>
       <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">
         GitHub<span aria-hidden="true"> {EXTERNAL_LINK_INDICATOR}</span>
       </a>

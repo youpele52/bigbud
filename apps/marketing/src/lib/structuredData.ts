@@ -1,4 +1,4 @@
-import { APP_NAME, GITHUB_REPO_URL } from "../constants/app";
+import { APP_NAME, GITHUB_REPO_URL, X_PROFILE_URL } from "../constants/app";
 
 interface SiteContext {
   pageUrl: string;
@@ -12,7 +12,7 @@ export function buildOrganizationSchema({ siteUrl }: SiteContext) {
     name: APP_NAME,
     url: siteUrl,
     logo: `${siteUrl}/brand/icon.png`,
-    sameAs: [GITHUB_REPO_URL],
+    sameAs: [X_PROFILE_URL, GITHUB_REPO_URL],
   };
 }
 
@@ -35,14 +35,14 @@ export function buildSoftwareApplicationSchema({
     "@type": "SoftwareApplication",
     name: APP_NAME,
     url: siteUrl,
-    applicationCategory: "DeveloperApplication",
+    applicationCategory: "ProductivityApplication",
     operatingSystem: "macOS, Windows, Linux",
     applicationSubCategory: "AI Workspace",
     downloadUrl: `${siteUrl}/download/`,
     screenshot: `${siteUrl}/screenshots/bigbud.webp`,
     image: `${siteUrl}/social/bigbud-social-preview.png`,
     description:
-      "bigbud is an AI workspace for developers that combines chats, browser research, files, git workflows, and multiple AI providers in one desktop experience.",
+      "bigbud is an AI workspace for everyone. It keeps research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.",
     offers: {
       "@type": "Offer",
       price: "0",
