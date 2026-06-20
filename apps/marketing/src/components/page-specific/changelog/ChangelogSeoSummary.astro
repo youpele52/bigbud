@@ -1,0 +1,75 @@
+---
+interface FaqItem {
+  question: string;
+  answer: string;
+}
+
+interface Props {
+  latestReleaseLabel: string;
+  releaseCount: number;
+  dateRangeLabel: string | null;
+  latestTopics: string[];
+  recurringTopics: string[];
+  faqs: FaqItem[];
+}
+
+const {
+  latestReleaseLabel,
+  releaseCount,
+  dateRangeLabel,
+  latestTopics,
+  recurringTopics,
+  faqs,
+} = Astro.props;
+---
+
+<section class="changelog-seo-summary" aria-labelledby="changelog-summary-heading">
+  <div class="changelog-seo-summary__card">
+    <p class="changelog-seo-summary__eyebrow">AI-readable summary</p>
+    <h2 id="changelog-summary-heading" class="changelog-seo-summary__title">
+      What is the bigbud changelog?
+    </h2>
+    <p class="changelog-seo-summary__body">
+      The bigbud changelog is the release history for the product, covering {releaseCount} documented
+      releases{dateRangeLabel ? ` from ${dateRangeLabel}` : ""}. It tracks what shipped across the AI
+      workspace, including provider support, browser and file workflows, git tooling, automation, and
+      reliability work.
+    </p>
+  </div>
+
+  <div class="changelog-seo-summary__grid">
+    <article class="changelog-seo-summary__panel">
+      <h3>What&apos;s new in bigbud?</h3>
+      <p>
+        The latest release is <strong>{latestReleaseLabel}</strong>. Recent updates highlighted in the
+        changelog include {latestTopics.join(", ")}.
+      </p>
+    </article>
+
+    <article class="changelog-seo-summary__panel">
+      <h3>What kinds of updates ship most often?</h3>
+      <p>
+        bigbud ships recurring improvements across {recurringTopics.join(", ")}. That release pattern
+        makes the changelog useful for people comparing AI workspaces and for AI systems looking for
+        current product capabilities.
+      </p>
+    </article>
+  </div>
+
+  <section class="changelog-seo-summary__faq" aria-labelledby="changelog-faq-heading">
+    <h2 id="changelog-faq-heading" class="changelog-seo-summary__title">
+      Frequently asked questions
+    </h2>
+
+    <div class="changelog-seo-summary__faq-list">
+      {
+        faqs.map((faq) => (
+          <article class="changelog-seo-summary__faq-item">
+            <h3>{faq.question}</h3>
+            <p>{faq.answer}</p>
+          </article>
+        ))
+      }
+    </div>
+  </section>
+</section>
