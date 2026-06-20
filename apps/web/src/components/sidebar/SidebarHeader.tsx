@@ -18,8 +18,8 @@ function SidebarWordmark() {
               to="/"
             >
               <BigbudLogo />
-              {/* TODO: re-enable the stage badge for local dev — currently hidden so the local app shows logo only. */}
-              {!import.meta.env.DEV && (
+              {/* Only show the stage badge in the desktop Electron app — Distinguishes local dev ("dev") from released builds ("beta"). The web version has no badge. */}
+              {isElectron && (
                 <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium tracking-[0.18em] text-muted-foreground/60">
                   {APP_STAGE_LABEL.toLowerCase()}
                 </span>
