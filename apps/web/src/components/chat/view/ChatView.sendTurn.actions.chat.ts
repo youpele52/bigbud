@@ -12,6 +12,7 @@ import {
   buildExpiredTerminalContextToastCopy,
   deriveComposerSendState,
   formatOutgoingPrompt,
+  revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import {
@@ -266,7 +267,6 @@ export async function sendChatTurn({
       "subProviderID" in selectedModelSelection ? selectedModelSelection.subProviderID : undefined,
     );
   })().catch(async (err: unknown) => {
-    const { revokeUserMessagePreviewUrls } = await import("./ChatView.logic");
     restoreMessageComposerDraftAfterFailure({
       currentDraftEmpty:
         !turnStartSucceeded &&

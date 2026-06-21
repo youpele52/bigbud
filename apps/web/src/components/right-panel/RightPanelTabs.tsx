@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "../ui/button";
+import { contentPanelHeaderClassName } from "../layout/ContentPanelHeader";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
-import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 import { requestRightPanel } from "~/stores/rightPanel/rightPanel.coordinator";
@@ -198,13 +198,7 @@ export function RightPanelTabs({
   };
 
   return (
-    <div
-      className={cn(
-        "flex items-center overflow-hidden border-b border-border bg-card/95 px-3",
-        isElectron && "drag-region",
-        isElectron ? "h-[52px] pt-2" : "pt-2",
-      )}
-    >
+    <div className={cn(contentPanelHeaderClassName("bg-card/95 px-3 sm:px-3"), "overflow-hidden")}>
       <div className="flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-webkit-app-region:no-drag] [&::-webkit-scrollbar]:hidden">
         {openTabs.map((tabId, index) => {
           const kind = getRightPanelTabKind(tabId);

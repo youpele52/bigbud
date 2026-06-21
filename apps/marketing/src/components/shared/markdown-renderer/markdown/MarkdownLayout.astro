@@ -10,7 +10,7 @@ interface Props {
 }
 
 const { class: className = "", rendered } = Astro.props;
-const tocItems = rendered.toc.filter((item) => item.level <= 3);
+const tocItems = rendered.toc.filter((item) => item.level === 2);
 const classes = ["md-layout", className].filter(Boolean).join(" ");
 ---
 

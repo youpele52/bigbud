@@ -10,7 +10,13 @@ export function makeTempDir(
 ): Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem | Scope.Scope> {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem.makeTempDirectoryScoped({ prefix });
+    const scope = yield* Scope.Scope;
+    const tempDir = yield* fileSystem.makeTempDirectory({ prefix });
+    yield* Scope.addFinalizer(
+      scope,
+      fileSystem.remove(tempDir, { recursive: true }).pipe(Effect.catch(() => Effect.void)),
+    );
+    return tempDir;
   });
 }
 

@@ -3,12 +3,49 @@ import changelogContent from "../../../../docs/CHANGELOG.md?raw";
 
 import MarkdownRenderer from "../components/shared/markdown-renderer/MarkdownRenderer.astro";
 import { CHANGELOG_METADATA } from "../constants/seo";
+import { summarizeChangelog } from "../lib/changelogSeo";
+import {
+  buildBreadcrumbSchema,
+  buildOrganizationSchema,
+  buildSoftwareApplicationSchema,
+  buildWebsiteSchema,
+} from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
 import "./changelog.css";
+
+const summary = summarizeChangelog(changelogContent);
+const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? Astro.url.origin;
+const pageUrl = new URL(Astro.url.pathname, siteUrl).toString();
+const changelogDescription = summary.latestRelease
+  ? `Read the ${CHANGELOG_METADATA.title.replace(" | bigbud", "")} for ${summary.latestRelease.version} and browse ${summary.releaseCount} documented bigbud releases covering AI providers, browser workflows, git tooling, automation, and reliability improvements.`
+  : CHANGELOG_METADATA.description;
+const structuredData = [
+  buildOrganizationSchema({ pageUrl, siteUrl }),
+  buildWebsiteSchema({ pageUrl, siteUrl }),
+  buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+  buildBreadcrumbSchema(pageUrl, "Changelog", siteUrl),
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: "bigbud changelog",
+    url: pageUrl,
+    description: changelogDescription,
+    isPartOf: siteUrl,
+    about: {
+      "@type": "SoftwareApplication",
+      name: "bigbud",
+    },
+    dateModified: summary.latestRelease?.isoDate ?? undefined,
+  },
+];
 ---
 
-<Layout {...CHANGELOG_METADATA}>
-    <section class="changelog-page">
-        <MarkdownRenderer content={changelogContent} />
-    </section>
+<Layout
+  {...CHANGELOG_METADATA}
+  description={changelogDescription}
+  structuredData={structuredData}
+>
+  <section class="changelog-page">
+    <MarkdownRenderer content={changelogContent} />
+  </section>
 </Layout>
