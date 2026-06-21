@@ -70,7 +70,7 @@ export const HOME_METADATA = {
     "AI chat workspace",
     "AI browser workspace",
     "AI git workspace",
-    "bring your own AI provider",
+    "use your existing AI subscriptions",
     "AI workspace for everyone",
   ]),
 } as const;
