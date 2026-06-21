@@ -2,9 +2,26 @@
 import HomeHero from "../components/page-specific/home/HomeHero.astro";
 import { MARKETING_ASSETS } from "../constants/app";
 import { HOME_METADATA } from "../constants/seo";
+import {
+  buildOrganizationSchema,
+  buildSoftwareApplicationSchema,
+  buildWebsiteSchema,
+} from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? Astro.url.origin;
+const pageUrl = new URL(Astro.url.pathname, siteUrl).toString();
+const structuredData = [
+  buildOrganizationSchema({ pageUrl, siteUrl }),
+  buildWebsiteSchema({ pageUrl, siteUrl }),
+  buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+];
 ---
 
-<Layout {...HOME_METADATA} preloadImage={MARKETING_ASSETS.homepageScreenshotPath}>
+<Layout
+  {...HOME_METADATA}
+  preloadImage={MARKETING_ASSETS.homepageScreenshotPath}
+  structuredData={structuredData}
+>
   <HomeHero />
 </Layout>

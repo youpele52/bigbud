@@ -2,9 +2,28 @@
 import DownloadExperience from "../components/page-specific/download/DownloadExperience.astro";
 import { MARKETING_ASSETS } from "../constants/app";
 import { DOWNLOAD_METADATA } from "../constants/seo";
+import {
+  buildBreadcrumbSchema,
+  buildOrganizationSchema,
+  buildSoftwareApplicationSchema,
+  buildWebsiteSchema,
+} from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? Astro.url.origin;
+const pageUrl = new URL(Astro.url.pathname, siteUrl).toString();
+const structuredData = [
+  buildOrganizationSchema({ pageUrl, siteUrl }),
+  buildWebsiteSchema({ pageUrl, siteUrl }),
+  buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+  buildBreadcrumbSchema(pageUrl, "Download", siteUrl),
+];
 ---
 
-<Layout {...DOWNLOAD_METADATA} preloadImage={MARKETING_ASSETS.downloadScreenshotPath}>
+<Layout
+  {...DOWNLOAD_METADATA}
+  preloadImage={MARKETING_ASSETS.downloadScreenshotPath}
+  structuredData={structuredData}
+>
   <DownloadExperience />
 </Layout>

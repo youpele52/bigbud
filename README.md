@@ -4,7 +4,7 @@
   <img src="apps/desktop/resources/icon.png" alt="bigbud logo" width="80">
 </p>
 
-An AI companion workspace for getting things done — whether you're coding, writing, analyzing, or exploring ideas. Built for developers and designed for everyone.
+An AI workspace for everyone. It keeps your research, writing, coding, files, and git workflows in one place so you can stay focused and get more done with less context switching.
 
 > **About the name:** This project was formally known as **bigCode** ([https://github.com/youpele52/bigCode](https://github.com/youpele52/bigCode)). The rebranding to **bigbud** reflects our evolved vision: while we excel at coding tasks, we're expanding to help anyone accomplish their goals. Like a good friend, bigbud is here to be useful to everyone — programmers and non-programmers alike.
 >

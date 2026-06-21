@@ -1,19 +1,32 @@
 .hero-visual {
   position: relative;
-  align-self: stretch;
-  min-height: 42rem;
+  width: min(100%, var(--marketing-max-width));
+  margin: 2rem auto 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: 0 0 0 2rem;
-  border-left: 1px solid var(--border);
-  perspective: 1200px;
+  justify-content: center;
+  height: 100dvh;
+  padding: clamp(4rem, 6vh, 6rem) 6rem;
+  perspective: 1400px;
   transform-style: preserve-3d;
+  scroll-snap-align: start;
+}
+
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  top: -2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100vw;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
 }
 
 .visual-frame {
   position: relative;
-  width: min(100%, 72rem);
+  width: 100%;
   border-radius: 1.1rem;
   border: 1px solid var(--border);
   background:
@@ -25,11 +38,26 @@
     0 0 0 1px rgb(255 255 255 / 0.03);
   overflow: hidden;
   opacity: 0;
-  transform: translateX(84px) translateY(26px) scale(0.96) rotateY(-10deg) rotateX(4deg);
+  transform: translateY(40px) scale(0.94) rotateX(9deg) rotateY(0deg);
+  transform-origin: center top;
   transform-style: preserve-3d;
   animation:
     screenshot-in 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards,
     float-frame 9s ease-in-out 1.2s infinite;
+}
+
+.visual-frame::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: clamp(2.25rem, 4vw, 4rem);
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0) 0%,
+    color-mix(in srgb, var(--card) 92%, transparent) 100%
+  );
+  clip-path: polygon(0 0, 100% 70%, 100% 100%, 0 100%);
+  pointer-events: none;
 }
 
 .screenshot {
@@ -47,18 +75,18 @@
 @keyframes screenshot-in {
   from {
     opacity: 0;
-    transform: translateX(84px) translateY(26px) scale(0.96) rotateY(-10deg) rotateX(4deg);
+    transform: translateY(40px) scale(0.94) rotateX(9deg) rotateY(0deg);
   }
   to {
     opacity: 1;
-    transform: translateX(0) translateY(0) scale(1) rotateY(-6deg) rotateX(3deg);
+    transform: translateY(0) scale(1) rotateX(6deg) rotateY(0deg);
   }
 }
 
 @keyframes float-frame {
   0%,
   100% {
-    transform: translateY(0) rotateY(-6deg) rotateX(3deg);
+    transform: translateY(0) rotateX(6deg) rotateY(0deg);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.06),
       0 50px 120px rgb(0 0 0 / 0.55),
@@ -66,7 +94,7 @@
       0 0 0 1px rgb(255 255 255 / 0.03);
   }
   50% {
-    transform: translateY(-10px) rotateY(-5.5deg) rotateX(2.7deg);
+    transform: translateY(-10px) rotateX(5.4deg) rotateY(0deg);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.06),
       0 70px 150px rgb(0 0 0 / 0.4),
@@ -77,19 +105,19 @@
 
 @media (max-width: 1100px) {
   .hero-visual {
+    padding: clamp(2.5rem, 4vh, 4rem) 2.5rem;
+    height: auto;
     min-height: auto;
-    padding: 1.25rem 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    justify-content: center;
+    scroll-snap-align: none;
   }
 }
 
 @media (max-width: 640px) {
   .hero-visual {
-    min-height: 0;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding: 2.5rem 2rem;
+    height: auto;
+    min-height: auto;
+    scroll-snap-align: none;
   }
 
   .visual-frame {
