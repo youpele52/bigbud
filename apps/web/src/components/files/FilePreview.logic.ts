@@ -51,6 +51,13 @@ function fileNameFromPath(pathValue: string): string {
   return segments.at(-1) ?? pathValue;
 }
 
+export function buildAbsolutePreviewPath(cwd: string, relativePath: string): string {
+  if (relativePath.length === 0) {
+    return cwd;
+  }
+  return `${cwd.replace(/\/+$/, "")}/${relativePath.replace(/^\/+/, "")}`;
+}
+
 export function inferPreviewLanguage(pathValue: string): string {
   const name = fileNameFromPath(pathValue).toLowerCase();
   if (name === "dockerfile") return "dockerfile";
