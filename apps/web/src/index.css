@@ -489,17 +489,17 @@ label:has(> select#reasoning-effort) select {
   color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground));
 }
 
-.file-preview-markdown.chat-markdown h1,
-.file-preview-markdown.chat-markdown h2,
-.file-preview-markdown.chat-markdown h3,
-.file-preview-markdown.chat-markdown h4,
-.file-preview-markdown.chat-markdown h5,
-.file-preview-markdown.chat-markdown h6 {
+:is(.file-preview-markdown, .note-markdown).chat-markdown h1,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h2,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h3,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h4,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h5,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h6 {
   letter-spacing: -0.02em;
   color: color-mix(in srgb, var(--foreground) 94%, var(--muted-foreground));
 }
 
-.file-preview-markdown.chat-markdown h1 {
+:is(.file-preview-markdown, .note-markdown).chat-markdown h1 {
   margin: 0 0 1.5rem;
   padding-bottom: 0.85rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -508,7 +508,7 @@ label:has(> select#reasoning-effort) select {
   font-weight: 700;
 }
 
-.file-preview-markdown.chat-markdown h2 {
+:is(.file-preview-markdown, .note-markdown).chat-markdown h2 {
   margin: 2rem 0 1.15rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
@@ -517,16 +517,16 @@ label:has(> select#reasoning-effort) select {
   font-weight: 700;
 }
 
-.file-preview-markdown.chat-markdown h3 {
+:is(.file-preview-markdown, .note-markdown).chat-markdown h3 {
   margin: 1.5rem 0 0.75rem;
   font-size: 1.125rem;
   line-height: 1.25;
   font-weight: 650;
 }
 
-.file-preview-markdown.chat-markdown h4,
-.file-preview-markdown.chat-markdown h5,
-.file-preview-markdown.chat-markdown h6 {
+:is(.file-preview-markdown, .note-markdown).chat-markdown h4,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h5,
+:is(.file-preview-markdown, .note-markdown).chat-markdown h6 {
   margin: 1.25rem 0 0.65rem;
   font-size: 1rem;
   line-height: 1.25;
