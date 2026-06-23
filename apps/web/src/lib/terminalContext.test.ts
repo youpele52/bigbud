@@ -226,6 +226,44 @@ describe("terminalContext", () => {
     });
   });
 
+  it("hides trailing terminal annotation blocks from visible user message text", () => {
+    const annotation = [
+      "Terminal annotation",
+      "",
+      "User instruction:",
+      "Explain this failure",
+      "",
+      "Terminal:",
+      "Label: Terminal 1",
+      "ID: terminal-1",
+      "Lines: 12-13",
+      "",
+      "Selected output:",
+      "```",
+      "error: build failed",
+      "exit code 1",
+      "```",
+    ].join("\n");
+    const prompt = `Please inspect\n\n${annotation}`;
+
+    expect(deriveDisplayedUserMessageState(prompt)).toMatchObject({
+      visibleText: "Please inspect",
+      copyText: prompt,
+      annotations: [
+        {
+          kind: "terminal",
+          text: annotation,
+          comment: "Explain this failure",
+          terminalLabel: "Terminal 1",
+          terminalId: "terminal-1",
+          lineLabel: "Lines 12-13",
+          selectedOutput: "error: build failed\nexit code 1",
+        },
+      ],
+      readDocument: null,
+    });
+  });
+
   it("hides trailing read-document payloads from the visible user message text", () => {
     const prompt = [
       "Read this document URL and use the extracted contents below.",
