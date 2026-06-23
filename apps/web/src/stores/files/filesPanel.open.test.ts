@@ -116,6 +116,12 @@ describe("canOpenPathInBrowserPanel", () => {
     ).toBe(true);
   });
 
+  it("allows workspace html files", () => {
+    expect(
+      canOpenPathInBrowserPanel("/Users/alice/project/public/index.html", "/Users/alice/project"),
+    ).toBe(true);
+  });
+
   it("rejects non-previewable workspace files", () => {
     expect(
       canOpenPathInBrowserPanel("/Users/alice/project/README.md", "/Users/alice/project"),
@@ -140,6 +146,12 @@ describe("canOpenPathInternally", () => {
     expect(canOpenPathInternally("/Users/alice/project/logo.png", "/Users/alice/project")).toBe(
       true,
     );
+  });
+
+  it("allows html files in browser and file viewer", () => {
+    expect(
+      canOpenPathInternally("/Users/alice/project/public/index.html", "/Users/alice/project"),
+    ).toBe(true);
   });
 });
 
@@ -263,6 +275,27 @@ describe("openPathInBrowserPanelIfSupported", () => {
       },
     });
   });
+
+  it("opens workspace html files in the browser panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInBrowserPanelIfSupported(
+        "/Users/alice/project/public/index.html",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
+    expect(useBrowserPanelStore.getState()).toMatchObject({
+      open: true,
+      tabsById: {
+        [browserTabIds[0] ?? ""]: {
+          url: expect.stringContaining("/api/workspace-file-preview?"),
+        },
+      },
+    });
+  });
 });
 
 describe("openPathInFilesPanelIfSupported", () => {
@@ -326,6 +359,26 @@ describe("openPathInFilesPanelIfSupported", () => {
       open: true,
       fileOpenRequest: {
         path: "assets/logo.png",
+        position: null,
+        requestId: 1,
+      },
+    });
+  });
+
+  it("opens workspace html files in the files panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInFilesPanelIfSupported(
+        "/Users/alice/project/public/index.html",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      fileOpenRequest: {
+        path: "public/index.html",
         position: null,
         requestId: 1,
       },

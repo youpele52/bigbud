@@ -1,8 +1,9 @@
 import { isRemoteExecutionTargetId } from "@bigbud/contracts";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
 import type { DirectoryState } from "./FilesPanel.shared";
+import { createDebouncedDirectoryRefresh } from "./useFilesPanelDirectoryRefresh.logic";
 
 interface UseFilesPanelDirectoryRefreshInput {
   readonly workspaceRoot: string | null;
@@ -42,7 +43,26 @@ export function useFilesPanelDirectoryRefresh({
     () => getVisibleDirectoryPaths(expandedDirectories, directoryStateByPath),
     [directoryStateByPath, expandedDirectories],
   );
-  const visibleDirectoryPathsKey = visibleDirectoryPaths.join("\u0000");
+
+  const loadDirectoryRef = useRef(loadDirectory);
+  loadDirectoryRef.current = loadDirectory;
+
+  const visibleDirectoryPathsRef = useRef(visibleDirectoryPaths);
+  visibleDirectoryPathsRef.current = visibleDirectoryPaths;
+
+  const debouncedRefreshRef = useRef(
+    createDebouncedDirectoryRefresh(
+      (relativePath, options) => loadDirectoryRef.current(relativePath, options),
+      () => visibleDirectoryPathsRef.current,
+    ),
+  );
+
+  useEffect(() => {
+    debouncedRefreshRef.current = createDebouncedDirectoryRefresh(
+      (relativePath, options) => loadDirectoryRef.current(relativePath, options),
+      () => visibleDirectoryPathsRef.current,
+    );
+  }, []);
 
   useEffect(() => {
     if (!workspaceRoot) {
@@ -54,8 +74,8 @@ export function useFilesPanelDirectoryRefresh({
       return;
     }
 
-    const refreshDirectory = (relativePath: string) => {
-      void loadDirectory(relativePath, { force: true });
+    const refreshVisibleDirectories = () => {
+      debouncedRefreshRef.current.schedule();
     };
 
     const unsubscribe = visibleDirectoryPaths.map((relativePath) =>
@@ -65,27 +85,18 @@ export function useFilesPanelDirectoryRefresh({
           ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
           ...(relativePath.length > 0 ? { relativePath } : {}),
         },
-        () => {
-          refreshDirectory(relativePath);
-        },
+        refreshVisibleDirectories,
         {
-          onResubscribe: () => {
-            refreshDirectory(relativePath);
-          },
+          onResubscribe: refreshVisibleDirectories,
         },
       ),
     );
 
     return () => {
+      debouncedRefreshRef.current.cancel();
       for (const unsubscribeDirectory of unsubscribe) {
         unsubscribeDirectory();
       }
     };
-  }, [
-    loadDirectory,
-    visibleDirectoryPaths,
-    visibleDirectoryPathsKey,
-    workspaceExecutionTargetId,
-    workspaceRoot,
-  ]);
+  }, [visibleDirectoryPaths, workspaceExecutionTargetId, workspaceRoot]);
 }

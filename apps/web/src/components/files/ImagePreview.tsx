@@ -1,14 +1,16 @@
 import { AlertCircleIcon, XIcon } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { buildWorkspaceFilePreviewUrl } from "../../lib/workspaceFilePreview";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { buildFilePreviewBreadcrumb } from "./FilePreview.logic";
+import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 
 interface ImagePreviewProps {
   cwd: string;
   relativePath: string;
+  executionTargetId?: string | undefined;
   projectName?: string | undefined;
   onBack?: (() => void) | undefined;
 }
@@ -16,22 +18,40 @@ interface ImagePreviewProps {
 export const ImagePreview = memo(function ImagePreview({
   cwd,
   relativePath,
+  executionTargetId,
   projectName,
   onBack,
 }: ImagePreviewProps) {
   const [loadError, setLoadError] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
   const breadcrumb = useMemo(
     () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
     [cwd, projectName, relativePath],
   );
-  const imageUrl = useMemo(
-    () =>
-      buildWorkspaceFilePreviewUrl({
-        cwd,
-        relativePath,
-      }),
-    [cwd, relativePath],
-  );
+  const refreshPreview = useCallback(() => {
+    setLoadError(false);
+    setPreviewVersion((current) => current + 1);
+  }, []);
+  const imageUrl = useMemo(() => {
+    const url = buildWorkspaceFilePreviewUrl({
+      cwd,
+      relativePath,
+    });
+    const separator = url.includes("?") ? "&" : "?";
+    return `${url}${separator}v=${previewVersion}`;
+  }, [cwd, previewVersion, relativePath]);
+
+  useFilePreviewRefresh({
+    cwd,
+    relativePath,
+    executionTargetId,
+    refreshPreview,
+  });
+
+  useEffect(() => {
+    setLoadError(false);
+    setPreviewVersion(0);
+  }, [relativePath]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -70,6 +90,7 @@ export const ImagePreview = memo(function ImagePreview({
           </div>
         ) : (
           <img
+            key={imageUrl}
             src={imageUrl}
             alt={breadcrumb.at(-1)?.label ?? relativePath}
             className="max-h-full max-w-full object-contain"
