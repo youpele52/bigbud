@@ -86,6 +86,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     update: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
     delete: vi.fn<(...args: any[]) => Promise<KanbanDeleteResult>>(),
     move: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
+    reorder: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
   },
   teach: {
     listProjects: vi.fn(),

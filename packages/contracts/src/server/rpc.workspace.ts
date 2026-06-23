@@ -2,6 +2,25 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
+  KanbanCard,
+  KanbanCreateError,
+  KanbanCreateInput,
+  KanbanDeleteError,
+  KanbanDeleteInput,
+  KanbanDeleteResult,
+  KanbanGetError,
+  KanbanGetInput,
+  KanbanListError,
+  KanbanListInput,
+  KanbanListResult,
+  KanbanMoveError,
+  KanbanMoveInput,
+  KanbanReorderError,
+  KanbanReorderInput,
+  KanbanUpdateError,
+  KanbanUpdateInput,
+} from "./kanban";
+import {
   Note,
   NotesCreateError,
   NotesCreateInput,
@@ -106,6 +125,48 @@ export const WsNotesDeleteRpc = Rpc.make(WS_METHODS.notesDelete, {
   payload: NotesDeleteInput,
   success: NotesDeleteResult,
   error: NotesDeleteError,
+});
+
+export const WsKanbanListRpc = Rpc.make(WS_METHODS.kanbanList, {
+  payload: KanbanListInput,
+  success: KanbanListResult,
+  error: KanbanListError,
+});
+
+export const WsKanbanGetRpc = Rpc.make(WS_METHODS.kanbanGet, {
+  payload: KanbanGetInput,
+  success: KanbanCard,
+  error: KanbanGetError,
+});
+
+export const WsKanbanCreateRpc = Rpc.make(WS_METHODS.kanbanCreate, {
+  payload: KanbanCreateInput,
+  success: KanbanCard,
+  error: KanbanCreateError,
+});
+
+export const WsKanbanUpdateRpc = Rpc.make(WS_METHODS.kanbanUpdate, {
+  payload: KanbanUpdateInput,
+  success: KanbanCard,
+  error: KanbanUpdateError,
+});
+
+export const WsKanbanDeleteRpc = Rpc.make(WS_METHODS.kanbanDelete, {
+  payload: KanbanDeleteInput,
+  success: KanbanDeleteResult,
+  error: KanbanDeleteError,
+});
+
+export const WsKanbanMoveRpc = Rpc.make(WS_METHODS.kanbanMove, {
+  payload: KanbanMoveInput,
+  success: KanbanCard,
+  error: KanbanMoveError,
+});
+
+export const WsKanbanReorderRpc = Rpc.make(WS_METHODS.kanbanReorder, {
+  payload: KanbanReorderInput,
+  success: KanbanCard,
+  error: KanbanReorderError,
 });
 
 export const WsTeachListProjectsRpc = Rpc.make(WS_METHODS.teachListProjects, {

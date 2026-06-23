@@ -7,6 +7,7 @@ import DiffPanel from "../diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../diff/DiffWorkerPoolProvider";
 import { FilesPanelContent } from "../files/FilesPanel";
 import { GitPanelContent } from "../git-panel/GitPanel";
+import { KanbanPanelContent } from "../kanban/KanbanPanel";
 import { NotesPanelContent } from "../notes/NotesPanel";
 import { TerminalPanelContent } from "../terminal/TerminalPanel";
 import { useServerKeybindings } from "~/rpc/serverState";
@@ -23,6 +24,7 @@ import {
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { shortcutLabelForCommand } from "~/models/keybindings";
 import { closeGitPanel, openGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeKanbanPanel, openKanbanPanel } from "~/stores/kanban/kanbanPanel.coordinator";
 import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
@@ -71,18 +73,21 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         gitShortcutLabel={gitShortcutLabel}
+        kanbanShortcutLabel={null}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={isGitRepo}
         onCloseBrowserTab={closeBrowserTab}
         onCloseDiff={closeDiffPanelIfOpen}
         onCloseFiles={closeFilesPanel}
         onCloseGit={closeGitPanel}
+        onCloseKanban={closeKanbanPanel}
         onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
         onOpenFiles={openFilesPanel}
         onOpenGit={openGitPanel}
+        onOpenKanban={openKanbanPanel}
         onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
         notesShortcutLabel={notesShortcutLabel}
@@ -99,12 +104,14 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   diffShortcutLabel={diffShortcutLabel}
                   filesShortcutLabel={filesShortcutLabel}
                   gitShortcutLabel={gitShortcutLabel}
+                  kanbanShortcutLabel={null}
                   hasActiveProject={Boolean(workspaceRoot)}
                   isGitRepo={isGitRepo}
                   onToggleBrowser={openNewBrowserTab}
                   onToggleDiff={openDiff}
                   onToggleFiles={openFilesPanel}
                   onToggleGit={openGitPanel}
+                  onToggleKanban={openKanbanPanel}
                   onToggleNotes={openNotesPanel}
                   onToggleTerminal={openTerminalPanel}
                   notesShortcutLabel={notesShortcutLabel}
@@ -177,6 +184,21 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     inert={!isActive ? true : undefined}
                   >
                     <NotesPanelContent activeThreadId={activeThreadId ?? null} />
+                  </div>
+                );
+              }
+
+              if (kind === "kanban") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    inert={!isActive ? true : undefined}
+                  >
+                    <KanbanPanelContent activeThreadId={activeThreadId ?? null} />
                   </div>
                 );
               }

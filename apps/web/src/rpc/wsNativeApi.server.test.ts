@@ -1,4 +1,9 @@
-import { DEFAULT_SERVER_SETTINGS, NoteId, type ServerProvider } from "@bigbud/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  KanbanCardId,
+  NoteId,
+  type ServerProvider,
+} from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import { baseServerConfig, defaultProviders, rpcClientMock } from "./wsNativeApi.test.helpers";
@@ -122,6 +127,63 @@ describe("wsNativeApi — server", () => {
     ).resolves.toEqual(note);
     await expect(api.notes.delete({ noteId: NoteId.makeUnsafe("note-1") })).resolves.toEqual({
       noteId: NoteId.makeUnsafe("note-1"),
+    });
+  });
+
+  it("forwards kanban RPCs directly to the RPC client", async () => {
+    const card = {
+      cardId: KanbanCardId.makeUnsafe("kanban/global/card-1.md"),
+      projectId: null,
+      title: "Card 1",
+      status: "backlog" as const,
+      absolutePath: "/tmp/kanban/global/card-1.md",
+      content: "# Card 1\n",
+      createdAt: "2026-06-08T00:00:00.000Z",
+      updatedAt: "2026-06-08T00:00:00.000Z",
+    };
+    rpcClientMock.kanban.list.mockResolvedValue({ cards: [card] });
+    rpcClientMock.kanban.get.mockResolvedValue(card);
+    rpcClientMock.kanban.create.mockResolvedValue(card);
+    rpcClientMock.kanban.update.mockResolvedValue(card);
+    rpcClientMock.kanban.delete.mockResolvedValue({ cardId: card.cardId });
+    rpcClientMock.kanban.move.mockResolvedValue({
+      ...card,
+      status: "todo",
+      updatedAt: "2026-06-08T00:00:01.000Z",
+    });
+    rpcClientMock.kanban.reorder.mockResolvedValue({
+      ...card,
+      updatedAt: "2026-06-08T00:00:02.000Z",
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.kanban.list({ projectId: null, scope: "global" })).resolves.toEqual({
+      cards: [card],
+    });
+    await expect(api.kanban.get({ cardId: card.cardId })).resolves.toEqual(card);
+    await expect(
+      api.kanban.create({ projectId: null, title: "Card 1", content: "# Card 1\n" }),
+    ).resolves.toEqual(card);
+    await expect(
+      api.kanban.update({
+        cardId: card.cardId,
+        title: "Card 1",
+        content: "# Card 1\n",
+      }),
+    ).resolves.toEqual(card);
+    await expect(api.kanban.delete({ cardId: card.cardId })).resolves.toEqual({
+      cardId: card.cardId,
+    });
+    await expect(api.kanban.move({ cardId: card.cardId, status: "todo" })).resolves.toMatchObject({
+      cardId: card.cardId,
+      status: "todo",
+    });
+    await expect(
+      api.kanban.reorder({ cardId: card.cardId, status: "backlog", targetIndex: 0 }),
+    ).resolves.toMatchObject({
+      cardId: card.cardId,
     });
   });
 });

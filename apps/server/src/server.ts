@@ -72,6 +72,7 @@ import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
+import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
 
 const PtyAdapterLive = Layer.unwrap(
@@ -224,7 +225,13 @@ const ProviderLayerLive = Layer.unwrap(
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
+const KanbanPersistenceLayerLive = ProjectionKanbanRepositoryLive;
 const ThreadProjectionPersistenceLayerLive = ProjectionThreadRepositoryLive;
+const ProjectionPersistenceLayerLive = Layer.mergeAll(
+  KanbanPersistenceLayerLive,
+  NotesPersistenceLayerLive,
+  ThreadProjectionPersistenceLayerLive,
+);
 
 const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -255,8 +262,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
-  Layer.provideMerge(NotesPersistenceLayerLive),
-  Layer.provideMerge(ThreadProjectionPersistenceLayerLive),
+  Layer.provideMerge(ProjectionPersistenceLayerLive),
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),

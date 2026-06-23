@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  Columns3Icon,
   DiffIcon,
   FoldersIcon,
   GitBranchIcon,
@@ -30,6 +31,7 @@ const TAB_LABELS: Record<RightPanelTabKind, string> = {
   diff: "Diff",
   files: "Files",
   git: "Git",
+  kanban: "Kanban",
   notes: "Notes",
   terminal: "Terminal",
 };
@@ -39,6 +41,7 @@ const TAB_ICONS: Record<RightPanelTabKind, React.ComponentType<{ className?: str
   diff: DiffIcon,
   files: FoldersIcon,
   git: GitBranchIcon,
+  kanban: Columns3Icon,
   notes: NotebookTextIcon,
   terminal: TerminalIcon,
 };
@@ -48,6 +51,7 @@ interface RightPanelTabsProps {
   diffShortcutLabel?: string | null;
   filesShortcutLabel: string | null;
   gitShortcutLabel?: string | null;
+  kanbanShortcutLabel?: string | null;
   hasActiveProject: boolean;
   isGitRepo?: boolean;
   notesShortcutLabel?: string | null;
@@ -55,12 +59,14 @@ interface RightPanelTabsProps {
   onCloseDiff?: () => void;
   onCloseFiles: () => void;
   onCloseGit?: () => void;
+  onCloseKanban?: () => void;
   onCloseNotes?: () => void;
   onCloseTerminal: () => void;
   onOpenNewBrowserTab: () => void;
   onOpenDiff?: () => void;
   onOpenFiles: () => void;
   onOpenGit?: () => void;
+  onOpenKanban?: () => void;
   onOpenNotes?: () => void;
   onOpenTerminal: () => void;
   terminalAvailable: boolean;
@@ -133,6 +139,7 @@ export function RightPanelTabs({
   diffShortcutLabel,
   filesShortcutLabel,
   gitShortcutLabel,
+  kanbanShortcutLabel,
   hasActiveProject,
   isGitRepo,
   notesShortcutLabel,
@@ -140,12 +147,14 @@ export function RightPanelTabs({
   onCloseDiff,
   onCloseFiles,
   onCloseGit,
+  onCloseKanban,
   onCloseNotes,
   onCloseTerminal,
   onOpenNewBrowserTab,
   onOpenDiff,
   onOpenFiles,
   onOpenGit,
+  onOpenKanban,
   onOpenNotes,
   onOpenTerminal,
   terminalAvailable,
@@ -182,6 +191,9 @@ export function RightPanelTabs({
         break;
       case "git":
         onCloseGit?.();
+        break;
+      case "kanban":
+        onCloseKanban?.();
         break;
       case "notes":
         onCloseNotes?.();
@@ -328,6 +340,13 @@ export function RightPanelTabs({
               kind="notes"
               onSelect={onOpenNotes}
               shortcutLabel={notesShortcutLabel ?? null}
+            />
+          ) : null}
+          {onOpenKanban ? (
+            <TabMenuItem
+              kind="kanban"
+              onSelect={onOpenKanban}
+              shortcutLabel={kanbanShortcutLabel ?? null}
             />
           ) : null}
           <TabMenuItem

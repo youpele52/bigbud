@@ -33,6 +33,7 @@ export const WS_METHODS = {
   kanbanUpdate: "kanban.update",
   kanbanDelete: "kanban.delete",
   kanbanMove: "kanban.move",
+  kanbanReorder: "kanban.reorder",
 
   // Teach / learning projects
   teachListProjects: "teach.listProjects",

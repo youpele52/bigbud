@@ -15,13 +15,16 @@ import {
   ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerExportThreadContextError,
   ServerReadDocumentUrlError,
   ServerWriteHandoffDocumentError,
+  ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { clamp } from "effect/Number";
 
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
+import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
@@ -248,6 +251,36 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               message: "Failed to write handoff document",
               cause,
             }),
+        }),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverExportThreadContext]: (input: { readonly threadId: ThreadId }) =>
+      observeRpcEffect(
+        WS_METHODS.serverExportThreadContext,
+        Effect.gen(function* () {
+          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.mapError(
+              (cause) =>
+                new ServerExportThreadContextError({
+                  message: "Failed to read thread snapshot",
+                  cause,
+                }),
+            ),
+          );
+          const result = yield* Effect.tryPromise({
+            try: async () =>
+              exportThreadContext({
+                threadId: input.threadId,
+                snapshot,
+                stateDir: context.config.stateDir,
+              }),
+            catch: (cause) =>
+              new ServerExportThreadContextError({
+                message: cause instanceof Error ? cause.message : "Failed to export thread context",
+                cause,
+              }),
+          });
+          return result;
         }),
         { "rpc.aggregate": "server" },
       ),
