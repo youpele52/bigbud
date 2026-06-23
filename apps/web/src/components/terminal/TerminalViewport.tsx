@@ -31,6 +31,30 @@ export interface TerminalViewportProps {
   keybindings: ResolvedKeybindingsConfig;
 }
 
+interface FitTerminalViewportInput {
+  container: Pick<HTMLDivElement, "getBoundingClientRect"> | null;
+  terminal: Pick<Terminal, "buffer" | "scrollToBottom"> | null;
+  fitAddon: Pick<FitAddon, "fit"> | null;
+  requestTerminalResize: () => void;
+}
+
+export function fitTerminalViewport(input: FitTerminalViewportInput): void {
+  const { container, terminal, fitAddon, requestTerminalResize } = input;
+  if (!terminal || !fitAddon || !container) return;
+
+  const { width, height } = container.getBoundingClientRect();
+  if (width < 32 || height < 32) {
+    return;
+  }
+
+  const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
+  fitAddon.fit();
+  if (wasAtBottom) {
+    terminal.scrollToBottom();
+  }
+  requestTerminalResize();
+}
+
 export function TerminalViewport({
   threadId,
   terminalId,
@@ -146,6 +170,15 @@ export function TerminalViewport({
       });
   });
 
+  const fitAndResizeTerminal = useEffectEvent(() => {
+    fitTerminalViewport({
+      container: containerRef.current,
+      terminal: terminalRef.current,
+      fitAddon: fitAddonRef.current,
+      requestTerminalResize,
+    });
+  });
+
   useEffect(() => {
     if (!autoFocus) return;
     void focusRequestId;
@@ -163,21 +196,54 @@ export function TerminalViewport({
   useEffect(() => {
     void drawerHeight;
     void resizeEpoch;
-    const terminal = terminalRef.current;
-    const fitAddon = fitAddonRef.current;
-    if (!terminal || !fitAddon) return;
-    const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
     const frame = window.requestAnimationFrame(() => {
-      fitAddon.fit();
-      if (wasAtBottom) {
-        terminal.scrollToBottom();
-      }
-      requestTerminalResize();
+      fitAndResizeTerminal();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
   }, [drawerHeight, resizeEpoch]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let frame: number | null = null;
+    let lastWidth = Math.round(container.getBoundingClientRect().width);
+    let lastHeight = Math.round(container.getBoundingClientRect().height);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const nextWidth = Math.round(entry.contentRect.width);
+      const nextHeight = Math.round(entry.contentRect.height);
+      if (nextWidth === lastWidth && nextHeight === lastHeight) {
+        return;
+      }
+
+      lastWidth = nextWidth;
+      lastHeight = nextHeight;
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        fitAndResizeTerminal();
+      });
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
