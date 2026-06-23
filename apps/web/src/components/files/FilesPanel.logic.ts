@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import {
   buildWorkspaceFilePreviewUrl,
+  isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
 } from "../../lib/workspaceFilePreview";
@@ -86,7 +87,7 @@ export function openFilesPanelEntry(
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
 ): void {
-  if (isPdfFilePath(entry.path) || isImageFilePath(entry.path)) {
+  if (isPdfFilePath(entry.path) || isImageFilePath(entry.path) || isHtmlFilePath(entry.path)) {
     openNewBrowserTab({
       url: buildWorkspaceFilePreviewUrl({
         cwd: workspaceRoot,

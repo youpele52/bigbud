@@ -27,4 +27,22 @@ describe("openFilesPanelEntry", () => {
     });
     expect(setPreviewPath).not.toHaveBeenCalled();
   });
+
+  it("opens workspace html files in the browser panel by default", () => {
+    openNewBrowserTabMock.mockReset();
+    const setPreviewPath = vi.fn();
+    const setPreviewPosition = vi.fn();
+
+    openFilesPanelEntry(
+      { path: "public/index.html", kind: "file" } satisfies ProjectEntry,
+      "/Users/alice/project",
+      setPreviewPath,
+      setPreviewPosition,
+    );
+
+    expect(openNewBrowserTabMock).toHaveBeenCalledWith({
+      url: expect.stringContaining("/api/workspace-file-preview?"),
+    });
+    expect(setPreviewPath).not.toHaveBeenCalled();
+  });
 });

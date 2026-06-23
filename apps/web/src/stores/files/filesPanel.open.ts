@@ -7,6 +7,7 @@ import {
 import { openNewBrowserTab } from "../browser/browserPanel.actions";
 import {
   buildWorkspaceFilePreviewUrl,
+  isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
 } from "../../lib/workspaceFilePreview";
@@ -65,7 +66,10 @@ export function canOpenPathInBrowserPanel(
   workspaceRoot: string | undefined,
 ): boolean {
   const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  return relativePath !== null && (isPdfFilePath(relativePath) || isImageFilePath(relativePath));
+  return (
+    relativePath !== null &&
+    (isPdfFilePath(relativePath) || isImageFilePath(relativePath) || isHtmlFilePath(relativePath))
+  );
 }
 
 export function canOpenPathInternally(
@@ -93,7 +97,11 @@ export function openPathInBrowserPanelIfSupported(
   if (!relativePath || !workspaceRoot) {
     return false;
   }
-  if (!isPdfFilePath(relativePath) && !isImageFilePath(relativePath)) {
+  if (
+    !isPdfFilePath(relativePath) &&
+    !isImageFilePath(relativePath) &&
+    !isHtmlFilePath(relativePath)
+  ) {
     return false;
   }
 

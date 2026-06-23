@@ -17,6 +17,9 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Clicking an image in the Files panel now opens it in the **Browser** by default, matching how PDFs already behave.
 - Right-click an image for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path** — the file viewer shows a dedicated image preview when you want to stay inside the panel.
+- Fixed the file tree and file viewer not updating after workspace changes — directory watches now refresh every visible folder in the tree (not only the watched path), keep stable subscriptions while listings reload, and retry forced refreshes that arrive mid-load. File and image previews also wait briefly after filesystem events so saved content is on disk before reload.
+- Clicking an HTML file (`.html` / `.htm`) now opens it in the **Browser** by default so pages render instead of showing raw markup in the code editor.
+- Right-click an HTML file for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path**.
 
 ## v0.1.646 (20 June, 2026)
 

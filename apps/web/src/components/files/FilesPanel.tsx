@@ -7,7 +7,6 @@ import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useDefaultChatCwd } from "../../rpc/serverState";
-import { readNativeApi } from "../../rpc/nativeApi";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useFilesPanelStore } from "../../stores/files/filesPanel.store";
 import { useProjectById, useThreadById } from "../../stores/main";
@@ -17,19 +16,11 @@ import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 import { ImagePreview } from "./ImagePreview";
 import { IpynbPreview } from "./IpynbPreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
-import {
-  applyDirectoryNavigationRequest,
-  openFilesPanelEntry,
-  reconcilePreviewPathAfterDirectoryRefresh,
-} from "./FilesPanel.logic";
-import {
-  EMPTY_ENTRIES,
-  FILE_PREVIEW_MIN_WIDTH,
-  makeAnnotationId,
-  type DirectoryState,
-} from "./FilesPanel.shared";
+import { applyDirectoryNavigationRequest, openFilesPanelEntry } from "./FilesPanel.logic";
+import { EMPTY_ENTRIES, FILE_PREVIEW_MIN_WIDTH, makeAnnotationId } from "./FilesPanel.shared";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
 import { useFilesTreeWidth } from "./FilesPanel.treeWidth";
+import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
 import { useFilesPanelDirectoryRefresh } from "./useFilesPanelDirectoryRefresh";
 
 interface FilesPanelProps {
@@ -60,13 +51,19 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     : undefined;
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
   const { fileTreeWidth, resizeTreeWidth } = useFilesTreeWidth();
-  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
-  const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
-    {},
-  );
-  const { contextMenuState, openContextMenu, closeContextMenu } = useFilesPanelContextMenu();
   const previewPathRef = useRef<string | null>(previewPath);
   const previewPositionRef = useRef(previewPosition);
+  const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
+  const { directoryStateByPath, setDirectoryStateByPath, loadDirectory } =
+    useFilesPanelDirectoryLoader({
+      workspaceRoot,
+      workspaceExecutionTargetId,
+      previewPathRef,
+      previewPositionRef,
+      setPreviewPath,
+      setPreviewPosition,
+    });
+  const { contextMenuState, openContextMenu, closeContextMenu } = useFilesPanelContextMenu();
 
   useEffect(() => {
     previewPathRef.current = previewPath;
@@ -109,7 +106,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     setDirectoryStateByPath({});
     setPreviewPath(null);
     setPreviewPosition(null);
-  }, [setPreviewPath, setPreviewPosition, workspaceRoot]);
+  }, [setDirectoryStateByPath, setPreviewPath, setPreviewPosition, workspaceRoot]);
 
   useEffect(() => {
     if (!fileOpenRequest) return;
@@ -118,73 +115,13 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     setPreviewPosition(fileOpenRequest.position);
   }, [fileOpenRequest, setPreviewPath, setPreviewPosition]);
 
-  const loadDirectory = useCallback(
-    async (relativePath: string, options?: { readonly force?: boolean }) => {
-      if (!workspaceRoot) return;
-      const existing = directoryStateByPath[relativePath];
-      if (existing?.loading) return;
-      if (existing && !options?.force) return;
-
-      setDirectoryStateByPath((current) => ({
-        ...current,
-        [relativePath]: {
-          entries: current[relativePath]?.entries ?? EMPTY_ENTRIES,
-          loading: true,
-          error: null,
-        },
-      }));
-
-      try {
-        const api = readNativeApi();
-        if (!api) {
-          throw new Error("Native API not found.");
-        }
-        const result = await api.projects.listDirectory({
-          cwd: workspaceRoot,
-          ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
-          ...(relativePath.length > 0 ? { relativePath } : {}),
-        });
-        const currentPreviewPath = previewPathRef.current;
-        const nextPreviewPath = reconcilePreviewPathAfterDirectoryRefresh({
-          previewPath: currentPreviewPath,
-          refreshedRelativePath: relativePath,
-          previousEntries: existing?.entries ?? EMPTY_ENTRIES,
-          nextEntries: result.entries,
-        });
-
-        setDirectoryStateByPath((current) => ({
-          ...current,
-          [relativePath]: {
-            entries: result.entries,
-            loading: false,
-            error: null,
-          },
-        }));
-        if (nextPreviewPath !== currentPreviewPath) {
-          setPreviewPath(nextPreviewPath);
-          if (nextPreviewPath === null && previewPositionRef.current !== null) {
-            setPreviewPosition(null);
-          }
-        }
-      } catch (error) {
-        setDirectoryStateByPath((current) => ({
-          ...current,
-          [relativePath]: {
-            entries: current[relativePath]?.entries ?? EMPTY_ENTRIES,
-            loading: false,
-            error: error instanceof Error ? error.message : "Failed to load directory.",
-          },
-        }));
-      }
-    },
-    [
-      directoryStateByPath,
-      setPreviewPath,
-      setPreviewPosition,
-      workspaceExecutionTargetId,
-      workspaceRoot,
-    ],
-  );
+  useFilesPanelDirectoryRefresh({
+    workspaceRoot,
+    workspaceExecutionTargetId,
+    expandedDirectories,
+    directoryStateByPath,
+    loadDirectory,
+  });
 
   useEffect(() => {
     if (!directoryNavigationRequest) return;
@@ -196,14 +133,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       setExpandedDirectories,
     );
   }, [directoryNavigationRequest, directoryStateByPath, loadDirectory]);
-
-  useFilesPanelDirectoryRefresh({
-    workspaceRoot,
-    workspaceExecutionTargetId,
-    expandedDirectories,
-    directoryStateByPath,
-    loadDirectory,
-  });
 
   useEffect(() => {
     if (!workspaceRoot) return;
@@ -330,6 +259,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
             <ImagePreview
               cwd={workspaceRoot}
               relativePath={previewPath}
+              executionTargetId={workspaceExecutionTargetId}
               projectName={project?.name}
               onBack={handleBack}
             />

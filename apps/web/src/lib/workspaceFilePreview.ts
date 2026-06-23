@@ -29,6 +29,17 @@ export function isImageFilePath(pathValue: string): boolean {
   return IMAGE_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
 }
 
+const HTML_FILE_EXTENSIONS = new Set([".htm", ".html"]);
+
+export function isHtmlFilePath(pathValue: string): boolean {
+  const normalized = normalizePreviewPath(pathValue).toLowerCase();
+  const extensionStart = normalized.lastIndexOf(".");
+  if (extensionStart <= 0) {
+    return false;
+  }
+  return HTML_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
+}
+
 export function isPdfFilePath(pathValue: string): boolean {
   return normalizePreviewPath(pathValue).toLowerCase().endsWith(".pdf");
 }
