@@ -229,6 +229,24 @@ export class ServerWriteHandoffDocumentError extends Schema.TaggedErrorClass<Ser
   },
 ) {}
 
+export const ServerExportThreadContextInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type ServerExportThreadContextInput = typeof ServerExportThreadContextInput.Type;
+
+export const ServerExportThreadContextResult = Schema.Struct({
+  path: TrimmedNonEmptyString,
+});
+export type ServerExportThreadContextResult = typeof ServerExportThreadContextResult.Type;
+
+export class ServerExportThreadContextError extends Schema.TaggedErrorClass<ServerExportThreadContextError>()(
+  "ServerExportThreadContextError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export const ServerVerifyExecutionTargetInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,
   cwd: Schema.optional(TrimmedNonEmptyString),

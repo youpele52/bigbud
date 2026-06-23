@@ -76,6 +76,9 @@ import {
   ServerWriteHandoffDocumentError,
   ServerWriteHandoffDocumentInput,
   ServerWriteHandoffDocumentResult,
+  ServerExportThreadContextError,
+  ServerExportThreadContextInput,
+  ServerExportThreadContextResult,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
@@ -93,6 +96,12 @@ import {
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
+  WsKanbanCreateRpc,
+  WsKanbanDeleteRpc,
+  WsKanbanGetRpc,
+  WsKanbanListRpc,
+  WsKanbanMoveRpc,
+  WsKanbanUpdateRpc,
   WsNotesCreateRpc,
   WsNotesDeleteRpc,
   WsNotesGetRpc,
@@ -178,6 +187,12 @@ export const WsServerWriteHandoffDocumentRpc = Rpc.make(WS_METHODS.serverWriteHa
   payload: ServerWriteHandoffDocumentInput,
   success: ServerWriteHandoffDocumentResult,
   error: ServerWriteHandoffDocumentError,
+});
+
+export const WsServerExportThreadContextRpc = Rpc.make(WS_METHODS.serverExportThreadContext, {
+  payload: ServerExportThreadContextInput,
+  success: ServerExportThreadContextResult,
+  error: ServerExportThreadContextError,
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
@@ -407,6 +422,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
+  WsServerExportThreadContextRpc,
   WsServerGetAutomationRpc,
   WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
@@ -423,6 +439,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsKanbanListRpc,
+  WsKanbanGetRpc,
+  WsKanbanCreateRpc,
+  WsKanbanUpdateRpc,
+  WsKanbanDeleteRpc,
+  WsKanbanMoveRpc,
   WsNotesListRpc,
   WsNotesGetRpc,
   WsNotesCreateRpc,

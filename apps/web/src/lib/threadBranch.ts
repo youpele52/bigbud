@@ -3,7 +3,7 @@
  *
  * Handles message filtering, capping, and preparation for branch operations.
  */
-import { type MessageId } from "@bigbud/contracts";
+import { type MessageId, type ThreadId } from "@bigbud/contracts";
 import { newMessageId } from "./utils";
 
 /**
@@ -45,6 +45,15 @@ export interface SeedMessageInput {
         readonly path: string;
         readonly entryKind: "file" | "directory";
       }
+    | {
+        readonly type: "thread";
+        readonly id: string;
+        readonly name: string;
+        readonly mimeType: "application/x-bigbud-thread-reference";
+        readonly sizeBytes: 0;
+        readonly threadId: ThreadId;
+        readonly title: string;
+      }
   >;
   readonly streaming: boolean;
   readonly createdAt: string;
@@ -79,6 +88,15 @@ export interface SeedMessageOutput {
         readonly sizeBytes: 0;
         readonly path: string;
         readonly entryKind: "file" | "directory";
+      }
+    | {
+        readonly type: "thread";
+        readonly id: string;
+        readonly name: string;
+        readonly mimeType: "application/x-bigbud-thread-reference";
+        readonly sizeBytes: 0;
+        readonly threadId: ThreadId;
+        readonly title: string;
       }
   >;
   readonly turnId: null;
@@ -157,6 +175,17 @@ export function prepareSeedMessages(
                   name: attachment.name,
                   mimeType: attachment.mimeType,
                   sizeBytes: attachment.sizeBytes,
+                };
+              }
+              if (attachment.type === "thread") {
+                return {
+                  type: "thread" as const,
+                  id: attachment.id,
+                  name: attachment.name,
+                  mimeType: attachment.mimeType,
+                  sizeBytes: attachment.sizeBytes,
+                  threadId: attachment.threadId,
+                  title: attachment.title,
                 };
               }
               if (attachment.type === "path") {

@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react";
+import { MessageSquareIcon, XIcon } from "lucide-react";
 import { Button } from "../../ui/button";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import type { ComposerFileAttachment } from "../../../stores/composer";
@@ -27,13 +27,24 @@ export function ComposerFilePreviews({
           key={file.id}
           className="group relative flex max-w-[160px] items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1.5"
         >
-          <VscodeEntryIcon
-            pathValue={file.filePath || file.name}
-            kind={file.entryKind === "directory" ? "directory" : "file"}
-            theme={resolvedTheme}
-            className="shrink-0"
-          />
-          <span className="truncate text-xs text-foreground/80" title={file.filePath || file.name}>
+          {file.attachmentMode === "thread-reference" ? (
+            <MessageSquareIcon className="size-3.5 shrink-0 opacity-70" />
+          ) : (
+            <VscodeEntryIcon
+              pathValue={file.filePath || file.name}
+              kind={file.entryKind === "directory" ? "directory" : "file"}
+              theme={resolvedTheme}
+              className="shrink-0"
+            />
+          )}
+          <span
+            className="truncate text-xs text-foreground/80"
+            title={
+              file.attachmentMode === "thread-reference"
+                ? (file.threadTitle ?? file.name)
+                : file.filePath || file.name
+            }
+          >
             {entryDisplayName(file)}
           </span>
           <Button

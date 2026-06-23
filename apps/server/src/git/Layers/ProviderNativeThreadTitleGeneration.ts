@@ -49,9 +49,12 @@ function buildCopilotThreadTitlePrompt(input: {
   readonly message: string;
   readonly attachments?: ThreadTitleGenerationInput["attachments"];
 }): string {
-  const attachmentLines = (input.attachments ?? []).map(
-    (attachment) => `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
-  );
+  const attachmentLines = (input.attachments ?? [])
+    .filter((attachment) => attachment.type !== "thread")
+    .map(
+      (attachment) =>
+        `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
+    );
   const sections = [
     "Write a concise thread title for a coding conversation.",
     "Return plain text only.",

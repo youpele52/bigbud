@@ -192,9 +192,12 @@ interface PromptFromMessageInput {
 }
 
 function buildPromptFromMessage(input: PromptFromMessageInput): string {
-  const attachmentLines = (input.attachments ?? []).map(
-    (attachment) => `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
-  );
+  const attachmentLines = (input.attachments ?? [])
+    .filter((attachment) => attachment.type !== "thread")
+    .map(
+      (attachment) =>
+        `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
+    );
 
   const promptSections = [
     input.instruction,

@@ -1,5 +1,8 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  type KanbanCard,
+  type KanbanDeleteResult,
+  type KanbanListResult,
   type DesktopBridge,
   type Note,
   type NotesDeleteResult,
@@ -76,6 +79,14 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     update: vi.fn<(...args: any[]) => Promise<Note>>(),
     delete: vi.fn<(...args: any[]) => Promise<NotesDeleteResult>>(),
   },
+  kanban: {
+    list: vi.fn<(...args: any[]) => Promise<KanbanListResult>>(),
+    get: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
+    create: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
+    update: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
+    delete: vi.fn<(...args: any[]) => Promise<KanbanDeleteResult>>(),
+    move: vi.fn<(...args: any[]) => Promise<KanbanCard>>(),
+  },
   teach: {
     listProjects: vi.fn(),
   },
@@ -113,6 +124,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     updateSettings: vi.fn(),
     readDocumentUrl: vi.fn(),
     writeHandoffDocument: vi.fn(),
+    exportThreadContext: vi.fn(),
     getAutomation: vi.fn(),
     listAutomations: vi.fn(),
     listAllAutomations: vi.fn(),

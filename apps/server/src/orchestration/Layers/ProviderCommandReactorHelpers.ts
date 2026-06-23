@@ -2,8 +2,15 @@
  * Pure helper utilities for ProviderCommandReactor.
  * No Effect services or side-effects — all functions are stateless transforms.
  */
-import { type OrchestrationSession, type RuntimeMode } from "@bigbud/contracts";
+import {
+  type OrchestrationMessage,
+  type OrchestrationSession,
+  type OrchestrationThread,
+  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
+  type RuntimeMode,
+} from "@bigbud/contracts";
 import { CommandId } from "@bigbud/contracts";
+import { buildBootstrapInput } from "@bigbud/shared/history";
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { Cause, Schema } from "effect";
 
@@ -190,3 +197,23 @@ export function buildGeneratedWorktreeBranchName(raw: string): string {
 
 export const serverCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
+
+export function buildResumedTurnInput(input: {
+  readonly transcriptThread: OrchestrationThread;
+  readonly latestTranscriptMessageText: string;
+  readonly latestProviderInputText: string;
+}): string {
+  const previousMessages = input.transcriptThread.messages.filter(
+    (message): message is OrchestrationMessage => message.role !== "system",
+  );
+  const transcriptMessages =
+    previousMessages.at(-1)?.role === "user" &&
+    previousMessages.at(-1)?.text === input.latestTranscriptMessageText
+      ? previousMessages.slice(0, -1)
+      : previousMessages;
+  return buildBootstrapInput(
+    transcriptMessages,
+    input.latestProviderInputText,
+    PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
+  ).text;
+}
