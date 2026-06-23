@@ -43,6 +43,17 @@ import type {
   ProjectWriteFileResult,
 } from "../workspace/project";
 import type {
+  KanbanCard,
+  KanbanCreateInput,
+  KanbanDeleteInput,
+  KanbanDeleteResult,
+  KanbanGetInput,
+  KanbanListInput,
+  KanbanListResult,
+  KanbanMoveInput,
+  KanbanUpdateInput,
+} from "./kanban";
+import type {
   Note,
   NotesCreateInput,
   NotesDeleteInput,
@@ -67,6 +78,8 @@ import type {
   ServerVerifyExecutionTargetResult,
   ServerWriteHandoffDocumentInput,
   ServerWriteHandoffDocumentResult,
+  ServerExportThreadContextInput,
+  ServerExportThreadContextResult,
 } from "./server";
 import type {
   ServerAutomationResult,
@@ -243,6 +256,14 @@ export interface NativeApi {
     update: (input: NotesUpdateInput) => Promise<Note>;
     delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
+  kanban: {
+    list: (input: KanbanListInput) => Promise<KanbanListResult>;
+    get: (input: KanbanGetInput) => Promise<KanbanCard>;
+    create: (input: KanbanCreateInput) => Promise<KanbanCard>;
+    update: (input: KanbanUpdateInput) => Promise<KanbanCard>;
+    delete: (input: KanbanDeleteInput) => Promise<KanbanDeleteResult>;
+    move: (input: KanbanMoveInput) => Promise<KanbanCard>;
+  };
   teach: {
     listProjects: (input?: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
   };
@@ -301,6 +322,9 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    exportThreadContext: (
+      input: ServerExportThreadContextInput,
+    ) => Promise<ServerExportThreadContextResult>;
     getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
     listAutomations: (input: ServerListAutomationsInput) => Promise<ServerListAutomationsResult>;
     listAllAutomations: (

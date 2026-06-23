@@ -24,7 +24,11 @@ import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
-import { UserFileReferenceChips, UserFileSourcePaths } from "./MessagesTimeline.userAttachments";
+import {
+  UserFileReferenceChips,
+  UserFileSourcePaths,
+  UserThreadReferenceChips,
+} from "./MessagesTimeline.userAttachments";
 
 export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProps) {
   const {
@@ -127,6 +131,10 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           const userImages = allAttachments.filter(
             (a): a is ChatImageAttachment => a.type === "image",
           );
+          const userThreadReferences = allAttachments.filter(
+            (a): a is Extract<(typeof allAttachments)[number], { type: "thread" }> =>
+              a.type === "thread",
+          );
           const userFileReferences = allAttachments.filter(
             (a): a is ChatFileAttachment | ChatPathAttachment =>
               a.type === "file" || a.type === "path",
@@ -200,6 +208,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   markdownCwd={markdownCwd}
                   resolvedTheme={resolvedTheme}
                 />
+                <UserThreadReferenceChips threads={userThreadReferences} />
                 <UserFileSourcePaths
                   files={userFilesWithSourcePath}
                   markdownCwd={markdownCwd}

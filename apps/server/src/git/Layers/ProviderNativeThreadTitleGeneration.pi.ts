@@ -37,6 +37,7 @@ function buildPiThreadTitlePrompt(input: {
           "Attachment metadata:",
           limitSection(
             input.attachments
+              .filter((a) => a.type !== "thread")
               .map((a) => `- ${a.name} (${a.mimeType}, ${a.sizeBytes} bytes)`)
               .join("\n"),
             4_000,

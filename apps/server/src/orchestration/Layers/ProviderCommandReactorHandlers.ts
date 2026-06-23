@@ -23,6 +23,7 @@ import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts"
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
   canReplaceThreadTitle,
@@ -77,6 +78,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const serverConfig = yield* ServerConfig;
   const workspacePaths = yield* WorkspacePaths;
   const fileSystem = yield* FileSystem.FileSystem;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
@@ -168,6 +170,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     gitStatusBroadcaster,
     textGeneration,
     serverSettingsService,
+    serverConfig,
     threadModelSelections,
     setThreadSession,
     resolveThread,
@@ -287,7 +290,6 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         }).pipe(Effect.forkScoped);
       }
     }
-
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,

@@ -132,24 +132,34 @@ export function buildOptimisticAttachments(
       previewUrl: image.previewUrl,
     })),
     ...files.map((file) =>
-      file.attachmentMode === "path-reference"
+      file.attachmentMode === "thread-reference"
         ? {
-            type: "path" as const,
+            type: "thread" as const,
             id: file.id,
             name: file.name,
-            mimeType: file.mimeType,
+            mimeType: "application/x-bigbud-thread-reference" as const,
             sizeBytes: 0 as const,
-            path: file.filePath,
-            entryKind: file.entryKind ?? "file",
+            threadId: file.threadId!,
+            title: file.threadTitle ?? file.name,
           }
-        : {
-            type: "file" as const,
-            id: file.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            sizeBytes: file.sizeBytes,
-            ...(file.filePath ? { sourcePath: file.filePath } : {}),
-          },
+        : file.attachmentMode === "path-reference"
+          ? {
+              type: "path" as const,
+              id: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              sizeBytes: 0 as const,
+              path: file.filePath,
+              entryKind: file.entryKind ?? "file",
+            }
+          : {
+              type: "file" as const,
+              id: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              sizeBytes: file.sizeBytes,
+              ...(file.filePath ? { sourcePath: file.filePath } : {}),
+            },
     ),
   ];
 }
@@ -167,6 +177,16 @@ export function buildTurnAttachments(
       dataUrl: await readFileAsDataUrl(image.file),
     })),
     ...files.map(async (file) => {
+      if (file.attachmentMode === "thread-reference") {
+        return {
+          type: "thread" as const,
+          name: file.name,
+          mimeType: "application/x-bigbud-thread-reference" as const,
+          sizeBytes: 0 as const,
+          threadId: file.threadId!,
+          title: file.threadTitle ?? file.name,
+        };
+      }
       if (file.attachmentMode === "path-reference") {
         return {
           type: "path" as const,

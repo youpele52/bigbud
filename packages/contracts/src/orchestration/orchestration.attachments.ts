@@ -49,6 +49,21 @@ export const ChatPathReferenceAttachment = Schema.Struct({
 });
 export type ChatPathReferenceAttachment = typeof ChatPathReferenceAttachment.Type;
 
+export const ChatThreadReferenceAttachment = Schema.Struct({
+  type: Schema.Literal("thread"),
+  id: ChatAttachmentId,
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)).pipe(
+    Schema.withDecodingDefault(() => "Thread reference"),
+  ),
+  mimeType: Schema.Literal("application/x-bigbud-thread-reference").pipe(
+    Schema.withDecodingDefault(() => "application/x-bigbud-thread-reference"),
+  ),
+  sizeBytes: Schema.Literal(0).pipe(Schema.withDecodingDefault(() => 0 as const)),
+  threadId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  title: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+});
+export type ChatThreadReferenceAttachment = typeof ChatThreadReferenceAttachment.Type;
+
 const UploadChatImageAttachment = Schema.Struct({
   type: Schema.Literal("image"),
   name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
@@ -98,15 +113,27 @@ export const UploadChatPathReferenceAttachment = Schema.Struct({
 });
 export type UploadChatPathReferenceAttachment = typeof UploadChatPathReferenceAttachment.Type;
 
+export const UploadChatThreadReferenceAttachment = Schema.Struct({
+  type: Schema.Literal("thread"),
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  mimeType: Schema.Literal("application/x-bigbud-thread-reference"),
+  sizeBytes: Schema.Literal(0),
+  threadId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  title: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+});
+export type UploadChatThreadReferenceAttachment = typeof UploadChatThreadReferenceAttachment.Type;
+
 export const ChatAttachment = Schema.Union([
   ChatImageAttachment,
   ChatFileAttachment,
   ChatPathReferenceAttachment,
+  ChatThreadReferenceAttachment,
 ]);
 export type ChatAttachment = typeof ChatAttachment.Type;
 export const UploadChatAttachment = Schema.Union([
   UploadChatImageAttachment,
   UploadChatFileAttachment,
   UploadChatPathReferenceAttachment,
+  UploadChatThreadReferenceAttachment,
 ]);
 export type UploadChatAttachment = typeof UploadChatAttachment.Type;

@@ -70,6 +70,14 @@ export function createWsNativeApi(): NativeApi {
       update: rpcClient.notes.update,
       delete: rpcClient.notes.delete,
     },
+    kanban: {
+      list: rpcClient.kanban.list,
+      get: rpcClient.kanban.get,
+      create: rpcClient.kanban.create,
+      update: rpcClient.kanban.update,
+      delete: rpcClient.kanban.delete,
+      move: rpcClient.kanban.move,
+    },
     teach: {
       listProjects: () => rpcClient.teach.listProjects({}),
     },
@@ -125,6 +133,7 @@ export function createWsNativeApi(): NativeApi {
       updateSettings: rpcClient.server.updateSettings,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
+      exportThreadContext: rpcClient.server.exportThreadContext,
       getAutomation: rpcClient.server.getAutomation,
       listAutomations: rpcClient.server.listAutomations,
       listAllAutomations: rpcClient.server.listAllAutomations,

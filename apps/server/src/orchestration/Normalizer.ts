@@ -281,6 +281,25 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             };
           }
 
+          if (attachment.type === "thread") {
+            const attachmentId = createAttachmentId(command.threadId);
+            if (!attachmentId) {
+              return yield* new OrchestrationDispatchCommandError({
+                message: "Failed to create a safe attachment id.",
+              });
+            }
+
+            return {
+              type: "thread" as const,
+              id: attachmentId,
+              name: attachment.name,
+              mimeType: attachment.mimeType,
+              sizeBytes: attachment.sizeBytes,
+              threadId: attachment.threadId,
+              title: attachment.title,
+            };
+          }
+
           // ── File (base64 transport) ──────────────────────────────────────────
           const parsed = parseBase64DataUrl(attachment.dataUrl);
           if (!parsed) {

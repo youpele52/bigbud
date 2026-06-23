@@ -10,15 +10,13 @@ import {
   type ChatAttachment,
   DEFAULT_SERVER_SETTINGS,
   type ModelSelection,
-  type OrchestrationMessage,
   type OrchestrationSession,
   ProviderKind,
   type OrchestrationThread,
   ThreadId,
   type ProviderSession,
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
 } from "@bigbud/contracts";
-import { buildBootstrapInput, hasAnyAttachments } from "@bigbud/shared/history";
+import { hasAnyAttachments } from "@bigbud/shared/history";
 import { Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -30,8 +28,10 @@ import type { ProviderServiceShape } from "../../provider/Services/ProviderServi
 import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd, type ServerSettingsShape } from "../../ws/serverSettings.ts";
+import { type ServerConfigShape } from "../../startup/config.ts";
 import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
 import {
+  buildResumedTurnInput,
   mapProviderSessionStatusToOrchestrationStatus,
   toNonEmptyProviderInput,
 } from "./ProviderCommandReactorHelpers.ts";
@@ -39,6 +39,11 @@ import {
   maybeGenerateAndRenameWorktreeBranchForFirstTurn,
   maybeGenerateThreadTitleForFirstTurn,
 } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+import {
+  appendReferencedThreadsToProviderInput,
+  prependThreadContextToProviderInput,
+  resolveAndExportThreadContextPath,
+} from "./ProviderCommandReactorSessionOps.threadContext.ts";
 
 /** Service bundle accepted by session-op helpers. */
 export type SessionOpServices = {
@@ -48,6 +53,7 @@ export type SessionOpServices = {
   readonly gitStatusBroadcaster: GitStatusBroadcasterShape;
   readonly textGeneration: TextGenerationShape;
   readonly serverSettingsService: ServerSettingsShape;
+  readonly serverConfig: ServerConfigShape;
   readonly threadModelSelections: Map<string, ModelSelection>;
   readonly setThreadSession: (input: {
     readonly threadId: ThreadId;
@@ -77,26 +83,6 @@ function shouldRebuildProviderContextFromTranscript(input: {
     return false;
   }
   return true;
-}
-
-function buildResumedTurnInput(input: {
-  readonly transcriptThread: OrchestrationThread;
-  readonly latestTranscriptMessageText: string;
-  readonly latestProviderInputText: string;
-}): string {
-  const previousMessages = input.transcriptThread.messages.filter(
-    (message): message is OrchestrationMessage => message.role !== "system",
-  );
-  const transcriptMessages =
-    previousMessages.at(-1)?.role === "user" &&
-    previousMessages.at(-1)?.text === input.latestTranscriptMessageText
-      ? previousMessages.slice(0, -1)
-      : previousMessages;
-  return buildBootstrapInput(
-    transcriptMessages,
-    input.latestProviderInputText,
-    PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
-  ).text;
 }
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
@@ -324,15 +310,32 @@ export const sendTurnForThread = (services: SessionOpServices) =>
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
 
-    const normalizedInput = toNonEmptyProviderInput(
-      shouldBootstrapFromTranscript
-        ? buildResumedTurnInput({
-            transcriptThread: bootstrapThread ?? thread,
-            latestTranscriptMessageText: input.messageText,
-            latestProviderInputText: input.providerInputText ?? input.messageText,
-          })
-        : (input.providerInputText ?? input.messageText),
-    );
+    yield* resolveAndExportThreadContextPath({
+      thread,
+      stateDir: services.serverConfig.stateDir,
+    });
+
+    const baseInput = shouldBootstrapFromTranscript
+      ? buildResumedTurnInput({
+          transcriptThread: bootstrapThread ?? thread,
+          latestTranscriptMessageText: input.messageText,
+          latestProviderInputText: input.providerInputText ?? input.messageText,
+        })
+      : (input.providerInputText ?? input.messageText);
+    const providerInputWithCurrentThread = baseInput
+      ? prependThreadContextToProviderInput({
+          providerInputText: baseInput,
+          threadId: thread.id,
+          threadTitle: thread.title,
+        })
+      : baseInput;
+    const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
+      providerInputText: providerInputWithCurrentThread ?? "",
+      currentThreadId: thread.id,
+      attachments: normalizedAttachments,
+      resolveThread,
+    });
+    const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
     const sessionModelSwitch =
       activeSession === undefined
         ? "in-session"
@@ -349,11 +352,14 @@ export const sendTurnForThread = (services: SessionOpServices) =>
           : requestedModelSelection
         : input.modelSelection;
 
+    const providerAttachments = normalizedAttachments.filter(
+      (attachment) => attachment.type !== "thread",
+    );
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
       ...(normalizedInput ? { input: normalizedInput } : {}),
-      ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
+      ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
     });

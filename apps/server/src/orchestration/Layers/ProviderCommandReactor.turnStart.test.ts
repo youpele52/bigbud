@@ -236,4 +236,79 @@ describe("ProviderCommandReactor", () => {
       `- report.pdf (application/pdf, 120000 bytes) -> ${sourcePath}`,
     );
   });
+
+  it("prepends current thread context to provider input", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-context"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-context"),
+          role: "user",
+          text: "hello reactor",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
+    expect(sendInput?.input).toContain("Current thread context:");
+    expect(sendInput?.input).toContain("Thread ID: thread-1");
+    expect(sendInput?.input).toContain("Thread title:");
+    expect(sendInput?.input).toContain(
+      "You can rename or archive the current thread if asked. You must not delete threads.",
+    );
+    expect(sendInput?.input).toContain("hello reactor");
+  });
+
+  it("inlines referenced thread context for thread attachments", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-thread-reference"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-thread-reference"),
+          role: "user",
+          text: "use this as context",
+          attachments: [
+            {
+              type: "thread",
+              id: "thread-ref-1",
+              name: "Referenced thread",
+              mimeType: "application/x-bigbud-thread-reference",
+              sizeBytes: 0,
+              threadId: ThreadId.makeUnsafe("thread-2"),
+              title: "Referenced thread",
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    const sendInput = harness.sendTurn.mock.calls[0]?.[0] as
+      | { input?: string; attachments?: ReadonlyArray<{ type: string }> }
+      | undefined;
+    expect(sendInput?.input).toContain("<attached_threads>");
+    expect(sendInput?.input).toContain("Referenced thread");
+    expect(sendInput?.input).toContain("Thread ID: thread-2");
+    expect(sendInput?.attachments).toBeUndefined();
+  });
 });

@@ -1,5 +1,9 @@
-import { ChevronDownIcon } from "lucide-react";
-import type { ChatFileAttachment, ChatPathAttachment } from "../../../models/types/app.types";
+import { ChevronDownIcon, MessageSquareIcon } from "lucide-react";
+import type {
+  ChatFileAttachment,
+  ChatPathAttachment,
+  ChatThreadAttachment,
+} from "../../../models/types/app.types";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
 import { cn } from "~/lib/utils";
 import {
@@ -12,6 +16,27 @@ import { openChatFileTarget } from "../common/chatFileTargets";
 type UserFileReference = ChatFileAttachment | ChatPathAttachment;
 type UserFileWithSourcePath = ChatFileAttachment & { sourcePath: string };
 type VscodeIconTheme = "light" | "dark";
+
+export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThreadAttachment> }) {
+  if (props.threads.length === 0) return null;
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {props.threads.map((thread) => (
+        <div
+          key={thread.id}
+          className="flex min-w-0 max-w-[180px] items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1"
+          title={thread.title}
+        >
+          <MessageSquareIcon className="size-3 shrink-0 opacity-60" />
+          <span className="min-w-0 truncate text-[11px] text-muted-foreground/60">
+            {thread.title}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function openChatFilePath(path: string, markdownCwd: string | undefined): void {
   const targetPath = resolveMarkdownFileLinkTarget(path, markdownCwd);

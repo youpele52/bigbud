@@ -122,14 +122,29 @@ export function createComposerAttachmentActions(
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         const existingIds = new Set(existing.files.map((file) => file.id));
         const existingPaths = new Set(existing.files.map((file) => file.filePath).filter(Boolean));
+        const existingThreadIds = new Set(
+          existing.files
+            .filter((file) => file.attachmentMode === "thread-reference" && file.threadId)
+            .map((file) => file.threadId!),
+        );
         const deduped: ComposerFileAttachment[] = [];
         for (const file of files) {
           if (existingIds.has(file.id)) continue;
+          if (
+            file.attachmentMode === "thread-reference" &&
+            file.threadId &&
+            existingThreadIds.has(file.threadId)
+          ) {
+            continue;
+          }
           if (file.filePath && existingPaths.has(file.filePath)) continue;
           deduped.push(file);
           existingIds.add(file.id);
           if (file.filePath) {
             existingPaths.add(file.filePath);
+          }
+          if (file.attachmentMode === "thread-reference" && file.threadId) {
+            existingThreadIds.add(file.threadId);
           }
         }
         if (deduped.length === 0) return state;

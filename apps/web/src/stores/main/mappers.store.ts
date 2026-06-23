@@ -8,6 +8,7 @@ import {
   type OrchestrationSessionStatus,
   type OrchestrationThread,
   type ProviderKind,
+  ThreadId,
 } from "@bigbud/contracts";
 import { resolveModelSlugForProvider } from "@bigbud/shared/model";
 import {
@@ -106,6 +107,17 @@ export function mapSession(session: OrchestrationSession): Thread["session"] {
 
 export function mapMessage(message: OrchestrationMessage): ChatMessage {
   const attachments = message.attachments?.map((attachment) => {
+    if (attachment.type === "thread") {
+      return {
+        type: "thread" as const,
+        id: attachment.id,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        sizeBytes: attachment.sizeBytes,
+        threadId: ThreadId.makeUnsafe(attachment.threadId),
+        title: attachment.title,
+      };
+    }
     if (attachment.type === "path") {
       return {
         type: "path" as const,
