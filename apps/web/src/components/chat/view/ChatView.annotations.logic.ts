@@ -1,5 +1,6 @@
 import {
   isCodeAnnotationAttachment,
+  isTerminalAnnotationAttachment,
   type ComposerAnnotationAttachment,
 } from "../../../stores/composer";
 import {
@@ -8,6 +9,7 @@ import {
   normalizeBrowserAnnotationPage,
   normalizeBrowserAnnotationViewport,
   type ComposerCodeAnnotationAttachment,
+  type ComposerTerminalAnnotationAttachment,
 } from "../../../stores/composer/types.annotation.store";
 
 export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAttachment): string {
@@ -48,9 +50,51 @@ export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAtta
   return lines.join("\n");
 }
 
+export function buildTerminalAnnotationPrompt(
+  annotation: ComposerTerminalAnnotationAttachment,
+): string {
+  const userInstruction = normalizeAnnotationComment(annotation.comment).trim();
+  const normalizedInstruction = userInstruction || "(no instruction provided)";
+  const lineLabel =
+    annotation.selection.startLine === annotation.selection.endLine
+      ? `Line: ${annotation.selection.startLine}`
+      : `Lines: ${annotation.selection.startLine}-${annotation.selection.endLine}`;
+  const closingLine =
+    annotation.intent === "fix"
+      ? "Use the selected terminal output and user instruction to make the appropriate change."
+      : annotation.intent === "context"
+        ? "Use the selected terminal output as context when responding."
+        : undefined;
+  const lines = [
+    "Terminal annotation",
+    "",
+    "User instruction:",
+    normalizedInstruction,
+    "",
+    "Terminal:",
+    `Label: ${annotation.terminal.terminalLabel}`,
+    `ID: ${annotation.terminal.terminalId}`,
+    lineLabel,
+    "",
+    "Selected output:",
+    "```",
+    annotation.selection.text,
+    "```",
+  ];
+
+  if (closingLine) {
+    lines.push("", closingLine);
+  }
+
+  return lines.join("\n");
+}
+
 export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttachment): string {
   if (isCodeAnnotationAttachment(annotation)) {
     return buildCodeAnnotationPrompt(annotation);
+  }
+  if (isTerminalAnnotationAttachment(annotation)) {
+    return buildTerminalAnnotationPrompt(annotation);
   }
   const element = normalizeBrowserAnnotationElement(annotation.element);
   const page = normalizeBrowserAnnotationPage(annotation.page);

@@ -5,14 +5,20 @@ import {
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useSettings } from "../../hooks/useSettings";
+import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
+import { makeAnnotationId } from "../files/FilesPanel.shared";
 import { terminalFontFamilyFromSettings } from "./terminalTypography";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
+import {
+  TerminalViewportAnnotationComposer,
+  type PendingTerminalAnnotation,
+} from "./TerminalViewport.annotations";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
@@ -71,7 +77,8 @@ export function TerminalViewport({
   drawerHeight,
   keybindings,
 }: TerminalViewportProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const hasHandledExitRef = useRef(false);
@@ -89,6 +96,39 @@ export function TerminalViewport({
   const handleAddTerminalContext = useEffectEvent((selection: TerminalContextSelection) => {
     onAddTerminalContext(selection);
   });
+  const [pendingAnnotation, setPendingAnnotation] = useState<PendingTerminalAnnotation | null>(
+    null,
+  );
+  const handleRequestTerminalAnnotation = useEffectEvent(
+    (input: { selection: TerminalContextSelection; position: { x: number; y: number } }) => {
+      setPendingAnnotation({
+        selection: input.selection,
+        anchorX: input.position.x,
+        anchorY: input.position.y,
+      });
+    },
+  );
+  const handleCreateTerminalAnnotation = useEffectEvent(
+    (input: { intent: AnnotationIntent; comment: string; selection: TerminalContextSelection }) => {
+      useComposerDraftStore.getState().addAnnotation(threadId, {
+        id: makeAnnotationId(),
+        kind: "terminal",
+        comment: input.comment,
+        intent: input.intent,
+        createdAt: new Date().toISOString(),
+        terminal: {
+          terminalId: input.selection.terminalId,
+          terminalLabel: input.selection.terminalLabel,
+        },
+        selection: {
+          startLine: input.selection.lineStart,
+          endLine: input.selection.lineEnd,
+          text: input.selection.text,
+        },
+      });
+      setPendingAnnotation(null);
+    },
+  );
   const readTerminalLabel = useEffectEvent(() => terminalLabel);
   const settings = useSettings();
   const terminalFontFamily = terminalFontFamilyFromSettings(settings.terminalFontFamily);
@@ -112,7 +152,7 @@ export function TerminalViewport({
   });
 
   useTerminalViewportSession({
-    containerRef,
+    containerRef: mountRef,
     terminalRef,
     fitAddonRef,
     hasHandledExitRef,
@@ -136,6 +176,7 @@ export function TerminalViewport({
     usesBundledTerminalFont,
     onSessionExited: handleSessionExited,
     onAddTerminalContext: handleAddTerminalContext,
+    onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
   });
 
   useEffect(() => {
@@ -172,7 +213,7 @@ export function TerminalViewport({
 
   const fitAndResizeTerminal = useEffectEvent(() => {
     fitTerminalViewport({
-      container: containerRef.current,
+      container: mountRef.current,
       terminal: terminalRef.current,
       fitAddon: fitAddonRef.current,
       requestTerminalResize,
@@ -205,7 +246,7 @@ export function TerminalViewport({
   }, [drawerHeight, resizeEpoch]);
 
   useEffect(() => {
-    const container = containerRef.current;
+    const container = wrapperRef.current;
     if (!container || typeof ResizeObserver === "undefined") {
       return;
     }
@@ -246,6 +287,15 @@ export function TerminalViewport({
   }, []);
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
+    <div ref={wrapperRef} className="relative h-full w-full overflow-hidden rounded-[4px]">
+      <div ref={mountRef} className="h-full w-full" />
+      {pendingAnnotation ? (
+        <TerminalViewportAnnotationComposer
+          pendingAnnotation={pendingAnnotation}
+          onCreateAnnotation={handleCreateTerminalAnnotation}
+          onCancel={() => setPendingAnnotation(null)}
+        />
+      ) : null}
+    </div>
   );
 }

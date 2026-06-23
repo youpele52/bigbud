@@ -7,6 +7,7 @@ import {
 export type {
   ParsedBrowserAnnotationEntry,
   ParsedCodeAnnotationEntry,
+  ParsedTerminalAnnotationEntry,
   ParsedUserAnnotationEntry,
 } from "./terminalContext.annotations";
 
