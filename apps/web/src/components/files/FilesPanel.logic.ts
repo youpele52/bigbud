@@ -1,7 +1,11 @@
 import type { ProjectEntry } from "@bigbud/contracts";
 import type { Dispatch, SetStateAction } from "react";
 
-import { buildWorkspaceFilePreviewUrl, isPdfFilePath } from "../../lib/workspaceFilePreview";
+import {
+  buildWorkspaceFilePreviewUrl,
+  isImageFilePath,
+  isPdfFilePath,
+} from "../../lib/workspaceFilePreview";
 import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
@@ -82,7 +86,7 @@ export function openFilesPanelEntry(
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
 ): void {
-  if (isPdfFilePath(entry.path)) {
+  if (isPdfFilePath(entry.path) || isImageFilePath(entry.path)) {
     openNewBrowserTab({
       url: buildWorkspaceFilePreviewUrl({
         cwd: workspaceRoot,

@@ -2,6 +2,22 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.647 (23 June, 2026)
+
+### Terminal
+
+- Added **Annotate selection** to the terminal text-selection menu alongside **Add to chat** — select terminal output, choose **Annotate selection**, and use the same Ask / Context / Fix composer panel already available in the file viewer, diff panel, and browser. Annotations appear as chips in the composer and in the message timeline with the selected output preserved.
+- Fixed terminal refitting when the panel is resized — the viewport now reflows wrapped lines and notifies the backend when the container width changes, not only when the drawer height changes, so output stays readable after sidebar or panel layout changes.
+
+### Desktop
+
+- Local and development desktop builds now use a distinct inverted bigbud icon (dark background, white glyph) so you can tell at a glance whether you are running a dev build or a packaged production install.
+
+### Files Panel
+
+- Clicking an image in the Files panel now opens it in the **Browser** by default, matching how PDFs already behave.
+- Right-click an image for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path** — the file viewer shows a dedicated image preview when you want to stay inside the panel.
+
 ## v0.1.646 (20 June, 2026)
 
 ### Teach Skill

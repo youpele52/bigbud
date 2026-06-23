@@ -5,7 +5,11 @@ import {
   stripPathPositionSuffix,
 } from "../../models/editor";
 import { openNewBrowserTab } from "../browser/browserPanel.actions";
-import { buildWorkspaceFilePreviewUrl, isPdfFilePath } from "../../lib/workspaceFilePreview";
+import {
+  buildWorkspaceFilePreviewUrl,
+  isImageFilePath,
+  isPdfFilePath,
+} from "../../lib/workspaceFilePreview";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
 
@@ -49,10 +53,11 @@ export function canOpenPathInFilesPanel(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  return (
-    isCodeRelatedFilePath(targetPath) &&
-    resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot) !== null
-  );
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  if (relativePath === null) {
+    return false;
+  }
+  return isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath);
 }
 
 export function canOpenPathInBrowserPanel(
@@ -60,7 +65,7 @@ export function canOpenPathInBrowserPanel(
   workspaceRoot: string | undefined,
 ): boolean {
   const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  return relativePath !== null && isPdfFilePath(relativePath);
+  return relativePath !== null && (isPdfFilePath(relativePath) || isImageFilePath(relativePath));
 }
 
 export function canOpenPathInternally(
@@ -85,7 +90,10 @@ export function openPathInBrowserPanelIfSupported(
   workspaceRoot: string | undefined,
 ): boolean {
   const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (!relativePath || !workspaceRoot || !isPdfFilePath(relativePath)) {
+  if (!relativePath || !workspaceRoot) {
+    return false;
+  }
+  if (!isPdfFilePath(relativePath) && !isImageFilePath(relativePath)) {
     return false;
   }
 
@@ -103,7 +111,10 @@ export function openPathInFilesPanelIfSupported(
   workspaceRoot: string | undefined,
 ): boolean {
   const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (!relativePath || !isCodeRelatedFilePath(targetPath)) {
+  if (!relativePath) {
+    return false;
+  }
+  if (!isCodeRelatedFilePath(targetPath) && !isImageFilePath(targetPath)) {
     return false;
   }
 

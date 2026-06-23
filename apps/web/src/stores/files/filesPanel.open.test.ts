@@ -98,7 +98,7 @@ describe("canOpenPathInFilesPanel", () => {
 
   it("rejects unsupported files even when they are in the workspace", () => {
     expect(canOpenPathInFilesPanel("/Users/alice/project/logo.png", "/Users/alice/project")).toBe(
-      false,
+      true,
     );
   });
 });
@@ -110,7 +110,13 @@ describe("canOpenPathInBrowserPanel", () => {
     ).toBe(true);
   });
 
-  it("rejects non-PDF workspace files", () => {
+  it("allows workspace images", () => {
+    expect(
+      canOpenPathInBrowserPanel("/Users/alice/project/assets/logo.png", "/Users/alice/project"),
+    ).toBe(true);
+  });
+
+  it("rejects non-previewable workspace files", () => {
     expect(
       canOpenPathInBrowserPanel("/Users/alice/project/README.md", "/Users/alice/project"),
     ).toBe(false);
@@ -128,6 +134,12 @@ describe("canOpenPathInternally", () => {
     expect(
       canOpenPathInternally("/Users/alice/project/docs/report.pdf", "/Users/alice/project"),
     ).toBe(true);
+  });
+
+  it("allows image previews in the files panel", () => {
+    expect(canOpenPathInternally("/Users/alice/project/logo.png", "/Users/alice/project")).toBe(
+      true,
+    );
   });
 });
 
@@ -230,6 +242,27 @@ describe("openPathInBrowserPanelIfSupported", () => {
       expect.stringContaining("report-4.pdf"),
     ]);
   });
+
+  it("opens workspace images in the browser panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInBrowserPanelIfSupported(
+        "/Users/alice/project/assets/logo.png",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
+    expect(useBrowserPanelStore.getState()).toMatchObject({
+      open: true,
+      tabsById: {
+        [browserTabIds[0] ?? ""]: {
+          url: expect.stringContaining("/api/workspace-file-preview?"),
+        },
+      },
+    });
+  });
 });
 
 describe("openPathInFilesPanelIfSupported", () => {
@@ -273,6 +306,26 @@ describe("openPathInFilesPanelIfSupported", () => {
     expect(useFilesPanelStore.getState()).toMatchObject({
       fileOpenRequest: {
         path: "src/new.ts",
+        position: null,
+        requestId: 1,
+      },
+    });
+  });
+
+  it("opens workspace images in the files panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInFilesPanelIfSupported(
+        "/Users/alice/project/assets/logo.png",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      fileOpenRequest: {
+        path: "assets/logo.png",
         position: null,
         requestId: 1,
       },
