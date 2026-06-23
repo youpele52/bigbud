@@ -190,14 +190,14 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       yield* notes.create({
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Project note",
-        content: "project",
+        content: "# Project note\n\nproject body",
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
       });
       yield* notes.create({
         projectId: null,
         title: "Global note",
-        content: "global",
+        content: "# Global note\n\nglobal body",
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T01:00:00.000Z",
       });
@@ -219,6 +219,101 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         allNotes.map((note) => note.title),
         ["Global note", "Project note"],
       );
+    }),
+  );
+
+  it.effect("creates notes with stable datetime-based filenames", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+
+      const created = yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "My Note Title",
+        content: "# My Note Title\n\nbody",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+
+      assert.ok(created.noteId.endsWith(".md"), "noteId should end with .md");
+      assert.ok(!created.noteId.includes("My Note Title"), "noteId should not contain the title");
+      assert.strictEqual(created.title, "My Note Title");
+    }),
+  );
+
+  it.effect("does not rename file when note title changes", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+
+      const created = yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "Original Title",
+        content: "# Original Title\n\nbody",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+
+      const originalNoteId = created.noteId;
+
+      const updated = yield* notes.update({
+        noteId: originalNoteId,
+        title: "New Title",
+        content: "# New Title\n\nupdated body",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+
+      assert.strictEqual(updated.noteId, originalNoteId);
+      assert.strictEqual(updated.title, "New Title");
+
+      const listed = yield* notes.list({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        scope: "project",
+      });
+      const found = listed.find((n) => n.noteId === originalNoteId);
+      assert.ok(found, "note should still exist with same noteId");
+      assert.strictEqual(found?.title, "New Title");
+    }),
+  );
+
+  it.effect("appends counter when creating multiple notes in the same second", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+
+      const created1 = yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "First",
+        content: "first",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+      const created2 = yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "Second",
+        content: "second",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+
+      assert.notStrictEqual(created1.noteId, created2.noteId);
+      assert.ok(created1.noteId.endsWith(".md"));
+      assert.ok(created2.noteId.endsWith(".md"));
+    }),
+  );
+
+  it.effect("derives title from H1 in content, not from filename", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+
+      const created = yield* notes.create({
+        projectId: ProjectId.makeUnsafe("project-null-options"),
+        title: "Ignored Title",
+        content: "# Real Title\n\nbody",
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+      });
+
+      const byId = yield* notes.getById({ noteId: created.noteId });
+      assert.ok(Option.isSome(byId));
+      assert.strictEqual(Option.getOrNull(byId)?.title, "Real Title");
     }),
   );
 });
