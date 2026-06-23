@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { Effect, Layer } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
@@ -16,7 +18,10 @@ import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
-import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
+import {
+  cleanupProviderLogDirectories,
+  makeEventNdjsonLogger,
+} from "./provider/Layers/EventNdjsonLogger";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
@@ -157,13 +162,23 @@ const CheckpointingLayerLive = Layer.empty.pipe(
 
 const ProviderLayerLive = Layer.unwrap(
   Effect.gen(function* () {
-    const { providerEventLogPath } = yield* ServerConfig;
-    const nativeEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
-      stream: "native",
-    });
-    const canonicalEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
-      stream: "canonical",
-    });
+    const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
+    yield* cleanupProviderLogDirectories([
+      path.join(baseDir, "userdata", "logs", "provider"),
+      path.join(baseDir, "dev", "logs", "provider"),
+    ]);
+    const nativeEventLogger =
+      devUrl !== undefined
+        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+            stream: "native",
+          })
+        : undefined;
+    const canonicalEventLogger =
+      devUrl !== undefined
+        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+            stream: "canonical",
+          })
+        : undefined;
     const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
       Layer.provide(ProviderSessionRuntimeRepositoryLive),
     );
