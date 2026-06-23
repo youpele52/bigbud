@@ -94,13 +94,65 @@ function readJson(path) {
   }
 }
 
-function buildMacLauncher(electronBinaryPath) {
+function runIconCommand(command, args) {
+  const result = spawnSync(command, args, { encoding: "utf8" });
+  if (result.status === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Failed to run ${command} ${args.join(" ")}: ${result.stderr || result.stdout || "unknown error"}`.trim(),
+  );
+}
+
+function generateMacIconSetFromPng(sourcePngPath, targetIcnsPath, runtimeDir) {
+  const iconsetDir = join(runtimeDir, "icon.iconset");
+  rmSync(iconsetDir, { recursive: true, force: true });
+  mkdirSync(iconsetDir, { recursive: true });
+
+  const iconSizes = [16, 32, 128, 256, 512];
+  for (const size of iconSizes) {
+    runIconCommand("sips", [
+      "-z",
+      String(size),
+      String(size),
+      sourcePngPath,
+      "--out",
+      join(iconsetDir, `icon_${size}x${size}.png`),
+    ]);
+
+    const retinaSize = size * 2;
+    runIconCommand("sips", [
+      "-z",
+      String(retinaSize),
+      String(retinaSize),
+      sourcePngPath,
+      "--out",
+      join(iconsetDir, `icon_${size}x${size}@2x.png`),
+    ]);
+  }
+
+  runIconCommand("iconutil", ["-c", "icns", iconsetDir, "-o", targetIcnsPath]);
+}
+
+function resolveMacLauncherIcon(isDevelopment, runtimeDir) {
+  if (!isDevelopment) {
+    return join(desktopDir, "resources", "icon.icns");
+  }
+
+  const developmentIconSource = resolve(desktopDir, "../../assets/dev/blueprint-macos-1024.png");
+  const generatedDevelopmentIconPath = join(runtimeDir, "icon-dev.icns");
+  generateMacIconSetFromPng(developmentIconSource, generatedDevelopmentIconPath, runtimeDir);
+  return generatedDevelopmentIconPath;
+}
+
+function buildMacLauncher(electronBinaryPath, isDevelopment = false) {
   const sourceAppBundlePath = resolve(electronBinaryPath, "../../..");
   const runtimeDir = join(desktopDir, ".electron-runtime");
   const targetAppBundlePath = join(runtimeDir, `${APP_DISPLAY_NAME}.app`);
   const targetBinaryPath = join(targetAppBundlePath, "Contents", "MacOS", "Electron");
-  const iconPath = join(desktopDir, "resources", "icon.icns");
   const metadataPath = join(runtimeDir, "metadata.json");
+  const iconPath = resolveMacLauncherIcon(isDevelopment, runtimeDir);
 
   mkdirSync(runtimeDir, { recursive: true });
   // Remove legacy app bundles from previous naming schemes.
@@ -115,6 +167,7 @@ function buildMacLauncher(electronBinaryPath) {
 
   const expectedMetadata = {
     launcherVersion: LAUNCHER_VERSION,
+    isDevelopment,
     sourceAppBundlePath,
     sourceAppMtimeMs: statSync(sourceAppBundlePath).mtimeMs,
     iconMtimeMs: statSync(iconPath).mtimeMs,
@@ -138,7 +191,7 @@ function buildMacLauncher(electronBinaryPath) {
   return targetBinaryPath;
 }
 
-export function resolveElectronPath() {
+export function resolveElectronPath(isDevelopment = false) {
   const require = createRequire(import.meta.url);
   const electronBinaryPath = require("electron");
 
@@ -146,5 +199,5 @@ export function resolveElectronPath() {
     return electronBinaryPath;
   }
 
-  return buildMacLauncher(electronBinaryPath);
+  return buildMacLauncher(electronBinaryPath, isDevelopment);
 }

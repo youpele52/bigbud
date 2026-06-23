@@ -72,8 +72,25 @@ export function resolveResourcePath(
 export function makeResolveIconPath(
   desktopDir: string,
   resourcesPath: string,
+  isDevelopment = false,
 ): (ext: "ico" | "icns" | "png") => string | null {
-  return (ext) => resolveResourcePath(`icon.${ext}`, desktopDir, resourcesPath);
+  return (ext) => {
+    if (isDevelopment) {
+      const repoRoot = Path.resolve(desktopDir, "../../..");
+      const developmentFileName =
+        ext === "ico"
+          ? "blueprint-windows.ico"
+          : process.platform === "darwin"
+            ? "blueprint-macos-1024.png"
+            : "blueprint-universal-1024.png";
+      const developmentIconPath = Path.join(repoRoot, "assets", "dev", developmentFileName);
+      if (FS.existsSync(developmentIconPath)) {
+        return developmentIconPath;
+      }
+    }
+
+    return resolveResourcePath(`icon.${ext}`, desktopDir, resourcesPath);
+  };
 }
 
 // ---------------------------------------------------------------------------

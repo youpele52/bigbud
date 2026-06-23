@@ -121,7 +121,7 @@ const desktopLinuxRuntimeConfig = resolveLinuxDesktopRuntimeConfig({
 });
 
 // Resolved once after logging init.
-const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "");
+const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "", isDevelopment);
 const desktopAppIdentity = {
   appDisplayName: APP_DISPLAY_NAME,
   appUserModelId: APP_USER_MODEL_ID,
