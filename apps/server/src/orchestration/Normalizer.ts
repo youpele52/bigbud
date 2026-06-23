@@ -80,6 +80,65 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       return command as OrchestrationCommand;
     }
 
+    const persistFileAttachment = (
+      name: string,
+      mimeType: string,
+      bytes: Uint8Array,
+      sourcePath?: string,
+    ) =>
+      Effect.gen(function* () {
+        if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
+          return yield* new OrchestrationDispatchCommandError({
+            message: `File attachment '${name}' is empty or too large.`,
+          });
+        }
+
+        const attachmentId = createAttachmentId(command.threadId);
+        if (!attachmentId) {
+          return yield* new OrchestrationDispatchCommandError({
+            message: "Failed to create a safe attachment id.",
+          });
+        }
+
+        const persistedAttachment = {
+          type: "file" as const,
+          id: attachmentId,
+          name,
+          mimeType: mimeType.toLowerCase(),
+          sizeBytes: bytes.byteLength,
+          ...(sourcePath ? { sourcePath } : {}),
+        };
+
+        const attachmentPath = resolveAttachmentPath({
+          attachmentsDir: serverConfig.attachmentsDir,
+          attachment: persistedAttachment,
+        });
+        if (!attachmentPath) {
+          return yield* new OrchestrationDispatchCommandError({
+            message: `Failed to resolve persisted path for '${name}'.`,
+          });
+        }
+
+        yield* fileSystem.makeDirectory(path.dirname(attachmentPath), { recursive: true }).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationDispatchCommandError({
+                message: `Failed to create attachment directory for '${name}'.`,
+              }),
+          ),
+        );
+        yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
+          Effect.mapError(
+            () =>
+              new OrchestrationDispatchCommandError({
+                message: `Failed to persist file attachment '${name}'.`,
+              }),
+          ),
+        );
+
+        return { persistedAttachment, attachmentPath };
+      });
+
     const normalizedAttachments = yield* Effect.forEach(
       command.message.attachments,
       (attachment) =>
@@ -165,60 +224,45 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
               ),
             );
 
-            if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
-              return yield* new OrchestrationDispatchCommandError({
-                message: `File attachment '${attachment.name}' is empty or too large.`,
-              });
-            }
-
-            const attachmentId = createAttachmentId(command.threadId);
-            if (!attachmentId) {
-              return yield* new OrchestrationDispatchCommandError({
-                message: "Failed to create a safe attachment id.",
-              });
-            }
-
-            const persistedAttachment = {
-              type: "file" as const,
-              id: attachmentId,
-              name: attachment.name,
-              mimeType: attachment.mimeType.toLowerCase(),
-              sizeBytes: bytes.byteLength,
-              // Desktop path transport: sourcePath = original user file path
-              sourcePath: sourceFilePath,
-            };
-
-            const attachmentPath = resolveAttachmentPath({
-              attachmentsDir: serverConfig.attachmentsDir,
-              attachment: persistedAttachment,
-            });
-            if (!attachmentPath) {
-              return yield* new OrchestrationDispatchCommandError({
-                message: `Failed to resolve persisted path for '${attachment.name}'.`,
-              });
-            }
-
-            yield* fileSystem.makeDirectory(path.dirname(attachmentPath), { recursive: true }).pipe(
-              Effect.mapError(
-                () =>
-                  new OrchestrationDispatchCommandError({
-                    message: `Failed to create attachment directory for '${attachment.name}'.`,
-                  }),
-              ),
-            );
-            yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
-              Effect.mapError(
-                () =>
-                  new OrchestrationDispatchCommandError({
-                    message: `Failed to persist file attachment '${attachment.name}'.`,
-                  }),
-              ),
+            const { persistedAttachment } = yield* persistFileAttachment(
+              attachment.name,
+              attachment.mimeType,
+              bytes,
+              sourceFilePath,
             );
 
             return persistedAttachment;
           }
 
           if (attachment.type === "path") {
+            // Hydrate readable file path references into persisted file attachments
+            // so providers that skip "path" attachments (Claude, Copilot, OpenCode,
+            // and Codex's attachment resolver) still receive the file content.
+            // Directories, missing files, and unreadable files remain path references.
+            if (path.isAbsolute(attachment.path) && attachment.entryKind === "file") {
+              const stat = yield* fileSystem
+                .stat(attachment.path)
+                .pipe(Effect.orElseSucceed(() => null));
+              if (stat?.type === "File") {
+                const bytes = yield* fileSystem
+                  .readFile(attachment.path)
+                  .pipe(Effect.orElseSucceed(() => null));
+                if (
+                  bytes &&
+                  bytes.byteLength > 0 &&
+                  bytes.byteLength <= PROVIDER_SEND_TURN_MAX_FILE_BYTES
+                ) {
+                  const { persistedAttachment } = yield* persistFileAttachment(
+                    attachment.name,
+                    attachment.mimeType,
+                    bytes,
+                    attachment.path,
+                  );
+                  return persistedAttachment;
+                }
+              }
+            }
+
             const attachmentId = createAttachmentId(command.threadId);
             if (!attachmentId) {
               return yield* new OrchestrationDispatchCommandError({
@@ -246,56 +290,14 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
           }
 
           const bytes = Buffer.from(parsed.base64, "base64");
-          if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
-            return yield* new OrchestrationDispatchCommandError({
-              message: `File attachment '${attachment.name}' is empty or too large.`,
-            });
-          }
-
-          const attachmentId = createAttachmentId(command.threadId);
-          if (!attachmentId) {
-            return yield* new OrchestrationDispatchCommandError({
-              message: "Failed to create a safe attachment id.",
-            });
-          }
-
-          const persistedAttachmentBase = {
-            type: "file" as const,
-            id: attachmentId,
-            name: attachment.name,
-            mimeType: attachment.mimeType.toLowerCase(),
-            sizeBytes: bytes.byteLength,
-          };
-
-          const attachmentPath = resolveAttachmentPath({
-            attachmentsDir: serverConfig.attachmentsDir,
-            attachment: persistedAttachmentBase,
-          });
-          if (!attachmentPath) {
-            return yield* new OrchestrationDispatchCommandError({
-              message: `Failed to resolve persisted path for '${attachment.name}'.`,
-            });
-          }
-
-          yield* fileSystem.makeDirectory(path.dirname(attachmentPath), { recursive: true }).pipe(
-            Effect.mapError(
-              () =>
-                new OrchestrationDispatchCommandError({
-                  message: `Failed to create attachment directory for '${attachment.name}'.`,
-                }),
-            ),
-          );
-          yield* fileSystem.writeFile(attachmentPath, bytes).pipe(
-            Effect.mapError(
-              () =>
-                new OrchestrationDispatchCommandError({
-                  message: `Failed to persist file attachment '${attachment.name}'.`,
-                }),
-            ),
+          const { persistedAttachment, attachmentPath } = yield* persistFileAttachment(
+            attachment.name,
+            attachment.mimeType,
+            bytes,
           );
 
           // Web base64 transport: sourcePath = server-side copy (no original path available)
-          return { ...persistedAttachmentBase, sourcePath: attachmentPath };
+          return { ...persistedAttachment, sourcePath: attachmentPath };
         }),
       { concurrency: 1 },
     );
