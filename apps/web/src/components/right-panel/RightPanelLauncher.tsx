@@ -1,4 +1,5 @@
 import {
+  Columns3Icon,
   DiffIcon,
   FoldersIcon,
   GitBranchIcon,
@@ -10,7 +11,14 @@ import {
 import { cn } from "~/lib/utils";
 import { Kbd, KbdGroup } from "../ui/kbd";
 
-export type LauncherToolKind = "browser" | "diff" | "files" | "git" | "notes" | "terminal";
+export type LauncherToolKind =
+  | "browser"
+  | "diff"
+  | "files"
+  | "git"
+  | "kanban"
+  | "notes"
+  | "terminal";
 
 interface LauncherCardProps {
   description: string;
@@ -61,11 +69,13 @@ interface RightPanelLauncherProps {
   gitShortcutLabel: string | null;
   hasActiveProject: boolean;
   isGitRepo: boolean;
+  kanbanShortcutLabel?: string | null;
   notesShortcutLabel?: string | null;
   onToggleBrowser: () => void;
   onToggleDiff: () => void;
   onToggleFiles: () => void;
   onToggleGit: () => void;
+  onToggleKanban: () => void;
   onToggleNotes: () => void;
   onToggleTerminal: () => void;
   terminalAvailable: boolean;
@@ -79,11 +89,13 @@ export function RightPanelLauncher({
   gitShortcutLabel,
   hasActiveProject,
   isGitRepo,
+  kanbanShortcutLabel,
   notesShortcutLabel,
   onToggleBrowser,
   onToggleDiff,
   onToggleFiles,
   onToggleGit,
+  onToggleKanban,
   onToggleNotes,
   onToggleTerminal,
   terminalAvailable,
@@ -116,6 +128,14 @@ export function RightPanelLauncher({
           label="Notes"
           onSelect={onToggleNotes}
           shortcutLabel={notesShortcutLabel ?? null}
+        />
+        <LauncherCard
+          description="Track work across columns"
+          icon={Columns3Icon}
+          kind="kanban"
+          label="Kanban"
+          onSelect={onToggleKanban}
+          shortcutLabel={kanbanShortcutLabel ?? null}
         />
         <LauncherCard
           description="Start an interactive shell"

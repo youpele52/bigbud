@@ -7,6 +7,7 @@ import {
   type KanbanListInput,
   type KanbanListResult,
   type KanbanMoveInput,
+  type KanbanReorderInput,
   type KanbanUpdateInput,
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
@@ -126,6 +127,7 @@ export interface WsRpcClient {
     readonly update: (input: KanbanUpdateInput) => Promise<KanbanCard>;
     readonly delete: (input: KanbanDeleteInput) => Promise<KanbanDeleteResult>;
     readonly move: (input: KanbanMoveInput) => Promise<KanbanCard>;
+    readonly reorder: (input: KanbanReorderInput) => Promise<KanbanCard>;
   };
   readonly teach: {
     readonly listProjects: (input: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
@@ -293,6 +295,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       update: (input) => transport.request((client) => client[WS_METHODS.kanbanUpdate](input)),
       delete: (input) => transport.request((client) => client[WS_METHODS.kanbanDelete](input)),
       move: (input) => transport.request((client) => client[WS_METHODS.kanbanMove](input)),
+      reorder: (input) => transport.request((client) => client[WS_METHODS.kanbanReorder](input)),
     },
     teach: {
       listProjects: (input) =>

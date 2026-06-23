@@ -77,6 +77,7 @@ export function createWsNativeApi(): NativeApi {
       update: rpcClient.kanban.update,
       delete: rpcClient.kanban.delete,
       move: rpcClient.kanban.move,
+      reorder: rpcClient.kanban.reorder,
     },
     teach: {
       listProjects: () => rpcClient.teach.listProjects({}),

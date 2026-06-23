@@ -16,6 +16,7 @@ export * from "./orchestration/provider";
 export * from "./orchestration/providerRuntime";
 export * from "./core/model";
 export * from "./server/keybindings";
+export * from "./server/kanban";
 export * from "./server/notes";
 export * from "./server/teach";
 export * from "./server/server";

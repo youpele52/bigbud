@@ -51,6 +51,7 @@ import type {
   KanbanListInput,
   KanbanListResult,
   KanbanMoveInput,
+  KanbanReorderInput,
   KanbanUpdateInput,
 } from "./kanban";
 import type {
@@ -263,6 +264,7 @@ export interface NativeApi {
     update: (input: KanbanUpdateInput) => Promise<KanbanCard>;
     delete: (input: KanbanDeleteInput) => Promise<KanbanDeleteResult>;
     move: (input: KanbanMoveInput) => Promise<KanbanCard>;
+    reorder: (input: KanbanReorderInput) => Promise<KanbanCard>;
   };
   teach: {
     listProjects: (input?: TeachListProjectsInput) => Promise<TeachListProjectsResult>;

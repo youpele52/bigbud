@@ -52,6 +52,7 @@ import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerShape,
 } from "./project/Services/ProjectSetupScriptRunner.ts";
+import { ProjectionKanbanRepository } from "./persistence/Services/ProjectionKanban.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import {
   ProjectionThreadRepository,
@@ -285,6 +286,55 @@ export const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mergeAll(
+          Layer.mock(ProjectionKanbanRepository)({
+            list: () => Effect.succeed([]),
+            getById: () => Effect.succeed(Option.none()),
+            create: (input) =>
+              Effect.succeed({
+                cardId: "mock-card-id" as never,
+                projectId: input.projectId,
+                title: input.title,
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: input.content,
+                createdAt: input.createdAt,
+                updatedAt: input.updatedAt,
+              }),
+            update: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: input.title,
+                status: "backlog" as const,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: input.content,
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            move: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: "Mock card",
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: "# Mock card\n",
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            reorderWithinStatus: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: "Mock card",
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: "# Mock card\n",
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            deleteById: () => Effect.void,
+          }),
           Layer.mock(ProjectionNoteRepository)({
             list: () => Effect.succeed([]),
             getById: () => Effect.succeed(Option.none()),

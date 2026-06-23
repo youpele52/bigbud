@@ -36,10 +36,25 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Fixed right-panel dropdown menus and popovers having their top items unresponsive in the desktop app when opened over the Git, Terminal, or Files panel headers — portalled overlays now explicitly opt out of the Electron drag region so clicks reach the menu instead of moving the window.
 - Drag-to-reorder tab wrappers also opted out of the Electron drag region, making the entire tab area reliably clickable rather than only the center label button.
 
+### Kanban
+
+- Added a **Kanban** right-panel tab after Notes with Backlog, Todo, Ongoing, and Done columns for lightweight task tracking alongside your chats.
+- Boards can be **global** or **project-scoped**, with markdown-backed cards persisted as workspace files and JSON sidecars so cards survive restarts and sync with the filesystem.
+- Drag cards between columns or within a column to reorder; drag cards into the composer like notes and files to attach them as context for the agent.
+- Create, edit, duplicate, and manage cards from a context menu — move between statuses, copy paths, open externally, or delete without leaving the panel.
+- Collapse columns into compact vertical strips when you want more room for the lists you are actively working through.
+
 ### Observability
 
 - Provider event logs (`events.log` and per-thread `*.log` files in `~/.bigbud/{userdata,dev}/logs/provider/`) are now development-only — in production builds the verbose native and canonical trace loggers are not created at all, preventing unbounded disk accumulation from raw event payloads and per-delta protocol frames.
 - On every startup, provider log files older than 7 days are automatically pruned from both runtime profiles, keeping even development installs bounded without manual cleanup.
+
+### Thread References
+
+- Added drag-and-drop thread references — drag a thread from the sidebar into the composer to attach it as context. The server resolves the referenced thread at send time, inlines its full transcript inside an `<attached_threads>` block, and strips thread references from the provider's attachment list so providers receive inline context without needing file-path access to the thread export.
+- Thread references are deduplicated by thread ID in the composer, show a dedicated thread icon (`MessageSquare`) in the file preview area, and render as `UserThreadReferenceChips` in the message timeline so you always see which threads were included in a turn.
+- Excluded thread-attachment metadata from title generation and branch-name prompts so those features stay accurate when thread references are present.
+- Added a server-side `exportThreadContext` RPC behind the "Copy path" action in the sidebar thread context menu, giving the workspace path without exposing a file the agent can edit directly.
 
 ## v0.1.646 (20 June, 2026)
 
