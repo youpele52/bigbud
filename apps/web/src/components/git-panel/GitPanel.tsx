@@ -1,6 +1,6 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { GitBranchIcon, HistoryIcon, Rows3Icon } from "lucide-react";
+import { GitBranchIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { isElectron } from "~/config/env";
@@ -16,7 +16,6 @@ import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 interface GitPanelProps {
   activeThreadId?: ThreadId | null;
@@ -141,26 +140,12 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
               }
             }}
           >
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle aria-label="Show changes" title="Changes" value="changes">
-                    <Rows3Icon className="size-3" />
-                  </Toggle>
-                }
-              />
-              <TooltipPopup side="bottom">Changes</TooltipPopup>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle aria-label="Show history" title="History" value="history">
-                    <HistoryIcon className="size-3" />
-                  </Toggle>
-                }
-              />
-              <TooltipPopup side="bottom">History</TooltipPopup>
-            </Tooltip>
+            <Toggle aria-label="Changes" value="changes">
+              Changes
+            </Toggle>
+            <Toggle aria-label="History" value="history">
+              History
+            </Toggle>
           </ToggleGroup>
         </div>
       </div>
