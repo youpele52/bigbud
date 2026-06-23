@@ -21,6 +21,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Clicking an HTML file (`.html` / `.htm`) now opens it in the **Browser** by default so pages render instead of showing raw markup in the code editor.
 - Right-click an HTML file for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path**.
 
+### Notes
+
+- Note filenames are now stable — new notes use a creation-time datetime stem (e.g. `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note's title no longer renames the file or changes its `noteId`. Existing notes keep their current filenames.
+- The display title in the Notes panel continues to come from the note's H1 or first sentence, derived from content rather than the filename.
+
 ## v0.1.646 (20 June, 2026)
 
 ### Teach Skill
