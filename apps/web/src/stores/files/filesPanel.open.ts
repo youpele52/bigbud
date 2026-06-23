@@ -14,6 +14,12 @@ import {
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
 
+interface InternalOpenTarget {
+  cwd: string;
+  relativePath: string;
+  workspaceRootOverride: string | null;
+}
+
 function normalizePathForCompare(pathValue: string): string {
   return pathValue.replaceAll("\\", "/").replace(/\/+$/, "");
 }
@@ -50,12 +56,103 @@ export function resolveWorkspaceRelativeEntryPath(
   return normalizedTarget.slice(normalizedRoot.length + 1);
 }
 
+function isAbsolutePath(pathValue: string): boolean {
+  return pathValue.startsWith("/") || /^[A-Za-z]:[\\/]/.test(pathValue);
+}
+
+function trimTrailingSeparators(pathValue: string): string {
+  if (/^[A-Za-z]:[\\/]?$/.test(pathValue) || pathValue === "/") {
+    return pathValue.replaceAll("\\", "/");
+  }
+
+  return pathValue.replaceAll("\\", "/").replace(/\/+$/, "");
+}
+
+function splitAbsolutePath(pathValue: string): { cwd: string; name: string } | null {
+  const normalizedPath = trimTrailingSeparators(stripPathPositionSuffix(pathValue));
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  if (slashIndex < 0 || slashIndex === normalizedPath.length - 1) {
+    return null;
+  }
+
+  const cwd =
+    slashIndex === 0
+      ? "/"
+      : /^[A-Za-z]:$/.test(normalizedPath.slice(0, slashIndex))
+        ? `${normalizedPath.slice(0, slashIndex)}/`
+        : normalizedPath.slice(0, slashIndex);
+  const name = normalizedPath.slice(slashIndex + 1);
+  if (name.length === 0) {
+    return null;
+  }
+
+  return { cwd, name };
+}
+
+function resolveInternalOpenTarget(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): InternalOpenTarget | null {
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  if (relativePath !== null && workspaceRoot) {
+    return {
+      cwd: trimTrailingSeparators(workspaceRoot),
+      relativePath,
+      workspaceRootOverride: null,
+    };
+  }
+
+  const strippedTargetPath = stripPathPositionSuffix(targetPath);
+  if (!isAbsolutePath(strippedTargetPath)) {
+    if (!workspaceRoot) {
+      return null;
+    }
+
+    return {
+      cwd: trimTrailingSeparators(workspaceRoot),
+      relativePath: normalizePathForCompare(strippedTargetPath),
+      workspaceRootOverride: null,
+    };
+  }
+
+  const splitPath = splitAbsolutePath(strippedTargetPath);
+  if (!splitPath) {
+    return null;
+  }
+
+  return {
+    cwd: splitPath.cwd,
+    relativePath: splitPath.name,
+    workspaceRootOverride: splitPath.cwd,
+  };
+}
+
+function resolveDirectoryOpenTarget(
+  targetPath: string,
+  workspaceRoot: string | undefined,
+): { path: string; workspaceRootOverride: string | null } | null {
+  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  if (relativePath !== null) {
+    return { path: relativePath, workspaceRootOverride: null };
+  }
+
+  const strippedTargetPath = stripPathPositionSuffix(targetPath);
+  if (!isAbsolutePath(strippedTargetPath)) {
+    return null;
+  }
+
+  return {
+    path: "",
+    workspaceRootOverride: trimTrailingSeparators(strippedTargetPath),
+  };
+}
+
 export function canOpenPathInFilesPanel(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (relativePath === null) {
+  const openTarget = resolveInternalOpenTarget(targetPath, workspaceRoot);
+  if (openTarget === null) {
     return false;
   }
   return isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath);
@@ -65,9 +162,10 @@ export function canOpenPathInBrowserPanel(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
+  const relativePath = resolveInternalOpenTarget(targetPath, workspaceRoot)?.relativePath;
   return (
     relativePath !== null &&
+    relativePath !== undefined &&
     (isPdfFilePath(relativePath) || isImageFilePath(relativePath) || isHtmlFilePath(relativePath))
   );
 }
@@ -86,17 +184,18 @@ export function canOpenDirectoryInFilesPanel(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  return resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot) !== null;
+  return resolveDirectoryOpenTarget(targetPath, workspaceRoot) !== null;
 }
 
 export function openPathInBrowserPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (!relativePath || !workspaceRoot) {
+  const openTarget = resolveInternalOpenTarget(targetPath, workspaceRoot);
+  if (!openTarget) {
     return false;
   }
+  const { cwd, relativePath } = openTarget;
   if (
     !isPdfFilePath(relativePath) &&
     !isImageFilePath(relativePath) &&
@@ -107,7 +206,7 @@ export function openPathInBrowserPanelIfSupported(
 
   openNewBrowserTab({
     url: buildWorkspaceFilePreviewUrl({
-      cwd: workspaceRoot,
+      cwd,
       relativePath,
     }),
   });
@@ -118,15 +217,16 @@ export function openPathInFilesPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (!relativePath) {
+  const openTarget = resolveInternalOpenTarget(targetPath, workspaceRoot);
+  if (!openTarget) {
     return false;
   }
+  const { relativePath, workspaceRootOverride } = openTarget;
   if (!isCodeRelatedFilePath(targetPath) && !isImageFilePath(targetPath)) {
     return false;
   }
 
-  openFileInFilesPanel(relativePath, parsePathPositionSuffix(targetPath));
+  openFileInFilesPanel(relativePath, parsePathPositionSuffix(targetPath), workspaceRootOverride);
   return true;
 }
 
@@ -134,12 +234,12 @@ export function openDirectoryInFilesPanelIfSupported(
   targetPath: string,
   workspaceRoot: string | undefined,
 ): boolean {
-  const relativePath = resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot);
-  if (!relativePath) {
+  const openTarget = resolveDirectoryOpenTarget(targetPath, workspaceRoot);
+  if (!openTarget) {
     return false;
   }
 
-  openDirectoryInFilesPanel(relativePath);
+  openDirectoryInFilesPanel(openTarget.path, openTarget.workspaceRootOverride);
   return true;
 }
 

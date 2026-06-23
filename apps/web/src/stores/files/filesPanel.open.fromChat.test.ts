@@ -12,6 +12,7 @@ function resetFilesPanelState() {
   });
   useFilesPanelStore.setState({
     open: false,
+    workspaceRootOverride: null,
     previewPath: null,
     previewPosition: null,
     fileOpenRequest: null,
@@ -45,12 +46,31 @@ describe("openPathFromChat", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       fileOpenRequest: {
         path: "README.md",
         position: null,
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
     expect(Object.keys(useBrowserPanelStore.getState().tabsById)).toHaveLength(0);
+  });
+
+  it("opens supported files outside the current workspace inside the files panel", async () => {
+    resetFilesPanelState();
+
+    await openPathFromChat("/Users/alice/other-project/README.md", "/Users/alice/project");
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: "/Users/alice/other-project",
+      fileOpenRequest: {
+        path: "README.md",
+        position: null,
+        workspaceRootOverride: "/Users/alice/other-project",
+        requestId: 1,
+      },
+    });
   });
 });

@@ -23,6 +23,7 @@ function resetFilesPanelState() {
   });
   useFilesPanelStore.setState({
     open: false,
+    workspaceRootOverride: null,
     previewPath: null,
     previewPosition: null,
     fileOpenRequest: null,
@@ -159,12 +160,6 @@ describe("canOpenDirectoryInFilesPanel", () => {
   it("allows workspace directories", () => {
     expect(canOpenDirectoryInFilesPanel("/Users/alice/project/src", "/Users/alice/project")).toBe(
       true,
-    );
-  });
-
-  it("rejects directories outside the workspace", () => {
-    expect(canOpenDirectoryInFilesPanel("/Users/alice/other/src", "/Users/alice/project")).toBe(
-      false,
     );
   });
 });
@@ -311,9 +306,11 @@ describe("openPathInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       fileOpenRequest: {
         path: "src/index.ts",
         position: { line: 16, column: 23 },
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -327,6 +324,7 @@ describe("openPathInFilesPanelIfSupported", () => {
     resetFilesPanelState();
     useFilesPanelStore.setState({
       open: true,
+      workspaceRootOverride: null,
       previewPath: "src/old.ts",
       previewPosition: { line: 9, column: 2 },
       fileOpenRequest: null,
@@ -340,6 +338,7 @@ describe("openPathInFilesPanelIfSupported", () => {
       fileOpenRequest: {
         path: "src/new.ts",
         position: null,
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -357,9 +356,11 @@ describe("openPathInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       fileOpenRequest: {
         path: "assets/logo.png",
         position: null,
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -377,9 +378,11 @@ describe("openPathInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       fileOpenRequest: {
         path: "public/index.html",
         position: null,
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -396,11 +399,13 @@ describe("openDirectoryInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       previewPath: null,
       previewPosition: null,
       fileOpenRequest: null,
       directoryNavigationRequest: {
         path: "src/lib",
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });

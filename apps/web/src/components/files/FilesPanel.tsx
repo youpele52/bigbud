@@ -16,6 +16,7 @@ import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 import { ImagePreview } from "./ImagePreview";
 import { IpynbPreview } from "./IpynbPreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
+import { buildAbsolutePreviewPath } from "./FilePreview.logic";
 import { applyDirectoryNavigationRequest, openFilesPanelEntry } from "./FilesPanel.logic";
 import { EMPTY_ENTRIES, FILE_PREVIEW_MIN_WIDTH, makeAnnotationId } from "./FilesPanel.shared";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
@@ -33,6 +34,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const previewPath = useFilesPanelStore((state) => state.previewPath);
   const previewPosition = useFilesPanelStore((state) => state.previewPosition);
   const fileOpenRequest = useFilesPanelStore((state) => state.fileOpenRequest);
+  const workspaceRootOverride = useFilesPanelStore((state) => state.workspaceRootOverride);
   const directoryNavigationRequest = useFilesPanelStore(
     (state) => state.directoryNavigationRequest,
   );
@@ -46,9 +48,13 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
+  const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
   const workspaceExecutionTargetId = project
     ? resolveWorkspaceExecutionTargetId(project)
     : undefined;
+  const activeWorkspaceExecutionTargetId =
+    workspaceRootOverride === null ? workspaceExecutionTargetId : undefined;
+  const activeProjectName = workspaceRootOverride === null ? project?.name : undefined;
   const fileTreeContainerRef = useRef<HTMLDivElement>(null);
   const { fileTreeWidth, resizeTreeWidth } = useFilesTreeWidth();
   const previewPathRef = useRef<string | null>(previewPath);
@@ -56,8 +62,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const [expandedDirectories, setExpandedDirectories] = useState<Record<string, boolean>>({});
   const { directoryStateByPath, setDirectoryStateByPath, loadDirectory } =
     useFilesPanelDirectoryLoader({
-      workspaceRoot,
-      workspaceExecutionTargetId,
+      workspaceRoot: activeWorkspaceRoot,
+      workspaceExecutionTargetId: activeWorkspaceExecutionTargetId,
       previewPathRef,
       previewPositionRef,
       setPreviewPath,
@@ -106,7 +112,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     setDirectoryStateByPath({});
     setPreviewPath(null);
     setPreviewPosition(null);
-  }, [setDirectoryStateByPath, setPreviewPath, setPreviewPosition, workspaceRoot]);
+  }, [activeWorkspaceRoot, setDirectoryStateByPath, setPreviewPath, setPreviewPosition]);
 
   useEffect(() => {
     if (!fileOpenRequest) return;
@@ -116,8 +122,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   }, [fileOpenRequest, setPreviewPath, setPreviewPosition]);
 
   useFilesPanelDirectoryRefresh({
-    workspaceRoot,
-    workspaceExecutionTargetId,
+    workspaceRoot: activeWorkspaceRoot,
+    workspaceExecutionTargetId: activeWorkspaceExecutionTargetId,
     expandedDirectories,
     directoryStateByPath,
     loadDirectory,
@@ -135,13 +141,13 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   }, [directoryNavigationRequest, directoryStateByPath, loadDirectory]);
 
   useEffect(() => {
-    if (!workspaceRoot) return;
+    if (!activeWorkspaceRoot) return;
     if (directoryStateByPath[""] !== undefined) return;
     void loadDirectory("");
-  }, [directoryStateByPath, loadDirectory, workspaceRoot]);
+  }, [activeWorkspaceRoot, directoryStateByPath, loadDirectory]);
 
   const rootDirectoryState = directoryStateByPath[""];
-  const remoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
+  const remoteWorkspace = isRemoteExecutionTargetId(activeWorkspaceExecutionTargetId);
   const sortedRootEntries = rootDirectoryState?.entries ?? EMPTY_ENTRIES;
   const showRootLoading = rootDirectoryState?.loading && sortedRootEntries.length === 0;
   const previewTargetLine = previewPosition?.line;
@@ -161,15 +167,15 @@ export const FilesPanelContent = memo(function FilesPanelContent({
 
   const handleOpenFile = useCallback(
     (entry: ProjectEntry) => {
-      if (!workspaceRoot) return;
-      openFilesPanelEntry(entry, workspaceRoot, setPreviewPath, setPreviewPosition);
+      if (!activeWorkspaceRoot) return;
+      openFilesPanelEntry(entry, activeWorkspaceRoot, setPreviewPath, setPreviewPosition);
     },
-    [setPreviewPath, setPreviewPosition, workspaceRoot],
+    [activeWorkspaceRoot, setPreviewPath, setPreviewPosition],
   );
 
   const handleCreateCodeAnnotation = useCallback(
     (annotation: CodeAnnotationDraft) => {
-      if (!activeThreadId || !workspaceRoot || !previewPath) return;
+      if (!activeThreadId || !activeWorkspaceRoot || !previewPath) return;
       addAnnotation(activeThreadId, {
         id: makeAnnotationId(),
         kind: "code",
@@ -177,8 +183,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         intent: annotation.intent,
         createdAt: new Date().toISOString(),
         file: {
-          ...(project?.name ? { projectName: project.name } : {}),
-          cwd: workspaceRoot,
+          ...(activeProjectName ? { projectName: activeProjectName } : {}),
+          cwd: activeWorkspaceRoot,
           relativePath: previewPath,
         },
         selection: {
@@ -188,7 +194,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         },
       });
     },
-    [activeThreadId, addAnnotation, previewPath, project?.name, workspaceRoot],
+    [activeProjectName, activeThreadId, activeWorkspaceRoot, addAnnotation, previewPath],
   );
 
   const treeBody = useMemo(() => {
@@ -203,7 +209,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         {renderFilesPanelTree({
           entries: sortedRootEntries,
           depth: 0,
-          workspaceRoot,
+          workspaceRoot: activeWorkspaceRoot,
           previewPath,
           resolvedTheme,
           expandedDirectories,
@@ -225,11 +231,11 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     rootDirectoryState,
     showRootLoading,
     sortedRootEntries,
-    workspaceRoot,
+    activeWorkspaceRoot,
   ]);
 
   const panelBody = useMemo(() => {
-    if (!workspaceRoot) {
+    if (!activeWorkspaceRoot) {
       return (
         <div className="p-3 text-sm text-muted-foreground/70">
           Select a project to browse files.
@@ -257,29 +263,29 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         <div className="min-h-0 flex-1" style={{ minWidth: FILE_PREVIEW_MIN_WIDTH }}>
           {isImage ? (
             <ImagePreview
-              cwd={workspaceRoot}
+              cwd={activeWorkspaceRoot}
               relativePath={previewPath}
-              executionTargetId={workspaceExecutionTargetId}
-              projectName={project?.name}
+              executionTargetId={activeWorkspaceExecutionTargetId}
+              projectName={activeProjectName}
               onBack={handleBack}
             />
           ) : isIpynb ? (
             <IpynbPreview
-              cwd={workspaceRoot}
+              cwd={activeWorkspaceRoot}
               relativePath={previewPath}
               targetLine={previewTargetLine}
-              executionTargetId={workspaceExecutionTargetId}
-              projectName={project?.name}
+              executionTargetId={activeWorkspaceExecutionTargetId}
+              projectName={activeProjectName}
               onBack={handleBack}
               onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
             />
           ) : (
             <FilePreview
-              cwd={workspaceRoot}
+              cwd={activeWorkspaceRoot}
               relativePath={previewPath}
               targetLine={previewTargetLine}
-              executionTargetId={workspaceExecutionTargetId}
-              projectName={project?.name}
+              executionTargetId={activeWorkspaceExecutionTargetId}
+              projectName={activeProjectName}
               onBack={handleBack}
               onCreateAnnotation={activeThreadId ? handleCreateCodeAnnotation : undefined}
             />
@@ -305,22 +311,30 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     handleTreeResizeStart,
     previewPath,
     previewTargetLine,
-    project?.name,
+    activeProjectName,
     remoteWorkspace,
     setPreviewPath,
     setPreviewPosition,
     treeBody,
-    workspaceExecutionTargetId,
-    workspaceRoot,
+    activeWorkspaceExecutionTargetId,
+    activeWorkspaceRoot,
   ]);
+
+  const activeFilePath = useMemo(() => {
+    if (!activeWorkspaceRoot || !previewPath) {
+      return null;
+    }
+
+    return buildAbsolutePreviewPath(activeWorkspaceRoot, previewPath);
+  }, [activeWorkspaceRoot, previewPath]);
 
   return (
     <>
-      <FilesPanelHeader workspaceRoot={workspaceRoot} />
+      <FilesPanelHeader workspaceRoot={activeWorkspaceRoot} activeFilePath={activeFilePath} />
       <div className="min-h-0 flex-1 overflow-hidden">{panelBody}</div>
       <FilesPanelContextMenu
         contextMenuState={contextMenuState}
-        workspaceRoot={workspaceRoot ?? undefined}
+        workspaceRoot={activeWorkspaceRoot ?? undefined}
         onClose={closeContextMenu}
         onCopyPath={(path) => copyToClipboard(path, { path })}
       />
