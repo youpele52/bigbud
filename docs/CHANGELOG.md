@@ -20,6 +20,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Fixed the file tree and file viewer not updating after workspace changes — directory watches now refresh every visible folder in the tree (not only the watched path), keep stable subscriptions while listings reload, and retry forced refreshes that arrive mid-load. File and image previews also wait briefly after filesystem events so saved content is on disk before reload.
 - Clicking an HTML file (`.html` / `.htm`) now opens it in the **Browser** by default so pages render instead of showing raw markup in the code editor.
 - Right-click an HTML file for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path**.
+- Supported files now open inside bigbud even when the clicked path belongs to another project, worktree, or unrelated folder — the Files panel temporarily roots itself to that path instead of kicking you out to an external editor.
+- External directories can now open inside the Files panel too, and the panel header shows the full absolute path of the file you are previewing so you always know exactly which file is open.
 
 ### Notes
 
@@ -27,6 +29,17 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - The display title in the Notes panel continues to come from the note's H1 or first sentence, derived from content rather than the filename.
 - Note preview now renders headings (H1–H6) with the same hierarchy, size, and weight as the file preview markdown viewer, so long notes are easier to scan and read.
 - Note edit mode now uses the same background color as the raw markdown file viewer instead of the lighter input surface, making the editing experience visually consistent with reading code and markdown files.
+- Fixed drag-and-drop of notes (and any file panel path reference) failing to send the file content to the AI agent — when a note or file is dragged to the composer as a path reference, the normalizer now reads the file, persists a copy, and converts it to a proper file attachment so all four providers (Claude, Copilot, Codex, OpenCode) receive the content instead of just the raw path text.
+
+### Right Panel
+
+- Fixed right-panel dropdown menus and popovers having their top items unresponsive in the desktop app when opened over the Git, Terminal, or Files panel headers — portalled overlays now explicitly opt out of the Electron drag region so clicks reach the menu instead of moving the window.
+- Drag-to-reorder tab wrappers also opted out of the Electron drag region, making the entire tab area reliably clickable rather than only the center label button.
+
+### Observability
+
+- Provider event logs (`events.log` and per-thread `*.log` files in `~/.bigbud/{userdata,dev}/logs/provider/`) are now development-only — in production builds the verbose native and canonical trace loggers are not created at all, preventing unbounded disk accumulation from raw event payloads and per-delta protocol frames.
+- On every startup, provider log files older than 7 days are automatically pruned from both runtime profiles, keeping even development installs bounded without manual cleanup.
 
 ## v0.1.646 (20 June, 2026)
 
