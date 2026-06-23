@@ -602,6 +602,7 @@ export const NotesPanelContent = memo(function NotesPanelContent({
                 cwd={cwd}
                 isStreaming={false}
                 preserveLineBreaks
+                className="note-markdown"
               />
             ) : (
               <Textarea
