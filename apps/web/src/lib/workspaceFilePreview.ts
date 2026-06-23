@@ -8,6 +8,27 @@ function normalizePreviewPath(pathValue: string): string {
   return stripPathPositionSuffix(pathValue).split(/[?#]/, 1)[0] ?? "";
 }
 
+const IMAGE_FILE_EXTENSIONS = new Set([
+  ".avif",
+  ".bmp",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".svg",
+  ".webp",
+]);
+
+export function isImageFilePath(pathValue: string): boolean {
+  const normalized = normalizePreviewPath(pathValue).toLowerCase();
+  const extensionStart = normalized.lastIndexOf(".");
+  if (extensionStart <= 0) {
+    return false;
+  }
+  return IMAGE_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
+}
+
 export function isPdfFilePath(pathValue: string): boolean {
   return normalizePreviewPath(pathValue).toLowerCase().endsWith(".pdf");
 }

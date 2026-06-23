@@ -1,6 +1,8 @@
 import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bigbud/contracts";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { isImageFilePath } from "../../lib/workspaceFilePreview";
+
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
@@ -12,6 +14,7 @@ import { useProjectById, useThreadById } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
+import { ImagePreview } from "./ImagePreview";
 import { IpynbPreview } from "./IpynbPreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
 import {
@@ -315,6 +318,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       return <div className="h-full overflow-y-auto">{treeBody}</div>;
     }
     const isIpynb = previewPath.toLowerCase().endsWith(".ipynb");
+    const isImage = isImageFilePath(previewPath);
     const handleBack = () => {
       setPreviewPath(null);
       setPreviewPosition(null);
@@ -322,7 +326,14 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     return (
       <div ref={fileTreeContainerRef} className="flex h-full min-h-0">
         <div className="min-h-0 flex-1" style={{ minWidth: FILE_PREVIEW_MIN_WIDTH }}>
-          {isIpynb ? (
+          {isImage ? (
+            <ImagePreview
+              cwd={workspaceRoot}
+              relativePath={previewPath}
+              projectName={project?.name}
+              onBack={handleBack}
+            />
+          ) : isIpynb ? (
             <IpynbPreview
               cwd={workspaceRoot}
               relativePath={previewPath}
