@@ -41,11 +41,21 @@ export function ConfirmationPanel({
       </div>
 
       <div className="flex items-center justify-end gap-2">
+        <Button
+          size="sm"
+          variant={confirmVariant === "destructive" ? "ghost" : confirmVariant}
+          disabled={busy}
+          onClick={onConfirm}
+          className={
+            confirmVariant === "destructive"
+              ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+              : undefined
+          }
+        >
+          {confirmLabel}
+        </Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>
           {cancelLabel}
-        </Button>
-        <Button size="sm" variant={confirmVariant} disabled={busy} onClick={onConfirm}>
-          {confirmLabel}
         </Button>
       </div>
     </div>
