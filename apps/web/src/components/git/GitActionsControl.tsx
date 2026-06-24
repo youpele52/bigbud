@@ -412,18 +412,19 @@ export default function GitActionsControl({
           </DialogHeader>
           <DialogPanel>
             <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setIsDiscardConfirmOpen(false)}>
-                Cancel
-              </Button>
               <Button
-                variant="destructive"
+                variant="ghost"
                 size="sm"
                 onClick={() => {
                   setIsDiscardConfirmOpen(false);
                   runDiscard();
                 }}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 Discard changes
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsDiscardConfirmOpen(false)}>
+                Cancel
               </Button>
             </DialogFooter>
           </DialogPanel>
