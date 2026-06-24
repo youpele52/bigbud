@@ -54,7 +54,11 @@ import {
   type ServerUpdateAutomationInput,
   type ServerExportThreadContextInput,
   type ServerExportThreadContextResult,
+  type ServerCreateMobileRemotePairingInput,
+  type ServerListMobileRemoteSessionsResult,
+  type ServerMobileRemotePairing,
   WS_METHODS,
+  type ServerRevokeMobileRemoteSessionInput,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 
@@ -185,6 +189,13 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly createMobileRemotePairing: (
+      input: ServerCreateMobileRemotePairingInput,
+    ) => Promise<ServerMobileRemotePairing>;
+    readonly listMobileRemoteSessions: () => Promise<ServerListMobileRemoteSessionsResult>;
+    readonly revokeMobileRemoteSession: (
+      input: ServerRevokeMobileRemoteSessionInput,
+    ) => Promise<void>;
     readonly exportThreadContext: (
       input: ServerExportThreadContextInput,
     ) => Promise<ServerExportThreadContextResult>;
@@ -374,6 +385,12 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      createMobileRemotePairing: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
+      listMobileRemoteSessions: () =>
+        transport.request((client) => client[WS_METHODS.serverListMobileRemoteSessions]({})),
+      revokeMobileRemoteSession: (input) =>
+        transport.request((client) => client[WS_METHODS.serverRevokeMobileRemoteSession](input)),
       exportThreadContext: (input) =>
         transport.request((client) => client[WS_METHODS.serverExportThreadContext](input)),
       getAutomation: (input) =>

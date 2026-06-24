@@ -96,6 +96,56 @@ describe("wsNativeApi — server", () => {
     });
   });
 
+  it("forwards mobile remote control RPCs directly to the RPC client", async () => {
+    const pairing = {
+      pairingId: "pairing-1",
+      scope: "thread-control" as const,
+      expiresAt: "2026-06-24T12:00:00.000Z",
+      pairUrl: "https://mobile.example/mobile/pair/pairing-1#secret=secret-1",
+      secret: "secret-1",
+    };
+    const sessions = {
+      sessions: [
+        {
+          sessionId: "session-1",
+          scope: "thread-control" as const,
+          createdAt: "2026-06-24T12:00:00.000Z",
+          expiresAt: "2026-07-01T12:00:00.000Z",
+          lastUsedAt: null,
+          revokedAt: null,
+          label: "iphone",
+        },
+      ],
+    };
+    rpcClientMock.server.createMobileRemotePairing.mockResolvedValue(pairing);
+    rpcClientMock.server.listMobileRemoteSessions.mockResolvedValue(sessions);
+    rpcClientMock.server.revokeMobileRemoteSession.mockResolvedValue(undefined);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(
+      api.server.createMobileRemotePairing({
+        scope: "thread-control",
+        baseUrl: "https://mobile.example",
+        backendBaseUrl: "https://desktop.example",
+      }),
+    ).resolves.toEqual(pairing);
+    await expect(api.server.listMobileRemoteSessions()).resolves.toEqual(sessions);
+    await expect(
+      api.server.revokeMobileRemoteSession({ sessionId: "session-1" }),
+    ).resolves.toBeUndefined();
+    expect(rpcClientMock.server.createMobileRemotePairing).toHaveBeenCalledWith({
+      scope: "thread-control",
+      baseUrl: "https://mobile.example",
+      backendBaseUrl: "https://desktop.example",
+    });
+    expect(rpcClientMock.server.listMobileRemoteSessions).toHaveBeenCalledWith();
+    expect(rpcClientMock.server.revokeMobileRemoteSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+    });
+  });
+
   it("forwards notes RPCs directly to the RPC client", async () => {
     const note = {
       noteId: NoteId.makeUnsafe("note-1"),

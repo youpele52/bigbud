@@ -12,9 +12,11 @@ import {
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
 } from "./ws/http";
+import { mobilePairingRoutesLayer } from "./ws/http.mobile";
 import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
+import { mobileWebsocketRpcRouteLayer } from "./ws/ws.mobile";
 import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
@@ -75,6 +77,7 @@ import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
+import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -283,6 +286,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
+  Layer.provideMerge(MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive))),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
@@ -295,9 +299,11 @@ export const makeRoutesLayer = Layer.mergeAll(
   projectFaviconRouteLayer,
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
+  mobilePairingRoutesLayer,
   staticAndDevRouteLayer,
   threadOrchestrationToolsRouteLayer,
   websocketRpcRouteLayer,
+  mobileWebsocketRpcRouteLayer,
 );
 
 export const makeServerLayer = Layer.unwrap(

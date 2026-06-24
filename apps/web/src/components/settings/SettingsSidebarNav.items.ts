@@ -7,6 +7,7 @@ import {
   InfoIcon,
   KeyboardIcon,
   Settings2Icon,
+  SmartphoneIcon,
 } from "lucide-react";
 
 export type SettingsSectionPath =
@@ -15,6 +16,7 @@ export type SettingsSectionPath =
   | "/settings/providers"
   | "/settings/ai"
   | "/settings/keybindings"
+  | "/settings/remote"
   | "/settings/archived"
   | "/settings/about";
 
@@ -28,6 +30,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "Providers", to: "/settings/providers", icon: CpuIcon },
   { label: "AI", to: "/settings/ai", icon: BotIcon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
+  { label: "Remote", to: "/settings/remote", icon: SmartphoneIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
   { label: "About", to: "/settings/about", icon: InfoIcon },
 ];

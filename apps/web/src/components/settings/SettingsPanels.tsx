@@ -1,4 +1,5 @@
 export { GeneralSettingsPanel } from "./GeneralSettingsPanel";
+export { RemoteSettingsPanel } from "./RemoteSettingsPanel";
 export { NotificationsSettingsPanel } from "./NotificationsSettingsPanel";
 export { ProvidersSettingsPanel } from "./ProvidersSettingsPanel";
 export { AiSettingsPanel } from "./AiSettingsPanel";

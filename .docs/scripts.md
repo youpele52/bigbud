@@ -3,7 +3,8 @@
 - `bun run dev` — Starts contracts, server, and web in `turbo watch` mode.
 - `bun run dev:server` — Starts just the WebSocket server (uses Bun TypeScript execution).
 - `bun run dev:web` — Starts just the Vite dev server for the web app.
-- Dev commands default `T3CODE_STATE_DIR` to `~/.bigbud/dev` to keep dev state isolated from desktop/prod state.
+- `bun run dev:mobile-web` — Starts just the mobile companion Vite dev server.
+- Dev commands default `BIGBUD_HOME` to `~/.bigbud` unless overridden.
 - Override server CLI-equivalent flags from root dev commands with `--`, for example:
   `bun run dev -- --base-dir ~/.bigbud-2`
 - `bun run start` — Runs the production server (serves built web app as static files).
@@ -33,10 +34,27 @@
 
 ## Running multiple dev instances
 
-Set `T3CODE_DEV_INSTANCE` to any value to deterministically shift all dev ports together.
+Set `BIGBUD_DEV_INSTANCE` to any value to deterministically shift all dev ports together. Legacy `T3CODE_DEV_INSTANCE` is still accepted.
 
-- Default ports: server `3773`, web `5733`
-- Shifted ports: `base + offset` (offset is hashed from `T3CODE_DEV_INSTANCE`)
-- Example: `T3CODE_DEV_INSTANCE=branch-a bun run dev:desktop`
+Base ports (offset `0`):
 
-If you want full control instead of hashing, set `T3CODE_PORT_OFFSET` to a numeric offset.
+- Server: `3773` (`BIGBUD_PORT`)
+- Web: `5733` (`PORT`)
+- Mobile web: `5740` (`MOBILE_WEB_PORT`)
+
+Shifted ports use the same offset for all three: `base + offset`. The offset is hashed from `BIGBUD_DEV_INSTANCE` unless you provide a numeric instance value.
+
+Examples:
+
+```bash
+BIGBUD_DEV_INSTANCE=branch-a bun run dev
+BIGBUD_DEV_INSTANCE=branch-a bun run dev:mobile-web
+```
+
+If you want full control instead of hashing, set `BIGBUD_PORT_OFFSET` to a numeric offset. Legacy `T3CODE_PORT_OFFSET` is still accepted.
+
+The dev runner prints the resolved ports on startup:
+
+```text
+[dev-runner] mode=dev source=... serverPort=3773 webPort=5733 mobileWebPort=5740 baseDir=...
+```

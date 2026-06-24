@@ -1,3 +1,4 @@
+import { DEFAULT_WEB_PORT } from "@bigbud/shared/DevPorts";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
@@ -5,7 +6,7 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineConfig } from "vite";
 import pkg from "./package.json" with { type: "json" };
 
-const port = Number(process.env.PORT ?? 5733);
+const port = Number(process.env.PORT ?? DEFAULT_WEB_PORT);
 const sourcemapEnv = (process.env.BIGBUD_WEB_SOURCEMAP ?? process.env.T3CODE_WEB_SOURCEMAP)
   ?.trim()
   .toLowerCase();
@@ -37,6 +38,7 @@ export default defineConfig({
   define: {
     // In dev mode, tell the web app where the WebSocket server lives
     "import.meta.env.VITE_WS_URL": JSON.stringify(process.env.VITE_WS_URL ?? ""),
+    "import.meta.env.VITE_MOBILE_WEB_URL": JSON.stringify(process.env.VITE_MOBILE_WEB_URL ?? ""),
     "import.meta.env.APP_VERSION": JSON.stringify(pkg.version),
   },
   resolve: {

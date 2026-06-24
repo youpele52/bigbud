@@ -62,6 +62,10 @@ import {
   ThreadShellRunner,
   type ThreadShellRunnerShape,
 } from "./shell/Services/ThreadShellRunner.ts";
+import {
+  MobileRemoteControl,
+  type MobileRemoteControlShape,
+} from "./mobile/Services/MobileRemoteControl.ts";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
@@ -158,6 +162,7 @@ export const buildAppUnderTest = (options?: {
     gitManager?: Partial<GitManagerShape>;
     projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
     threadShellRunner?: Partial<ThreadShellRunnerShape>;
+    mobileRemoteControl?: Partial<MobileRemoteControlShape>;
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
@@ -250,6 +255,17 @@ export const buildAppUnderTest = (options?: {
           updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
           streamChanges: Stream.empty,
           ...options?.layers?.serverSettings,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(MobileRemoteControl)({
+          createPairing: () => Effect.die("not implemented"),
+          getPairingStatus: () => Effect.succeed(null),
+          exchangePairing: () => Effect.die("not implemented"),
+          listSessions: Effect.succeed([]),
+          revokeSession: () => Effect.void,
+          validateSessionToken: () => Effect.succeed(null),
+          ...options?.layers?.mobileRemoteControl,
         }),
       ),
       Layer.provide(
@@ -500,8 +516,8 @@ export const buildAppUnderTest = (options?: {
           record: () => Effect.void,
         }),
       ),
-      Layer.provide(workspaceAndProjectServicesLayer),
-      Layer.provide(layerConfig),
+      (layer) =>
+        layer.pipe(Layer.provide(workspaceAndProjectServicesLayer), Layer.provide(layerConfig)),
     );
 
     yield* Layer.build(appLayer);

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
+import { Route as SettingsRemoteRouteImport } from './routes/settings.remote'
 import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
@@ -37,6 +38,11 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ChatRoute,
+} as any)
+const SettingsRemoteRoute = SettingsRemoteRouteImport.update({
+  id: '/remote',
+  path: '/remote',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
   id: '/providers',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/automations/': typeof ChatAutomationsIndexRoute
 }
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/': typeof ChatIndexRoute
   '/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/automations': typeof ChatAutomationsIndexRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/settings/keybindings': typeof SettingsKeybindingsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/providers': typeof SettingsProvidersRoute
+  '/settings/remote': typeof SettingsRemoteRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/automations/$automationId': typeof ChatAutomationsAutomationIdRoute
   '/_chat/automations/': typeof ChatAutomationsIndexRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/notifications'
     | '/settings/providers'
+    | '/settings/remote'
     | '/automations/$automationId'
     | '/automations/'
   fileRoutesByTo: FileRoutesByTo
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/notifications'
     | '/settings/providers'
+    | '/settings/remote'
     | '/'
     | '/automations/$automationId'
     | '/automations'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/settings/keybindings'
     | '/settings/notifications'
     | '/settings/providers'
+    | '/settings/remote'
     | '/_chat/'
     | '/_chat/automations/$automationId'
     | '/_chat/automations/'
@@ -216,6 +228,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/settings/remote': {
+      id: '/settings/remote'
+      path: '/remote'
+      fullPath: '/settings/remote'
+      preLoaderRoute: typeof SettingsRemoteRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/settings/providers': {
       id: '/settings/providers'
@@ -333,6 +352,7 @@ interface SettingsRouteChildren {
   SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsProvidersRoute: typeof SettingsProvidersRoute
+  SettingsRemoteRoute: typeof SettingsRemoteRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
@@ -343,6 +363,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsKeybindingsRoute: SettingsKeybindingsRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsProvidersRoute: SettingsProvidersRoute,
+  SettingsRemoteRoute: SettingsRemoteRoute,
 }
 
 const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
