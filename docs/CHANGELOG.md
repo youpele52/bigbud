@@ -4,57 +4,48 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.1.647 (23 June, 2026)
 
-### Terminal
-
-- Added **Annotate selection** to the terminal text-selection menu alongside **Add to chat** — select terminal output, choose **Annotate selection**, and use the same Ask / Context / Fix composer panel already available in the file viewer, diff panel, and browser. Annotations appear as chips in the composer and in the message timeline with the selected output preserved.
-- Fixed terminal refitting when the panel is resized — the viewport now reflows wrapped lines and notifies the backend when the container width changes, not only when the drawer height changes, so output stays readable after sidebar or panel layout changes.
-
-### Desktop
-
-- Local and development desktop builds now use a distinct inverted bigbud icon (dark background, white glyph) so you can tell at a glance whether you are running a dev build or a packaged production install.
-
-### Files Panel
-
-- Clicking an image in the Files panel now opens it in the **Browser** by default, matching how PDFs already behave.
-- Right-click an image for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path** — the file viewer shows a dedicated image preview when you want to stay inside the panel.
-- Fixed the file tree and file viewer not updating after workspace changes — directory watches now refresh every visible folder in the tree (not only the watched path), keep stable subscriptions while listings reload, and retry forced refreshes that arrive mid-load. File and image previews also wait briefly after filesystem events so saved content is on disk before reload.
-- Clicking an HTML file (`.html` / `.htm`) now opens it in the **Browser** by default so pages render instead of showing raw markup in the code editor.
-- Right-click an HTML file for **Open in file viewer**, **Open in browser**, **Open externally**, or **Copy path**.
-- Supported files now open inside bigbud even when the clicked path belongs to another project, worktree, or unrelated folder — the Files panel temporarily roots itself to that path instead of kicking you out to an external editor.
-- External directories can now open inside the Files panel too, and the panel header shows the full absolute path of the file you are previewing so you always know exactly which file is open.
-
-### Notes
-
-- Note filenames are now stable — new notes use a creation-time datetime stem (e.g. `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note's title no longer renames the file or changes its `noteId`. Existing notes keep their current filenames.
-- The display title in the Notes panel continues to come from the note's H1 or first sentence, derived from content rather than the filename.
-- Note preview now renders headings (H1–H6) with the same hierarchy, size, and weight as the file preview markdown viewer, so long notes are easier to scan and read.
-- Note edit mode now uses the same background color as the raw markdown file viewer instead of the lighter input surface, making the editing experience visually consistent with reading code and markdown files.
-- Fixed drag-and-drop of notes (and any file panel path reference) failing to send the file content to the AI agent — when a note or file is dragged to the composer as a path reference, the normalizer now reads the file, persists a copy, and converts it to a proper file attachment so all four providers (Claude, Copilot, Codex, OpenCode) receive the content instead of just the raw path text.
-
-### Right Panel
-
-- Fixed right-panel dropdown menus and popovers having their top items unresponsive in the desktop app when opened over the Git, Terminal, or Files panel headers — portalled overlays now explicitly opt out of the Electron drag region so clicks reach the menu instead of moving the window.
-- Drag-to-reorder tab wrappers also opted out of the Electron drag region, making the entire tab area reliably clickable rather than only the center label button.
-
 ### Kanban
 
 - Added a **Kanban** right-panel tab after Notes with Backlog, Todo, Ongoing, and Done columns for lightweight task tracking alongside your chats.
-- Boards can be **global** or **project-scoped**, with markdown-backed cards persisted as workspace files and JSON sidecars so cards survive restarts and sync with the filesystem.
-- Drag cards between columns or within a column to reorder; drag cards into the composer like notes and files to attach them as context for the agent.
-- Create, edit, duplicate, and manage cards from a context menu — move between statuses, copy paths, open externally, or delete without leaving the panel.
-- Collapse columns into compact vertical strips when you want more room for the lists you are actively working through.
+- Boards can be **global** or **project-scoped**, with markdown-backed cards and JSON sidecars so they persist across restarts and stay in sync with the filesystem.
+- Drag cards between columns or within a column to reorder, drag them into the composer to write, flesh out, or even carry out the task with the agent, manage them from a context menu, and collapse columns when you want a denser view.
 
-### Observability
+### Files Panel
 
-- Provider event logs (`events.log` and per-thread `*.log` files in `~/.bigbud/{userdata,dev}/logs/provider/`) are now development-only — in production builds the verbose native and canonical trace loggers are not created at all, preventing unbounded disk accumulation from raw event payloads and per-delta protocol frames.
-- On every startup, provider log files older than 7 days are automatically pruned from both runtime profiles, keeping even development installs bounded without manual cleanup.
+- The Files panel now opens images and HTML files in the **Browser** by default, and right-clicking either shows **Open in file viewer**, **Open in browser**, **Open externally**, and **Copy path**.
+- Supported files and external directories can now open inside bigbud even when they live outside the current project or worktree; the panel temporarily roots itself to that path and shows the full absolute path in the header.
+- Fixed stale file trees and previews after workspace changes by broadening directory refreshes, keeping subscriptions stable during reloads, and waiting briefly before reloading changed previews so saved content is on disk first.
 
 ### Thread References
 
-- Added drag-and-drop thread references — drag a thread from the sidebar into the composer to attach it as context. The server resolves the referenced thread at send time, inlines its full transcript inside an `<attached_threads>` block, and strips thread references from the provider's attachment list so providers receive inline context without needing file-path access to the thread export.
-- Thread references are deduplicated by thread ID in the composer, show a dedicated thread icon (`MessageSquare`) in the file preview area, and render as `UserThreadReferenceChips` in the message timeline so you always see which threads were included in a turn.
-- Excluded thread-attachment metadata from title generation and branch-name prompts so those features stay accurate when thread references are present.
-- Added a server-side `exportThreadContext` RPC behind the "Copy path" action in the sidebar thread context menu, giving the workspace path without exposing a file the agent can edit directly.
+- Added drag-and-drop thread references — drag a thread from the sidebar into the composer to attach it as context. The server resolves the referenced thread at send time, inlines its full transcript inside an `<attached_threads>` block, and strips thread references from the provider attachment list.
+- Thread references are deduplicated by thread ID, shown with a dedicated `MessageSquare` chip in the composer and message timeline, and the timeline chips are now clickable so you can jump straight to the referenced thread.
+- Referenced threads are not just passive context: you can ask the agent to inspect them and act on them, including renaming the referenced thread when needed.
+- Excluded thread-reference metadata from title and branch-name generation, and added a server-side `exportThreadContext` RPC behind the sidebar **Copy path** action without exposing an editable file to the agent.
+
+### Notes
+
+- Note filenames are now stable — new notes use a creation-time datetime stem (for example `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note no longer renames the file or changes its `noteId`. Existing notes keep their current filenames, and display titles still come from content.
+- Fixed note and file path references dragged into the composer so the AI now receives the actual file contents as a proper attachment instead of just the raw path text.
+- Improved note readability and visual consistency: preview headings now match the markdown file viewer hierarchy, and edit mode now uses the same background treatment as the raw markdown viewer.
+
+### Terminal
+
+- Added **Annotate selection** to the terminal text-selection menu alongside **Add to chat**, using the same Ask / Context / Fix composer flow already available in the file viewer, diff panel, and browser.
+- Fixed terminal refitting on panel resize so wrapped lines reflow correctly after sidebar and layout changes.
+
+### Observability
+
+- Provider event logs in `~/.bigbud/{userdata,dev}/logs/provider/` are now development-only, so production builds no longer accumulate verbose native and canonical trace logs on disk.
+- On startup, provider log files older than 7 days are automatically pruned from both runtime profiles.
+
+### Right Panel
+
+- Fixed desktop drag-region issues that made right-panel menus, popovers, and draggable tab wrappers partially unclickable over the Git, Terminal, and Files headers.
+
+### Desktop
+
+- Local and development desktop builds now use a distinct inverted bigbud icon so you can tell dev and packaged installs apart at a glance.
 
 ## v0.1.646 (20 June, 2026)
 

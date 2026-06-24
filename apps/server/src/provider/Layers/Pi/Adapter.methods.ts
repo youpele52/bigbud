@@ -8,6 +8,7 @@ import {
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { createPiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
 import { resolveProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { resolveWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import type { ServerSettingsShape } from "../../../ws/serverSettings.ts";
@@ -44,6 +45,9 @@ import { normalizeString, readResumeCursor, toMessage } from "./Adapter.utils.ts
 
 export function makePiAdapterMethods(deps: {
   readonly attachmentsDir: string;
+  readonly stateDir: string;
+  readonly host: string | undefined;
+  readonly port: number;
   readonly emit: PiEmitEvents;
   readonly handleProcessExit: PiProcessExitHandler;
   readonly handleStdoutEvent: PiStdoutEventHandler;
@@ -97,12 +101,29 @@ export function makePiAdapterMethods(deps: {
       executionTargetId: executionTargets.workspaceExecutionTargetId,
       cwd: input.cwd,
     });
+    const orchestrationBridge = yield* Effect.tryPromise({
+      try: () =>
+        createPiOrchestrationBridge({
+          stateDir: deps.stateDir,
+          threadId: input.threadId,
+          host: deps.host,
+          port: deps.port,
+        }),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+          detail: toMessage(cause, "Failed to prepare Pi thread orchestration bridge."),
+          cause,
+        }),
+    });
     const rpcProcess = yield* Effect.tryPromise({
       try: () =>
         createPiRpcProcess({
           binaryPath: piSettings.binaryPath,
           providerRuntimeTarget,
           workspaceTarget,
+          orchestrationBridge,
           ...(resumeCursor?.sessionFile ? { sessionFile: resumeCursor.sessionFile } : {}),
           env: process.env,
         }),
@@ -114,6 +135,11 @@ export function makePiAdapterMethods(deps: {
           cause,
         }),
     }).pipe(
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          void orchestrationBridge.cleanup().catch(() => undefined);
+        }),
+      ),
       Effect.tapError((error) =>
         Effect.logError("Pi RPC process failed to start", {
           threadId: input.threadId,

@@ -26,13 +26,13 @@ import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSet
 import { ServerConfig } from "../../startup/config.ts";
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
-  canReplaceThreadTitle,
   formatProviderServiceCauseDetail,
   HANDLED_TURN_START_KEY_MAX,
   HANDLED_TURN_START_KEY_TTL_MINUTES,
   resolveThreadTitleSeed,
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
+import { shouldAllowAutoTitleReplace } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
@@ -269,7 +269,13 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         ...generationInput,
       }).pipe(Effect.forkScoped);
 
-      if (canReplaceThreadTitle(thread.title, resolvedTitleSeed)) {
+      if (
+        shouldAllowAutoTitleReplace({
+          threadId: event.payload.threadId,
+          currentTitle: thread.title,
+          ...(resolvedTitleSeed !== undefined ? { titleSeed: resolvedTitleSeed } : {}),
+        })
+      ) {
         if (resolvedTitleSeed !== undefined && thread.title.trim() !== resolvedTitleSeed.trim()) {
           yield* orchestrationEngine.dispatch({
             type: "thread.meta.update",

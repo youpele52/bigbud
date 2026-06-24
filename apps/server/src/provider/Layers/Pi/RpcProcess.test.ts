@@ -175,6 +175,71 @@ describe("createPiRpcProcess", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it("loads orchestration tools alongside the remote workspace bridge", async () => {
+    const child = createFakeChildProcess();
+    const remoteCleanup = vi.fn(async () => undefined);
+    const orchestrationCleanup = vi.fn(async () => undefined);
+    spawnMock.mockReturnValueOnce(child);
+    createPiRemoteWorkspaceBridgeMock.mockResolvedValueOnce({
+      cwd: "/tmp/pi-remote-bridge",
+      extensionPath: "/tmp/pi-remote-bridge/.bigbud/bigbud-remote-workspace-bridge.ts",
+      extraArgs: [
+        "--no-builtin-tools",
+        "--no-extensions",
+        "--extension",
+        "/tmp/pi-remote-bridge/.bigbud/bigbud-remote-workspace-bridge.ts",
+      ],
+      cleanup: remoteCleanup,
+    });
+
+    const orchestrationExtensionPath =
+      "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts";
+
+    await createPiRpcProcess({
+      binaryPath: "/custom/pi",
+      providerRuntimeTarget: {
+        location: "local",
+        executionTargetId: "local",
+      },
+      workspaceTarget: {
+        location: "remote",
+        executionTargetId: "ssh:host=devbox&user=root&port=22",
+        cwd: "/srv/project",
+      },
+      orchestrationBridge: {
+        extensionPath: orchestrationExtensionPath,
+        bridgeDir: "/tmp/pi-orchestration",
+        extraArgs: ["--extension", orchestrationExtensionPath],
+        cleanup: orchestrationCleanup,
+      },
+      env: globalThis.process.env,
+    });
+
+    expect(spawnMock).toHaveBeenCalledWith(
+      "/custom/pi",
+      [
+        "--mode",
+        "rpc",
+        "--no-builtin-tools",
+        "--no-extensions",
+        "--extension",
+        "/tmp/pi-remote-bridge/.bigbud/bigbud-remote-workspace-bridge.ts",
+        "--extension",
+        orchestrationExtensionPath,
+      ],
+      {
+        cwd: "/tmp/pi-remote-bridge",
+        env: globalThis.process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+      },
+    );
+
+    child.emit("exit", 0, null);
+    expect(remoteCleanup).toHaveBeenCalledTimes(1);
+    expect(orchestrationCleanup).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a shell on Windows for local provider runtime Pi sessions", async () => {
     await withMockedPlatform("win32", async () => {
       const child = createFakeChildProcess();

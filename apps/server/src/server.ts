@@ -12,6 +12,7 @@ import {
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
 } from "./ws/http";
+import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
 import { OpenLive } from "./utils/open";
@@ -295,6 +296,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
   staticAndDevRouteLayer,
+  threadOrchestrationToolsRouteLayer,
   websocketRpcRouteLayer,
 );
 

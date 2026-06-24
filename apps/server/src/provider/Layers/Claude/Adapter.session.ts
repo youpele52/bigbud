@@ -44,6 +44,11 @@ import { PROVIDER } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
 import { makeApprovalHandlers } from "./Adapter.approval.ts";
 import { createClaudeRemoteWorkspaceBridge } from "./ClaudeRemoteWorkspaceBridge.ts";
+import {
+  buildClaudeSessionOrchestrationConfig,
+  composeBridgeCleanups,
+  prepareThreadOrchestrationMcpBridge,
+} from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
 import {
   asCanonicalTurnId,
@@ -57,7 +62,12 @@ import {
 
 export interface SessionStartDeps {
   readonly fileSystem: FileSystem.FileSystem;
-  readonly serverConfig: { readonly attachmentsDir: string };
+  readonly serverConfig: {
+    readonly attachmentsDir: string;
+    readonly stateDir: string;
+    readonly port: number;
+    readonly host: string | undefined;
+  };
   readonly serverSettingsService: {
     readonly getSettings: Effect.Effect<
       { readonly providers: { readonly claudeAgent: { readonly binaryPath: string } } },
@@ -237,6 +247,27 @@ export const makeStartSession = (deps: SessionStartDeps) => {
               }),
           })
         : undefined;
+    const orchestrationBridge = yield* Effect.tryPromise({
+      try: () =>
+        prepareThreadOrchestrationMcpBridge({
+          stateDir: deps.serverConfig.stateDir,
+          threadId: input.threadId,
+          host: deps.serverConfig.host,
+          port: deps.serverConfig.port,
+        }),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+          detail: toMessage(cause, "Failed to prepare Claude thread orchestration bridge."),
+          cause,
+        }),
+    });
+    const orchestrationConfig = buildClaudeSessionOrchestrationConfig(orchestrationBridge);
+    const cleanupBridge = composeBridgeCleanups(
+      remoteWorkspaceBridge?.cleanup,
+      orchestrationBridge.cleanup,
+    );
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const caps = getClaudeModelCapabilities(modelSelection?.model);
@@ -256,7 +287,8 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     };
     const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
 
-    const queryOptions: ClaudeQueryOptions = {
+    const remoteQueryOptions = remoteWorkspaceBridge?.queryOptions;
+    const queryOptions = {
       ...(runtimeCwd ? { cwd: runtimeCwd } : {}),
       ...(apiModelId ? { model: apiModelId } : {}),
       pathToClaudeCodeExecutable: claudeBinaryPath,
@@ -266,12 +298,20 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
       ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
       ...(newSessionId ? { sessionId: newSessionId } : {}),
-      ...remoteWorkspaceBridge?.queryOptions,
+      ...remoteQueryOptions,
+      mcpServers: {
+        ...remoteQueryOptions?.mcpServers,
+        ...orchestrationConfig.mcpServers,
+      },
+      allowedTools: [
+        ...(remoteQueryOptions?.allowedTools ?? []),
+        ...orchestrationConfig.allowedTools,
+      ],
       includePartialMessages: true,
       canUseTool,
       env: process.env,
       ...(runtimeCwd && !remoteWorkspaceBridge ? { additionalDirectories: [runtimeCwd] } : {}),
-    };
+    } as ClaudeQueryOptions;
 
     const queryRuntime = yield* Effect.try({
       try: () =>
@@ -289,7 +329,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     }).pipe(
       Effect.tapError(() =>
         Effect.sync(() => {
-          void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+          void cleanupBridge().catch(() => undefined);
         }),
       ),
     );
@@ -330,9 +370,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       session,
       promptQueue,
       query: queryRuntime,
-      ...(remoteWorkspaceBridge?.cleanup
-        ? { cleanupRemoteWorkspaceBridge: remoteWorkspaceBridge.cleanup }
-        : {}),
+      ...(cleanupBridge ? { cleanupRemoteWorkspaceBridge: cleanupBridge } : {}),
       streamFiber: undefined,
       startedAt,
       basePermissionMode: permissionMode,

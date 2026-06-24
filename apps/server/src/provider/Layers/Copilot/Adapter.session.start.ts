@@ -17,6 +17,8 @@ import { Effect } from "effect";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+import { createCopilotThreadOrchestrationTools } from "../../../orchestration-tools/copilotThreadOrchestrationTools.ts";
+import { getThreadOrchestrationToolDispatcher } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterSessionNotFoundError,
@@ -39,7 +41,12 @@ import {
 
 export interface SessionOpsDeps {
   readonly sessions: Map<ThreadId, ActiveCopilotSession>;
-  readonly serverConfig: { readonly attachmentsDir: string };
+  readonly serverConfig: {
+    readonly attachmentsDir: string;
+    readonly stateDir: string;
+    readonly port: number;
+    readonly host: string | undefined;
+  };
   readonly serverSettings: {
     readonly getSettings: Effect.Effect<
       {
@@ -165,15 +172,31 @@ export const makeStartSession =
       const pendingUserInputs = new Map<string, PendingUserInputRequest>();
       let activeTurn: TurnId | undefined;
       const stoppedRef = { stopped: false };
+      const dispatcher = getThreadOrchestrationToolDispatcher();
+      if (!dispatcher) {
+        return yield* new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+          detail: "Thread orchestration tools are not ready.",
+        });
+      }
+      const orchestrationTools = createCopilotThreadOrchestrationTools({
+        renameThread: (title) =>
+          Effect.runPromise(dispatcher.rename({ threadId: input.threadId, title })),
+        archiveThread: () =>
+          Effect.runPromise(dispatcher.archive({ threadId: input.threadId }).pipe(Effect.asVoid)),
+      });
+      const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(
         {
           threadId: input.threadId,
           runtimeMode: input.runtimeMode,
           ...(sessionWorkingDirectory ? { cwd: sessionWorkingDirectory } : {}),
           ...(input.modelSelection ? { modelSelection: input.modelSelection } : {}),
-          ...(remoteWorkspaceBridge?.sessionConfig
-            ? { sessionConfigOverrides: remoteWorkspaceBridge.sessionConfig }
-            : {}),
+          sessionConfigOverrides: {
+            ...remoteSessionConfig,
+            tools: [...(remoteSessionConfig?.tools ?? []), ...orchestrationTools],
+          },
         },
         pendingApprovals,
         pendingUserInputs,

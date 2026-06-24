@@ -20,6 +20,12 @@ import {
   type CodexAppServerStartSessionInput,
 } from "../../../codex/codexAppServerManager.ts";
 import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
+import {
+  buildCodexSessionOrchestrationConfig,
+  composeBridgeCleanups,
+  prepareThreadOrchestrationMcpBridge,
+} from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
+import { mergeCodexConfigArgs } from "../../../orchestration-tools/orchestrationMcpBridge.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
   appendAttachedImageOcrContents,
@@ -123,6 +129,31 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                 }),
             })
           : undefined;
+      const orchestrationBridge = yield* Effect.tryPromise({
+        try: () =>
+          prepareThreadOrchestrationMcpBridge({
+            stateDir: serverConfig.stateDir,
+            threadId: input.threadId,
+            host: serverConfig.host,
+            port: serverConfig.port,
+          }),
+        catch: (cause) =>
+          new ProviderAdapterProcessError({
+            provider: PROVIDER,
+            threadId: input.threadId,
+            detail: toMessage(cause, "Failed to prepare Codex thread orchestration bridge."),
+            cause,
+          }),
+      });
+      const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
+      const mergedConfigArgs = mergeCodexConfigArgs(
+        remoteWorkspaceBridge?.configArgs,
+        orchestrationConfig,
+      );
+      const cleanupBridge = composeBridgeCleanups(
+        remoteWorkspaceBridge?.cleanup,
+        orchestrationBridge.cleanup,
+      );
       const managerInput: CodexAppServerStartSessionInput = {
         threadId: input.threadId,
         provider: "codex",
@@ -139,12 +170,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         runtimeMode: input.runtimeMode,
         binaryPath,
         ...(homePath ? { homePath } : {}),
-        ...(remoteWorkspaceBridge?.configArgs
-          ? { configArgs: remoteWorkspaceBridge.configArgs }
-          : {}),
-        ...(remoteWorkspaceBridge?.cleanup
-          ? { cleanupRemoteWorkspaceBridge: remoteWorkspaceBridge.cleanup }
-          : {}),
+        ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
+        ...(cleanupBridge ? { cleanupRemoteWorkspaceBridge: cleanupBridge } : {}),
         ...(remoteWorkspaceBridge?.promptPrefix
           ? { developerInstructions: remoteWorkspaceBridge.promptPrefix }
           : {}),
@@ -168,7 +195,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       }).pipe(
         Effect.tapError(() =>
           Effect.sync(() => {
-            void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+            void cleanupBridge().catch(() => undefined);
           }),
         ),
       );
