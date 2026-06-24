@@ -131,6 +131,8 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_remote_workspace__grep",
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
+        "mcp__bigbud_orchestration__rename_thread",
+        "mcp__bigbud_orchestration__archive_thread",
       ]);
       assert.deepEqual(createInput?.options.additionalDirectories, undefined);
       const remoteWorkspaceServer = createInput?.options.mcpServers?.bigbud_remote_workspace;

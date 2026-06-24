@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   asEventId,
@@ -11,9 +11,17 @@ import {
   registerProviderRuntimeIngestionTestCleanup,
   waitForThread,
 } from "./ProviderRuntimeIngestion.test.helpers.ts";
+import {
+  lockThreadTitle,
+  resetThreadTitleLockForTests,
+} from "../../orchestration-tools/ThreadTitleLock.ts";
 
 describe("ProviderRuntimeIngestion", () => {
   registerProviderRuntimeIngestionTestCleanup();
+
+  afterEach(() => {
+    resetThreadTitleLockForTests();
+  });
 
   it("maps session/thread lifecycle and item.started into session/activity projections", async () => {
     const harness = await createHarness();
@@ -199,5 +207,27 @@ describe("ProviderRuntimeIngestion", () => {
     expect(checkpoint?.status).toBe("missing");
     expect(checkpoint?.assistantMessageId).toBe("assistant:item-p1-assistant");
     expect(checkpoint?.checkpointRef).toBe("provider-diff:evt-turn-diff-updated");
+  });
+
+  it("skips provider thread metadata updates when the title is locked", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+
+    lockThreadTitle("thread-1");
+
+    harness.emit({
+      type: "thread.metadata.updated",
+      eventId: asEventId("evt-thread-metadata-locked"),
+      provider: "codex",
+      createdAt: now,
+      threadId: asThreadId("thread-1"),
+      payload: {
+        name: "Provider overwrite attempt",
+        metadata: { source: "provider" },
+      },
+    });
+
+    const thread = await waitForThread(harness.engine, (entry) => entry.id === "thread-1");
+    expect(thread.title).not.toBe("Provider overwrite attempt");
   });
 });

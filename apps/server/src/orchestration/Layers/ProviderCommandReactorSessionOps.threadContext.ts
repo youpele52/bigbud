@@ -22,7 +22,9 @@ export function prependThreadContextToProviderInput(input: {
     `- Thread ID: ${input.threadId}`,
     `- Thread title: ${input.threadTitle}`,
     "",
-    "You can rename or archive the current thread if asked. You must not delete threads.",
+    "To rename the current thread, call the `rename_thread` tool with the new title.",
+    "To archive the current thread, call the `archive_thread` tool.",
+    "You must not delete threads.",
   ].join("\n");
   if (!input.providerInputText) {
     return contextBlock;

@@ -114,6 +114,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
         if (ctx.notificationFiber) {
           yield* Fiber.interrupt(ctx.notificationFiber);
         }
+        yield* Effect.tryPromise({
+          try: () => ctx.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
+          catch: () => undefined,
+        }).pipe(Effect.ignore);
         yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
         sessions.delete(ctx.threadId);
         yield* offerRuntimeEvent({
@@ -146,6 +150,11 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
           {
             childProcessSpawner,
             nativeEventLogger,
+            serverConfig: {
+              stateDir: serverConfig.stateDir,
+              host: serverConfig.host,
+              port: serverConfig.port,
+            },
             sessions,
             stopSessionInternal,
             getCursorSettings,

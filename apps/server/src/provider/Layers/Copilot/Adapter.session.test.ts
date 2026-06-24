@@ -15,6 +15,7 @@ import { Effect, Layer } from "effect";
 
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
+import { setThreadOrchestrationToolDispatcher } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { CopilotAdapter } from "../../Services/Copilot/Adapter.ts";
 import { makeCopilotAdapterLive } from "./Adapter.ts";
 
@@ -78,6 +79,11 @@ describe("CopilotAdapter remote workspace sessions", () => {
     );
 
     return Effect.gen(function* () {
+      setThreadOrchestrationToolDispatcher({
+        rename: () => Effect.succeed({ title: "Renamed" }),
+        archive: () => Effect.succeed({ archived: true as const }),
+      });
+
       const adapter = yield* CopilotAdapter;
       const session = yield* adapter.startSession({
         threadId: THREAD_ID,

@@ -111,6 +111,9 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
 
   const methods = makePiAdapterMethods({
     attachmentsDir: serverConfig.attachmentsDir,
+    stateDir: serverConfig.stateDir,
+    host: serverConfig.host,
+    port: serverConfig.port,
     emit,
     handleProcessExit,
     handleStdoutEvent,

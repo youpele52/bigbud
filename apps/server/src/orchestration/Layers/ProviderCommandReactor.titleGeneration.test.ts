@@ -1,7 +1,9 @@
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
 import { TextGenerationError } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTitleLock.ts";
 
 import {
   asMessageId,
@@ -12,6 +14,10 @@ import {
 
 describe("ProviderCommandReactor", () => {
   registerProviderCommandReactorTestCleanup();
+
+  afterEach(() => {
+    resetThreadTitleLockForTests();
+  });
 
   it("generates a thread title on the first turn", async () => {
     const harness = await createHarness();
@@ -292,6 +298,67 @@ describe("ProviderCommandReactor", () => {
     const readModel = await Effect.runPromise(harness.engine.getReadModel());
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(thread?.title).toBe("Keep this custom title");
+  });
+
+  it("does not overwrite an agent rename during first-turn title generation", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    let releaseTitleGeneration: (() => void) | undefined;
+    const titleGate = new Promise<void>((resolve) => {
+      releaseTitleGeneration = resolve;
+    });
+
+    harness.generateThreadTitle.mockReturnValue(
+      Effect.gen(function* () {
+        yield* Effect.promise(() => titleGate);
+        return { title: "Identifying the conversation topic" };
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-agent-rename-race"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-agent-rename-race"),
+          role: "user",
+          text: "Rename this thread to summer sun.",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+        modelSelection: {
+          provider: "codex",
+          model: "gpt-5-codex",
+        },
+      }),
+    );
+
+    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe("agent:thread-rename:test"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        title: "Summer sun",
+      }),
+    );
+
+    releaseTitleGeneration?.();
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"))?.title ===
+        "Summer sun"
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
+    expect(thread?.title).toBe("Summer sun");
   });
 
   it("generates a thread title even when the outgoing prompt is reformatted", async () => {

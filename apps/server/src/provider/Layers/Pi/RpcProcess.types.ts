@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
+import type { PiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
 import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 
@@ -324,6 +325,7 @@ export interface PiRpcProcessOptions {
   readonly workspaceTarget: WorkspaceTarget;
   readonly sessionFile?: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly orchestrationBridge?: PiOrchestrationBridge;
 }
 
 export interface PiRpcProcess {

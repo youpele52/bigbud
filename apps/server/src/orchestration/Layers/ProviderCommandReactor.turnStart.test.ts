@@ -265,8 +265,12 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain("Thread ID: thread-1");
     expect(sendInput?.input).toContain("Thread title:");
     expect(sendInput?.input).toContain(
-      "You can rename or archive the current thread if asked. You must not delete threads.",
+      "To rename the current thread, call the `rename_thread` tool with the new title.",
     );
+    expect(sendInput?.input).toContain(
+      "To archive the current thread, call the `archive_thread` tool.",
+    );
+    expect(sendInput?.input).toContain("You must not delete threads.");
     expect(sendInput?.input).toContain("hello reactor");
   });
 
