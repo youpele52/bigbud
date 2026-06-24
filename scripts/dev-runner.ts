@@ -3,7 +3,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { NetService } from "@bigbud/shared/Net";
-import { Effect, Layer, Logger, Schema } from "effect";
+import { Config, Effect, Layer, Logger, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ChildProcess } from "effect/unstable/process";
 
@@ -23,6 +23,7 @@ import {
 } from "./dev-runner.lib.ts";
 
 export {
+  DEFAULT_BIGBUD_HOME,
   DEFAULT_T3_HOME,
   DEV_RUNNER_MODES,
   DevRunnerError,
@@ -47,8 +48,8 @@ interface DevRunnerCliInput {
   readonly turboArgs: ReadonlyArray<string>;
 }
 
-const readOptionalBooleanEnv = (name: string): boolean | undefined => {
-  const value = process.env[name];
+const readOptionalBooleanEnv = (primary: string, alias?: string): boolean | undefined => {
+  const value = process.env[primary] ?? (alias ? process.env[alias] : undefined);
   if (value === undefined) {
     return undefined;
   }
@@ -76,13 +77,40 @@ const resolveOptionalBooleanOverride = (
   return envValue;
 };
 
+const aliasedOptionalBooleanConfig = (
+  primary: string,
+  alias: string,
+): Config.Config<boolean | undefined> =>
+  Config.all({
+    primary: optionalBooleanConfig(primary),
+    alias: optionalBooleanConfig(alias),
+  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
+
+const aliasedOptionalPortConfig = (
+  primary: string,
+  alias: string,
+): Config.Config<number | undefined> =>
+  Config.all({
+    primary: optionalPortConfig(primary),
+    alias: optionalPortConfig(alias),
+  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
+
+const aliasedOptionalStringConfig = (
+  primary: string,
+  alias: string,
+): Config.Config<string | undefined> =>
+  Config.all({
+    primary: optionalStringConfig(primary),
+    alias: optionalStringConfig(alias),
+  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
+
 export function runDevRunnerWithInput(input: DevRunnerCliInput) {
   return Effect.gen(function* () {
     const { portOffset, devInstance } = yield* OffsetConfig.asEffect().pipe(
       Effect.mapError(
         (cause) =>
           new DevRunnerError({
-            message: "Failed to read T3CODE_PORT_OFFSET/T3CODE_DEV_INSTANCE configuration.",
+            message: "Failed to read BIGBUD_PORT_OFFSET/BIGBUD_DEV_INSTANCE configuration.",
             cause,
           }),
       ),
@@ -98,9 +126,12 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     });
 
     const envOverrides = {
-      noBrowser: readOptionalBooleanEnv("T3CODE_NO_BROWSER"),
-      autoBootstrapProjectFromCwd: readOptionalBooleanEnv("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD"),
-      logWebSocketEvents: readOptionalBooleanEnv("T3CODE_LOG_WS_EVENTS"),
+      noBrowser: readOptionalBooleanEnv("BIGBUD_NO_BROWSER", "T3CODE_NO_BROWSER"),
+      autoBootstrapProjectFromCwd: readOptionalBooleanEnv(
+        "BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+        "T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+      ),
+      logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
     };
 
     const { serverOffset, webOffset } = yield* resolveModePortOffsets({
@@ -137,7 +168,7 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
         : "";
 
     yield* Effect.logInfo(
-      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.T3CODE_PORT)} webPort=${String(env.PORT)} baseDir=${String(env.T3CODE_HOME)}`,
+      `[dev-runner] mode=${input.mode} source=${source}${selectionSuffix} serverPort=${String(env.BIGBUD_PORT)} webPort=${String(env.PORT)} mobileWebPort=${String(env.MOBILE_WEB_PORT)} baseDir=${String(env.BIGBUD_HOME)}`,
     );
 
     if (input.dryRun) {
@@ -183,37 +214,44 @@ const devRunnerCli = Command.make("dev-runner", {
     Argument.withDescription("Development mode to run."),
   ),
   t3Home: Flag.string("home-dir").pipe(
-    Flag.withDescription("Base directory for all bigbud data (equivalent to T3CODE_HOME)."),
-    Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOME")),
+    Flag.withDescription("Base directory for all bigbud data (equivalent to BIGBUD_HOME)."),
+    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_HOME", "T3CODE_HOME")),
   ),
   authToken: Flag.string("auth-token").pipe(
-    Flag.withDescription("Auth token (forwards to T3CODE_AUTH_TOKEN)."),
+    Flag.withDescription("Auth token (forwards to BIGBUD_AUTH_TOKEN)."),
     Flag.withAlias("token"),
-    Flag.withFallbackConfig(optionalStringConfig("T3CODE_AUTH_TOKEN")),
+    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_AUTH_TOKEN", "T3CODE_AUTH_TOKEN")),
   ),
   noBrowser: Flag.boolean("no-browser").pipe(
-    Flag.withDescription("Browser auto-open toggle (equivalent to T3CODE_NO_BROWSER)."),
-    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_NO_BROWSER")),
+    Flag.withDescription("Browser auto-open toggle (equivalent to BIGBUD_NO_BROWSER)."),
+    Flag.withFallbackConfig(aliasedOptionalBooleanConfig("BIGBUD_NO_BROWSER", "T3CODE_NO_BROWSER")),
   ),
   autoBootstrapProjectFromCwd: Flag.boolean("auto-bootstrap-project-from-cwd").pipe(
     Flag.withDescription(
-      "Auto-bootstrap toggle (equivalent to T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
+      "Auto-bootstrap toggle (equivalent to BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD).",
     ),
-    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD")),
+    Flag.withFallbackConfig(
+      aliasedOptionalBooleanConfig(
+        "BIGBUD_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+        "T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD",
+      ),
+    ),
   ),
   logWebSocketEvents: Flag.boolean("log-websocket-events").pipe(
-    Flag.withDescription("WebSocket event logging toggle (equivalent to T3CODE_LOG_WS_EVENTS)."),
+    Flag.withDescription("WebSocket event logging toggle (equivalent to BIGBUD_LOG_WS_EVENTS)."),
     Flag.withAlias("log-ws-events"),
-    Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_LOG_WS_EVENTS")),
+    Flag.withFallbackConfig(
+      aliasedOptionalBooleanConfig("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
+    ),
   ),
   host: Flag.string("host").pipe(
-    Flag.withDescription("Server host/interface override (forwards to T3CODE_HOST)."),
-    Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOST")),
+    Flag.withDescription("Server host/interface override (forwards to BIGBUD_HOST)."),
+    Flag.withFallbackConfig(aliasedOptionalStringConfig("BIGBUD_HOST", "T3CODE_HOST")),
   ),
   port: Flag.integer("port").pipe(
     Flag.withSchema(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
-    Flag.withDescription("Server port override (forwards to T3CODE_PORT)."),
-    Flag.withFallbackConfig(optionalPortConfig("T3CODE_PORT")),
+    Flag.withDescription("Server port override (forwards to BIGBUD_PORT)."),
+    Flag.withFallbackConfig(aliasedOptionalPortConfig("BIGBUD_PORT", "T3CODE_PORT")),
   ),
   devUrl: Flag.string("dev-url").pipe(
     Flag.withSchema(Schema.URLFromString),

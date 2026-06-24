@@ -16,6 +16,7 @@ import {
   ProjectSearchEntriesError,
   ProjectWriteFileError,
   ServerExportThreadContextError,
+  ServerMobileRemoteError,
   ServerReadDocumentUrlError,
   ServerWriteHandoffDocumentError,
   ThreadId,
@@ -282,6 +283,53 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
           });
           return result;
         }),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverCreateMobileRemotePairing]: (input: {
+      readonly scope: "read-only" | "approve-only" | "thread-control";
+      readonly baseUrl: string;
+      readonly backendBaseUrl: string;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.serverCreateMobileRemotePairing,
+        context.mobileRemoteControl.createPairing(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to create mobile pairing.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverListMobileRemoteSessions]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverListMobileRemoteSessions,
+        context.mobileRemoteControl.listSessions.pipe(
+          Effect.map((sessions) => ({ sessions })),
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to list mobile sessions.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverRevokeMobileRemoteSession]: (input: { readonly sessionId: string }) =>
+      observeRpcEffect(
+        WS_METHODS.serverRevokeMobileRemoteSession,
+        context.mobileRemoteControl.revokeSession(input.sessionId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to revoke mobile session.",
+                cause,
+              }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUpsertKeybinding]: (

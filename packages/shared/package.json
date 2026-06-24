@@ -67,6 +67,10 @@
     "./platform": {
       "types": "./src/platform.ts",
       "import": "./src/platform.ts"
+    },
+    "./DevPorts": {
+      "types": "./src/DevPorts.ts",
+      "import": "./src/DevPorts.ts"
     }
   },
   "scripts": {

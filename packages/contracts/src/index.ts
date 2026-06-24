@@ -19,6 +19,7 @@ export * from "./server/keybindings";
 export * from "./server/kanban";
 export * from "./server/notes";
 export * from "./server/teach";
+export * from "./server/mobile";
 export * from "./server/server";
 export * from "./server/automation";
 export * from "./core/settings";

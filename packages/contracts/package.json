@@ -23,6 +23,16 @@
     "./constants/*": "./src/constants/*",
     "./core/*": "./src/core/*",
     "./orchestration/*": "./src/orchestration/*",
+    "./server/mobile": {
+      "types": "./src/server/mobile.ts",
+      "import": "./src/server/mobile.ts",
+      "require": "./src/server/mobile.ts"
+    },
+    "./server/rpc.mobile": {
+      "types": "./src/server/rpc.mobile.ts",
+      "import": "./src/server/rpc.mobile.ts",
+      "require": "./src/server/rpc.mobile.ts"
+    },
     "./workspace/*": "./src/workspace/*",
     "./server/*": "./src/server/*"
   },

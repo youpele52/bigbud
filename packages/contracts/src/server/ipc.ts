@@ -83,6 +83,12 @@ import type {
   ServerExportThreadContextResult,
 } from "./server";
 import type {
+  ServerCreateMobileRemotePairingInput,
+  ServerListMobileRemoteSessionsResult,
+  ServerMobileRemotePairing,
+  ServerRevokeMobileRemoteSessionInput,
+} from "./mobile";
+import type {
   ServerAutomationResult,
   ServerCreateAutomationInput,
   ServerDeleteAutomationInput,
@@ -324,6 +330,11 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    createMobileRemotePairing: (
+      input: ServerCreateMobileRemotePairingInput,
+    ) => Promise<ServerMobileRemotePairing>;
+    listMobileRemoteSessions: () => Promise<ServerListMobileRemoteSessionsResult>;
+    revokeMobileRemoteSession: (input: ServerRevokeMobileRemoteSessionInput) => Promise<void>;
     exportThreadContext: (
       input: ServerExportThreadContextInput,
     ) => Promise<ServerExportThreadContextResult>;

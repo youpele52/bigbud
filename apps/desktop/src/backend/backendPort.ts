@@ -2,7 +2,9 @@ import * as Effect from "effect/Effect";
 
 import { NetService } from "@bigbud/shared/Net";
 
-export const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
+import { DEFAULT_SERVER_PORT } from "@bigbud/shared/DevPorts";
+
+export const DEFAULT_DESKTOP_BACKEND_PORT = DEFAULT_SERVER_PORT;
 const MAX_TCP_PORT = 65_535;
 
 export interface ResolveDesktopBackendPortOptions {
