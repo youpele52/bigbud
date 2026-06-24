@@ -97,7 +97,7 @@
   --radius: 0.625rem;
   --brand-primary-light: color-mix(in srgb, var(--color-white) 94%, var(--color-neutral-200));
   --brand-primary-dark: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-  --background: var(--color-white);
+  --background: var(--color-neutral-50);
   --foreground: var(--color-neutral-900);
   --card: var(--color-white);
   --card-foreground: var(--foreground);
