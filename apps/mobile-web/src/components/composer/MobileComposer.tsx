@@ -1,4 +1,10 @@
-import { type ApprovalRequestId, type ProviderApprovalDecision } from "@bigbud/contracts";
+import {
+  type ApprovalRequestId,
+  type ModelSelection,
+  type ProviderApprovalDecision,
+  type ProviderKind,
+  type ServerProvider,
+} from "@bigbud/contracts";
 import { ChevronLeftIcon } from "lucide-react";
 import { useRef, type KeyboardEvent } from "react";
 
@@ -9,12 +15,13 @@ import {
   setPendingUserInputCustomAnswer,
 } from "~/logic/user-input";
 
-import type { MobilePendingApproval, MobilePendingUserInput } from "../mobileModels";
-import { cn } from "../lib/cn";
+import type { MobilePendingApproval, MobilePendingUserInput } from "../../mobileModels";
+import { cn } from "../../lib/cn";
+import { MobileComposerModelPicker } from "./MobileComposerModelPicker";
 import { MobileComposerPendingUserInput } from "./MobileComposerPendingUserInput";
 import { MobileComposerSendIcon } from "./MobileComposerSendIcon";
 import { MobileComposerStopIcon } from "./MobileComposerStopIcon";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 
 interface MobileComposerProps {
   value: string;
@@ -24,6 +31,7 @@ interface MobileComposerProps {
   placeholder?: string | undefined;
   projectTitle?: string | undefined;
   isRunning?: boolean | undefined;
+  workingVerb?: string | undefined;
   onStop?: (() => void) | undefined;
   pendingApproval?: MobilePendingApproval | null | undefined;
   onRespondToApproval?: (requestId: ApprovalRequestId, decision: ProviderApprovalDecision) => void;
@@ -35,6 +43,11 @@ interface MobileComposerProps {
   onChangeUserInputCustomAnswer?: (questionId: string, value: string) => void;
   onAdvanceUserInput?: () => void;
   onPreviousUserInputQuestion?: () => void;
+  availableProviders?: ReadonlyArray<ServerProvider>;
+  modelSelection?: ModelSelection | null;
+  onModelSelectionChange?: (next: ModelSelection) => void;
+  lockedProvider?: ProviderKind | null;
+  onProviderUnlock?: () => void;
 }
 
 export function MobileComposer({
@@ -45,6 +58,7 @@ export function MobileComposer({
   placeholder = "Ask anything, @tag files/folders, or use / to show available commands",
   projectTitle,
   isRunning = false,
+  workingVerb,
   onStop,
   pendingApproval = null,
   onRespondToApproval,
@@ -56,6 +70,11 @@ export function MobileComposer({
   onChangeUserInputCustomAnswer,
   onAdvanceUserInput,
   onPreviousUserInputQuestion,
+  availableProviders = [],
+  modelSelection = null,
+  onModelSelectionChange,
+  lockedProvider = null,
+  onProviderUnlock,
 }: MobileComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isApprovalMode = pendingApproval !== null;
@@ -121,13 +140,13 @@ export function MobileComposer({
         ? "Type your answer to continue..."
         : "Select an option above or type a custom answer"
       : isRunning
-        ? "Waiting for response…"
+        ? (workingVerb ?? "Waiting for response…")
         : placeholder;
 
   return (
     <div
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background/95 backdrop-blur-sm",
+        "fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-background",
         "pb-[max(0.75rem,env(safe-area-inset-bottom))]",
       )}
     >
@@ -178,8 +197,16 @@ export function MobileComposer({
           </div>
 
           <div className="flex items-center justify-between gap-2 px-3 pb-3">
-            <div className="min-w-0 truncate text-xs text-muted-foreground">
-              {projectTitle ? <span>{projectTitle}</span> : null}
+            <div className="flex min-w-0 items-center gap-2">
+              {modelSelection && onModelSelectionChange ? (
+                <MobileComposerModelPicker
+                  lockedProvider={lockedProvider}
+                  onChange={onModelSelectionChange}
+                  {...(onProviderUnlock ? { onProviderUnlock } : {})}
+                  providers={availableProviders}
+                  selection={modelSelection}
+                />
+              ) : null}
             </div>
 
             {isApprovalMode && pendingApproval && onRespondToApproval ? (
@@ -256,6 +283,13 @@ export function MobileComposer({
             )}
           </div>
         </div>
+        {projectTitle ? (
+          <div className="px-1 pt-2">
+            <span className="block min-w-0 truncate text-xs text-muted-foreground">
+              {projectTitle}
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

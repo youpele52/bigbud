@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  type ModelSelection,
   type ProjectId,
   type ProviderInteractionMode,
   type RuntimeMode,
@@ -18,6 +19,7 @@ export interface MobileDraftThread {
   readonly worktreePath: string | null;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
+  readonly modelSelection: ModelSelection | null;
 }
 
 function canUseSessionStorage(): boolean {
@@ -47,7 +49,10 @@ function writeDraftMap(next: Record<string, MobileDraftThread>) {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
-export function createMobileDraftThread(projectId: ProjectId): MobileDraftThread {
+export function createMobileDraftThread(
+  projectId: ProjectId,
+  modelSelection: ModelSelection | null = null,
+): MobileDraftThread {
   return {
     threadId: ThreadId.makeUnsafe(crypto.randomUUID()),
     projectId,
@@ -56,6 +61,7 @@ export function createMobileDraftThread(projectId: ProjectId): MobileDraftThread
     worktreePath: null,
     runtimeMode: DEFAULT_RUNTIME_MODE,
     interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+    modelSelection,
   };
 }
 

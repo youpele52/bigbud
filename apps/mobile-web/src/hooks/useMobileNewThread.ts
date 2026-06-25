@@ -1,4 +1,4 @@
-import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId } from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID, type ModelSelection, type ProjectId } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 
@@ -8,8 +8,8 @@ export function useMobileNewThread() {
   const navigate = useNavigate();
 
   const startNewThread = useCallback(
-    (projectId: ProjectId) => {
-      const draft = createMobileDraftThread(projectId);
+    (projectId: ProjectId, modelSelection: ModelSelection | null = null) => {
+      const draft = createMobileDraftThread(projectId, modelSelection);
       setMobileDraftThread(draft);
       void navigate({
         to: "/mobile/thread/$threadId",
@@ -19,9 +19,12 @@ export function useMobileNewThread() {
     [navigate],
   );
 
-  const startNewChat = useCallback(() => {
-    startNewThread(BUILT_IN_CHATS_PROJECT_ID);
-  }, [startNewThread]);
+  const startNewChat = useCallback(
+    (modelSelection: ModelSelection | null = null) => {
+      startNewThread(BUILT_IN_CHATS_PROJECT_ID, modelSelection);
+    },
+    [startNewThread],
+  );
 
   return { startNewThread, startNewChat };
 }

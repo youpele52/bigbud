@@ -27,8 +27,9 @@ export function buildMobileCreateThreadBootstrap(input: {
   readonly worktreePath: string | null;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
+  readonly modelSelection?: ModelSelection;
 }): ThreadTurnStartBootstrap {
-  const modelSelection = resolveMobileModelSelection(input.project);
+  const modelSelection = input.modelSelection ?? resolveMobileModelSelection(input.project);
   const executionTargets = buildExplicitExecutionTargets({
     providerRuntimeExecutionTargetId: input.project.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: input.project.workspaceExecutionTargetId,

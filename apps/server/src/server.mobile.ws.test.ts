@@ -1,8 +1,8 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { ORCHESTRATION_WS_METHODS } from "@bigbud/contracts";
+import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 
@@ -147,6 +147,53 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
         return;
       }
       assert.include(String(result.failure), "OrchestrationDispatchCommandError");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
+  it.effect("streams server config snapshot to the mobile websocket", () =>
+    Effect.gen(function* () {
+      yield* buildAppUnderTest({
+        layers: {
+          mobileRemoteControl: {
+            validateSessionToken: () =>
+              Effect.succeed({
+                sessionId: "session-1",
+                token: "token-1",
+                scope: "thread-control",
+                createdAt: "2026-06-24T12:00:00.000Z",
+                expiresAt: "2026-07-01T12:00:00.000Z",
+                lastUsedAt: null,
+                revokedAt: null,
+                label: "iphone",
+              }),
+          },
+          keybindings: {
+            loadConfigState: Effect.succeed({
+              keybindings: [],
+              issues: [],
+            }),
+            streamChanges: Stream.empty,
+          },
+          providerRegistry: {
+            getProviders: Effect.succeed([]),
+            streamChanges: Stream.empty,
+          },
+        },
+      });
+
+      const wsUrl = yield* getWsServerUrl("/mobile-ws?token=token-1");
+      const events = yield* Effect.scoped(
+        withRetriedMobileWsRpcClient(wsUrl, (client) =>
+          Stream.take(client[WS_METHODS.subscribeServerConfig]({}), 1).pipe(Stream.runCollect),
+        ),
+      );
+
+      const snapshot = Array.from(events)[0];
+      assert.isNotNull(snapshot);
+      if (!snapshot || snapshot.type !== "snapshot") {
+        return;
+      }
+      assert.equal(snapshot.config.providers.length, 0);
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 });

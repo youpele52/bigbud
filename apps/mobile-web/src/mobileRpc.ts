@@ -100,4 +100,26 @@ export class MobileRpcClient {
       cancel();
     };
   }
+
+  onServerConfigEvent(listener: (event: unknown) => void): () => void {
+    let closed = false;
+    const cancel = this.runtime.runCallback(
+      Effect.promise(() => this.clientPromise).pipe(
+        Effect.flatMap((client) =>
+          Stream.runForEach(client[WS_METHODS.subscribeServerConfig]({}), (event) =>
+            Effect.sync(() => {
+              if (!closed) {
+                listener(event);
+              }
+            }),
+          ),
+        ),
+        Effect.catch(() => Effect.void),
+      ),
+    );
+    return () => {
+      closed = true;
+      cancel();
+    };
+  }
 }

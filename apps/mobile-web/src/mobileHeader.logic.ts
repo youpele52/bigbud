@@ -1,6 +1,7 @@
 import {
   BUILT_IN_CHATS_PROJECT_TITLE,
   type OrchestrationReadModel,
+  type ProjectId,
   type ThreadId,
   isBuiltInChatsProject,
 } from "@bigbud/contracts";
@@ -22,6 +23,7 @@ export interface MobileHeaderState {
 }
 
 const MOBILE_THREAD_PATH_PATTERN = /^\/mobile\/thread\/([^/]+)(?:\/|$)/;
+const MOBILE_PROJECT_THREADS_PATH_PATTERN = /^\/mobile\/projects\/([^/]+)$/;
 
 export function extractMobileThreadId(pathname: string): ThreadId | null {
   const match = pathname.match(MOBILE_THREAD_PATH_PATTERN);
@@ -29,6 +31,14 @@ export function extractMobileThreadId(pathname: string): ThreadId | null {
     return null;
   }
   return match[1] as ThreadId;
+}
+
+export function extractMobileProjectId(pathname: string): ProjectId | null {
+  const match = pathname.match(MOBILE_PROJECT_THREADS_PATH_PATTERN);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1] as ProjectId;
 }
 
 export function isMobileLaunchRoute(pathname: string): boolean {
@@ -47,7 +57,16 @@ export function resolveMobileHeaderState(
     return { showLogo: false, showBack: true, title: "Projects", backTo: "/mobile" };
   }
   if (pathname.startsWith("/mobile/projects/")) {
-    return { showLogo: false, showBack: true, title: "Threads", backTo: "/mobile/projects" };
+    const projectId = extractMobileProjectId(pathname);
+    const project = projectId
+      ? snapshot?.projects.find((candidate) => candidate.id === projectId)
+      : undefined;
+    return {
+      showLogo: false,
+      showBack: true,
+      title: project?.title ?? "Project",
+      backTo: "/mobile/projects",
+    };
   }
   if (pathname === "/mobile/chats") {
     return { showLogo: false, showBack: true, title: "Recents", backTo: "/mobile" };

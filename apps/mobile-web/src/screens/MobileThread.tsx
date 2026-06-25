@@ -2,11 +2,14 @@ import {
   ApprovalRequestId,
   CommandId,
   MessageId,
+  type ModelSelection,
   type ProviderApprovalDecision,
   type ThreadId,
 } from "@bigbud/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { deriveWorkLogEntries } from "@bigbud/shared/workLog";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { deriveActiveWorkStartedAt } from "~/logic/session/session.logic";
 import {
   derivePendingUserInputProgress,
   type PendingUserInputDraftAnswer,
@@ -14,18 +17,29 @@ import {
   togglePendingUserInputOptionSelection,
 } from "~/logic/user-input";
 
+import { MobileWorkingIndicator } from "../components/composer/MobileWorkingIndicator";
+import { MobileStartupSplash } from "../components/MobileStartupSplash";
 import {
   applyMobileUserInputCustomAnswer,
   MobileComposer,
   resolveMobileUserInputAnswers,
-} from "../components/MobileComposer";
+} from "../components/composer/MobileComposer";
 import { MobileMessages } from "../components/MobileMessages";
+import { MobileWorkLog } from "../components/MobileWorkLog";
+import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
+import { useMobileWorkingState } from "../hooks/useMobileWorkingState";
+import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import {
   clearMobileDraftThread,
   getMobileDraftThread,
   type MobileDraftThread,
 } from "../mobileDraftThread";
+import {
+  isMobileComposerModelLocked,
+  resolveMobileComposerModelSelection,
+  resolveMobileLockedProvider,
+} from "../mobileModelSelection.logic";
 import {
   derivePendingApprovals,
   derivePendingUserInputs,
@@ -58,6 +72,8 @@ function resolveDraftWorkspaceRoot(
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
   const { client, snapshotQuery } = useMobileSnapshot(session);
+  const { providers } = useMobileServerConfig(session);
+  const { startNewThread } = useMobileNewThread();
   const [prompt, setPrompt] = useState("");
   const [userInputAnswersByRequestId, setUserInputAnswersByRequestId] = useState<
     Record<string, Record<string, PendingUserInputDraftAnswer>>
@@ -66,6 +82,11 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     Record<string, number>
   >({});
   const [isRespondingToUserInput, setIsRespondingToUserInput] = useState(false);
+  const [pendingModelSelection, setPendingModelSelection] = useState<ModelSelection | null>(null);
+  const [providerUnlocked, setProviderUnlocked] = useState(false);
+
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
+  const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
 
   const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
 
@@ -82,8 +103,16 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     () => (thread ? derivePendingUserInputs(thread.activities) : []),
     [thread],
   );
+  const workLogEntries = useMemo(
+    () => (thread ? deriveWorkLogEntries(thread.activities, thread.latestTurn?.turnId) : []),
+    [thread],
+  );
   const activePendingApproval = approvals[0] ?? null;
   const activePendingUserInput = !activePendingApproval ? (pendingUserInputs[0] ?? null) : null;
+  const isRunning = thread?.session?.status === "running";
+  const showWorkingIndicator =
+    isRunning && activePendingApproval === null && activePendingUserInput === null;
+  const { workingVerb, nowIso } = useMobileWorkingState(showWorkingIndicator);
 
   const activeUserInputAnswers = activePendingUserInput
     ? (userInputAnswersByRequestId[activePendingUserInput.requestId] ?? {})
@@ -98,6 +127,36 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       markThreadVisited(threadId);
     }
   }, [thread, threadId]);
+
+  useEffect(() => {
+    setProviderUnlocked(false);
+  }, [threadId]);
+
+  const isLocked = isMobileComposerModelLocked(thread, draftThread);
+  const lockedProvider =
+    isLocked && !providerUnlocked ? resolveMobileLockedProvider(thread, draftThread) : null;
+
+  useLayoutEffect(() => {
+    if (lastScrolledThreadIdRef.current === threadId) {
+      return;
+    }
+    if (!thread) {
+      return;
+    }
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    lastScrolledThreadIdRef.current = threadId;
+    const timeoutId = window.setTimeout(() => {
+      const container = messagesScrollRef.current;
+      if (container && container.isConnected) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 96);
+    return () => window.clearTimeout(timeoutId);
+  }, [threadId, thread]);
 
   const interruptTurn = useCallback(async () => {
     if (!client) {
@@ -124,7 +183,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   }
 
   if (!snapshot) {
-    return <p className="px-1 py-8 text-sm text-muted-foreground">Loading thread…</p>;
+    return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
   }
 
   const projectId = thread?.projectId ?? draftThread!.projectId;
@@ -136,7 +195,39 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       ? resolveDraftWorkspaceRoot(snapshot, draftThread)
       : undefined;
   const messages = thread?.messages ?? [];
-  const isRunning = thread?.session?.status === "running";
+  const activeWorkStartedAt = thread
+    ? deriveActiveWorkStartedAt(
+        thread.latestTurn,
+        thread.session
+          ? {
+              orchestrationStatus: thread.session.status,
+              activeTurnId: thread.session.activeTurnId ?? undefined,
+            }
+          : null,
+        null,
+      )
+    : null;
+  const selectedModelSelection = resolveMobileComposerModelSelection(
+    {
+      thread,
+      draft: draftThread,
+      project: project ?? null,
+      providers,
+      isRunning,
+    },
+    pendingModelSelection,
+  );
+
+  const handleModelSelectionChange = useCallback(
+    (next: ModelSelection) => {
+      if (lockedProvider !== null && next.provider !== lockedProvider && project) {
+        startNewThread(project.id, next);
+        return;
+      }
+      setPendingModelSelection(next);
+    },
+    [lockedProvider, project, startNewThread],
+  );
 
   async function sendPrompt() {
     if (!client) {
@@ -212,6 +303,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         runtimeMode: draftThread.runtimeMode,
         interactionMode: draftThread.interactionMode,
         createdAt,
+        modelSelection: selectedModelSelection,
         bootstrap: buildMobileCreateThreadBootstrap({
           project,
           promptText: trimmedPrompt,
@@ -220,6 +312,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
           worktreePath: draftThread.worktreePath,
           runtimeMode: draftThread.runtimeMode,
           interactionMode: draftThread.interactionMode,
+          modelSelection: selectedModelSelection,
         }),
         message: {
           messageId: newMessageId(),
@@ -229,6 +322,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         },
       });
       clearMobileDraftThread(threadId);
+      setPendingModelSelection(null);
       setPrompt("");
       await snapshotQuery.refetch();
       return;
@@ -245,6 +339,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       runtimeMode: thread.runtimeMode,
       interactionMode: thread.interactionMode,
       createdAt,
+      modelSelection: selectedModelSelection,
       message: {
         messageId: newMessageId(),
         role: "user",
@@ -345,18 +440,40 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   }
 
   return (
-    <div className="-mx-4 flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-44">
-        <MobileMessages cwd={workspaceRoot} messages={messages} />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={messagesScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-44 [scrollbar-gutter:stable]"
+        >
+          {workLogEntries.length > 0 ? (
+            <div className="pt-3">
+              <MobileWorkLog entries={workLogEntries} />
+            </div>
+          ) : null}
+          <MobileMessages cwd={workspaceRoot} messages={messages} />
+        </div>
+        {showWorkingIndicator ? (
+          <MobileWorkingIndicator
+            activeWorkStartedAt={activeWorkStartedAt}
+            nowIso={nowIso}
+            verb={workingVerb}
+          />
+        ) : null}
       </div>
 
       <MobileComposer
+        availableProviders={providers}
         isRespondingToUserInput={isRespondingToUserInput}
         isRunning={isRunning}
+        lockedProvider={lockedProvider}
+        modelSelection={selectedModelSelection}
         onAdvanceUserInput={handleAdvanceUserInput}
         onChange={setPrompt}
         onChangeUserInputCustomAnswer={handleChangeUserInputCustomAnswer}
+        onModelSelectionChange={handleModelSelectionChange}
         onPreviousUserInputQuestion={handlePreviousUserInputQuestion}
+        onProviderUnlock={() => setProviderUnlocked(true)}
         onRespondToApproval={(requestId, decision) => void respondToApproval(requestId, decision)}
         onSend={() => void sendPrompt()}
         onStop={() => void interruptTurn()}
@@ -368,6 +485,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         userInputAnswers={activeUserInputAnswers}
         userInputQuestionIndex={activeUserInputQuestionIndex}
         value={prompt}
+        workingVerb={workingVerb}
       />
     </div>
   );

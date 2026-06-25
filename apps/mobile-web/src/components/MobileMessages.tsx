@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import ChatMarkdown from "~/components/chat/common/ChatMarkdown";
 import { UserMessageBody } from "~/components/chat/messages/MessagesTimeline.userMessage";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
+import { formatShortTimestamp } from "~/utils/timestamp/timestamp.utils";
 
 interface MobileMessagesProps {
   messages: ReadonlyArray<OrchestrationMessage>;
@@ -57,12 +58,19 @@ function MobileMessage({
   }
 
   return (
-    <article className="min-w-0 rounded-xl bg-card/40 px-3 py-2.5">
-      <UserMessageBody
-        cwd={cwd}
-        terminalContexts={displayedUserMessage.contexts}
-        text={displayedUserMessage.visibleText}
-      />
-    </article>
+    <div className="group flex flex-col items-end gap-1">
+      <article className="max-w-[85%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+        <UserMessageBody
+          cwd={cwd}
+          terminalContexts={displayedUserMessage.contexts}
+          text={displayedUserMessage.visibleText}
+        />
+        <div className="mt-1.5 flex justify-end">
+          <p className="text-xs text-muted-foreground/50">
+            {formatShortTimestamp(message.createdAt, "12-hour")}
+          </p>
+        </div>
+      </article>
+    </div>
   );
 }
