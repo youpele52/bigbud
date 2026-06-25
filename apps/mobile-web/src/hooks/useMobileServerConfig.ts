@@ -1,7 +1,7 @@
 import type { ServerConfig, ServerConfigStreamEvent, ServerProvider } from "@bigbud/contracts";
 import { useEffect, useState } from "react";
 
-import { useMobileRpcClient } from "../MobileRpcContext";
+import { useMobileRpcClient } from "../context/MobileRpcContext";
 
 function asStreamEvent(value: unknown): ServerConfigStreamEvent | null {
   if (!value || typeof value !== "object") {

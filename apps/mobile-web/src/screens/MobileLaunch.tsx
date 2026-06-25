@@ -8,8 +8,8 @@ import { MobileThreadList } from "../components/MobileThreadList";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { cn } from "../lib/cn";
-import { chatThreadsForMobile } from "../mobileModels";
-import { useMobileSessionState } from "../MobileSessionContext";
+import { chatThreadsForMobile } from "../lib/mobileModels";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 export function MobileLaunch() {
   const { session } = useMobileSessionState();

@@ -6,7 +6,7 @@ import {
   createMobileDraftThread,
   getMobileDraftThread,
   setMobileDraftThread,
-} from "./mobileDraftThread";
+} from "../lib/mobileDraftThread";
 import {
   buildMobileCreateThreadBootstrap,
   resolveMobileModelSelection,

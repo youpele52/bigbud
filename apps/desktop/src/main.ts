@@ -38,6 +38,7 @@ import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
 import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
+import { resolveDesktopMobileRemoteNetwork } from "./backend/mobileRemoteNetwork";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
 import {
   readLinuxGpuFallbackMarker,
@@ -67,6 +68,7 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
@@ -110,6 +112,7 @@ let desktopProtocolRegistered = false;
 let desktopLogSink: RotatingFileSink | null = null;
 let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
+let mobileBackendBaseUrl = "";
 
 const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
   platform: process.platform,
@@ -138,6 +141,10 @@ const desktopAppIdentity = {
 
 function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 installDesktopSingleInstanceLock(app, () => mainWindow);
@@ -242,18 +249,30 @@ function makeWindow(): BrowserWindow {
 
 async function bootstrap(): Promise<void> {
   logHeader("bootstrap start");
+  const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
+    serverSettingsPath: SERVER_SETTINGS_PATH,
+    hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
+  });
   const port = await resolveDesktopBackendPort({
-    host: "127.0.0.1",
+    host: desktopMobileRemoteNetwork.bindHost,
     startPort: DEFAULT_DESKTOP_BACKEND_PORT,
   });
   logHeader(
-    `selected backend port via sequential scan startPort=${DEFAULT_DESKTOP_BACKEND_PORT} port=${port}`,
+    `selected backend port via sequential scan host=${desktopMobileRemoteNetwork.bindHost} startPort=${DEFAULT_DESKTOP_BACKEND_PORT} port=${port}`,
   );
   const authToken = Crypto.randomBytes(24).toString("hex");
-  const baseUrl = `ws://127.0.0.1:${port}`;
+  const baseUrl = `ws://${formatHostForUrl(desktopMobileRemoteNetwork.clientHost)}:${port}`;
   const wsUrl = `${baseUrl}/?token=${encodeURIComponent(authToken)}`;
-  setBackendConnectionInfo({ port, authToken, wsUrl });
-  logHeader(`bootstrap resolved websocket endpoint baseUrl=${baseUrl}`);
+  mobileBackendBaseUrl = `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`;
+  setBackendConnectionInfo({
+    port,
+    authToken,
+    wsUrl,
+    host: desktopMobileRemoteNetwork.bindHost,
+  });
+  logHeader(
+    `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileBackendBaseUrl}`,
+  );
 
   registerIpcHandlers({
     PICK_FOLDER_CHANNEL,
@@ -262,6 +281,7 @@ async function bootstrap(): Promise<void> {
     CONTEXT_MENU_CHANNEL,
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
+    GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -279,6 +299,7 @@ async function bootstrap(): Promise<void> {
     downloadAvailableUpdate,
     installDownloadedUpdate,
     resolveIconPath,
+    getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
   });
   logHeader("bootstrap ipc handlers registered");
   mainWindow = makeWindow();

@@ -15,7 +15,7 @@ import {
   setPendingUserInputCustomAnswer,
 } from "~/logic/user-input";
 
-import type { MobilePendingApproval, MobilePendingUserInput } from "../../mobileModels";
+import type { MobilePendingApproval, MobilePendingUserInput } from "../../lib/mobileModels";
 import { cn } from "../../lib/cn";
 import { MobileComposerModelPicker } from "./MobileComposerModelPicker";
 import { MobileComposerPendingUserInput } from "./MobileComposerPendingUserInput";

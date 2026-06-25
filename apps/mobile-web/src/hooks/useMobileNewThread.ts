@@ -2,7 +2,7 @@ import { BUILT_IN_CHATS_PROJECT_ID, type ModelSelection, type ProjectId } from "
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 
-import { createMobileDraftThread, setMobileDraftThread } from "../mobileDraftThread";
+import { createMobileDraftThread, setMobileDraftThread } from "../lib/mobileDraftThread";
 
 export function useMobileNewThread() {
   const navigate = useNavigate();

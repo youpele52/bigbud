@@ -7,8 +7,8 @@ import { MobileSessionGate } from "../components/MobileSessionGate";
 import { MobileThreadList } from "../components/MobileThreadList";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
-import { chatThreadsForMobile } from "../mobileModels";
-import { useMobileSessionState } from "../MobileSessionContext";
+import { chatThreadsForMobile } from "../lib/mobileModels";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 export function MobileChats() {
   const { session } = useMobileSessionState();

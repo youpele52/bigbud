@@ -5,7 +5,7 @@ import { getVisibleThreadsForProject } from "~/components/sidebar/Sidebar.logic"
 
 import { MobileListLink } from "./MobileAppHeader";
 import { MobileThreadProviderIcon } from "./MobileThreadProviderIcon";
-import { MOBILE_THREAD_PREVIEW_LIMIT } from "../mobileModels";
+import { MOBILE_THREAD_PREVIEW_LIMIT } from "../lib/mobileModels";
 
 export function MobileThreadList({
   threads,

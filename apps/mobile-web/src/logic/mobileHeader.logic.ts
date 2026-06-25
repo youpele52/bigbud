@@ -7,7 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { DEFAULT_THREAD_TITLE } from "@bigbud/shared/String";
 
-import type { MobileDraftThread } from "./mobileDraftThread";
+import type { MobileDraftThread } from "../lib/mobileDraftThread";
 
 export interface MobileHeaderBreadcrumbSegment {
   readonly label: string;

@@ -9,6 +9,10 @@ export interface PersistedServerObservabilitySettings {
   readonly otlpMetricsUrl: string | undefined;
 }
 
+export interface PersistedMobileRemoteControlSettings {
+  readonly enabled: boolean;
+}
+
 export function normalizePersistedServerSettingString(
   value: string | null | undefined,
 ): string | undefined {
@@ -28,6 +32,16 @@ export function extractPersistedServerObservabilitySettings(input: {
   };
 }
 
+export function extractPersistedMobileRemoteControlSettings(input: {
+  readonly mobileRemoteControl?: {
+    readonly enabled?: boolean;
+  };
+}): PersistedMobileRemoteControlSettings {
+  return {
+    enabled: input.mobileRemoteControl?.enabled === true,
+  };
+}
+
 export function parsePersistedServerObservabilitySettings(
   raw: string,
 ): PersistedServerObservabilitySettings {
@@ -36,5 +50,16 @@ export function parsePersistedServerObservabilitySettings(
     return extractPersistedServerObservabilitySettings(decoded);
   } catch {
     return { otlpTracesUrl: undefined, otlpMetricsUrl: undefined };
+  }
+}
+
+export function parsePersistedMobileRemoteControlSettings(
+  raw: string,
+): PersistedMobileRemoteControlSettings {
+  try {
+    const decoded = Schema.decodeUnknownSync(ServerSettingsJson)(raw);
+    return extractPersistedMobileRemoteControlSettings(decoded);
+  } catch {
+    return { enabled: false };
   }
 }

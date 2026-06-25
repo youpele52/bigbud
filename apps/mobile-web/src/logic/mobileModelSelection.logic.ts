@@ -10,7 +10,7 @@ import {
 } from "@bigbud/contracts";
 import { normalizeModelSlug } from "@bigbud/shared/model";
 
-import type { MobileDraftThread } from "./mobileDraftThread";
+import type { MobileDraftThread } from "../lib/mobileDraftThread";
 
 const SUB_PROVIDER_PROVIDERS = new Set<ProviderKind>(["pi", "opencode", "kilocode"]);
 

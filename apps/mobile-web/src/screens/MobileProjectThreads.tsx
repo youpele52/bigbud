@@ -8,8 +8,8 @@ import { MobileSessionGate } from "../components/MobileSessionGate";
 import { MobileThreadList } from "../components/MobileThreadList";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
-import { threadsForProject } from "../mobileModels";
-import { useMobileSessionState } from "../MobileSessionContext";
+import { threadsForProject } from "../lib/mobileModels";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 export function MobileProjectThreads({ projectId }: { projectId: ProjectId }) {
   const { session } = useMobileSessionState();
