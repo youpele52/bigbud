@@ -25,6 +25,7 @@ export default defineConfig({
     tsconfigPaths: false,
   },
   server: {
+    host: "0.0.0.0",
     port,
     strictPort: true,
   },

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-import type { StoredMobileSession } from "./mobileSession";
+import type { StoredMobileSession } from "../lib/mobileSession";
 
 export interface MobileSessionState {
   readonly session: StoredMobileSession | null;

@@ -8,7 +8,7 @@ import {
 } from "~/logic/session/session.timeline.logic";
 import type { ThreadSession } from "~/models/types/app.types";
 
-import { derivePendingApprovals, derivePendingUserInputs } from "./mobileModels";
+import { derivePendingApprovals, derivePendingUserInputs } from "../lib/mobileModels";
 
 function adaptSessionForStatus(session: OrchestrationSession | null): ThreadSession | null {
   if (!session) {

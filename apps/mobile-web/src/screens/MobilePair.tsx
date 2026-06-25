@@ -11,9 +11,9 @@ import {
   MobileMuted,
   MobilePage,
   MobileTitle,
-} from "../mobileShell";
-import { writeMobileSession } from "../mobileSession";
-import { useMobileSessionState } from "../MobileSessionContext";
+} from "../components/mobileShell";
+import { writeMobileSession } from "../lib/mobileSession";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 function readPairingSecret() {
   const hash = new URL(window.location.href).hash;

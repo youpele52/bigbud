@@ -15,14 +15,14 @@ import { MobileStartupSplash } from "./components/MobileStartupSplash";
 import { useMobileSnapshot } from "./hooks/useMobileSnapshot";
 import { useTheme } from "./theme/useTheme";
 
-import { getMobileDraftThread } from "./mobileDraftThread";
+import { getMobileDraftThread } from "./lib/mobileDraftThread";
 import {
   extractMobileThreadId,
   isMobileLaunchRoute,
   resolveMobileHeaderState,
-} from "./mobileHeader.logic";
-import { MobileRpcProvider } from "./MobileRpcContext";
-import { MobileSessionContext } from "./MobileSessionContext";
+} from "./logic/mobileHeader.logic";
+import { MobileRpcProvider } from "./context/MobileRpcContext";
+import { MobileSessionContext } from "./context/MobileSessionContext";
 import { MobileChats } from "./screens/MobileChats";
 import { MobileDiff } from "./screens/MobileDiff";
 import { MobileLaunch } from "./screens/MobileLaunch";
@@ -30,7 +30,7 @@ import { MobilePair } from "./screens/MobilePair";
 import { MobileProjects } from "./screens/MobileProjects";
 import { MobileProjectThreads } from "./screens/MobileProjectThreads";
 import { MobileThread } from "./screens/MobileThread";
-import { clearMobileSession, isMobileSessionExpired, readMobileSession } from "./mobileSession";
+import { clearMobileSession, isMobileSessionExpired, readMobileSession } from "./lib/mobileSession";
 
 function handleReconnect() {
   window.location.reload();

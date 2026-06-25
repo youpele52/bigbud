@@ -34,20 +34,20 @@ import {
   clearMobileDraftThread,
   getMobileDraftThread,
   type MobileDraftThread,
-} from "../mobileDraftThread";
+} from "../lib/mobileDraftThread";
 import {
   isMobileComposerModelLocked,
   resolveMobileComposerModelSelection,
   resolveMobileLockedProvider,
-} from "../mobileModelSelection.logic";
+} from "../logic/mobileModelSelection.logic";
 import {
   derivePendingApprovals,
   derivePendingUserInputs,
   resolveThreadWorkspaceRoot,
-} from "../mobileModels";
-import { buildMobileCreateThreadBootstrap } from "../mobileNewThread.logic";
-import { markThreadVisited } from "../mobileThreadVisit";
-import { useMobileSessionState } from "../MobileSessionContext";
+} from "../lib/mobileModels";
+import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
+import { markThreadVisited } from "../lib/mobileThreadVisit";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 function newId() {
   return crypto.randomUUID();

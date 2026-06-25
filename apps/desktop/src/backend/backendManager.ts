@@ -56,6 +56,7 @@ export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
 export let backendWsUrl = "";
+export let backendHost = "";
 export let restartAttempt = 0;
 export let restartTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -86,6 +87,7 @@ export function initBackendManager(deps: BackendManagerDeps): void {
   backendPort = 0;
   backendAuthToken = "";
   backendWsUrl = "";
+  backendHost = "";
   restartAttempt = 0;
   restartTimer = null;
 }
@@ -131,10 +133,12 @@ export function setBackendConnectionInfo(opts: {
   port: number;
   authToken: string;
   wsUrl: string;
+  host: string;
 }): void {
   backendPort = opts.port;
   backendAuthToken = opts.authToken;
   backendWsUrl = opts.wsUrl;
+  backendHost = opts.host;
 }
 
 export function scheduleBackendRestart(reason: string): void {
@@ -239,6 +243,7 @@ export function startBackend(): void {
         mode: "desktop",
         noBrowser: true,
         port: backendPort,
+        host: backendHost,
         t3Home: _deps.baseDir,
         authToken: backendAuthToken,
         ...(backendObservabilitySettings.otlpTracesUrl

@@ -6,6 +6,17 @@ function stripTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
+function resolveDesktopMobileBackendBaseUrl(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const bridgeBaseUrl = window.desktopBridge?.getMobileBackendBaseUrl?.();
+  return typeof bridgeBaseUrl === "string" && bridgeBaseUrl.length > 0
+    ? normalizeBackendBaseUrl(bridgeBaseUrl)
+    : null;
+}
+
 export function normalizeBackendBaseUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -27,9 +38,16 @@ export function resolveDefaultMobileWebBaseUrl(): string {
   if (typeof fromEnv === "string" && fromEnv.length > 0) {
     return stripTrailingSlash(fromEnv);
   }
+  const desktopBackendBaseUrl = resolveDesktopMobileBackendBaseUrl();
+  if (desktopBackendBaseUrl) {
+    const url = new URL(desktopBackendBaseUrl);
+    url.port = String(DEFAULT_MOBILE_WEB_PORT);
+    url.pathname = "/";
+    return stripTrailingSlash(url.toString());
+  }
   return `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`;
 }
 
 export function resolveDefaultBackendBaseUrl(): string {
-  return normalizeBackendBaseUrl(resolveWsHttpOrigin());
+  return resolveDesktopMobileBackendBaseUrl() ?? normalizeBackendBaseUrl(resolveWsHttpOrigin());
 }

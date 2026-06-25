@@ -1,7 +1,7 @@
 import { BUILT_IN_CHATS_PROJECT_ID, ProjectId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { createMobileDraftThread } from "./mobileDraftThread";
+import { createMobileDraftThread } from "../lib/mobileDraftThread";
 import {
   extractMobileThreadId,
   isMobileLaunchRoute,

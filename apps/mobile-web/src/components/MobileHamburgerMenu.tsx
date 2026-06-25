@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "../lib/cn";
 import { useTheme } from "../theme/useTheme";
-import { clearMobileSession } from "../mobileSession";
+import { clearMobileSession } from "../lib/mobileSession";
 
 interface MobileHamburgerMenuProps {
   onReconnect: () => void;

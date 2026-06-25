@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 
-import { MobileRpcClient } from "./mobileRpc";
-import { resolveMobileWebsocketUrl } from "./mobileSession";
+import { MobileRpcClient } from "../lib/mobileRpc";
+import { resolveMobileWebsocketUrl } from "../lib/mobileSession";
 import { useMobileSessionState } from "./MobileSessionContext";
 
 interface MobileRpcState {

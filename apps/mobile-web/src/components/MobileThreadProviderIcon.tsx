@@ -3,8 +3,8 @@ import type { OrchestrationThread } from "@bigbud/contracts";
 import { PROVIDER_ICON_BY_PROVIDER } from "~/components/chat/provider/ProviderModelPicker.models";
 
 import { SIDEBAR_ICON_SIZE_CLASS } from "./mobileIconSizes";
-import { resolveMobileProviderIconClassName } from "../mobileThreadStatus.logic";
-import { getThreadLastVisitedAt } from "../mobileThreadVisit";
+import { resolveMobileProviderIconClassName } from "../logic/mobileThreadStatus.logic";
+import { getThreadLastVisitedAt } from "../lib/mobileThreadVisit";
 import { cn } from "../lib/cn";
 
 export function MobileThreadProviderIcon({ thread }: { thread: OrchestrationThread }) {

@@ -7,7 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { createMobileDraftThread } from "./mobileDraftThread";
+import { createMobileDraftThread } from "../lib/mobileDraftThread";
 import {
   isMobileComposerModelLocked,
   resolveComposerModelLabel,

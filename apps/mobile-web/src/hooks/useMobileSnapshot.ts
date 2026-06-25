@@ -2,7 +2,7 @@ import type { OrchestrationReadModel } from "@bigbud/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { useMobileRpcClient } from "../MobileRpcContext";
+import { useMobileRpcClient } from "../context/MobileRpcContext";
 
 function formatQueryError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {

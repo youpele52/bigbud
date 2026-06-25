@@ -2,8 +2,8 @@ import { MobileListLink, MobileListSection } from "../components/MobileAppHeader
 import { MobileFolderIcon } from "../components/MobileFolderIcon";
 import { MobileSessionGate } from "../components/MobileSessionGate";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
-import { sortProjectsForMobile } from "../mobileModels";
-import { useMobileSessionState } from "../MobileSessionContext";
+import { sortProjectsForMobile } from "../lib/mobileModels";
+import { useMobileSessionState } from "../context/MobileSessionContext";
 
 export function MobileProjects() {
   const { session } = useMobileSessionState();

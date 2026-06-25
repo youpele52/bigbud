@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "./ui/button";
 import { MobileStartupSplash } from "./MobileStartupSplash";
-import { clearMobileSession } from "../mobileSession";
+import { clearMobileSession } from "../lib/mobileSession";
 
 export function MobileSessionGate({
   session,
