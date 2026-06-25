@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
+import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import {
   normalizeBackendBaseUrl,
@@ -47,6 +49,15 @@ export function MobileRemoteControlSettingsSection() {
   const [backendBaseUrl, setBackendBaseUrl] = useState(readStoredBackendBaseUrl);
   const [pairingLink, setPairingLink] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
+
+  const { copyToClipboard, isCopied } = useCopyToClipboard({
+    onCopy: () => {
+      toastManager.add({ type: "success", title: "Link copied to clipboard" });
+    },
+    onError: (error) => {
+      toastManager.add({ type: "error", title: "Failed to copy link", description: error.message });
+    },
+  });
 
   const sessionsQuery = useQuery({
     queryKey: MOBILE_REMOTE_SESSIONS_QUERY_KEY,
@@ -183,12 +194,8 @@ export function MobileRemoteControlSettingsSection() {
               {createPairingMutation.isPending ? "Creating..." : "Create pairing link"}
             </Button>
             {pairingLink ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => navigator.clipboard.writeText(pairingLink)}
-              >
-                Copy link
+              <Button size="sm" variant="outline" onClick={() => copyToClipboard(pairingLink)}>
+                {isCopied ? "Copied!" : "Copy link"}
               </Button>
             ) : null}
           </div>

@@ -113,4 +113,12 @@ describe("mobileHeader.logic", () => {
     expect(header.breadcrumb?.[0]).toEqual({ label: "Chats", to: "/mobile/chats" });
     expect(header.backTo).toBe("/mobile/chats");
   });
+
+  it("falls back to the launch header on diff routes", () => {
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    const header = resolveMobileHeaderState(`/mobile/thread/${threadId}/diff`, undefined, null);
+
+    expect(header.showBack).toBe(false);
+    expect(header.backTo).toBe("/mobile");
+  });
 });

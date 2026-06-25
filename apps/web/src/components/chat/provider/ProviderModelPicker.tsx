@@ -45,6 +45,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   enableRecentlyUsed?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  popupClassName?: string;
+  subPopupClassName?: string;
+  modelListSearchbarClassName?: string;
+  modelListGroupLabelClassName?: string;
+  modelListItemClassName?: string;
+  modelListItemLabelClassName?: string;
   onProviderModelChange: (
     provider: ProviderKind,
     model: string,
@@ -176,11 +182,18 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
           </span>
         </MenuTrigger>
-        <MenuPopup align="start">
+        <MenuPopup
+          align="start"
+          className={cn("[--available-height:min(24rem,70vh)]", props.popupClassName)}
+        >
           {props.lockedProvider !== null && view === "model" ? (
-            <div className="[--available-height:min(24rem,70vh)] max-h-(--available-height) overflow-y-auto">
+            <div className="max-h-(--available-height) overflow-y-auto">
               <ModelList
+                groupLabelClassName={props.modelListGroupLabelClassName}
+                itemClassName={props.modelListItemClassName}
+                itemLabelClassName={props.modelListItemLabelClassName}
                 provider={props.lockedProvider}
+                searchbarClassName={props.modelListSearchbarClassName}
                 selectedValue={selectedProviderValue}
                 options={props.modelOptionsByProvider[props.lockedProvider]}
                 recentOptions={recentOptionsByProvider[props.lockedProvider]}
@@ -257,7 +270,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                         aria-hidden="true"
                         className={cn(
                           "size-4 shrink-0 opacity-80",
-                          providerIconClassName(option.value, "text-muted-foreground/85"),
+                          providerIconClassName(option.value, "text-muted-foreground/70"),
                         )}
                       />
                       <span>{option.label}</span>
@@ -274,18 +287,25 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                         aria-hidden="true"
                         className={cn(
                           "size-4 shrink-0",
-                          providerIconClassName(option.value, "text-muted-foreground/85"),
+                          providerIconClassName(option.value, "text-muted-foreground/70"),
                         )}
                       />
                       {option.label}
                     </MenuSubTrigger>
                     <MenuSubPopup
-                      className="[--available-height:min(24rem,70vh)] !p-0 overflow-hidden"
+                      className={cn(
+                        "[--available-height:min(24rem,70vh)] !p-0 overflow-hidden",
+                        props.subPopupClassName,
+                      )}
                       sideOffset={4}
                     >
                       <div className="max-h-(--available-height) overflow-y-auto">
                         <ModelList
+                          groupLabelClassName={props.modelListGroupLabelClassName}
+                          itemClassName={props.modelListItemClassName}
+                          itemLabelClassName={props.modelListItemLabelClassName}
                           provider={option.value}
+                          searchbarClassName={props.modelListSearchbarClassName}
                           selectedValue={props.provider === option.value ? props.model : ""}
                           options={props.modelOptionsByProvider[option.value]}
                           recentOptions={recentOptionsByProvider[option.value]}

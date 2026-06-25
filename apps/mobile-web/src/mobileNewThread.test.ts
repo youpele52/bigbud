@@ -7,7 +7,10 @@ import {
   getMobileDraftThread,
   setMobileDraftThread,
 } from "./mobileDraftThread";
-import { buildMobileCreateThreadBootstrap } from "./mobileNewThread.logic";
+import {
+  buildMobileCreateThreadBootstrap,
+  resolveMobileModelSelection,
+} from "./mobileNewThread.logic";
 
 function createSessionStorageMock() {
   const store = new Map<string, string>();
@@ -36,6 +39,43 @@ describe("mobileDraftThread", () => {
     expect(getMobileDraftThread(draft.threadId)).toEqual(draft);
     clearMobileDraftThread(draft.threadId);
     expect(getMobileDraftThread(draft.threadId)).toBeNull();
+  });
+});
+
+describe("resolveMobileModelSelection", () => {
+  it("uses the project default when one is configured", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    expect(
+      resolveMobileModelSelection({
+        id: projectId,
+        title: "Demo",
+        workspaceRoot: "/tmp/demo",
+        defaultModelSelection: { provider: "claudeAgent", model: "opus" },
+        scripts: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        deletingAt: null,
+        deletedAt: null,
+      }),
+    ).toEqual({ provider: "claudeAgent", model: "opus" });
+  });
+
+  it("falls back to the first provider default when the project has no default", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const selection = resolveMobileModelSelection({
+      id: projectId,
+      title: "Demo",
+      workspaceRoot: "/tmp/demo",
+      defaultModelSelection: null,
+      scripts: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      deletingAt: null,
+      deletedAt: null,
+    });
+
+    expect(selection.provider).toBeTruthy();
+    expect(selection.model).toBeTruthy();
   });
 });
 
@@ -69,5 +109,34 @@ describe("buildMobileCreateThreadBootstrap", () => {
       model: "gpt-5",
     });
     expect(bootstrap.createThread?.worktreePath).toBeNull();
+  });
+
+  it("uses an explicit modelSelection override when provided", () => {
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const bootstrap = buildMobileCreateThreadBootstrap({
+      project: {
+        id: projectId,
+        title: "Demo",
+        workspaceRoot: "/tmp/demo",
+        defaultModelSelection: { provider: "codex", model: "gpt-5" },
+        scripts: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        deletingAt: null,
+        deletedAt: null,
+      },
+      promptText: "Switch to Claude",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      branch: null,
+      worktreePath: null,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      modelSelection: { provider: "claudeAgent", model: "opus" },
+    });
+
+    expect(bootstrap.createThread?.modelSelection).toEqual({
+      provider: "claudeAgent",
+      model: "opus",
+    });
   });
 });

@@ -17,6 +17,7 @@ import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import {
   makeOrderedOrchestrationDomainEventStream,
+  makeServerConfigUpdateStream,
   makeThinkingActivityDeltaStream,
 } from "./wsStreams";
 import { makeWsRpcContext } from "./wsRpcContext";
@@ -136,6 +137,18 @@ const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
             serverSettings: context.serverSettings,
           }),
           { "rpc.aggregate": "mobile-orchestration" },
+        ),
+      [WS_METHODS.subscribeServerConfig]: (_input: unknown) =>
+        observeRpcStreamEffect(
+          WS_METHODS.subscribeServerConfig,
+          makeServerConfigUpdateStream({
+            loadServerConfig: context.loadServerConfig,
+            keybindings: context.keybindings,
+            providerRegistry: context.providerRegistry,
+            discoveryRegistry: context.discoveryRegistry,
+            serverSettings: context.serverSettings,
+          }),
+          { "rpc.aggregate": "mobile-server" },
         ),
     });
   }),

@@ -7,6 +7,7 @@ import {
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationReplayEventsRpc,
   WsSubscribeOrchestrationDomainEventsRpc,
+  WsSubscribeServerConfigRpc,
   WsSubscribeThinkingActivityDeltasRpc,
 } from "./rpc";
 
@@ -17,5 +18,6 @@ export const MobileWsRpcGroup = RpcGroup.make(
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
   WsSubscribeOrchestrationDomainEventsRpc,
+  WsSubscribeServerConfigRpc,
   WsSubscribeThinkingActivityDeltasRpc,
 );

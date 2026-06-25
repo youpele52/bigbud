@@ -65,7 +65,7 @@ export function MobileAppHeader({
   }
 
   return (
-    <header className="sticky top-0 z-40 -mx-4 mb-4 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 -mx-4 mb-4 border-b border-border/60 bg-background px-4 py-3">
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {showBack ? (
@@ -110,7 +110,7 @@ export function MobileListSection({
   return (
     <section className={cn("py-1", className)}>
       {title ? (
-        <h2 className="mb-1 flex items-center gap-2 px-2 text-xs font-semibold text-muted-foreground">
+        <h2 className="mb-1 mx-1 flex items-center gap-2 px-2 text-xs font-semibold text-muted-foreground">
           {icon}
           <span className="truncate">{title}</span>
         </h2>

@@ -1,8 +1,12 @@
-import {
-  isToolLifecycleItemType,
-  type OrchestrationThreadActivity,
-  type ToolLifecycleItemType,
-} from "@bigbud/contracts";
+/**
+ * Work log payload extraction: pulls detail, command, changed files, tool
+ * title, and request kind from raw `OrchestrationThreadActivity.payload`
+ * records.
+ *
+ * Internal helper for `workLog.ts`. Pure functions, no React.
+ */
+
+import { isToolLifecycleItemType, type ToolLifecycleItemType } from "@bigbud/contracts";
 
 export interface WorkLogPayloadDetails {
   readonly detail?: string;
@@ -12,15 +16,6 @@ export interface WorkLogPayloadDetails {
   readonly toolTitle?: string;
   readonly itemType?: ToolLifecycleItemType;
   readonly requestKind?: "command" | "file-read" | "file-change";
-}
-
-export function isPlanBoundaryToolActivity(activity: OrchestrationThreadActivity): boolean {
-  if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") {
-    return false;
-  }
-
-  const payload = asRecord(activity.payload);
-  return typeof payload?.detail === "string" && payload.detail.startsWith("ExitPlanMode:");
 }
 
 export function extractWorkLogPayloadDetails(

@@ -12,6 +12,7 @@ import type { ChatMessage, ProposedPlan, ThreadSession } from "../../models/type
 
 export type { WorkLogEntry } from "./worklog.logic";
 export { deriveWorkLogEntries } from "./worklog.logic";
+export { extractWorkLogPayloadDetails, isPlanBoundaryToolActivity } from "./worklog.logic";
 
 // ── Re-exports from sub-modules ───────────────────────────────────────
 

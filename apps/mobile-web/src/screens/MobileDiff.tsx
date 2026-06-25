@@ -1,6 +1,7 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
 
+import { MobileStartupSplash } from "../components/MobileStartupSplash";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { MobileCard, MobileMuted, MobilePage } from "../mobileShell";
 import { useMobileSessionState } from "../MobileSessionContext";
@@ -34,11 +35,15 @@ export function MobileDiff({ threadId, toTurnCount }: { threadId: ThreadId; toTu
     );
   }
 
+  if (!diffQuery.data) {
+    return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
+  }
+
   return (
     <MobilePage>
       <MobileCard>
         <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-foreground">
-          {diffQuery.data?.diff ?? "Loading diff…"}
+          {diffQuery.data.diff}
         </pre>
       </MobileCard>
     </MobilePage>
