@@ -6,6 +6,7 @@ export const X_POST_URL =
   "https://x.com/intent/post?text=Hi%20%40bigbudapp%2C%20I%27d%20like%20you%20to%20add%20this%20feature...";
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
 export const CHANGELOG_PATH = "/changelog";
+export const GETTING_STARTED_PATH = "/getting-started";
 export const EXTERNAL_LINK_INDICATOR = "↗" as const;
 
 export const MARKETING_ASSETS = {

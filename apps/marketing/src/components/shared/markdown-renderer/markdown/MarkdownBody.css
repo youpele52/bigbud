@@ -15,10 +15,6 @@
 
 .md-heading--hero {
   max-width: 8.25ch;
-  font-size: clamp(3.15rem, 4.25vw, 5rem);
-  font-weight: 400;
-  letter-spacing: -0.068em;
-  line-height: 0.9;
   text-wrap: pretty;
 }
 

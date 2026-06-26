@@ -51,7 +51,7 @@ function classAttr(className: string): string {
 
 function getHeadingClasses(level: number): string {
   if (level === 1) {
-    return "md-heading md-heading--hero";
+    return "heading md-heading md-heading--hero";
   }
   if (level === 2) {
     return "md-heading md-heading--section";

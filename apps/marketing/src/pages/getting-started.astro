@@ -1,0 +1,26 @@
+---
+import { GETTING_STARTED_METADATA } from "../constants/seo";
+import {
+  buildBreadcrumbSchema,
+  buildOrganizationSchema,
+  buildSoftwareApplicationSchema,
+  buildWebsiteSchema,
+} from "../lib/structuredData";
+import Layout from "../layouts/Layout.astro";
+import "./getting-started.css";
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? Astro.url.origin;
+const pageUrl = new URL(Astro.url.pathname, siteUrl).toString();
+const structuredData = [
+  buildOrganizationSchema({ pageUrl, siteUrl }),
+  buildWebsiteSchema({ pageUrl, siteUrl }),
+  buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+  buildBreadcrumbSchema(pageUrl, "Getting Started", siteUrl),
+];
+---
+
+<Layout {...GETTING_STARTED_METADATA} structuredData={structuredData}>
+  <section class="getting-started-page">
+    <h1 class="heading">getting started</h1>
+  </section>
+</Layout>
