@@ -46,6 +46,7 @@ import {
 } from "../Services/OrchestrationEngine.ts";
 import {
   archiveThreadViaOrchestration,
+  getThreadStatusViaOrchestration,
   renameThreadViaOrchestration,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
@@ -327,6 +328,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     archive: (input) =>
       archiveThreadViaOrchestration({
         orchestrationEngine: engine,
+        threadId: input.threadId,
+      }),
+    getStatus: (input) =>
+      getThreadStatusViaOrchestration({
+        orchestrationEngine: engine,
+        callerThreadId: input.callerThreadId,
         threadId: input.threadId,
       }),
   });

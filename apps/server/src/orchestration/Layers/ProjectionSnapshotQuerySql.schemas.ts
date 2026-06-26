@@ -107,3 +107,9 @@ export const ProjectionThreadCheckpointContextThreadRowSchema = Schema.Struct({
   workspaceRoot: Schema.NullOr(Schema.String),
   worktreePath: Schema.NullOr(Schema.String),
 });
+
+export const ProjectionThreadWatchDbRowSchema = Schema.Struct({
+  watcherThreadId: ThreadId,
+  watchedThreadId: ThreadId,
+  watchedThreadTitle: ProjectionThread.fields.title,
+});

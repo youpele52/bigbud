@@ -141,6 +141,7 @@ export function buildOptimisticAttachments(
             sizeBytes: 0 as const,
             threadId: file.threadId!,
             title: file.threadTitle ?? file.name,
+            ...(file.watchForCompletion ? { watchForCompletion: true } : {}),
           }
         : file.attachmentMode === "path-reference"
           ? {
@@ -185,6 +186,7 @@ export function buildTurnAttachments(
           sizeBytes: 0 as const,
           threadId: file.threadId!,
           title: file.threadTitle ?? file.name,
+          ...(file.watchForCompletion ? { watchForCompletion: true } : {}),
         };
       }
       if (file.attachmentMode === "path-reference") {

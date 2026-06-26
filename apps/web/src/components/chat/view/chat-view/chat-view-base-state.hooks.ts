@@ -100,6 +100,9 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
   const addComposerDraftFile = useComposerDraftStore((store) => store.addFile);
   const addComposerDraftFiles = useComposerDraftStore((store) => store.addFiles);
   const removeComposerDraftFile = useComposerDraftStore((store) => store.removeFile);
+  const setComposerDraftFileWatchForCompletion = useComposerDraftStore(
+    (store) => store.setFileWatchForCompletion,
+  );
   const addComposerDraftAnnotations = useComposerDraftStore((store) => store.addAnnotations);
   const removeComposerDraftAnnotation = useComposerDraftStore((store) => store.removeAnnotation);
   const insertComposerDraftTerminalContext = useComposerDraftStore(
@@ -173,6 +176,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
     addComposerDraftFile,
     addComposerDraftFiles,
     removeComposerDraftFile,
+    setComposerDraftFileWatchForCompletion,
     addComposerDraftAnnotations,
     removeComposerDraftAnnotation,
     addComposerDraftTerminalContexts,

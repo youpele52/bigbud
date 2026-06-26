@@ -185,6 +185,15 @@ export const makeStartSession =
           Effect.runPromise(dispatcher.rename({ threadId: input.threadId, title })),
         archiveThread: () =>
           Effect.runPromise(dispatcher.archive({ threadId: input.threadId }).pipe(Effect.asVoid)),
+        getThreadStatus: (targetThreadId) =>
+          Effect.runPromise(
+            dispatcher
+              .getStatus({
+                callerThreadId: input.threadId,
+                threadId: ThreadId.makeUnsafe(targetThreadId),
+              })
+              .pipe(Effect.map((status) => status as unknown as Record<string, unknown>)),
+          ),
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

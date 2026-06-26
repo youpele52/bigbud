@@ -13,7 +13,7 @@ import { ThreadId } from "@bigbud/contracts";
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
 
 const ThreadToolRequest = Schema.Struct({
-  action: Schema.Literals(["rename", "archive"]),
+  action: Schema.Literals(["rename", "archive", "get_status"]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
 });
@@ -90,6 +90,33 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         ),
       );
       return yield* HttpServerResponse.json({ ok: true, title: result.title });
+    }
+
+    if (body.action === "get_status") {
+      const targetThreadId = body.threadId?.trim() ?? "";
+      if (targetThreadId.length === 0) {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: "Thread ID is required.",
+        });
+      }
+      const status = yield* dispatcher
+        .getStatus({
+          callerThreadId: threadId,
+          threadId: ThreadId.makeUnsafe(targetThreadId),
+        })
+        .pipe(
+          Effect.mapError((error) => {
+            const message =
+              error instanceof Error ? error.message : "Failed to read thread status.";
+            const statusCode = message.includes("not found") ? 404 : 400;
+            return new ThreadToolRequestError({
+              status: statusCode,
+              message,
+            });
+          }),
+        );
+      return yield* HttpServerResponse.json({ ok: true, status });
     }
 
     yield* dispatcher.archive({ threadId }).pipe(

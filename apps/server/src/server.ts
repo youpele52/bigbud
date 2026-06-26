@@ -63,6 +63,7 @@ import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus"
 import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
+import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import { ServerSettingsLive } from "./ws/serverSettings";
@@ -77,6 +78,7 @@ import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
+import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/ProjectionThreadWatches";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 
 const PtyAdapterLive = Layer.unwrap(
@@ -133,6 +135,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SchedulerReactorLive),
+  Layer.provideMerge(ThreadWatchReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
   Layer.provideMerge(DefaultSchedulerConfigLive),
 );
@@ -235,6 +238,7 @@ const ProjectionPersistenceLayerLive = Layer.mergeAll(
   KanbanPersistenceLayerLive,
   NotesPersistenceLayerLive,
   ThreadProjectionPersistenceLayerLive,
+  ProjectionThreadWatchRepositoryLive,
 );
 
 const GitLayerLive = Layer.empty.pipe(

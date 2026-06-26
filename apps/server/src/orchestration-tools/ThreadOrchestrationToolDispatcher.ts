@@ -1,6 +1,8 @@
 import type { ThreadId } from "@bigbud/contracts";
 import type { Effect } from "effect";
 
+import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
+
 export interface ThreadOrchestrationToolDispatcherShape {
   readonly rename: (input: {
     readonly threadId: ThreadId;
@@ -9,6 +11,10 @@ export interface ThreadOrchestrationToolDispatcherShape {
   readonly archive: (input: {
     readonly threadId: ThreadId;
   }) => Effect.Effect<{ readonly archived: true }, Error>;
+  readonly getStatus: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly threadId: ThreadId;
+  }) => Effect.Effect<ThreadWorkflowStatusSnapshot, Error>;
 }
 
 let dispatcher: ThreadOrchestrationToolDispatcherShape | null = null;

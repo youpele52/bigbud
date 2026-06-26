@@ -11,6 +11,10 @@ import {
   resolveThreadContextPath,
   serializeThreadContextMarkdown,
 } from "../ThreadContextExport.ts";
+import {
+  resolveThreadWorkflowStatus,
+  serializeThreadWorkflowStatusMarkdown,
+} from "../ThreadWorkflowStatus.logic.ts";
 
 export function prependThreadContextToProviderInput(input: {
   readonly providerInputText: string;
@@ -24,6 +28,7 @@ export function prependThreadContextToProviderInput(input: {
     "",
     "To rename the current thread, call the `rename_thread` tool with the new title.",
     "To archive the current thread, call the `archive_thread` tool.",
+    "To check whether another thread's agent is still active, call `get_thread_status` with that thread's ID.",
     "You must not delete threads.",
   ].join("\n");
   if (!input.providerInputText) {
@@ -98,16 +103,21 @@ export const appendReferencedThreadsToProviderInput = Effect.fn(
         } as const;
       }
 
+      const workflowStatus = resolveThreadWorkflowStatus(thread);
+
       return {
         threadId: thread.id,
         title: thread.title,
-        markdown: serializeThreadContextMarkdown({
-          id: thread.id,
-          title: thread.title,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          messages: thread.messages,
-        }),
+        markdown: [
+          serializeThreadWorkflowStatusMarkdown(workflowStatus),
+          serializeThreadContextMarkdown({
+            id: thread.id,
+            title: thread.title,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+            messages: thread.messages,
+          }),
+        ].join("\n\n"),
       } as const;
     }),
   );
@@ -121,6 +131,7 @@ export const appendReferencedThreadsToProviderInput = Effect.fn(
   const lines = [
     "<attached_threads>",
     "The user attached the following threads as read-only context. Do not rename, archive, or delete them unless they are the current thread and you are explicitly asked to do so.",
+    "Use `get_thread_status` to poll live workflow status before starting dependent work.",
     "",
   ];
   for (const thread of visibleThreads) {

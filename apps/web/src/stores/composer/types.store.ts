@@ -57,6 +57,7 @@ export interface ComposerFileAttachment extends ChatFileAttachment {
   file: File | null;
   threadId?: ThreadId;
   threadTitle?: string;
+  watchForCompletion?: boolean;
 }
 
 export const PersistedComposerFileAttachment = Schema.Struct({
@@ -71,6 +72,7 @@ export const PersistedComposerFileAttachment = Schema.Struct({
   ),
   threadId: Schema.optional(ThreadId),
   threadTitle: Schema.optional(Schema.String),
+  watchForCompletion: Schema.optional(Schema.Boolean),
 });
 
 export const PersistedTerminalContextDraft = Schema.Struct({
@@ -279,6 +281,11 @@ export interface ComposerDraftStoreState {
   addFile: (threadId: ThreadId, file: ComposerFileAttachment) => void;
   addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => void;
   removeFile: (threadId: ThreadId, fileId: string) => void;
+  setFileWatchForCompletion: (
+    threadId: ThreadId,
+    fileId: string,
+    watchForCompletion: boolean,
+  ) => void;
   addAnnotation: (threadId: ThreadId, annotation: ComposerAnnotationAttachment) => void;
   addAnnotations: (threadId: ThreadId, annotations: ComposerAnnotationAttachment[]) => void;
   removeAnnotation: (threadId: ThreadId, annotationId: string) => void;

@@ -82,6 +82,22 @@ describe("CopilotAdapter remote workspace sessions", () => {
       setThreadOrchestrationToolDispatcher({
         rename: () => Effect.succeed({ title: "Renamed" }),
         archive: () => Effect.succeed({ archived: true as const }),
+        getStatus: () =>
+          Effect.succeed({
+            threadId: THREAD_ID,
+            title: "Thread",
+            workflowStatus: "idle",
+            isAgentActive: false,
+            isWorkflowComplete: false,
+            sessionStatus: null,
+            latestTurnState: null,
+            latestTurnCompletedAt: null,
+            hasPendingApprovals: false,
+            hasPendingUserInput: false,
+            hasActionableProposedPlan: false,
+            lastAssistantExcerpt: null,
+            updatedAt: new Date().toISOString(),
+          }),
       });
 
       const adapter = yield* CopilotAdapter;

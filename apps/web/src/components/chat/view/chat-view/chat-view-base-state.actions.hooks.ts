@@ -24,6 +24,11 @@ export function useChatViewComposerDraftActions(input: {
   addComposerDraftFile: (threadId: ThreadId, file: ComposerFileAttachment) => void;
   addComposerDraftFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => void;
   removeComposerDraftFile: (threadId: ThreadId, fileId: string) => void;
+  setComposerDraftFileWatchForCompletion: (
+    threadId: ThreadId,
+    fileId: string,
+    watchForCompletion: boolean,
+  ) => void;
   addComposerDraftAnnotations: (
     threadId: ThreadId,
     annotations: ComposerAnnotationAttachment[],
@@ -46,6 +51,7 @@ export function useChatViewComposerDraftActions(input: {
     addComposerDraftFile,
     addComposerDraftFiles,
     removeComposerDraftFile,
+    setComposerDraftFileWatchForCompletion,
     addComposerDraftAnnotations,
     removeComposerDraftAnnotation,
     addComposerDraftTerminalContexts,
@@ -114,6 +120,12 @@ export function useChatViewComposerDraftActions(input: {
     },
     [removeComposerDraftFile, threadId],
   );
+  const toggleComposerFileWatchForCompletion = useCallback(
+    (fileId: string, watchForCompletion: boolean) => {
+      setComposerDraftFileWatchForCompletion(threadId, fileId, watchForCompletion);
+    },
+    [setComposerDraftFileWatchForCompletion, threadId],
+  );
   const removeComposerTerminalContextFromDraft = useCallback(
     (contextId: string) => {
       const contextIndex = composerTerminalContexts.findIndex(
@@ -156,6 +168,7 @@ export function useChatViewComposerDraftActions(input: {
     addComposerAnnotationsToDraft,
     removeComposerAnnotationFromDraft,
     removeComposerFileFromDraft,
+    toggleComposerFileWatchForCompletion,
     removeComposerTerminalContextFromDraft,
   };
 }
