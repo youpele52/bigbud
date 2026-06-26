@@ -8,6 +8,7 @@ import {
   deriveServerPaths,
   ensureServerDirectories,
   resolveStaticDir,
+  resolveMobileWebStaticDir,
   RuntimeMode,
   type ServerConfigShape,
 } from "../startup/config";
@@ -274,6 +275,7 @@ export const resolveServerConfig = (
       ),
     );
     const staticDir = devUrl ? undefined : yield* resolveStaticDir();
+    const mobileWebStaticDir = devUrl ? undefined : yield* resolveMobileWebStaticDir();
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         flags.host,
@@ -317,6 +319,7 @@ export const resolveServerConfig = (
       serverTracePath,
       host,
       staticDir,
+      mobileWebStaticDir,
       devUrl,
       noBrowser,
       authToken,

@@ -46,7 +46,7 @@ export function resolveDefaultMobileWebBaseUrl(): string {
   if (desktopBackendBaseUrl) {
     const url = new URL(desktopBackendBaseUrl);
     if (!isLocalDesktopBackendProtocol(url.protocol)) {
-      return `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`;
+      return stripTrailingSlash(desktopBackendBaseUrl);
     }
     url.port = String(DEFAULT_MOBILE_WEB_PORT);
     url.pathname = "/";

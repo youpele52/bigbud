@@ -116,7 +116,11 @@ export function MobileRemoteControlSettingsSection() {
     },
     onSuccess: async (status) => {
       if (status.remoteBaseUrl) {
-        setBackendBaseUrl(normalizeBackendBaseUrl(status.remoteBaseUrl));
+        const nextRemoteBaseUrl = normalizeBackendBaseUrl(status.remoteBaseUrl);
+        setBackendBaseUrl(nextRemoteBaseUrl);
+        setMobileBaseUrl(nextRemoteBaseUrl);
+        window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextRemoteBaseUrl);
+        window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
       }
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
     },

@@ -42,6 +42,7 @@ const makeServerConfigLayer = (tempDir: string) =>
     autoBootstrapProjectFromCwd: false,
     logWebSocketEvents: false,
     staticDir: undefined,
+    mobileWebStaticDir: undefined,
     devUrl: undefined,
   });
 
