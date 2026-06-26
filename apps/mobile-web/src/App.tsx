@@ -47,13 +47,16 @@ function AppFrame() {
     return current;
   });
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { snapshotQuery } = useMobileSnapshot(session);
+  const { snapshotQuery, connectionError } = useMobileSnapshot(session);
   const threadId = extractMobileThreadId(pathname);
   const draftThread = threadId ? getMobileDraftThread(threadId) : null;
   const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
   const isThreadView = pathname.startsWith("/mobile/thread/") && !pathname.endsWith("/diff");
   const showLaunchSplash =
-    isMobileLaunchRoute(pathname) && session !== null && snapshotQuery.isLoading;
+    isMobileLaunchRoute(pathname) &&
+    session !== null &&
+    snapshotQuery.isLoading &&
+    !snapshotQuery.isError;
   const sessionContextValue = useMemo(() => ({ session, setSession }), [session, setSession]);
 
   function handleSignOut() {
@@ -66,6 +69,33 @@ function AppFrame() {
       <MobileRpcProvider>
         {showLaunchSplash ? (
           <MobileStartupSplash />
+        ) : isMobileLaunchRoute(pathname) && session !== null && snapshotQuery.isError ? (
+          <div className="grid gap-3 px-4 py-8">
+            <p className="text-sm font-medium text-foreground">Unable to connect</p>
+            <p className="text-sm text-muted-foreground">
+              {connectionError ?? "Refresh the page or pair again if the session expired."}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="rounded-md border border-border px-3 py-2 text-sm"
+                onClick={() => window.location.reload()}
+                type="button"
+              >
+                Retry
+              </button>
+              <button
+                className="rounded-md bg-secondary px-3 py-2 text-sm"
+                onClick={() => {
+                  clearMobileSession();
+                  setSession(null);
+                  window.location.assign("/mobile");
+                }}
+                type="button"
+              >
+                Clear session
+              </button>
+            </div>
+          </div>
         ) : (
           <div
             className={

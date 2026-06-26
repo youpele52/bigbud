@@ -276,7 +276,7 @@ export function MobileRemoteControlSettingsSection() {
 
       <SettingsRow
         title="Mobile app URL"
-        description="Where the separate apps/mobile-web companion is hosted. For different-Wi-Fi access, this must be reachable from the phone."
+        description="Root origin of the mobile companion. For Tailscale, use the ts.net origin without /mobile (e.g. https://your-mac.ts.net). The pairing link adds /mobile automatically."
       >
         <div className="mt-3">
           <Input value={mobileBaseUrl} onChange={(event) => setMobileBaseUrl(event.target.value)} />

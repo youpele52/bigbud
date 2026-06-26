@@ -275,7 +275,7 @@ export const resolveServerConfig = (
       ),
     );
     const staticDir = devUrl ? undefined : yield* resolveStaticDir();
-    const mobileWebStaticDir = devUrl ? undefined : yield* resolveMobileWebStaticDir();
+    const mobileWebStaticDir = yield* resolveMobileWebStaticDir();
     const host = Option.getOrElse(
       resolveOptionPrecedence(
         flags.host,

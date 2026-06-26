@@ -187,7 +187,8 @@ const makeMobileRemoteControl = Effect.gen(function* () {
         };
         yield* writeJsonFile(pairingFilePath(pairingId), record);
 
-        const pairUrl = `${baseUrl}/mobile/pair/${pairingId}?backend=${encodeURIComponent(backendBaseUrl)}#secret=${encodeURIComponent(secret)}`;
+        const pairBaseUrl = baseUrl.replace(/\/mobile\/?$/, "");
+        const pairUrl = `${pairBaseUrl}/mobile/pair/${pairingId}?backend=${encodeURIComponent(backendBaseUrl)}#secret=${encodeURIComponent(secret)}`;
         return {
           pairingId,
           scope: record.scope,

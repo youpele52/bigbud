@@ -145,6 +145,8 @@ const buildCmd = Command.make(
 
       const webDist = path.join(repoRoot, "apps/web/dist");
       const clientTarget = path.join(serverDir, "dist/client");
+      const mobileWebDist = path.join(repoRoot, "apps/mobile-web/dist");
+      const mobileWebTarget = path.join(serverDir, "dist/mobile-web");
 
       if (yield* fs.exists(webDist)) {
         yield* fs.copy(webDist, clientTarget);
@@ -152,6 +154,22 @@ const buildCmd = Command.make(
         yield* Effect.log("[cli] Bundled web app into dist/client");
       } else {
         yield* Effect.logWarning("[cli] Web dist not found — skipping client bundle.");
+      }
+
+      if (yield* fs.exists(mobileWebDist)) {
+        const indexHtml = yield* fs.readFileString(path.join(mobileWebDist, "index.html"));
+        if (indexHtml.includes('src="/mobile/assets/')) {
+          yield* fs.copy(mobileWebDist, mobileWebTarget);
+          yield* Effect.log("[cli] Bundled mobile companion into dist/mobile-web");
+        } else {
+          yield* Effect.logWarning(
+            "[cli] Mobile web dist is not a desktop build — run 'bun run build:mobile-web:desktop' first.",
+          );
+        }
+      } else {
+        yield* Effect.logWarning(
+          "[cli] Mobile web dist not found — skipping mobile companion bundle.",
+        );
       }
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
