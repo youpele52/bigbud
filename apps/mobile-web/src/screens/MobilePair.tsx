@@ -30,6 +30,7 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
     return backend?.trim() ?? "";
   }, []);
   const secret = useMemo(() => readPairingSecret(), []);
+  const missingSecret = secret.length === 0;
 
   const statusQuery = useQuery({
     enabled: backendBaseUrl.length > 0,
@@ -112,10 +113,23 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
             {new Date(statusQuery.data.expiresAt).toLocaleString()}
           </MobileMuted>
         ) : null}
+        {statusQuery.isLoading ? <MobileMuted>Checking pairing status...</MobileMuted> : null}
+        {statusQuery.isError ? (
+          <p className="text-xs text-destructive">
+            {statusQuery.error instanceof Error
+              ? statusQuery.error.message
+              : "Could not reach the desktop backend."}
+          </p>
+        ) : null}
+        {missingSecret ? (
+          <p className="text-xs text-destructive">
+            This pairing link is missing its secret token. Open the original full link again.
+          </p>
+        ) : null}
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <MobileActions>
           <Button
-            disabled={!statusQuery.data?.available || secret.length === 0}
+            disabled={!statusQuery.data?.available || missingSecret}
             onClick={() => void confirmPairing()}
           >
             Confirm pairing
