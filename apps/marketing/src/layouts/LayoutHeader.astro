@@ -1,5 +1,5 @@
 ---
-import { APP_NAME, MARKETING_ASSETS } from "../constants/app";
+import { APP_NAME, GETTING_STARTED_PATH, MARKETING_ASSETS } from "../constants/app";
 import "./LayoutHeader.css";
 ---
 
@@ -9,8 +9,47 @@ import "./LayoutHeader.css";
       <img src={MARKETING_ASSETS.navLogoPath} alt={APP_NAME} class="nav-icon" />
     </a>
     <div class="nav-links">
-      <a href="/changelog" class="nav-link">changelog</a>
       <a href="/download" class="nav-link">download</a>
+      <a href={GETTING_STARTED_PATH} class="nav-link">docs</a>
+      <a href="/changelog" class="nav-link">changelog</a>
     </div>
+    <button class="nav-hamburger" aria-label="Toggle menu" data-hamburger>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+    </button>
   </nav>
 </header>
+
+<div class="nav-overlay" data-overlay hidden></div>
+<div class="nav-drawer" data-drawer hidden>
+  <div class="nav-drawer-links">
+    <a href="/download" class="nav-drawer-link">download</a>
+    <a href={GETTING_STARTED_PATH} class="nav-drawer-link">docs</a>
+    <a href="/changelog" class="nav-drawer-link">changelog</a>
+  </div>
+</div>
+
+<script>
+  const hamburger = document.querySelector<HTMLElement>("[data-hamburger]");
+  const drawer = document.querySelector<HTMLElement>("[data-drawer]");
+  const overlay = document.querySelector<HTMLElement>("[data-overlay]");
+
+  if (hamburger && drawer && overlay) {
+    const toggle = () => {
+      const isOpen = drawer.classList.toggle("open");
+      overlay.classList.toggle("open");
+      hamburger.classList.toggle("open");
+      drawer.hidden = false;
+      overlay.hidden = false;
+      document.body.style.overflow = isOpen ? "hidden" : "";
+    };
+
+    hamburger.addEventListener("click", toggle);
+    overlay.addEventListener("click", toggle);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && drawer.classList.contains("open")) toggle();
+    });
+  }
+</script>

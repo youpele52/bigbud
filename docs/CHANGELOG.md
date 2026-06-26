@@ -2,7 +2,7 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.647 (26 June, 2026)
+## v0.1.648 (26 June, 2026)
 
 ### Mobile Remote Companion
 

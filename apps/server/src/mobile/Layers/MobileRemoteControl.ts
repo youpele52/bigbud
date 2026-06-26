@@ -73,6 +73,16 @@ function stripTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
+export function buildMobilePairUrl(input: {
+  readonly baseUrl: string;
+  readonly pairingId: string;
+  readonly backendBaseUrl: string;
+  readonly secret: string;
+}): string {
+  const pairBaseUrl = input.baseUrl.replace(/\/mobile\/?$/, "");
+  return `${pairBaseUrl}/mobile/pair/${input.pairingId}?backend=${encodeURIComponent(input.backendBaseUrl)}#secret=${encodeURIComponent(input.secret)}`;
+}
+
 const makeMobileRemoteControl = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -187,8 +197,12 @@ const makeMobileRemoteControl = Effect.gen(function* () {
         };
         yield* writeJsonFile(pairingFilePath(pairingId), record);
 
-        const pairBaseUrl = baseUrl.replace(/\/mobile\/?$/, "");
-        const pairUrl = `${pairBaseUrl}/mobile/pair/${pairingId}?backend=${encodeURIComponent(backendBaseUrl)}#secret=${encodeURIComponent(secret)}`;
+        const pairUrl = buildMobilePairUrl({
+          baseUrl,
+          pairingId,
+          backendBaseUrl,
+          secret,
+        });
         return {
           pairingId,
           scope: record.scope,
