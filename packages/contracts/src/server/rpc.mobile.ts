@@ -1,6 +1,7 @@
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import {
+  WsGitRefreshStatusRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationGetMobileThreadRpc,
@@ -19,6 +20,7 @@ export const MobileWsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsGitRefreshStatusRpc,
   WsSubscribeOrchestrationDomainEventsRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeThinkingActivityDeltasRpc,

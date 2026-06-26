@@ -1,6 +1,5 @@
 import type { OrchestrationThread, ThreadId } from "@bigbud/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useMobileRpcClient } from "../context/MobileRpcContext";
 
@@ -12,7 +11,6 @@ function formatQueryError(error: unknown): string {
 }
 
 export function useMobileThread(session: { sessionId: string } | null, threadId: ThreadId) {
-  const queryClient = useQueryClient();
   const { client } = useMobileRpcClient();
 
   const threadQuery = useQuery<OrchestrationThread>({
@@ -21,20 +19,9 @@ export function useMobileThread(session: { sessionId: string } | null, threadId:
     queryFn: () => client!.getMobileThread(threadId),
     retry: 1,
     retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 8_000),
-    staleTime: 1_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
-
-  useEffect(() => {
-    if (!client || !session || !threadQuery.isSuccess) {
-      return;
-    }
-    const unsubscribe = client.onDomainEvent(() => {
-      void queryClient.invalidateQueries({
-        queryKey: ["mobile-thread", session.sessionId, threadId],
-      });
-    });
-    return unsubscribe;
-  }, [client, queryClient, session, threadId, threadQuery.isSuccess]);
 
   return {
     threadQuery,

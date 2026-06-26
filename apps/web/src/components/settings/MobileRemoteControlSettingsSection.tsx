@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SmartphoneIcon } from "lucide-react";
+import { SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -16,6 +16,7 @@ import {
   resolveDefaultBackendBaseUrl,
   resolveDefaultMobileWebBaseUrl,
 } from "./mobileRemoteControl.urls";
+import { MobileRemotePairingQrCode } from "./MobileRemotePairingQrCode";
 
 const MOBILE_REMOTE_SESSIONS_QUERY_KEY = ["mobile-remote-sessions"] as const;
 const MOBILE_REMOTE_TAILSCALE_QUERY_KEY = ["mobile-remote-tailscale"] as const;
@@ -172,157 +173,178 @@ export function MobileRemoteControlSettingsSection() {
   }, [tailscaleQuery.data, tailscaleQuery.isLoading]);
 
   return (
-    <SettingsSection title="Mobile Remote" icon={<SmartphoneIcon className="size-3" />}>
-      <SettingsRow
-        title="Enable mobile remote control"
-        description="Allow scoped mobile sessions to pair with the desktop server."
-        status={status}
-        control={
-          <Switch
-            checked={settings.mobileRemoteControl.enabled}
-            onCheckedChange={(checked) =>
-              updateSettings({
-                mobileRemoteControl: {
-                  ...settings.mobileRemoteControl,
-                  enabled: Boolean(checked),
-                },
-              })
-            }
-            aria-label="Enable mobile remote control"
-          />
-        }
-      />
-
-      <SettingsRow
-        title="Default pairing scope"
-        description="Keep v1 narrow. Thread control allows prompt send, interrupt, approvals, diff, and archive."
-        control={
-          <Select
-            value={settings.mobileRemoteControl.defaultScope}
-            onValueChange={(value) => {
-              if (value === "read-only" || value === "approve-only" || value === "thread-control") {
+    <>
+      <SettingsSection title="Mobile Remote" icon={<SmartphoneIcon className="size-3" />}>
+        <SettingsRow
+          title="Enable mobile remote control"
+          description="Allow scoped mobile sessions to pair with the desktop server."
+          status={status}
+          control={
+            <Switch
+              checked={settings.mobileRemoteControl.enabled}
+              onCheckedChange={(checked) =>
                 updateSettings({
                   mobileRemoteControl: {
                     ...settings.mobileRemoteControl,
-                    defaultScope: value,
+                    enabled: Boolean(checked),
                   },
-                });
+                })
               }
-            }}
-          >
-            <SelectTrigger className="w-full sm:w-40" aria-label="Mobile pairing scope">
-              <SelectValue>{settings.mobileRemoteControl.defaultScope}</SelectValue>
-            </SelectTrigger>
-            <SelectPopup align="end" alignItemWithTrigger={false}>
-              <SelectItem hideIndicator value="read-only">
-                read-only
-              </SelectItem>
-              <SelectItem hideIndicator value="approve-only">
-                approve-only
-              </SelectItem>
-              <SelectItem hideIndicator value="thread-control">
-                thread-control
-              </SelectItem>
-            </SelectPopup>
-          </Select>
-        }
-      />
+              aria-label="Enable mobile remote control"
+            />
+          }
+        />
 
-      <SettingsRow
-        title="Tailscale remote backend"
-        description="Private different-Wi-Fi access. This exposes the desktop backend through your tailnet over HTTPS."
-        status={tailscaleStatus}
-      >
-        <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={enableTailscaleMutation.isPending}
-              onClick={() => enableTailscaleMutation.mutate()}
-            >
-              {enableTailscaleMutation.isPending ? "Enabling..." : "Enable Tailscale Serve"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disableTailscaleMutation.isPending}
-              onClick={() => disableTailscaleMutation.mutate()}
-            >
-              {disableTailscaleMutation.isPending ? "Disabling..." : "Disable Tailscale Serve"}
-            </Button>
-          </div>
-          {tailscaleQuery.data?.remoteBaseUrl ? (
-            <p className="break-all text-xs text-muted-foreground">
-              Use this as the backend URL for different-Wi-Fi pairing:{" "}
-              {normalizeBackendBaseUrl(tailscaleQuery.data.remoteBaseUrl)}
-            </p>
-          ) : null}
-          {enableTailscaleMutation.isError ? (
-            <p className="text-xs text-destructive">
-              {enableTailscaleMutation.error instanceof Error
-                ? enableTailscaleMutation.error.message
-                : "Failed to enable Tailscale Serve."}
-            </p>
-          ) : null}
-          {disableTailscaleMutation.isError ? (
-            <p className="text-xs text-destructive">
-              {disableTailscaleMutation.error instanceof Error
-                ? disableTailscaleMutation.error.message
-                : "Failed to disable Tailscale Serve."}
-            </p>
-          ) : null}
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        title="Mobile app URL"
-        description="Root origin of the mobile companion. For Tailscale, use the ts.net origin without /mobile (e.g. https://your-mac.ts.net). The pairing link adds /mobile automatically."
-      >
-        <div className="mt-3">
-          <Input value={mobileBaseUrl} onChange={(event) => setMobileBaseUrl(event.target.value)} />
-        </div>
-      </SettingsRow>
-
-      <SettingsRow
-        title="Backend URL"
-        description="The phone must be able to reach this desktop server origin from the same network or tailnet. Use the HTTP origin only, without auth tokens."
-      >
-        <div className="mt-3 space-y-3">
-          <Input
-            value={backendBaseUrl}
-            onChange={(event) => setBackendBaseUrl(event.target.value)}
-            onBlur={() => setBackendBaseUrl((current) => normalizeBackendBaseUrl(current))}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={!settings.mobileRemoteControl.enabled || createPairingMutation.isPending}
-              onClick={() => {
-                setPairingLink(null);
-                setPairingError(null);
-                createPairingMutation.mutate();
+        <SettingsRow
+          title="Default pairing scope"
+          description="Keep v1 narrow. Thread control allows prompt send, interrupt, approvals, diff, and archive."
+          control={
+            <Select
+              value={settings.mobileRemoteControl.defaultScope}
+              onValueChange={(value) => {
+                if (
+                  value === "read-only" ||
+                  value === "approve-only" ||
+                  value === "thread-control"
+                ) {
+                  updateSettings({
+                    mobileRemoteControl: {
+                      ...settings.mobileRemoteControl,
+                      defaultScope: value,
+                    },
+                  });
+                }
               }}
             >
-              {createPairingMutation.isPending ? "Creating..." : "Create pairing link"}
-            </Button>
-            {pairingLink ? (
-              <Button size="sm" variant="outline" onClick={() => copyToClipboard(pairingLink)}>
-                {isCopied ? "Copied!" : "Copy link"}
+              <SelectTrigger className="w-full sm:w-40" aria-label="Mobile pairing scope">
+                <SelectValue>{settings.mobileRemoteControl.defaultScope}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="read-only">
+                  read-only
+                </SelectItem>
+                <SelectItem hideIndicator value="approve-only">
+                  approve-only
+                </SelectItem>
+                <SelectItem hideIndicator value="thread-control">
+                  thread-control
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          title="Tailscale remote backend"
+          description="Private different-Wi-Fi access. This exposes the desktop backend through your tailnet over HTTPS."
+          status={tailscaleStatus}
+        >
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={enableTailscaleMutation.isPending}
+                onClick={() => enableTailscaleMutation.mutate()}
+              >
+                {enableTailscaleMutation.isPending ? "Enabling..." : "Enable Tailscale Serve"}
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={disableTailscaleMutation.isPending}
+                onClick={() => disableTailscaleMutation.mutate()}
+              >
+                {disableTailscaleMutation.isPending ? "Disabling..." : "Disable Tailscale Serve"}
+              </Button>
+            </div>
+            {tailscaleQuery.data?.remoteBaseUrl ? (
+              <p className="break-all text-xs text-muted-foreground">
+                Use this as the backend URL for different-Wi-Fi pairing:{" "}
+                {normalizeBackendBaseUrl(tailscaleQuery.data.remoteBaseUrl)}
+              </p>
+            ) : null}
+            {enableTailscaleMutation.isError ? (
+              <p className="text-xs text-destructive">
+                {enableTailscaleMutation.error instanceof Error
+                  ? enableTailscaleMutation.error.message
+                  : "Failed to enable Tailscale Serve."}
+              </p>
+            ) : null}
+            {disableTailscaleMutation.isError ? (
+              <p className="text-xs text-destructive">
+                {disableTailscaleMutation.error instanceof Error
+                  ? disableTailscaleMutation.error.message
+                  : "Failed to disable Tailscale Serve."}
+              </p>
             ) : null}
           </div>
-          {pairingError ? <p className="text-xs text-destructive">{pairingError}</p> : null}
-          {pairingLink ? (
-            <p className="break-all text-xs text-muted-foreground">{pairingLink}</p>
-          ) : null}
-        </div>
-      </SettingsRow>
+        </SettingsRow>
 
-      <SettingsRow
-        title="Active sessions"
-        description="Revoke any paired phone immediately if you no longer trust it."
-      >
-        <div className="mt-3 space-y-2">
+        <SettingsRow
+          title="Mobile app URL"
+          description="Root origin of the mobile companion. For Tailscale, use the ts.net origin without /mobile (e.g. https://your-mac.ts.net). The pairing link adds /mobile automatically."
+        >
+          <div className="mt-3">
+            <Input
+              value={mobileBaseUrl}
+              onChange={(event) => setMobileBaseUrl(event.target.value)}
+            />
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title="Backend URL"
+          description="The phone must be able to reach this desktop server origin from the same network or tailnet. Use the HTTP origin only, without auth tokens."
+        >
+          <div className="mt-3 space-y-3">
+            <Input
+              value={backendBaseUrl}
+              onChange={(event) => setBackendBaseUrl(event.target.value)}
+              onBlur={() => setBackendBaseUrl((current) => normalizeBackendBaseUrl(current))}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={!settings.mobileRemoteControl.enabled || createPairingMutation.isPending}
+                onClick={() => {
+                  setPairingLink(null);
+                  setPairingError(null);
+                  createPairingMutation.mutate();
+                }}
+              >
+                {createPairingMutation.isPending ? "Creating..." : "Create pairing link"}
+              </Button>
+            </div>
+            {pairingError ? <p className="text-xs text-destructive">{pairingError}</p> : null}
+            {pairingLink ? (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <MobileRemotePairingQrCode value={pairingLink} />
+                  <div className="min-w-0 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Scan with your phone camera to open the pairing flow, or copy the link below.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard(pairingLink)}
+                    >
+                      {isCopied ? "Copied!" : "Copy link"}
+                    </Button>
+                    <p className="break-all text-xs text-muted-foreground">{pairingLink}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </SettingsRow>
+      </SettingsSection>
+
+      <SettingsSection title="Active sessions" icon={<TabletSmartphoneIcon className="size-3" />}>
+        <div className="space-y-3 px-4 py-4 sm:px-5">
+          <p className="text-xs text-muted-foreground">
+            Revoke any paired phone immediately if you no longer trust it.
+          </p>
           {sessionsQuery.isError ? (
             <p className="text-xs text-destructive">
               {sessionsQuery.error instanceof Error
@@ -358,7 +380,7 @@ export function MobileRemoteControlSettingsSection() {
             <p className="text-xs text-muted-foreground">No active mobile sessions.</p>
           )}
         </div>
-      </SettingsRow>
-    </SettingsSection>
+      </SettingsSection>
+    </>
   );
 }
