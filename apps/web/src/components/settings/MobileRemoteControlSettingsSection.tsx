@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -14,6 +14,11 @@ import {
   normalizeBackendBaseUrl,
   resolveDefaultBackendBaseUrl,
   resolveDefaultMobileWebBaseUrl,
+  resolveHostedMobileWebBaseUrl,
+  resolveStoredBackendBaseUrl,
+  resolveStoredMobileWebBaseUrl,
+  shouldPreferLiveBackendBaseUrl,
+  shouldResetMobileAppUrlToHosted,
 } from "./mobileRemoteControl.urls";
 import { MobileRemotePairingQrCode } from "./MobileRemotePairingQrCode";
 
@@ -26,27 +31,31 @@ function stripTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function readStoredValue(key: string, fallback: string): string {
+function readStoredBackendBaseUrl(): string {
   if (typeof window === "undefined") {
-    return fallback;
+    return normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
   }
-  const stored = window.localStorage.getItem(key)?.trim();
-  return stored && stored.length > 0 ? stored : fallback;
+  return resolveStoredBackendBaseUrl(
+    window.localStorage.getItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY),
+  );
 }
 
-function readStoredBackendBaseUrl(): string {
-  const fallback = resolveDefaultBackendBaseUrl();
-  const stored = readStoredValue(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, fallback);
-  return normalizeBackendBaseUrl(stored);
+function readStoredMobileWebBaseUrl(): string {
+  if (typeof window === "undefined") {
+    return resolveDefaultMobileWebBaseUrl();
+  }
+  const backendBaseUrl = readStoredBackendBaseUrl();
+  return resolveStoredMobileWebBaseUrl(
+    window.localStorage.getItem(MOBILE_WEB_BASE_URL_STORAGE_KEY),
+    backendBaseUrl,
+  );
 }
 
 export function MobileRemoteControlSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const queryClient = useQueryClient();
-  const [mobileBaseUrl, setMobileBaseUrl] = useState(() =>
-    readStoredValue(MOBILE_WEB_BASE_URL_STORAGE_KEY, resolveDefaultMobileWebBaseUrl()),
-  );
+  const [mobileBaseUrl, setMobileBaseUrl] = useState(readStoredMobileWebBaseUrl);
   const [backendBaseUrl, setBackendBaseUrl] = useState(readStoredBackendBaseUrl);
   const [pairingLink, setPairingLink] = useState<string | null>(null);
   const [pairingError, setPairingError] = useState<string | null>(null);
@@ -76,6 +85,53 @@ export function MobileRemoteControlSettingsSection() {
     staleTime: 5_000,
     refetchInterval: 10_000,
   });
+  const tailscaleStatus = tailscaleQuery.data;
+
+  useEffect(() => {
+    const status = tailscaleStatus;
+    if (!status) {
+      return;
+    }
+
+    if (status.serving && status.remoteBaseUrl) {
+      const nextRemoteBaseUrl = normalizeBackendBaseUrl(status.remoteBaseUrl);
+      setBackendBaseUrl((current) => {
+        const normalizedCurrent = normalizeBackendBaseUrl(current);
+        if (!shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextRemoteBaseUrl)) {
+          return current;
+        }
+        window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
+        return nextRemoteBaseUrl;
+      });
+      setMobileBaseUrl((current) => {
+        if (!shouldResetMobileAppUrlToHosted(current, nextRemoteBaseUrl)) {
+          return current;
+        }
+        const nextMobileBaseUrl = stripTrailingSlash(resolveHostedMobileWebBaseUrl());
+        window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
+        return nextMobileBaseUrl;
+      });
+      return;
+    }
+
+    const nextLocalBackend = normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
+    const nextLocalMobile = stripTrailingSlash(resolveDefaultMobileWebBaseUrl());
+    setBackendBaseUrl((current) => {
+      const normalizedCurrent = normalizeBackendBaseUrl(current);
+      if (!shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextLocalBackend)) {
+        return current;
+      }
+      window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextLocalBackend);
+      return nextLocalBackend;
+    });
+    setMobileBaseUrl((current) => {
+      if (!shouldResetMobileAppUrlToHosted(current, nextLocalBackend)) {
+        return current;
+      }
+      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextLocalMobile);
+      return nextLocalMobile;
+    });
+  }, [tailscaleStatus]);
 
   const createPairingMutation = useMutation({
     mutationFn: async () => {
@@ -118,9 +174,12 @@ export function MobileRemoteControlSettingsSection() {
       if (status.remoteBaseUrl) {
         const nextRemoteBaseUrl = normalizeBackendBaseUrl(status.remoteBaseUrl);
         setBackendBaseUrl(nextRemoteBaseUrl);
-        setMobileBaseUrl(nextRemoteBaseUrl);
-        window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextRemoteBaseUrl);
         window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
+        if (shouldResetMobileAppUrlToHosted(mobileBaseUrl, nextRemoteBaseUrl)) {
+          const nextMobileBaseUrl = stripTrailingSlash(resolveHostedMobileWebBaseUrl());
+          setMobileBaseUrl(nextMobileBaseUrl);
+          window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
+        }
       }
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
     },
@@ -133,6 +192,12 @@ export function MobileRemoteControlSettingsSection() {
       return window.desktopBridge.disableTailscaleRemoteAccess();
     },
     onSuccess: async () => {
+      const nextLocalBackend = normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
+      const nextLocalMobile = stripTrailingSlash(resolveDefaultMobileWebBaseUrl());
+      setBackendBaseUrl(nextLocalBackend);
+      setMobileBaseUrl(nextLocalMobile);
+      window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextLocalBackend);
+      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextLocalMobile);
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
     },
   });
@@ -145,8 +210,8 @@ export function MobileRemoteControlSettingsSection() {
     }
     return `${activeSessionCount} active mobile session${activeSessionCount === 1 ? "" : "s"}.`;
   }, [activeSessionCount, settings.mobileRemoteControl.enabled]);
-  const tailscaleStatus = useMemo(() => {
-    const status = tailscaleQuery.data;
+  const tailscaleStatusLabel = useMemo(() => {
+    const status = tailscaleStatus;
     if (tailscaleQuery.isLoading) {
       return "Checking Tailscale remote access.";
     }
@@ -169,7 +234,7 @@ export function MobileRemoteControlSettingsSection() {
       return "Tailscale is installed but the daemon is not running.";
     }
     return "Tailscale CLI is not installed.";
-  }, [tailscaleQuery.data, tailscaleQuery.isLoading]);
+  }, [tailscaleQuery.isLoading, tailscaleStatus]);
 
   return (
     <>
@@ -197,7 +262,7 @@ export function MobileRemoteControlSettingsSection() {
         <SettingsRow
           title="Tailscale remote backend"
           description="Private different-Wi-Fi access. This exposes the desktop backend through your tailnet over HTTPS."
-          status={tailscaleStatus}
+          status={tailscaleStatusLabel}
         >
           <div className="mt-3 space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -242,7 +307,7 @@ export function MobileRemoteControlSettingsSection() {
 
         <SettingsRow
           title="Mobile app URL"
-          description="Root origin of the mobile companion. For Tailscale, use the ts.net origin without /mobile (e.g. https://your-mac.ts.net). The pairing link adds /mobile automatically."
+          description="Root origin of the hosted mobile companion (for example https://mobile.bigbud.app). Pairing links add /mobile automatically. Dev uses the local mobile dev server."
         >
           <div className="mt-3">
             <Input
