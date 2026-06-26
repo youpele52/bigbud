@@ -313,6 +313,7 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain("<attached_threads>");
     expect(sendInput?.input).toContain("Referenced thread");
     expect(sendInput?.input).toContain("Thread ID: thread-2");
+    expect(sendInput?.input).toContain("get_thread_status");
     expect(sendInput?.attachments).toBeUndefined();
   });
 });

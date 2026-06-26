@@ -86,6 +86,7 @@ const makeReadModel = (threadId: ThreadId | null, projectWorkspaceRoot: string |
               activities: [],
               proposedPlans: [],
               checkpoints: [],
+              watchingThreads: [],
               deletedAt: null,
             },
           ],

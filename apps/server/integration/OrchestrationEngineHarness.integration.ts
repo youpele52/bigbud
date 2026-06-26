@@ -13,6 +13,7 @@ import { ProjectionCheckpointRepositoryLive } from "../src/persistence/Layers/Pr
 import { ProjectionPendingApprovalRepositoryLive } from "../src/persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
+import { ProjectionThreadWatchRepositoryLive } from "../src/persistence/Layers/ProjectionThreadWatches.ts";
 import { ProjectionCheckpointRepository } from "../src/persistence/Services/ProjectionCheckpoints.ts";
 import { ProjectionPendingApprovalRepository } from "../src/persistence/Services/ProjectionPendingApprovals.ts";
 import { ProviderUnsupportedError } from "../src/provider/Errors.ts";
@@ -37,6 +38,7 @@ import { OrchestrationEngineService } from "../src/orchestration/Services/Orches
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SchedulerReactor } from "../src/orchestration/Services/SchedulerReactor.ts";
+import { ThreadWatchReactor } from "../src/orchestration/Services/ThreadWatchReactor.ts";
 import {
   RuntimeReceiptBus,
   type OrchestrationRuntimeReceipt,
@@ -171,6 +173,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(gitCoreLayer),
       Layer.provideMerge(textGenerationLayer),
       Layer.provideMerge(serverSettingsLayer),
+      Layer.provide(persistenceLayer.pipe(Layer.provideMerge(ProjectionThreadWatchRepositoryLive))),
     );
     const checkpointReactorLayer = CheckpointReactorLive.pipe(
       Layer.provideMerge(runtimeServicesLayer),
@@ -222,11 +225,15 @@ export const makeOrchestrationIntegrationHarness = (
       start: () => Effect.void,
       triggerNow: () => Effect.succeed({ status: "dispatched" as const }),
     });
+    const threadWatchReactorLayer = Layer.succeed(ThreadWatchReactor, {
+      start: () => Effect.void,
+    });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
       Layer.provideMerge(checkpointReactorLayer),
       Layer.provideMerge(schedulerReactorLayer),
+      Layer.provideMerge(threadWatchReactorLayer),
     );
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),

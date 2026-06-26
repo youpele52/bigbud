@@ -23,6 +23,9 @@ export const RENAME_THREAD_TOOL_DESCRIPTION = "Rename the current BigBud thread.
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 
+export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
+  "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
+
 export function resolveOrchestrationBridgeHost(host: string | undefined): string {
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
     return "127.0.0.1";

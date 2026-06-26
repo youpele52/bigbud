@@ -37,6 +37,7 @@ import {
 import { TextGeneration, type TextGenerationShape } from "../../git/Services/TextGeneration.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
+import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
@@ -311,6 +312,17 @@ export async function createHarness(input?: {
   );
   const layer = ProviderCommandReactorLive.pipe(
     Layer.provideMerge(orchestrationLayer),
+    Layer.provideMerge(
+      Layer.succeed(ProjectionThreadWatchRepository, {
+        replaceActiveWatchesForMessage: () => Effect.void,
+        listActiveByWatchedThread: () => Effect.succeed([]),
+        listActiveByWatcherAndMessage: () => Effect.succeed([]),
+        listActiveByWatcher: () => Effect.succeed([]),
+        markGroupTriggered: () => Effect.succeed(false),
+        cancelActiveForWatcher: () => Effect.void,
+        listAllActive: () => Effect.succeed([]),
+      }),
+    ),
     Layer.provideMerge(Layer.succeed(ProviderService, service)),
     Layer.provideMerge(
       Layer.succeed(DiscoveryRegistry, {

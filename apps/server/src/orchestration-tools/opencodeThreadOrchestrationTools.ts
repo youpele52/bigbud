@@ -4,6 +4,7 @@ import path from "node:path";
 
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
+  GET_THREAD_STATUS_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
   renderCallOrchestrationToolSource,
   renderResolveCurrentThreadIdSource,
@@ -53,6 +54,19 @@ export function renderOpencodeArchiveThreadToolSource(): string {
   });
 }
 
+export function renderOpencodeGetThreadStatusToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: GET_THREAD_STATUS_TOOL_DESCRIPTION,
+    argsSource: ['    threadId: tool.schema.string().describe("Thread ID to inspect"),'].join("\n"),
+    executeBody: [
+      "const result = await runtime.getThreadStatus({",
+      "  threadId: String(args.threadId ?? ''),",
+      "});",
+      "return result.message;",
+    ],
+  });
+}
+
 export function renderOpencodeOrchestrationRuntimeSource(
   input: ThreadOrchestrationHttpConfig,
 ): string {
@@ -78,6 +92,13 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "export async function archiveThread() {",
     "  await callOrchestrationTool({ action: 'archive', threadId: resolveCurrentThreadId() });",
     "  return { message: 'Archived the current thread.' };",
+    "}",
+    "",
+    "export async function getThreadStatus(input: { readonly threadId: string }) {",
+    "  const threadId = input.threadId.trim();",
+    "  if (threadId.length === 0) throw new Error('Thread ID is required.');",
+    "  const result = await callOrchestrationTool({ action: 'get_status', threadId });",
+    "  return { message: JSON.stringify(result.status ?? {}, null, 2) };",
     "}",
     "",
   ].join("\n");
@@ -117,6 +138,11 @@ export async function writeOpencodeOrchestrationTools(input: {
       "utf8",
     ),
     writeFile(
+      path.join(toolsDir, "get_thread_status.ts"),
+      renderOpencodeGetThreadStatusToolSource(),
+      "utf8",
+    ),
+    writeFile(
       path.join(runtimeDir, "opencode-orchestration-runtime.ts"),
       renderOpencodeOrchestrationRuntimeSource(httpConfig),
       "utf8",
@@ -127,6 +153,7 @@ export async function writeOpencodeOrchestrationTools(input: {
 export const OPENCODE_ORCHESTRATION_TOOL_FILES = {
   ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource,
   ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource,
+  ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource,
 } as const;
 
 export function renderOpencodeOrchestrationBridgeFiles(
@@ -135,6 +162,7 @@ export function renderOpencodeOrchestrationBridgeFiles(
   return {
     ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource(),
     ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource(),
+    ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource(),
     ".bigbud/opencode-orchestration-runtime.ts": renderOpencodeOrchestrationRuntimeSource(input),
   };
 }

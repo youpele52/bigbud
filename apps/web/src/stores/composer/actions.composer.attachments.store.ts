@@ -179,6 +179,38 @@ export function createComposerAttachmentActions(
         return { draftsByThreadId: nextDraftsByThreadId };
       });
     },
+    setFileWatchForCompletion: (
+      threadId: ThreadId,
+      fileId: string,
+      watchForCompletion: boolean,
+    ) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      set((state) => {
+        const current = state.draftsByThreadId[threadId];
+        if (!current) {
+          return state;
+        }
+        const nextFiles = current.files.map((file) =>
+          file.id === fileId && file.attachmentMode === "thread-reference"
+            ? { ...file, watchForCompletion }
+            : file,
+        );
+        if (nextFiles === current.files) {
+          return state;
+        }
+        return {
+          draftsByThreadId: {
+            ...state.draftsByThreadId,
+            [threadId]: {
+              ...current,
+              files: nextFiles,
+            },
+          },
+        };
+      });
+    },
     clearPersistedAttachments: (threadId: ThreadId) => {
       if (threadId.length === 0) {
         return;

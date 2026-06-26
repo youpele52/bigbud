@@ -49,6 +49,7 @@ import Migration0033 from "./Migrations/033_AutomationSchedulesBackfillColumns.t
 import Migration0034 from "./Migrations/034_AutomationSchedulesBackfillProjectId.ts";
 import Migration0035 from "./Migrations/035_AutomationRunOccurrences.ts";
 import Migration0036 from "./Migrations/036_AutomationRunTerminalEventId.ts";
+import Migration0037 from "./Migrations/037_ProjectionThreadWatches.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -97,6 +98,7 @@ export const migrationEntries = [
   [34, "AutomationSchedulesBackfillProjectId", Migration0034],
   [35, "AutomationRunOccurrences", Migration0035],
   [36, "AutomationRunTerminalEventId", Migration0036],
+  [37, "ProjectionThreadWatches", Migration0037],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

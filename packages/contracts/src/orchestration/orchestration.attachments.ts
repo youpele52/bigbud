@@ -61,6 +61,7 @@ export const ChatThreadReferenceAttachment = Schema.Struct({
   sizeBytes: Schema.Literal(0).pipe(Schema.withDecodingDefault(() => 0 as const)),
   threadId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
   title: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  watchForCompletion: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ChatThreadReferenceAttachment = typeof ChatThreadReferenceAttachment.Type;
 
@@ -120,6 +121,7 @@ export const UploadChatThreadReferenceAttachment = Schema.Struct({
   sizeBytes: Schema.Literal(0),
   threadId: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
   title: TrimmedNonEmptyString.check(Schema.isMaxLength(255)),
+  watchForCompletion: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
 });
 export type UploadChatThreadReferenceAttachment = typeof UploadChatThreadReferenceAttachment.Type;
 

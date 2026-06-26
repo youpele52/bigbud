@@ -133,6 +133,7 @@ export const makeDefaultOrchestrationReadModel = () => {
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        watchingThreads: [],
         deletedAt: null,
       },
     ],

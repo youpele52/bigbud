@@ -57,6 +57,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       checkpointRows,
       latestTurnRows,
       stateRows,
+      threadWatchRows,
     ] = yield* Effect.all([
       queries
         .listProjectRows(undefined)
@@ -148,6 +149,16 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
             ),
           ),
         ),
+      queries
+        .listThreadWatchRows(undefined)
+        .pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getSnapshot:listThreadWatches:query",
+              "ProjectionSnapshotQuery.getSnapshot:listThreadWatches:decodeRows",
+            ),
+          ),
+        ),
     ]);
 
     const snapshot = assembleSnapshotRows({
@@ -160,6 +171,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       checkpointRows,
       latestTurnRows,
       stateRows,
+      threadWatchRows,
     });
 
     return yield* decodeReadModel(snapshot).pipe(

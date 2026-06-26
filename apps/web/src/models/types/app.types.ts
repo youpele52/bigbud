@@ -79,6 +79,7 @@ export interface ChatThreadAttachment {
   sizeBytes: 0;
   threadId: ThreadId;
   title: string;
+  watchForCompletion?: boolean;
 }
 
 export type ChatAttachment =
@@ -175,6 +176,10 @@ export interface Thread {
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
   activities: OrchestrationThreadActivity[];
+  watchingThreads?: Array<{
+    threadId: ThreadId;
+    title: string;
+  }>;
 }
 
 export interface SidebarThreadSummary {

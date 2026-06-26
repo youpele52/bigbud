@@ -2,6 +2,7 @@ import { CommandId, type ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import { lockThreadTitle } from "./ThreadTitleLock.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
@@ -40,5 +41,31 @@ export const archiveThreadViaOrchestration = Effect.fn("archiveThreadViaOrchestr
       threadId: input.threadId,
     });
     return { archived: true } as const;
+  },
+);
+
+export const getThreadStatusViaOrchestration = Effect.fn("getThreadStatusViaOrchestration")(
+  function* (input: {
+    readonly orchestrationEngine: OrchestrationEngineShape;
+    readonly callerThreadId: ThreadId;
+    readonly threadId: ThreadId;
+  }) {
+    const readModel = yield* input.orchestrationEngine.getReadModel();
+    const callerThread = readModel.threads.find((thread) => thread.id === input.callerThreadId);
+    if (!callerThread) {
+      return yield* Effect.fail(new Error("Caller thread could not be resolved."));
+    }
+
+    const targetThread = readModel.threads.find((thread) => thread.id === input.threadId);
+    if (!targetThread) {
+      return yield* Effect.fail(new Error(`Thread '${input.threadId}' was not found.`));
+    }
+    if (targetThread.projectId !== callerThread.projectId) {
+      return yield* Effect.fail(
+        new Error(`Thread '${input.threadId}' is not accessible from the current project.`),
+      );
+    }
+
+    return resolveThreadWorkflowStatus(targetThread);
   },
 );

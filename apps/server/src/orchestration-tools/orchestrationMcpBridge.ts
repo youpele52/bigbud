@@ -108,6 +108,7 @@ export function buildClaudeOrchestrationBridgeConfig(
     allowedTools: [
       `mcp__${bridge.serverName}__rename_thread`,
       `mcp__${bridge.serverName}__archive_thread`,
+      `mcp__${bridge.serverName}__get_thread_status`,
     ],
   };
 }

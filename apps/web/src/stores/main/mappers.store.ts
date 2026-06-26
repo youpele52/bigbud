@@ -116,6 +116,7 @@ export function mapMessage(message: OrchestrationMessage): ChatMessage {
         sizeBytes: attachment.sizeBytes,
         threadId: ThreadId.makeUnsafe(attachment.threadId),
         title: attachment.title,
+        ...(attachment.watchForCompletion ? { watchForCompletion: true } : {}),
       };
     }
     if (attachment.type === "path") {
@@ -221,6 +222,9 @@ export function mapThread(thread: OrchestrationThread): Thread {
     worktreePath: thread.worktreePath,
     turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
     activities: thread.activities.map((activity) => ({ ...activity })),
+    ...((thread.watchingThreads?.length ?? 0) > 0
+      ? { watchingThreads: thread.watchingThreads!.map((watch) => ({ ...watch })) }
+      : {}),
   };
 }
 

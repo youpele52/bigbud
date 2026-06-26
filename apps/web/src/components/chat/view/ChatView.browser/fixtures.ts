@@ -261,6 +261,7 @@ export function createSnapshotForTargetUser(options: {
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        watchingThreads: [],
         session: {
           threadId: THREAD_ID,
           status: options.sessionStatus ?? "ready",
@@ -316,6 +317,7 @@ export function addThreadToSnapshot(
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        watchingThreads: [],
         session: {
           threadId,
           status: "ready",

@@ -157,6 +157,7 @@ export function useChatViewInteractionFiles({
             file: null,
             threadId: payload.threadId,
             threadTitle: payload.title,
+            watchForCompletion: true,
           });
           runtime.focusComposer();
         }

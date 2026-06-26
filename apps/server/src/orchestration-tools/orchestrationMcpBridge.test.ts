@@ -31,8 +31,9 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("/api/internal/thread-tools");
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
+    expect(source).toContain("get_thread_status");
     expect(source).toContain("token-1");
-    expect(source).not.toContain("args?.threadId");
+    expect(source).toContain("action: 'get_status'");
   });
 
   it("merges Codex and Claude orchestration config into existing provider config", () => {
@@ -60,7 +61,11 @@ describe("orchestrationMcpBridge", () => {
       claude,
     );
     expect(merged.allowedTools).toEqual(
-      expect.arrayContaining(["Read", "mcp__bigbud_orchestration__rename_thread"]),
+      expect.arrayContaining([
+        "Read",
+        "mcp__bigbud_orchestration__rename_thread",
+        "mcp__bigbud_orchestration__get_thread_status",
+      ]),
     );
     expect((merged.mcpServers as Record<string, unknown>)["bigbud_orchestration"]).toBeDefined();
     expect(merged.mcpServers?.existing).toBeDefined();

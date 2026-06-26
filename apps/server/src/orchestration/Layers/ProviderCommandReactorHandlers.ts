@@ -13,7 +13,7 @@ import {
   type TurnId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
-import { Cache, Duration, Effect, FileSystem, Option, Scope } from "effect";
+import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -21,6 +21,8 @@ import { increment, orchestrationEventsProcessedTotal } from "../../observabilit
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
+import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
 import { ServerConfig } from "../../startup/config.ts";
@@ -81,6 +83,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const workspacePaths = yield* WorkspacePaths;
   const fileSystem = yield* FileSystem.FileSystem;
+  const threadWatchRepository = yield* ProjectionThreadWatchRepository;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
     timeToLive: Duration.minutes(HANDLED_TURN_START_KEY_TTL_MINUTES),
@@ -296,6 +299,26 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         }).pipe(Effect.forkScoped);
       }
     }
+
+    const threadAttachments = message.attachments ?? [];
+    if (threadAttachments.some((attachment) => attachment.type === "thread")) {
+      yield* registerThreadWatchesFromAttachments({
+        repository: threadWatchRepository,
+        watcherThreadId: event.payload.threadId,
+        sourceMessageId: event.payload.messageId,
+        attachments: threadAttachments,
+        createdAt: event.payload.createdAt,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to register thread watches from attachments", {
+            threadId: event.payload.threadId,
+            messageId: event.payload.messageId,
+            cause: Cause.pretty(cause),
+          }),
+        ),
+      );
+    }
+
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,
