@@ -1,9 +1,9 @@
 import { LogOutIcon, MoonIcon, PanelLeftIcon, RefreshCwIcon, SunIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { cn } from "../lib/cn";
-import { useTheme } from "../theme/useTheme";
-import { clearMobileSession } from "../lib/mobileSession";
+import { cn } from "../../lib/cn";
+import { useTheme } from "../../theme/useTheme";
+import { clearMobileSession } from "../../lib/mobileSession";
 
 interface MobileHamburgerMenuProps {
   onReconnect: () => void;

@@ -11,7 +11,7 @@ import {
   MobileMuted,
   MobilePage,
   MobileTitle,
-} from "../components/mobileShell";
+} from "../components/shell/MobileShell";
 import { writeMobileSession } from "../lib/mobileSession";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 

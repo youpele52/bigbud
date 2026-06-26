@@ -1,11 +1,11 @@
 import type { ProjectId } from "@bigbud/contracts";
 import { FolderOpenIcon } from "lucide-react";
 
-import { MobileListSection } from "../components/MobileAppHeader";
-import { MobileNewChatFab } from "../components/MobileNewChatFab";
-import { SIDEBAR_ICON_SIZE_CLASS } from "../components/mobileIconSizes";
-import { MobileSessionGate } from "../components/MobileSessionGate";
-import { MobileThreadList } from "../components/MobileThreadList";
+import { MobileListSection } from "../components/shell/MobileAppHeader";
+import { MobileNewChatFab } from "../components/threads/MobileNewChatFab";
+import { SIDEBAR_ICON_SIZE_CLASS } from "../components/threads/threads.iconSizes";
+import { MobileSessionGate } from "../components/shell/MobileSessionGate";
+import { MobileThreadList } from "../components/threads/MobileThreadList";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { threadsForProject } from "../lib/mobileModels";

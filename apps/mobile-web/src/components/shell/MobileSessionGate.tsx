@@ -2,9 +2,9 @@ import type { OrchestrationReadModel } from "@bigbud/contracts";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 import { MobileStartupSplash } from "./MobileStartupSplash";
-import { clearMobileSession } from "../lib/mobileSession";
+import { clearMobileSession } from "../../lib/mobileSession";
 
 export function MobileSessionGate({
   session,

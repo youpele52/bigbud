@@ -3,9 +3,9 @@ import { useState } from "react";
 
 import { getVisibleThreadsForProject } from "~/components/sidebar/Sidebar.logic";
 
-import { MobileListLink } from "./MobileAppHeader";
+import { MobileListLink } from "../shell/MobileAppHeader";
 import { MobileThreadProviderIcon } from "./MobileThreadProviderIcon";
-import { MOBILE_THREAD_PREVIEW_LIMIT } from "../lib/mobileModels";
+import { MOBILE_THREAD_PREVIEW_LIMIT } from "../../lib/mobileModels";
 
 export function MobileThreadList({
   threads,

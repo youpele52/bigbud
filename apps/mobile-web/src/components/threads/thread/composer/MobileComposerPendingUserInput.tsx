@@ -8,8 +8,8 @@ import {
   togglePendingUserInputOptionSelection,
 } from "~/logic/user-input";
 
-import type { MobilePendingUserInput } from "../../lib/mobileModels";
-import { cn } from "../../lib/cn";
+import type { MobilePendingUserInput } from "../../../../lib/mobileModels";
+import { cn } from "../../../../lib/cn";
 
 interface MobileComposerPendingUserInputProps {
   pendingUserInput: MobilePendingUserInput;

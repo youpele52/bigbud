@@ -1,5 +1,3 @@
-@import "../../web/src/index.css";
-
 @source "./**/*.{ts,tsx}";
 @source "../web/src/**/*.{ts,tsx}";
 

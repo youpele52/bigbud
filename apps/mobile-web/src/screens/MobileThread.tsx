@@ -17,15 +17,15 @@ import {
   togglePendingUserInputOptionSelection,
 } from "~/logic/user-input";
 
-import { MobileWorkingIndicator } from "../components/composer/MobileWorkingIndicator";
-import { MobileStartupSplash } from "../components/MobileStartupSplash";
+import { MobileWorkingIndicator } from "../components/threads/thread/composer/MobileWorkingIndicator";
+import { MobileStartupSplash } from "../components/shell/MobileStartupSplash";
 import {
   applyMobileUserInputCustomAnswer,
   MobileComposer,
   resolveMobileUserInputAnswers,
-} from "../components/composer/MobileComposer";
-import { MobileMessages } from "../components/MobileMessages";
-import { MobileWorkLog } from "../components/MobileWorkLog";
+} from "../components/threads/thread/composer/MobileComposer";
+import { MobileMessages } from "../components/threads/thread/MobileMessages";
+import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { useMobileWorkingState } from "../hooks/useMobileWorkingState";

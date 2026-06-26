@@ -10,8 +10,8 @@ import {
 } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { MobileAppHeader } from "./components/MobileAppHeader";
-import { MobileStartupSplash } from "./components/MobileStartupSplash";
+import { MobileAppHeader } from "./components/shell/MobileAppHeader";
+import { MobileStartupSplash } from "./components/shell/MobileStartupSplash";
 import { useMobileSnapshot } from "./hooks/useMobileSnapshot";
 import { useTheme } from "./theme/useTheme";
 

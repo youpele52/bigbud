@@ -38,6 +38,7 @@
     "start:mock-update-server": "bun run scripts/mock-update-server.ts",
     "build": "turbo run build",
     "build:marketing": "turbo run build --filter=@bigbud/marketing",
+    "build:mobile-web": "turbo run build --filter=@bigbud/mobile-web",
     "build:desktop": "turbo run build --filter=@bigbud/desktop --filter=@bigbud/server",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives && bun run scripts/check-test-file-length.ts",

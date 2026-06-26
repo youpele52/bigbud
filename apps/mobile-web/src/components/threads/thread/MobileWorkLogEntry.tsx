@@ -1,7 +1,7 @@
 import { type WorkLogEntry } from "@bigbud/shared/workLog";
 import { BotIcon, CheckIcon, CircleAlertIcon, TerminalIcon, WrenchIcon } from "lucide-react";
 
-import { cn } from "../lib/cn";
+import { cn } from "../../../lib/cn";
 
 function workEntryHeading(entry: WorkLogEntry): string {
   if (entry.requestKind === "command" || entry.itemType === "command_execution" || entry.command) {

@@ -22,7 +22,7 @@ export default defineConfig({
     alias: {
       "~": webSrcDir,
     },
-    tsconfigPaths: false,
+    tsconfigPaths: true,
   },
   server: {
     host: "0.0.0.0",

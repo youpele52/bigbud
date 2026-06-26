@@ -2,10 +2,10 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { MobileHeaderBreadcrumbSegment } from "../logic/mobileHeader.logic";
+import type { MobileHeaderBreadcrumbSegment } from "../../logic/mobileHeader.logic";
 import { BigbudLogo } from "./BigbudLogo";
 import { MobileHamburgerMenu } from "./MobileHamburgerMenu";
-import { cn } from "../lib/cn";
+import { cn } from "../../lib/cn";
 
 interface MobileAppHeaderProps {
   title?: string | undefined;

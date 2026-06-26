@@ -1,9 +1,9 @@
 import type { ThreadId } from "@bigbud/contracts";
 import { useQuery } from "@tanstack/react-query";
 
-import { MobileStartupSplash } from "../components/MobileStartupSplash";
+import { MobileStartupSplash } from "../components/shell/MobileStartupSplash";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
-import { MobileCard, MobileMuted, MobilePage } from "../components/mobileShell";
+import { MobileCard, MobileMuted, MobilePage } from "../components/shell/MobileShell";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 
 export function MobileDiff({ threadId, toTurnCount }: { threadId: ThreadId; toTurnCount: number }) {

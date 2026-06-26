@@ -1,0 +1,24 @@
+{
+  "name": "bigbud mobile companion",
+  "short_name": "bigbud",
+  "description": "A lightweight mobile companion for checking chats, approving actions, and steering work away from your desktop.",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#171717",
+  "theme_color": "#171717",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
