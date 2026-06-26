@@ -64,7 +64,6 @@ export interface BuildCliInput {
   readonly skipBuild: Option.Option<boolean>;
   readonly keepStage: Option.Option<boolean>;
   readonly signed: Option.Option<boolean>;
-  readonly noNotarize: Option.Option<boolean>;
   readonly verbose: Option.Option<boolean>;
   readonly mockUpdates: Option.Option<boolean>;
   readonly mockUpdateServerPort: Option.Option<string>;
@@ -173,7 +172,6 @@ export interface ResolvedBuildOptions {
   readonly skipBuild: boolean;
   readonly keepStage: boolean;
   readonly signed: boolean;
-  readonly noNotarize: boolean;
   readonly verbose: boolean;
   readonly mockUpdates: boolean;
   readonly mockUpdateServerPort: string | undefined;
@@ -245,11 +243,6 @@ const BuildEnvConfig = Config.all({
     Config.boolean("T3CODE_DESKTOP_SIGNED"),
     false,
   ),
-  noNotarize: aliasedWithDefault(
-    Config.boolean("BIGBUD_DESKTOP_NO_NOTARIZE"),
-    Config.boolean("T3CODE_DESKTOP_NO_NOTARIZE"),
-    false,
-  ),
   verbose: aliasedWithDefault(
     Config.boolean("BIGBUD_DESKTOP_VERBOSE"),
     Config.boolean("T3CODE_DESKTOP_VERBOSE"),
@@ -311,7 +304,6 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     skipBuild: resolveBooleanFlag(input.skipBuild, env.skipBuild),
     keepStage: resolveBooleanFlag(input.keepStage, env.keepStage),
     signed: resolveBooleanFlag(input.signed, env.signed),
-    noNotarize: resolveBooleanFlag(input.noNotarize, env.noNotarize),
     verbose: resolveBooleanFlag(input.verbose, env.verbose),
     mockUpdates: resolveBooleanFlag(input.mockUpdates, env.mockUpdates),
     mockUpdateServerPort: mergeOptions(

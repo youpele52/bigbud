@@ -322,7 +322,6 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       options.target,
       desktopPackageJson.productName ?? "bigbud",
       options.signed,
-      options.signed && !options.noNotarize,
       options.mockUpdates,
       options.mockUpdateServerPort,
       stageResourcesDir,
@@ -439,9 +438,6 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   }
 
   const electronBuilderResult = yield* resolveElectronBuilderBinary();
-  if (options.platform === "mac" && options.signed && options.noNotarize) {
-    yield* Effect.log("[desktop-artifact] macOS notarization disabled for this build.");
-  }
   yield* Effect.log(
     `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
   );
