@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { useMobileOrchestrationSync } from "../hooks/useMobileOrchestrationSync";
 import { MobileRpcClient } from "../lib/mobileRpc";
@@ -19,8 +20,20 @@ const MobileRpcContext = createContext<MobileRpcState>({
 
 export function MobileRpcProvider({ children }: { children: ReactNode }) {
   const { session } = useMobileSessionState();
+  const queryClient = useQueryClient();
   const wsUrl = useMemo(() => (session ? resolveMobileWebsocketUrl(session) : null), [session]);
-  const client = useMemo(() => (wsUrl ? new MobileRpcClient(wsUrl) : null), [wsUrl]);
+  const client = useMemo(
+    () =>
+      wsUrl
+        ? new MobileRpcClient(wsUrl, {
+            onOpen: () => {
+              void queryClient.invalidateQueries({ queryKey: ["mobile-snapshot"] });
+              void queryClient.invalidateQueries({ queryKey: ["mobile-thread"] });
+            },
+          })
+        : null,
+    [queryClient, wsUrl],
+  );
   useMobileOrchestrationSync(session, client);
 
   useEffect(() => {

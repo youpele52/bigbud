@@ -223,7 +223,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
     turnDiffSummaries: thread.checkpoints.map(mapTurnDiffSummary),
     activities: thread.activities.map((activity) => ({ ...activity })),
     ...((thread.watchingThreads?.length ?? 0) > 0
-      ? { watchingThreads: thread.watchingThreads!.map((watch) => ({ ...watch })) }
+      ? { watchingThreads: thread.watchingThreads!.map((watch) => Object.assign({}, watch)) }
       : {}),
   };
 }

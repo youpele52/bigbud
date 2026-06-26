@@ -14,12 +14,30 @@ import {
   createMobileRpcProtocolLayer,
   type MobileWsProtocolLifecycleHandlers,
 } from "./mobileRpc.protocol";
+import { SelfHealingStream } from "./selfHealingStream";
 
 const makeMobileRpcProtocolClient = RpcClient.make(MobileWsRpcGroup);
 type MobileRpcProtocolClient =
   typeof makeMobileRpcProtocolClient extends Effect.Effect<infer Client, any, any> ? Client : never;
 const MOBILE_SNAPSHOT_TIMEOUT_MS = 45_000;
 const MOBILE_THREAD_TIMEOUT_MS = 45_000;
+
+type MobileRpcRuntime = Pick<
+  ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>,
+  "dispose" | "runCallback" | "runPromise" | "runSync"
+>;
+
+type DomainEventStreamStarter = (input: {
+  readonly dispatchEvent: (event: unknown) => void;
+  readonly onExit: () => void;
+}) => () => void;
+
+interface MobileRpcClientOptions {
+  readonly clientPromise?: Promise<MobileRpcProtocolClient>;
+  readonly clientScope?: Scope.Closeable;
+  readonly runtime?: MobileRpcRuntime;
+  readonly startDomainEventStream?: DomainEventStreamStarter;
+}
 
 function formatRpcError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -29,20 +47,52 @@ function formatRpcError(error: unknown): string {
 }
 
 export class MobileRpcClient {
-  private readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
+  private readonly runtime: MobileRpcRuntime;
   private readonly clientScope: Scope.Closeable;
   private readonly clientPromise: Promise<MobileRpcProtocolClient>;
   private readonly domainEventListeners = new Set<(event: unknown) => void>();
-  private domainEventCancel: (() => void) | null = null;
+  private readonly domainEventStream: SelfHealingStream;
+  private readonly startDomainEventStream: DomainEventStreamStarter;
 
   constructor(
     private readonly wsUrl: string,
     lifecycleHandlers?: MobileWsProtocolLifecycleHandlers,
+    options?: MobileRpcClientOptions,
   ) {
-    this.runtime = ManagedRuntime.make(createMobileRpcProtocolLayer(wsUrl, lifecycleHandlers));
-    this.clientScope = this.runtime.runSync(Scope.make());
-    this.clientPromise = this.runtime.runPromise(
-      Scope.provide(this.clientScope)(makeMobileRpcProtocolClient),
+    this.runtime =
+      options?.runtime ??
+      ManagedRuntime.make(createMobileRpcProtocolLayer(wsUrl, lifecycleHandlers));
+    this.clientScope = options?.clientScope ?? this.runtime.runSync(Scope.make());
+    this.clientPromise =
+      options?.clientPromise ??
+      this.runtime.runPromise(Scope.provide(this.clientScope)(makeMobileRpcProtocolClient));
+    this.startDomainEventStream =
+      options?.startDomainEventStream ??
+      (({ dispatchEvent, onExit }) =>
+        this.runtime.runCallback(
+          Effect.promise(() => this.clientPromise).pipe(
+            Effect.flatMap((client) =>
+              Stream.runForEach(
+                client[WS_METHODS.subscribeOrchestrationDomainEvents]({}),
+                (event) =>
+                  Effect.sync(() => {
+                    dispatchEvent(event);
+                  }),
+              ),
+            ),
+            Effect.catch(() => Effect.void),
+            Effect.ensuring(Effect.sync(onExit)),
+          ),
+        ));
+    this.domainEventStream = new SelfHealingStream(({ onExit }) =>
+      this.startDomainEventStream({
+        dispatchEvent: (event) => {
+          for (const listener of this.domainEventListeners) {
+            listener(event);
+          }
+        },
+        onExit,
+      }),
     );
   }
 
@@ -135,31 +185,11 @@ export class MobileRpcClient {
   }
 
   private ensureDomainEventStream() {
-    if (this.domainEventCancel !== null) {
-      return;
-    }
-    this.domainEventCancel = this.runtime.runCallback(
-      Effect.promise(() => this.clientPromise).pipe(
-        Effect.flatMap((client) =>
-          Stream.runForEach(client[WS_METHODS.subscribeOrchestrationDomainEvents]({}), (event) =>
-            Effect.sync(() => {
-              for (const listener of this.domainEventListeners) {
-                listener(event);
-              }
-            }),
-          ),
-        ),
-        Effect.catch(() => Effect.void),
-      ),
-    );
+    this.domainEventStream.start();
   }
 
   private stopDomainEventStream() {
-    if (this.domainEventCancel === null) {
-      return;
-    }
-    this.domainEventCancel();
-    this.domainEventCancel = null;
+    this.domainEventStream.stop();
   }
 
   onServerConfigEvent(listener: (event: unknown) => void): () => void {

@@ -7,7 +7,6 @@ import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
@@ -86,7 +85,7 @@ export function MobileRemoteControlSettingsSection() {
       window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextBackendBaseUrl);
       setBackendBaseUrl(nextBackendBaseUrl);
       return ensureNativeApi().server.createMobileRemotePairing({
-        scope: settings.mobileRemoteControl.defaultScope,
+        scope: "thread-control",
         baseUrl: nextMobileBaseUrl,
         backendBaseUrl: nextBackendBaseUrl,
       });
@@ -177,7 +176,7 @@ export function MobileRemoteControlSettingsSection() {
       <SettingsSection title="Mobile Remote" icon={<SmartphoneIcon className="size-3" />}>
         <SettingsRow
           title="Enable mobile remote control"
-          description="Allow scoped mobile sessions to pair with the desktop server."
+          description="Allow mobile sessions to pair with the desktop server."
           status={status}
           control={
             <Switch
@@ -192,45 +191,6 @@ export function MobileRemoteControlSettingsSection() {
               }
               aria-label="Enable mobile remote control"
             />
-          }
-        />
-
-        <SettingsRow
-          title="Default pairing scope"
-          description="Keep v1 narrow. Thread control allows prompt send, interrupt, approvals, diff, and archive."
-          control={
-            <Select
-              value={settings.mobileRemoteControl.defaultScope}
-              onValueChange={(value) => {
-                if (
-                  value === "read-only" ||
-                  value === "approve-only" ||
-                  value === "thread-control"
-                ) {
-                  updateSettings({
-                    mobileRemoteControl: {
-                      ...settings.mobileRemoteControl,
-                      defaultScope: value,
-                    },
-                  });
-                }
-              }}
-            >
-              <SelectTrigger className="w-full sm:w-40" aria-label="Mobile pairing scope">
-                <SelectValue>{settings.mobileRemoteControl.defaultScope}</SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="read-only">
-                  read-only
-                </SelectItem>
-                <SelectItem hideIndicator value="approve-only">
-                  approve-only
-                </SelectItem>
-                <SelectItem hideIndicator value="thread-control">
-                  thread-control
-                </SelectItem>
-              </SelectPopup>
-            </Select>
           }
         />
 
@@ -361,7 +321,7 @@ export function MobileRemoteControlSettingsSection() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{session.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    {session.scope} · expires {new Date(session.expiresAt).toLocaleString()}
+                    Expires {new Date(session.expiresAt).toLocaleString()}
                   </p>
                 </div>
                 <Button

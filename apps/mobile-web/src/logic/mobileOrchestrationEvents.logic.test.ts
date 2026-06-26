@@ -46,7 +46,10 @@ function makeThread(): OrchestrationThread {
   };
 }
 
-function makeMessageSentEvent(text: string, streaming: boolean): OrchestrationEvent {
+function makeMessageSentEvent(
+  text: string,
+  streaming: boolean,
+): Extract<OrchestrationEvent, { type: "thread.message-sent" }> {
   return {
     type: "thread.message-sent",
     sequence: 1,
@@ -94,5 +97,56 @@ describe("mobileOrchestrationEvents.logic", () => {
     expect(next.changed).toBe(true);
     expect(next.snapshot.threads[0]?.messages[0]?.text).toBe("Done");
     expect(next.snapshot.threads[0]?.messages[0]?.streaming).toBe(false);
+  });
+
+  it("replaces the final assistant message content when the event requests replacement", () => {
+    const thread = applyOrchestrationEventToThread(makeThread(), makeMessageSentEvent("Hel", true));
+    const finalEvent = makeMessageSentEvent("Hello", false);
+    const next = applyOrchestrationEventToThread(thread!, {
+      ...finalEvent,
+      payload: {
+        ...finalEvent.payload,
+        replace: true,
+      },
+    });
+
+    expect(next?.messages).toHaveLength(1);
+    expect(next?.messages[0]?.text).toBe("Hello");
+    expect(next?.messages[0]?.streaming).toBe(false);
+  });
+
+  it("normalizes stale running session updates back to ready once the assistant message completed", () => {
+    const thread = applyOrchestrationEventToThread(
+      makeThread(),
+      makeMessageSentEvent("Done", false),
+    );
+    const next = applyOrchestrationEventToThread(thread!, {
+      type: "thread.session-set",
+      sequence: 2,
+      occurredAt: "2026-01-01T00:00:02.000Z",
+      commandId: CommandId.makeUnsafe("command-2"),
+      eventId: EventId.makeUnsafe("event-2"),
+      aggregateKind: "thread",
+      aggregateId: threadId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: {
+        threadId,
+        session: {
+          threadId,
+          status: "running",
+          providerName: "codex",
+          runtimeMode: "full-access",
+          activeTurnId: turnId,
+          lastError: null,
+          reason: null,
+          updatedAt: "2026-01-01T00:00:02.000Z",
+        },
+      },
+    });
+
+    expect(next?.session?.status).toBe("ready");
+    expect(next?.session?.activeTurnId).toBeNull();
   });
 });
