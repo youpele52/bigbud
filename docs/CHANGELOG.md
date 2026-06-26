@@ -2,7 +2,13 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.647 (23 June, 2026)
+## v0.1.647 (26 June, 2026)
+
+### Mobile Remote Companion
+
+- Added a standalone **mobile web companion** (`apps/mobile-web`) for steering bigbud from your phone — browse chats and projects, open threads, watch live turns, send prompts, interrupt runs, approve or reject pending actions, inspect diffs, and archive threads without the full desktop shell.
+- Pair your phone from **Settings → Mobile Remote**: enable scoped mobile sessions, create a pairing link, and authorize the device in the hosted companion. Sessions are short-lived, scope-limited (`read-only`, `approve-only`, or `thread-control`), and can be revoked immediately from desktop.
+- The hosted companion and desktop backend stay intentionally separate — configure the **Mobile app URL** (for example `https://mobile.bigbud.app`) and a reachable **Backend URL** so the phone can pair over the same network or, with **Tailscale Serve**, from another Wi-Fi on your tailnet.
 
 ### Kanban
 
