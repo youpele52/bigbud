@@ -159,6 +159,8 @@ it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
       assert.equal(response.status, 204);
       assert.equal(response.headers.get("access-control-allow-origin"), "*");
       assert.include(response.headers.get("access-control-allow-methods") ?? "", "POST");
+      assert.include(response.headers.get("access-control-allow-methods") ?? "", "GET");
+      assert.equal(response.headers.get("access-control-allow-private-network"), "true");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 });

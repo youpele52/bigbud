@@ -1,4 +1,8 @@
-import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
+import {
+  ORCHESTRATION_WS_METHODS,
+  type OrchestrationReadModel,
+  WS_METHODS,
+} from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
 import { Effect, Exit, ManagedRuntime, Scope, Stream } from "effect";
 import { RpcClient } from "effect/unstable/rpc";
@@ -11,6 +15,7 @@ import {
 const makeMobileRpcProtocolClient = RpcClient.make(MobileWsRpcGroup);
 type MobileRpcProtocolClient =
   typeof makeMobileRpcProtocolClient extends Effect.Effect<infer Client, any, any> ? Client : never;
+const MOBILE_SNAPSHOT_TIMEOUT_MS = 10_000;
 
 function formatRpcError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -40,10 +45,17 @@ export class MobileRpcClient {
     this.runtime.dispose();
   }
 
-  async getSnapshot() {
+  async getSnapshot(): Promise<OrchestrationReadModel> {
     const client = await this.clientPromise;
     try {
-      return await this.runtime.runPromise(client[ORCHESTRATION_WS_METHODS.getSnapshot]({}));
+      return await Promise.race([
+        this.runtime.runPromise(client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error("Timed out waiting for the desktop snapshot."));
+          }, MOBILE_SNAPSHOT_TIMEOUT_MS);
+        }),
+      ]);
     } catch (error) {
       throw new Error(formatRpcError(error), { cause: error });
     }
