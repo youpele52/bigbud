@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "bun ../../scripts/fetch-download-stats.ts --write",
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check"
