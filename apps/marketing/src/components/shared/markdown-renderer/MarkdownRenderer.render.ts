@@ -312,6 +312,10 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
     }
 
     if (trimmed.toLowerCase().startsWith("<iframe")) {
+      if (trimmed.toLowerCase().includes("</iframe>")) {
+        sections.push({ html: renderIframe(trimmed) });
+        continue;
+      }
       const iframeLines = [trimmed];
       while (index + 1 < lines.length) {
         const nextLine = lines[index + 1]?.trim() ?? "";
