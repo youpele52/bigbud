@@ -194,6 +194,48 @@ it.layer(TestLayer)("git integration", (it) => {
       }),
     );
 
+    it.effect("includes co-authors in commit summaries and details", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+
+        yield* writeTextFile(path.join(tmp, "paired.txt"), "paired work\n");
+        yield* git(tmp, ["add", "paired.txt"]);
+        yield* git(
+          tmp,
+          [
+            "commit",
+            "--cleanup=verbatim",
+            "-m",
+            "feat: paired change",
+            "-m",
+            "Implemented with another author.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+          ],
+          {
+            ...process.env,
+            GIT_AUTHOR_DATE: "2026-06-08T13:00:00.000Z",
+            GIT_COMMITTER_DATE: "2026-06-08T13:00:00.000Z",
+          },
+        );
+
+        const core = yield* GitCore;
+        const history = yield* core.listCommits({ cwd: tmp, limit: 5 });
+        const summary = history.commits[0];
+        expect(summary?.subject).toBe("feat: paired change");
+        expect(summary?.authors).toEqual([
+          { name: "Test", email: "test@test.com" },
+          { name: "Cursor", email: "cursoragent@cursor.com" },
+        ]);
+
+        const sha = yield* git(tmp, ["rev-parse", "HEAD"]);
+        const details = yield* core.getCommitDetails({ cwd: tmp, commit: sha });
+        expect(details.commit.authors).toEqual([
+          { name: "Test", email: "test@test.com" },
+          { name: "Cursor", email: "cursoragent@cursor.com" },
+        ]);
+      }),
+    );
+
     it.effect("reads commit details with file stats and patch", () =>
       Effect.gen(function* () {
         const tmp = yield* makeTmpDir();
@@ -212,6 +254,7 @@ it.layer(TestLayer)("git integration", (it) => {
         const result = yield* (yield* GitCore).getCommitDetails({ cwd: tmp, commit: sha });
 
         expect(result.commit.subject).toBe("feat: commit details");
+        expect(result.commit.authors).toEqual([{ name: "Test", email: "test@test.com" }]);
         expect(result.commit.tags).toEqual(["release-candidate", "v0.1.642-beta-1"]);
         expect(result.commit.files.some((file) => file.path === "history.txt")).toBe(true);
         expect(result.commit.diff).toContain("diff --git a/history.txt b/history.txt");
