@@ -1,4 +1,9 @@
-import { ChevronDownIcon, Code2Icon, MousePointerSquareDashedIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  Code2Icon,
+  MousePointerSquareDashedIcon,
+  TerminalIcon,
+} from "lucide-react";
 import type { ParsedUserAnnotationEntry } from "~/lib/terminalContext";
 
 function annotationLabel(count: number): string {
@@ -23,6 +28,8 @@ export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnno
           const icon =
             annotation.kind === "browser" ? (
               <MousePointerSquareDashedIcon className="mt-0.5 size-3.5 shrink-0 text-info" />
+            ) : annotation.kind === "terminal" ? (
+              <TerminalIcon className="mt-0.5 size-3.5 shrink-0 text-info" />
             ) : (
               <Code2Icon className="mt-0.5 size-3.5 shrink-0 text-info" />
             );
@@ -30,9 +37,11 @@ export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnno
           const subtitle =
             annotation.kind === "browser"
               ? annotation.pageTitle || annotation.pageUrl
-              : annotation.projectName
-                ? `${annotation.projectName} > ${annotation.path}`
-                : annotation.path;
+              : annotation.kind === "terminal"
+                ? annotation.terminalLabel
+                : annotation.projectName
+                  ? `${annotation.projectName} > ${annotation.path}`
+                  : annotation.path;
           const detail =
             annotation.kind === "browser"
               ? annotation.selector || annotation.tag
@@ -63,7 +72,9 @@ export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnno
                 </div>
               ) : (
                 <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-background/45 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
-                  {annotation.selectedCode}
+                  {annotation.kind === "terminal"
+                    ? annotation.selectedOutput
+                    : annotation.selectedCode}
                 </pre>
               )}
             </div>

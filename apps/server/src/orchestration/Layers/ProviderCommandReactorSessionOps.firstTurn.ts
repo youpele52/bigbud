@@ -8,11 +8,14 @@ import { Cause, Effect } from "effect";
 
 import {
   buildGeneratedWorktreeBranchName,
-  canReplaceThreadTitle,
   isTemporaryWorktreeBranch,
   serverCommandId,
   shouldRetryGeneratedThreadTitle,
 } from "./ProviderCommandReactorHelpers.ts";
+import {
+  getThreadTitleVersion,
+  shouldAllowAutoTitleReplace,
+} from "../../orchestration-tools/ThreadTitleLock.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.ts";
 
 export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: SessionOpServices) =>
@@ -87,6 +90,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
   }) {
     const { textGeneration, orchestrationEngine, resolveThread } = services;
     const attachments = input.attachments ?? [];
+    const titleVersionAtStart = getThreadTitleVersion(input.threadId);
     yield* Effect.gen(function* () {
       const generated = yield* Effect.suspend(() =>
         textGeneration.generateThreadTitle({
@@ -113,7 +117,16 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       );
       const thread = yield* resolveThread(input.threadId);
       if (!thread) return;
-      if (!canReplaceThreadTitle(thread.title, input.titleSeed)) {
+      if (getThreadTitleVersion(input.threadId) !== titleVersionAtStart) {
+        return;
+      }
+      if (
+        !shouldAllowAutoTitleReplace({
+          threadId: input.threadId,
+          currentTitle: thread.title,
+          ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
+        })
+      ) {
         return;
       }
       yield* orchestrationEngine.dispatch({

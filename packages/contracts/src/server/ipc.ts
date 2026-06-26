@@ -43,6 +43,18 @@ import type {
   ProjectWriteFileResult,
 } from "../workspace/project";
 import type {
+  KanbanCard,
+  KanbanCreateInput,
+  KanbanDeleteInput,
+  KanbanDeleteResult,
+  KanbanGetInput,
+  KanbanListInput,
+  KanbanListResult,
+  KanbanMoveInput,
+  KanbanReorderInput,
+  KanbanUpdateInput,
+} from "./kanban";
+import type {
   Note,
   NotesCreateInput,
   NotesDeleteInput,
@@ -67,7 +79,15 @@ import type {
   ServerVerifyExecutionTargetResult,
   ServerWriteHandoffDocumentInput,
   ServerWriteHandoffDocumentResult,
+  ServerExportThreadContextInput,
+  ServerExportThreadContextResult,
 } from "./server";
+import type {
+  ServerCreateMobileRemotePairingInput,
+  ServerListMobileRemoteSessionsResult,
+  ServerMobileRemotePairing,
+  ServerRevokeMobileRemoteSessionInput,
+} from "./mobile";
 import type {
   ServerAutomationResult,
   ServerCreateAutomationInput,
@@ -175,8 +195,21 @@ export interface DesktopNotificationInput {
   silent?: boolean;
 }
 
+export interface DesktopTailscaleRemoteAccessStatus {
+  installed: boolean;
+  running: boolean;
+  online: boolean;
+  serving: boolean;
+  remoteBaseUrl: string | null;
+  error: string | null;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
+  getMobileBackendBaseUrl: () => string | null;
+  getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
@@ -243,6 +276,15 @@ export interface NativeApi {
     update: (input: NotesUpdateInput) => Promise<Note>;
     delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
+  kanban: {
+    list: (input: KanbanListInput) => Promise<KanbanListResult>;
+    get: (input: KanbanGetInput) => Promise<KanbanCard>;
+    create: (input: KanbanCreateInput) => Promise<KanbanCard>;
+    update: (input: KanbanUpdateInput) => Promise<KanbanCard>;
+    delete: (input: KanbanDeleteInput) => Promise<KanbanDeleteResult>;
+    move: (input: KanbanMoveInput) => Promise<KanbanCard>;
+    reorder: (input: KanbanReorderInput) => Promise<KanbanCard>;
+  };
   teach: {
     listProjects: (input?: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
   };
@@ -301,6 +343,14 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    createMobileRemotePairing: (
+      input: ServerCreateMobileRemotePairingInput,
+    ) => Promise<ServerMobileRemotePairing>;
+    listMobileRemoteSessions: () => Promise<ServerListMobileRemoteSessionsResult>;
+    revokeMobileRemoteSession: (input: ServerRevokeMobileRemoteSessionInput) => Promise<void>;
+    exportThreadContext: (
+      input: ServerExportThreadContextInput,
+    ) => Promise<ServerExportThreadContextResult>;
     getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
     listAutomations: (input: ServerListAutomationsInput) => Promise<ServerListAutomationsResult>;
     listAllAutomations: (

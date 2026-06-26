@@ -79,6 +79,7 @@ describe("OrchestrationEngine", () => {
           proposedPlans: [],
           activities: [],
           checkpoints: [],
+          watchingThreads: [],
           session: null,
         },
       ],

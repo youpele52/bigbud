@@ -22,6 +22,7 @@ export interface DevinAcpRuntimeInput extends Omit<
 > {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly devinSettings: DevinAcpRuntimeDevinSettings | null | undefined;
+  readonly mcpServers?: ReadonlyArray<import("effect-acp/schema").McpServer>;
 }
 
 export interface DevinAcpModelSelectionErrorContext {
@@ -50,6 +51,7 @@ export const makeDevinAcpRuntime = (
         ...input,
         spawn: buildDevinAcpSpawnInput(input.devinSettings, input.cwd),
         clientCapabilities: {},
+        ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
       }).pipe(
         Layer.provide(
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),

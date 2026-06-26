@@ -75,6 +75,7 @@ export function attachmentRelativePath(attachment: ChatAttachment): string | nul
       return `${attachment.id}${extension}`;
     }
     case "path":
+    case "thread":
       return null;
   }
 }

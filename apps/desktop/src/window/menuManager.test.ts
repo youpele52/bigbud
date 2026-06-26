@@ -1,3 +1,7 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 const menuHarness = vi.hoisted(() => ({
@@ -47,7 +51,7 @@ vi.mock("electron", () => ({
   },
 }));
 
-import { configureApplicationMenu } from "./menuManager";
+import { configureApplicationMenu, makeResolveIconPath } from "./menuManager";
 
 function getViewMenuEntries(): readonly MenuTemplateEntry[] {
   const viewMenu = menuHarness.buildTemplate?.find((entry) => entry.label === "View");
@@ -127,5 +131,41 @@ describe("configureApplicationMenu", () => {
       "desktop:menu-action",
       "reload-browser-ignoring-cache",
     );
+  });
+
+  it("prefers development desktop icons when running in development", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bigbud-menu-manager-"));
+    const desktopDir = path.join(tempRoot, "apps", "desktop", "dist-electron");
+    const developmentIconFileName =
+      process.platform === "darwin" ? "blueprint-macos-1024.png" : "blueprint-universal-1024.png";
+    const developmentIconPath = path.join(tempRoot, "assets", "dev", developmentIconFileName);
+
+    fs.mkdirSync(path.dirname(developmentIconPath), { recursive: true });
+    fs.mkdirSync(desktopDir, { recursive: true });
+    fs.writeFileSync(developmentIconPath, "dev");
+
+    try {
+      const resolveIconPath = makeResolveIconPath(desktopDir, "", true);
+      expect(resolveIconPath("png")).toBe(developmentIconPath);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to bundled resources when development desktop icons are unavailable", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bigbud-menu-manager-"));
+    const desktopDir = path.join(tempRoot, "apps", "desktop", "dist-electron");
+    const resourceIconPath = path.join(tempRoot, "apps", "desktop", "resources", "icon.png");
+
+    fs.mkdirSync(path.dirname(resourceIconPath), { recursive: true });
+    fs.mkdirSync(desktopDir, { recursive: true });
+    fs.writeFileSync(resourceIconPath, "prod");
+
+    try {
+      const resolveIconPath = makeResolveIconPath(desktopDir, "", true);
+      expect(resolveIconPath("png")).toBe(resourceIconPath);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });

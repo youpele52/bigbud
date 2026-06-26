@@ -6,6 +6,7 @@ import { useRightPanelWidth } from "./useRightPanelWidth";
 import { closeBrowserTab, openNewBrowserTab } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, openFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { closeGitPanel } from "~/stores/git/gitPanel.coordinator";
+import { closeKanbanPanel, openKanbanPanel } from "~/stores/kanban/kanbanPanel.coordinator";
 import { closeNotesPanel, openNotesPanel } from "~/stores/notes/notesPanel.coordinator";
 import { closeTerminalPanel, openTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useQuery } from "@tanstack/react-query";
@@ -65,17 +66,20 @@ export function RightPanelLauncherPanel({
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         gitShortcutLabel={gitShortcutLabel}
+        kanbanShortcutLabel={null}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onCloseBrowserTab={closeBrowserTab}
         onCloseFiles={closeFilesPanel}
         onCloseGit={closeGitPanel}
+        onCloseKanban={closeKanbanPanel}
         onCloseNotes={closeNotesPanel}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={onToggleDiff}
         onOpenFiles={openFilesPanel}
         onOpenGit={onToggleGit}
+        onOpenKanban={openKanbanPanel}
         onOpenNotes={openNotesPanel}
         onOpenTerminal={openTerminalPanel}
         notesShortcutLabel={notesShortcutLabel}
@@ -87,12 +91,14 @@ export function RightPanelLauncherPanel({
         diffShortcutLabel={diffShortcutLabel}
         filesShortcutLabel={filesShortcutLabel}
         gitShortcutLabel={gitShortcutLabel}
+        kanbanShortcutLabel={null}
         hasActiveProject={Boolean(workspaceRoot)}
         isGitRepo={gitStatusQuery.data?.isRepo ?? false}
         onToggleBrowser={openNewBrowserTab}
         onToggleDiff={onToggleDiff}
         onToggleFiles={onToggleFiles}
         onToggleGit={onToggleGit}
+        onToggleKanban={openKanbanPanel}
         onToggleNotes={openNotesPanel}
         onToggleTerminal={onToggleTerminal}
         notesShortcutLabel={notesShortcutLabel}

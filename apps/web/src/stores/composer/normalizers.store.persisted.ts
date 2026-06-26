@@ -110,6 +110,50 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
     };
   }
 
+  if (candidate.kind === "terminal") {
+    const terminal = candidate.terminal;
+    const selection = candidate.selection;
+    if (!terminal || typeof terminal !== "object" || !selection || typeof selection !== "object") {
+      return null;
+    }
+    const terminalCandidate = terminal as Record<string, unknown>;
+    const selectionCandidate = selection as Record<string, unknown>;
+    const terminalId = terminalCandidate.terminalId;
+    const terminalLabel = terminalCandidate.terminalLabel;
+    const startLine = normalizeFiniteNumber(selectionCandidate.startLine);
+    const endLine = normalizeFiniteNumber(selectionCandidate.endLine);
+    const text = selectionCandidate.text;
+    if (
+      typeof terminalId !== "string" ||
+      terminalId.length === 0 ||
+      typeof terminalLabel !== "string" ||
+      terminalLabel.length === 0 ||
+      startLine === null ||
+      endLine === null ||
+      typeof text !== "string"
+    ) {
+      return null;
+    }
+    const normalizedStartLine = Math.max(1, Math.floor(startLine));
+    const normalizedEndLine = Math.max(normalizedStartLine, Math.floor(endLine));
+    return {
+      id,
+      kind: "terminal",
+      comment,
+      intent,
+      createdAt,
+      terminal: {
+        terminalId,
+        terminalLabel,
+      },
+      selection: {
+        startLine: normalizedStartLine,
+        endLine: normalizedEndLine,
+        text,
+      },
+    };
+  }
+
   const page = candidate.page;
   const element = candidate.element;
   const viewport = candidate.viewport;

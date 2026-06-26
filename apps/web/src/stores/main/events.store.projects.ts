@@ -171,5 +171,6 @@ function mapProjectThread(event: Extract<OrchestrationEvent, { type: "thread.cre
     activities: [],
     checkpoints: [],
     session: null,
+    watchingThreads: [],
   });
 }

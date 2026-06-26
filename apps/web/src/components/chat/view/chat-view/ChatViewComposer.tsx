@@ -366,6 +366,7 @@ export function ChatViewComposer({
                   composerFiles={base.composerFiles}
                   resolvedTheme={base.resolvedTheme}
                   onRemoveFile={base.removeComposerFileFromDraft}
+                  onToggleWatchForCompletion={base.toggleComposerFileWatchForCompletion}
                 />
               </>
             ) : null}

@@ -181,7 +181,12 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
 
   const sessionDeps: SessionOpsDeps = {
     sessions,
-    serverConfig: { attachmentsDir: serverConfig.attachmentsDir },
+    serverConfig: {
+      attachmentsDir: serverConfig.attachmentsDir,
+      stateDir: serverConfig.stateDir,
+      port: serverConfig.port,
+      host: serverConfig.host,
+    },
     serverSettings,
     options,
     emit,

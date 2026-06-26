@@ -147,10 +147,8 @@ describe("GitPanelContent", () => {
     expect(markup).toContain("text-[11px] text-muted-foreground/80");
     expect(markup).toContain("29 changed files");
     expect(markup).toContain("Scroll for more changed files");
-    expect(markup).toContain('aria-label="Show changes"');
-    expect(markup).toContain('title="Changes"');
-    expect(markup).toContain('aria-label="Show history"');
-    expect(markup).toContain('title="History"');
+    expect(markup).toContain('aria-label="Changes"');
+    expect(markup).toContain('aria-label="History"');
     expect(markup).toContain('draggable="true"');
   });
 

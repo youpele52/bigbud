@@ -46,6 +46,10 @@ interface UseTerminalViewportSessionInput {
   usesBundledTerminalFont: boolean;
   onSessionExited: () => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  onRequestTerminalAnnotation: (input: {
+    selection: TerminalContextSelection;
+    position: { x: number; y: number };
+  }) => void;
 }
 
 export function useTerminalViewportSession(input: UseTerminalViewportSessionInput) {
@@ -55,6 +59,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   readTerminalLabelRef.current = input.readTerminalLabel;
   const onAddTerminalContextRef = useRef(input.onAddTerminalContext);
   onAddTerminalContextRef.current = input.onAddTerminalContext;
+  const onRequestTerminalAnnotationRef = useRef(input.onRequestTerminalAnnotation);
+  onRequestTerminalAnnotationRef.current = input.onRequestTerminalAnnotation;
   const onSessionExitedRef = useRef(input.onSessionExited);
   onSessionExitedRef.current = input.onSessionExited;
 
@@ -65,6 +71,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const readTerminalLabel = () => readTerminalLabelRef.current();
     const onAddTerminalContext = (selection: TerminalContextSelection) =>
       onAddTerminalContextRef.current(selection);
+    const onRequestTerminalAnnotation = (input: {
+      selection: TerminalContextSelection;
+      position: { x: number; y: number };
+    }) => onRequestTerminalAnnotationRef.current(input);
     const terminalHydratedRef = input.terminalHydratedRef;
     const lastAppliedTerminalEventIdRef = input.lastAppliedTerminalEventIdRef;
     const selectionActionTimerRef = input.selectionActionTimerRef;
@@ -158,15 +168,28 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       input.selectionActionOpenRef.current = true;
       try {
         const clicked = await api.contextMenu.show(
-          [{ id: "add-to-chat", label: "Add to chat" }],
+          [
+            { id: "add-to-chat", label: "Add to chat" },
+            { id: "annotate-selection", label: "Annotate selection" },
+          ],
           nextAction.position,
         );
-        if (requestId !== input.selectionActionRequestIdRef.current || clicked !== "add-to-chat") {
+        if (requestId !== input.selectionActionRequestIdRef.current) {
           return;
         }
-        onAddTerminalContext(nextAction.selection);
-        terminalRef.current?.clearSelection();
-        terminalRef.current?.focus();
+        if (clicked === "add-to-chat") {
+          onAddTerminalContext(nextAction.selection);
+          terminalRef.current?.clearSelection();
+          terminalRef.current?.focus();
+          return;
+        }
+        if (clicked === "annotate-selection") {
+          onRequestTerminalAnnotation({
+            selection: nextAction.selection,
+            position: nextAction.position,
+          });
+          terminalRef.current?.clearSelection();
+        }
       } finally {
         input.selectionActionOpenRef.current = false;
       }

@@ -1,5 +1,10 @@
-import { ChevronDownIcon } from "lucide-react";
-import type { ChatFileAttachment, ChatPathAttachment } from "../../../models/types/app.types";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronDownIcon, MessageSquareIcon } from "lucide-react";
+import type {
+  ChatFileAttachment,
+  ChatPathAttachment,
+  ChatThreadAttachment,
+} from "../../../models/types/app.types";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
 import { cn } from "~/lib/utils";
 import {
@@ -12,6 +17,33 @@ import { openChatFileTarget } from "../common/chatFileTargets";
 type UserFileReference = ChatFileAttachment | ChatPathAttachment;
 type UserFileWithSourcePath = ChatFileAttachment & { sourcePath: string };
 type VscodeIconTheme = "light" | "dark";
+
+export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThreadAttachment> }) {
+  const navigate = useNavigate();
+
+  if (props.threads.length === 0) return null;
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {props.threads.map((thread) => (
+        <button
+          type="button"
+          key={thread.id}
+          className="flex min-w-0 max-w-[180px] cursor-pointer items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1 text-left transition-colors hover:bg-background/60"
+          title={`Open thread: ${thread.title}`}
+          onClick={() => {
+            void navigate({ to: "/$threadId", params: { threadId: thread.threadId } });
+          }}
+        >
+          <MessageSquareIcon className="size-3 shrink-0 opacity-60" />
+          <span className="min-w-0 truncate text-[11px] text-muted-foreground/60">
+            {thread.title}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function openChatFilePath(path: string, markdownCwd: string | undefined): void {
   const targetPath = resolveMarkdownFileLinkTarget(path, markdownCwd);

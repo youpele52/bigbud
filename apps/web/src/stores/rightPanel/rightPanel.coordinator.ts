@@ -1,4 +1,4 @@
-export type RightPanelKind = "browser" | "diff" | "files" | "git" | "notes" | "terminal";
+export type RightPanelKind = "browser" | "diff" | "files" | "git" | "kanban" | "notes" | "terminal";
 
 let requestedRightPanel: RightPanelKind | null = null;
 let closeDiffPanel: (() => void) | null = null;

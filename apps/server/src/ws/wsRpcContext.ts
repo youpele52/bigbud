@@ -34,9 +34,11 @@ import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
 import { makeDispatchShellCommand } from "./wsShellDispatch";
 import { formatRemoteExecutionTargetDetail, isLocalExecutionTarget } from "../executionTargets";
 import { ProjectionNoteRepository } from "../persistence/Services/ProjectionNotes";
+import { ProjectionKanbanRepository } from "../persistence/Services/ProjectionKanban.ts";
 import { AutomationScheduleRepository } from "../persistence/Services/AutomationScheduleRepository.ts";
 import { ProjectionThreadRepository } from "../persistence/Services/ProjectionThreads.ts";
 import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts";
+import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
@@ -60,9 +62,11 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const workspaceFileSystem = yield* WorkspaceFileSystem;
   const projectSetupScriptRunner = yield* ProjectSetupScriptRunner;
   const projectionNotes = yield* ProjectionNoteRepository;
+  const projectionKanban = yield* ProjectionKanbanRepository;
   const projectionThreadRepository = yield* ProjectionThreadRepository;
   const automationScheduleRepository = yield* AutomationScheduleRepository;
   const schedulerReactor = yield* SchedulerReactor;
+  const mobileRemoteControl = yield* MobileRemoteControl;
   const fileSystem = yield* FileSystem.FileSystem;
 
   const serverCommandId = (tag: string) =>
@@ -226,11 +230,13 @@ export const makeWsRpcContext = Effect.gen(function* () {
     keybindings,
     lifecycleEvents,
     loadServerConfig,
+    mobileRemoteControl,
     normalizeDispatchCommand,
     open,
     orchestrationEngine,
     projectSetupScriptRunner,
     projectionNotes,
+    projectionKanban,
     projectionThreadRepository,
     projectionSnapshotQuery,
     providerRegistry,

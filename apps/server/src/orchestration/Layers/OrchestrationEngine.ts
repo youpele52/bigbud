@@ -44,6 +44,13 @@ import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
+import {
+  archiveThreadViaOrchestration,
+  getThreadStatusViaOrchestration,
+  renameThreadViaOrchestration,
+} from "../../orchestration-tools/ThreadOrchestrationTools.ts";
+import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
 
 interface CommandEnvelope {
   command: OrchestrationCommand;
@@ -274,6 +281,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   yield* projectionPipeline.bootstrap;
   readModel = yield* projectionSnapshotQuery.getSnapshot();
+  rehydrateThreadTitleLocks(
+    yield* Stream.runCollect(eventStore.readFromSequence(0)).pipe(
+      Effect.map((events) => Array.from(events)),
+    ),
+  );
 
   const worker = Effect.forever(Queue.take(commandQueue).pipe(Effect.flatMap(processEnvelope)));
   yield* Effect.forkScoped(worker);
@@ -294,7 +306,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       return yield* Deferred.await(result);
     });
 
-  return {
+  const engine: OrchestrationEngineShape = {
     getReadModel,
     readEvents,
     dispatch,
@@ -304,7 +316,35 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return Stream.fromPubSub(eventPubSub);
     },
-  } satisfies OrchestrationEngineShape;
+  };
+
+  setThreadOrchestrationToolDispatcher({
+    rename: (input) =>
+      renameThreadViaOrchestration({
+        orchestrationEngine: engine,
+        threadId: input.threadId,
+        title: input.title,
+      }),
+    archive: (input) =>
+      archiveThreadViaOrchestration({
+        orchestrationEngine: engine,
+        threadId: input.threadId,
+      }),
+    getStatus: (input) =>
+      getThreadStatusViaOrchestration({
+        orchestrationEngine: engine,
+        callerThreadId: input.callerThreadId,
+        threadId: input.threadId,
+      }),
+  });
+
+  yield* Effect.addFinalizer(() =>
+    Effect.sync(() => {
+      setThreadOrchestrationToolDispatcher(null);
+    }),
+  );
+
+  return engine satisfies OrchestrationEngineShape;
 });
 
 export const OrchestrationEngineLive = Layer.effect(

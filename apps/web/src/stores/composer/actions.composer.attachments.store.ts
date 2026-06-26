@@ -122,14 +122,29 @@ export function createComposerAttachmentActions(
         const existing = state.draftsByThreadId[threadId] ?? createEmptyThreadDraft();
         const existingIds = new Set(existing.files.map((file) => file.id));
         const existingPaths = new Set(existing.files.map((file) => file.filePath).filter(Boolean));
+        const existingThreadIds = new Set(
+          existing.files
+            .filter((file) => file.attachmentMode === "thread-reference" && file.threadId)
+            .map((file) => file.threadId!),
+        );
         const deduped: ComposerFileAttachment[] = [];
         for (const file of files) {
           if (existingIds.has(file.id)) continue;
+          if (
+            file.attachmentMode === "thread-reference" &&
+            file.threadId &&
+            existingThreadIds.has(file.threadId)
+          ) {
+            continue;
+          }
           if (file.filePath && existingPaths.has(file.filePath)) continue;
           deduped.push(file);
           existingIds.add(file.id);
           if (file.filePath) {
             existingPaths.add(file.filePath);
+          }
+          if (file.attachmentMode === "thread-reference" && file.threadId) {
+            existingThreadIds.add(file.threadId);
           }
         }
         if (deduped.length === 0) return state;
@@ -162,6 +177,38 @@ export function createComposerAttachmentActions(
           nextDraftsByThreadId[threadId] = nextDraft;
         }
         return { draftsByThreadId: nextDraftsByThreadId };
+      });
+    },
+    setFileWatchForCompletion: (
+      threadId: ThreadId,
+      fileId: string,
+      watchForCompletion: boolean,
+    ) => {
+      if (threadId.length === 0) {
+        return;
+      }
+      set((state) => {
+        const current = state.draftsByThreadId[threadId];
+        if (!current) {
+          return state;
+        }
+        const nextFiles = current.files.map((file) =>
+          file.id === fileId && file.attachmentMode === "thread-reference"
+            ? { ...file, watchForCompletion }
+            : file,
+        );
+        if (nextFiles === current.files) {
+          return state;
+        }
+        return {
+          draftsByThreadId: {
+            ...state.draftsByThreadId,
+            [threadId]: {
+              ...current,
+              files: nextFiles,
+            },
+          },
+        };
       });
     },
     clearPersistedAttachments: (threadId: ThreadId) => {

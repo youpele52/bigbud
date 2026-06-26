@@ -17,6 +17,7 @@ import { toSafeThreadAttachmentSegment } from "../../attachments/attachmentStore
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 10;
 const DEFAULT_BATCH_WINDOW_MS = 200;
+const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const GLOBAL_THREAD_SEGMENT = "_global";
 const LOG_SCOPE = "provider-observability";
 
@@ -47,6 +48,15 @@ interface LoggerState {
 
 function logWarning(message: string, context: Record<string, unknown>): Effect.Effect<void> {
   return Effect.logWarning(message, context).pipe(Effect.annotateLogs({ scope: LOG_SCOPE }));
+}
+
+function isMissingDirectoryError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR")
+  );
 }
 
 function resolveThreadSegment(raw: string | null | undefined): string {
@@ -288,4 +298,74 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
     write,
     close,
   } satisfies EventNdjsonLogger;
+});
+
+export const cleanupProviderLogDirectories = Effect.fn("cleanupProviderLogDirectories")(function* (
+  directories: ReadonlyArray<string>,
+  options?: {
+    readonly now?: Date;
+    readonly maxAgeMs?: number;
+  },
+): Effect.fn.Return<void> {
+  const nowMs = options?.now?.getTime() ?? Date.now();
+  const maxAgeMs = options?.maxAgeMs ?? DEFAULT_RETENTION_MS;
+
+  for (const directory of directories) {
+    const directoryEntries = yield* Effect.sync(() => {
+      try {
+        return { ok: true as const, entries: fs.readdirSync(directory) };
+      } catch (error) {
+        return { ok: false as const, error };
+      }
+    });
+
+    if (!directoryEntries.ok) {
+      if (!isMissingDirectoryError(directoryEntries.error)) {
+        yield* logWarning("failed to read provider log directory for cleanup", {
+          directory,
+          error: directoryEntries.error,
+        });
+      }
+      continue;
+    }
+
+    for (const entry of directoryEntries.entries) {
+      const entryPath = path.join(directory, entry);
+      const entryStat = yield* Effect.sync(() => {
+        try {
+          return { ok: true as const, stat: fs.statSync(entryPath) };
+        } catch (error) {
+          return { ok: false as const, error };
+        }
+      });
+
+      if (!entryStat.ok) {
+        yield* logWarning("failed to stat provider log entry during cleanup", {
+          entryPath,
+          error: entryStat.error,
+        });
+        continue;
+      }
+
+      if (!entryStat.stat.isFile() || nowMs - entryStat.stat.mtimeMs <= maxAgeMs) {
+        continue;
+      }
+
+      const removed = yield* Effect.sync(() => {
+        try {
+          fs.rmSync(entryPath, { force: true });
+          return { ok: true as const };
+        } catch (error) {
+          return { ok: false as const, error };
+        }
+      });
+
+      if (!removed.ok) {
+        yield* logWarning("failed to remove expired provider log entry", {
+          entryPath,
+          error: removed.error,
+        });
+      }
+    }
+  }
 });

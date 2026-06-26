@@ -1,5 +1,6 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
+  ThreadId,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
   type OrchestrationMessage,
@@ -21,6 +22,7 @@ import {
   ProjectionThreadMessageDbRowSchema,
   ProjectionThreadProposedPlanDbRowSchema,
   ProjectionThreadSessionDbRowSchema,
+  ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
 
@@ -35,6 +37,7 @@ type ProjectionThreadSessionRow = Schema.Schema.Type<typeof ProjectionThreadSess
 type ProjectionCheckpointRow = Schema.Schema.Type<typeof ProjectionCheckpointDbRowSchema>;
 type ProjectionLatestTurnRow = Schema.Schema.Type<typeof ProjectionLatestTurnDbRowSchema>;
 type ProjectionStateRow = Schema.Schema.Type<typeof ProjectionStateDbRowSchema>;
+type ProjectionThreadWatchRow = Schema.Schema.Type<typeof ProjectionThreadWatchDbRowSchema>;
 
 const REQUIRED_SNAPSHOT_PROJECTORS = [
   ORCHESTRATION_PROJECTOR_NAMES.projects,
@@ -141,6 +144,7 @@ function mapThreadRow(
     checkpointsByThread: Map<string, Array<OrchestrationCheckpointSummary>>;
     sessionsByThread: Map<string, OrchestrationSession>;
     latestTurnByThread: Map<string, OrchestrationLatestTurn>;
+    watchingThreadsByWatcher: Map<string, Array<{ threadId: ThreadId; title: string }>>;
   },
 ): OrchestrationThread {
   return {
@@ -168,6 +172,7 @@ function mapThreadRow(
     activities: groupedRows.activitiesByThread.get(row.threadId) ?? [],
     checkpoints: groupedRows.checkpointsByThread.get(row.threadId) ?? [],
     session: groupedRows.sessionsByThread.get(row.threadId) ?? null,
+    watchingThreads: groupedRows.watchingThreadsByWatcher.get(row.threadId) ?? [],
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
   };
 }
@@ -182,6 +187,7 @@ export function assembleSnapshotRows(rows: {
   checkpointRows: ReadonlyArray<ProjectionCheckpointRow>;
   latestTurnRows: ReadonlyArray<ProjectionLatestTurnRow>;
   stateRows: ReadonlyArray<ProjectionStateRow>;
+  threadWatchRows: ReadonlyArray<ProjectionThreadWatchRow>;
 }) {
   const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
   const proposedPlansByThread = new Map<string, Array<OrchestrationProposedPlan>>();
@@ -189,6 +195,7 @@ export function assembleSnapshotRows(rows: {
   const checkpointsByThread = new Map<string, Array<OrchestrationCheckpointSummary>>();
   const sessionsByThread = new Map<string, OrchestrationSession>();
   const latestTurnByThread = new Map<string, OrchestrationLatestTurn>();
+  const watchingThreadsByWatcher = new Map<string, Array<{ threadId: ThreadId; title: string }>>();
 
   let updatedAt: string | null = null;
 
@@ -285,6 +292,17 @@ export function assembleSnapshotRows(rows: {
     });
   }
 
+  for (const row of rows.threadWatchRows) {
+    const existing = watchingThreadsByWatcher.get(row.watcherThreadId) ?? [];
+    if (!existing.some((entry) => entry.threadId === row.watchedThreadId)) {
+      existing.push({
+        threadId: row.watchedThreadId,
+        title: row.watchedThreadTitle,
+      });
+    }
+    watchingThreadsByWatcher.set(row.watcherThreadId, existing);
+  }
+
   return {
     snapshotSequence: computeSnapshotSequence(rows.stateRows),
     projects: rows.projectRows.map(mapProjectRow),
@@ -296,6 +314,7 @@ export function assembleSnapshotRows(rows: {
         checkpointsByThread,
         sessionsByThread,
         latestTurnByThread,
+        watchingThreadsByWatcher,
       }),
     ),
     updatedAt: updatedAt ?? new Date(0).toISOString(),

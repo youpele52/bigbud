@@ -6,7 +6,7 @@ import { ThreadId } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import { cleanupProviderLogDirectories, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 
 function parseLogLine(line: string) {
   const match = /^\[([^\]]+)\] ([A-Z]+): (.+)$/.exec(line);
@@ -205,5 +205,39 @@ describe("EventNdjsonLogger", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }
     }),
+  );
+
+  it.effect("removes provider log files older than the retention window", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-log-"));
+      const stalePath = path.join(tempDir, "stale.log");
+      const recentPath = path.join(tempDir, "recent.log");
+      const nestedDir = path.join(tempDir, "nested");
+      const now = new Date("2026-06-23T16:00:00.000Z");
+      const staleAt = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
+      const recentAt = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+      try {
+        fs.writeFileSync(stalePath, "stale");
+        fs.writeFileSync(recentPath, "recent");
+        fs.mkdirSync(nestedDir);
+        fs.utimesSync(stalePath, staleAt, staleAt);
+        fs.utimesSync(recentPath, recentAt, recentAt);
+
+        yield* cleanupProviderLogDirectories([tempDir], { now });
+
+        assert.equal(fs.existsSync(stalePath), false);
+        assert.equal(fs.existsSync(recentPath), true);
+        assert.equal(fs.existsSync(nestedDir), true);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }),
+  );
+
+  it.effect("ignores missing provider log directories during cleanup", () =>
+    cleanupProviderLogDirectories([
+      path.join(os.tmpdir(), `t3-missing-provider-log-${crypto.randomUUID()}`),
+    ]),
   );
 });

@@ -69,6 +69,18 @@ describe("rightPanelTabs.store", () => {
     });
   });
 
+  it("opens kanban tabs like other singleton right panel tabs", () => {
+    useRightPanelTabsStore.getState().openTab("kanban");
+
+    expect(useRightPanelTabsStore.getState()).toMatchObject({
+      activeKind: "kanban",
+      activeTabId: "kanban",
+      lastActiveKind: "kanban",
+      openTabs: ["kanban"],
+      rightPanelOpen: true,
+    });
+  });
+
   it("reorders tabs without changing the active tab", () => {
     useRightPanelTabsStore.setState({
       activeKind: "terminal",

@@ -4,10 +4,12 @@ import { openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
 import {
   canOpenDirectoryInFilesPanel,
-  canOpenPathInternally,
+  canOpenPathInBrowserPanel,
+  canOpenPathInFilesPanel,
   openDirectoryInFilesPanelIfSupported,
+  openPathInBrowserPanelIfSupported,
+  openPathInFilesPanelIfSupported,
 } from "../../stores/files/filesPanel.open";
-import { openChatFileTarget } from "../chat/common/chatFileTargets";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,21 +65,44 @@ export function FileTargetContextMenu({
 
   const anchor = useMemo(() => (position ? createVirtualAnchor(position) : undefined), [position]);
 
-  const canOpenInternally = useMemo(() => {
-    if (!targetPath || !workspaceRoot || !kind) return false;
-    return kind === "directory"
-      ? canOpenDirectoryInFilesPanel(targetPath, workspaceRoot)
-      : canOpenPathInternally(targetPath, workspaceRoot);
+  const menuOptions = useMemo(() => {
+    if (!targetPath || !kind) {
+      return {
+        canOpenInBrowser: false,
+        canOpenInFileViewer: false,
+        canOpenDirectoryInternally: false,
+      };
+    }
+
+    if (kind === "directory") {
+      return {
+        canOpenInBrowser: false,
+        canOpenInFileViewer: false,
+        canOpenDirectoryInternally: canOpenDirectoryInFilesPanel(targetPath, workspaceRoot),
+      };
+    }
+
+    return {
+      canOpenInBrowser: canOpenPathInBrowserPanel(targetPath, workspaceRoot),
+      canOpenInFileViewer: canOpenPathInFilesPanel(targetPath, workspaceRoot),
+      canOpenDirectoryInternally: false,
+    };
   }, [kind, targetPath, workspaceRoot]);
 
-  const handleOpenInternally = useCallback(() => {
-    if (!targetPath || !kind) return;
-    if (kind === "directory") {
-      openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot);
-      return;
-    }
-    openChatFileTarget(targetPath, workspaceRoot);
-  }, [kind, targetPath, workspaceRoot]);
+  const handleOpenInBrowser = useCallback(() => {
+    if (!targetPath) return;
+    openPathInBrowserPanelIfSupported(targetPath, workspaceRoot);
+  }, [targetPath, workspaceRoot]);
+
+  const handleOpenInFileViewer = useCallback(() => {
+    if (!targetPath) return;
+    openPathInFilesPanelIfSupported(targetPath, workspaceRoot);
+  }, [targetPath, workspaceRoot]);
+
+  const handleOpenDirectoryInternally = useCallback(() => {
+    if (!targetPath) return;
+    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot);
+  }, [targetPath, workspaceRoot]);
 
   const handleOpenExternally = useCallback(() => {
     if (!targetPath) return;
@@ -92,6 +117,8 @@ export function FileTargetContextMenu({
     if (!targetPath || !onCopyPath) return;
     onCopyPath(targetPath);
   }, [onCopyPath, targetPath]);
+
+  const showOpenExternally = kind === "file";
 
   return (
     <DropdownMenu
@@ -109,10 +136,22 @@ export function FileTargetContextMenu({
       />
       {anchor && targetPath ? (
         <DropdownMenuContent align="start" anchor={anchor} side="bottom" sideOffset={2}>
-          {canOpenInternally ? (
-            <DropdownMenuItem onClick={handleOpenInternally}>Open internally</DropdownMenuItem>
+          {menuOptions.canOpenInBrowser ? (
+            <DropdownMenuItem onClick={handleOpenInBrowser}>Open in browser</DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onClick={handleOpenExternally}>Open externally</DropdownMenuItem>
+          {menuOptions.canOpenInFileViewer ? (
+            <DropdownMenuItem onClick={handleOpenInFileViewer}>
+              Open in file viewer
+            </DropdownMenuItem>
+          ) : null}
+          {menuOptions.canOpenDirectoryInternally ? (
+            <DropdownMenuItem onClick={handleOpenDirectoryInternally}>
+              Open internally
+            </DropdownMenuItem>
+          ) : null}
+          {showOpenExternally || kind === "directory" ? (
+            <DropdownMenuItem onClick={handleOpenExternally}>Open externally</DropdownMenuItem>
+          ) : null}
           {onCopyPath ? (
             <DropdownMenuItem onClick={handleCopyPath}>Copy path</DropdownMenuItem>
           ) : null}

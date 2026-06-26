@@ -6,6 +6,7 @@ import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
+import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
 describe("OrchestrationReactor", () => {
@@ -59,6 +60,14 @@ describe("OrchestrationReactor", () => {
             triggerNow: () => Effect.succeed({ status: "dispatched" as const }),
           }),
         ),
+        Layer.provideMerge(
+          Layer.succeed(ThreadWatchReactor, {
+            start: () => {
+              started.push("thread-watch-reactor");
+              return Effect.void;
+            },
+          }),
+        ),
       ),
     );
 
@@ -71,6 +80,7 @@ describe("OrchestrationReactor", () => {
       "provider-command-reactor",
       "checkpoint-reactor",
       "scheduler-reactor",
+      "thread-watch-reactor",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));

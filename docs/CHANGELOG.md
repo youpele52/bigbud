@@ -2,6 +2,51 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.647 (23 June, 2026)
+
+### Kanban
+
+- Added a **Kanban** right-panel tab after Notes with Backlog, Todo, Ongoing, and Done columns for lightweight task tracking alongside your chats.
+- Boards can be **global** or **project-scoped**, with markdown-backed cards and JSON sidecars so they persist across restarts and stay in sync with the filesystem.
+- Drag cards between columns or within a column to reorder, drag them into the composer to write, flesh out, or even carry out the task with the agent, manage them from a context menu, and collapse columns when you want a denser view.
+
+### Files Panel
+
+- The Files panel now opens images and HTML files in the **Browser** by default, and right-clicking either shows **Open in file viewer**, **Open in browser**, **Open externally**, and **Copy path**.
+- Supported files and external directories can now open inside bigbud even when they live outside the current project or worktree; the panel temporarily roots itself to that path and shows the full absolute path in the header.
+- Fixed stale file trees and previews after workspace changes by broadening directory refreshes, keeping subscriptions stable during reloads, and waiting briefly before reloading changed previews so saved content is on disk first.
+
+### Thread References
+
+- Added drag-and-drop thread references — drag a thread from the sidebar into the composer to attach it as context. The server resolves the referenced thread at send time, inlines its full transcript inside an `<attached_threads>` block, and strips thread references from the provider attachment list.
+- Thread references are deduplicated by thread ID, shown with a dedicated `MessageSquare` chip in the composer and message timeline, and the timeline chips are now clickable so you can jump straight to the referenced thread.
+- Referenced threads are not just passive context: you can ask the agent to inspect them and act on them, including renaming the referenced thread when needed.
+- Excluded thread-reference metadata from title and branch-name generation, and added a server-side `exportThreadContext` RPC behind the sidebar **Copy path** action without exposing an editable file to the agent.
+
+### Notes
+
+- Note filenames are now stable — new notes use a creation-time datetime stem (for example `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note no longer renames the file or changes its `noteId`. Existing notes keep their current filenames, and display titles still come from content.
+- Fixed note and file path references dragged into the composer so the AI now receives the actual file contents as a proper attachment instead of just the raw path text.
+- Improved note readability and visual consistency: preview headings now match the markdown file viewer hierarchy, and edit mode now uses the same background treatment as the raw markdown viewer.
+
+### Terminal
+
+- Added **Annotate selection** to the terminal text-selection menu alongside **Add to chat**, using the same Ask / Context / Fix composer flow already available in the file viewer, diff panel, and browser.
+- Fixed terminal refitting on panel resize so wrapped lines reflow correctly after sidebar and layout changes.
+
+### Observability
+
+- Provider event logs in `~/.bigbud/{userdata,dev}/logs/provider/` are now development-only, so production builds no longer accumulate verbose native and canonical trace logs on disk.
+- On startup, provider log files older than 7 days are automatically pruned from both runtime profiles.
+
+### Right Panel
+
+- Fixed desktop drag-region issues that made right-panel menus, popovers, and draggable tab wrappers partially unclickable over the Git, Terminal, and Files headers.
+
+### Desktop
+
+- Local and development desktop builds now use a distinct inverted bigbud icon so you can tell dev and packaged installs apart at a glance.
+
 ## v0.1.646 (20 June, 2026)
 
 ### Teach Skill

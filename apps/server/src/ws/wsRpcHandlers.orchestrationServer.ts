@@ -15,13 +15,17 @@ import {
   ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerExportThreadContextError,
+  ServerMobileRemoteError,
   ServerReadDocumentUrlError,
   ServerWriteHandoffDocumentError,
+  ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { clamp } from "effect/Number";
 
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
+import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
@@ -249,6 +253,83 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
               cause,
             }),
         }),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverExportThreadContext]: (input: { readonly threadId: ThreadId }) =>
+      observeRpcEffect(
+        WS_METHODS.serverExportThreadContext,
+        Effect.gen(function* () {
+          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.mapError(
+              (cause) =>
+                new ServerExportThreadContextError({
+                  message: "Failed to read thread snapshot",
+                  cause,
+                }),
+            ),
+          );
+          const result = yield* Effect.tryPromise({
+            try: async () =>
+              exportThreadContext({
+                threadId: input.threadId,
+                snapshot,
+                stateDir: context.config.stateDir,
+              }),
+            catch: (cause) =>
+              new ServerExportThreadContextError({
+                message: cause instanceof Error ? cause.message : "Failed to export thread context",
+                cause,
+              }),
+          });
+          return result;
+        }),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverCreateMobileRemotePairing]: (input: {
+      readonly scope: "read-only" | "approve-only" | "thread-control";
+      readonly baseUrl: string;
+      readonly backendBaseUrl: string;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.serverCreateMobileRemotePairing,
+        context.mobileRemoteControl.createPairing(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to create mobile pairing.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverListMobileRemoteSessions]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverListMobileRemoteSessions,
+        context.mobileRemoteControl.listSessions.pipe(
+          Effect.map((sessions) => ({ sessions })),
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to list mobile sessions.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverRevokeMobileRemoteSession]: (input: { readonly sessionId: string }) =>
+      observeRpcEffect(
+        WS_METHODS.serverRevokeMobileRemoteSession,
+        context.mobileRemoteControl.revokeSession(input.sessionId).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ServerMobileRemoteError({
+                message: cause.message || "Failed to revoke mobile session.",
+                cause,
+              }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUpsertKeybinding]: (

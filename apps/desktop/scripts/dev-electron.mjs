@@ -58,7 +58,7 @@ function startApp() {
   }
 
   const app = spawn(
-    resolveElectronPath(),
+    resolveElectronPath(true),
     ["--no-deprecation", `--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
     {
       cwd: desktopDir,

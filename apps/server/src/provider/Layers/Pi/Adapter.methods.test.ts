@@ -6,6 +6,15 @@ vi.mock("./RpcProcess.ts", () => ({
   createPiRpcProcess: vi.fn(),
 }));
 
+vi.mock("../../../orchestration-tools/PiOrchestrationBridge.ts", () => ({
+  createPiOrchestrationBridge: vi.fn(async () => ({
+    extensionPath: "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts",
+    bridgeDir: "/tmp/pi-orchestration",
+    extraArgs: ["--extension", "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts"],
+    cleanup: async () => undefined,
+  })),
+}));
+
 import { makePiAdapterMethods } from "./Adapter.methods.ts";
 import type { ActivePiSession } from "./Adapter.types.ts";
 import { createPiRpcProcess } from "./RpcProcess.ts";
@@ -37,6 +46,9 @@ describe("PiAdapter methods", () => {
 
     const methods = makePiAdapterMethods({
       attachmentsDir: "/tmp",
+      stateDir: "/tmp/bigbud-state",
+      host: "127.0.0.1",
+      port: 3773,
       emit: () => Effect.void,
       handleProcessExit: () => Effect.void,
       handleStdoutEvent: () => Effect.void,
@@ -83,6 +95,12 @@ describe("PiAdapter methods", () => {
         location: "remote",
         executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
         cwd: "/root/project",
+      },
+      orchestrationBridge: {
+        extensionPath: "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts",
+        bridgeDir: "/tmp/pi-orchestration",
+        extraArgs: ["--extension", "/tmp/pi-orchestration/.bigbud/bigbud-orchestration-bridge.ts"],
+        cleanup: expect.any(Function),
       },
       env: process.env,
     });
@@ -141,6 +159,9 @@ describe("PiAdapter methods", () => {
     };
     const methods = makePiAdapterMethods({
       attachmentsDir: "/tmp",
+      stateDir: "/tmp/bigbud-state",
+      host: "127.0.0.1",
+      port: 3773,
       emit: () => Effect.void,
       handleProcessExit: () => Effect.void,
       handleStdoutEvent: () => Effect.void,
@@ -205,6 +226,9 @@ describe("PiAdapter methods", () => {
     };
     const methods = makePiAdapterMethods({
       attachmentsDir: "/tmp",
+      stateDir: "/tmp/bigbud-state",
+      host: "127.0.0.1",
+      port: 3773,
       emit: () => Effect.void,
       handleProcessExit: () => Effect.void,
       handleStdoutEvent: () => Effect.void,

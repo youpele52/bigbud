@@ -7,6 +7,10 @@ import {
   BIGBUD_FILES_PANEL_DRAG_MIME,
   parseFilesPanelDragEntry,
 } from "../../../files/filesPanel.dnd";
+import {
+  BIGBUD_THREAD_CONTEXT_DRAG_MIME,
+  parseThreadContextDragPayload,
+} from "../../../sidebar/threadPanel.dnd";
 import { toastManager } from "../../../ui/toast";
 
 import { useAddComposerFiles, useAddComposerImages } from "../ChatView.composerHandlers.logic";
@@ -62,42 +66,41 @@ export function useChatViewInteractionFiles({
     [addComposerFiles, addComposerImages],
   );
 
+  const hasAcceptedDragData = useCallback((event: React.DragEvent<HTMLElement>) => {
+    return (
+      event.dataTransfer.types.includes("Files") ||
+      event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME) ||
+      event.dataTransfer.types.includes(BIGBUD_THREAD_CONTEXT_DRAG_MIME)
+    );
+  }, []);
+
   const onComposerDragEnter = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (
-        !event.dataTransfer.types.includes("Files") &&
-        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
-      ) {
+      if (!hasAcceptedDragData(event)) {
         return;
       }
       event.preventDefault();
       base.dragDepthRef.current += 1;
       base.setIsDragOverComposer(true);
     },
-    [base],
+    [base, hasAcceptedDragData],
   );
 
   const onComposerDragOver = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (
-        !event.dataTransfer.types.includes("Files") &&
-        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
-      ) {
+      if (!hasAcceptedDragData(event)) {
         return;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
       base.setIsDragOverComposer(true);
     },
-    [base],
+    [base, hasAcceptedDragData],
   );
 
   const onComposerDragLeave = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
-      if (
-        !event.dataTransfer.types.includes("Files") &&
-        !event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)
-      ) {
+      if (!hasAcceptedDragData(event)) {
         return;
       }
       event.preventDefault();
@@ -108,17 +111,58 @@ export function useChatViewInteractionFiles({
         base.setIsDragOverComposer(false);
       }
     },
-    [base],
+    [base, hasAcceptedDragData],
   );
 
   const onComposerDrop = useCallback(
     (event: React.DragEvent<HTMLElement>) => {
       const hasNativeFiles = event.dataTransfer.types.includes("Files");
       const hasFilesPanelEntry = event.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME);
-      if (!hasNativeFiles && !hasFilesPanelEntry) return;
+      const hasThreadContextEntry = event.dataTransfer.types.includes(
+        BIGBUD_THREAD_CONTEXT_DRAG_MIME,
+      );
+      if (!hasNativeFiles && !hasFilesPanelEntry && !hasThreadContextEntry) return;
       event.preventDefault();
       base.dragDepthRef.current = 0;
       base.setIsDragOverComposer(false);
+
+      if (hasThreadContextEntry && base.activeThreadId) {
+        const payload = parseThreadContextDragPayload(
+          event.dataTransfer.getData(BIGBUD_THREAD_CONTEXT_DRAG_MIME),
+        );
+        if (payload) {
+          if (payload.threadId === base.activeThreadId) {
+            toastManager.add({
+              type: "error",
+              title: "Cannot use a thread as context for itself.",
+            });
+            return;
+          }
+          const nextCount = base.composerFilesRef.current.length + base.composerImages.length;
+          if (nextCount >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS) {
+            toastManager.add({
+              type: "error",
+              title: `You can attach up to ${PROVIDER_SEND_TURN_MAX_ATTACHMENTS} files per message.`,
+            });
+            return;
+          }
+          base.addComposerFile({
+            type: "file",
+            id: randomUUID(),
+            name: payload.title,
+            mimeType: "application/x-bigbud-thread-reference",
+            sizeBytes: 0,
+            attachmentMode: "thread-reference",
+            filePath: "",
+            file: null,
+            threadId: payload.threadId,
+            threadTitle: payload.title,
+            watchForCompletion: true,
+          });
+          runtime.focusComposer();
+        }
+        return;
+      }
 
       if (hasFilesPanelEntry && base.activeThreadId) {
         const payload = parseFilesPanelDragEntry(

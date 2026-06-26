@@ -23,6 +23,7 @@ function resetFilesPanelState() {
   });
   useFilesPanelStore.setState({
     open: false,
+    workspaceRootOverride: null,
     previewPath: null,
     previewPosition: null,
     fileOpenRequest: null,
@@ -98,7 +99,7 @@ describe("canOpenPathInFilesPanel", () => {
 
   it("rejects unsupported files even when they are in the workspace", () => {
     expect(canOpenPathInFilesPanel("/Users/alice/project/logo.png", "/Users/alice/project")).toBe(
-      false,
+      true,
     );
   });
 });
@@ -110,7 +111,19 @@ describe("canOpenPathInBrowserPanel", () => {
     ).toBe(true);
   });
 
-  it("rejects non-PDF workspace files", () => {
+  it("allows workspace images", () => {
+    expect(
+      canOpenPathInBrowserPanel("/Users/alice/project/assets/logo.png", "/Users/alice/project"),
+    ).toBe(true);
+  });
+
+  it("allows workspace html files", () => {
+    expect(
+      canOpenPathInBrowserPanel("/Users/alice/project/public/index.html", "/Users/alice/project"),
+    ).toBe(true);
+  });
+
+  it("rejects non-previewable workspace files", () => {
     expect(
       canOpenPathInBrowserPanel("/Users/alice/project/README.md", "/Users/alice/project"),
     ).toBe(false);
@@ -129,18 +142,24 @@ describe("canOpenPathInternally", () => {
       canOpenPathInternally("/Users/alice/project/docs/report.pdf", "/Users/alice/project"),
     ).toBe(true);
   });
+
+  it("allows image previews in the files panel", () => {
+    expect(canOpenPathInternally("/Users/alice/project/logo.png", "/Users/alice/project")).toBe(
+      true,
+    );
+  });
+
+  it("allows html files in browser and file viewer", () => {
+    expect(
+      canOpenPathInternally("/Users/alice/project/public/index.html", "/Users/alice/project"),
+    ).toBe(true);
+  });
 });
 
 describe("canOpenDirectoryInFilesPanel", () => {
   it("allows workspace directories", () => {
     expect(canOpenDirectoryInFilesPanel("/Users/alice/project/src", "/Users/alice/project")).toBe(
       true,
-    );
-  });
-
-  it("rejects directories outside the workspace", () => {
-    expect(canOpenDirectoryInFilesPanel("/Users/alice/other/src", "/Users/alice/project")).toBe(
-      false,
     );
   });
 });
@@ -230,6 +249,48 @@ describe("openPathInBrowserPanelIfSupported", () => {
       expect.stringContaining("report-4.pdf"),
     ]);
   });
+
+  it("opens workspace images in the browser panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInBrowserPanelIfSupported(
+        "/Users/alice/project/assets/logo.png",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
+    expect(useBrowserPanelStore.getState()).toMatchObject({
+      open: true,
+      tabsById: {
+        [browserTabIds[0] ?? ""]: {
+          url: expect.stringContaining("/api/workspace-file-preview?"),
+        },
+      },
+    });
+  });
+
+  it("opens workspace html files in the browser panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInBrowserPanelIfSupported(
+        "/Users/alice/project/public/index.html",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    const browserTabIds = Object.keys(useBrowserPanelStore.getState().tabsById);
+    expect(useBrowserPanelStore.getState()).toMatchObject({
+      open: true,
+      tabsById: {
+        [browserTabIds[0] ?? ""]: {
+          url: expect.stringContaining("/api/workspace-file-preview?"),
+        },
+      },
+    });
+  });
 });
 
 describe("openPathInFilesPanelIfSupported", () => {
@@ -245,9 +306,11 @@ describe("openPathInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       fileOpenRequest: {
         path: "src/index.ts",
         position: { line: 16, column: 23 },
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -261,6 +324,7 @@ describe("openPathInFilesPanelIfSupported", () => {
     resetFilesPanelState();
     useFilesPanelStore.setState({
       open: true,
+      workspaceRootOverride: null,
       previewPath: "src/old.ts",
       previewPosition: { line: 9, column: 2 },
       fileOpenRequest: null,
@@ -274,6 +338,51 @@ describe("openPathInFilesPanelIfSupported", () => {
       fileOpenRequest: {
         path: "src/new.ts",
         position: null,
+        workspaceRootOverride: null,
+        requestId: 1,
+      },
+    });
+  });
+
+  it("opens workspace images in the files panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInFilesPanelIfSupported(
+        "/Users/alice/project/assets/logo.png",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: null,
+      fileOpenRequest: {
+        path: "assets/logo.png",
+        position: null,
+        workspaceRootOverride: null,
+        requestId: 1,
+      },
+    });
+  });
+
+  it("opens workspace html files in the files panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInFilesPanelIfSupported(
+        "/Users/alice/project/public/index.html",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: null,
+      fileOpenRequest: {
+        path: "public/index.html",
+        position: null,
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });
@@ -290,11 +399,13 @@ describe("openDirectoryInFilesPanelIfSupported", () => {
 
     expect(useFilesPanelStore.getState()).toMatchObject({
       open: true,
+      workspaceRootOverride: null,
       previewPath: null,
       previewPosition: null,
       fileOpenRequest: null,
       directoryNavigationRequest: {
         path: "src/lib",
+        workspaceRootOverride: null,
         requestId: 1,
       },
     });

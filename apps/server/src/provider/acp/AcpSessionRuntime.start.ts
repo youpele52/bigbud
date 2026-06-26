@@ -25,6 +25,7 @@ interface AcpSessionRuntimeStartDeps {
   readonly options: {
     readonly cwd: string;
     readonly resumeSessionId?: string;
+    readonly mcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
     readonly clientCapabilities?: EffectAcpSchema.InitializeRequest["clientCapabilities"];
     readonly clientInfo: {
       readonly name: string;
@@ -195,7 +196,7 @@ function loadOrCreateSession(
     const loadPayload = {
       sessionId: resumedSessionId,
       cwd: deps.options.cwd,
-      mcpServers: [],
+      mcpServers: deps.options.mcpServers ?? [],
     } satisfies EffectAcpSchema.LoadSessionRequest;
     return runLoggedRequest(
       "session/load",
@@ -227,7 +228,7 @@ function createSession(
 ) {
   const createPayload = {
     cwd: deps.options.cwd,
-    mcpServers: [],
+    mcpServers: deps.options.mcpServers ?? [],
   } satisfies EffectAcpSchema.NewSessionRequest;
   return runLoggedRequest(
     "session/new",

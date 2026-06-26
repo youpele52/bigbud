@@ -93,7 +93,12 @@ describe("Opencode session lifecycle", () => {
               },
             } as never),
           },
-          serverConfig: { attachmentsDir: "/tmp/attachments" },
+          serverConfig: {
+            attachmentsDir: "/tmp/attachments",
+            stateDir: "/tmp/bigbud-state",
+            port: 3773,
+            host: "127.0.0.1",
+          },
           nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
           makeEventStamp: () =>
             Effect.succeed({
@@ -164,7 +169,12 @@ describe("Opencode session lifecycle", () => {
             },
           } as never),
         },
-        serverConfig: { attachmentsDir: "/tmp/attachments" },
+        serverConfig: {
+          attachmentsDir: "/tmp/attachments",
+          stateDir: "/tmp/bigbud-state",
+          port: 3773,
+          host: "127.0.0.1",
+        },
         nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
         makeEventStamp: () =>
           Effect.succeed({
@@ -204,6 +214,84 @@ describe("Opencode session lifecycle", () => {
         "ssh:host=devbox&user=root&port=22&auth=ssh-key",
       );
       expect(session.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+
+      yield* methods.stopSession(THREAD_ID);
+      yield* Effect.promise(() => expect(fs.access(acquireInput.directory)).rejects.toThrow());
+    }),
+  );
+
+  it.effect("installs orchestration tools for OpenCode sessions without a cwd", () =>
+    Effect.gen(function* () {
+      const acquireCalls: Array<unknown> = [];
+      const subscribe = async () => ({
+        stream: makeEmptyAsyncIterable<unknown>(),
+      });
+      const handle: OpencodeServerHandle = {
+        client: {
+          session: {
+            create: async () => ({
+              data: {
+                id: "opencode-session-global",
+              },
+              error: undefined,
+            }),
+          },
+          event: {
+            subscribe,
+          },
+        } as never,
+        url: "http://127.0.0.1:4098",
+        release() {},
+      };
+
+      const methods = makeSessionMethods({
+        provider: "opencode",
+        sessions: new Map(),
+        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+        serverManager: {
+          acquire: async (input) => {
+            acquireCalls.push(input);
+            return handle;
+          },
+        },
+        serverSettings: {
+          getSettings: Effect.succeed({
+            providers: {
+              opencode: {
+                binaryPath: "opencode",
+              },
+            },
+          } as never),
+        },
+        serverConfig: {
+          attachmentsDir: "/tmp/attachments",
+          stateDir: "/tmp/bigbud-state",
+          port: 3773,
+          host: "127.0.0.1",
+        },
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
+        makeEventStamp: () =>
+          Effect.succeed({
+            eventId: EventId.makeUnsafe("evt-global"),
+            createdAt: CREATED_AT,
+          }),
+        nativeEventLogger: undefined,
+        services: yield* Effect.services<never>(),
+      });
+
+      yield* methods.startSession({
+        threadId: THREAD_ID,
+        provider: "opencode",
+        runtimeMode: "approval-required",
+      });
+
+      const acquireInput = acquireCalls[0] as { readonly directory: string };
+      expect(acquireInput.directory).toContain("bigbud-opencode-orchestration-");
+      yield* Effect.promise(() =>
+        expect(
+          fs.access(`${acquireInput.directory}/.opencode/tools/rename_thread.ts`),
+        ).resolves.toBeUndefined(),
+      );
 
       yield* methods.stopSession(THREAD_ID);
       yield* Effect.promise(() => expect(fs.access(acquireInput.directory)).rejects.toThrow());

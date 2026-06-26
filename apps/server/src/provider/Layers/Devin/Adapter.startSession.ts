@@ -29,10 +29,16 @@ import {
   selectAutoApprovedPermissionOption,
 } from "./Adapter.helpers.ts";
 import { forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { prepareAcpThreadOrchestrationBridge } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 
 interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly nativeEventLogger: DevinAdapterLiveOptions["nativeEventLogger"] | undefined;
+  readonly serverConfig: {
+    readonly stateDir: string;
+    readonly host: string | undefined;
+    readonly port: number;
+  };
   readonly sessions: Map<ThreadId, DevinSessionContext>;
   readonly stopSessionInternal: (ctx: DevinSessionContext) => Effect.Effect<void>;
   readonly getDevinSettings: (
@@ -90,12 +96,38 @@ export function makeStartSessionEffect(
     });
     const devinSettings = yield* deps.getDevinSettings(input.threadId);
     const resumeSessionId = parseDevinResume(input.resumeCursor)?.sessionId;
+    const orchestration = yield* Effect.tryPromise({
+      try: () =>
+        prepareAcpThreadOrchestrationBridge({
+          stateDir: deps.serverConfig.stateDir,
+          threadId: input.threadId,
+          host: deps.serverConfig.host,
+          port: deps.serverConfig.port,
+        }),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+          detail:
+            cause instanceof Error
+              ? cause.message
+              : "Failed to prepare Devin orchestration bridge.",
+          cause,
+        }),
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.tryPromise({
+        try: () => orchestration.bridge.cleanup(),
+        catch: () => undefined,
+      }).pipe(Effect.ignore),
+    );
     const acp = yield* makeDevinAcpRuntime({
       devinSettings,
       childProcessSpawner: deps.childProcessSpawner,
       cwd,
       ...(resumeSessionId ? { resumeSessionId } : {}),
       clientInfo: { name: "bigbud", version: "0.0.0" },
+      mcpServers: orchestration.mcpServers,
       ...acpNativeLoggers,
     }).pipe(
       Effect.provideService(Scope.Scope, sessionScope),
@@ -207,6 +239,7 @@ export function makeStartSessionEffect(
       session,
       scope: sessionScope,
       acp,
+      orchestrationBridgeCleanup: orchestration.bridge.cleanup,
       notificationFiber: undefined,
       pendingApprovals,
       pendingUserInputs,

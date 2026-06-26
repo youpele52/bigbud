@@ -110,6 +110,7 @@ export function makeReadModelThread(overrides: Partial<OrchestrationReadModel["t
     proposedPlans: [],
     checkpoints: [],
     session: null,
+    watchingThreads: [],
     ...overrides,
   } satisfies OrchestrationReadModel["threads"][number];
 }

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
+import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
   modelOptionValue,
@@ -19,6 +20,10 @@ export function ModelList({
   unavailableMessage,
   onSelect,
   onBack,
+  searchbarClassName,
+  groupLabelClassName,
+  itemClassName,
+  itemLabelClassName,
 }: {
   provider: ProviderKind;
   selectedValue: string;
@@ -28,6 +33,10 @@ export function ModelList({
   unavailableMessage?: string | undefined;
   onSelect: (value: string) => void;
   onBack?: () => void;
+  searchbarClassName?: string | undefined;
+  groupLabelClassName?: string | undefined;
+  itemClassName?: string | undefined;
+  itemLabelClassName?: string | undefined;
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +84,7 @@ export function ModelList({
         onClick={() => {
           inputRef.current?.focus();
         }}
+        {...(searchbarClassName ? { className: searchbarClassName } : {})}
         {...(onBack ? { onBack } : {})}
       >
         <input
@@ -104,13 +114,14 @@ export function ModelList({
         ) : null}
         {showRecentOptions && recentOptions ? (
           <MenuGroup>
-            <MenuGroupLabel>Recently used</MenuGroupLabel>
+            <MenuGroupLabel className={groupLabelClassName}>Recently used</MenuGroupLabel>
             {recentOptions.map((modelOption) => (
               <MenuRadioItem
+                className={itemClassName}
                 key={`recent:${provider}:${modelOptionValue(modelOption)}`}
                 value={modelOptionValue(modelOption)}
               >
-                {modelOption.name}
+                <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
               </MenuRadioItem>
             ))}
           </MenuGroup>
@@ -122,13 +133,16 @@ export function ModelList({
         ) : hasNamedGroups ? (
           grouped.map((section) => (
             <MenuGroup key={section.kind === "named" ? section.group : "__ungrouped"}>
-              {section.kind === "named" ? <MenuGroupLabel>{section.group}</MenuGroupLabel> : null}
+              {section.kind === "named" ? (
+                <MenuGroupLabel className={groupLabelClassName}>{section.group}</MenuGroupLabel>
+              ) : null}
               {section.models.map((modelOption) => (
                 <MenuRadioItem
+                  className={itemClassName}
                   key={`${provider}:${modelOptionValue(modelOption)}`}
                   value={modelOptionValue(modelOption)}
                 >
-                  {modelOption.name}
+                  <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
                 </MenuRadioItem>
               ))}
             </MenuGroup>
@@ -137,10 +151,11 @@ export function ModelList({
           <MenuGroup>
             {filtered.map((modelOption) => (
               <MenuRadioItem
+                className={itemClassName}
                 key={`${provider}:${modelOptionValue(modelOption)}`}
                 value={modelOptionValue(modelOption)}
               >
-                {modelOption.name}
+                <span className={cn("min-w-0", itemLabelClassName)}>{modelOption.name}</span>
               </MenuRadioItem>
             ))}
           </MenuGroup>

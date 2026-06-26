@@ -3,7 +3,10 @@ import type {
   ComposerAnnotationAttachment,
   ComposerImageAttachment,
 } from "../../../stores/composer";
-import { isCodeAnnotationAttachment } from "../../../stores/composer";
+import {
+  isCodeAnnotationAttachment,
+  isTerminalAnnotationAttachment,
+} from "../../../stores/composer";
 import {
   normalizeAnnotationComment,
   normalizeBrowserAnnotationElement,
@@ -51,6 +54,25 @@ export function ComposerAnnotationPreviews({
         subtitle: annotation.file.projectName
           ? `${annotation.file.projectName} > ${annotation.file.relativePath}`
           : annotation.file.relativePath,
+        detail: lineLabel,
+        removeLabel: `Remove annotation ${index + 1}`,
+      };
+    }
+    if (isTerminalAnnotationAttachment(annotation)) {
+      const lineLabel =
+        annotation.selection.startLine === annotation.selection.endLine
+          ? `Line ${annotation.selection.startLine}`
+          : `Lines ${annotation.selection.startLine}-${annotation.selection.endLine}`;
+      return {
+        id: annotation.id,
+        thumbnail: null,
+        title: comment.trim() || "No instruction provided",
+        badge: (
+          <span className="shrink-0 rounded bg-info/15 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-info">
+            terminal
+          </span>
+        ),
+        subtitle: annotation.terminal.terminalLabel,
         detail: lineLabel,
         removeLabel: `Remove annotation ${index + 1}`,
       };

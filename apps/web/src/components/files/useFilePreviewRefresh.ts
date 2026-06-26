@@ -1,8 +1,9 @@
 import { isRemoteExecutionTargetId } from "@bigbud/contracts";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
 import { getFilePreviewWatchRelativePath } from "./FilePreview.logic";
+import { createDebouncedFilePreviewRefresh } from "./useFilePreviewRefresh.logic";
 
 interface FilePreviewRefreshInput {
   readonly cwd: string;
@@ -34,20 +35,28 @@ export function useFilePreviewRefresh({
   executionTargetId,
   refreshPreview,
 }: UseFilePreviewRefreshInput) {
+  const debouncedRefreshRef = useRef(createDebouncedFilePreviewRefresh(refreshPreview));
+
+  useEffect(() => {
+    debouncedRefreshRef.current = createDebouncedFilePreviewRefresh(refreshPreview);
+  }, [refreshPreview]);
+
   useEffect(() => {
     const api = readNativeApi();
     if (!api || isRemoteExecutionTargetId(executionTargetId)) {
       return;
     }
 
+    const scheduleRefresh = () => {
+      debouncedRefreshRef.current.schedule();
+    };
+
     return api.projects.onDirectoryChange(
       buildFilePreviewWatchInput({ cwd, relativePath, executionTargetId }),
-      () => {
-        refreshPreview();
-      },
+      scheduleRefresh,
       {
-        onResubscribe: refreshPreview,
+        onResubscribe: scheduleRefresh,
       },
     );
-  }, [cwd, executionTargetId, refreshPreview, relativePath]);
+  }, [cwd, executionTargetId, relativePath]);
 }

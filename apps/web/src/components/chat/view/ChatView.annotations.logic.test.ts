@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { ComposerAnnotationAttachment } from "../../../stores/composer";
 
-import { appendBrowserAnnotationsToPrompt } from "./ChatView.annotations.logic";
+import {
+  appendBrowserAnnotationsToPrompt,
+  buildTerminalAnnotationPrompt,
+} from "./ChatView.annotations.logic";
 
 describe("appendBrowserAnnotationsToPrompt", () => {
   it("appends full annotation metadata without requiring composer prompt text", () => {
@@ -180,5 +183,54 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(prompt).toContain("Lines: 20-22");
     expect(prompt).toContain("const value = createValue();");
     expect(prompt).toContain("make the appropriate code change");
+  });
+
+  it("appends terminal annotation metadata and selected output", () => {
+    const annotation = {
+      id: "terminal-annotation-1",
+      kind: "terminal" as const,
+      comment: "Why did this fail?",
+      intent: "ask" as const,
+      createdAt: "2026-06-23T00:00:00.000Z",
+      terminal: {
+        terminalId: "terminal-1",
+        terminalLabel: "Terminal 1",
+      },
+      selection: {
+        startLine: 12,
+        endLine: 13,
+        text: "error: build failed\nexit code 1",
+      },
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("Please inspect", [annotation]);
+    expect(prompt).toContain("Terminal annotation");
+    expect(prompt).toContain("Label: Terminal 1");
+    expect(prompt).toContain("ID: terminal-1");
+    expect(prompt).toContain("Lines: 12-13");
+    expect(prompt).toContain("error: build failed");
+    expect(prompt).not.toContain("make the appropriate code change");
+  });
+
+  it("uses terminal fix framing for fix intent", () => {
+    const prompt = buildTerminalAnnotationPrompt({
+      id: "terminal-annotation-1",
+      kind: "terminal",
+      comment: "Fix the build",
+      intent: "fix",
+      createdAt: "2026-06-23T00:00:00.000Z",
+      terminal: {
+        terminalId: "terminal-1",
+        terminalLabel: "Terminal 1",
+      },
+      selection: {
+        startLine: 4,
+        endLine: 4,
+        text: "npm ERR! missing script: test",
+      },
+    });
+
+    expect(prompt).toContain("make the appropriate change");
+    expect(prompt).toContain("Line: 4");
   });
 });

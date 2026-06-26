@@ -289,10 +289,14 @@ export default function ProjectScriptsControl({
             <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-            <Button variant="destructive" onClick={confirmDeleteScript}>
+            <Button
+              variant="ghost"
+              onClick={confirmDeleteScript}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
               Delete action
             </Button>
+            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>

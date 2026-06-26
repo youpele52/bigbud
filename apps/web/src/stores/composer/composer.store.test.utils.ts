@@ -102,6 +102,34 @@ export function makeCodeAnnotation(input: {
   };
 }
 
+export function makeTerminalAnnotation(input: {
+  id: string;
+  comment?: string;
+  intent?: "ask" | "context" | "fix";
+  terminalId?: string;
+  terminalLabel?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  text?: string;
+}): ComposerAnnotationAttachment {
+  return {
+    id: input.id,
+    kind: "terminal",
+    comment: input.comment ?? "Explain this output",
+    intent: input.intent ?? "ask",
+    createdAt: "2026-06-23T00:00:00.000Z",
+    terminal: {
+      terminalId: input.terminalId ?? "terminal-1",
+      terminalLabel: input.terminalLabel ?? "Terminal 1",
+    },
+    selection: {
+      startLine: input.lineStart ?? 4,
+      endLine: input.lineEnd ?? 5,
+      text: input.text ?? "error: build failed\nexit code 1",
+    },
+  };
+}
+
 export function resetComposerDraftStore() {
   useComposerDraftStore.setState({
     draftsByThreadId: {},

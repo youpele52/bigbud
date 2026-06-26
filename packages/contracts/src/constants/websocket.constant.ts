@@ -26,6 +26,15 @@ export const WS_METHODS = {
   notesUpdate: "notes.update",
   notesDelete: "notes.delete",
 
+  // Kanban methods
+  kanbanList: "kanban.list",
+  kanbanGet: "kanban.get",
+  kanbanCreate: "kanban.create",
+  kanbanUpdate: "kanban.update",
+  kanbanDelete: "kanban.delete",
+  kanbanMove: "kanban.move",
+  kanbanReorder: "kanban.reorder",
+
   // Teach / learning projects
   teachListProjects: "teach.listProjects",
 
@@ -70,6 +79,10 @@ export const WS_METHODS = {
   serverUpdateSettings: "server.updateSettings",
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
+  serverExportThreadContext: "server.exportThreadContext",
+  serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
+  serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
+  serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",
   serverGetAutomation: "server.getAutomation",
   serverListAutomations: "server.listAutomations",
   serverListAllAutomations: "server.listAllAutomations",

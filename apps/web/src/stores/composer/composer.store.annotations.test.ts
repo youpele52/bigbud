@@ -6,6 +6,7 @@ import {
   makeAnnotation,
   makeCodeAnnotation,
   makeImage,
+  makeTerminalAnnotation,
   resetComposerDraftStore,
 } from "./composer.store.test.utils";
 
@@ -49,6 +50,15 @@ describe("composerDraftStore annotations", () => {
     const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
     expect(draft?.images).toEqual([]);
     expect(draft?.annotations).toEqual([codeAnnotation]);
+  });
+
+  it("stores terminal annotations independently from prompt text", () => {
+    const terminalAnnotation = makeTerminalAnnotation({ id: "terminal-annotation-1" });
+    useComposerDraftStore.getState().addAnnotation(threadId, terminalAnnotation);
+
+    const draft = useComposerDraftStore.getState().draftsByThreadId[threadId];
+    expect(draft?.prompt).toBe("");
+    expect(draft?.annotations).toEqual([terminalAnnotation]);
   });
 
   it("persists annotations with draft metadata", () => {

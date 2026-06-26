@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractPersistedMobileRemoteControlSettings,
   extractPersistedServerObservabilitySettings,
   normalizePersistedServerSettingString,
+  parsePersistedMobileRemoteControlSettings,
   parsePersistedServerObservabilitySettings,
 } from "./serverSettings";
 
@@ -28,6 +30,18 @@ describe("serverSettings helpers", () => {
     });
   });
 
+  it("extracts persisted mobile remote settings", () => {
+    expect(
+      extractPersistedMobileRemoteControlSettings({
+        mobileRemoteControl: {
+          enabled: true,
+        },
+      }),
+    ).toEqual({
+      enabled: true,
+    });
+  });
+
   it("parses lenient persisted settings JSON", () => {
     expect(
       parsePersistedServerObservabilitySettings(
@@ -48,6 +62,9 @@ describe("serverSettings helpers", () => {
     expect(parsePersistedServerObservabilitySettings("{")).toEqual({
       otlpTracesUrl: undefined,
       otlpMetricsUrl: undefined,
+    });
+    expect(parsePersistedMobileRemoteControlSettings("{")).toEqual({
+      enabled: false,
     });
   });
 });

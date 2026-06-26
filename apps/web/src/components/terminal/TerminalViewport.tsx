@@ -5,14 +5,20 @@ import {
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useSettings } from "../../hooks/useSettings";
+import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
+import { makeAnnotationId } from "../files/FilesPanel.shared";
 import { terminalFontFamilyFromSettings } from "./terminalTypography";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
+import {
+  TerminalViewportAnnotationComposer,
+  type PendingTerminalAnnotation,
+} from "./TerminalViewport.annotations";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
@@ -31,6 +37,30 @@ export interface TerminalViewportProps {
   keybindings: ResolvedKeybindingsConfig;
 }
 
+interface FitTerminalViewportInput {
+  container: Pick<HTMLDivElement, "getBoundingClientRect"> | null;
+  terminal: Pick<Terminal, "buffer" | "scrollToBottom"> | null;
+  fitAddon: Pick<FitAddon, "fit"> | null;
+  requestTerminalResize: () => void;
+}
+
+export function fitTerminalViewport(input: FitTerminalViewportInput): void {
+  const { container, terminal, fitAddon, requestTerminalResize } = input;
+  if (!terminal || !fitAddon || !container) return;
+
+  const { width, height } = container.getBoundingClientRect();
+  if (width < 32 || height < 32) {
+    return;
+  }
+
+  const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
+  fitAddon.fit();
+  if (wasAtBottom) {
+    terminal.scrollToBottom();
+  }
+  requestTerminalResize();
+}
+
 export function TerminalViewport({
   threadId,
   terminalId,
@@ -47,7 +77,8 @@ export function TerminalViewport({
   drawerHeight,
   keybindings,
 }: TerminalViewportProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const hasHandledExitRef = useRef(false);
@@ -65,6 +96,39 @@ export function TerminalViewport({
   const handleAddTerminalContext = useEffectEvent((selection: TerminalContextSelection) => {
     onAddTerminalContext(selection);
   });
+  const [pendingAnnotation, setPendingAnnotation] = useState<PendingTerminalAnnotation | null>(
+    null,
+  );
+  const handleRequestTerminalAnnotation = useEffectEvent(
+    (input: { selection: TerminalContextSelection; position: { x: number; y: number } }) => {
+      setPendingAnnotation({
+        selection: input.selection,
+        anchorX: input.position.x,
+        anchorY: input.position.y,
+      });
+    },
+  );
+  const handleCreateTerminalAnnotation = useEffectEvent(
+    (input: { intent: AnnotationIntent; comment: string; selection: TerminalContextSelection }) => {
+      useComposerDraftStore.getState().addAnnotation(threadId, {
+        id: makeAnnotationId(),
+        kind: "terminal",
+        comment: input.comment,
+        intent: input.intent,
+        createdAt: new Date().toISOString(),
+        terminal: {
+          terminalId: input.selection.terminalId,
+          terminalLabel: input.selection.terminalLabel,
+        },
+        selection: {
+          startLine: input.selection.lineStart,
+          endLine: input.selection.lineEnd,
+          text: input.selection.text,
+        },
+      });
+      setPendingAnnotation(null);
+    },
+  );
   const readTerminalLabel = useEffectEvent(() => terminalLabel);
   const settings = useSettings();
   const terminalFontFamily = terminalFontFamilyFromSettings(settings.terminalFontFamily);
@@ -88,7 +152,7 @@ export function TerminalViewport({
   });
 
   useTerminalViewportSession({
-    containerRef,
+    containerRef: mountRef,
     terminalRef,
     fitAddonRef,
     hasHandledExitRef,
@@ -112,6 +176,7 @@ export function TerminalViewport({
     usesBundledTerminalFont,
     onSessionExited: handleSessionExited,
     onAddTerminalContext: handleAddTerminalContext,
+    onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
   });
 
   useEffect(() => {
@@ -146,6 +211,15 @@ export function TerminalViewport({
       });
   });
 
+  const fitAndResizeTerminal = useEffectEvent(() => {
+    fitTerminalViewport({
+      container: mountRef.current,
+      terminal: terminalRef.current,
+      fitAddon: fitAddonRef.current,
+      requestTerminalResize,
+    });
+  });
+
   useEffect(() => {
     if (!autoFocus) return;
     void focusRequestId;
@@ -163,23 +237,65 @@ export function TerminalViewport({
   useEffect(() => {
     void drawerHeight;
     void resizeEpoch;
-    const terminal = terminalRef.current;
-    const fitAddon = fitAddonRef.current;
-    if (!terminal || !fitAddon) return;
-    const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
     const frame = window.requestAnimationFrame(() => {
-      fitAddon.fit();
-      if (wasAtBottom) {
-        terminal.scrollToBottom();
-      }
-      requestTerminalResize();
+      fitAndResizeTerminal();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
   }, [drawerHeight, resizeEpoch]);
 
+  useEffect(() => {
+    const container = wrapperRef.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let frame: number | null = null;
+    let lastWidth = Math.round(container.getBoundingClientRect().width);
+    let lastHeight = Math.round(container.getBoundingClientRect().height);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const nextWidth = Math.round(entry.contentRect.width);
+      const nextHeight = Math.round(entry.contentRect.height);
+      if (nextWidth === lastWidth && nextHeight === lastHeight) {
+        return;
+      }
+
+      lastWidth = nextWidth;
+      lastHeight = nextHeight;
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        fitAndResizeTerminal();
+      });
+    });
+
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, []);
+
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden rounded-[4px]" />
+    <div ref={wrapperRef} className="relative h-full w-full overflow-hidden rounded-[4px]">
+      <div ref={mountRef} className="h-full w-full" />
+      {pendingAnnotation ? (
+        <TerminalViewportAnnotationComposer
+          pendingAnnotation={pendingAnnotation}
+          onCreateAnnotation={handleCreateTerminalAnnotation}
+          onCancel={() => setPendingAnnotation(null)}
+        />
+      ) : null}
+    </div>
   );
 }

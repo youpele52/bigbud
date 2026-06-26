@@ -106,8 +106,14 @@ describe("ClaudeAdapterLive", () => {
 
       harness.query.fail(new Error("All fibers interrupted without error"));
 
-      yield* Effect.yieldNow;
-      yield* Effect.yieldNow;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const hasSession = yield* adapter.hasSession(THREAD_ID);
+        const sessions = yield* adapter.listSessions();
+        if (!hasSession && sessions.length === 0) {
+          break;
+        }
+        yield* Effect.yieldNow;
+      }
       yield* Effect.yieldNow;
       runtimeEventsFiber.interruptUnsafe();
       assert.deepEqual(
@@ -129,10 +135,8 @@ describe("ClaudeAdapterLive", () => {
         assert.equal(turnCompleted.payload.state, "interrupted");
         assert.equal(turnCompleted.payload.errorMessage, "Claude runtime interrupted.");
       }
-
       const sessionExited = runtimeEvents[5];
       assert.equal(sessionExited?.type, "session.exited");
-
       assert.equal(yield* adapter.hasSession(THREAD_ID), false);
       const sessions = yield* adapter.listSessions();
       assert.equal(sessions.length, 0);

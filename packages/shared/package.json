@@ -64,9 +64,17 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./workLog": {
+      "types": "./src/workLog.ts",
+      "import": "./src/workLog.ts"
+    },
     "./platform": {
       "types": "./src/platform.ts",
       "import": "./src/platform.ts"
+    },
+    "./DevPorts": {
+      "types": "./src/DevPorts.ts",
+      "import": "./src/DevPorts.ts"
     }
   },
   "scripts": {

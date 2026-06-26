@@ -76,6 +76,9 @@ import {
   ServerWriteHandoffDocumentError,
   ServerWriteHandoffDocumentInput,
   ServerWriteHandoffDocumentResult,
+  ServerExportThreadContextError,
+  ServerExportThreadContextInput,
+  ServerExportThreadContextResult,
   ServerLifecycleStreamEvent,
   ServerProviderUpdatedPayload,
   ServerUnlockSshKeyError,
@@ -90,9 +93,23 @@ import {
   ServerVerifyExecutionTargetInput,
   ServerVerifyExecutionTargetResult,
 } from "./server";
+import {
+  ServerCreateMobileRemotePairingInput,
+  ServerListMobileRemoteSessionsResult,
+  ServerMobileRemoteError,
+  ServerMobileRemotePairing,
+  ServerRevokeMobileRemoteSessionInput,
+} from "./mobile";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
+  WsKanbanCreateRpc,
+  WsKanbanDeleteRpc,
+  WsKanbanGetRpc,
+  WsKanbanListRpc,
+  WsKanbanMoveRpc,
+  WsKanbanReorderRpc,
+  WsKanbanUpdateRpc,
   WsNotesCreateRpc,
   WsNotesDeleteRpc,
   WsNotesGetRpc,
@@ -179,6 +196,39 @@ export const WsServerWriteHandoffDocumentRpc = Rpc.make(WS_METHODS.serverWriteHa
   success: ServerWriteHandoffDocumentResult,
   error: ServerWriteHandoffDocumentError,
 });
+
+export const WsServerExportThreadContextRpc = Rpc.make(WS_METHODS.serverExportThreadContext, {
+  payload: ServerExportThreadContextInput,
+  success: ServerExportThreadContextResult,
+  error: ServerExportThreadContextError,
+});
+
+export const WsServerCreateMobileRemotePairingRpc = Rpc.make(
+  WS_METHODS.serverCreateMobileRemotePairing,
+  {
+    payload: ServerCreateMobileRemotePairingInput,
+    success: ServerMobileRemotePairing,
+    error: ServerMobileRemoteError,
+  },
+);
+
+export const WsServerListMobileRemoteSessionsRpc = Rpc.make(
+  WS_METHODS.serverListMobileRemoteSessions,
+  {
+    payload: Schema.Struct({}),
+    success: ServerListMobileRemoteSessionsResult,
+    error: ServerMobileRemoteError,
+  },
+);
+
+export const WsServerRevokeMobileRemoteSessionRpc = Rpc.make(
+  WS_METHODS.serverRevokeMobileRemoteSession,
+  {
+    payload: ServerRevokeMobileRemoteSessionInput,
+    success: Schema.Void,
+    error: ServerMobileRemoteError,
+  },
+);
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
@@ -407,6 +457,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpdateSettingsRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
+  WsServerExportThreadContextRpc,
+  WsServerCreateMobileRemotePairingRpc,
+  WsServerListMobileRemoteSessionsRpc,
+  WsServerRevokeMobileRemoteSessionRpc,
   WsServerGetAutomationRpc,
   WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
@@ -423,6 +477,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeProjectDirectoryChangesRpc,
   WsProjectsReadFilePreviewRpc,
   WsProjectsWriteFileRpc,
+  WsKanbanListRpc,
+  WsKanbanGetRpc,
+  WsKanbanCreateRpc,
+  WsKanbanUpdateRpc,
+  WsKanbanDeleteRpc,
+  WsKanbanMoveRpc,
+  WsKanbanReorderRpc,
   WsNotesListRpc,
   WsNotesGetRpc,
   WsNotesCreateRpc,

@@ -5,6 +5,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 import {
+  DEFAULT_MOBILE_WEB_PORT,
+  DEFAULT_SERVER_PORT,
+  DEFAULT_WEB_PORT,
+} from "@bigbud/shared/DevPorts";
+
+import {
   createDevRunnerEnv,
   findFirstAvailableOffset,
   resolveModePortOffsets,
@@ -13,12 +19,12 @@ import {
 
 it.layer(NodeServices.layer)("dev-runner", (it) => {
   describe("resolveOffset", () => {
-    it.effect("uses explicit T3CODE_PORT_OFFSET when provided", () =>
+    it.effect("uses explicit BIGBUD_PORT_OFFSET when provided", () =>
       Effect.sync(() => {
         const result = resolveOffset({ portOffset: 12, devInstance: undefined });
         assert.deepStrictEqual(result, {
           offset: 12,
-          source: "T3CODE_PORT_OFFSET=12",
+          source: "BIGBUD_PORT_OFFSET=12",
         });
       }),
     );
@@ -40,13 +46,13 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           }),
         );
 
-        assert.ok(error.includes("Invalid T3CODE_PORT_OFFSET"));
+        assert.ok(error.includes("Invalid BIGBUD_PORT_OFFSET"));
       }),
     );
   });
 
   describe("createDevRunnerEnv", () => {
-    it.effect("defaults T3CODE_HOME to ~/.bigbud when not provided", () =>
+    it.effect("defaults BIGBUD_HOME to ~/.bigbud when not provided", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
@@ -63,7 +69,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
+        assert.equal(env.BIGBUD_HOME, resolve(homedir(), ".bigbud"));
         assert.equal(env.T3CODE_HOME, resolve(homedir(), ".bigbud"));
+        assert.equal(env.MOBILE_WEB_PORT, String(DEFAULT_MOBILE_WEB_PORT));
+        assert.equal(env.VITE_MOBILE_WEB_URL, `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`);
       }),
     );
 
@@ -84,7 +93,9 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: new URL("http://localhost:7331"),
         });
 
+        assert.equal(env.BIGBUD_HOME, resolve("/tmp/custom-t3"));
         assert.equal(env.T3CODE_HOME, resolve("/tmp/custom-t3"));
+        assert.equal(env.BIGBUD_PORT, "4222");
         assert.equal(env.T3CODE_PORT, "4222");
         assert.equal(env.VITE_WS_URL, "ws://localhost:4222");
         assert.equal(env.T3CODE_NO_BROWSER, "1");
@@ -114,6 +125,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
+        assert.equal(env.BIGBUD_MODE, "web");
         assert.equal(env.T3CODE_MODE, "web");
         assert.equal(env.T3CODE_LOG_WS_EVENTS, undefined);
       }),
@@ -157,6 +169,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
+        assert.equal(env.BIGBUD_HOME, resolve("/tmp/my-t3"));
         assert.equal(env.T3CODE_HOME, resolve("/tmp/my-t3"));
       }),
     );
@@ -185,6 +198,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
+        assert.equal(env.BIGBUD_HOME, resolve("/tmp/my-t3"));
         assert.equal(env.T3CODE_HOME, resolve("/tmp/my-t3"));
         assert.equal(env.PORT, "5733");
         assert.equal(env.ELECTRON_RENDERER_PORT, "5733");
@@ -206,6 +220,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           startOffset: 0,
           requireServerPort: true,
           requireWebPort: true,
+          requireMobileWebPort: false,
           checkPortAvailability: () => Effect.succeed(true),
         });
 
@@ -215,11 +230,17 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it.effect("advances until all required ports are available", () =>
       Effect.gen(function* () {
-        const taken = new Set([3773, 5733, 3774, 5734]);
+        const taken = new Set([
+          DEFAULT_SERVER_PORT,
+          DEFAULT_WEB_PORT,
+          DEFAULT_SERVER_PORT + 1,
+          DEFAULT_WEB_PORT + 1,
+        ]);
         const offset = yield* findFirstAvailableOffset({
           startOffset: 0,
           requireServerPort: true,
           requireWebPort: true,
+          requireMobileWebPort: false,
           checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
         });
 
@@ -233,6 +254,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           startOffset: 59_803,
           requireServerPort: true,
           requireWebPort: false,
+          requireMobileWebPort: false,
           checkPortAvailability: () => Effect.succeed(true),
         });
 
@@ -244,7 +266,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   describe("resolveModePortOffsets", () => {
     it.effect("uses a shared fallback offset for dev mode", () =>
       Effect.gen(function* () {
-        const taken = new Set([3773, 5733]);
+        const taken = new Set([DEFAULT_SERVER_PORT, DEFAULT_WEB_PORT, DEFAULT_MOBILE_WEB_PORT]);
         const offsets = yield* resolveModePortOffsets({
           mode: "dev",
           startOffset: 0,
@@ -259,7 +281,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it.effect("keeps server offset stable for dev:web and only shifts web offset", () =>
       Effect.gen(function* () {
-        const taken = new Set([5733]);
+        const taken = new Set([DEFAULT_WEB_PORT]);
         const offsets = yield* resolveModePortOffsets({
           mode: "dev:web",
           startOffset: 0,
@@ -274,7 +296,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it.effect("shifts only server offset for dev:server", () =>
       Effect.gen(function* () {
-        const taken = new Set([3773]);
+        const taken = new Set([DEFAULT_SERVER_PORT]);
         const offsets = yield* resolveModePortOffsets({
           mode: "dev:server",
           startOffset: 0,

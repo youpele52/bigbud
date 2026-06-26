@@ -68,7 +68,8 @@ validationLayer("CodexAdapterLive validation", (it) => {
         runtimeMode: "full-access",
       });
 
-      assert.deepStrictEqual(validationManager.startSessionImpl.mock.calls[0]?.[0], {
+      const startInput = validationManager.startSessionImpl.mock.calls[0]?.[0];
+      assert.deepStrictEqual(startInput, {
         provider: "codex",
         threadId: asThreadId("thread-1"),
         providerRuntimeExecutionTargetId: "local",
@@ -78,7 +79,13 @@ validationLayer("CodexAdapterLive validation", (it) => {
         model: "gpt-5.3-codex",
         serviceTier: "fast",
         runtimeMode: "full-access",
+        configArgs: startInput?.configArgs,
+        cleanupRemoteWorkspaceBridge: startInput?.cleanupRemoteWorkspaceBridge,
       });
+      expect(startInput?.configArgs?.some((arg) => arg.includes("bigbud_orchestration"))).toBe(
+        true,
+      );
+      expect(typeof startInput?.cleanupRemoteWorkspaceBridge).toBe("function");
     }),
   );
 
