@@ -16,6 +16,7 @@ import {
   updaterConfigured,
 } from "./updater/autoUpdater";
 import {
+  backendPort,
   backendWsUrl,
   initBackendManager,
   setBackendConnectionInfo,
@@ -23,6 +24,11 @@ import {
   stopBackend,
   stopBackendAndWaitForExit,
 } from "./backend/backendManager";
+import {
+  disableDesktopTailscaleRemoteAccess,
+  enableDesktopTailscaleRemoteAccess,
+  getDesktopTailscaleRemoteAccessStatus,
+} from "./backend/tailscaleRemoteAccess";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
   formatErrorMessage,
@@ -69,6 +75,9 @@ const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
+const GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL = "desktop:get-tailscale-remote-access-status";
+const ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:enable-tailscale-remote-access";
+const DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:disable-tailscale-remote-access";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
@@ -113,6 +122,13 @@ let desktopLogSink: RotatingFileSink | null = null;
 let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let mobileBackendBaseUrl = "";
+let localMobileBackendBaseUrl = "";
+
+async function syncMobileBackendBaseUrlFromTailscaleRemoteAccess(): Promise<void> {
+  const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
+  mobileBackendBaseUrl =
+    status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+}
 
 const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
   platform: process.platform,
@@ -264,12 +280,14 @@ async function bootstrap(): Promise<void> {
   const baseUrl = `ws://${formatHostForUrl(desktopMobileRemoteNetwork.clientHost)}:${port}`;
   const wsUrl = `${baseUrl}/?token=${encodeURIComponent(authToken)}`;
   mobileBackendBaseUrl = `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`;
+  localMobileBackendBaseUrl = mobileBackendBaseUrl;
   setBackendConnectionInfo({
     port,
     authToken,
     wsUrl,
     host: desktopMobileRemoteNetwork.bindHost,
   });
+  await syncMobileBackendBaseUrlFromTailscaleRemoteAccess();
   logHeader(
     `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileBackendBaseUrl}`,
   );
@@ -282,6 +300,9 @@ async function bootstrap(): Promise<void> {
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
     GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
+    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
+    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
+    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -300,6 +321,23 @@ async function bootstrap(): Promise<void> {
     installDownloadedUpdate,
     resolveIconPath,
     getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
+    getTailscaleRemoteAccessStatus: async () => {
+      const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
+      mobileBackendBaseUrl =
+        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+      return status;
+    },
+    enableTailscaleRemoteAccess: async () => {
+      const status = await enableDesktopTailscaleRemoteAccess(backendPort);
+      mobileBackendBaseUrl =
+        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+      return status;
+    },
+    disableTailscaleRemoteAccess: async () => {
+      const status = await disableDesktopTailscaleRemoteAccess(backendPort);
+      mobileBackendBaseUrl = localMobileBackendBaseUrl;
+      return status;
+    },
   });
   logHeader("bootstrap ipc handlers registered");
   mainWindow = makeWindow();

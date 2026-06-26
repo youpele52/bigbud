@@ -195,9 +195,21 @@ export interface DesktopNotificationInput {
   silent?: boolean;
 }
 
+export interface DesktopTailscaleRemoteAccessStatus {
+  installed: boolean;
+  running: boolean;
+  online: boolean;
+  serving: boolean;
+  remoteBaseUrl: string | null;
+  error: string | null;
+}
+
 export interface DesktopBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
+  getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
