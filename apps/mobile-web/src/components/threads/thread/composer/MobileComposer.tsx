@@ -15,13 +15,13 @@ import {
   setPendingUserInputCustomAnswer,
 } from "~/logic/user-input";
 
-import type { MobilePendingApproval, MobilePendingUserInput } from "../../lib/mobileModels";
-import { cn } from "../../lib/cn";
+import type { MobilePendingApproval, MobilePendingUserInput } from "../../../../lib/mobileModels";
+import { cn } from "../../../../lib/cn";
 import { MobileComposerModelPicker } from "./MobileComposerModelPicker";
 import { MobileComposerPendingUserInput } from "./MobileComposerPendingUserInput";
 import { MobileComposerSendIcon } from "./MobileComposerSendIcon";
 import { MobileComposerStopIcon } from "./MobileComposerStopIcon";
-import { Button } from "../ui/button";
+import { Button } from "../../../ui/button";
 
 interface MobileComposerProps {
   value: string;

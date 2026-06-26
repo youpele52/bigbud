@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { cn } from "../lib/cn";
+import { cn } from "../../lib/cn";
 
 export function MobilePage({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("grid gap-3", className)}>{children}</div>;

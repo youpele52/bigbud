@@ -1,6 +1,6 @@
-import { MobileListLink, MobileListSection } from "../components/MobileAppHeader";
-import { MobileFolderIcon } from "../components/MobileFolderIcon";
-import { MobileSessionGate } from "../components/MobileSessionGate";
+import { MobileListLink, MobileListSection } from "../components/shell/MobileAppHeader";
+import { MobileFolderIcon } from "../components/threads/MobileFolderIcon";
+import { MobileSessionGate } from "../components/shell/MobileSessionGate";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { sortProjectsForMobile } from "../lib/mobileModels";
 import { useMobileSessionState } from "../context/MobileSessionContext";
