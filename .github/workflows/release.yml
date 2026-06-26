@@ -178,10 +178,6 @@ jobs:
             if has_all "$APPLE_ID" "$APPLE_APP_SPECIFIC_PASSWORD" "$APPLE_TEAM_ID"; then
               echo "macOS signing enabled."
               args+=(--signed)
-              if [[ "${{ needs.preflight.outputs.is_prerelease }}" == "true" ]]; then
-                echo "Prerelease build: skipping macOS notarization."
-                args+=(--no-notarize)
-              fi
             else
               echo "macOS signing disabled (missing one or more Apple notarization secrets)."
             fi

@@ -61,12 +61,6 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     ),
     Flag.optional,
   ),
-  noNotarize: Flag.boolean("no-notarize").pipe(
-    Flag.withDescription(
-      "Code-sign macOS builds without submitting to Apple notarization (env: BIGBUD_DESKTOP_NO_NOTARIZE, legacy: T3CODE_DESKTOP_NO_NOTARIZE).",
-    ),
-    Flag.optional,
-  ),
   verbose: Flag.boolean("verbose").pipe(
     Flag.withDescription(
       "Stream subprocess stdout (env: BIGBUD_DESKTOP_VERBOSE, legacy: T3CODE_DESKTOP_VERBOSE).",
