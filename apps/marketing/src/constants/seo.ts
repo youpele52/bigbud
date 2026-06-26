@@ -101,12 +101,13 @@ export const CHANGELOG_METADATA = {
   ]),
 } as const;
 
-export const GETTING_STARTED_METADATA = {
+export const DOCS_METADATA = {
   title: formatPageTitle(`getting started with ${APP_NAME}`),
   description: `Get up and running with ${APP_NAME} — install the app, connect your AI providers, start your first thread, and learn the key workflows.`,
   image: MARKETING_ASSETS.socialImagePath,
-  imageAlt: `${APP_NAME} getting started preview`,
+  imageAlt: `${APP_NAME} docs preview`,
   keywords: uniqueKeywords(CORE_KEYWORDS, PROVIDER_KEYWORDS, MODEL_KEYWORDS, [
+    "bigbud docs",
     "bigbud getting started",
     "bigbud quick start",
     "bigbud tutorial",
@@ -114,3 +115,5 @@ export const GETTING_STARTED_METADATA = {
     "how to use bigbud",
   ]),
 } as const;
+
+export const GETTING_STARTED_METADATA = DOCS_METADATA;
