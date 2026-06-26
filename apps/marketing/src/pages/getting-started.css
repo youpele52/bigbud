@@ -1,0 +1,16 @@
+.page:has(.getting-started-page) {
+  overflow-x: clip;
+}
+
+.getting-started-page {
+  position: relative;
+  width: min(100%, var(--marketing-max-width));
+  padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
+}
+
+@media (max-width: 1099px) {
+  .getting-started-page {
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+  }
+}
