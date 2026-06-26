@@ -31,7 +31,7 @@ describe("mobileRemoteControl.urls", () => {
     expect(resolveDefaultMobileWebBaseUrl()).toBe("http://192.168.1.24:5740");
   });
 
-  it("does not derive the hosted mobile web origin from a secure remote backend", () => {
+  it("uses the tailnet origin for remote mobile pairing", () => {
     vi.stubGlobal("window", {
       desktopBridge: {
         getWsUrl: () => "ws://127.0.0.1:3774/?token=abc123",
@@ -43,6 +43,6 @@ describe("mobileRemoteControl.urls", () => {
     });
 
     expect(resolveDefaultBackendBaseUrl()).toBe("https://bigbud-dev.tail123.ts.net");
-    expect(resolveDefaultMobileWebBaseUrl()).toBe("http://localhost:5740");
+    expect(resolveDefaultMobileWebBaseUrl()).toBe("https://bigbud-dev.tail123.ts.net");
   });
 });
