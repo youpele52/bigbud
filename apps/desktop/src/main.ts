@@ -16,6 +16,7 @@ import {
   updaterConfigured,
 } from "./updater/autoUpdater";
 import {
+  backendPort,
   backendWsUrl,
   initBackendManager,
   setBackendConnectionInfo,
@@ -23,6 +24,11 @@ import {
   stopBackend,
   stopBackendAndWaitForExit,
 } from "./backend/backendManager";
+import {
+  disableDesktopTailscaleRemoteAccess,
+  enableDesktopTailscaleRemoteAccess,
+  getDesktopTailscaleRemoteAccessStatus,
+} from "./backend/tailscaleRemoteAccess";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
   formatErrorMessage,
@@ -38,6 +44,7 @@ import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
 import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
+import { resolveDesktopMobileRemoteNetwork } from "./backend/mobileRemoteNetwork";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
 import {
   readLinuxGpuFallbackMarker,
@@ -67,6 +74,10 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
+const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
+const GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL = "desktop:get-tailscale-remote-access-status";
+const ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:enable-tailscale-remote-access";
+const DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:disable-tailscale-remote-access";
 const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
@@ -110,6 +121,14 @@ let desktopProtocolRegistered = false;
 let desktopLogSink: RotatingFileSink | null = null;
 let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
+let mobileBackendBaseUrl = "";
+let localMobileBackendBaseUrl = "";
+
+async function syncMobileBackendBaseUrlFromTailscaleRemoteAccess(): Promise<void> {
+  const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
+  mobileBackendBaseUrl =
+    status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+}
 
 const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
   platform: process.platform,
@@ -121,7 +140,7 @@ const desktopLinuxRuntimeConfig = resolveLinuxDesktopRuntimeConfig({
 });
 
 // Resolved once after logging init.
-const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "");
+const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "", isDevelopment);
 const desktopAppIdentity = {
   appDisplayName: APP_DISPLAY_NAME,
   appUserModelId: APP_USER_MODEL_ID,
@@ -138,6 +157,10 @@ const desktopAppIdentity = {
 
 function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 installDesktopSingleInstanceLock(app, () => mainWindow);
@@ -242,18 +265,32 @@ function makeWindow(): BrowserWindow {
 
 async function bootstrap(): Promise<void> {
   logHeader("bootstrap start");
+  const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
+    serverSettingsPath: SERVER_SETTINGS_PATH,
+    hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
+  });
   const port = await resolveDesktopBackendPort({
-    host: "127.0.0.1",
+    host: desktopMobileRemoteNetwork.bindHost,
     startPort: DEFAULT_DESKTOP_BACKEND_PORT,
   });
   logHeader(
-    `selected backend port via sequential scan startPort=${DEFAULT_DESKTOP_BACKEND_PORT} port=${port}`,
+    `selected backend port via sequential scan host=${desktopMobileRemoteNetwork.bindHost} startPort=${DEFAULT_DESKTOP_BACKEND_PORT} port=${port}`,
   );
   const authToken = Crypto.randomBytes(24).toString("hex");
-  const baseUrl = `ws://127.0.0.1:${port}`;
+  const baseUrl = `ws://${formatHostForUrl(desktopMobileRemoteNetwork.clientHost)}:${port}`;
   const wsUrl = `${baseUrl}/?token=${encodeURIComponent(authToken)}`;
-  setBackendConnectionInfo({ port, authToken, wsUrl });
-  logHeader(`bootstrap resolved websocket endpoint baseUrl=${baseUrl}`);
+  mobileBackendBaseUrl = `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`;
+  localMobileBackendBaseUrl = mobileBackendBaseUrl;
+  setBackendConnectionInfo({
+    port,
+    authToken,
+    wsUrl,
+    host: desktopMobileRemoteNetwork.bindHost,
+  });
+  await syncMobileBackendBaseUrlFromTailscaleRemoteAccess();
+  logHeader(
+    `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileBackendBaseUrl}`,
+  );
 
   registerIpcHandlers({
     PICK_FOLDER_CHANNEL,
@@ -262,6 +299,10 @@ async function bootstrap(): Promise<void> {
     CONTEXT_MENU_CHANNEL,
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
+    GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
+    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
+    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
+    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -279,6 +320,24 @@ async function bootstrap(): Promise<void> {
     downloadAvailableUpdate,
     installDownloadedUpdate,
     resolveIconPath,
+    getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
+    getTailscaleRemoteAccessStatus: async () => {
+      const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
+      mobileBackendBaseUrl =
+        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+      return status;
+    },
+    enableTailscaleRemoteAccess: async () => {
+      const status = await enableDesktopTailscaleRemoteAccess(backendPort);
+      mobileBackendBaseUrl =
+        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
+      return status;
+    },
+    disableTailscaleRemoteAccess: async () => {
+      const status = await disableDesktopTailscaleRemoteAccess(backendPort);
+      mobileBackendBaseUrl = localMobileBackendBaseUrl;
+      return status;
+    },
   });
   logHeader("bootstrap ipc handlers registered");
   mainWindow = makeWindow();

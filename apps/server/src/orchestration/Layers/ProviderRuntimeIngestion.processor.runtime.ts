@@ -12,6 +12,7 @@ import {
   sameId,
   toTurnId,
 } from "./ProviderRuntimeIngestion.helpers.ts";
+import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
 import { makeRuntimeProcessorEventHelpers } from "./ProviderRuntimeIngestion.processor.events.ts";
@@ -361,12 +362,14 @@ export function makeRuntimeEventProcessor(
     }
 
     if (event.type === "thread.metadata.updated" && event.payload.name) {
-      yield* orchestrationEngine.dispatch({
-        type: "thread.meta.update",
-        commandId: providerCommandId(event, "thread-meta-update"),
-        threadId: thread.id,
-        title: event.payload.name,
-      });
+      if (!isThreadTitleLocked(thread.id)) {
+        yield* orchestrationEngine.dispatch({
+          type: "thread.meta.update",
+          commandId: providerCommandId(event, "thread-meta-update"),
+          threadId: thread.id,
+          title: event.payload.name,
+        });
+      }
     }
 
     if (event.type === "turn.diff.updated") {

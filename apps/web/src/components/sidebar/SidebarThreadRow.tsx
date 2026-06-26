@@ -2,6 +2,11 @@ import { GitPullRequestIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { useCallback, type MouseEvent, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
+import {
+  BIGBUD_THREAD_CONTEXT_DRAG_MIME,
+  serializeThreadContextDragPayload,
+} from "./threadPanel.dnd";
+
 import { type ThreadId } from "@bigbud/contracts";
 import {
   useIsThreadCompacting,
@@ -202,6 +207,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         </div>
         <SidebarMenuSubButton
           render={<div role="button" tabIndex={0} />}
+          draggable
           size="sm"
           isActive={isActive}
           data-testid={`thread-row-${thread.id}`}
@@ -219,6 +225,17 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           onPointerUp={swipeReveal.handlePointerUp}
           onPointerCancel={swipeReveal.handlePointerCancel}
           onWheel={swipeReveal.handleWheel}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData(
+              BIGBUD_THREAD_CONTEXT_DRAG_MIME,
+              serializeThreadContextDragPayload({
+                threadId: thread.id,
+                title: thread.title,
+              }),
+            );
+            event.dataTransfer.setData("text/plain", thread.title);
+          }}
           onClick={(event) => {
             if (swipeReveal.consumeGestureClickSuppression()) {
               event.preventDefault();

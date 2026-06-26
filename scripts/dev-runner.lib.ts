@@ -1,16 +1,23 @@
 import { homedir } from "node:os";
 
+import {
+  DEFAULT_MOBILE_WEB_PORT,
+  DEFAULT_SERVER_PORT,
+  DEFAULT_WEB_PORT,
+  devPortsForOffset,
+} from "@bigbud/shared/DevPorts";
 import { NetService } from "@bigbud/shared/Net";
 import { Config, Data, Effect, Hash, Option, Path } from "effect";
 
-const BASE_SERVER_PORT = 3773;
-const BASE_WEB_PORT = 5733;
 const MAX_HASH_OFFSET = 3000;
 const MAX_PORT = 65535;
 
-export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
+export const DEFAULT_BIGBUD_HOME = Effect.map(Effect.service(Path.Path), (path) =>
   path.join(homedir(), ".bigbud"),
 );
+
+/** @deprecated Use `DEFAULT_BIGBUD_HOME` */
+export const DEFAULT_T3_HOME = DEFAULT_BIGBUD_HOME;
 
 export const MODE_ARGS = {
   dev: [
@@ -23,6 +30,7 @@ export const MODE_ARGS = {
   ],
   "dev:server": ["run", "dev", "--filter=@bigbud/server"],
   "dev:web": ["run", "dev", "--filter=@bigbud/web"],
+  "dev:mobile-web": ["run", "dev", "--filter=@bigbud/mobile-web"],
   "dev:desktop": ["run", "dev", "--filter=@bigbud/desktop", "--filter=@bigbud/web"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
@@ -66,9 +74,27 @@ export const optionalUrlConfig = (name: string): Config.Config<URL | undefined> 
     Config.map((value) => Option.getOrUndefined(value)),
   );
 
+const aliasedOptionalIntegerConfig = (
+  primary: string,
+  alias: string,
+): Config.Config<number | undefined> =>
+  Config.all({
+    primary: optionalIntegerConfig(primary),
+    alias: optionalIntegerConfig(alias),
+  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
+
+const aliasedOptionalStringConfig = (
+  primary: string,
+  alias: string,
+): Config.Config<string | undefined> =>
+  Config.all({
+    primary: optionalStringConfig(primary),
+    alias: optionalStringConfig(alias),
+  }).pipe(Config.map(({ primary, alias }) => primary ?? alias));
+
 export const OffsetConfig = Config.all({
-  portOffset: optionalIntegerConfig("T3CODE_PORT_OFFSET"),
-  devInstance: optionalStringConfig("T3CODE_DEV_INSTANCE"),
+  portOffset: aliasedOptionalIntegerConfig("BIGBUD_PORT_OFFSET", "T3CODE_PORT_OFFSET"),
+  devInstance: aliasedOptionalStringConfig("BIGBUD_DEV_INSTANCE", "T3CODE_DEV_INSTANCE"),
 });
 
 export function resolveOffset(config: {
@@ -77,11 +103,11 @@ export function resolveOffset(config: {
 }): { readonly offset: number; readonly source: string } {
   if (config.portOffset !== undefined) {
     if (config.portOffset < 0) {
-      throw new Error(`Invalid T3CODE_PORT_OFFSET: ${config.portOffset}`);
+      throw new Error(`Invalid BIGBUD_PORT_OFFSET: ${config.portOffset}`);
     }
     return {
       offset: config.portOffset,
-      source: `T3CODE_PORT_OFFSET=${config.portOffset}`,
+      source: `BIGBUD_PORT_OFFSET=${config.portOffset}`,
     };
   }
 
@@ -91,11 +117,11 @@ export function resolveOffset(config: {
   }
 
   if (/^\d+$/.test(seed)) {
-    return { offset: Number(seed), source: `numeric T3CODE_DEV_INSTANCE=${seed}` };
+    return { offset: Number(seed), source: `numeric BIGBUD_DEV_INSTANCE=${seed}` };
   }
 
   const offset = ((Hash.string(seed) >>> 0) % MAX_HASH_OFFSET) + 1;
-  return { offset, source: `hashed T3CODE_DEV_INSTANCE=${seed}` };
+  return { offset, source: `hashed BIGBUD_DEV_INSTANCE=${seed}` };
 }
 
 function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, never, Path.Path> {
@@ -107,7 +133,7 @@ function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, neve
       return path.resolve(configured);
     }
 
-    return yield* DEFAULT_T3_HOME;
+    return yield* DEFAULT_BIGBUD_HOME;
   });
 }
 
@@ -141,25 +167,29 @@ export function createDevRunnerEnv({
   devUrl,
 }: CreateDevRunnerEnvInput): Effect.Effect<NodeJS.ProcessEnv, never, Path.Path> {
   return Effect.gen(function* () {
-    const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
-    const webPort = BASE_WEB_PORT + webOffset;
+    const resolvedServerPort = port ?? devPortsForOffset(serverOffset).serverPort;
+    const resolvedWebPort = devPortsForOffset(webOffset).webPort;
+    const resolvedMobileWebPort = devPortsForOffset(webOffset).mobileWebPort;
     const resolvedBaseDir = yield* resolveBaseDir(t3Home);
     const isDesktopMode = mode === "dev:desktop";
+    const isMobileWebMode = mode === "dev:mobile-web";
 
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
-      PORT: String(webPort),
-      ELECTRON_RENDERER_PORT: String(webPort),
-      VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${webPort}`,
+      PORT: String(isMobileWebMode ? resolvedMobileWebPort : resolvedWebPort),
+      ELECTRON_RENDERER_PORT: String(resolvedWebPort),
+      VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://localhost:${resolvedWebPort}`,
+      MOBILE_WEB_PORT: String(resolvedMobileWebPort),
+      VITE_MOBILE_WEB_URL: `http://localhost:${resolvedMobileWebPort}`,
       BIGBUD_HOME: resolvedBaseDir,
       T3CODE_HOME: resolvedBaseDir,
     };
 
-    if (!isDesktopMode) {
-      output.BIGBUD_PORT = String(serverPort);
-      output.T3CODE_PORT = String(serverPort);
-      output.VITE_WS_URL = `ws://localhost:${serverPort}`;
-    } else {
+    if (!isDesktopMode && !isMobileWebMode) {
+      output.BIGBUD_PORT = String(resolvedServerPort);
+      output.T3CODE_PORT = String(resolvedServerPort);
+      output.VITE_WS_URL = `ws://localhost:${resolvedServerPort}`;
+    } else if (isDesktopMode) {
       delete output.BIGBUD_PORT;
       delete output.T3CODE_PORT;
       delete output.VITE_WS_URL;
@@ -173,23 +203,23 @@ export function createDevRunnerEnv({
       delete output.T3CODE_HOST;
     }
 
-    if (!isDesktopMode && host !== undefined) {
+    if (!isDesktopMode && !isMobileWebMode && host !== undefined) {
       output.BIGBUD_HOST = host;
       output.T3CODE_HOST = host;
     }
 
-    if (!isDesktopMode && authToken !== undefined) {
+    if (!isDesktopMode && !isMobileWebMode && authToken !== undefined) {
       output.BIGBUD_AUTH_TOKEN = authToken;
       output.T3CODE_AUTH_TOKEN = authToken;
-    } else if (!isDesktopMode) {
+    } else if (!isDesktopMode && !isMobileWebMode) {
       delete output.BIGBUD_AUTH_TOKEN;
       delete output.T3CODE_AUTH_TOKEN;
     }
 
-    if (!isDesktopMode && noBrowser !== undefined) {
+    if (!isDesktopMode && !isMobileWebMode && noBrowser !== undefined) {
       output.BIGBUD_NO_BROWSER = noBrowser ? "1" : "0";
       output.T3CODE_NO_BROWSER = noBrowser ? "1" : "0";
-    } else if (!isDesktopMode) {
+    } else if (!isDesktopMode && !isMobileWebMode) {
       delete output.BIGBUD_NO_BROWSER;
       delete output.T3CODE_NO_BROWSER;
     }
@@ -229,11 +259,9 @@ export function createDevRunnerEnv({
 function portPairForOffset(offset: number): {
   readonly serverPort: number;
   readonly webPort: number;
+  readonly mobileWebPort: number;
 } {
-  return {
-    serverPort: BASE_SERVER_PORT + offset,
-    webPort: BASE_WEB_PORT + offset,
-  };
+  return devPortsForOffset(offset);
 }
 
 const defaultCheckPortAvailability: PortAvailabilityCheck<NetService> = (port) =>
@@ -246,6 +274,7 @@ export interface FindFirstAvailableOffsetInput<R = NetService> {
   readonly startOffset: number;
   readonly requireServerPort: boolean;
   readonly requireWebPort: boolean;
+  readonly requireMobileWebPort: boolean;
   readonly checkPortAvailability?: PortAvailabilityCheck<R>;
 }
 
@@ -253,6 +282,7 @@ export function findFirstAvailableOffset<R = NetService>({
   startOffset,
   requireServerPort,
   requireWebPort,
+  requireMobileWebPort,
   checkPortAvailability,
 }: FindFirstAvailableOffsetInput<R>): Effect.Effect<number, DevRunnerError, R> {
   return Effect.gen(function* () {
@@ -260,14 +290,19 @@ export function findFirstAvailableOffset<R = NetService>({
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
 
     for (let candidate = startOffset; ; candidate += 1) {
-      const { serverPort, webPort } = portPairForOffset(candidate);
+      const { serverPort, webPort, mobileWebPort } = portPairForOffset(candidate);
       const serverPortOutOfRange = serverPort > MAX_PORT;
       const webPortOutOfRange = webPort > MAX_PORT;
+      const mobileWebPortOutOfRange = mobileWebPort > MAX_PORT;
 
       if (
         (requireServerPort && serverPortOutOfRange) ||
         (requireWebPort && webPortOutOfRange) ||
-        (!requireServerPort && !requireWebPort && (serverPortOutOfRange || webPortOutOfRange))
+        (requireMobileWebPort && mobileWebPortOutOfRange) ||
+        (!requireServerPort &&
+          !requireWebPort &&
+          !requireMobileWebPort &&
+          (serverPortOutOfRange || webPortOutOfRange || mobileWebPortOutOfRange))
       ) {
         break;
       }
@@ -275,6 +310,7 @@ export function findFirstAvailableOffset<R = NetService>({
       const checks: Array<Effect.Effect<boolean, never, R>> = [];
       if (requireServerPort) checks.push(checkPort(serverPort));
       if (requireWebPort) checks.push(checkPort(webPort));
+      if (requireMobileWebPort) checks.push(checkPort(mobileWebPort));
 
       if (checks.length === 0) {
         return candidate;
@@ -287,7 +323,7 @@ export function findFirstAvailableOffset<R = NetService>({
     }
 
     return yield* new DevRunnerError({
-      message: `No available dev ports found from offset ${startOffset}. Tried server=${BASE_SERVER_PORT}+n web=${BASE_WEB_PORT}+n up to port ${MAX_PORT}.`,
+      message: `No available dev ports found from offset ${startOffset}. Tried server=${DEFAULT_SERVER_PORT}+n web=${DEFAULT_WEB_PORT}+n mobile=${DEFAULT_MOBILE_WEB_PORT}+n up to port ${MAX_PORT}.`,
     });
   });
 }
@@ -324,6 +360,7 @@ export function resolveModePortOffsets<R = NetService>({
         startOffset,
         requireServerPort: false,
         requireWebPort: true,
+        requireMobileWebPort: false,
         checkPortAvailability: checkPort,
       });
       return { serverOffset: startOffset, webOffset };
@@ -338,15 +375,28 @@ export function resolveModePortOffsets<R = NetService>({
         startOffset,
         requireServerPort: true,
         requireWebPort: false,
+        requireMobileWebPort: false,
         checkPortAvailability: checkPort,
       });
       return { serverOffset, webOffset: serverOffset };
+    }
+
+    if (mode === "dev:mobile-web") {
+      const mobileOffset = yield* findFirstAvailableOffset({
+        startOffset,
+        requireServerPort: false,
+        requireWebPort: false,
+        requireMobileWebPort: true,
+        checkPortAvailability: checkPort,
+      });
+      return { serverOffset: mobileOffset, webOffset: mobileOffset };
     }
 
     const sharedOffset = yield* findFirstAvailableOffset({
       startOffset,
       requireServerPort: !hasExplicitServerPort,
       requireWebPort: !hasExplicitDevUrl,
+      requireMobileWebPort: true,
       checkPortAvailability: checkPort,
     });
 

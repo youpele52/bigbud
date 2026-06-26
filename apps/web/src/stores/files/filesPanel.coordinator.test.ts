@@ -10,6 +10,7 @@ describe("filesPanel.coordinator", () => {
   afterEach(() => {
     useFilesPanelStore.setState({
       open: false,
+      workspaceRootOverride: null,
       previewPath: null,
       previewPosition: null,
       fileOpenRequest: null,
@@ -80,7 +81,7 @@ describe("filesPanel.coordinator", () => {
   });
 
   it("closeFilesPanel clears the requested right panel", () => {
-    useFilesPanelStore.setState({ open: true });
+    useFilesPanelStore.setState({ open: true, workspaceRootOverride: "/tmp/other-project" });
     requestRightPanel("files");
     useRightPanelTabsStore.setState({
       activeKind: "files",
@@ -91,6 +92,7 @@ describe("filesPanel.coordinator", () => {
     closeFilesPanel();
 
     expect(useFilesPanelStore.getState().open).toBe(false);
+    expect(useFilesPanelStore.getState().workspaceRootOverride).toBeNull();
     expect(getRequestedRightPanel()).toBeNull();
   });
 });

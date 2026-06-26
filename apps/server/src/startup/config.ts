@@ -8,7 +8,7 @@
  */
 import { Effect, FileSystem, Layer, LogLevel, Path, Schema, ServiceMap } from "effect";
 
-export const DEFAULT_PORT = 3773;
+export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
 
 export const RuntimeMode = Schema.Literals(["web", "desktop"]);
 export type RuntimeMode = typeof RuntimeMode.Type;

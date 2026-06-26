@@ -15,6 +15,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import type {
   ContextMenuItem,
   DesktopNotificationInput,
+  DesktopTailscaleRemoteAccessStatus,
   DesktopTheme,
   DesktopUpdateActionResult,
   DesktopUpdateCheckResult,
@@ -90,6 +91,10 @@ export interface IpcHandlerDeps {
   readonly CONTEXT_MENU_CHANNEL: string;
   readonly OPEN_EXTERNAL_CHANNEL: string;
   readonly GET_WS_URL_CHANNEL: string;
+  readonly GET_MOBILE_BACKEND_BASE_URL_CHANNEL: string;
+  readonly GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: string;
+  readonly ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
+  readonly DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
   readonly NOTIFICATIONS_IS_SUPPORTED_CHANNEL: string;
   readonly NOTIFICATIONS_SHOW_CHANNEL: string;
   readonly COPY_TO_CLIPBOARD_CHANNEL: string;
@@ -102,6 +107,10 @@ export interface IpcHandlerDeps {
   // State/action accessors
   readonly getMainWindow: () => BrowserWindow | null;
   readonly getBackendWsUrl: () => string;
+  readonly getMobileBackendBaseUrl: () => string;
+  readonly getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  readonly enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  readonly disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly getIsQuitting: () => boolean;
   readonly getUpdateState: () => DesktopUpdateState;
   readonly isUpdaterConfigured: () => boolean;
@@ -123,6 +132,10 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     CONTEXT_MENU_CHANNEL,
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
+    GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
+    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
+    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
+    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -137,6 +150,24 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.on(GET_WS_URL_CHANNEL, (event) => {
     event.returnValue = deps.getBackendWsUrl();
   });
+
+  ipcMain.removeAllListeners(GET_MOBILE_BACKEND_BASE_URL_CHANNEL);
+  ipcMain.on(GET_MOBILE_BACKEND_BASE_URL_CHANNEL, (event) => {
+    event.returnValue = deps.getMobileBackendBaseUrl();
+  });
+
+  ipcMain.removeHandler(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL);
+  ipcMain.handle(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL, () =>
+    deps.getTailscaleRemoteAccessStatus(),
+  );
+
+  ipcMain.removeHandler(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL);
+  ipcMain.handle(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, () => deps.enableTailscaleRemoteAccess());
+
+  ipcMain.removeHandler(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL);
+  ipcMain.handle(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, () =>
+    deps.disableTailscaleRemoteAccess(),
+  );
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
   ipcMain.handle(PICK_FOLDER_CHANNEL, async () => {

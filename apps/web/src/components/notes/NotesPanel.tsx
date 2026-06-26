@@ -602,13 +602,14 @@ export const NotesPanelContent = memo(function NotesPanelContent({
                 cwd={cwd}
                 isStreaming={false}
                 preserveLineBreaks
+                className="note-markdown"
               />
             ) : (
               <Textarea
                 ref={editorRef}
                 value={selectedContent}
                 onChange={(event) => setSelectedContent(event.target.value)}
-                className="h-full min-h-full"
+                className="h-full min-h-full !bg-background"
                 unstyled={false}
               />
             )}

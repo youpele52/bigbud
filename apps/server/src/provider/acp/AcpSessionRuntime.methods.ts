@@ -37,6 +37,7 @@ interface AcpSessionRuntimeMethodsDeps {
   readonly options: {
     readonly cwd: string;
     readonly resumeSessionId?: string;
+    readonly mcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
     readonly clientCapabilities?: EffectAcpSchema.InitializeRequest["clientCapabilities"];
     readonly clientInfo: {
       readonly name: string;

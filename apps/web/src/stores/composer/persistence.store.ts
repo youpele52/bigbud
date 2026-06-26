@@ -260,6 +260,8 @@ export function hydrateFilesFromPersisted(
     filePath: attachment.filePath,
     entryKind: attachment.entryKind ?? "file",
     attachmentMode: attachment.attachmentMode ?? "upload",
+    ...(attachment.threadId ? { threadId: attachment.threadId } : {}),
+    ...(attachment.threadTitle ? { threadTitle: attachment.threadTitle } : {}),
     file: null,
   }));
 }

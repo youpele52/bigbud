@@ -25,6 +25,7 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
+import { MobileRemoteControlScope } from "../server/mobile";
 
 const DEFAULT_CHAT_CWD = "~/Documents";
 
@@ -183,6 +184,14 @@ export const ObservabilitySettings = Schema.Struct({
 });
 export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
+export const MobileRemoteControlSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  defaultScope: MobileRemoteControlScope.pipe(
+    Schema.withDecodingDefault(() => "thread-control" as const satisfies MobileRemoteControlScope),
+  ),
+});
+export type MobileRemoteControlSettings = typeof MobileRemoteControlSettings.Type;
+
 export const ServerSettings = Schema.Struct({
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableThinkingStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
@@ -212,6 +221,7 @@ export const ServerSettings = Schema.Struct({
     devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -388,6 +398,12 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(Schema.String),
       otlpMetricsUrl: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  mobileRemoteControl: Schema.optionalKey(
+    Schema.Struct({
+      enabled: Schema.optionalKey(Schema.Boolean),
+      defaultScope: Schema.optionalKey(MobileRemoteControlScope),
     }),
   ),
   providers: Schema.optionalKey(

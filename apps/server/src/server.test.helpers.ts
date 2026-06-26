@@ -52,6 +52,7 @@ import {
   ProjectSetupScriptRunner,
   type ProjectSetupScriptRunnerShape,
 } from "./project/Services/ProjectSetupScriptRunner.ts";
+import { ProjectionKanbanRepository } from "./persistence/Services/ProjectionKanban.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import {
   ProjectionThreadRepository,
@@ -61,6 +62,10 @@ import {
   ThreadShellRunner,
   type ThreadShellRunnerShape,
 } from "./shell/Services/ThreadShellRunner.ts";
+import {
+  MobileRemoteControl,
+  type MobileRemoteControlShape,
+} from "./mobile/Services/MobileRemoteControl.ts";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries.ts";
 import { WorkspaceFileSystemLive } from "./workspace/Layers/WorkspaceFileSystem.ts";
 import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths.ts";
@@ -128,6 +133,7 @@ export const makeDefaultOrchestrationReadModel = () => {
         activities: [],
         proposedPlans: [],
         checkpoints: [],
+        watchingThreads: [],
         deletedAt: null,
       },
     ],
@@ -157,6 +163,7 @@ export const buildAppUnderTest = (options?: {
     gitManager?: Partial<GitManagerShape>;
     projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
     threadShellRunner?: Partial<ThreadShellRunnerShape>;
+    mobileRemoteControl?: Partial<MobileRemoteControlShape>;
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
@@ -252,6 +259,17 @@ export const buildAppUnderTest = (options?: {
         }),
       ),
       Layer.provide(
+        Layer.mock(MobileRemoteControl)({
+          createPairing: () => Effect.die("not implemented"),
+          getPairingStatus: () => Effect.succeed(null),
+          exchangePairing: () => Effect.die("not implemented"),
+          listSessions: Effect.succeed([]),
+          revokeSession: () => Effect.void,
+          validateSessionToken: () => Effect.succeed(null),
+          ...options?.layers?.mobileRemoteControl,
+        }),
+      ),
+      Layer.provide(
         Layer.mock(Open)({
           ...options?.layers?.open,
         }),
@@ -285,6 +303,55 @@ export const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mergeAll(
+          Layer.mock(ProjectionKanbanRepository)({
+            list: () => Effect.succeed([]),
+            getById: () => Effect.succeed(Option.none()),
+            create: (input) =>
+              Effect.succeed({
+                cardId: "mock-card-id" as never,
+                projectId: input.projectId,
+                title: input.title,
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: input.content,
+                createdAt: input.createdAt,
+                updatedAt: input.updatedAt,
+              }),
+            update: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: input.title,
+                status: "backlog" as const,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: input.content,
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            move: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: "Mock card",
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: "# Mock card\n",
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            reorderWithinStatus: (input) =>
+              Effect.succeed({
+                cardId: input.cardId,
+                projectId: null,
+                title: "Mock card",
+                status: input.status,
+                absolutePath: "/mock/kanban/global/mock.md",
+                content: "# Mock card\n",
+                createdAt: input.updatedAt,
+                updatedAt: input.updatedAt,
+              }),
+            deleteById: () => Effect.void,
+          }),
           Layer.mock(ProjectionNoteRepository)({
             list: () => Effect.succeed([]),
             getById: () => Effect.succeed(Option.none()),
@@ -450,8 +517,8 @@ export const buildAppUnderTest = (options?: {
           record: () => Effect.void,
         }),
       ),
-      Layer.provide(workspaceAndProjectServicesLayer),
-      Layer.provide(layerConfig),
+      (layer) =>
+        layer.pipe(Layer.provide(workspaceAndProjectServicesLayer), Layer.provide(layerConfig)),
     );
 
     yield* Layer.build(appLayer);

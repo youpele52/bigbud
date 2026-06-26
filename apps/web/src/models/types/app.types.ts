@@ -71,7 +71,22 @@ export interface ChatPathAttachment {
   entryKind: "file" | "directory";
 }
 
-export type ChatAttachment = ChatImageAttachment | ChatFileAttachment | ChatPathAttachment;
+export interface ChatThreadAttachment {
+  type: "thread";
+  id: string;
+  name: string;
+  mimeType: "application/x-bigbud-thread-reference";
+  sizeBytes: 0;
+  threadId: ThreadId;
+  title: string;
+  watchForCompletion?: boolean;
+}
+
+export type ChatAttachment =
+  | ChatImageAttachment
+  | ChatFileAttachment
+  | ChatPathAttachment
+  | ChatThreadAttachment;
 
 export interface ChatMessageReplyTarget {
   messageId: MessageId;
@@ -161,6 +176,10 @@ export interface Thread {
   worktreePath: string | null;
   turnDiffSummaries: TurnDiffSummary[];
   activities: OrchestrationThreadActivity[];
+  watchingThreads?: Array<{
+    threadId: ThreadId;
+    title: string;
+  }>;
 }
 
 export interface SidebarThreadSummary {

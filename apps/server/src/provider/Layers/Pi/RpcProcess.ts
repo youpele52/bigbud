@@ -11,6 +11,7 @@ import {
   createPiRemoteWorkspaceBridge,
   type PiRemoteWorkspaceExtensionBridge,
 } from "./PiRemoteWorkspaceBridge.ts";
+import { composeBridgeCleanups } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReady } from "../../../ssh/sshVerification.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
@@ -123,6 +124,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     const rpcArgs = [
       ...(options.sessionFile ? ["--session", options.sessionFile] : []),
       ...(bridge ? bridge.extraArgs : []),
+      ...(options.orchestrationBridge ? options.orchestrationBridge.extraArgs : []),
     ];
     const invocation = isLocalProviderRuntimeTarget(options.providerRuntimeTarget)
       ? buildPiRpcInvocation(options.binaryPath, rpcArgs)
@@ -149,7 +151,9 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
         shell: useWindowsShell,
       });
     } catch (error) {
-      void bridge?.cleanup().catch(() => undefined);
+      void composeBridgeCleanups(bridge?.cleanup, options.orchestrationBridge?.cleanup)().catch(
+        () => undefined,
+      );
       throw error;
     }
 
@@ -162,12 +166,17 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     let exitPromise: Promise<void> | undefined;
     let cleanedUp = false;
 
-    const cleanupBridge = () => {
+    const cleanupBridge = composeBridgeCleanups(
+      bridge?.cleanup,
+      options.orchestrationBridge?.cleanup,
+    );
+
+    const cleanupBridgeOnce = () => {
       if (cleanedUp) {
         return;
       }
       cleanedUp = true;
-      void bridge?.cleanup().catch(() => undefined);
+      void cleanupBridge().catch(() => undefined);
     };
 
     const rejectAllPending = (error: Error) => {
@@ -241,13 +250,13 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
 
     child.once("error", (error) => {
       closed = true;
-      cleanupBridge();
+      cleanupBridgeOnce();
       rejectAllPending(error instanceof Error ? error : new Error(String(error)));
     });
 
     child.once("exit", (code, signal) => {
       closed = true;
-      cleanupBridge();
+      cleanupBridgeOnce();
       rejectAllPending(
         describePiExit({
           command: invocation.command,
@@ -330,13 +339,13 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
 
       exitPromise = new Promise<void>((resolve) => {
         if (closed || child.exitCode !== null) {
-          cleanupBridge();
+          cleanupBridgeOnce();
           resolve();
           return;
         }
 
         child.once("exit", () => {
-          cleanupBridge();
+          cleanupBridgeOnce();
           resolve();
         });
 

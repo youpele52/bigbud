@@ -228,6 +228,23 @@ export function ChatViewContent({
                   <span className="h-px flex-1 bg-border" />
                 </div>
               ) : null}
+              {base.activeThread && (base.activeThread.watchingThreads?.length ?? 0) > 0 ? (
+                <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+                    Watching
+                  </span>
+                  {base.activeThread.watchingThreads!.map((watch) => (
+                    <Link
+                      key={watch.threadId}
+                      to="/$threadId"
+                      params={{ threadId: watch.threadId }}
+                      className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {watch.title}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
               <MessagesTimeline
                 key={base.activeThread!.id}
                 isWorking={thread.isWorking}

@@ -26,17 +26,18 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
         size="sm"
         variant="ghost"
         disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "cancel")}
+        onClick={() => void onRespondToApproval(requestId, "decline")}
+        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
       >
-        Cancel turn
+        Decline
       </Button>
       <Button
         size="sm"
-        variant="destructive-outline"
+        variant="ghost"
         disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "decline")}
+        onClick={() => void onRespondToApproval(requestId, "cancel")}
       >
-        Decline
+        Cancel turn
       </Button>
       {sessionApprovalAvailable !== false ? (
         <Button

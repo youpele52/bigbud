@@ -19,7 +19,7 @@ import type {
 /** Encapsulates all thread-level actions for the sidebar. */
 export function useSidebarThreadActions({
   sidebarThreadsById,
-  projectCwdById,
+  projectCwdById: _projectCwdById,
   appSettings,
   navigateToThreadRoute,
   cancelProjectRename,
@@ -202,8 +202,6 @@ export function useSidebarThreadActions({
       if (!api) return;
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-      const threadWorkspacePath =
-        thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null;
       const isFavorite = appSettings.favoriteThreadIds.includes(threadId);
       const clicked = await api.contextMenu.show(
         [
@@ -256,15 +254,16 @@ export function useSidebarThreadActions({
         return;
       }
       if (clicked === "copy-path") {
-        if (!threadWorkspacePath) {
+        try {
+          const { path } = await api.server.exportThreadContext({ threadId });
+          copyPathToClipboard(path, { path });
+        } catch {
           toastManager.add({
             type: "error",
             title: "Path unavailable",
-            description: "This thread does not have a workspace path to copy.",
+            description: "Failed to export thread context path.",
           });
-          return;
         }
-        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
         return;
       }
       if (clicked === "copy-thread-id") {
@@ -283,7 +282,6 @@ export function useSidebarThreadActions({
       copyThreadIdToClipboard,
       handleBranchThread,
       markThreadUnread,
-      projectCwdById,
       requestThreadDelete,
       renamingCommittedRef,
       setRenamingThreadId,

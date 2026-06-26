@@ -71,6 +71,12 @@ export const ParentThreadReference = Schema.Struct({
 });
 export type ParentThreadReference = typeof ParentThreadReference.Type;
 
+export const WatchingThreadReference = Schema.Struct({
+  threadId: ThreadId,
+  title: TrimmedNonEmptyString,
+});
+export type WatchingThreadReference = typeof WatchingThreadReference.Type;
+
 export const OrchestrationSessionStatus = Schema.Literals([
   "idle",
   "starting",
@@ -184,6 +190,7 @@ export const OrchestrationThread = Schema.Struct({
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
+  watchingThreads: Schema.Array(WatchingThreadReference).pipe(Schema.withDecodingDefault(() => [])),
 });
 export type OrchestrationThread = typeof OrchestrationThread.Type;
 

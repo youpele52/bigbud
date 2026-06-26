@@ -1,4 +1,14 @@
 import {
+  type KanbanCard,
+  type KanbanCreateInput,
+  type KanbanDeleteInput,
+  type KanbanDeleteResult,
+  type KanbanGetInput,
+  type KanbanListInput,
+  type KanbanListResult,
+  type KanbanMoveInput,
+  type KanbanReorderInput,
+  type KanbanUpdateInput,
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
   type ServerAutomationResult,
@@ -42,7 +52,13 @@ import {
   type ServerTriggerAutomationInput,
   type ServerTriggerAutomationResult,
   type ServerUpdateAutomationInput,
+  type ServerExportThreadContextInput,
+  type ServerExportThreadContextResult,
+  type ServerCreateMobileRemotePairingInput,
+  type ServerListMobileRemoteSessionsResult,
+  type ServerMobileRemotePairing,
   WS_METHODS,
+  type ServerRevokeMobileRemoteSessionInput,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 
@@ -108,6 +124,15 @@ export interface WsRpcClient {
     readonly update: (input: NotesUpdateInput) => Promise<Note>;
     readonly delete: (input: NotesDeleteInput) => Promise<NotesDeleteResult>;
   };
+  readonly kanban: {
+    readonly list: (input: KanbanListInput) => Promise<KanbanListResult>;
+    readonly get: (input: KanbanGetInput) => Promise<KanbanCard>;
+    readonly create: (input: KanbanCreateInput) => Promise<KanbanCard>;
+    readonly update: (input: KanbanUpdateInput) => Promise<KanbanCard>;
+    readonly delete: (input: KanbanDeleteInput) => Promise<KanbanDeleteResult>;
+    readonly move: (input: KanbanMoveInput) => Promise<KanbanCard>;
+    readonly reorder: (input: KanbanReorderInput) => Promise<KanbanCard>;
+  };
   readonly teach: {
     readonly listProjects: (input: TeachListProjectsInput) => Promise<TeachListProjectsResult>;
   };
@@ -164,6 +189,16 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly createMobileRemotePairing: (
+      input: ServerCreateMobileRemotePairingInput,
+    ) => Promise<ServerMobileRemotePairing>;
+    readonly listMobileRemoteSessions: () => Promise<ServerListMobileRemoteSessionsResult>;
+    readonly revokeMobileRemoteSession: (
+      input: ServerRevokeMobileRemoteSessionInput,
+    ) => Promise<void>;
+    readonly exportThreadContext: (
+      input: ServerExportThreadContextInput,
+    ) => Promise<ServerExportThreadContextResult>;
     readonly getAutomation: (input: ServerGetAutomationInput) => Promise<ServerGetAutomationResult>;
     readonly listAutomations: (
       input: ServerListAutomationsInput,
@@ -264,6 +299,15 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       update: (input) => transport.request((client) => client[WS_METHODS.notesUpdate](input)),
       delete: (input) => transport.request((client) => client[WS_METHODS.notesDelete](input)),
     },
+    kanban: {
+      list: (input) => transport.request((client) => client[WS_METHODS.kanbanList](input)),
+      get: (input) => transport.request((client) => client[WS_METHODS.kanbanGet](input)),
+      create: (input) => transport.request((client) => client[WS_METHODS.kanbanCreate](input)),
+      update: (input) => transport.request((client) => client[WS_METHODS.kanbanUpdate](input)),
+      delete: (input) => transport.request((client) => client[WS_METHODS.kanbanDelete](input)),
+      move: (input) => transport.request((client) => client[WS_METHODS.kanbanMove](input)),
+      reorder: (input) => transport.request((client) => client[WS_METHODS.kanbanReorder](input)),
+    },
     teach: {
       listProjects: (input) =>
         transport.request((client) => client[WS_METHODS.teachListProjects](input)),
@@ -341,6 +385,14 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      createMobileRemotePairing: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
+      listMobileRemoteSessions: () =>
+        transport.request((client) => client[WS_METHODS.serverListMobileRemoteSessions]({})),
+      revokeMobileRemoteSession: (input) =>
+        transport.request((client) => client[WS_METHODS.serverRevokeMobileRemoteSession](input)),
+      exportThreadContext: (input) =>
+        transport.request((client) => client[WS_METHODS.serverExportThreadContext](input)),
       getAutomation: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetAutomation](input)),
       listAutomations: (input) =>

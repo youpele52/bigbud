@@ -11,16 +11,22 @@ export function openFilesPanel() {
 export function openFileInFilesPanel(
   relativePath: string,
   previewPosition?: { line: number; column: number | null } | null,
+  workspaceRootOverride: string | null = null,
 ) {
   openFilesPanel();
-  useFilesPanelStore.getState().requestFileOpen(relativePath, previewPosition ?? null);
+  useFilesPanelStore
+    .getState()
+    .requestFileOpen(relativePath, previewPosition ?? null, workspaceRootOverride);
 }
 
-export function openDirectoryInFilesPanel(relativePath: string) {
+export function openDirectoryInFilesPanel(
+  relativePath: string,
+  workspaceRootOverride: string | null = null,
+) {
   openFilesPanel();
   useFilesPanelStore.getState().setPreviewPath(null);
   useFilesPanelStore.getState().setPreviewPosition(null);
-  useFilesPanelStore.getState().requestDirectoryNavigation(relativePath);
+  useFilesPanelStore.getState().requestDirectoryNavigation(relativePath, workspaceRootOverride);
 }
 
 export function toggleFilesPanel() {
@@ -40,6 +46,7 @@ export function closeFilesPanel() {
   useRightPanelTabsStore.getState().closeTab("files");
   requestRightPanel(useRightPanelTabsStore.getState().activeKind);
   useFilesPanelStore.getState().setOpen(false);
+  useFilesPanelStore.getState().setWorkspaceRootOverride(null);
   useFilesPanelStore.getState().setPreviewPath(null);
   useFilesPanelStore.getState().setPreviewPosition(null);
 }

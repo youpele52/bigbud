@@ -13,7 +13,7 @@ import {
   type TurnId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
-import { Cache, Duration, Effect, FileSystem, Option, Scope } from "effect";
+import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -21,17 +21,20 @@ import { increment, orchestrationEventsProcessedTotal } from "../../observabilit
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
+import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
+import { ServerConfig } from "../../startup/config.ts";
 import { WorkspacePaths } from "../../workspace/Services/WorkspacePaths.ts";
 import {
-  canReplaceThreadTitle,
   formatProviderServiceCauseDetail,
   HANDLED_TURN_START_KEY_MAX,
   HANDLED_TURN_START_KEY_TTL_MINUTES,
   resolveThreadTitleSeed,
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
+import { shouldAllowAutoTitleReplace } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
@@ -77,8 +80,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const gitStatusBroadcaster = yield* GitStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const serverConfig = yield* ServerConfig;
   const workspacePaths = yield* WorkspacePaths;
   const fileSystem = yield* FileSystem.FileSystem;
+  const threadWatchRepository = yield* ProjectionThreadWatchRepository;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
     timeToLive: Duration.minutes(HANDLED_TURN_START_KEY_TTL_MINUTES),
@@ -168,6 +173,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     gitStatusBroadcaster,
     textGeneration,
     serverSettingsService,
+    serverConfig,
     threadModelSelections,
     setThreadSession,
     resolveThread,
@@ -266,7 +272,13 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         ...generationInput,
       }).pipe(Effect.forkScoped);
 
-      if (canReplaceThreadTitle(thread.title, resolvedTitleSeed)) {
+      if (
+        shouldAllowAutoTitleReplace({
+          threadId: event.payload.threadId,
+          currentTitle: thread.title,
+          ...(resolvedTitleSeed !== undefined ? { titleSeed: resolvedTitleSeed } : {}),
+        })
+      ) {
         if (resolvedTitleSeed !== undefined && thread.title.trim() !== resolvedTitleSeed.trim()) {
           yield* orchestrationEngine.dispatch({
             type: "thread.meta.update",
@@ -286,6 +298,25 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
           ...generationInput,
         }).pipe(Effect.forkScoped);
       }
+    }
+
+    const threadAttachments = message.attachments ?? [];
+    if (threadAttachments.some((attachment) => attachment.type === "thread")) {
+      yield* registerThreadWatchesFromAttachments({
+        repository: threadWatchRepository,
+        watcherThreadId: event.payload.threadId,
+        sourceMessageId: event.payload.messageId,
+        attachments: threadAttachments,
+        createdAt: event.payload.createdAt,
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("failed to register thread watches from attachments", {
+            threadId: event.payload.threadId,
+            messageId: event.payload.messageId,
+            cause: Cause.pretty(cause),
+          }),
+        ),
+      );
     }
 
     yield* sendTurnForThread(sessionOpServices)({

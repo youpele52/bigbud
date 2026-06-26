@@ -30,4 +30,8 @@ describe("getVisibleDirectoryPaths", () => {
       ),
     ).toEqual(["", "docs", "docs/plan"]);
   });
+
+  it("always includes the workspace root even when it has not loaded yet", () => {
+    expect(getVisibleDirectoryPaths({}, {})).toEqual([""]);
+  });
 });

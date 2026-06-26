@@ -23,6 +23,7 @@ export interface CursorAcpRuntimeInput extends Omit<
 > {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly cursorSettings: CursorAcpRuntimeCursorSettings | null | undefined;
+  readonly mcpServers?: ReadonlyArray<import("effect-acp/schema").McpServer>;
 }
 
 export interface CursorAcpModelSelectionErrorContext {
@@ -56,6 +57,7 @@ export const makeCursorAcpRuntime = (
         spawn: buildCursorAcpSpawnInput(input.cursorSettings, input.cwd),
         authMethodId: "cursor_login",
         clientCapabilities: CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
+        ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
       }).pipe(
         Layer.provide(
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),

@@ -10,13 +10,6 @@ import { PersistenceSqlError } from "../Errors.ts";
 
 const NOTES_DIR_SEGMENT = "notes";
 
-function sanitizeFilename(title: string): string {
-  return title
-    .replace(/[<>:"/\\|?*]/g, "_")
-    .replace(/\.{2,}/g, "_")
-    .trim();
-}
-
 function deriveNoteTitle(content: string): string {
   const firstLine =
     content
@@ -29,6 +22,15 @@ function deriveNoteTitle(content: string): string {
       .replace(/^#+\s*/, "")
       .trim()
       .slice(0, 200) || "Untitled note"
+  );
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+function formatTimestamp(date: Date): string {
+  return (
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
+    `-${pad2(date.getHours())}-${pad2(date.getMinutes())}-${pad2(date.getSeconds())}`
   );
 }
 
@@ -87,7 +89,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
         notes.push({
           noteId: noteRelPath as NoteId,
           projectId: input.projectId,
-          title: entry.slice(0, -3),
+          title: deriveNoteTitle(content),
           absolutePath,
           content,
           createdAt: mtime.toISOString(),
@@ -115,7 +117,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
           notes.push({
             noteId: noteRelPath as NoteId,
             projectId: null,
-            title: entry.slice(0, -3),
+            title: deriveNoteTitle(content),
             absolutePath,
             content,
             createdAt: mtime.toISOString(),
@@ -143,7 +145,6 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     const stat = yield* fs
       .stat(absolutePath)
       .pipe(Effect.orElseSucceed(() => ({ mtime: new Date() }) as { mtime: Date }));
-    const basename = input.noteId.split("/").pop() ?? input.noteId;
     const mtime = resolveMtime(stat);
 
     const projectId = input.noteId.includes("/global/") ? null : null;
@@ -151,7 +152,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     return Option.some({
       noteId: input.noteId,
       projectId,
-      title: basename.endsWith(".md") ? basename.slice(0, -3) : basename,
+      title: deriveNoteTitle(content),
       absolutePath,
       content,
       createdAt: mtime.toISOString(),
@@ -169,16 +170,22 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     readonly updatedAt: string;
   }) {
     const title = input.title ?? deriveNoteTitle(input.content);
-    const safeTitle = sanitizeFilename(title);
     const targetDir = input.projectId
       ? path.join(notesBaseDir, input.projectId)
       : path.join(notesBaseDir, "global");
-    const noteRelPath = path.relative(config.stateDir, path.join(targetDir, `${safeTitle}.md`));
-    const absolutePath = path.join(config.stateDir, noteRelPath);
 
-    const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
-    if (exists) {
-      return yield* fileSystemError("create", `A note named "${safeTitle}.md" already exists.`);
+    const timestamp = formatTimestamp(new Date());
+    let noteRelPath = path.relative(config.stateDir, path.join(targetDir, `${timestamp}.md`));
+    let absolutePath = path.join(config.stateDir, noteRelPath);
+
+    let counter = 1;
+    while (yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false))) {
+      noteRelPath = path.relative(
+        config.stateDir,
+        path.join(targetDir, `${timestamp}-${counter}.md`),
+      );
+      absolutePath = path.join(config.stateDir, noteRelPath);
+      counter++;
     }
 
     yield* fs
@@ -229,45 +236,15 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
       return yield* fileSystemError("update", "Note not found");
     }
 
-    const currentBasename = input.noteId.split("/").pop() ?? input.noteId;
-    const currentTitle = currentBasename.endsWith(".md")
-      ? currentBasename.slice(0, -3)
-      : currentBasename;
-
-    let noteId = input.noteId;
-    let foundPath = absolutePath;
-
-    if (input.title && input.title !== currentTitle) {
-      const safeTitle = sanitizeFilename(input.title);
-      const targetDir = path.dirname(absolutePath);
-      const newAbsolutePath = path.join(targetDir, `${safeTitle}.md`);
-      const newRelPath = path.relative(config.stateDir, newAbsolutePath);
-
-      const exists = yield* fs.exists(newAbsolutePath).pipe(Effect.orElseSucceed(() => false));
-      if (exists) {
-        return yield* fileSystemError("update", `A note named "${safeTitle}.md" already exists.`);
-      }
-
-      yield* fs
-        .rename(foundPath, newAbsolutePath)
-        .pipe(
-          Effect.mapError((cause) =>
-            fileSystemError("update.rename", "Failed to rename note", cause),
-          ),
-        );
-      foundPath = newAbsolutePath;
-      noteId = newRelPath as NoteId;
-    }
-
     yield* fs
-      .writeFileString(foundPath, input.content)
+      .writeFileString(absolutePath, input.content)
       .pipe(
         Effect.mapError((cause) =>
           fileSystemError("update.writeFile", "Failed to write note", cause),
         ),
       );
 
-    return yield* getById({ noteId }).pipe(
+    return yield* getById({ noteId: input.noteId }).pipe(
       Effect.flatMap((note) =>
         Option.match(note, {
           onNone: () => Effect.fail(fileSystemError("update", "Failed to load updated note")),

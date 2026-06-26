@@ -7,6 +7,7 @@ import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcAutomationHandlers } from "./wsRpcHandlers.automation";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
+import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
@@ -18,6 +19,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     return WsRpcGroup.of({
       ...makeWsRpcAutomationHandlers(context),
       ...makeWsRpcOrchestrationServerHandlers(context),
+      ...makeWsRpcKanbanHandlers(context),
       ...makeWsRpcNotesHandlers(context),
       ...makeWsRpcTeachHandlers(context),
       ...makeWsRpcGitTerminalHandlers(context),

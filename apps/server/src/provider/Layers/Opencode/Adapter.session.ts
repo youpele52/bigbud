@@ -68,7 +68,12 @@ export interface SessionMethodDeps {
   readonly runtimeEventQueue: Queue.Queue<ProviderRuntimeEvent>;
   readonly serverManager: OpencodeServerManagerShape;
   readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
-  readonly serverConfig: { readonly attachmentsDir: string };
+  readonly serverConfig: {
+    readonly attachmentsDir: string;
+    readonly stateDir: string;
+    readonly port: number;
+    readonly host: string | undefined;
+  };
   readonly nextEventId: Effect.Effect<EventId>;
   readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
@@ -212,6 +217,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
     sessions,
     serverManager,
     serverSettings,
+    serverConfig,
     emitFn,
     handleEventFn,
     syntheticEventFn,

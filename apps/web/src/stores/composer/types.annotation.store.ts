@@ -64,9 +64,25 @@ export const ComposerCodeAnnotationAttachment = Schema.Struct({
 });
 export type ComposerCodeAnnotationAttachment = typeof ComposerCodeAnnotationAttachment.Type;
 
+export const ComposerTerminalAnnotationAttachment = Schema.Struct({
+  ...ComposerAnnotationAttachmentBase.fields,
+  kind: Schema.Literal("terminal"),
+  terminal: Schema.Struct({
+    terminalId: Schema.String,
+    terminalLabel: Schema.String,
+  }),
+  selection: Schema.Struct({
+    startLine: Schema.Number,
+    endLine: Schema.Number,
+    text: Schema.String,
+  }),
+});
+export type ComposerTerminalAnnotationAttachment = typeof ComposerTerminalAnnotationAttachment.Type;
+
 export const ComposerAnnotationAttachment = Schema.Union([
   ComposerBrowserAnnotationAttachment,
   ComposerCodeAnnotationAttachment,
+  ComposerTerminalAnnotationAttachment,
 ]);
 export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.Type;
 
@@ -135,7 +151,7 @@ export function normalizeBrowserAnnotationViewport(viewport: unknown): ComposerA
 export function normalizeAnnotationAttachment(
   annotation: ComposerAnnotationAttachment,
 ): ComposerAnnotationAttachment {
-  if (isCodeAnnotationAttachment(annotation)) {
+  if (isCodeAnnotationAttachment(annotation) || isTerminalAnnotationAttachment(annotation)) {
     return {
       ...annotation,
       comment: normalizeAnnotationComment(annotation.comment),
@@ -157,8 +173,14 @@ export function isCodeAnnotationAttachment(
   return annotation.kind === "code";
 }
 
+export function isTerminalAnnotationAttachment(
+  annotation: ComposerAnnotationAttachment,
+): annotation is ComposerTerminalAnnotationAttachment {
+  return annotation.kind === "terminal";
+}
+
 export function isBrowserAnnotationAttachment(
   annotation: ComposerAnnotationAttachment,
 ): annotation is ComposerBrowserAnnotationAttachment {
-  return !isCodeAnnotationAttachment(annotation);
+  return !isCodeAnnotationAttachment(annotation) && !isTerminalAnnotationAttachment(annotation);
 }

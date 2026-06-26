@@ -25,6 +25,7 @@ export {
   ProjectIdLookupInput,
   ThreadIdLookupInput,
   WorkspaceRootLookupInput,
+  ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import {
   ProjectionCheckpointDbRowSchema,
@@ -40,6 +41,7 @@ import {
   ProjectionThreadMessageDbRowSchema,
   ProjectionThreadProposedPlanDbRowSchema,
   ProjectionThreadSessionDbRowSchema,
+  ProjectionThreadWatchDbRowSchema,
   ProjectIdLookupInput,
   ThreadIdLookupInput,
   WorkspaceRootLookupInput,
@@ -316,6 +318,20 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
       `,
   });
 
+  const listThreadWatchRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionThreadWatchDbRowSchema,
+    execute: () =>
+      sql`
+        SELECT
+          watcher_thread_id AS "watcherThreadId",
+          watched_thread_id AS "watchedThreadId",
+          watched_thread_title AS "watchedThreadTitle"
+        FROM projection_thread_watches
+        WHERE status = 'active'
+      `,
+  });
+
   const listCheckpointRowsByThread = SqlSchema.findAll({
     Request: ThreadIdLookupInput,
     Result: ProjectionCheckpointDbRowSchema,
@@ -352,6 +368,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
     getFirstActiveThreadIdByProject,
     getThreadCheckpointContextThreadRow,
     listCheckpointRowsByThread,
+    listThreadWatchRows,
   };
 }
 

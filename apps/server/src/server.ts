@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { Effect, Layer } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
@@ -10,13 +12,19 @@ import {
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
 } from "./ws/http";
+import { mobilePairingRoutesLayer } from "./ws/http.mobile";
+import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
+import { mobileWebsocketRpcRouteLayer } from "./ws/ws.mobile";
 import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
-import { makeEventNdjsonLogger } from "./provider/Layers/EventNdjsonLogger";
+import {
+  cleanupProviderLogDirectories,
+  makeEventNdjsonLogger,
+} from "./provider/Layers/EventNdjsonLogger";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
@@ -55,6 +63,7 @@ import { RuntimeReceiptBusLive } from "./orchestration/Layers/RuntimeReceiptBus"
 import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRuntimeIngestion";
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
+import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import { ServerSettingsLive } from "./ws/serverSettings";
@@ -67,7 +76,10 @@ import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
+import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
+import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/ProjectionThreadWatches";
+import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -123,6 +135,7 @@ const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SchedulerReactorLive),
+  Layer.provideMerge(ThreadWatchReactorLive),
   Layer.provideMerge(RuntimeReceiptBusLive),
   Layer.provideMerge(DefaultSchedulerConfigLive),
 );
@@ -157,13 +170,23 @@ const CheckpointingLayerLive = Layer.empty.pipe(
 
 const ProviderLayerLive = Layer.unwrap(
   Effect.gen(function* () {
-    const { providerEventLogPath } = yield* ServerConfig;
-    const nativeEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
-      stream: "native",
-    });
-    const canonicalEventLogger = yield* makeEventNdjsonLogger(providerEventLogPath, {
-      stream: "canonical",
-    });
+    const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
+    yield* cleanupProviderLogDirectories([
+      path.join(baseDir, "userdata", "logs", "provider"),
+      path.join(baseDir, "dev", "logs", "provider"),
+    ]);
+    const nativeEventLogger =
+      devUrl !== undefined
+        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+            stream: "native",
+          })
+        : undefined;
+    const canonicalEventLogger =
+      devUrl !== undefined
+        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+            stream: "canonical",
+          })
+        : undefined;
     const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
       Layer.provide(ProviderSessionRuntimeRepositoryLive),
     );
@@ -209,7 +232,14 @@ const ProviderLayerLive = Layer.unwrap(
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
+const KanbanPersistenceLayerLive = ProjectionKanbanRepositoryLive;
 const ThreadProjectionPersistenceLayerLive = ProjectionThreadRepositoryLive;
+const ProjectionPersistenceLayerLive = Layer.mergeAll(
+  KanbanPersistenceLayerLive,
+  NotesPersistenceLayerLive,
+  ThreadProjectionPersistenceLayerLive,
+  ProjectionThreadWatchRepositoryLive,
+);
 
 const GitLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -240,8 +270,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
-  Layer.provideMerge(NotesPersistenceLayerLive),
-  Layer.provideMerge(ThreadProjectionPersistenceLayerLive),
+  Layer.provideMerge(ProjectionPersistenceLayerLive),
   Layer.provideMerge(ProviderLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
@@ -261,6 +290,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),
   Layer.provideMerge(ServerLifecycleEventsLive),
+  Layer.provideMerge(MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive))),
 );
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
@@ -273,8 +303,11 @@ export const makeRoutesLayer = Layer.mergeAll(
   projectFaviconRouteLayer,
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
+  mobilePairingRoutesLayer,
   staticAndDevRouteLayer,
+  threadOrchestrationToolsRouteLayer,
   websocketRpcRouteLayer,
+  mobileWebsocketRpcRouteLayer,
 );
 
 export const makeServerLayer = Layer.unwrap(
