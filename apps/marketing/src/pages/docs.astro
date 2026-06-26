@@ -1,5 +1,8 @@
 ---
-import { GETTING_STARTED_METADATA } from "../constants/seo";
+import docsContent from "../components/page-specific/docs/_docs-content.md?raw";
+
+import MarkdownRenderer from "../components/shared/markdown-renderer/MarkdownRenderer.astro";
+import { DOCS_METADATA } from "../constants/seo";
 import {
   buildBreadcrumbSchema,
   buildOrganizationSchema,
@@ -7,7 +10,7 @@ import {
   buildWebsiteSchema,
 } from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
-import "./getting-started.css";
+import "./docs.css";
 
 const siteUrl = Astro.site?.toString().replace(/\/$/, "") ?? Astro.url.origin;
 const pageUrl = new URL(Astro.url.pathname, siteUrl).toString();
@@ -15,12 +18,12 @@ const structuredData = [
   buildOrganizationSchema({ pageUrl, siteUrl }),
   buildWebsiteSchema({ pageUrl, siteUrl }),
   buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
-  buildBreadcrumbSchema(pageUrl, "Getting Started", siteUrl),
+  buildBreadcrumbSchema(pageUrl, "Docs", siteUrl),
 ];
 ---
 
-<Layout {...GETTING_STARTED_METADATA} structuredData={structuredData}>
-  <section class="getting-started-page">
-    <h1 class="heading">getting started</h1>
+<Layout {...DOCS_METADATA} structuredData={structuredData}>
+  <section class="docs-page">
+    <MarkdownRenderer content={docsContent} />
   </section>
 </Layout>

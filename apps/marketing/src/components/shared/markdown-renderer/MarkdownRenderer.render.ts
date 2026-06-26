@@ -32,6 +32,31 @@ function isSafeHref(href: string): boolean {
   return /^(https?:\/\/|mailto:|\/|#)/.test(href);
 }
 
+function isSafeIframeSrc(src: string): boolean {
+  return /^https:\/\/(www\.)?(youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|player\.vimeo\.com\/video\/)/.test(
+    src,
+  );
+}
+
+function renderIframe(raw: string): string {
+  const match = /<iframe\b([^>]*)><\/iframe>/i.exec(raw.trim());
+  if (!match) {
+    return "";
+  }
+
+  const attrs = match[1] ?? "";
+  const srcMatch = /\bsrc\s*=\s*"([^"]+)"/i.exec(attrs);
+  if (!srcMatch || !isSafeIframeSrc(srcMatch[1])) {
+    return "";
+  }
+
+  const allowedSrc = escapeAttribute(srcMatch[1]);
+  const titleMatch = /\btitle\s*=\s*"([^"]*)"/i.exec(attrs);
+  const title = titleMatch ? escapeAttribute(titleMatch[1]) : "embedded video";
+
+  return `<div class="md-embed"><iframe src="${allowedSrc}" title="${title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`;
+}
+
 function isSafeImageSrc(src: string): boolean {
   return /^(https?:\/\/|\/|\.\/|\.\.\/)/.test(src);
 }
@@ -109,7 +134,11 @@ function tokenizeInline(value: string): { text: string; tokens: string[] } {
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) => {
     const safeHref = href.trim();
     const token = `%%TOKEN${tokens.length}%%`;
-    const linkLabel = escapeHtml(label.trim());
+    const trimmedLabel = label.trim();
+    const nestedToken = /^%%TOKEN(\d+)%%$/.exec(trimmedLabel);
+    const linkLabel = nestedToken
+      ? (tokens[Number(nestedToken[1])] ?? "")
+      : escapeHtml(trimmedLabel);
 
     if (!isSafeHref(safeHref)) {
       tokens.push(linkLabel);
@@ -158,6 +187,43 @@ function renderList(lines: string[], ordered: boolean): string {
     .join("");
 
   return `<${tag}${classAttr(getListClasses(ordered))}>${items}</${tag}>`;
+}
+
+function parseTableLine(line: string): string[] | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return undefined;
+  }
+  const inner = trimmed.slice(1, -1);
+  if (!inner.includes("|")) {
+    return undefined;
+  }
+  return inner.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return false;
+  }
+  const inner = trimmed.slice(1, -1);
+  return /^(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*$/.test(inner);
+}
+
+function renderTable(headerCells: string[], rows: string[][]): string {
+  const headerHtml = headerCells
+    .map((cell) => `<th${classAttr("md-table__th")}>${renderInline(cell)}</th>`)
+    .join("");
+  const bodyHtml = rows
+    .map((row) => {
+      const cells = row
+        .map((cell) => `<td${classAttr("md-table__td")}>${renderInline(cell)}</td>`)
+        .join("");
+      return `<tr${classAttr("md-table__tr")}>${cells}</tr>`;
+    })
+    .join("");
+
+  return `<div${classAttr("md-table-wrap")}><table${classAttr("md-table")}><thead${classAttr("md-table__head")}><tr${classAttr("md-table__tr")}>${headerHtml}</tr></thead><tbody${classAttr("md-table__body")}>${bodyHtml}</tbody></table></div>`;
 }
 
 function renderCodeBlock(lines: string[]): string {
@@ -245,6 +311,20 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
       continue;
     }
 
+    if (trimmed.toLowerCase().startsWith("<iframe")) {
+      const iframeLines = [trimmed];
+      while (index + 1 < lines.length) {
+        const nextLine = lines[index + 1]?.trim() ?? "";
+        iframeLines.push(nextLine);
+        index += 1;
+        if (nextLine.toLowerCase().includes("</iframe>")) {
+          break;
+        }
+      }
+      sections.push({ html: renderIframe(iframeLines.join(" ")) });
+      continue;
+    }
+
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
     if (headingMatch) {
       const level = headingMatch[1].length;
@@ -259,6 +339,27 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
     const image = parseImageLine(trimmed);
     if (image) {
       sections.push({ html: renderImage(image.alt, image.src) });
+      continue;
+    }
+
+    const headerCells = parseTableLine(trimmed);
+    const nextLine = lines[index + 1]?.trim() ?? "";
+    if (headerCells && isTableSeparator(nextLine)) {
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length) {
+        const dataLine = lines[index]?.trim() ?? "";
+        if (dataLine.length === 0) {
+          break;
+        }
+        const dataCells = parseTableLine(dataLine);
+        if (!dataCells) {
+          break;
+        }
+        rows.push(dataCells);
+        index += 1;
+      }
+      sections.push({ html: renderTable(headerCells, rows) });
       continue;
     }
 
