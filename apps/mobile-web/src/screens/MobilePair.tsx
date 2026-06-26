@@ -61,7 +61,7 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("Timed out reaching the desktop backend.");
+      throw new Error("Timed out reaching the desktop backend.", { cause: error });
     }
     throw error;
   } finally {
@@ -174,10 +174,7 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
           />
         </label>
         {statusQuery.data ? (
-          <MobileMuted>
-            Scope {statusQuery.data.scope} · expires{" "}
-            {new Date(statusQuery.data.expiresAt).toLocaleString()}
-          </MobileMuted>
+          <MobileMuted>Expires {new Date(statusQuery.data.expiresAt).toLocaleString()}</MobileMuted>
         ) : null}
         {pairingUnavailableMessage ? (
           <p className="text-xs text-destructive">{pairingUnavailableMessage}</p>

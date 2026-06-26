@@ -25,7 +25,6 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
-import { MobileRemoteControlScope } from "../server/mobile";
 
 const DEFAULT_CHAT_CWD = "~/Documents";
 
@@ -186,9 +185,6 @@ export type ObservabilitySettings = typeof ObservabilitySettings.Type;
 
 export const MobileRemoteControlSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  defaultScope: MobileRemoteControlScope.pipe(
-    Schema.withDecodingDefault(() => "thread-control" as const satisfies MobileRemoteControlScope),
-  ),
 });
 export type MobileRemoteControlSettings = typeof MobileRemoteControlSettings.Type;
 
@@ -403,7 +399,6 @@ export const ServerSettingsPatch = Schema.Struct({
   mobileRemoteControl: Schema.optionalKey(
     Schema.Struct({
       enabled: Schema.optionalKey(Schema.Boolean),
-      defaultScope: Schema.optionalKey(MobileRemoteControlScope),
     }),
   ),
   providers: Schema.optionalKey(
