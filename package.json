@@ -39,7 +39,7 @@
     "build": "turbo run build",
     "build:marketing": "turbo run build --filter=@bigbud/marketing",
     "build:mobile-web": "turbo run build --filter=@bigbud/mobile-web",
-    "build:mobile-web:desktop": "bun run --cwd apps/mobile-web build:desktop",
+    "build:mobile-web:desktop": "bun run --cwd apps/mobile-web build:desktop && node scripts/copy-mobile-web-desktop.mjs",
     "build:desktop": "turbo run build --filter=@bigbud/desktop --filter=@bigbud/server",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives && bun run scripts/check-test-file-length.ts",
