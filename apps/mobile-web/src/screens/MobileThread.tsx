@@ -30,6 +30,7 @@ import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { useMobileThread } from "../hooks/useMobileThread";
 import { useMobileWorkingState } from "../hooks/useMobileWorkingState";
+import { useMobileGitStatus } from "../hooks/useMobileGitStatus";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import {
   clearMobileDraftThread,
@@ -48,6 +49,7 @@ import {
 } from "../lib/mobileModels";
 import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
+import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 
 function newId() {
@@ -89,6 +91,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
+  const lastMessageFingerprintRef = useRef<string | null>(null);
 
   const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
 
@@ -98,6 +101,37 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   );
 
   const thread = threadQuery.data ?? snapshotThread;
+
+  const composerProject = useMemo(() => {
+    const snapshot = snapshotQuery.data;
+    if (!snapshot) {
+      return null;
+    }
+    const projectId = thread?.projectId ?? draftThread?.projectId;
+    if (!projectId) {
+      return null;
+    }
+    return snapshot.projects.find((candidate) => candidate.id === projectId) ?? null;
+  }, [draftThread, snapshotQuery.data, thread]);
+
+  const composerWorkspaceRoot = useMemo(() => {
+    const snapshot = snapshotQuery.data;
+    if (!snapshot) {
+      return undefined;
+    }
+    if (thread) {
+      return resolveThreadWorkspaceRoot(snapshot, thread);
+    }
+    if (draftThread) {
+      return resolveDraftWorkspaceRoot(snapshot, draftThread);
+    }
+    return undefined;
+  }, [draftThread, snapshotQuery.data, thread]);
+
+  const gitStatusQuery = useMobileGitStatus(
+    composerWorkspaceRoot ?? null,
+    composerProject ? resolveWorkspaceExecutionTargetId(composerProject) : null,
+  );
 
   const approvals = useMemo(
     () => (thread ? derivePendingApprovals(thread.activities) : []),
@@ -161,6 +195,30 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     }, 96);
     return () => window.clearTimeout(timeoutId);
   }, [threadId, thread]);
+
+  useLayoutEffect(() => {
+    if (!thread) {
+      return;
+    }
+    const lastMessage = thread.messages.at(-1);
+    const fingerprint = lastMessage
+      ? `${lastMessage.id}:${lastMessage.text.length}:${lastMessage.streaming ? 1 : 0}`
+      : `empty:${thread.messages.length}`;
+    if (lastMessageFingerprintRef.current === fingerprint) {
+      return;
+    }
+    lastMessageFingerprintRef.current = fingerprint;
+
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+    const distanceFromBottom =
+      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    if (isRunning || distanceFromBottom < 120) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }, [isRunning, thread]);
 
   const interruptTurn = useCallback(async () => {
     if (!client) {
@@ -504,6 +562,10 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         pendingUserInput={activePendingUserInput}
         placeholder="Ask anything, @tag files/folders, or use / commands"
         projectTitle={projectTitle}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
+        activeThreadBranch={thread?.branch ?? draftThread?.branch ?? null}
+        activeWorktreePath={thread?.worktreePath ?? draftThread?.worktreePath ?? null}
+        currentGitBranch={gitStatusQuery.data?.branch ?? null}
         userInputAnswers={activeUserInputAnswers}
         userInputQuestionIndex={activeUserInputQuestionIndex}
         value={prompt}

@@ -1,5 +1,7 @@
 import {
   ORCHESTRATION_WS_METHODS,
+  type GitStatusInput,
+  type GitStatusResult,
   type OrchestrationReadModel,
   type ThreadId,
   WS_METHODS,
@@ -30,6 +32,8 @@ export class MobileRpcClient {
   private readonly runtime: ManagedRuntime.ManagedRuntime<RpcClient.Protocol, never>;
   private readonly clientScope: Scope.Closeable;
   private readonly clientPromise: Promise<MobileRpcProtocolClient>;
+  private readonly domainEventListeners = new Set<(event: unknown) => void>();
+  private domainEventCancel: (() => void) | null = null;
 
   constructor(
     private readonly wsUrl: string,
@@ -43,8 +47,18 @@ export class MobileRpcClient {
   }
 
   async dispose() {
+    this.stopDomainEventStream();
     await this.runtime.runPromise(Scope.close(this.clientScope, Exit.void));
     this.runtime.dispose();
+  }
+
+  async refreshGitStatus(input: GitStatusInput): Promise<GitStatusResult> {
+    const client = await this.clientPromise;
+    try {
+      return await this.runtime.runPromise(client[WS_METHODS.gitRefreshStatus](input));
+    } catch (error) {
+      throw new Error(formatRpcError(error), { cause: error });
+    }
   }
 
   async getSnapshot(): Promise<OrchestrationReadModel> {
@@ -110,13 +124,26 @@ export class MobileRpcClient {
   }
 
   onDomainEvent(listener: (event: unknown) => void): () => void {
-    let closed = false;
-    const cancel = this.runtime.runCallback(
+    this.domainEventListeners.add(listener);
+    this.ensureDomainEventStream();
+    return () => {
+      this.domainEventListeners.delete(listener);
+      if (this.domainEventListeners.size === 0) {
+        this.stopDomainEventStream();
+      }
+    };
+  }
+
+  private ensureDomainEventStream() {
+    if (this.domainEventCancel !== null) {
+      return;
+    }
+    this.domainEventCancel = this.runtime.runCallback(
       Effect.promise(() => this.clientPromise).pipe(
         Effect.flatMap((client) =>
           Stream.runForEach(client[WS_METHODS.subscribeOrchestrationDomainEvents]({}), (event) =>
             Effect.sync(() => {
-              if (!closed) {
+              for (const listener of this.domainEventListeners) {
                 listener(event);
               }
             }),
@@ -125,10 +152,14 @@ export class MobileRpcClient {
         Effect.catch(() => Effect.void),
       ),
     );
-    return () => {
-      closed = true;
-      cancel();
-    };
+  }
+
+  private stopDomainEventStream() {
+    if (this.domainEventCancel === null) {
+      return;
+    }
+    this.domainEventCancel();
+    this.domainEventCancel = null;
   }
 
   onServerConfigEvent(listener: (event: unknown) => void): () => void {

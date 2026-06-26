@@ -1,4 +1,3 @@
-import { Effect, Layer, Option, Schema, Stream } from "effect";
 import {
   type ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
@@ -12,6 +11,7 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
+import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -181,6 +181,10 @@ const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
           }),
           { "rpc.aggregate": "mobile-server" },
         ),
+      [WS_METHODS.gitRefreshStatus]: (input: Parameters<typeof context.gitManager.status>[0]) =>
+        observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
+          "rpc.aggregate": "mobile-git",
+        }),
     });
   }),
 );

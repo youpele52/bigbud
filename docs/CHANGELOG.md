@@ -9,6 +9,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added a standalone **mobile web companion** (`apps/mobile-web`) for steering bigbud from your phone — browse chats and projects, open threads, watch live turns, send prompts, interrupt runs, approve or reject pending actions, inspect diffs, and archive threads without the full desktop shell.
 - Pair your phone from **Settings → Mobile Remote**: enable scoped mobile sessions, create a pairing link, and authorize the device in the hosted companion. Sessions are short-lived, scope-limited (`read-only`, `approve-only`, or `thread-control`), and can be revoked immediately from desktop.
 - The hosted companion and desktop backend stay intentionally separate — configure the **Mobile app URL** (for example `https://mobile.bigbud.app`) and a reachable **Backend URL** so the phone can pair over the same network or, with **Tailscale Serve**, from another Wi-Fi on your tailnet.
+- Added **live message streaming** in the mobile thread view — user and assistant text updates in real time as domain events arrive, with incremental cache updates and streaming markdown rendering so you can follow a turn without leaving the chat.
+- Added **project and git context** below the mobile composer on git-backed projects — folder icon with project name on the left and the current branch on the right, aligned with the desktop chat footer.
 
 ### Kanban
 

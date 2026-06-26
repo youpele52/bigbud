@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 
+import { useMobileOrchestrationSync } from "../hooks/useMobileOrchestrationSync";
 import { MobileRpcClient } from "../lib/mobileRpc";
 import { resolveMobileWebsocketUrl } from "../lib/mobileSession";
 import { useMobileSessionState } from "./MobileSessionContext";
@@ -20,6 +21,7 @@ export function MobileRpcProvider({ children }: { children: ReactNode }) {
   const { session } = useMobileSessionState();
   const wsUrl = useMemo(() => (session ? resolveMobileWebsocketUrl(session) : null), [session]);
   const client = useMemo(() => (wsUrl ? new MobileRpcClient(wsUrl) : null), [wsUrl]);
+  useMobileOrchestrationSync(session, client);
 
   useEffect(() => {
     return () => {
