@@ -21,6 +21,7 @@ import { decodeOtlpTraceRecords } from "../observability/TraceRecord.ts";
 import { BrowserTraceCollector } from "../observability/Services/BrowserTraceCollector.ts";
 import { ProjectFaviconResolver } from "../project/Services/ProjectFaviconResolver";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
+import { makeCorsMiddleware } from "./http.cors";
 
 const PROJECT_FAVICON_CACHE_CONTROL = "public, max-age=3600";
 const FALLBACK_PROJECT_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#6b728080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-fallback="project-favicon"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>`;
@@ -446,10 +447,13 @@ export const otlpTracesProxyRouteLayer = HttpRouter.add(
   }),
 ).pipe(
   Layer.provide(
-    HttpRouter.cors({
-      allowedMethods: ["POST", "OPTIONS"],
-      allowedHeaders: ["content-type"],
-      maxAge: 600,
-    }),
+    HttpRouter.middleware(
+      makeCorsMiddleware({
+        allowedMethods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["content-type"],
+        maxAge: 600,
+      }),
+      { global: true },
+    ),
   ),
 );

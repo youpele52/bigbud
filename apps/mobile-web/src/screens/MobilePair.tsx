@@ -20,6 +20,39 @@ function readPairingSecret() {
   return hash.startsWith("#secret=") ? decodeURIComponent(hash.slice("#secret=".length)) : "";
 }
 
+const MOBILE_PAIRING_REQUEST_TIMEOUT_MS = 10_000;
+
+function formatMobileBackendError(error: unknown): string {
+  if (
+    error instanceof Error &&
+    (error.message === "Load failed" || error.message === "Failed to fetch")
+  ) {
+    return "Could not reach the desktop backend. Confirm Tailscale is connected on this phone.";
+  }
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Could not reach the desktop backend.";
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), MOBILE_PAIRING_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Timed out reaching the desktop backend.");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export function MobilePair({ pairingId }: { pairingId: string }) {
   const navigate = useNavigate();
   const { setSession } = useMobileSessionState();
@@ -36,7 +69,7 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
     enabled: backendBaseUrl.length > 0,
     queryKey: ["mobile-pairing", backendBaseUrl, pairingId],
     queryFn: async () => {
-      const response = await fetch(`${backendBaseUrl}/api/mobile/pairing/${pairingId}`);
+      const response = await fetchWithTimeout(`${backendBaseUrl}/api/mobile/pairing/${pairingId}`);
       if (!response.ok) {
         throw new Error("Pairing link is invalid or expired.");
       }
@@ -48,21 +81,34 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
         available: boolean;
       }>;
     },
+    retry: 0,
   });
+  const pairingUnavailableMessage = useMemo(() => {
+    if (!statusQuery.data || statusQuery.data.available) {
+      return null;
+    }
+    if (!statusQuery.data.enabled) {
+      return "Mobile remote control is disabled on the desktop.";
+    }
+    return "This pairing link has already been used or expired. Create a fresh link from the desktop app.";
+  }, [statusQuery.data]);
 
   async function confirmPairing() {
     setError(null);
     try {
-      const response = await fetch(`${backendBaseUrl}/api/mobile/pairing/${pairingId}/exchange`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const response = await fetchWithTimeout(
+        `${backendBaseUrl}/api/mobile/pairing/${pairingId}/exchange`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            secret,
+            label: label.trim() || "mobile-device",
+          }),
         },
-        body: JSON.stringify({
-          secret,
-          label: label.trim() || "mobile-device",
-        }),
-      });
+      );
       if (!response.ok) {
         throw new Error("Pairing could not be completed.");
       }
@@ -84,8 +130,8 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
       writeMobileSession(nextSession);
       setSession(nextSession);
       await navigate({ to: "/mobile" });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch (error) {
+      setError(formatMobileBackendError(error));
     }
   }
 
@@ -113,13 +159,12 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
             {new Date(statusQuery.data.expiresAt).toLocaleString()}
           </MobileMuted>
         ) : null}
+        {pairingUnavailableMessage ? (
+          <p className="text-xs text-destructive">{pairingUnavailableMessage}</p>
+        ) : null}
         {statusQuery.isLoading ? <MobileMuted>Checking pairing status...</MobileMuted> : null}
         {statusQuery.isError ? (
-          <p className="text-xs text-destructive">
-            {statusQuery.error instanceof Error
-              ? statusQuery.error.message
-              : "Could not reach the desktop backend."}
-          </p>
+          <p className="text-xs text-destructive">{formatMobileBackendError(statusQuery.error)}</p>
         ) : null}
         {missingSecret ? (
           <p className="text-xs text-destructive">

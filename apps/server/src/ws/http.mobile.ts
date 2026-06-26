@@ -7,6 +7,7 @@ import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
+import { makeCorsMiddleware } from "./http.cors";
 
 const PAIRING_PREFIX = "/api/mobile/pairing/";
 
@@ -20,6 +21,12 @@ function parsePairingId(pathname: string): string | null {
 }
 
 const decodeMobilePairingExchangeRequest = Schema.decodeUnknownSync(MobilePairingExchangeRequest);
+
+const mobilePairingCors = makeCorsMiddleware({
+  allowedHeaders: ["content-type"],
+  allowedMethods: ["GET", "POST", "OPTIONS"],
+  maxAge: 600,
+});
 
 export const mobilePairingRouteLayer = HttpRouter.add(
   "GET",
@@ -112,12 +119,4 @@ export const mobilePairingExchangeRouteLayer = HttpRouter.add(
 export const mobilePairingRoutesLayer = Layer.mergeAll(
   mobilePairingRouteLayer,
   mobilePairingExchangeRouteLayer,
-).pipe(
-  Layer.provide(
-    HttpRouter.cors({
-      allowedMethods: ["GET", "POST", "OPTIONS"],
-      allowedHeaders: ["content-type"],
-      maxAge: 600,
-    }),
-  ),
-);
+).pipe(Layer.provide(HttpRouter.middleware(mobilePairingCors, { global: true })));

@@ -19,7 +19,7 @@ export function useMobileSnapshot(session: { sessionId: string } | null) {
     enabled: client !== null && session !== null,
     queryKey: ["mobile-snapshot", session?.sessionId ?? "anonymous"],
     queryFn: () => client!.getSnapshot(),
-    retry: 6,
+    retry: 1,
     retryDelay: (attempt) => Math.min(750 * 2 ** attempt, 8_000),
     staleTime: 1_000,
   });
