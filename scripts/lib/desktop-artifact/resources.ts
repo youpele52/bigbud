@@ -185,6 +185,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   target: string,
   productName: string,
   signed: boolean,
+  notarize: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: string | undefined,
   buildResourcesDir: string,
@@ -257,7 +258,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
       macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
       // afterSign is a root-level electron-builder property, not mac-specific.
-      buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
+      if (notarize) {
+        buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
+      }
     } else {
       // Explicitly disable code signing for unsigned builds. Otherwise
       // electron-builder falls back to ad-hoc signing, which fails at
