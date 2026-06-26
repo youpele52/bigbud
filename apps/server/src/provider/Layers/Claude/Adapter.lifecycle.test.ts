@@ -107,9 +107,10 @@ describe("ClaudeAdapterLive", () => {
       harness.query.fail(new Error("All fibers interrupted without error"));
 
       for (let attempt = 0; attempt < 200; attempt += 1) {
+        const hasSessionExited = runtimeEvents.some((event) => event.type === "session.exited");
         const hasSession = yield* adapter.hasSession(THREAD_ID);
         const sessions = yield* adapter.listSessions();
-        if (!hasSession && sessions.length === 0) {
+        if (hasSessionExited && !hasSession && sessions.length === 0) {
           break;
         }
         yield* Effect.yieldNow;
