@@ -18,6 +18,7 @@ import {
 } from "./mobileRemoteControl.urls";
 
 const MOBILE_REMOTE_SESSIONS_QUERY_KEY = ["mobile-remote-sessions"] as const;
+const MOBILE_REMOTE_TAILSCALE_QUERY_KEY = ["mobile-remote-tailscale"] as const;
 const MOBILE_WEB_BASE_URL_STORAGE_KEY = "bigbud:mobile-web:base-url:v1";
 const MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY = "bigbud:mobile-remote:backend-url:v1";
 
@@ -64,6 +65,17 @@ export function MobileRemoteControlSettingsSection() {
     queryFn: () => ensureNativeApi().server.listMobileRemoteSessions(),
     staleTime: 5_000,
   });
+  const tailscaleQuery = useQuery({
+    queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY,
+    queryFn: async () => {
+      if (!window.desktopBridge?.getTailscaleRemoteAccessStatus) {
+        return null;
+      }
+      return window.desktopBridge.getTailscaleRemoteAccessStatus();
+    },
+    staleTime: 5_000,
+    refetchInterval: 10_000,
+  });
 
   const createPairingMutation = useMutation({
     mutationFn: async () => {
@@ -95,6 +107,31 @@ export function MobileRemoteControlSettingsSection() {
       await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_SESSIONS_QUERY_KEY });
     },
   });
+  const enableTailscaleMutation = useMutation({
+    mutationFn: async () => {
+      if (!window.desktopBridge?.enableTailscaleRemoteAccess) {
+        throw new Error("Tailscale remote access is only available in the desktop app.");
+      }
+      return window.desktopBridge.enableTailscaleRemoteAccess();
+    },
+    onSuccess: async (status) => {
+      if (status.remoteBaseUrl) {
+        setBackendBaseUrl(normalizeBackendBaseUrl(status.remoteBaseUrl));
+      }
+      await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
+    },
+  });
+  const disableTailscaleMutation = useMutation({
+    mutationFn: async () => {
+      if (!window.desktopBridge?.disableTailscaleRemoteAccess) {
+        throw new Error("Tailscale remote access is only available in the desktop app.");
+      }
+      return window.desktopBridge.disableTailscaleRemoteAccess();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: MOBILE_REMOTE_TAILSCALE_QUERY_KEY });
+    },
+  });
 
   const activeSessionCount =
     sessionsQuery.data?.sessions.filter((session) => session.revokedAt === null).length ?? 0;
@@ -104,6 +141,31 @@ export function MobileRemoteControlSettingsSection() {
     }
     return `${activeSessionCount} active mobile session${activeSessionCount === 1 ? "" : "s"}.`;
   }, [activeSessionCount, settings.mobileRemoteControl.enabled]);
+  const tailscaleStatus = useMemo(() => {
+    const status = tailscaleQuery.data;
+    if (tailscaleQuery.isLoading) {
+      return "Checking Tailscale remote access.";
+    }
+    if (!status) {
+      return "Desktop-only. Use Tailscale Serve to reach this backend from another Wi-Fi.";
+    }
+    if (status.error) {
+      return status.error;
+    }
+    if (status.serving && status.remoteBaseUrl) {
+      return `Remote backend available at ${status.remoteBaseUrl}.`;
+    }
+    if (status.running && !status.online) {
+      return "Tailscale is running, but this device is offline.";
+    }
+    if (status.running) {
+      return "Tailscale is connected, but Serve is not exposing this desktop backend.";
+    }
+    if (status.installed) {
+      return "Tailscale is installed but the daemon is not running.";
+    }
+    return "Tailscale CLI is not installed.";
+  }, [tailscaleQuery.data, tailscaleQuery.isLoading]);
 
   return (
     <SettingsSection title="Mobile Remote" icon={<SmartphoneIcon className="size-3" />}>
@@ -163,8 +225,54 @@ export function MobileRemoteControlSettingsSection() {
       />
 
       <SettingsRow
+        title="Tailscale remote backend"
+        description="Private different-Wi-Fi access. This exposes the desktop backend through your tailnet over HTTPS."
+        status={tailscaleStatus}
+      >
+        <div className="mt-3 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={enableTailscaleMutation.isPending}
+              onClick={() => enableTailscaleMutation.mutate()}
+            >
+              {enableTailscaleMutation.isPending ? "Enabling..." : "Enable Tailscale Serve"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disableTailscaleMutation.isPending}
+              onClick={() => disableTailscaleMutation.mutate()}
+            >
+              {disableTailscaleMutation.isPending ? "Disabling..." : "Disable Tailscale Serve"}
+            </Button>
+          </div>
+          {tailscaleQuery.data?.remoteBaseUrl ? (
+            <p className="break-all text-xs text-muted-foreground">
+              Use this as the backend URL for different-Wi-Fi pairing:{" "}
+              {normalizeBackendBaseUrl(tailscaleQuery.data.remoteBaseUrl)}
+            </p>
+          ) : null}
+          {enableTailscaleMutation.isError ? (
+            <p className="text-xs text-destructive">
+              {enableTailscaleMutation.error instanceof Error
+                ? enableTailscaleMutation.error.message
+                : "Failed to enable Tailscale Serve."}
+            </p>
+          ) : null}
+          {disableTailscaleMutation.isError ? (
+            <p className="text-xs text-destructive">
+              {disableTailscaleMutation.error instanceof Error
+                ? disableTailscaleMutation.error.message
+                : "Failed to disable Tailscale Serve."}
+            </p>
+          ) : null}
+        </div>
+      </SettingsRow>
+
+      <SettingsRow
         title="Mobile app URL"
-        description="Where the separate apps/mobile-web companion is hosted."
+        description="Where the separate apps/mobile-web companion is hosted. For different-Wi-Fi access, this must be reachable from the phone."
       >
         <div className="mt-3">
           <Input value={mobileBaseUrl} onChange={(event) => setMobileBaseUrl(event.target.value)} />

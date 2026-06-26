@@ -6,6 +6,10 @@ function stripTrailingSlash(value: string): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
+function isLocalDesktopBackendProtocol(protocol: string): boolean {
+  return protocol === "http:";
+}
+
 function resolveDesktopMobileBackendBaseUrl(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -41,6 +45,9 @@ export function resolveDefaultMobileWebBaseUrl(): string {
   const desktopBackendBaseUrl = resolveDesktopMobileBackendBaseUrl();
   if (desktopBackendBaseUrl) {
     const url = new URL(desktopBackendBaseUrl);
+    if (!isLocalDesktopBackendProtocol(url.protocol)) {
+      return `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`;
+    }
     url.port = String(DEFAULT_MOBILE_WEB_PORT);
     url.pathname = "/";
     return stripTrailingSlash(url.toString());

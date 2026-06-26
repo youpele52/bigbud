@@ -1,7 +1,4 @@
-import * as FS from "node:fs";
 import * as os from "node:os";
-
-import { parsePersistedMobileRemoteControlSettings } from "@bigbud/shared/serverSettings";
 
 const LOOPBACK_HOST = "127.0.0.1";
 const WILDCARD_IPV4_HOST = "0.0.0.0";
@@ -90,21 +87,7 @@ export function resolveAdvertisedIpv4Host(
   return candidates[0]?.address ?? null;
 }
 
-export function readPersistedMobileRemoteEnabled(serverSettingsPath: string): boolean {
-  try {
-    if (!FS.existsSync(serverSettingsPath)) {
-      return false;
-    }
-    return parsePersistedMobileRemoteControlSettings(FS.readFileSync(serverSettingsPath, "utf8"))
-      .enabled;
-  } catch (error) {
-    console.warn("[desktop] failed to read persisted mobile remote settings", error);
-    return false;
-  }
-}
-
 export function resolveDesktopMobileRemoteNetwork({
-  serverSettingsPath,
   hostOverride,
   networkInterfaces = os.networkInterfaces,
 }: ResolveDesktopMobileRemoteNetworkInput): DesktopMobileRemoteNetwork {
@@ -122,26 +105,9 @@ export function resolveDesktopMobileRemoteNetwork({
     };
   }
 
-  if (!readPersistedMobileRemoteEnabled(serverSettingsPath)) {
-    return {
-      bindHost: LOOPBACK_HOST,
-      clientHost: LOOPBACK_HOST,
-      advertisedHost: LOOPBACK_HOST,
-    };
-  }
-
-  const advertisedHost = resolveAdvertisedIpv4Host(networkInterfaces);
-  if (!advertisedHost) {
-    return {
-      bindHost: LOOPBACK_HOST,
-      clientHost: LOOPBACK_HOST,
-      advertisedHost: LOOPBACK_HOST,
-    };
-  }
-
   return {
-    bindHost: WILDCARD_IPV4_HOST,
+    bindHost: LOOPBACK_HOST,
     clientHost: LOOPBACK_HOST,
-    advertisedHost,
+    advertisedHost: LOOPBACK_HOST,
   };
 }
