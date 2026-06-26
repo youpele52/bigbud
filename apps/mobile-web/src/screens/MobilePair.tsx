@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -35,22 +35,6 @@ function formatMobileBackendError(error: unknown): string {
   return "Could not reach the desktop backend.";
 }
 
-function maybeRedirectToSameOriginPairing(pairingId: string, backendBaseUrl: string) {
-  if (!backendBaseUrl) {
-    return;
-  }
-  try {
-    const backend = new URL(backendBaseUrl);
-    if (!backend.hostname.endsWith(".ts.net") || backend.origin === window.location.origin) {
-      return;
-    }
-    const target = `${backend.origin}/mobile/pair/${pairingId}?backend=${encodeURIComponent(backendBaseUrl)}${window.location.hash}`;
-    window.location.replace(target);
-  } catch {
-    // Ignore invalid backend URLs.
-  }
-}
-
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), MOBILE_PAIRING_REQUEST_TIMEOUT_MS);
@@ -80,10 +64,6 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
   }, []);
   const secret = useMemo(() => readPairingSecret(), []);
   const missingSecret = secret.length === 0;
-
-  useEffect(() => {
-    maybeRedirectToSameOriginPairing(pairingId, backendBaseUrl);
-  }, [backendBaseUrl, pairingId]);
 
   const statusQuery = useQuery({
     enabled: backendBaseUrl.length > 0,
