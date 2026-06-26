@@ -28,6 +28,7 @@ import { MobileMessages } from "../components/threads/thread/MobileMessages";
 import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
+import { useMobileThread } from "../hooks/useMobileThread";
 import { useMobileWorkingState } from "../hooks/useMobileWorkingState";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import {
@@ -72,6 +73,7 @@ function resolveDraftWorkspaceRoot(
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
   const { client, snapshotQuery } = useMobileSnapshot(session);
+  const { threadQuery, threadError } = useMobileThread(session, threadId);
   const { providers } = useMobileServerConfig(session);
   const { startNewThread } = useMobileNewThread();
   const [prompt, setPrompt] = useState("");
@@ -90,10 +92,12 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
   const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
 
-  const thread = useMemo(
+  const snapshotThread = useMemo(
     () => snapshotQuery.data?.threads.find((candidate) => candidate.id === threadId) ?? null,
     [snapshotQuery.data, threadId],
   );
+
+  const thread = threadQuery.data ?? snapshotThread;
 
   const approvals = useMemo(
     () => (thread ? derivePendingApprovals(thread.activities) : []),
@@ -179,6 +183,24 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const isDraft = thread === null && draftThread !== null;
 
   if (!thread && !isDraft) {
+    if (threadQuery.isLoading) {
+      return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
+    }
+    if (threadError) {
+      return (
+        <div className="grid gap-3 px-1 py-8">
+          <p className="text-sm font-medium text-foreground">Unable to load thread</p>
+          <p className="text-sm text-muted-foreground">{threadError}</p>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm"
+            onClick={() => void threadQuery.refetch()}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return <p className="px-1 py-8 text-sm text-muted-foreground">Thread not found.</p>;
   }
 

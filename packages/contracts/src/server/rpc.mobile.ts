@@ -3,6 +3,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetMobileThreadRpc,
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationReplayEventsRpc,
@@ -13,6 +14,7 @@ import {
 
 export const MobileWsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSnapshotRpc,
+  WsOrchestrationGetMobileThreadRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

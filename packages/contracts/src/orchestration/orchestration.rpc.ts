@@ -13,6 +13,7 @@ import { ClientOrchestrationCommand } from "./orchestration.commands";
 import { OrchestrationEvent } from "./orchestration.events";
 import { OrchestrationReadModel } from "./orchestration.thread";
 import { OrchestrationCheckpointFile, OrchestrationCheckpointStatus } from "./orchestration.thread";
+import { OrchestrationThread } from "./orchestration.thread";
 
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
@@ -101,6 +102,14 @@ export type OrchestrationGetFullThreadDiffInput = typeof OrchestrationGetFullThr
 export const OrchestrationGetFullThreadDiffResult = ThreadTurnDiff;
 export type OrchestrationGetFullThreadDiffResult = typeof OrchestrationGetFullThreadDiffResult.Type;
 
+export const OrchestrationGetMobileThreadInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type OrchestrationGetMobileThreadInput = typeof OrchestrationGetMobileThreadInput.Type;
+
+const OrchestrationGetMobileThreadResult = OrchestrationThread;
+export type OrchestrationGetMobileThreadResult = typeof OrchestrationGetMobileThreadResult.Type;
+
 export const OrchestrationReplayEventsInput = Schema.Struct({
   fromSequenceExclusive: NonNegativeInt,
 });
@@ -125,6 +134,10 @@ export const OrchestrationRpcSchemas = {
   getFullThreadDiff: {
     input: OrchestrationGetFullThreadDiffInput,
     output: OrchestrationGetFullThreadDiffResult,
+  },
+  getMobileThread: {
+    input: OrchestrationGetMobileThreadInput,
+    output: OrchestrationGetMobileThreadResult,
   },
   replayEvents: {
     input: OrchestrationReplayEventsInput,
@@ -158,6 +171,14 @@ export class OrchestrationGetTurnDiffError extends Schema.TaggedErrorClass<Orche
 
 export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass<OrchestrationGetFullThreadDiffError>()(
   "OrchestrationGetFullThreadDiffError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetMobileThreadError extends Schema.TaggedErrorClass<OrchestrationGetMobileThreadError>()(
+  "OrchestrationGetMobileThreadError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

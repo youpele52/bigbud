@@ -1,6 +1,7 @@
 import {
   ORCHESTRATION_WS_METHODS,
   type OrchestrationReadModel,
+  type ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
@@ -15,7 +16,8 @@ import {
 const makeMobileRpcProtocolClient = RpcClient.make(MobileWsRpcGroup);
 type MobileRpcProtocolClient =
   typeof makeMobileRpcProtocolClient extends Effect.Effect<infer Client, any, any> ? Client : never;
-const MOBILE_SNAPSHOT_TIMEOUT_MS = 10_000;
+const MOBILE_SNAPSHOT_TIMEOUT_MS = 45_000;
+const MOBILE_THREAD_TIMEOUT_MS = 45_000;
 
 function formatRpcError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
@@ -54,6 +56,22 @@ export class MobileRpcClient {
           window.setTimeout(() => {
             reject(new Error("Timed out waiting for the desktop snapshot."));
           }, MOBILE_SNAPSHOT_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (error) {
+      throw new Error(formatRpcError(error), { cause: error });
+    }
+  }
+
+  async getMobileThread(threadId: ThreadId) {
+    const client = await this.clientPromise;
+    try {
+      return await Promise.race([
+        this.runtime.runPromise(client[ORCHESTRATION_WS_METHODS.getMobileThread]({ threadId })),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error("Timed out waiting for the desktop thread."));
+          }, MOBILE_THREAD_TIMEOUT_MS);
         }),
       ]);
     } catch (error) {
