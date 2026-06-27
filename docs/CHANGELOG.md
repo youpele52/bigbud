@@ -18,6 +18,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Boards can be **global** or **project-scoped**, with markdown-backed cards and JSON sidecars so they persist across restarts and stay in sync with the filesystem.
 - Drag cards between columns or within a column to reorder, drag them into the composer to write, flesh out, or even carry out the task with the agent, manage them from a context menu, and collapse columns when you want a denser view.
 
+<iframe src="https://www.youtube-nocookie.com/embed/R0WvKJjY62Q" title="bigbud: Using bigbud's Kanban board"></iframe>
+
 ### Files Panel
 
 - The Files panel now opens images and HTML files in the **Browser** by default, and right-clicking either shows **Open in file viewer**, **Open in browser**, **Open externally**, and **Copy path**.
@@ -36,6 +38,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Note filenames are now stable — new notes use a creation-time datetime stem (for example `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note no longer renames the file or changes its `noteId`. Existing notes keep their current filenames, and display titles still come from content.
 - Fixed note and file path references dragged into the composer so the AI now receives the actual file contents as a proper attachment instead of just the raw path text.
 - Improved note readability and visual consistency: preview headings now match the markdown file viewer hierarchy, and edit mode now uses the same background treatment as the raw markdown viewer.
+
+<iframe src="https://www.youtube-nocookie.com/embed/DPceRqM3Sis" title="bigbud: Writing notes like a Pro"></iframe>
 
 ### Terminal
 

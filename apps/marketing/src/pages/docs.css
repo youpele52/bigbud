@@ -12,9 +12,24 @@
   max-width: 40rem;
 }
 
+.docs-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(75% - 0.75rem);
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
 @media (max-width: 1099px) {
   .docs-page {
     padding-right: 1.25rem;
     padding-left: 1.25rem;
+  }
+
+  .docs-page::before {
+    display: none;
   }
 }
