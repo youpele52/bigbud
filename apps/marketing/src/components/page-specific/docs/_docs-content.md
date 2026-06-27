@@ -1,5 +1,7 @@
 # Docs
 
+Every panel and shortcut in bigbud exists to keep you from switching windows. Install, connect your providers, and learn how the workspace adapts to the way you'd like to work.
+
 ## Getting started
 
 Install bigbud on your machine, set up your AI providers, launch the app, and start your first session. No terminal needed — everything works from the app.

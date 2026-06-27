@@ -29,7 +29,7 @@
 }
 
 .md-body--content .md-heading--section {
-  margin-right: calc(clamp(2.25rem, 4vw, 4rem) * -1);
+  margin-right: calc(clamp(2.25rem, 4vw, 4rem) * -1 - 0.375rem);
   padding-right: clamp(2.25rem, 4vw, 4rem);
 }
 
@@ -147,7 +147,7 @@
   position: relative;
   width: 100%;
   max-width: var(--md-content-max-width);
-  margin: 1.6rem 0;
+  margin: 1.5rem 0 3rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
   background: rgb(255 255 255 / 0.02);
