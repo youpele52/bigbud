@@ -61,6 +61,67 @@ function isSafeImageSrc(src: string): boolean {
   return /^(https?:\/\/|\/|\.\/|\.\.\/)/.test(src);
 }
 
+function isSafeVideoSrc(src: string): boolean {
+  return /^(https?:\/\/|\/|\.\/|\.\.\/)/.test(src);
+}
+
+function renderMediaFallbackSvg(kind: "image" | "video"): string {
+  if (kind === "video") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`;
+}
+
+function renderImage(rawAlt: string, rawSrc: string): string {
+  const src = rawSrc.trim();
+  const alt = rawAlt.trim();
+
+  if (!isSafeImageSrc(src)) {
+    return "";
+  }
+
+  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} onerror="this.outerHTML='<div class=\\'md-media-fallback\\'>${renderMediaFallbackSvg("image")}<span>Image failed to load</span></div>'" />`;
+}
+
+function renderVideo(raw: string): string {
+  const match = /<video\b([^>]*?)>[\s\S]*?<\/video>/i.exec(raw.trim());
+  if (!match) {
+    return "";
+  }
+
+  const attrs = match[1] ?? "";
+  const srcMatch = /\bsrc\s*=\s*"([^"]+)"/i.exec(attrs);
+  if (!srcMatch || !isSafeVideoSrc(srcMatch[1])) {
+    return "";
+  }
+
+  const allowedSrc = escapeAttribute(srcMatch[1]);
+  const widthMatch = /\bwidth\s*=\s*"([^"]+)"/i.exec(attrs);
+  const titleMatch = /\btitle\s*=\s*"([^"]*)"/i.exec(attrs);
+
+  const hasExplicitControls = /\b(autoplay|loop|muted|controls|playsinline)\b/i.test(attrs);
+  const attrsList = [
+    hasExplicitControls && /\bautoplay\b/i.test(attrs) ? "autoplay" : "",
+    hasExplicitControls && /\bloop\b/i.test(attrs) ? "loop" : "",
+    hasExplicitControls && /\bmuted\b/i.test(attrs) ? "muted" : "",
+    hasExplicitControls && /\bcontrols\b/i.test(attrs) ? "controls" : "",
+    hasExplicitControls && /\bplaysinline\b/i.test(attrs) ? "playsinline" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const videoAttrs = hasExplicitControls ? attrsList : "autoplay loop muted playsinline";
+  const title = titleMatch ? ` title="${escapeAttribute(titleMatch[1])}"` : "";
+  const width = widthMatch ? ` width="${escapeAttribute(widthMatch[1])}"` : "";
+
+  return `<div class="md-embed md-media--video">
+    <video src="${allowedSrc}" loading="lazy"${videoAttrs ? ` ${videoAttrs}` : ""}${title}${width}
+      oncanplay="this.style.opacity='1'" style="opacity:0;transition:opacity 0.3s"
+    ></video>
+    <div class="md-media-fallback">${renderMediaFallbackSvg("video")}<span>Video failed to load</span></div>
+  </div>`;
+}
+
 function slugifyHeading(value: string): string {
   return value
     .toLowerCase()
@@ -231,17 +292,6 @@ function renderCodeBlock(lines: string[]): string {
   return `<pre${classAttr(classes.pre)}><code${classAttr(classes.code)}>${escapeHtml(lines.join("\n"))}</code></pre>`;
 }
 
-function renderImage(rawAlt: string, rawSrc: string): string {
-  const src = rawSrc.trim();
-  const alt = rawAlt.trim();
-
-  if (!isSafeImageSrc(src)) {
-    return "";
-  }
-
-  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} />`;
-}
-
 function isListLine(line: string): boolean {
   return /^-\s+/.test(line) || /^\d+\.\s+/.test(line);
 }
@@ -329,6 +379,24 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
       continue;
     }
 
+    if (trimmed.toLowerCase().startsWith("<video")) {
+      if (trimmed.toLowerCase().includes("</video>")) {
+        sections.push({ html: renderVideo(trimmed) });
+        continue;
+      }
+      const videoLines = [trimmed];
+      while (index + 1 < lines.length) {
+        const nextLine = lines[index + 1]?.trim() ?? "";
+        videoLines.push(nextLine);
+        index += 1;
+        if (nextLine.toLowerCase().includes("</video>")) {
+          break;
+        }
+      }
+      sections.push({ html: renderVideo(videoLines.join(" ")) });
+      continue;
+    }
+
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
     if (headingMatch) {
       const level = headingMatch[1].length;
@@ -392,6 +460,8 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
       if (
         nextLine.length === 0 ||
         nextLine.startsWith("```") ||
+        nextLine.toLowerCase().startsWith("<video") ||
+        nextLine.toLowerCase().startsWith("<iframe") ||
         /^(#{1,6})\s+/.test(nextLine) ||
         parseImageLine(nextLine) !== undefined ||
         isListLine(nextLine)
