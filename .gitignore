@@ -26,3 +26,5 @@ docs/ideas/
 docs/handoff/
 build-certs/
 apps/server/userdata/
+.bigbud/
+.opencode/
