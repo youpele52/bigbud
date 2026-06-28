@@ -1,5 +1,4 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { describe, it, assert } from "@effect/vitest";
 import { Effect, Fiber, Layer, Random, Stream } from "effect";
 
@@ -78,18 +77,10 @@ describe("ClaudeAdapterLive", () => {
   it.effect("closes the session when the Claude stream aborts after a turn starts", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
-      const services = yield* Effect.services();
-      const runFork = Effect.runForkWith(services);
-
       const adapter = yield* ClaudeAdapter;
-      const runtimeEvents: Array<ProviderRuntimeEvent> = [];
-
-      const runtimeEventsFiber = runFork(
-        Stream.runForEach(adapter.streamEvents, (event) =>
-          Effect.sync(() => {
-            runtimeEvents.push(event);
-          }),
-        ),
+      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 6).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
       );
 
       yield* adapter.startSession({
@@ -106,6 +97,7 @@ describe("ClaudeAdapterLive", () => {
 
       harness.query.fail(new Error("All fibers interrupted without error"));
 
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
       for (let attempt = 0; attempt < 200; attempt += 1) {
         const hasSession = yield* adapter.hasSession(THREAD_ID);
         const sessions = yield* adapter.listSessions();
@@ -114,8 +106,6 @@ describe("ClaudeAdapterLive", () => {
         }
         yield* Effect.yieldNow;
       }
-      yield* Effect.yieldNow;
-      runtimeEventsFiber.interruptUnsafe();
       assert.deepEqual(
         runtimeEvents.map((event) => event.type),
         [

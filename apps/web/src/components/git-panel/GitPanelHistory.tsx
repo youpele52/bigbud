@@ -10,6 +10,7 @@ import { formatRelativeTimeLabel } from "~/utils/timestamp/timestamp.utils";
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { showGitCommitCopyMenu } from "./GitPanel.copy";
+import { formatGitCommitAuthorNames, GitPanelAuthors } from "./GitPanelAuthors";
 import { GitPatchViewer } from "./GitPatchViewer";
 import { GitPanelSplitView } from "./GitPanelSplitView";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -160,10 +161,12 @@ export function GitPanelHistory({
                   </div>
                 ) : null}
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span className="truncate">
-                    {commit.shortSha} by {commit.authorName},{" "}
-                    {formatRelativeTimeLabel(commit.authoredAt)}
-                  </span>
+                  <GitPanelAuthors
+                    authors={commit.authors}
+                    className="min-w-0 flex-1"
+                    textClassName="text-xs text-muted-foreground"
+                  />
+                  <span className="shrink-0">• {formatRelativeTimeLabel(commit.authoredAt)}</span>
                   {!commit.isPushed ? (
                     <Tooltip>
                       <TooltipTrigger
@@ -223,10 +226,14 @@ export function GitPanelHistory({
                   ))}
                 </div>
               ) : null}
-              <div className="mt-1 text-xs text-muted-foreground">
-                {commitDetails.shortSha} by {commitDetails.authorName},{" "}
-                {formatRelativeTimeLabel(commitDetails.authoredAt)}
-                {!selectedCommitSummary?.isPushed ? ", not pushed" : ""}
+              <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {commitDetails.shortSha} by {formatGitCommitAuthorNames(commitDetails.authors)},{" "}
+                  {formatRelativeTimeLabel(commitDetails.authoredAt)}
+                </span>
+                {!selectedCommitSummary?.isPushed ? (
+                  <span className="shrink-0">, not pushed</span>
+                ) : null}
               </div>
               {commitDetails.body.trim() ? (
                 <pre className="mt-2 text-xs whitespace-pre-wrap text-muted-foreground select-text">

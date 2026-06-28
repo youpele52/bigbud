@@ -2,6 +2,7 @@ import type { GitCommitSummary, GitGetCommitDetailsResult } from "@bigbud/contra
 
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { ensureNativeApi } from "~/rpc/nativeApi";
+import { formatGitCommitAuthorNames } from "./GitPanelAuthors";
 
 type GitCommitCopyAction =
   | "copy-selected-text"
@@ -41,7 +42,10 @@ export async function showGitCommitCopyMenu(input: {
         label: "Copy Tags",
         disabled: input.commit.tags.length === 0,
       },
-      { id: "copy-author", label: "Copy Author" },
+      {
+        id: "copy-author",
+        label: input.commit.authors.length > 1 ? "Copy Authors" : "Copy Author",
+      },
       {
         id: "copy-body",
         label: "Copy Body",
@@ -71,7 +75,7 @@ export async function showGitCommitCopyMenu(input: {
     return;
   }
   if (action === "copy-author") {
-    await copyTextToClipboard(input.commit.authorName);
+    await copyTextToClipboard(formatGitCommitAuthorNames(input.commit.authors));
     return;
   }
   await copyTextToClipboard((input.body ?? "").trim());

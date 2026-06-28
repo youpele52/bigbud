@@ -57,7 +57,7 @@ vi.mock("@tanstack/react-query", async () => {
                     sha: "abc123",
                     shortSha: "abc123",
                     subject: "Commit subject",
-                    authorName: "Youpele Michael",
+                    authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
                     authoredAt: "2026-06-08T00:00:00.000Z",
                     isPushed: false,
                     tags: [],
@@ -103,8 +103,9 @@ vi.mock("@tanstack/react-query", async () => {
               sha: "abc123",
               shortSha: "abc123",
               subject: "Commit subject",
-              authorName: "Youpele Michael",
+              authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
               authoredAt: "2026-06-08T00:00:00.000Z",
+              tags: [],
               body: "Commit body",
               parents: [],
               files: [],
@@ -161,7 +162,10 @@ describe("GitPanelContent", () => {
         sha: "abc123",
         shortSha: "abc123",
         subject: "Commit subject",
-        authorName: "Youpele Michael",
+        authors: [
+          { name: "Youpele Michael", email: "mjayjesus@gmail.com" },
+          { name: "Cursor", email: "cursoragent@cursor.com" },
+        ],
         authoredAt: "2026-06-08T00:00:00.000Z",
         isPushed: false,
         tags: ["v0.1.642-beta-2", "latest"],
@@ -184,7 +188,10 @@ describe("GitPanelContent", () => {
       />,
     );
 
-    expect(markup).toContain("abc123 by Youpele Michael, 2m");
+    expect(markup).toContain("Youpele Michael, Cursor");
+    expect(markup).toContain("• 2m");
+    expect(markup).toContain(">YM<");
+    expect(markup).toContain(">CU<");
     expect(markup).toContain("v0.1.642-beta-2");
     expect(markup).toContain("latest");
     expect(markup).toContain('aria-label="Not pushed"');
@@ -202,7 +209,7 @@ describe("GitPanelContent", () => {
         sha: "abc123",
         shortSha: "abc123",
         subject: "Commit subject",
-        authorName: "Youpele Michael",
+        authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
         authoredAt: "2026-06-08T00:00:00.000Z",
         isPushed: true,
         tags: ["v0.1.642-beta-2", "stable"],
@@ -215,7 +222,7 @@ describe("GitPanelContent", () => {
           sha: "abc123",
           shortSha: "abc123",
           subject: "Commit subject",
-          authorName: "Youpele Michael",
+          authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
           authoredAt: "2026-06-08T00:00:00.000Z",
           tags: ["v0.1.642-beta-2", "stable"],
           body: "",
@@ -238,6 +245,7 @@ describe("GitPanelContent", () => {
 
     expect(markup).toContain("v0.1.642-beta-2");
     expect(markup).toContain("stable");
+    expect(markup).toContain("abc123 by Youpele Michael, 2m");
 
     vi.useRealTimers();
   });

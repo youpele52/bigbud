@@ -38,7 +38,10 @@ describe("GitPanel.copy", () => {
         sha: "be9f1ab52cafe1234",
         shortSha: "be9f1ab52",
         subject: "Update CHANGELOG.md",
-        authorName: "Youpele Michael",
+        authors: [
+          { name: "Youpele Michael", email: "mjayjesus@gmail.com" },
+          { name: "Cursor", email: "cursoragent@cursor.com" },
+        ],
         authoredAt: "2026-06-18T10:00:00.000Z",
         isPushed: true,
         tags: ["stable"],
@@ -51,7 +54,7 @@ describe("GitPanel.copy", () => {
         { id: "copy-subject", label: "Copy Subject" },
         { id: "copy-sha", label: "Copy SHA" },
         { id: "copy-tags", label: "Copy Tags", disabled: false },
-        { id: "copy-author", label: "Copy Author" },
+        { id: "copy-author", label: "Copy Authors" },
         { id: "copy-body", label: "Copy Body", disabled: true },
       ],
       { x: 24, y: 32 },
@@ -72,7 +75,7 @@ describe("GitPanel.copy", () => {
         sha: "be9f1ab52cafe1234",
         shortSha: "be9f1ab52",
         subject: "Update CHANGELOG.md",
-        authorName: "Youpele Michael",
+        authors: [{ name: "Youpele Michael", email: "mjayjesus@gmail.com" }],
         authoredAt: "2026-06-18T10:00:00.000Z",
         body: "Body text",
         parents: [],
@@ -89,6 +92,28 @@ describe("GitPanel.copy", () => {
       { x: 11, y: 12 },
     );
     expect(copyTextToClipboardMock).toHaveBeenCalledWith("selected body text");
+  });
+
+  it("copies joined author names for co-authored commits", async () => {
+    contextMenuShowMock.mockResolvedValue("copy-author");
+
+    await showGitCommitCopyMenu({
+      commit: {
+        sha: "be9f1ab52cafe1234",
+        shortSha: "be9f1ab52",
+        subject: "Update CHANGELOG.md",
+        authors: [
+          { name: "Youpele Michael", email: "mjayjesus@gmail.com" },
+          { name: "Cursor", email: "cursoragent@cursor.com" },
+        ],
+        authoredAt: "2026-06-18T10:00:00.000Z",
+        isPushed: true,
+        tags: [],
+      },
+      position: { x: 11, y: 12 },
+    });
+
+    expect(copyTextToClipboardMock).toHaveBeenCalledWith("Youpele Michael, Cursor");
   });
 
   it("shows changed file copy actions and copies the filename", async () => {

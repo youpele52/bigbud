@@ -17,6 +17,7 @@ import {
 
 import type { MobilePendingApproval, MobilePendingUserInput } from "../../../../lib/mobileModels";
 import { cn } from "../../../../lib/cn";
+import { MobileComposerContextBar } from "./MobileComposerContextBar";
 import { MobileComposerModelPicker } from "./MobileComposerModelPicker";
 import { MobileComposerPendingUserInput } from "./MobileComposerPendingUserInput";
 import { MobileComposerSendIcon } from "./MobileComposerSendIcon";
@@ -30,6 +31,10 @@ interface MobileComposerProps {
   disabled?: boolean | undefined;
   placeholder?: string | undefined;
   projectTitle?: string | undefined;
+  isGitRepo?: boolean | undefined;
+  activeThreadBranch?: string | null | undefined;
+  activeWorktreePath?: string | null | undefined;
+  currentGitBranch?: string | null | undefined;
   isRunning?: boolean | undefined;
   workingVerb?: string | undefined;
   onStop?: (() => void) | undefined;
@@ -57,6 +62,10 @@ export function MobileComposer({
   disabled = false,
   placeholder = "Ask anything, @tag files/folders, or use / to show available commands",
   projectTitle,
+  isGitRepo = false,
+  activeThreadBranch = null,
+  activeWorktreePath = null,
+  currentGitBranch = null,
   isRunning = false,
   workingVerb,
   onStop,
@@ -284,11 +293,13 @@ export function MobileComposer({
           </div>
         </div>
         {projectTitle ? (
-          <div className="px-1 pt-2">
-            <span className="block min-w-0 truncate text-xs text-muted-foreground">
-              {projectTitle}
-            </span>
-          </div>
+          <MobileComposerContextBar
+            activeThreadBranch={activeThreadBranch}
+            activeWorktreePath={activeWorktreePath}
+            currentGitBranch={currentGitBranch}
+            isGitRepo={isGitRepo}
+            projectTitle={projectTitle}
+          />
         ) : null}
       </div>
     </div>

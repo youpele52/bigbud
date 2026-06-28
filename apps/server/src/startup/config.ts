@@ -53,6 +53,7 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly cwd: string;
   readonly baseDir: string;
   readonly staticDir: string | undefined;
+  readonly mobileWebStaticDir: string | undefined;
   readonly devUrl: URL | undefined;
   readonly noBrowser: boolean;
   readonly authToken: string | undefined;
@@ -151,6 +152,7 @@ export class ServerConfig extends ServiceMap.Service<ServerConfig, ServerConfigS
           host: undefined,
           authToken: undefined,
           staticDir: undefined,
+          mobileWebStaticDir: undefined,
           devUrl,
           noBrowser: false,
         } satisfies ServerConfigShape;
@@ -176,5 +178,31 @@ export const resolveStaticDir = Effect.fn(function* () {
   if (monorepoStat) {
     return monorepoClient;
   }
+  return undefined;
+});
+
+export const resolveMobileWebStaticDir = Effect.fn(function* () {
+  const { join, resolve } = yield* Path.Path;
+  const { exists, readFileString } = yield* FileSystem.FileSystem;
+  const candidates = [
+    resolve(join(import.meta.dirname, "mobile-web")),
+    resolve(join(import.meta.dirname, "../../mobile-web/dist")),
+  ];
+
+  for (const candidate of candidates) {
+    const indexPath = join(candidate, "index.html");
+    const hasIndex = yield* exists(indexPath).pipe(Effect.orElseSucceed(() => false));
+    if (!hasIndex) {
+      continue;
+    }
+
+    const indexHtml = yield* readFileString(indexPath).pipe(Effect.orElseSucceed(() => ""));
+    if (!indexHtml.includes('src="/mobile/assets/')) {
+      continue;
+    }
+
+    return candidate;
+  }
+
   return undefined;
 });

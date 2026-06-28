@@ -44,7 +44,7 @@ function MobileMessage({
   if (message.role === "assistant") {
     return (
       <article className="min-w-0 px-1">
-        <ChatMarkdown cwd={cwd} isStreaming={false} text={message.text} />
+        <ChatMarkdown cwd={cwd} isStreaming={message.streaming} text={message.text} />
       </article>
     );
   }

@@ -1,8 +1,8 @@
 {
   "repo": "youpele52/bigbud",
-  "fetchedAt": "2026-06-25T14:34:05.487Z",
-  "totalInstallers": 340,
-  "totalAllAssets": 1531,
+  "fetchedAt": "2026-06-27T11:42:01.456Z",
+  "totalInstallers": 375,
+  "totalAllAssets": 1621,
   "installerPattern": "\\.(dmg|zip|exe|AppImage|deb)$",
   "perPage": 100,
   "pagesFetched": 1

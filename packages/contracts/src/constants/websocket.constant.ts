@@ -114,5 +114,6 @@ export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
+  getMobileThread: "orchestration.getMobileThread",
   replayEvents: "orchestration.replayEvents",
 } as const;

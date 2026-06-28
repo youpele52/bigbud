@@ -28,7 +28,9 @@ import { MobileMessages } from "../components/threads/thread/MobileMessages";
 import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
+import { useMobileThread } from "../hooks/useMobileThread";
 import { useMobileWorkingState } from "../hooks/useMobileWorkingState";
+import { useMobileGitStatus } from "../hooks/useMobileGitStatus";
 import { useMobileNewThread } from "../hooks/useMobileNewThread";
 import {
   clearMobileDraftThread,
@@ -47,6 +49,7 @@ import {
 } from "../lib/mobileModels";
 import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
+import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useMobileSessionState } from "../context/MobileSessionContext";
 
 function newId() {
@@ -72,6 +75,7 @@ function resolveDraftWorkspaceRoot(
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
   const { client, snapshotQuery } = useMobileSnapshot(session);
+  const { threadQuery, threadError } = useMobileThread(session, threadId);
   const { providers } = useMobileServerConfig(session);
   const { startNewThread } = useMobileNewThread();
   const [prompt, setPrompt] = useState("");
@@ -87,12 +91,46 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
+  const lastMessageFingerprintRef = useRef<string | null>(null);
 
   const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
 
-  const thread = useMemo(
+  const snapshotThread = useMemo(
     () => snapshotQuery.data?.threads.find((candidate) => candidate.id === threadId) ?? null,
     [snapshotQuery.data, threadId],
+  );
+
+  const thread = threadQuery.data ?? snapshotThread;
+
+  const composerProject = useMemo(() => {
+    const snapshot = snapshotQuery.data;
+    if (!snapshot) {
+      return null;
+    }
+    const projectId = thread?.projectId ?? draftThread?.projectId;
+    if (!projectId) {
+      return null;
+    }
+    return snapshot.projects.find((candidate) => candidate.id === projectId) ?? null;
+  }, [draftThread, snapshotQuery.data, thread]);
+
+  const composerWorkspaceRoot = useMemo(() => {
+    const snapshot = snapshotQuery.data;
+    if (!snapshot) {
+      return undefined;
+    }
+    if (thread) {
+      return resolveThreadWorkspaceRoot(snapshot, thread);
+    }
+    if (draftThread) {
+      return resolveDraftWorkspaceRoot(snapshot, draftThread);
+    }
+    return undefined;
+  }, [draftThread, snapshotQuery.data, thread]);
+
+  const gitStatusQuery = useMobileGitStatus(
+    composerWorkspaceRoot ?? null,
+    composerProject ? resolveWorkspaceExecutionTargetId(composerProject) : null,
   );
 
   const approvals = useMemo(
@@ -158,6 +196,30 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     return () => window.clearTimeout(timeoutId);
   }, [threadId, thread]);
 
+  useLayoutEffect(() => {
+    if (!thread) {
+      return;
+    }
+    const lastMessage = thread.messages.at(-1);
+    const fingerprint = lastMessage
+      ? `${lastMessage.id}:${lastMessage.text.length}:${lastMessage.streaming ? 1 : 0}`
+      : `empty:${thread.messages.length}`;
+    if (lastMessageFingerprintRef.current === fingerprint) {
+      return;
+    }
+    lastMessageFingerprintRef.current = fingerprint;
+
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+    const distanceFromBottom =
+      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
+    if (isRunning || distanceFromBottom < 120) {
+      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+  }, [isRunning, thread]);
+
   const interruptTurn = useCallback(async () => {
     if (!client) {
       return;
@@ -179,6 +241,24 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const isDraft = thread === null && draftThread !== null;
 
   if (!thread && !isDraft) {
+    if (threadQuery.isLoading) {
+      return <MobileStartupSplash className="min-h-[calc(100dvh-5rem)]" />;
+    }
+    if (threadError) {
+      return (
+        <div className="grid gap-3 px-1 py-8">
+          <p className="text-sm font-medium text-foreground">Unable to load thread</p>
+          <p className="text-sm text-muted-foreground">{threadError}</p>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-sm"
+            onClick={() => void threadQuery.refetch()}
+            type="button"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
     return <p className="px-1 py-8 text-sm text-muted-foreground">Thread not found.</p>;
   }
 
@@ -482,6 +562,10 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         pendingUserInput={activePendingUserInput}
         placeholder="Ask anything, @tag files/folders, or use / commands"
         projectTitle={projectTitle}
+        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
+        activeThreadBranch={thread?.branch ?? draftThread?.branch ?? null}
+        activeWorktreePath={thread?.worktreePath ?? draftThread?.worktreePath ?? null}
+        currentGitBranch={gitStatusQuery.data?.branch ?? null}
         userInputAnswers={activeUserInputAnswers}
         userInputQuestionIndex={activeUserInputQuestionIndex}
         value={prompt}

@@ -82,11 +82,17 @@ export const GitListBranchesResult = Schema.Struct({
 });
 export type GitListBranchesResult = typeof GitListBranchesResult.Type;
 
+export const GitCommitAuthor = Schema.Struct({
+  name: TrimmedNonEmptyStringSchema,
+  email: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
+});
+export type GitCommitAuthor = typeof GitCommitAuthor.Type;
+
 export const GitCommitSummary = Schema.Struct({
   sha: TrimmedNonEmptyStringSchema,
   shortSha: TrimmedNonEmptyStringSchema,
   subject: TrimmedNonEmptyStringSchema,
-  authorName: TrimmedNonEmptyStringSchema,
+  authors: Schema.Array(GitCommitAuthor),
   authoredAt: IsoDateTime,
   isPushed: Schema.Boolean,
   tags: Schema.Array(TrimmedNonEmptyStringSchema),
@@ -110,7 +116,7 @@ export const GitCommitDetails = Schema.Struct({
   sha: TrimmedNonEmptyStringSchema,
   shortSha: TrimmedNonEmptyStringSchema,
   subject: TrimmedNonEmptyStringSchema,
-  authorName: TrimmedNonEmptyStringSchema,
+  authors: Schema.Array(GitCommitAuthor),
   authoredAt: IsoDateTime,
   tags: Schema.Array(TrimmedNonEmptyStringSchema),
   body: Schema.String,
