@@ -8,7 +8,7 @@ import {
   createRouter,
   useRouterState,
 } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { MobileAppHeader } from "./components/shell/MobileAppHeader";
 import { MobileStartupSplash } from "./components/shell/MobileStartupSplash";
@@ -30,10 +30,104 @@ import { MobilePair } from "./screens/MobilePair";
 import { MobileProjects } from "./screens/MobileProjects";
 import { MobileProjectThreads } from "./screens/MobileProjectThreads";
 import { MobileThread } from "./screens/MobileThread";
-import { clearMobileSession, isMobileSessionExpired, readMobileSession } from "./lib/mobileSession";
+import {
+  clearMobileSession,
+  isMobileSessionExpired,
+  readMobileSession,
+  type StoredMobileSession,
+} from "./lib/mobileSession";
 
 function handleReconnect() {
   window.location.reload();
+}
+
+function AppFrameContent({
+  session,
+  setSession,
+}: {
+  readonly session: StoredMobileSession | null;
+  readonly setSession: Dispatch<SetStateAction<StoredMobileSession | null>>;
+}) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { snapshotQuery, connectionError } = useMobileSnapshot(session);
+  const threadId = extractMobileThreadId(pathname);
+  const draftThread = threadId ? getMobileDraftThread(threadId) : null;
+  const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
+  const isThreadView = pathname.startsWith("/mobile/thread/") && !pathname.endsWith("/diff");
+  const showLaunchSplash =
+    isMobileLaunchRoute(pathname) &&
+    session !== null &&
+    snapshotQuery.isLoading &&
+    !snapshotQuery.isError;
+
+  function handleSignOut() {
+    setSession(null);
+    window.location.assign("/mobile");
+  }
+
+  return (
+    <>
+      {showLaunchSplash ? (
+        <MobileStartupSplash />
+      ) : isMobileLaunchRoute(pathname) && session !== null && snapshotQuery.isError ? (
+        <div className="grid gap-3 px-4 py-8">
+          <p className="text-sm font-medium text-foreground">Unable to connect</p>
+          <p className="text-sm text-muted-foreground">
+            {connectionError ?? "Refresh the page or pair again if the session expired."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-md border border-border px-3 py-2 text-sm"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              Retry
+            </button>
+            <button
+              className="rounded-md bg-secondary px-3 py-2 text-sm"
+              onClick={() => {
+                clearMobileSession();
+                setSession(null);
+                window.location.assign("/mobile");
+              }}
+              type="button"
+            >
+              Clear session
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={
+            isThreadView
+              ? "h-dvh overflow-hidden bg-background text-foreground"
+              : "min-h-dvh bg-background text-foreground"
+          }
+        >
+          <div
+            className={
+              isThreadView
+                ? "mx-auto flex h-dvh max-w-3xl flex-col overflow-hidden px-4 pt-2"
+                : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
+            }
+          >
+            <MobileAppHeader
+              backTo={header.backTo}
+              breadcrumb={header.breadcrumb}
+              onReconnect={handleReconnect}
+              onSignOut={handleSignOut}
+              showBack={header.showBack}
+              showLogo={header.showLogo}
+              title={header.title}
+            />
+            <main className={isThreadView ? "min-h-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function AppFrame() {
@@ -46,56 +140,12 @@ function AppFrame() {
     }
     return current;
   });
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { snapshotQuery } = useMobileSnapshot(session);
-  const threadId = extractMobileThreadId(pathname);
-  const draftThread = threadId ? getMobileDraftThread(threadId) : null;
-  const header = resolveMobileHeaderState(pathname, snapshotQuery.data, draftThread);
-  const isThreadView = pathname.startsWith("/mobile/thread/") && !pathname.endsWith("/diff");
-  const showLaunchSplash =
-    isMobileLaunchRoute(pathname) && session !== null && snapshotQuery.isLoading;
   const sessionContextValue = useMemo(() => ({ session, setSession }), [session, setSession]);
-
-  function handleSignOut() {
-    setSession(null);
-    window.location.assign("/mobile");
-  }
 
   return (
     <MobileSessionContext.Provider value={sessionContextValue}>
       <MobileRpcProvider>
-        {showLaunchSplash ? (
-          <MobileStartupSplash />
-        ) : (
-          <div
-            className={
-              isThreadView
-                ? "h-dvh overflow-hidden bg-background text-foreground"
-                : "min-h-dvh bg-background text-foreground"
-            }
-          >
-            <div
-              className={
-                isThreadView
-                  ? "mx-auto flex h-dvh max-w-3xl flex-col overflow-hidden px-4 pt-2"
-                  : "mx-auto flex min-h-dvh max-w-3xl flex-col px-4 pb-8 pt-2"
-              }
-            >
-              <MobileAppHeader
-                backTo={header.backTo}
-                breadcrumb={header.breadcrumb}
-                onReconnect={handleReconnect}
-                onSignOut={handleSignOut}
-                showBack={header.showBack}
-                showLogo={header.showLogo}
-                title={header.title}
-              />
-              <main className={isThreadView ? "min-h-0 flex-1 overflow-hidden" : "flex-1 px-3"}>
-                <Outlet />
-              </main>
-            </div>
-          </div>
-        )}
+        <AppFrameContent session={session} setSession={setSession} />
       </MobileRpcProvider>
     </MobileSessionContext.Provider>
   );

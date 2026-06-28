@@ -1,18 +1,22 @@
-import { Effect, Layer, Option, Schema, Stream } from "effect";
 import {
   type ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetMobileThreadError,
   OrchestrationGetSnapshotError,
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
+  type ThreadId,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
+import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
+import { getThreadFromOrchestrationSnapshot } from "../mobile/mobileSnapshot.thread.ts";
+import { trimOrchestrationSnapshotForMobile } from "../mobile/mobileSnapshot.trim.ts";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import {
@@ -39,12 +43,39 @@ const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
         observeRpcEffect(
           ORCHESTRATION_WS_METHODS.getSnapshot,
           context.projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.map(trimOrchestrationSnapshotForMobile),
             Effect.mapError(
               (cause) =>
                 new OrchestrationGetSnapshotError({
                   message: "Failed to load orchestration snapshot",
                   cause,
                 }),
+            ),
+          ),
+          { "rpc.aggregate": "mobile-orchestration" },
+        ),
+      [ORCHESTRATION_WS_METHODS.getMobileThread]: (input: { threadId: ThreadId }) =>
+        observeRpcEffect(
+          ORCHESTRATION_WS_METHODS.getMobileThread,
+          context.projectionSnapshotQuery.getSnapshot().pipe(
+            Effect.flatMap((snapshot) => {
+              const thread = getThreadFromOrchestrationSnapshot(snapshot, input.threadId);
+              if (thread === null) {
+                return Effect.fail(
+                  new OrchestrationGetMobileThreadError({
+                    message: "Thread not found in orchestration snapshot",
+                  }),
+                );
+              }
+              return Effect.succeed(thread);
+            }),
+            Effect.mapError((cause) =>
+              Schema.is(OrchestrationGetMobileThreadError)(cause)
+                ? cause
+                : new OrchestrationGetMobileThreadError({
+                    message: "Failed to load mobile thread",
+                    cause,
+                  }),
             ),
           ),
           { "rpc.aggregate": "mobile-orchestration" },
@@ -150,6 +181,10 @@ const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
           }),
           { "rpc.aggregate": "mobile-server" },
         ),
+      [WS_METHODS.gitRefreshStatus]: (input: Parameters<typeof context.gitManager.status>[0]) =>
+        observeRpcEffect(WS_METHODS.gitRefreshStatus, context.gitManager.status(input), {
+          "rpc.aggregate": "mobile-git",
+        }),
     });
   }),
 );

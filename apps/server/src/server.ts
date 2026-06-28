@@ -13,6 +13,7 @@ import {
   workspaceFilePreviewRouteLayer,
 } from "./ws/http";
 import { mobilePairingRoutesLayer } from "./ws/http.mobile";
+import { mobileWebStaticRouteLayer } from "./ws/http.mobileWeb";
 import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
@@ -304,6 +305,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
   mobilePairingRoutesLayer,
+  mobileWebStaticRouteLayer,
   staticAndDevRouteLayer,
   threadOrchestrationToolsRouteLayer,
   websocketRpcRouteLayer,

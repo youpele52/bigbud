@@ -32,8 +32,94 @@ function isSafeHref(href: string): boolean {
   return /^(https?:\/\/|mailto:|\/|#)/.test(href);
 }
 
+function isSafeIframeSrc(src: string): boolean {
+  return /^https:\/\/(www\.)?(youtube\.com\/embed\/|youtube-nocookie\.com\/embed\/|player\.vimeo\.com\/video\/)/.test(
+    src,
+  );
+}
+
+function renderIframe(raw: string): string {
+  const match = /<iframe\b([^>]*)><\/iframe>/i.exec(raw.trim());
+  if (!match) {
+    return "";
+  }
+
+  const attrs = match[1] ?? "";
+  const srcMatch = /\bsrc\s*=\s*"([^"]+)"/i.exec(attrs);
+  if (!srcMatch || !isSafeIframeSrc(srcMatch[1])) {
+    return "";
+  }
+
+  const allowedSrc = escapeAttribute(srcMatch[1]);
+  const titleMatch = /\btitle\s*=\s*"([^"]*)"/i.exec(attrs);
+  const title = titleMatch ? escapeAttribute(titleMatch[1]) : "embedded video";
+
+  return `<div class="md-embed"><iframe src="${allowedSrc}" title="${title}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>`;
+}
+
 function isSafeImageSrc(src: string): boolean {
   return /^(https?:\/\/|\/|\.\/|\.\.\/)/.test(src);
+}
+
+function isSafeVideoSrc(src: string): boolean {
+  return /^(https?:\/\/|\/|\.\/|\.\.\/)/.test(src);
+}
+
+function renderMediaFallbackSvg(kind: "image" | "video"): string {
+  if (kind === "video") {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`;
+}
+
+function renderImage(rawAlt: string, rawSrc: string): string {
+  const src = rawSrc.trim();
+  const alt = rawAlt.trim();
+
+  if (!isSafeImageSrc(src)) {
+    return "";
+  }
+
+  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} onerror="this.outerHTML='<div class=\\'md-media-fallback\\'>${renderMediaFallbackSvg("image")}<span>Image failed to load</span></div>'" />`;
+}
+
+function renderVideo(raw: string): string {
+  const match = /<video\b([^>]*?)>[\s\S]*?<\/video>/i.exec(raw.trim());
+  if (!match) {
+    return "";
+  }
+
+  const attrs = match[1] ?? "";
+  const srcMatch = /\bsrc\s*=\s*"([^"]+)"/i.exec(attrs);
+  if (!srcMatch || !isSafeVideoSrc(srcMatch[1])) {
+    return "";
+  }
+
+  const allowedSrc = escapeAttribute(srcMatch[1]);
+  const widthMatch = /\bwidth\s*=\s*"([^"]+)"/i.exec(attrs);
+  const titleMatch = /\btitle\s*=\s*"([^"]*)"/i.exec(attrs);
+
+  const hasExplicitControls = /\b(autoplay|loop|muted|controls|playsinline)\b/i.test(attrs);
+  const attrsList = [
+    hasExplicitControls && /\bautoplay\b/i.test(attrs) ? "autoplay" : "",
+    hasExplicitControls && /\bloop\b/i.test(attrs) ? "loop" : "",
+    hasExplicitControls && /\bmuted\b/i.test(attrs) ? "muted" : "",
+    hasExplicitControls && /\bcontrols\b/i.test(attrs) ? "controls" : "",
+    hasExplicitControls && /\bplaysinline\b/i.test(attrs) ? "playsinline" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const videoAttrs = hasExplicitControls ? attrsList : "autoplay loop muted playsinline";
+  const title = titleMatch ? ` title="${escapeAttribute(titleMatch[1])}"` : "";
+  const width = widthMatch ? ` width="${escapeAttribute(widthMatch[1])}"` : "";
+
+  return `<div class="md-embed md-media--video">
+    <video src="${allowedSrc}" loading="lazy"${videoAttrs ? ` ${videoAttrs}` : ""}${title}${width}
+      oncanplay="this.style.opacity='1'" style="opacity:0;transition:opacity 0.3s"
+    ></video>
+    <div class="md-media-fallback">${renderMediaFallbackSvg("video")}<span>Video failed to load</span></div>
+  </div>`;
 }
 
 function slugifyHeading(value: string): string {
@@ -51,7 +137,7 @@ function classAttr(className: string): string {
 
 function getHeadingClasses(level: number): string {
   if (level === 1) {
-    return "md-heading md-heading--hero";
+    return "heading md-heading md-heading--hero";
   }
   if (level === 2) {
     return "md-heading md-heading--section";
@@ -109,7 +195,11 @@ function tokenizeInline(value: string): { text: string; tokens: string[] } {
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label: string, href: string) => {
     const safeHref = href.trim();
     const token = `%%TOKEN${tokens.length}%%`;
-    const linkLabel = escapeHtml(label.trim());
+    const trimmedLabel = label.trim();
+    const nestedToken = /^%%TOKEN(\d+)%%$/.exec(trimmedLabel);
+    const linkLabel = nestedToken
+      ? (tokens[Number(nestedToken[1])] ?? "")
+      : escapeHtml(trimmedLabel);
 
     if (!isSafeHref(safeHref)) {
       tokens.push(linkLabel);
@@ -160,20 +250,46 @@ function renderList(lines: string[], ordered: boolean): string {
   return `<${tag}${classAttr(getListClasses(ordered))}>${items}</${tag}>`;
 }
 
+function parseTableLine(line: string): string[] | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return undefined;
+  }
+  const inner = trimmed.slice(1, -1);
+  if (!inner.includes("|")) {
+    return undefined;
+  }
+  return inner.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) {
+    return false;
+  }
+  const inner = trimmed.slice(1, -1);
+  return /^(\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*$/.test(inner);
+}
+
+function renderTable(headerCells: string[], rows: string[][]): string {
+  const headerHtml = headerCells
+    .map((cell) => `<th${classAttr("md-table__th")}>${renderInline(cell)}</th>`)
+    .join("");
+  const bodyHtml = rows
+    .map((row) => {
+      const cells = row
+        .map((cell) => `<td${classAttr("md-table__td")}>${renderInline(cell)}</td>`)
+        .join("");
+      return `<tr${classAttr("md-table__tr")}>${cells}</tr>`;
+    })
+    .join("");
+
+  return `<div${classAttr("md-table-wrap")}><table${classAttr("md-table")}><thead${classAttr("md-table__head")}><tr${classAttr("md-table__tr")}>${headerHtml}</tr></thead><tbody${classAttr("md-table__body")}>${bodyHtml}</tbody></table></div>`;
+}
+
 function renderCodeBlock(lines: string[]): string {
   const classes = getBlockCodeClasses();
   return `<pre${classAttr(classes.pre)}><code${classAttr(classes.code)}>${escapeHtml(lines.join("\n"))}</code></pre>`;
-}
-
-function renderImage(rawAlt: string, rawSrc: string): string {
-  const src = rawSrc.trim();
-  const alt = rawAlt.trim();
-
-  if (!isSafeImageSrc(src)) {
-    return "";
-  }
-
-  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} />`;
 }
 
 function isListLine(line: string): boolean {
@@ -245,6 +361,42 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
       continue;
     }
 
+    if (trimmed.toLowerCase().startsWith("<iframe")) {
+      if (trimmed.toLowerCase().includes("</iframe>")) {
+        sections.push({ html: renderIframe(trimmed) });
+        continue;
+      }
+      const iframeLines = [trimmed];
+      while (index + 1 < lines.length) {
+        const nextLine = lines[index + 1]?.trim() ?? "";
+        iframeLines.push(nextLine);
+        index += 1;
+        if (nextLine.toLowerCase().includes("</iframe>")) {
+          break;
+        }
+      }
+      sections.push({ html: renderIframe(iframeLines.join(" ")) });
+      continue;
+    }
+
+    if (trimmed.toLowerCase().startsWith("<video")) {
+      if (trimmed.toLowerCase().includes("</video>")) {
+        sections.push({ html: renderVideo(trimmed) });
+        continue;
+      }
+      const videoLines = [trimmed];
+      while (index + 1 < lines.length) {
+        const nextLine = lines[index + 1]?.trim() ?? "";
+        videoLines.push(nextLine);
+        index += 1;
+        if (nextLine.toLowerCase().includes("</video>")) {
+          break;
+        }
+      }
+      sections.push({ html: renderVideo(videoLines.join(" ")) });
+      continue;
+    }
+
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
     if (headingMatch) {
       const level = headingMatch[1].length;
@@ -259,6 +411,27 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
     const image = parseImageLine(trimmed);
     if (image) {
       sections.push({ html: renderImage(image.alt, image.src) });
+      continue;
+    }
+
+    const headerCells = parseTableLine(trimmed);
+    const nextLine = lines[index + 1]?.trim() ?? "";
+    if (headerCells && isTableSeparator(nextLine)) {
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length) {
+        const dataLine = lines[index]?.trim() ?? "";
+        if (dataLine.length === 0) {
+          break;
+        }
+        const dataCells = parseTableLine(dataLine);
+        if (!dataCells) {
+          break;
+        }
+        rows.push(dataCells);
+        index += 1;
+      }
+      sections.push({ html: renderTable(headerCells, rows) });
       continue;
     }
 
@@ -287,6 +460,8 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
       if (
         nextLine.length === 0 ||
         nextLine.startsWith("```") ||
+        nextLine.toLowerCase().startsWith("<video") ||
+        nextLine.toLowerCase().startsWith("<iframe") ||
         /^(#{1,6})\s+/.test(nextLine) ||
         parseImageLine(nextLine) !== undefined ||
         isListLine(nextLine)

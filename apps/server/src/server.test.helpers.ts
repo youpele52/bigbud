@@ -197,6 +197,7 @@ export const buildAppUnderTest = (options?: {
       baseDir,
       ...derivedPaths,
       staticDir: undefined,
+      mobileWebStaticDir: undefined,
       devUrl,
       noBrowser: true,
       authToken: undefined,

@@ -1,16 +1,18 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_MOBILE_WEB_PORT } from "@bigbud/shared/DevPorts";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import pkg from "./package.json" with { type: "json" };
 
-const port = Number(process.env.MOBILE_WEB_PORT ?? process.env.PORT ?? DEFAULT_MOBILE_WEB_PORT);
+// Dev server only — keep in sync with @bigbud/shared/DevPorts DEFAULT_MOBILE_WEB_PORT.
+const port = Number(process.env.MOBILE_WEB_PORT ?? process.env.PORT ?? 5740);
+const mobileBase = process.env.VITE_MOBILE_BASE ?? "/";
 const webSrcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/src");
 
 export default defineConfig({
+  base: mobileBase,
   plugins: [react(), tailwindcss()],
   define: {
     "import.meta.env.APP_VERSION": JSON.stringify(pkg.version),

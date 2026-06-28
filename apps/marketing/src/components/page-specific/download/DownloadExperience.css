@@ -15,17 +15,6 @@
   padding: 3.4rem 0 3rem;
 }
 
-.heading {
-  font-weight: 500;
-  font-size: clamp(3.15rem, 4.25vw, 5rem);
-  letter-spacing: -0.068em;
-  line-height: 0.9;
-  margin-bottom: 0.5rem;
-  max-width: 8ch;
-  opacity: 0;
-  animation: fade-in 0.9s ease-out forwards;
-}
-
 .subheading {
   font-size: 0.8rem;
   color: var(--fg-dim);

@@ -2,13 +2,23 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.647 (23 June, 2026)
+## v0.1.648 (26 June, 2026)
+
+### Mobile Remote Companion
+
+- Added a standalone **mobile web companion** (`apps/mobile-web`) for steering bigbud from your phone — browse chats and projects, open threads, watch live turns, send prompts, interrupt runs, approve or reject pending actions, inspect diffs, and archive threads without the full desktop shell.
+- Pair your phone from **Settings → Mobile Remote**: enable scoped mobile sessions, create a pairing link, and authorize the device in the hosted companion. Sessions are short-lived, scope-limited (`read-only`, `approve-only`, or `thread-control`), and can be revoked immediately from desktop.
+- The hosted companion and desktop backend stay intentionally separate — configure the **Mobile app URL** (for example `https://mobile.bigbud.app`) and a reachable **Backend URL** so the phone can pair over the same network or, with **Tailscale Serve**, from another Wi-Fi on your tailnet.
+- Added **live message streaming** in the mobile thread view — user and assistant text updates in real time as domain events arrive, with incremental cache updates and streaming markdown rendering so you can follow a turn without leaving the chat.
+- Added **project and git context** below the mobile composer on git-backed projects — folder icon with project name on the left and the current branch on the right, aligned with the desktop chat footer.
 
 ### Kanban
 
 - Added a **Kanban** right-panel tab after Notes with Backlog, Todo, Ongoing, and Done columns for lightweight task tracking alongside your chats.
 - Boards can be **global** or **project-scoped**, with markdown-backed cards and JSON sidecars so they persist across restarts and stay in sync with the filesystem.
 - Drag cards between columns or within a column to reorder, drag them into the composer to write, flesh out, or even carry out the task with the agent, manage them from a context menu, and collapse columns when you want a denser view.
+
+<iframe src="https://www.youtube-nocookie.com/embed/R0WvKJjY62Q" title="bigbud: Using bigbud's Kanban board"></iframe>
 
 ### Files Panel
 
@@ -23,11 +33,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Referenced threads are not just passive context: you can ask the agent to inspect them and act on them, including renaming the referenced thread when needed.
 - Excluded thread-reference metadata from title and branch-name generation, and added a server-side `exportThreadContext` RPC behind the sidebar **Copy path** action without exposing an editable file to the agent.
 
+<iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
+
 ### Notes
 
 - Note filenames are now stable — new notes use a creation-time datetime stem (for example `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note no longer renames the file or changes its `noteId`. Existing notes keep their current filenames, and display titles still come from content.
 - Fixed note and file path references dragged into the composer so the AI now receives the actual file contents as a proper attachment instead of just the raw path text.
 - Improved note readability and visual consistency: preview headings now match the markdown file viewer hierarchy, and edit mode now uses the same background treatment as the raw markdown viewer.
+
+<iframe src="https://www.youtube-nocookie.com/embed/DPceRqM3Sis" title="bigbud: Writing notes like a Pro"></iframe>
 
 ### Terminal
 

@@ -47,6 +47,8 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetMobileThreadError,
+  OrchestrationGetMobileThreadInput,
   OrchestrationGetSnapshotError,
   OrchestrationGetSnapshotInput,
   OrchestrationGetTurnDiffError,
@@ -400,6 +402,15 @@ export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
     payload: OrchestrationGetFullThreadDiffInput,
     success: OrchestrationRpcSchemas.getFullThreadDiff.output,
     error: OrchestrationGetFullThreadDiffError,
+  },
+);
+
+export const WsOrchestrationGetMobileThreadRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getMobileThread,
+  {
+    payload: OrchestrationGetMobileThreadInput,
+    success: OrchestrationRpcSchemas.getMobileThread.output,
+    error: OrchestrationGetMobileThreadError,
   },
 );
 

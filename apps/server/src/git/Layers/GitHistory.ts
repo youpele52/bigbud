@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import type {
+  GitCommitAuthor,
   GitGetCommitDetailsResult,
   GitListCommitsResult,
   GitReadWorkingTreeDiffResult,
@@ -11,7 +12,71 @@ import type { GitCoreShape } from "../Services/GitCore.ts";
 
 const DEFAULT_COMMIT_LIMIT = 50;
 const FIELD_SEPARATOR = "\u0000";
+const AUTHOR_SEPARATOR = "\u001f";
 const RECORD_SEPARATOR = "\u001e";
+
+function normalizeAuthorKey(author: GitCommitAuthor): string {
+  const normalizedEmail = author.email?.trim().toLowerCase() ?? "";
+  const normalizedName = author.name.trim().toLowerCase();
+  return normalizedEmail.length > 0 ? `email:${normalizedEmail}` : `name:${normalizedName}`;
+}
+
+function parseCommitAuthor(rawName: string, rawEmail?: string): GitCommitAuthor | null {
+  const name = rawName.trim();
+  const email = rawEmail?.trim() ?? "";
+  if (name.length === 0) {
+    return null;
+  }
+
+  return {
+    name,
+    email: email.length > 0 ? email : null,
+  };
+}
+
+function parseCoAuthorTrailer(rawTrailer: string): GitCommitAuthor | null {
+  const trimmed = rawTrailer.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const match = /^(.*?)\s*<([^<>]+)>$/.exec(trimmed);
+  if (!match) {
+    return parseCommitAuthor(trimmed);
+  }
+
+  const [, name = "", email = ""] = match;
+  return parseCommitAuthor(name, email);
+}
+
+function buildCommitAuthors(input: {
+  authorName: string;
+  authorEmail?: string;
+  coAuthorsRaw?: string;
+}): Array<GitCommitAuthor> {
+  const authors: Array<GitCommitAuthor> = [];
+  const seenKeys = new Set<string>();
+
+  const appendAuthor = (author: GitCommitAuthor | null) => {
+    if (!author) {
+      return;
+    }
+    const key = normalizeAuthorKey(author);
+    if (seenKeys.has(key)) {
+      return;
+    }
+    seenKeys.add(key);
+    authors.push(author);
+  };
+
+  appendAuthor(parseCommitAuthor(input.authorName, input.authorEmail));
+
+  for (const entry of (input.coAuthorsRaw ?? "").split(AUTHOR_SEPARATOR)) {
+    appendAuthor(parseCoAuthorTrailer(entry));
+  }
+
+  return authors;
+}
 
 function parseCommitSummaryRecords(
   stdout: string,
@@ -26,9 +91,11 @@ function parseCommitSummaryRecords(
         sha = "",
         shortSha = "",
         authorName = "",
+        authorEmail = "",
         authoredAt = "",
         subject = "",
         decorations = "",
+        coAuthorsRaw = "",
       ] = record.split(FIELD_SEPARATOR);
       if (!sha || !shortSha || !authorName || !authoredAt || !subject) {
         return [];
@@ -37,7 +104,7 @@ function parseCommitSummaryRecords(
         {
           sha,
           shortSha,
-          authorName,
+          authors: buildCommitAuthors({ authorName, authorEmail, coAuthorsRaw }),
           authoredAt,
           subject,
           isPushed: !unpushedCommitShas.has(sha),
@@ -65,16 +132,18 @@ function parseCommitDetails(stdout: string) {
     sha = "",
     shortSha = "",
     authorName = "",
+    authorEmail = "",
     authoredAt = "",
     subject = "",
     decorations = "",
     body = "",
     parentsRaw = "",
+    coAuthorsRaw = "",
   ] = stdout.split(FIELD_SEPARATOR);
   return {
     sha,
     shortSha,
-    authorName,
+    authors: buildCommitAuthors({ authorName, authorEmail, coAuthorsRaw }),
     authoredAt,
     subject,
     tags: parseGitTagDecorations(decorations),
@@ -221,7 +290,7 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
       "log",
       `--max-count=${limit + 1}`,
       ...(skip > 0 ? [`--skip=${skip}`] : []),
-      `--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%D%x1e`,
+      `--format=%H%x00%h%x00%an%x00%aE%x00%aI%x00%s%x00%D%x00%(trailers:key=Co-authored-by,valueonly,separator=%x1f,unfold=true)%x1e`,
     ];
     const result = yield* executeGit("GitCore.listCommits", input.cwd, args, {
       allowNonZeroExit: true,
@@ -261,7 +330,7 @@ export function makeGitHistoryOps(helpers: GitHelpers): GitHistoryOps {
           runGitStdout("GitCore.getCommitDetails.summary", input.cwd, [
             "show",
             "-s",
-            `--format=%H%x00%h%x00%an%x00%aI%x00%s%x00%D%x00%B%x00%P`,
+            `--format=%H%x00%h%x00%an%x00%aE%x00%aI%x00%s%x00%D%x00%B%x00%P%x00%(trailers:key=Co-authored-by,valueonly,separator=%x1f,unfold=true)`,
             input.commit,
           ]),
           runGitStdout("GitCore.getCommitDetails.numstat", input.cwd, [

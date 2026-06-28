@@ -1,0 +1,35 @@
+.page:has(.docs-page) {
+  overflow-x: clip;
+}
+
+.docs-page {
+  position: relative;
+  width: min(100%, var(--marketing-max-width));
+  padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
+}
+
+.docs-page .md-embed {
+  max-width: 40rem;
+}
+
+.docs-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(75% - 0.75rem);
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+@media (max-width: 1099px) {
+  .docs-page {
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+  }
+
+  .docs-page::before {
+    display: none;
+  }
+}
