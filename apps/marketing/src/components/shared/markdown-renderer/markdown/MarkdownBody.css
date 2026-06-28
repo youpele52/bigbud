@@ -245,6 +245,46 @@
   }
 }
 
+.md-media-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 8rem;
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  background: rgb(255 255 255 / 0.02);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  animation: md-media-fallback-pulse 2s ease-in-out infinite;
+}
+
+.md-media-fallback svg {
+  opacity: 0.35;
+}
+
+.md-embed .md-media-fallback {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.md-image + .md-media-fallback {
+  margin: 1.4rem 0;
+}
+
+@keyframes md-media-fallback-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
 @media (max-width: 640px) {
   .md-heading--hero {
     max-width: 9ch;
