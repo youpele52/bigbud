@@ -33,6 +33,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Referenced threads are not just passive context: you can ask the agent to inspect them and act on them, including renaming the referenced thread when needed.
 - Excluded thread-reference metadata from title and branch-name generation, and added a server-side `exportThreadContext` RPC behind the sidebar **Copy path** action without exposing an editable file to the agent.
 
+<iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
+
 ### Notes
 
 - Note filenames are now stable — new notes use a creation-time datetime stem (for example `2026-06-23-14-30-00.md`) instead of the H1 title, so editing a note no longer renames the file or changes its `noteId`. Existing notes keep their current filenames, and display titles still come from content.

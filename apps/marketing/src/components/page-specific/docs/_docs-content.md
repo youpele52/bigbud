@@ -93,3 +93,7 @@ bigbud brings everything into one window. Here are the key areas to know:
 ### Using bigbud's Kanban board
 
 <iframe src="https://www.youtube-nocookie.com/embed/R0WvKJjY62Q" title="bigbud: Using bigbud's Kanban board"></iframe>
+
+### Thread-aware agents: drag & drop context into AI
+
+<iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
