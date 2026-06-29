@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const copyTextToClipboard = vi.fn().mockResolvedValue(undefined);
-const openPathInPreferredApp = vi.fn().mockResolvedValue(undefined);
-const showContextMenu = vi.fn();
+const { copyTextToClipboard, openPathInPreferredApp, showContextMenu } = vi.hoisted(() => ({
+  copyTextToClipboard: vi.fn().mockResolvedValue(undefined),
+  openPathInPreferredApp: vi.fn().mockResolvedValue(undefined),
+  showContextMenu: vi.fn(),
+}));
 
 vi.mock("~/lib/clipboard/copyText", () => ({
   copyTextToClipboard,
