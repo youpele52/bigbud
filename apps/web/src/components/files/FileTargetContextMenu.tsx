@@ -9,7 +9,10 @@ import {
   openDirectoryInFilesPanelIfSupported,
   openPathInBrowserPanelIfSupported,
   openPathInFilesPanelIfSupported,
+  resolveWorkspaceRelativeEntryPath,
 } from "../../stores/files/filesPanel.open";
+import { copyTextToClipboard } from "~/lib/clipboard/copyText";
+import { createSharedFileActionItems, type SharedFileActionId } from "./FileActionsMenu.shared";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +33,6 @@ interface FileTargetContextMenuProps {
   kind: MenuTargetKind | null;
   position: ContextMenuPosition | null;
   onClose: () => void;
-  onCopyPath?: (path: string) => void;
 }
 
 function createVirtualAnchor(position: ContextMenuPosition) {
@@ -55,7 +57,6 @@ export function FileTargetContextMenu({
   kind,
   position,
   onClose,
-  onCopyPath,
 }: FileTargetContextMenuProps) {
   const [open, setOpen] = useState(false);
 
@@ -71,6 +72,7 @@ export function FileTargetContextMenu({
         canOpenInBrowser: false,
         canOpenInFileViewer: false,
         canOpenDirectoryInternally: false,
+        relativePath: null,
       };
     }
 
@@ -79,6 +81,7 @@ export function FileTargetContextMenu({
         canOpenInBrowser: false,
         canOpenInFileViewer: false,
         canOpenDirectoryInternally: canOpenDirectoryInFilesPanel(targetPath, workspaceRoot),
+        relativePath: resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot),
       };
     }
 
@@ -86,6 +89,7 @@ export function FileTargetContextMenu({
       canOpenInBrowser: canOpenPathInBrowserPanel(targetPath, workspaceRoot),
       canOpenInFileViewer: canOpenPathInFilesPanel(targetPath, workspaceRoot),
       canOpenDirectoryInternally: false,
+      relativePath: resolveWorkspaceRelativeEntryPath(targetPath, workspaceRoot),
     };
   }, [kind, targetPath, workspaceRoot]);
 
@@ -104,21 +108,47 @@ export function FileTargetContextMenu({
     openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot);
   }, [targetPath, workspaceRoot]);
 
-  const handleOpenExternally = useCallback(() => {
-    if (!targetPath) return;
-    const api = readNativeApi();
-    if (!api) return;
-    void openPathInPreferredApp(api, targetPath).catch((error) => {
-      console.error(`Failed to open ${kind ?? "entry"} externally:`, error);
-    });
-  }, [kind, targetPath]);
+  const handleSharedAction = useCallback(
+    (action: SharedFileActionId) => {
+      if (!targetPath) {
+        return;
+      }
 
-  const handleCopyPath = useCallback(() => {
-    if (!targetPath || !onCopyPath) return;
-    onCopyPath(targetPath);
-  }, [onCopyPath, targetPath]);
+      if (action === "open-externally") {
+        const api = readNativeApi();
+        if (!api) {
+          return;
+        }
+        void openPathInPreferredApp(api, targetPath).catch((error) => {
+          console.error(`Failed to open ${kind ?? "entry"} externally:`, error);
+        });
+        return;
+      }
 
-  const showOpenExternally = kind === "file";
+      if (action === "copy-relative-path") {
+        if (!menuOptions.relativePath) {
+          return;
+        }
+        void copyTextToClipboard(menuOptions.relativePath);
+        return;
+      }
+
+      if (action === "copy-path") {
+        void copyTextToClipboard(targetPath);
+      }
+    },
+    [kind, menuOptions.relativePath, targetPath],
+  );
+  const sharedActions = useMemo(
+    () =>
+      createSharedFileActionItems({
+        canSelectAll: false,
+        canOpenExternally: kind === "file" || kind === "directory",
+        canCopyRelativePath: Boolean(menuOptions.relativePath),
+        canCopyPath: true,
+      }),
+    [kind, menuOptions.relativePath],
+  );
 
   return (
     <DropdownMenu
@@ -149,12 +179,11 @@ export function FileTargetContextMenu({
               Open internally
             </DropdownMenuItem>
           ) : null}
-          {showOpenExternally || kind === "directory" ? (
-            <DropdownMenuItem onClick={handleOpenExternally}>Open externally</DropdownMenuItem>
-          ) : null}
-          {onCopyPath ? (
-            <DropdownMenuItem onClick={handleCopyPath}>Copy path</DropdownMenuItem>
-          ) : null}
+          {sharedActions.map((item) => (
+            <DropdownMenuItem key={item.id} onClick={() => handleSharedAction(item.id)}>
+              {item.label}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       ) : null}
     </DropdownMenu>

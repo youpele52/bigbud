@@ -3,7 +3,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isImageFilePath } from "../../lib/workspaceFilePreview";
 
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useDefaultChatCwd } from "../../rpc/serverState";
@@ -45,7 +44,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
   const { resolvedTheme } = useTheme();
   const defaultChatCwd = useDefaultChatCwd();
-  const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
@@ -336,7 +334,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         contextMenuState={contextMenuState}
         workspaceRoot={activeWorkspaceRoot ?? undefined}
         onClose={closeContextMenu}
-        onCopyPath={(path) => copyToClipboard(path, { path })}
       />
     </>
   );

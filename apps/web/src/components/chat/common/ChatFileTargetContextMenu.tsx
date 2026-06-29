@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 
-import { useCopyToClipboard } from "../../../hooks/useCopyToClipboard";
 import { FileTargetContextMenu } from "../../files/FileTargetContextMenu";
 
 type ContextMenuState = {
@@ -33,8 +32,6 @@ export function ChatFileTargetContextMenu(props: {
   contextMenuState: ContextMenuState | null;
   onClose: () => void;
 }) {
-  const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
-
   return (
     <FileTargetContextMenu
       targetPath={props.contextMenuState?.targetPath ?? null}
@@ -44,7 +41,6 @@ export function ChatFileTargetContextMenu(props: {
         props.contextMenuState ? { x: props.contextMenuState.x, y: props.contextMenuState.y } : null
       }
       onClose={props.onClose}
-      onCopyPath={(path) => copyToClipboard(path, { path })}
     />
   );
 }
