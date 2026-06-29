@@ -20,14 +20,10 @@ import {
 } from "./Adapter.session.helpers.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
 import {
-  prepareThreadOrchestrationSessionAuth,
-  resolveThreadOrchestrationHttpConfig,
-} from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
-import {
-  createOpencodeOrchestrationToolWorkspace,
-  writeOpencodeOrchestrationTools,
-} from "../../../orchestration-tools/opencodeThreadOrchestrationTools.ts";
-import { composeBridgeCleanups } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
+  composeBridgeCleanups,
+  prepareThreadOrchestrationMcpBridge,
+  registerOpencodeOrchestrationMcpBridge,
+} from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
@@ -134,62 +130,29 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             })
           : undefined;
 
-      const orchestrationWorkspace =
-        (remoteWorkspaceBridge?.cwd ?? input.cwd)
-          ? undefined
-          : yield* Effect.tryPromise({
-              try: () => createOpencodeOrchestrationToolWorkspace(),
-              catch: (cause) =>
-                new ProviderAdapterProcessError({
-                  provider: deps.provider,
-                  threadId: input.threadId,
-                  detail: toMessage(
-                    cause,
-                    `Failed to prepare ${deps.provider} orchestration tool workspace.`,
-                  ),
-                  cause,
-                }),
-            });
-      const orchestrationTargetDir =
-        remoteWorkspaceBridge?.cwd ?? input.cwd ?? orchestrationWorkspace?.targetDir;
-      if (!orchestrationTargetDir) {
-        return yield* new ProviderAdapterProcessError({
-          provider: deps.provider,
-          threadId: input.threadId,
-          detail: `Failed to resolve ${deps.provider} orchestration tool workspace.`,
-        });
-      }
-      yield* Effect.tryPromise({
-        try: async () => {
-          const { token } = await prepareThreadOrchestrationSessionAuth({
+      const orchestrationBridge = yield* Effect.tryPromise({
+        try: () =>
+          prepareThreadOrchestrationMcpBridge({
             stateDir: deps.serverConfig.stateDir,
             threadId: input.threadId,
-          });
-          const httpConfig = resolveThreadOrchestrationHttpConfig(
-            {
-              stateDir: deps.serverConfig.stateDir,
-              threadId: input.threadId,
-              host: deps.serverConfig.host,
-              port: deps.serverConfig.port,
-            },
-            token,
-          );
-          await writeOpencodeOrchestrationTools({
-            targetDir: orchestrationTargetDir,
-            ...httpConfig,
-          });
-        },
+            host: deps.serverConfig.host,
+            port: deps.serverConfig.port,
+          }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
             provider: deps.provider,
             threadId: input.threadId,
-            detail: toMessage(cause, `Failed to prepare ${deps.provider} orchestration tools.`),
+            detail: toMessage(
+              cause,
+              `Failed to prepare ${deps.provider} orchestration MCP bridge.`,
+            ),
             cause,
           }),
       });
+      const serverDirectory = remoteWorkspaceBridge?.cwd ?? input.cwd;
       const cleanupBridge = composeBridgeCleanups(
         remoteWorkspaceBridge?.cleanup,
-        orchestrationWorkspace?.cleanup,
+        orchestrationBridge.cleanup,
       );
 
       const serverHandle = yield* Effect.tryPromise({
@@ -197,7 +160,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
           deps.serverManager.acquire({
             provider: deps.provider,
             binaryPath: settings.binaryPath,
-            ...(orchestrationTargetDir ? { directory: orchestrationTargetDir } : {}),
+            ...(serverDirectory ? { directory: serverDirectory } : {}),
             executionTargetId: executionContext.providerRuntimeTarget.executionTargetId,
           }),
         catch: (cause) =>
@@ -210,6 +173,31 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       }).pipe(
         Effect.tapError(() =>
           Effect.sync(() => {
+            void cleanupBridge().catch(() => undefined);
+          }),
+        ),
+      );
+      yield* Effect.tryPromise({
+        try: () =>
+          registerOpencodeOrchestrationMcpBridge({
+            client: serverHandle.client,
+            ...(serverDirectory ? { directory: serverDirectory } : {}),
+            bridge: orchestrationBridge,
+          }),
+        catch: (cause) =>
+          new ProviderAdapterProcessError({
+            provider: deps.provider,
+            threadId: input.threadId,
+            detail: toMessage(
+              cause,
+              `Failed to register ${deps.provider} orchestration MCP bridge.`,
+            ),
+            cause,
+          }),
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            serverHandle.release();
             void cleanupBridge().catch(() => undefined);
           }),
         ),

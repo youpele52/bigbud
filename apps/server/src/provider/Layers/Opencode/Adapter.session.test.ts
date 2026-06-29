@@ -44,6 +44,41 @@ function makeEmptyAsyncIterable<T>(): AsyncIterable<T> {
   };
 }
 
+function makeMockOpencodeClient(input?: {
+  readonly onSessionCreate?: (sessionInput: Record<string, unknown>) => void;
+  readonly onMcpAdd?: (mcpInput: Record<string, unknown>) => void;
+  readonly onMcpConnect?: (mcpInput: Record<string, unknown>) => void;
+}) {
+  return {
+    session: {
+      create: async (sessionInput: Record<string, unknown>) => {
+        input?.onSessionCreate?.(sessionInput);
+        return {
+          data: {
+            id: "opencode-session-1",
+          },
+          error: undefined,
+        };
+      },
+    },
+    event: {
+      subscribe: async () => ({
+        stream: makeEmptyAsyncIterable<unknown>(),
+      }),
+    },
+    mcp: {
+      add: async (mcpInput: Record<string, unknown>) => {
+        input?.onMcpAdd?.(mcpInput);
+        return { data: {}, error: undefined };
+      },
+      connect: async (mcpInput: Record<string, unknown>) => {
+        input?.onMcpConnect?.(mcpInput);
+        return { data: {}, error: undefined };
+      },
+    },
+  } as never;
+}
+
 describe("Opencode session lifecycle", () => {
   for (const [runtimeMode, expectedRules] of [
     ["approval-required", APPROVAL_REQUIRED_RULES],
@@ -53,26 +88,12 @@ describe("Opencode session lifecycle", () => {
     it.effect(`passes explicit ${runtimeMode} permission rules into OpenCode session.create`, () =>
       Effect.gen(function* () {
         const createInputs: Array<Record<string, unknown>> = [];
-        const subscribe = async () => ({
-          stream: makeEmptyAsyncIterable<unknown>(),
-        });
         const handle: OpencodeServerHandle = {
-          client: {
-            session: {
-              create: async (input: Record<string, unknown>) => {
-                createInputs.push(input);
-                return {
-                  data: {
-                    id: "opencode-session-1",
-                  },
-                  error: undefined,
-                };
-              },
+          client: makeMockOpencodeClient({
+            onSessionCreate: (sessionInput) => {
+              createInputs.push(sessionInput);
             },
-            event: {
-              subscribe,
-            },
-          } as never,
+          }),
           url: "http://127.0.0.1:4096",
           release() {},
         };
@@ -129,23 +150,8 @@ describe("Opencode session lifecycle", () => {
   it.effect("runs OpenCode locally against a synthetic workspace for remote projects", () =>
     Effect.gen(function* () {
       const acquireCalls: Array<unknown> = [];
-      const subscribe = async () => ({
-        stream: makeEmptyAsyncIterable<unknown>(),
-      });
       const handle: OpencodeServerHandle = {
-        client: {
-          session: {
-            create: async () => ({
-              data: {
-                id: "opencode-session-remote",
-              },
-              error: undefined,
-            }),
-          },
-          event: {
-            subscribe,
-          },
-        } as never,
+        client: makeMockOpencodeClient(),
         url: "http://127.0.0.1:4097",
         release() {},
       };
@@ -220,26 +226,20 @@ describe("Opencode session lifecycle", () => {
     }),
   );
 
-  it.effect("installs orchestration tools for OpenCode sessions without a cwd", () =>
+  it.effect("registers orchestration MCP for OpenCode sessions without a cwd", () =>
     Effect.gen(function* () {
       const acquireCalls: Array<unknown> = [];
-      const subscribe = async () => ({
-        stream: makeEmptyAsyncIterable<unknown>(),
-      });
+      const mcpAddCalls: Array<Record<string, unknown>> = [];
+      const mcpConnectCalls: Array<Record<string, unknown>> = [];
       const handle: OpencodeServerHandle = {
-        client: {
-          session: {
-            create: async () => ({
-              data: {
-                id: "opencode-session-global",
-              },
-              error: undefined,
-            }),
+        client: makeMockOpencodeClient({
+          onMcpAdd: (mcpInput) => {
+            mcpAddCalls.push(mcpInput);
           },
-          event: {
-            subscribe,
+          onMcpConnect: (mcpInput) => {
+            mcpConnectCalls.push(mcpInput);
           },
-        } as never,
+        }),
         url: "http://127.0.0.1:4098",
         release() {},
       };
@@ -285,16 +285,96 @@ describe("Opencode session lifecycle", () => {
         runtimeMode: "approval-required",
       });
 
-      const acquireInput = acquireCalls[0] as { readonly directory: string };
-      expect(acquireInput.directory).toContain("bigbud-opencode-orchestration-");
-      yield* Effect.promise(() =>
-        expect(
-          fs.access(`${acquireInput.directory}/.opencode/tools/rename_thread.ts`),
-        ).resolves.toBeUndefined(),
-      );
+      expect(acquireCalls).toHaveLength(1);
+      expect(acquireCalls[0]).not.toHaveProperty("directory");
+      expect(mcpAddCalls).toEqual([
+        {
+          name: "bigbud_orchestration",
+          config: {
+            type: "local",
+            command: expect.arrayContaining([expect.any(String)]),
+          },
+        },
+      ]);
+      expect(mcpConnectCalls).toEqual([{ name: "bigbud_orchestration" }]);
+    }),
+  );
 
-      yield* methods.stopSession(THREAD_ID);
-      yield* Effect.promise(() => expect(fs.access(acquireInput.directory)).rejects.toThrow());
+  it.effect("does not write orchestration tool files into the project cwd", () =>
+    Effect.gen(function* () {
+      const projectDir = yield* Effect.promise(() => fs.mkdtemp("/tmp/bigbud-opencode-project-"));
+      const mcpAddCalls: Array<Record<string, unknown>> = [];
+      const handle: OpencodeServerHandle = {
+        client: makeMockOpencodeClient({
+          onMcpAdd: (mcpInput) => {
+            mcpAddCalls.push(mcpInput);
+          },
+        }),
+        url: "http://127.0.0.1:4099",
+        release() {},
+      };
+
+      const methods = makeSessionMethods({
+        provider: "opencode",
+        sessions: new Map(),
+        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+        serverManager: {
+          acquire: async () => handle,
+        },
+        serverSettings: {
+          getSettings: Effect.succeed({
+            providers: {
+              opencode: {
+                binaryPath: "opencode",
+              },
+            },
+          } as never),
+        },
+        serverConfig: {
+          attachmentsDir: "/tmp/attachments",
+          stateDir: "/tmp/bigbud-state",
+          port: 3773,
+          host: "127.0.0.1",
+        },
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
+        makeEventStamp: () =>
+          Effect.succeed({
+            eventId: EventId.makeUnsafe("evt-project"),
+            createdAt: CREATED_AT,
+          }),
+        nativeEventLogger: undefined,
+        services: yield* Effect.services<never>(),
+      });
+
+      try {
+        yield* methods.startSession({
+          threadId: THREAD_ID,
+          provider: "opencode",
+          runtimeMode: "approval-required",
+          cwd: projectDir,
+        });
+
+        expect(mcpAddCalls).toEqual([
+          {
+            directory: projectDir,
+            name: "bigbud_orchestration",
+            config: {
+              type: "local",
+              command: expect.arrayContaining([expect.any(String)]),
+            },
+          },
+        ]);
+        yield* Effect.promise(() =>
+          expect(fs.access(`${projectDir}/.opencode/tools/rename_thread.ts`)).rejects.toThrow(),
+        );
+        yield* Effect.promise(() =>
+          expect(
+            fs.access(`${projectDir}/.bigbud/opencode-orchestration-runtime.ts`),
+          ).rejects.toThrow(),
+        );
+      } finally {
+        yield* Effect.promise(() => fs.rm(projectDir, { recursive: true, force: true }));
+      }
     }),
   );
 });
