@@ -8,6 +8,7 @@ import {
   buildAcpOrchestrationBridgeConfig,
   buildClaudeOrchestrationBridgeConfig,
   buildCodexOrchestrationBridgeConfig,
+  buildOpencodeOrchestrationBridgeConfig,
   createThreadOrchestrationBridge,
   mergeClaudeQueryOptions,
   mergeCodexConfigArgs,
@@ -69,6 +70,24 @@ describe("orchestrationMcpBridge", () => {
     );
     expect((merged.mcpServers as Record<string, unknown>)["bigbud_orchestration"]).toBeDefined();
     expect(merged.mcpServers?.existing).toBeDefined();
+  });
+
+  it("builds OpenCode MCP config for orchestration tools", () => {
+    const bridge = {
+      serverName: "bigbud_orchestration" as const,
+      serverPath: "/tmp/orchestration-mcp-server.mjs",
+      bridgeDir: "/tmp/bridge",
+      token: "token-1",
+      cleanup: async () => undefined,
+    };
+
+    expect(buildOpencodeOrchestrationBridgeConfig(bridge)).toEqual({
+      name: "bigbud_orchestration",
+      config: {
+        type: "local",
+        command: [process.execPath, bridge.serverPath],
+      },
+    });
   });
 
   it("builds ACP stdio MCP config for orchestration tools", () => {

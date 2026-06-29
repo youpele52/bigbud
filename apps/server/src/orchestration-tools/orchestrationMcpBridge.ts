@@ -48,6 +48,14 @@ export interface AcpOrchestrationBridgeConfig {
   }>;
 }
 
+export interface OpencodeOrchestrationBridgeConfig {
+  readonly name: string;
+  readonly config: {
+    readonly type: "local";
+    readonly command: Array<string>;
+  };
+}
+
 function quoteTomlString(value: string): string {
   return JSON.stringify(value);
 }
@@ -110,6 +118,18 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__archive_thread`,
       `mcp__${bridge.serverName}__get_thread_status`,
     ],
+  };
+}
+
+export function buildOpencodeOrchestrationBridgeConfig(
+  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath">,
+): OpencodeOrchestrationBridgeConfig {
+  return {
+    name: bridge.serverName,
+    config: {
+      type: "local",
+      command: [process.execPath, bridge.serverPath],
+    },
   };
 }
 
