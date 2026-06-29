@@ -1,20 +1,20 @@
-import { AlertCircleIcon, XIcon } from "lucide-react";
+import { AlertCircleIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
-import { Button } from "../ui/button";
 import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
+import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
+import { FilePreviewHeader } from "./FilePreviewHeader";
 import {
   FilePreviewMarkdownToggle,
   FilePreviewMarkdownView,
   type MarkdownFileViewMode,
 } from "./FilePreview.markdown";
-import { readNativeApi } from "../../rpc/nativeApi";
-import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import {
+  buildAbsolutePreviewPath,
   buildFilePreviewBreadcrumb,
   FILE_PREVIEW_LINE_HEIGHT,
   getPreviewScrollTop,
@@ -23,6 +23,7 @@ import {
   shouldShowPreviewLoading,
 } from "./FilePreview.logic";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
+import { usePreviewLoad } from "./usePreviewLoad";
 
 interface FilePreviewProps {
   cwd: string;
@@ -42,22 +43,6 @@ export interface CodeAnnotationDraft {
   text: string;
 }
 
-interface PreviewState {
-  loading: boolean;
-  loaded: boolean;
-  contents: string;
-  truncated: boolean;
-  error: string | null;
-}
-
-const INITIAL_STATE: PreviewState = {
-  loading: true,
-  loaded: false,
-  contents: "",
-  truncated: false,
-  error: null,
-};
-
 export const FilePreview = memo(function FilePreview({
   cwd,
   relativePath,
@@ -67,108 +52,20 @@ export const FilePreview = memo(function FilePreview({
   onBack,
   onCreateAnnotation,
 }: FilePreviewProps) {
-  const [state, setState] = useState<PreviewState>(INITIAL_STATE);
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
     null,
   );
   const [markdownViewMode, setMarkdownViewMode] = useState<MarkdownFileViewMode>("preview");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
-  const previewRequestIdRef = useRef(0);
+  const codeContainerRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
-
-  const loadPreview = useCallback(
-    (options?: { readonly preserveContents?: boolean }) => {
-      const requestId = ++previewRequestIdRef.current;
-      const preserveContents = options?.preserveContents ?? false;
-
-      setState((current) =>
-        preserveContents
-          ? {
-              ...current,
-              loading: true,
-            }
-          : INITIAL_STATE,
-      );
-
-      const api = readNativeApi();
-      if (!api) {
-        setState((current) => {
-          if (requestId !== previewRequestIdRef.current) {
-            return current;
-          }
-
-          if (preserveContents && current.loaded) {
-            return {
-              ...current,
-              loading: false,
-            };
-          }
-
-          return {
-            loading: false,
-            loaded: false,
-            contents: "",
-            truncated: false,
-            error: "Native API not found.",
-          };
-        });
-        return;
-      }
-
-      void api.projects
-        .readFilePreview({
-          cwd,
-          relativePath,
-          ...(executionTargetId ? { executionTargetId } : {}),
-        })
-        .then((result) => {
-          setState((current) => {
-            if (requestId !== previewRequestIdRef.current) {
-              return current;
-            }
-
-            return {
-              loading: false,
-              loaded: true,
-              contents: result.contents,
-              truncated: result.truncated,
-              error: null,
-            };
-          });
-        })
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : "Failed to load file preview.";
-
-          setState((current) => {
-            if (requestId !== previewRequestIdRef.current) {
-              return current;
-            }
-
-            if (preserveContents && current.loaded) {
-              return {
-                ...current,
-                loading: false,
-              };
-            }
-
-            return {
-              loading: false,
-              loaded: false,
-              contents: "",
-              truncated: false,
-              error: message,
-            };
-          });
-        });
-    },
-    [cwd, executionTargetId, relativePath],
-  );
-
-  const refreshPreview = useCallback(() => {
-    loadPreview({ preserveContents: true });
-  }, [loadPreview]);
+  const { state, loadPreview, refreshPreview } = usePreviewLoad({
+    cwd,
+    relativePath,
+    executionTargetId,
+  });
 
   useEffect(() => {
     loadPreview();
@@ -223,6 +120,10 @@ export const FilePreview = memo(function FilePreview({
     () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
     [cwd, projectName, relativePath],
   );
+  const absolutePath = useMemo(
+    () => buildAbsolutePreviewPath(cwd, relativePath),
+    [cwd, relativePath],
+  );
   const plainFallback = useMemo(
     () => (
       <pre className="m-0 p-0 font-mono text-xs leading-5 text-foreground/85">{state.contents}</pre>
@@ -249,65 +150,69 @@ export const FilePreview = memo(function FilePreview({
     });
   };
 
-  const handleCodeContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!onCreateAnnotation) return;
+  const handlePreviewContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      const selectedText = window.getSelection()?.toString().trim() ?? "";
+      let annotationRange: { startLine: number; endLine: number } | null = null;
 
-    const selection = window.getSelection();
-    const selectedText = selection?.toString().trim();
-    if (!selectedText || selectedText.length < 2 || !state.contents) {
-      return;
-    }
-
-    const startIndex = state.contents.indexOf(selectedText);
-    if (startIndex === -1) return;
-
-    const api = readNativeApi();
-    if (!api?.contextMenu) return;
-
-    const endIndex = startIndex + selectedText.length;
-    const startLine = state.contents.slice(0, startIndex).split("\n").length;
-    const endLine = state.contents.slice(0, endIndex).split("\n").length;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    void api.contextMenu
-      .show([{ id: "annotate-selection", label: "Annotate selection" }], {
-        x: event.clientX,
-        y: event.clientY,
-      })
-      .then((action) => {
-        if (action === "annotate-selection") {
-          setSelectedRange({ startLine, endLine });
+      if (onCreateAnnotation && selectedText.length >= 2 && state.contents) {
+        const startIndex = state.contents.indexOf(selectedText);
+        if (startIndex !== -1) {
+          const endIndex = startIndex + selectedText.length;
+          annotationRange = {
+            startLine: state.contents.slice(0, startIndex).split("\n").length,
+            endLine: state.contents.slice(0, endIndex).split("\n").length,
+          };
         }
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      void showFilePreviewContextMenu({
+        position: { x: event.clientX, y: event.clientY },
+        absolutePath,
+        relativePath,
+        selectedText,
+        canSelectAll: true,
+        onSelectAll: () => {
+          selectElementContents(codeContainerRef.current ?? scrollContainerRef.current);
+        },
+        onAnnotateSelection:
+          annotationRange === null
+            ? undefined
+            : () => {
+                setSelectedRange(annotationRange);
+              },
       });
-  };
+    },
+    [absolutePath, onCreateAnnotation, relativePath, state.contents],
+  );
+
+  const handleHeaderContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      void showFilePreviewContextMenu({
+        position: { x: event.clientX, y: event.clientY },
+        absolutePath,
+        relativePath,
+        selectedText: "",
+        canSelectAll: false,
+      });
+    },
+    [absolutePath, relativePath],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs">
-            {breadcrumb.map((part, index) => (
-              <span key={part.id} className="flex min-w-0 items-center gap-1">
-                {index > 0 ? <span className="text-muted-foreground/45">&gt;</span> : null}
-                <span
-                  className={cn(
-                    "truncate",
-                    index === breadcrumb.length - 1
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground/75",
-                  )}
-                  title={part.label}
-                >
-                  {part.label}
-                </span>
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-8">
-          {isMarkdownFile ? (
+      <FilePreviewHeader
+        breadcrumb={breadcrumb}
+        onBack={onBack}
+        onContextMenu={handleHeaderContextMenu}
+        actions={
+          isMarkdownFile ? (
             <FilePreviewMarkdownToggle
               viewMode={markdownViewMode}
               onViewModeChange={(mode) => {
@@ -315,20 +220,9 @@ export const FilePreview = memo(function FilePreview({
                 setMarkdownViewMode(mode);
               }}
             />
-          ) : null}
-          {onBack ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              onClick={onBack}
-              aria-label="Close"
-            >
-              <XIcon />
-            </Button>
-          ) : null}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {shouldShowPreviewLoading(state) ? (
         <div className="p-3 text-sm text-muted-foreground/70">Loading preview...</div>
@@ -345,12 +239,16 @@ export const FilePreview = memo(function FilePreview({
           linesContainerRef={linesContainerRef}
           selectedRange={selectedRange}
           selectedText={selectedText}
-          onContextMenu={handleCodeContextMenu}
+          onContextMenu={handlePreviewContextMenu}
           onCreateAnnotation={onCreateAnnotation}
           onCancelAnnotation={() => setSelectedRange(null)}
         />
       ) : (
-        <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-auto">
+        <div
+          ref={scrollContainerRef}
+          className="relative min-h-0 flex-1 overflow-auto"
+          onContextMenu={handlePreviewContextMenu}
+        >
           {state.truncated ? (
             <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
               Preview truncated.
@@ -365,14 +263,15 @@ export const FilePreview = memo(function FilePreview({
                 <button
                   key={line.id}
                   type="button"
-                  className={cn(
-                    "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground",
-                    targetLine === line.lineNumber && "bg-primary/15 text-foreground",
-                    selectedRange &&
-                      line.lineNumber >= selectedRange.startLine &&
-                      line.lineNumber <= selectedRange.endLine &&
-                      "bg-info/15 text-info",
-                  )}
+                  className={
+                    targetLine === line.lineNumber
+                      ? "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground bg-primary/15 text-foreground"
+                      : selectedRange &&
+                          line.lineNumber >= selectedRange.startLine &&
+                          line.lineNumber <= selectedRange.endLine
+                        ? "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground bg-info/15 text-info"
+                        : "block h-5 w-10 cursor-pointer pr-2 text-right text-muted-foreground/55 hover:bg-accent/40 hover:text-foreground"
+                  }
                   onClick={(event) => selectLine(line.lineNumber, event.shiftKey)}
                   title="Click to annotate this line. Shift-click to extend selection."
                 >
@@ -381,8 +280,8 @@ export const FilePreview = memo(function FilePreview({
               ))}
             </div>
             <div
+              ref={codeContainerRef}
               className="file-preview-code min-w-0 px-3 text-foreground/85"
-              onContextMenu={handleCodeContextMenu}
             >
               <SyntaxHighlightedCode
                 code={state.contents}

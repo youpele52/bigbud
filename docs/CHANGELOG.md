@@ -2,6 +2,26 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.649 (2 July, 2026)
+
+### Files Panel
+
+- Added **Copy relative path** to file and folder right-click menus in the Files panel, so you can grab a workspace-friendly path without trimming the absolute one by hand.
+- Reordered the shared file actions to a more predictable sequence — **Select All**, **Open externally**, **Copy relative path**, then **Copy path** where each action applies.
+
+### File Viewer
+
+- Right-clicking an open file now shows the same file actions directly inside the viewer and on the file name breadcrumb, making it easier to open the file elsewhere or copy its path without going back to the tree.
+- Removed the duplicate **Copy full path** item from the file viewer menu so the copy options stay concise and less repetitive.
+
+### Maintainability
+
+- Extracted the repeated file-action menu ordering into a shared helper, so the Files panel tree, chat file links, and file viewer can stay in sync as more context-specific actions are added.
+
+### Validation
+
+- Passed `bun fmt`, `bun lint`, and `bun typecheck`.
+
 ## v0.1.648 (26 June, 2026)
 
 ### Mobile Remote Companion
