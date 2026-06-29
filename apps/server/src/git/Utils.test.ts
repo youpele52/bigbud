@@ -24,9 +24,20 @@ describe("stripSkillFrontmatter", () => {
 
 describe("loadSkillPrompt", () => {
   it("looks for bundled skills under ~/.bigbud/skills", () => {
-    expect(skillPromptPaths("git-commit")).toEqual([
-      join(homedir(), ".bigbud/skills", "git-commit", "SKILL.md"),
-    ]);
+    const previousBundledSkillsDir = process.env.BIGBUD_BUNDLED_SKILLS_DIR;
+    try {
+      delete process.env.BIGBUD_BUNDLED_SKILLS_DIR;
+
+      expect(skillPromptPaths("git-commit")).toEqual([
+        join(homedir(), ".bigbud/skills", "git-commit", "SKILL.md"),
+      ]);
+    } finally {
+      if (previousBundledSkillsDir === undefined) {
+        delete process.env.BIGBUD_BUNDLED_SKILLS_DIR;
+      } else {
+        process.env.BIGBUD_BUNDLED_SKILLS_DIR = previousBundledSkillsDir;
+      }
+    }
   });
 
   it("prefers packaged bundled skills when BIGBUD_BUNDLED_SKILLS_DIR is set", () => {

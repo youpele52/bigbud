@@ -12,15 +12,14 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### File Viewer
 
 - Right-clicking an open file now shows the same file actions directly inside the viewer and on the file name breadcrumb, making it easier to open the file elsewhere or copy its path without going back to the tree.
-- Removed the duplicate **Copy full path** item from the file viewer menu so the copy options stay concise and less repetitive.
 
-### Maintainability
+### Working Indicators
 
-- Extracted the repeated file-action menu ordering into a shared helper, so the Files panel tree, chat file links, and file viewer can stay in sync as more context-specific actions are added.
+- Refined the "working" state across desktop and mobile with a shimmer treatment on the action verb, so long-running agent turns feel more alive and easier to notice at a glance.
 
-### Validation
+### OpenCode
 
-- Passed `bun fmt`, `bun lint`, and `bun typecheck`.
+- Fixed OpenCode orchestration tools so they no longer write helper files into your project folders during a session; the runtime now keeps those temporary tool registrations out of the workspace.
 
 ## v0.1.648 (26 June, 2026)
 
