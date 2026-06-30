@@ -49,13 +49,15 @@ bigbud brings everything into one window. Here are the key areas to know:
 
 **Right side panel** — Use the right panel to view and work with your own files, write notes, browse the web, and more without leaving your chat. Press `Cmd + T` (macOS) or `Ctrl + T` (Windows/Linux) to open the panel switcher and choose from:
 
-- **Files** — Browse and open project files
+- **Files** — Browse and open project files (including inline video preview for `.mp4`, `.webm`, `.mov`, `.avi`)
 - **Notes** — Write markdown notes
 - **Browser** — Open a website alongside your workspace
 - **Terminal** — Start an interactive shell
 - **Diff** — View code changes side by side
 - **Kanban** — Track work across columns
 - **Git** — Inspect repo changes
+
+Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 **Search** — Find anything fast:
 
@@ -77,6 +79,7 @@ bigbud brings everything into one window. Here are the key areas to know:
 | `Cmd + Shift + B`                     | `Ctrl + Shift + B`                      | toggle browser panel           |
 | `Cmd + Shift + E`                     | `Ctrl + Shift + E`                      | toggle files panel             |
 | `Cmd + Shift + N`                     | `Ctrl + Shift + N`                      | new local thread               |
+| `Cmd + W`                             | `Ctrl + W`                              | close active right panel tab   |
 | `Cmd + Shift + [` / `Cmd + Shift + ]` | `Ctrl + Shift + [` / `Ctrl + Shift + ]` | previous / next thread         |
 
 ### 7. Next steps
@@ -97,3 +100,7 @@ bigbud brings everything into one window. Here are the key areas to know:
 ### Thread-aware agents: drag & drop context into AI
 
 <iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
+
+### Computer Use: desktop and browser automation
+
+AI agents can now control the in-app browser and, on desktop, your macOS machine. Enable desktop automation in **Settings → AI → Computer Use**, grant macOS Accessibility and Screen Recording permissions, and your agents can navigate the web, fill forms, open apps, take screenshots, and more — all within your session. Mutating actions (click, type, key presses) require `full-access` mode; read-only actions (capture, list windows, diagnostics) work in any mode.

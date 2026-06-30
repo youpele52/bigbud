@@ -17,7 +17,7 @@ import {
   findLatestProposedPlan,
   hasActionableProposedPlan,
 } from "../../logic/session";
-import { resolveWsHttpOrigin } from "../../rpc/wsHttpOrigin";
+import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "../../lib/attachmentPreview";
 import {
   type ChatMessage,
   type Project,
@@ -25,6 +25,8 @@ import {
   type Thread,
 } from "../../models/types";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
+
+export { attachmentPreviewRoutePath, toAttachmentPreviewUrl };
 
 // ── Normalization helpers ─────────────────────────────────────────────
 
@@ -77,17 +79,6 @@ export function toLegacyProvider(providerName: string | null): ProviderKind {
     return providerName;
   }
   return "codex";
-}
-
-export function attachmentPreviewRoutePath(attachmentId: string): string {
-  return `/attachments/${encodeURIComponent(attachmentId)}`;
-}
-
-export function toAttachmentPreviewUrl(rawUrl: string): string {
-  if (rawUrl.startsWith("/")) {
-    return `${resolveWsHttpOrigin()}${rawUrl}`;
-  }
-  return rawUrl;
 }
 
 // ── Domain object mappers ─────────────────────────────────────────────

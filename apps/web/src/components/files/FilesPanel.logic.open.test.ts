@@ -45,4 +45,21 @@ describe("openFilesPanelEntry", () => {
     });
     expect(setPreviewPath).not.toHaveBeenCalled();
   });
+
+  it("opens workspace videos in the files panel by default", () => {
+    openNewBrowserTabMock.mockReset();
+    const setPreviewPath = vi.fn();
+    const setPreviewPosition = vi.fn();
+
+    openFilesPanelEntry(
+      { path: "assets/demo.mp4", kind: "file" } satisfies ProjectEntry,
+      "/Users/alice/project",
+      setPreviewPath,
+      setPreviewPosition,
+    );
+
+    expect(openNewBrowserTabMock).not.toHaveBeenCalled();
+    expect(setPreviewPath).toHaveBeenCalledWith("assets/demo.mp4");
+    expect(setPreviewPosition).toHaveBeenCalledWith(null);
+  });
 });

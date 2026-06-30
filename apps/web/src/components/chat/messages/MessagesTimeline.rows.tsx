@@ -20,6 +20,8 @@ import {
 import { ThinkingMessageBody } from "./MessagesTimeline.thinking";
 import { Undo2Icon, ChevronDownIcon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
+import { isVideoMimeType } from "~/lib/workspaceFilePreview";
+import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { MAX_VISIBLE_WORK_LOG_ENTRIES } from "./MessagesTimeline.logic";
 import { cn } from "~/lib/utils";
@@ -131,13 +133,17 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           const userImages = allAttachments.filter(
             (a): a is ChatImageAttachment => a.type === "image",
           );
+          const userVideos = allAttachments.filter(
+            (attachment): attachment is ChatFileAttachment =>
+              attachment.type === "file" && isVideoMimeType(attachment.mimeType),
+          );
           const userThreadReferences = allAttachments.filter(
             (a): a is Extract<(typeof allAttachments)[number], { type: "thread" }> =>
               a.type === "thread",
           );
           const userFileReferences = allAttachments.filter(
             (a): a is ChatFileAttachment | ChatPathAttachment =>
-              a.type === "file" || a.type === "path",
+              (a.type === "file" && !isVideoMimeType(a.mimeType)) || a.type === "path",
           );
           const userFilesWithSourcePath = userFileReferences.filter(
             (file): file is ChatFileAttachment & { sourcePath: string } =>
@@ -199,6 +205,27 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                             {image.name}
                           </div>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {userVideos.length > 0 && (
+                  <div className="mb-2 flex max-w-[420px] flex-col gap-2">
+                    {userVideos.map((video) => (
+                      <div
+                        key={video.id}
+                        className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
+                      >
+                        <video
+                          src={toAttachmentPreviewUrl(attachmentPreviewRoutePath(video.id))}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="max-h-[280px] w-full bg-black"
+                          aria-label={video.name}
+                        >
+                          <track kind="captions" />
+                        </video>
                       </div>
                     ))}
                   </div>

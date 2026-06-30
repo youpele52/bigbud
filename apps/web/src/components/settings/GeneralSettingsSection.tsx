@@ -9,7 +9,6 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { useTheme } from "../../hooks/useTheme";
-import { FileAccessSettingsSection } from "./FileAccessSettingsSection";
 import { LearningProjectsSettingsSection } from "./LearningProjectsSettingsSection";
 
 const THEME_OPTIONS = [
@@ -329,7 +328,6 @@ export function GeneralSettingsSection() {
         />
       </SettingsSection>
 
-      <FileAccessSettingsSection />
       <LearningProjectsSettingsSection />
     </>
   );

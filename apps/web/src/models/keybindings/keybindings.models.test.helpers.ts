@@ -80,6 +80,11 @@ export const DEFAULT_BINDINGS = compile([
     whenAst: whenIdentifier("terminalFocus"),
   },
   {
+    shortcut: modShortcut("w"),
+    command: "rightPanel.closeTab",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
     shortcut: modShortcut("g"),
     command: "git.toggle",
     whenAst: whenNot(whenIdentifier("terminalFocus")),

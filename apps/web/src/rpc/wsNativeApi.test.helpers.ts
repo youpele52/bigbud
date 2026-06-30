@@ -186,6 +186,45 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
   return {
     getWsUrl: () => null,
     getMobileBackendBaseUrl: () => null,
+    getComputerUseRuntimeStatus: async () => ({
+      available: false,
+      source: "missing",
+      binaryPath: null,
+      version: null,
+      message: "Computer Use runtime is not installed yet.",
+      diagnostics: null,
+    }),
+    getComputerUsePermissionsStatus: async () => ({
+      runtimeAvailable: false,
+      granted: false,
+      message: "Computer Use runtime is not installed yet.",
+      permissions: [],
+    }),
+    requestComputerUsePermissions: async () => ({
+      runtimeAvailable: false,
+      granted: false,
+      message: "Computer Use runtime is not installed yet.",
+      permissions: [],
+    }),
+    installComputerUseRuntime: async () => ({
+      ok: false,
+      status: {
+        available: false,
+        source: "missing",
+        binaryPath: null,
+        version: null,
+        message: "Computer Use runtime is not installed yet.",
+        diagnostics: null,
+      },
+    }),
+    runComputerUseDoctor: async () => ({
+      available: false,
+      source: "missing",
+      binaryPath: null,
+      version: null,
+      message: "Computer Use runtime is not installed yet.",
+      diagnostics: null,
+    }),
     getTailscaleRemoteAccessStatus: async () => ({
       installed: false,
       running: false,

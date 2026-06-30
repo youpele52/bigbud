@@ -9,6 +9,11 @@ export function describePendingApproval(approval: PendingApproval): {
     : "";
 
   switch (approval.requestKind) {
+    case "browser":
+      return {
+        summary: "Browser approval requested",
+        description: `The agent wants to control a browser surface and requires your approval before continuing.${suffix}`,
+      };
     case "command":
       return {
         summary: "Command approval requested",

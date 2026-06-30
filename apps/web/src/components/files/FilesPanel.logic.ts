@@ -6,6 +6,7 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
+  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
 import { isCodeRelatedFilePath, openPathInPreferredApp } from "../../models/editor";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -97,7 +98,7 @@ export function openFilesPanelEntry(
     return;
   }
 
-  if (isCodeRelatedFilePath(entry.path)) {
+  if (isVideoFilePath(entry.path) || isCodeRelatedFilePath(entry.path)) {
     setPreviewPath(entry.path);
     setPreviewPosition(null);
     return;

@@ -44,6 +44,21 @@ export function isPdfFilePath(pathValue: string): boolean {
   return normalizePreviewPath(pathValue).toLowerCase().endsWith(".pdf");
 }
 
+const VIDEO_FILE_EXTENSIONS = new Set([".avi", ".mov", ".mp4", ".webm"]);
+
+export function isVideoFilePath(pathValue: string): boolean {
+  const normalized = normalizePreviewPath(pathValue).toLowerCase();
+  const extensionStart = normalized.lastIndexOf(".");
+  if (extensionStart <= 0) {
+    return false;
+  }
+  return VIDEO_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
+}
+
+export function isVideoMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith("video/");
+}
+
 export function isPdfPreviewUrl(pathValue: string): boolean {
   try {
     const url = new URL(pathValue);

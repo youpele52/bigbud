@@ -10,6 +10,7 @@ import {
   isHtmlFilePath,
   isImageFilePath,
   isPdfFilePath,
+  isVideoFilePath,
 } from "../../lib/workspaceFilePreview";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { openDirectoryInFilesPanel, openFileInFilesPanel } from "./filesPanel.coordinator";
@@ -155,7 +156,9 @@ export function canOpenPathInFilesPanel(
   if (openTarget === null) {
     return false;
   }
-  return isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath);
+  return (
+    isCodeRelatedFilePath(targetPath) || isImageFilePath(targetPath) || isVideoFilePath(targetPath)
+  );
 }
 
 export function canOpenPathInBrowserPanel(
@@ -222,7 +225,11 @@ export function openPathInFilesPanelIfSupported(
     return false;
   }
   const { relativePath, workspaceRootOverride } = openTarget;
-  if (!isCodeRelatedFilePath(targetPath) && !isImageFilePath(targetPath)) {
+  if (
+    !isCodeRelatedFilePath(targetPath) &&
+    !isImageFilePath(targetPath) &&
+    !isVideoFilePath(targetPath)
+  ) {
     return false;
   }
 

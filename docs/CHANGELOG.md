@@ -4,6 +4,33 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.1.649 (2 July, 2026)
 
+### Computer Use (Desktop & Browser Automation)
+
+- Added **Computer Use** — AI agents can now control the in-app browser and your desktop (macOS, Windows, Linux) to navigate web pages, fill forms, take screenshots, open applications, click, type, scroll, and carry out other tasks.
+- **Desktop automation is permission-gated** — requires explicit opt-in from **Settings → AI → Computer Use**, macOS Accessibility and Screen Recording permissions, and `full-access` runtime mode for mutating actions. Read-only actions (capture, list windows, list apps, diagnostics) work in any mode.
+- **Safety-first guardrails** — Dangerous key combos (Cmd+Q, Alt+F4, etc.) and sensitive text patterns (passwords, API keys, credit card numbers, SSNs) are blocked before reaching the driver.
+- **Cross-provider support** — All runtime providers (Codex, Claude, Copilot, OpenCode, Pi, etc.) receive computer-use capability instructions in their context, with the tool surfaced through per-provider bridges.
+
+### Orchestration Thread Tools
+
+- Added a **thread-aware MCP bridge** — agents from any provider can rename threads, archive threads, check thread status, and execute computer/browser actions through a unified internal HTTP API (`/api/internal/thread-tools`) with token-based auth.
+- **Per-provider tool bridges** — Copilot receives native SDK `Tool` objects; Codex and Claude use a dynamically generated MCP stdio server; OpenCode uses a local command bridge; Pi uses a coding agent extension. All bridges are set up at session start and torn down on disconnect.
+- The server prepends computer-use capability instructions into every provider input turn, telling the agent which surfaces are available and how to use them based on current settings and runtime mode.
+
+### Inline Video Preview
+
+- **Video files now play inline** in the Files panel — `.mp4`, `.webm`, `.mov`, and `.avi` files open with native `<video>` controls instead of launching the external browser.
+- **HTTP Range request support** — the file-serving endpoint now handles `Range` headers (including suffix ranges) for partial content delivery (`206 Partial Content`), enabling smooth streaming for video and large files.
+
+### Attachment Previews
+
+- Chat messages now render **image attachments as clickable zoomable previews** and **video attachments as inline players**, served through a new `/attachments/<id>` HTTP route.
+- Computer-use screenshots captured during a session are displayed inline in the timeline work entries, persisted as file attachments and served by attachment ID.
+
+### Right Panel
+
+- Pressing `Cmd+W` / `Ctrl+W` now closes the **active right-panel tab** (browser, diff, files, git, kanban, notes, terminal) instead of triggering a system-level close event. Respects terminal focus context.
+
 ### Files Panel
 
 - Added **Copy relative path** to file and folder right-click menus in the Files panel, so you can grab a workspace-friendly path without trimming the absolute one by hand.

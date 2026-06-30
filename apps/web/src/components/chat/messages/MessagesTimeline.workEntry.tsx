@@ -19,6 +19,7 @@ import { normalizeCompactToolLabel } from "./MessagesTimeline.logic";
 import { Button } from "../../ui/button";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { cn } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { getPassphraseProtectedSshKeyPath, getSshAuthFailureToastTitle } from "../../../lib/ssh";
@@ -86,6 +87,7 @@ function workEntryRawCommand(
 }
 
 export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+  if (workEntry.requestKind === "browser") return GlobeIcon;
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
@@ -276,6 +278,9 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
+  const attachmentUrl = workEntry.attachmentUrl
+    ? toAttachmentPreviewUrl(attachmentPreviewRoutePath(workEntry.attachmentUrl))
+    : null;
 
   return (
     <div className="group/work-entry rounded-lg px-1 py-1">
@@ -350,6 +355,23 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               +{(workEntry.changedFiles?.length ?? 0) - 4}
             </span>
           )}
+        </div>
+      )}
+      {attachmentUrl && (
+        <div className="mt-1 pl-6">
+          <a
+            href={attachmentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block overflow-hidden rounded-md border border-border/55"
+          >
+            <img
+              src={attachmentUrl}
+              alt="Computer use screenshot"
+              className="max-h-[160px] w-auto"
+              loading="lazy"
+            />
+          </a>
         </div>
       )}
       {showActions && (

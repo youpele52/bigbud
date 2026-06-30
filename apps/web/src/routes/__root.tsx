@@ -4,7 +4,7 @@ import {
   createRootRouteWithContext,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME } from "../config/branding";
 import { CommandPalette } from "../components/layout/CommandPalette";
@@ -24,9 +24,11 @@ import { useStore } from "../stores/main";
 import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
+import { ComputerUsePermissionDialog } from "../components/computer-use/ComputerUsePermissionDialog";
 import { useSettings } from "../hooks/useSettings";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
+const PERMISSION_DIALOG_CHAIN_DELAY_MS = 300;
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -44,6 +46,8 @@ function RootRouteView() {
   const [startupSplashVisible, setStartupSplashVisible] = useState(() => !bootstrapComplete);
   const settings = useSettings();
   const [showFileAccessDialog, setShowFileAccessDialog] = useState(false);
+  const [showComputerUseDialog, setShowComputerUseDialog] = useState(false);
+  const isDesktop = Boolean(readNativeApi());
 
   useEffect(() => {
     if (bootstrapComplete && !settings.hasSeenFileAccessPrompt) {
@@ -53,6 +57,37 @@ function RootRouteView() {
       return () => clearTimeout(timer);
     }
   }, [bootstrapComplete, settings.hasSeenFileAccessPrompt]);
+
+  useEffect(() => {
+    if (
+      bootstrapComplete &&
+      isDesktop &&
+      settings.hasSeenFileAccessPrompt &&
+      !settings.hasSeenComputerUsePrompt &&
+      !showFileAccessDialog
+    ) {
+      const timer = setTimeout(() => {
+        setShowComputerUseDialog(true);
+      }, PERMISSION_DIALOG_CHAIN_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    bootstrapComplete,
+    isDesktop,
+    settings.hasSeenComputerUsePrompt,
+    settings.hasSeenFileAccessPrompt,
+    showFileAccessDialog,
+  ]);
+
+  const handleFileAccessFinished = useCallback(() => {
+    if (!isDesktop || settings.hasSeenComputerUsePrompt) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      setShowComputerUseDialog(true);
+    }, PERMISSION_DIALOG_CHAIN_DELAY_MS);
+  }, [isDesktop, settings.hasSeenComputerUsePrompt]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -110,6 +145,11 @@ function RootRouteView() {
               <FileAccessPermissionDialog
                 open={showFileAccessDialog}
                 onOpenChange={setShowFileAccessDialog}
+                onFinished={handleFileAccessFinished}
+              />
+              <ComputerUsePermissionDialog
+                open={showComputerUseDialog}
+                onOpenChange={setShowComputerUseDialog}
               />
             </>
           ) : (
