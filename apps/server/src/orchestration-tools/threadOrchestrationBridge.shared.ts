@@ -26,6 +26,9 @@ export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud threa
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
 
+export const COMPUTER_USE_TOOL_DESCRIPTION =
+  'Automate the in-app browser and native desktop apps via the `computer_use` tool. Use `surface: "browser"` for browser navigation, clicks, typing, and screenshots. Use `surface: "desktop"` for native macOS automation such as launching or focusing apps, reading Calendar or Reminders, capturing screens, and interacting through the accessibility tree. Do not assume CLI tools or direct app APIs are unavailable before trying this tool. Read-only actions (capture, get_page_info, list_windows, list_apps, check_permissions, doctor, get_accessibility_tree) work in any runtime mode. Mutating actions require full-access runtime mode.';
+
 export function resolveOrchestrationBridgeHost(host: string | undefined): string {
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
     return "127.0.0.1";

@@ -34,6 +34,7 @@ import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceip
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionLive } from "../src/orchestration/Layers/ProviderRuntimeIngestion.ts";
+import { ComputerUseDisabledTestLayer } from "../src/orchestration/Layers/OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineService } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -103,6 +104,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provide(OrchestrationProjectionPipelineLive),
       Layer.provide(OrchestrationEventStoreLive),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+      Layer.provideMerge(ComputerUseDisabledTestLayer),
     );
     const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
       Layer.provide(ProviderSessionRuntimeRepositoryLive),
@@ -207,6 +209,12 @@ export const makeOrchestrationIntegrationHarness = (
       navigate: () => Effect.die(new Error("Unexpected browser navigate in integration harness")),
       screenshot: () =>
         Effect.die(new Error("Unexpected browser screenshot in integration harness")),
+      click: () => Effect.die(new Error("Unexpected browser click in integration harness")),
+      drag: () => Effect.die(new Error("Unexpected browser drag in integration harness")),
+      scroll: () => Effect.die(new Error("Unexpected browser scroll in integration harness")),
+      typeText: () => Effect.die(new Error("Unexpected browser typeText in integration harness")),
+      keyPress: () => Effect.die(new Error("Unexpected browser keyPress in integration harness")),
+      wait: () => Effect.die(new Error("Unexpected browser wait in integration harness")),
       getPageInfo: () =>
         Effect.die(new Error("Unexpected browser page info in integration harness")),
       close: () => Effect.void,

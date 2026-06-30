@@ -98,6 +98,13 @@ describe("CopilotAdapter remote workspace sessions", () => {
             lastAssistantExcerpt: null,
             updatedAt: new Date().toISOString(),
           }),
+        computerUse: () =>
+          Effect.succeed({
+            surface: "browser",
+            action: "capture",
+            summary: "Captured the current page at about:blank.",
+            page: { url: "about:blank", title: "" },
+          }),
       });
 
       const adapter = yield* CopilotAdapter;
@@ -125,6 +132,10 @@ describe("CopilotAdapter remote workspace sessions", () => {
       assert.equal(createdConfig.systemMessage?.content?.includes("/srv/project"), true);
       assert.equal(
         createdConfig.tools?.some((tool) => tool.name === "bash"),
+        true,
+      );
+      assert.equal(
+        createdConfig.tools?.some((tool) => tool.name === "computer_use"),
         true,
       );
       assert.equal(!!createdConfig.createSessionFsHandler, true);

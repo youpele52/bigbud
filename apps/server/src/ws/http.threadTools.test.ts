@@ -1,0 +1,103 @@
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
+import { ThreadId } from "@bigbud/contracts";
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem } from "effect";
+import { afterEach, describe, expect, vi } from "vitest";
+
+import { deriveServerPaths } from "../startup/config.ts";
+import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import {
+  getThreadOrchestrationToolDispatcher,
+  setThreadOrchestrationToolDispatcher,
+} from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
+
+const THREAD_ID = "thread-http-computer-use";
+const THREAD_TOOL_TOKEN = "thread-tool-token-http-computer-use";
+
+describe("thread orchestration tools route", () => {
+  afterEach(() => {
+    setThreadOrchestrationToolDispatcher(null);
+  });
+
+  it.layer(serverTestLayer)("POST /api/internal/thread-tools", (it) => {
+    it.effect("forwards computer_use actions to the orchestration dispatcher", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const tempBaseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "thread-tools-computer-use-",
+        });
+        const { stateDir } = yield* deriveServerPaths(tempBaseDir, undefined);
+
+        yield* Effect.promise(() =>
+          writeThreadOrchestrationToolAuth({
+            stateDir,
+            threadId: THREAD_ID,
+            token: THREAD_TOOL_TOKEN,
+          }),
+        );
+
+        const computerUse = vi.fn(({ action }: { action: { action: string } }) =>
+          Effect.succeed({
+            surface: "browser" as const,
+            action: action.action,
+            summary: "Captured the current page.",
+            page: { url: "https://example.com", title: "Example" },
+          }),
+        );
+
+        setThreadOrchestrationToolDispatcher({
+          rename: () => Effect.succeed({ title: "Renamed" }),
+          archive: () => Effect.succeed({ archived: true as const }),
+          getStatus: () =>
+            Effect.succeed({
+              threadId: ThreadId.makeUnsafe(THREAD_ID),
+              title: "Thread",
+              workflowStatus: "idle",
+              isAgentActive: false,
+              isWorkflowComplete: false,
+              sessionStatus: null,
+              latestTurnState: null,
+              latestTurnCompletedAt: null,
+              hasPendingApprovals: false,
+              hasPendingUserInput: false,
+              hasActionableProposedPlan: false,
+              lastAssistantExcerpt: null,
+              updatedAt: new Date().toISOString(),
+            }),
+          computerUse,
+        });
+
+        yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
+
+        const url = yield* getHttpServerUrl("/api/internal/thread-tools");
+        const response = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-bigbud-thread-tool-token": THREAD_TOOL_TOKEN,
+            },
+            body: JSON.stringify({
+              action: "computer_use",
+              computerUseAction: { action: "capture" },
+            }),
+          }),
+        );
+
+        assert.equal(response.status, 200);
+        const body = (yield* Effect.promise(() => response.json())) as {
+          ok: boolean;
+          result?: { summary?: string };
+        };
+        expect(body.ok).toBe(true);
+        expect(body.result?.summary).toContain("Captured");
+        expect(computerUse).toHaveBeenCalledWith({
+          threadId: ThreadId.makeUnsafe(THREAD_ID),
+          action: { action: "capture" },
+        });
+        expect(getThreadOrchestrationToolDispatcher()?.computerUse).toBe(computerUse);
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+  });
+});

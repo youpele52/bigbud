@@ -20,6 +20,7 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain('name: "rename_thread"');
     expect(source).toContain('name: "archive_thread"');
     expect(source).toContain('name: "get_thread_status"');
+    expect(source).toContain('name: "computer_use"');
     expect(source).toContain("/api/internal/thread-tools");
     expect(source).toContain("token-1");
   });

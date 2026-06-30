@@ -13,7 +13,7 @@ interface RuntimeEventActivityHelpers {
   readonly truncateDetail: (value: string, limit?: number) => string;
   readonly requestKindFromCanonicalRequestType: (
     requestType: string | undefined,
-  ) => "command" | "file-read" | "file-change" | undefined;
+  ) => "browser" | "command" | "file-read" | "file-change" | undefined;
   readonly buildContextWindowActivityPayload: (
     event: ProviderRuntimeEvent,
   ) => ThreadTokenUsageSnapshot | undefined;
@@ -43,13 +43,15 @@ export function runtimeEventToActivitiesFromHelpers(
           tone: "approval",
           kind: "approval.requested",
           summary:
-            requestKind === "command"
-              ? "Command approval requested"
-              : requestKind === "file-read"
-                ? "File-read approval requested"
-                : requestKind === "file-change"
-                  ? "File-change approval requested"
-                  : "Approval requested",
+            requestKind === "browser"
+              ? "Browser approval requested"
+              : requestKind === "command"
+                ? "Command approval requested"
+                : requestKind === "file-read"
+                  ? "File-read approval requested"
+                  : requestKind === "file-change"
+                    ? "File-change approval requested"
+                    : "Approval requested",
           payload: {
             requestId: helpers.toApprovalRequestId(event.requestId),
             ...(requestKind ? { requestKind } : {}),

@@ -36,6 +36,7 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
+import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -198,6 +199,7 @@ export async function createHarness(options?: { serverSettings?: Partial<ServerS
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     Layer.provide(SqlitePersistenceMemory),
+    Layer.provideMerge(ComputerUseDisabledTestLayer),
   );
   const layer = ProviderRuntimeIngestionLive.pipe(
     Layer.provideMerge(orchestrationLayer),

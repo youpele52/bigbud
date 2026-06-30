@@ -172,6 +172,30 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
+  it.effect("serves partial workspace file previews for byte range requests", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const projectDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-router-workspace-preview-range-",
+      });
+      const videoPath = path.join(projectDir, "assets", "demo.mp4");
+      yield* fileSystem.makeDirectory(path.dirname(videoPath), { recursive: true });
+      yield* fileSystem.writeFileString(videoPath, "0123456789abcdef");
+
+      yield* buildAppUnderTest();
+
+      const url = yield* getHttpServerUrl(
+        `/api/workspace-file-preview?cwd=${encodeURIComponent(projectDir)}&relativePath=${encodeURIComponent("assets/demo.mp4")}`,
+      );
+      const response = yield* Effect.promise(() => fetch(url, { headers: { Range: "bytes=4-9" } }));
+
+      assert.equal(response.status, 206);
+      assert.equal(response.headers.get("content-range"), "bytes 4-9/16");
+      assert.equal(yield* Effect.promise(() => response.text()), "456789");
+    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+  );
+
   it.effect("serves attachment files from state dir", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

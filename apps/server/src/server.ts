@@ -75,6 +75,8 @@ import { WorkspacePathsLive } from "./workspace/Layers/WorkspacePaths";
 import { ProjectSetupScriptRunnerLive } from "./project/Layers/ProjectSetupScriptRunner";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
+import { CuaDriverLive } from "./computer-use/Layers/CuaDriver";
+import { ComputerUseLive } from "./computer-use/Layers/ComputerUse";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
@@ -161,7 +163,12 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
 
 const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationInfrastructureLayerLive,
-  OrchestrationEngineLive.pipe(Layer.provide(OrchestrationInfrastructureLayerLive)),
+  OrchestrationEngineLive.pipe(
+    Layer.provide(OrchestrationInfrastructureLayerLive),
+    Layer.provide(
+      ComputerUseLive.pipe(Layer.provide(BrowserManagerLive), Layer.provide(CuaDriverLive)),
+    ),
+  ),
 );
 
 const CheckpointingLayerLive = Layer.empty.pipe(
@@ -286,7 +293,6 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpencodeServerManagerLive),
   // Browser automation for agent-driven web tasks
   Layer.provideMerge(BrowserManagerLive),
-
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),

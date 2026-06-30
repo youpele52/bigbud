@@ -127,8 +127,10 @@ export function orchestrationSessionStatusFromRuntimeState(
 
 export function requestKindFromCanonicalRequestType(
   requestType: string | undefined,
-): "command" | "file-read" | "file-change" | undefined {
+): "browser" | "command" | "file-read" | "file-change" | undefined {
   switch (requestType) {
+    case "browser_approval":
+      return "browser";
     case "command_execution_approval":
     case "exec_command_approval":
       return "command";

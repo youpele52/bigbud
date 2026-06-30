@@ -31,6 +31,7 @@ import {
 } from "../../provider/Services/ProviderService.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -154,6 +155,7 @@ describe("ProviderRuntimeIngestion thinking", () => {
       Layer.provide(OrchestrationEventStoreLive),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
       Layer.provide(SqlitePersistenceMemory),
+      Layer.provideMerge(ComputerUseDisabledTestLayer),
     );
     const layer = ProviderRuntimeIngestionLive.pipe(
       Layer.provideMerge(orchestrationLayer),

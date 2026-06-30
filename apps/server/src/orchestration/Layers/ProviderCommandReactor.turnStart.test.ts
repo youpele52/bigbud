@@ -270,6 +270,7 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain(
       "To archive the current thread, call the `archive_thread` tool.",
     );
+    expect(sendInput?.input).toContain("computer_use");
     expect(sendInput?.input).toContain("You must not delete threads.");
     expect(sendInput?.input).toContain("hello reactor");
   });
