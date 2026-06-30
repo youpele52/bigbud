@@ -28,6 +28,7 @@ import {
   resolveDesktopRuntimeDependencies,
   validateBundledClientAssets,
 } from "./resources.ts";
+import { stagePackagedCuaDriverRuntime } from "./cuaDriver.ts";
 import {
   findAppImageArtifact,
   findLinuxUnpackedApp,
@@ -299,6 +300,13 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       verbose: options.verbose,
     });
   }
+  yield* stagePackagedCuaDriverRuntime({
+    stageRoot,
+    stageServerDir,
+    platform: options.platform,
+    arch: options.arch,
+    verbose: options.verbose,
+  });
 
   // The server bundle is self-contained (all JS dependencies inlined by tsdown).
   // Only packages that cannot be bundled (native addons, runtime require.resolve)

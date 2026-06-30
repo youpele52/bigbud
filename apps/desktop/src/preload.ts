@@ -14,6 +14,11 @@ const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
 const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
+const GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL = "desktop:get-computer-use-runtime-status";
+const GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL = "desktop:get-computer-use-permissions-status";
+const REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL = "desktop:request-computer-use-permissions";
+const INSTALL_COMPUTER_USE_RUNTIME_CHANNEL = "desktop:install-computer-use-runtime";
+const RUN_COMPUTER_USE_DOCTOR_CHANNEL = "desktop:run-computer-use-doctor";
 const GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL = "desktop:get-tailscale-remote-access-status";
 const ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:enable-tailscale-remote-access";
 const DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:disable-tailscale-remote-access";
@@ -31,6 +36,12 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     const result = ipcRenderer.sendSync(GET_MOBILE_BACKEND_BASE_URL_CHANNEL);
     return typeof result === "string" ? result : null;
   },
+  getComputerUseRuntimeStatus: () => ipcRenderer.invoke(GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL),
+  getComputerUsePermissionsStatus: () =>
+    ipcRenderer.invoke(GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL),
+  requestComputerUsePermissions: () => ipcRenderer.invoke(REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL),
+  installComputerUseRuntime: () => ipcRenderer.invoke(INSTALL_COMPUTER_USE_RUNTIME_CHANNEL),
+  runComputerUseDoctor: () => ipcRenderer.invoke(RUN_COMPUTER_USE_DOCTOR_CHANNEL),
   getTailscaleRemoteAccessStatus: () =>
     ipcRenderer.invoke(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL),
   enableTailscaleRemoteAccess: () => ipcRenderer.invoke(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL),

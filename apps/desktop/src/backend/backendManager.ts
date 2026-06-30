@@ -16,6 +16,7 @@ import {
 } from "../env/pathResolver";
 import type { RotatingFileSink } from "@bigbud/shared/logging";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
+import { resolveComputerUseRuntimeEnv } from "./cuaDriver";
 
 // ---------------------------------------------------------------------------
 // Windows-safe process termination
@@ -173,6 +174,7 @@ export function startBackend(): void {
   const packagedOpencodeBinDir = resolvePackagedOpencodeBinaryDir();
   const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
+  const computerUseRuntimeEnv = resolveComputerUseRuntimeEnv(_deps.baseDir);
 
   // Ensure _modules → node_modules link exists for ESM resolution of
   // external native packages (e.g. @github/copilot-sdk, node-pty).
@@ -198,6 +200,7 @@ export function startBackend(): void {
         ...(packagedBundledSkillsDir
           ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
           : {}),
+        ...computerUseRuntimeEnv,
         ELECTRON_RUN_AS_NODE: "1",
       },
       _deps.backendMaxOldSpaceMb,
