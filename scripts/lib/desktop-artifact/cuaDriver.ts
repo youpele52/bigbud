@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
@@ -18,6 +21,7 @@ function resolveArchive(
   arch: typeof BuildArch.Type,
 ): {
   archiveName: string;
+  sha256: string;
   binaryName: string;
   binaryPath: string[];
   appPath: string[] | null;
@@ -26,6 +30,7 @@ function resolveArchive(
     const stageDir = `cua-driver-rs-${CUA_DRIVER_VERSION}-darwin-universal`;
     return {
       archiveName: `cua-driver-rs-${CUA_DRIVER_VERSION}-darwin-universal.tar.gz`,
+      sha256: "33910c98e8e022b42cc4d079f9932ed406bccfaa9fabfe898edea7934d8bd154",
       binaryName: "cua-driver",
       binaryPath: [stageDir, "cua-driver"],
       appPath: [stageDir, "CuaDriver.app"],
@@ -36,6 +41,10 @@ function resolveArchive(
     const label = arch === "arm64" ? "linux-arm64" : "linux-x86_64";
     return {
       archiveName: `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}-binary.tar.gz`,
+      sha256:
+        arch === "arm64"
+          ? "aa154aed01568c20201f75d07bbb0edad93ba132bf21c429b69e48d438d473df"
+          : "de885c6ad82b5e10ed0213be4642dda74b5922990ad6002eb5bc481d5d89c05b",
       binaryName: "cua-driver",
       binaryPath: ["cua-driver"],
       appPath: null,
@@ -46,7 +55,11 @@ function resolveArchive(
     const label = arch === "arm64" ? "windows-arm64" : "windows-x86_64";
     const stageDir = `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}`;
     return {
-      archiveName: `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}.zip`,
+      archiveName: `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}-binary.zip`,
+      sha256:
+        arch === "arm64"
+          ? "7d950d24aaf902357ce51827d23dd9c9c89a62720c1ff77effeec971139c696f"
+          : "8cde6fa362a5d6c7d3e38be29ffd36eba42bdfb235cb0692bec79697a54affbe",
       binaryName: "cua-driver.exe",
       binaryPath: [stageDir, "cua-driver.exe"],
       appPath: null,
@@ -55,6 +68,19 @@ function resolveArchive(
 
   throw new Error(`Unsupported desktop artifact platform '${platform}'.`);
 }
+
+const verifySha256 = Effect.fn("verifyCuaDriverSha256")(function* (
+  filePath: string,
+  expected: string,
+) {
+  const bytes = yield* Effect.promise(() => readFile(filePath));
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  if (hash !== expected) {
+    return yield* new BuildScriptError({
+      message: `Checksum mismatch for ${filePath}.`,
+    });
+  }
+});
 
 export const stagePackagedCuaDriverRuntime = Effect.fn("stagePackagedCuaDriverRuntime")(
   function* (input: {
@@ -82,6 +108,7 @@ export const stagePackagedCuaDriverRuntime = Effect.fn("stagePackagedCuaDriverRu
         shell: shellOptionForPlatform(input.platform),
       })`curl -fsSL -o ${archivePath} ${url}`,
     );
+    yield* verifySha256(archivePath, archive.sha256);
 
     yield* runCommand(
       ChildProcess.make({

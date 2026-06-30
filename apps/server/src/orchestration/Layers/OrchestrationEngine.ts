@@ -363,6 +363,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           serverMode: serverConfig.mode,
           threadId: input.threadId,
           action: input.action,
+          checkInIntervalMs: settings.computerUseCheckInIntervalMs,
+          actionTimeoutMs: settings.computerUseActionTimeoutMs,
         });
       }),
   });

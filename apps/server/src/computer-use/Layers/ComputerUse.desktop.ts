@@ -8,6 +8,7 @@ import { Effect } from "effect";
 
 import type { CuaDriverCallResult, CuaDriverShape } from "../Services/CuaDriver.ts";
 import { ComputerUseError } from "../Services/ComputerUse.ts";
+import { guardComputerUseTarget } from "../computerUseSafety.ts";
 
 interface WindowRef {
   readonly pid?: number | undefined;
@@ -307,6 +308,16 @@ export const executeDesktopComputerUse = (
       return yield* new ComputerUseError({
         message: "No active desktop window could be resolved.",
       });
+    }
+
+    const targetSafetyViolation = guardComputerUseTarget({
+      action,
+      surface: "desktop",
+      appName: windowRef.appName ?? null,
+      title: windowRef.title ?? null,
+    });
+    if (targetSafetyViolation) {
+      return yield* new ComputerUseError({ message: targetSafetyViolation });
     }
 
     if (action.action === "capture" || action.action === "get_page_info") {

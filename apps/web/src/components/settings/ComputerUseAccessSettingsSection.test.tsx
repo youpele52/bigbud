@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockSettings = vi.hoisted(() => ({
   computerUseEnabled: false,
   hasSeenComputerUsePrompt: false,
+  computerUseCheckInIntervalMs: 10 * 60_000,
+  computerUseActionTimeoutMs: 15 * 60_000,
 }));
 const mockNativeApi = vi.hoisted(() => ({ present: true as boolean }));
 
@@ -51,6 +53,8 @@ describe("ComputerUseAccessSettingsSection", () => {
     expect(markup).toContain("Computer Use");
     expect(markup).toContain("Limited capability");
     expect(markup).toContain("agents cannot open or read native apps");
+    expect(markup).toContain("Check-in interval");
+    expect(markup).toContain("Action timeout");
   });
 
   it("shows the macOS permissions row in the desktop shell", () => {

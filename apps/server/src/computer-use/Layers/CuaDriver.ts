@@ -11,6 +11,8 @@ import {
 import { runProcess } from "../../utils/processRunner.ts";
 
 const JSONRPC_VERSION = "2.0";
+const CUA_DRIVER_REQUEST_TIMEOUT_MS = 60 * 60_000;
+const CUA_DRIVER_MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 
 function resolveCuaDriverCommand(): string {
   return process.env.BIGBUD_CUA_DRIVER_PATH?.trim() || "cua-driver";
@@ -59,8 +61,13 @@ async function requestResponse(
 ): Promise<unknown> {
   return await new Promise((resolve, reject) => {
     let buffer = Buffer.alloc(0);
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error(`cua-driver MCP request '${method}' timed out.`));
+    }, CUA_DRIVER_REQUEST_TIMEOUT_MS);
 
     const cleanup = () => {
+      clearTimeout(timeout);
       child.stdout.removeListener("data", onData);
       child.removeListener("error", onError);
       child.removeListener("exit", onExit);
@@ -80,6 +87,11 @@ async function requestResponse(
 
     const onData = (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
+      if (buffer.length > CUA_DRIVER_MAX_MESSAGE_BYTES) {
+        cleanup();
+        reject(new Error("cua-driver MCP response exceeded the maximum size."));
+        return;
+      }
       for (;;) {
         const headerEnd = buffer.indexOf("\r\n\r\n");
         if (headerEnd === -1) {
@@ -92,13 +104,25 @@ async function requestResponse(
           continue;
         }
         const contentLength = Number(match[1]);
+        if (!Number.isFinite(contentLength) || contentLength > CUA_DRIVER_MAX_MESSAGE_BYTES) {
+          cleanup();
+          reject(new Error("cua-driver MCP response declared an invalid size."));
+          return;
+        }
         const totalLength = headerEnd + 4 + contentLength;
         if (buffer.length < totalLength) {
           return;
         }
         const body = buffer.slice(headerEnd + 4, totalLength).toString("utf8");
         buffer = buffer.slice(totalLength);
-        const message = JSON.parse(body) as Record<string, unknown>;
+        let message: Record<string, unknown>;
+        try {
+          message = JSON.parse(body) as Record<string, unknown>;
+        } catch (error) {
+          cleanup();
+          reject(error);
+          return;
+        }
         if (message.id !== id) {
           continue;
         }
@@ -190,6 +214,7 @@ function isSessionAlive(session: CuaDriverSession | null): session is CuaDriverS
 
 function makeCuaDriver(): CuaDriverShape {
   let session: CuaDriverSession | null = null;
+  let queue: Promise<void> = Promise.resolve();
 
   async function callToolViaSession(
     name: string,
@@ -215,9 +240,23 @@ function makeCuaDriver(): CuaDriverShape {
     }
   }
 
+  function enqueueCall<T>(work: () => Promise<T>): Promise<T> {
+    const previous = queue;
+    let release: () => void;
+    queue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return previous
+      .catch(() => undefined)
+      .then(work)
+      .finally(() => {
+        release();
+      });
+  }
+
   return {
     callTool: (name, args) =>
-      Effect.promise(() => callToolViaSession(name, args)).pipe(
+      Effect.promise(() => enqueueCall(() => callToolViaSession(name, args))).pipe(
         Effect.mapError((cause) =>
           toDriverError(cause, `Failed to call cua-driver tool '${name}'.`),
         ),

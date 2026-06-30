@@ -56,6 +56,12 @@ export const TERMINAL_FONT_SIZE_MAX = 18;
 export const CONTEXT_WINDOW_WARNING_THRESHOLD_MIN = 60_000;
 export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
 export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
+export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN = 60_000;
+export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX = 60 * 60_000;
+export const DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS = 10 * 60_000;
+export const COMPUTER_USE_ACTION_TIMEOUT_MS_MIN = 10_000;
+export const COMPUTER_USE_ACTION_TIMEOUT_MS_MAX = 60 * 60_000;
+export const DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS = 15 * 60_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
@@ -65,6 +71,12 @@ const TerminalFontSize = Schema.Int.check(
 const ContextWindowWarningThreshold = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MIN),
 ).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
+const ComputerUseCheckInIntervalMs = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN),
+).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX));
+const ComputerUseActionTimeoutMs = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MIN),
+).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
@@ -220,6 +232,12 @@ export const ServerSettings = Schema.Struct({
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  computerUseCheckInIntervalMs: ComputerUseCheckInIntervalMs.pipe(
+    Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS),
+  ),
+  computerUseActionTimeoutMs: ComputerUseActionTimeoutMs.pipe(
+    Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS),
+  ),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -405,6 +423,8 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   computerUseEnabled: Schema.optionalKey(Schema.Boolean),
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
+  computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
+  computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),

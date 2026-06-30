@@ -1,4 +1,3 @@
-import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
 import * as Path from "node:path";
 
@@ -14,16 +13,9 @@ import {
   checkComputerUsePermissions,
   missingComputerUsePermissionsStatus,
 } from "./cuaDriver.permissions";
-
-const CUA_DRIVER_VERSION = "0.6.8";
-const CUA_DRIVER_INSTALLER_URL =
-  "https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh";
-const CUA_DRIVER_WINDOWS_INSTALLER_URL =
-  "https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.ps1";
-
-function binaryName(): string {
-  return process.platform === "win32" ? "cua-driver.exe" : "cua-driver";
-}
+import { installManagedComputerUseRuntime } from "./cuaDriver.install";
+import { binaryName, resolveManagedPaths } from "./cuaDriver.paths";
+import { runCommand } from "./cuaDriver.process";
 
 function resolveBundledBinaryPath(): string | null {
   if (!app.isPackaged) {
@@ -54,19 +46,10 @@ function resolveBundledBinaryPath(): string | null {
   return null;
 }
 
-function resolveManagedPaths(baseDir: string) {
-  const rootDir = Path.join(baseDir, "runtime", "cua-driver");
-  const binDir = Path.join(rootDir, "bin");
-  const homeDir = Path.join(rootDir, "home");
-  return {
-    rootDir,
-    binDir,
-    homeDir,
-    binaryPath: Path.join(binDir, binaryName()),
-  };
-}
-
 function resolveSystemBinaryPath(): string | null {
+  if (process.env.BIGBUD_CUA_ALLOW_SYSTEM_DRIVER !== "1") {
+    return null;
+  }
   const rawPath = process.env.PATH;
   if (!rawPath) {
     return null;
@@ -129,34 +112,6 @@ function resolveBinary(baseDir: string): {
   return { source: "missing", binaryPath: null };
 }
 
-function runCommand(
-  command: string,
-  args: readonly string[],
-  env?: NodeJS.ProcessEnv,
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = ChildProcess.spawn(command, args, {
-      env,
-      stdio: "pipe",
-      shell: false,
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
-    });
-    child.once("error", reject);
-    child.once("close", (code) => {
-      resolve({ code, stdout: stdout.trim(), stderr: stderr.trim() });
-    });
-  });
-}
-
 async function readVersion(binaryPath: string): Promise<string | null> {
   try {
     const result = await runCommand(binaryPath, ["--version"]);
@@ -215,53 +170,10 @@ export async function installComputerUseRuntime(
       status: currentStatus,
     };
   }
-
-  const managedPaths = resolveManagedPaths(baseDir);
-  FS.mkdirSync(managedPaths.binDir, { recursive: true });
-  FS.mkdirSync(managedPaths.homeDir, { recursive: true });
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CUA_DRIVER_RS_VERSION: CUA_DRIVER_VERSION,
-    CUA_DRIVER_RS_INSTALL_DIR: managedPaths.binDir,
-    CUA_DRIVER_RS_HOME: managedPaths.homeDir,
-    CUA_DRIVER_RS_NO_MODIFY_PATH: "1",
-  };
-
-  const result =
-    process.platform === "win32"
-      ? await runCommand(
-          "powershell.exe",
-          [
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            `irm ${CUA_DRIVER_WINDOWS_INSTALLER_URL} | iex`,
-          ],
-          env,
-        )
-      : await runCommand(
-          "/bin/bash",
-          [
-            "-lc",
-            `curl -fsSL ${CUA_DRIVER_INSTALLER_URL} | /bin/bash -s -- --backend=rust --bin-dir "${managedPaths.binDir}" --no-modify-path`,
-          ],
-          env,
-        );
-
-  const status = await getComputerUseRuntimeStatus(baseDir);
-  return {
-    ok: result.code === 0 && status.available,
-    status: {
-      ...status,
-      message:
-        result.code === 0
-          ? status.message
-          : [result.stderr, result.stdout].filter(Boolean).join("\n\n") ||
-            "Computer Use runtime installation failed.",
-    },
-  };
+  return installManagedComputerUseRuntime({
+    baseDir,
+    getStatus: () => getComputerUseRuntimeStatus(baseDir),
+  });
 }
 
 export async function runComputerUseDoctor(

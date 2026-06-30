@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { guardComputerUseAction } from "./computerUseSafety";
+import { guardComputerUseAction, guardComputerUseTarget } from "./computerUseSafety";
 
 describe("guardComputerUseAction", () => {
   it("blocks force-quit key combos", () => {
@@ -50,9 +50,52 @@ describe("guardComputerUseAction", () => {
     expect(guardComputerUseAction({ action: "type", text: "click the button" })).toBeNull();
   });
 
+  it("blocks sensitive app launch requests", () => {
+    expect(guardComputerUseAction({ action: "launch_app", name: "Terminal" })).not.toBeNull();
+    expect(guardComputerUseAction({ action: "focus_app", name: "1Password" })).not.toBeNull();
+  });
+
+  it("blocks navigation to sensitive payment or banking pages", () => {
+    expect(
+      guardComputerUseAction({ action: "navigate", url: "https://example.com/checkout" }),
+    ).not.toBeNull();
+  });
+
   it("does not block non-key/non-type actions", () => {
     expect(guardComputerUseAction({ action: "capture" })).toBeNull();
     expect(guardComputerUseAction({ action: "click", x: 1, y: 2 })).toBeNull();
     expect(guardComputerUseAction({ action: "scroll", deltaY: 10 })).toBeNull();
+  });
+});
+
+describe("guardComputerUseTarget", () => {
+  it("blocks mutating desktop actions in sensitive apps", () => {
+    expect(
+      guardComputerUseTarget({
+        action: { action: "click", x: 1, y: 2 },
+        surface: "desktop",
+        appName: "System Settings",
+      }),
+    ).not.toBeNull();
+  });
+
+  it("allows read-only captures for sensitive desktop apps", () => {
+    expect(
+      guardComputerUseTarget({
+        action: { action: "capture", surface: "desktop" },
+        surface: "desktop",
+        appName: "System Settings",
+      }),
+    ).toBeNull();
+  });
+
+  it("blocks mutating browser actions on sensitive pages", () => {
+    expect(
+      guardComputerUseTarget({
+        action: { action: "type", text: "hello" },
+        surface: "browser",
+        url: "https://bank.example.com",
+      }),
+    ).not.toBeNull();
   });
 });
