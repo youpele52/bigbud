@@ -101,6 +101,8 @@ Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 <iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
 
-### Computer Use: desktop and browser automation
+### Computer Use: your agent, your extra hands
 
-AI agents can now control the in-app browser and, on desktop, your macOS machine. Enable desktop automation in **Settings → AI → Computer Use**, grant macOS Accessibility and Screen Recording permissions, and your agents can navigate the web, fill forms, open apps, take screenshots, and more — all within your session. Mutating actions (click, type, key presses) require `full-access` mode; read-only actions (capture, list windows, diagnostics) work in any mode.
+Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms.
+
+Enable it in **Settings → AI → Computer Use** and your agent becomes an extension of your workflow — macOS, Windows, or Linux.

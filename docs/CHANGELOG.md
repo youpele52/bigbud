@@ -6,7 +6,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Computer Use (Desktop & Browser Automation)
 
-- Added **Computer Use** — AI agents can now control the in-app browser and your desktop (macOS, Windows, Linux) to navigate web pages, fill forms, take screenshots, open applications, click, type, scroll, and carry out other tasks.
+- Added **Computer Use** — AI agents can now reach beyond the chat and work with your applications, browser, and desktop to navigate pages, fill forms, write emails, book appointments, check your calendar, open apps, take screenshots, click, type, scroll, and carry out other tasks — on macOS, Windows, and Linux.
 - **Desktop automation is permission-gated** — requires explicit opt-in from **Settings → AI → Computer Use**, macOS Accessibility and Screen Recording permissions, and `full-access` runtime mode for mutating actions. Read-only actions (capture, list windows, list apps, diagnostics) work in any mode.
 - **Safety-first guardrails** — Dangerous key combos (Cmd+Q, Alt+F4, etc.) and sensitive text patterns (passwords, API keys, credit card numbers, SSNs) are blocked before reaching the driver.
 - **Cross-provider support** — All runtime providers (Codex, Claude, Copilot, OpenCode, Pi, etc.) receive computer-use capability instructions in their context, with the tool surfaced through per-provider bridges.
