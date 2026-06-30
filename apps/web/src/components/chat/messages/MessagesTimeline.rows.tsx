@@ -158,7 +158,11 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
           const replyTarget = row.message.replyTo;
           return (
-            <div className="group flex flex-col items-end gap-1">
+            <div
+              className="group flex flex-col items-end gap-1"
+              data-scroll-anchor="true"
+              data-user-message-row
+            >
               <div
                 className={cn(
                   "max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3 transition-colors duration-300",

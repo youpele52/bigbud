@@ -73,6 +73,7 @@ export interface UseOnSendInput {
   beginLocalDispatch: (opts: { preparingWorktree: boolean }) => void;
   resetLocalDispatch: () => void;
   forceStickToBottom: () => void;
+  scrollToUserTurnAnchor: (messageId: MessageId) => void;
   persistThreadSettingsForNextTurn: (input: {
     threadId: ThreadId;
     createdAt: string;

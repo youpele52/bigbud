@@ -194,7 +194,7 @@ export async function sendChatTurn({
   ]);
   input.onOptimisticUserMessage?.(messageIdForSend);
   shouldAutoScrollRef.current = true;
-  input.forceStickToBottom();
+  input.scrollToUserTurnAnchor(messageIdForSend);
 
   input.setThreadError(threadIdForSend, null);
   if (expiredTerminalContextCount > 0) {
