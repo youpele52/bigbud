@@ -21,6 +21,18 @@ interface CuaDriverArtifact {
   readonly appPath: readonly string[] | null;
 }
 
+function installManagedBinary(sourcePath: string, destinationPath: string): void {
+  const tempPath = `${destinationPath}.${Crypto.randomUUID()}.tmp`;
+  const binaryContents = FS.readFileSync(sourcePath);
+  FS.mkdirSync(Path.dirname(destinationPath), { recursive: true });
+  FS.writeFileSync(tempPath, binaryContents);
+  if (process.platform !== "win32") {
+    FS.chmodSync(tempPath, 0o755);
+  }
+  FS.rmSync(destinationPath, { force: true });
+  FS.renameSync(tempPath, destinationPath);
+}
+
 function resolveManagedArtifact(): CuaDriverArtifact {
   if (process.platform === "darwin") {
     const stageDir = `cua-driver-rs-${CUA_DRIVER_VERSION}-darwin-universal`;
@@ -139,10 +151,7 @@ export async function installManagedComputerUseRuntime(input: {
     if (!FS.existsSync(binarySourcePath)) {
       throw new Error(`Expected Computer Use runtime binary at ${binarySourcePath}.`);
     }
-    FS.copyFileSync(binarySourcePath, managedPaths.binaryPath);
-    if (process.platform !== "win32") {
-      FS.chmodSync(managedPaths.binaryPath, 0o755);
-    }
+    installManagedBinary(binarySourcePath, managedPaths.binaryPath);
     if (artifact.appPath) {
       const appSourcePath = Path.join(extractDir, ...artifact.appPath);
       if (FS.existsSync(appSourcePath)) {
