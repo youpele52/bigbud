@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { BotIcon, CheckIcon, ShieldAlertIcon } from "lucide-react";
 import {
   Dialog,
@@ -11,6 +12,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { useUpdateSettings } from "../../hooks/useSettings";
+import { enableComputerUseInBackground } from "./computerUseEnable";
 
 interface ComputerUsePermissionDialogProps {
   open: boolean;
@@ -22,52 +24,15 @@ export function ComputerUsePermissionDialog({
   onOpenChange,
 }: ComputerUsePermissionDialogProps) {
   const { updateSettings } = useUpdateSettings();
-  const [isRequesting, setIsRequesting] = useState(false);
-  const [requestStep, setRequestStep] = useState<"install" | "permissions" | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const handleEnable = useCallback(async () => {
-    setIsRequesting(true);
-    setRequestStep("install");
-    setErrorMessage(null);
-
-    try {
-      const bridge = window.desktopBridge;
-      const runtimeStatus = await bridge?.getComputerUseRuntimeStatus?.();
-      if (!runtimeStatus?.available && bridge?.installComputerUseRuntime) {
-        const installResult = await bridge.installComputerUseRuntime();
-        if (!installResult.ok) {
-          throw new Error(installResult.status.message ?? "Computer Use runtime install failed.");
-        }
-      }
-      setRequestStep("permissions");
-      if (bridge?.requestComputerUsePermissions) {
-        const permissions = await bridge.requestComputerUsePermissions();
-        if (!permissions.granted) {
-          throw new Error(
-            permissions.message ??
-              "Computer Use needs Accessibility and Screen Recording permissions before it can be enabled.",
-          );
-        }
-      }
-      updateSettings({
-        computerUseEnabled: true,
-        hasSeenComputerUsePrompt: true,
-      });
-      onOpenChange(false);
-    } catch (error) {
-      updateSettings({
-        computerUseEnabled: false,
-        hasSeenComputerUsePrompt: true,
-      });
-      setErrorMessage(
-        error instanceof Error ? error.message : "Computer Use could not be enabled.",
-      );
-    } finally {
-      setRequestStep(null);
-      setIsRequesting(false);
-    }
-  }, [onOpenChange, updateSettings]);
+    enableComputerUseInBackground({
+      queryClient,
+      updateSettings,
+      closePrompt: () => onOpenChange(false),
+    });
+  }, [onOpenChange, queryClient, updateSettings]);
 
   const handleDismiss = useCallback(() => {
     updateSettings({
@@ -118,26 +83,17 @@ export function ComputerUsePermissionDialog({
               You can change this anytime in Settings → AI → Computer Use.
             </p>
           </div>
-
-          {errorMessage ? <p className="text-xs text-destructive">{errorMessage}</p> : null}
         </DialogPanel>
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={handleDismiss} disabled={isRequesting}>
+          <Button variant="outline" size="sm" onClick={handleDismiss}>
             Maybe Later
           </Button>
-          <Button size="sm" onClick={() => void handleEnable()} disabled={isRequesting}>
-            {isRequesting ? (
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                {requestStep === "permissions" ? "Requesting access..." : "Installing..."}
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5">
-                <CheckIcon className="size-3.5" />
-                Enable
-              </span>
-            )}
+          <Button size="sm" onClick={() => void handleEnable()}>
+            <span className="flex items-center gap-1.5">
+              <CheckIcon className="size-3.5" />
+              Enable
+            </span>
           </Button>
         </DialogFooter>
       </DialogPopup>
