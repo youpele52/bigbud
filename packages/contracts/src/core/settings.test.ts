@@ -40,6 +40,11 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
   test("defaults Cursor to the agent CLI binary", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.binaryPath).toBe("agent");
   });
+
+  test("defaults desktop computer use to disabled until the user opts in", () => {
+    expect(DEFAULT_SERVER_SETTINGS.computerUseEnabled).toBe(false);
+    expect(DEFAULT_SERVER_SETTINGS.hasSeenComputerUsePrompt).toBe(false);
+  });
 });
 
 it.effect("decodes valid terminal appearance settings", () =>
