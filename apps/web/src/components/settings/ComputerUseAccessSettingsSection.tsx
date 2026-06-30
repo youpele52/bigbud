@@ -23,6 +23,7 @@ import {
 } from "../../lib/desktopComputerUseReactQuery";
 import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { enableComputerUseInBackground } from "../computer-use/computerUseEnable";
 
 function formatStatusLabel(source: string | undefined): string {
   switch (source) {
@@ -203,20 +204,12 @@ export function ComputerUseAccessSettingsSection() {
         updateSettings({ computerUseEnabled: false });
         return;
       }
-      if (!status?.available || !permissions?.granted) {
-        toastManager.add({
-          type: "info",
-          title: "Computer Use permissions needed",
-          description:
-            permissions?.message ??
-            "Install the runtime and grant Accessibility and Screen Recording before enabling desktop automation.",
-        });
-        updateSettings({ computerUseEnabled: false });
-        return;
-      }
-      updateSettings({ computerUseEnabled: true });
+      enableComputerUseInBackground({
+        queryClient,
+        updateSettings,
+      });
     },
-    [permissions, status?.available, updateSettings],
+    [queryClient, updateSettings],
   );
 
   if (!isDesktop) {

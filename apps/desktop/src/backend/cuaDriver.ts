@@ -47,7 +47,7 @@ function resolveBundledBinaryPath(): string | null {
 }
 
 function resolveSystemBinaryPath(): string | null {
-  if (process.env.BIGBUD_CUA_ALLOW_SYSTEM_DRIVER !== "1") {
+  if (app.isPackaged && process.env.BIGBUD_CUA_ALLOW_SYSTEM_DRIVER !== "1") {
     return null;
   }
   const rawPath = process.env.PATH;
