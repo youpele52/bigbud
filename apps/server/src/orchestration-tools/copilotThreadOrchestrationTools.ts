@@ -1,10 +1,19 @@
 import type { Tool, ToolResultObject } from "@github/copilot-sdk";
+import {
+  ComputerUseAction,
+  type ComputerUseAction as ComputerUseActionType,
+} from "@bigbud/contracts";
+import { Schema } from "effect";
 
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
+import {
+  COMPUTER_USE_TOOL_DESCRIPTION,
+  COPILOT_COMPUTER_USE_PARAMETERS,
+} from "./orchestrationComputerUseTool.shared.ts";
 
 function successResult(message: string): ToolResultObject {
   return {
@@ -27,7 +36,9 @@ export function createCopilotThreadOrchestrationTools(input: {
   readonly renameThread: (title: string) => Promise<{ readonly title: string }>;
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
-}): ReadonlyArray<Tool<{ title?: string; threadId?: string }>> {
+  readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
+}): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
+  const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
   return [
     {
       name: "rename_thread",
@@ -65,6 +76,21 @@ export function createCopilotThreadOrchestrationTools(input: {
           return successResult("Archived the current thread.");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to archive thread.";
+          return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "computer_use",
+      description: COMPUTER_USE_TOOL_DESCRIPTION,
+      parameters: COPILOT_COMPUTER_USE_PARAMETERS,
+      handler: async (args) => {
+        try {
+          const action = decodeComputerUseAction(args);
+          const result = await input.computerUse(action);
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Computer-use action failed.";
           return failureResult(message);
         }
       },

@@ -131,6 +131,7 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_remote_workspace__grep",
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
+        "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__archive_thread",
         "mcp__bigbud_orchestration__get_thread_status",

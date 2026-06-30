@@ -1,6 +1,7 @@
 import { Data, Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
+import { ComputerUseAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
 import {
@@ -8,14 +9,15 @@ import {
   readThreadOrchestrationToolAuthByToken,
 } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { getThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
-import { ThreadId } from "@bigbud/contracts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
+const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 
 const ThreadToolRequest = Schema.Struct({
-  action: Schema.Literals(["rename", "archive", "get_status"]),
+  action: Schema.Literals(["rename", "archive", "get_status", "computer_use"]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
+  computerUseAction: Schema.optional(Schema.Unknown),
 });
 
 class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{
@@ -117,6 +119,32 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
           }),
         );
       return yield* HttpServerResponse.json({ ok: true, status });
+    }
+
+    if (body.action === "computer_use") {
+      const computerUseAction = yield* Effect.try({
+        try: () => decodeComputerUseAction(body.computerUseAction),
+        catch: () =>
+          new ThreadToolRequestError({
+            status: 400,
+            message: "Invalid computer-use action.",
+          }),
+      });
+      const result = yield* dispatcher
+        .computerUse({
+          threadId,
+          action: computerUseAction,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new ThreadToolRequestError({
+                status: 400,
+                message: error instanceof Error ? error.message : "Computer-use action failed.",
+              }),
+          ),
+        );
+      return yield* HttpServerResponse.json({ ok: true, result });
     }
 
     yield* dispatcher.archive({ threadId }).pipe(

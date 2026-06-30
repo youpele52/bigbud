@@ -22,6 +22,7 @@ import { BrowserTraceCollector } from "../observability/Services/BrowserTraceCol
 import { ProjectFaviconResolver } from "../project/Services/ProjectFaviconResolver";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
 import { makeCorsMiddleware } from "./http.cors";
+import { serveLocalFile } from "./http.fileResponse.ts";
 
 const PROJECT_FAVICON_CACHE_CONTROL = "public, max-age=3600";
 const FALLBACK_PROJECT_FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#6b728080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-fallback="project-favicon"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"/></svg>`;
@@ -180,16 +181,15 @@ export const attachmentsRouteLayer = HttpRouter.add(
       return HttpServerResponse.text("Not Found", { status: 404 });
     }
 
-    return yield* HttpServerResponse.file(filePath, {
-      status: 200,
+    return yield* serveLocalFile({
+      request,
+      filePath,
+      fileSize: Number(fileInfo.size),
       headers: {
         "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Type": Mime.getType(filePath) ?? "application/octet-stream",
       },
-    }).pipe(
-      Effect.catch(() =>
-        Effect.succeed(HttpServerResponse.text("Internal Server Error", { status: 500 })),
-      ),
-    );
+    });
   }),
 );
 
@@ -254,17 +254,23 @@ export const workspaceFilePreviewRouteLayer = HttpRouter.add(
       return HttpServerResponse.text("Invalid workspace file path", { status: 400 });
     }
 
-    return yield* HttpServerResponse.file(resolvedPath.absolutePath, {
-      status: 200,
+    const fileSystem = yield* FileSystem.FileSystem;
+    const fileInfo = yield* fileSystem
+      .stat(resolvedPath.absolutePath)
+      .pipe(Effect.catch(() => Effect.succeed(null)));
+    if (!fileInfo || fileInfo.type !== "File") {
+      return HttpServerResponse.text("Invalid workspace file path", { status: 400 });
+    }
+
+    return yield* serveLocalFile({
+      request,
+      filePath: resolvedPath.absolutePath,
+      fileSize: Number(fileInfo.size),
       headers: {
         "Cache-Control": WORKSPACE_FILE_PREVIEW_CACHE_CONTROL,
         "Content-Type": Mime.getType(resolvedPath.absolutePath) ?? "application/octet-stream",
       },
-    }).pipe(
-      Effect.catch(() =>
-        Effect.succeed(HttpServerResponse.text("Internal Server Error", { status: 500 })),
-      ),
-    );
+    });
   }),
 );
 

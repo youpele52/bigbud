@@ -1,3 +1,4 @@
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { describe, expect, it } from "vitest";
@@ -14,9 +15,11 @@ import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
 } from "../Services/ProjectionPipeline.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
-import { asProjectId } from "./OrchestrationEngine.test.helpers.ts";
+import { asProjectId, ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 
 describe("OrchestrationEngine", () => {
   it("bootstraps the in-memory read model from persisted projections", async () => {
@@ -104,6 +107,10 @@ describe("OrchestrationEngine", () => {
       Layer.provide(Layer.succeed(OrchestrationEventStore, failOnHistoricalReplayStore)),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
       Layer.provide(SqlitePersistenceMemory),
+      Layer.provideMerge(ComputerUseDisabledTestLayer),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(NodeServices.layer),
     );
 
     const runtime = ManagedRuntime.make(layer);

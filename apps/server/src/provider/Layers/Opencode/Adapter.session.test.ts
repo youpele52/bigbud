@@ -300,6 +300,78 @@ describe("Opencode session lifecycle", () => {
     }),
   );
 
+  it.effect("registers orchestration MCP for KiloCode sessions", () =>
+    Effect.gen(function* () {
+      const mcpAddCalls: Array<Record<string, unknown>> = [];
+      const handle: OpencodeServerHandle = {
+        client: makeMockOpencodeClient({
+          onMcpAdd: (mcpInput) => {
+            mcpAddCalls.push(mcpInput);
+          },
+        }),
+        url: "http://127.0.0.1:4100",
+        release() {},
+      };
+
+      const methods = makeSessionMethods({
+        provider: "kilocode",
+        sessions: new Map(),
+        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+        serverManager: {
+          acquire: async () => handle,
+        },
+        serverSettings: {
+          getSettings: Effect.succeed({
+            providers: {
+              kilocode: {
+                binaryPath: "kilo",
+              },
+            },
+          } as never),
+        },
+        serverConfig: {
+          attachmentsDir: "/tmp/attachments",
+          stateDir: "/tmp/bigbud-state",
+          port: 3773,
+          host: "127.0.0.1",
+        },
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-kilo-next")),
+        makeEventStamp: () =>
+          Effect.succeed({
+            eventId: EventId.makeUnsafe("evt-kilo"),
+            createdAt: CREATED_AT,
+          }),
+        nativeEventLogger: undefined,
+        services: yield* Effect.services<never>(),
+      });
+
+      yield* methods.startSession({
+        threadId: THREAD_ID,
+        provider: "kilocode",
+        runtimeMode: "approval-required",
+      });
+
+      expect(mcpAddCalls).toEqual([
+        {
+          name: "bigbud_orchestration",
+          config: {
+            type: "local",
+            command: expect.arrayContaining([expect.any(String)]),
+          },
+        },
+      ]);
+
+      const command = (mcpAddCalls[0]?.config as { command?: ReadonlyArray<string> } | undefined)
+        ?.command;
+      const serverPath = command?.[1];
+      expect(typeof serverPath).toBe("string");
+      if (typeof serverPath === "string") {
+        const source = yield* Effect.promise(() => fs.readFile(serverPath, "utf8"));
+        expect(source).toContain("computer_use");
+      }
+    }),
+  );
+
   it.effect("does not write orchestration tool files into the project cwd", () =>
     Effect.gen(function* () {
       const projectDir = yield* Effect.promise(() => fs.mkdtemp("/tmp/bigbud-opencode-project-"));

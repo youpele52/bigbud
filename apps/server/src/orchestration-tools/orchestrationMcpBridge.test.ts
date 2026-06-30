@@ -30,6 +30,7 @@ describe("orchestrationMcpBridge", () => {
     });
 
     expect(source).toContain("/api/internal/thread-tools");
+    expect(source).toContain("computer_use");
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
     expect(source).toContain("get_thread_status");
@@ -64,6 +65,7 @@ describe("orchestrationMcpBridge", () => {
     expect(merged.allowedTools).toEqual(
       expect.arrayContaining([
         "Read",
+        "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__get_thread_status",
       ]),

@@ -322,11 +322,16 @@ export const sendTurnForThread = (services: SessionOpServices) =>
           latestProviderInputText: input.providerInputText ?? input.messageText,
         })
       : (input.providerInputText ?? input.messageText);
+    const serverSettings = yield* services.serverSettingsService.getSettings.pipe(
+      Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+    );
     const providerInputWithCurrentThread = baseInput
       ? prependThreadContextToProviderInput({
           providerInputText: baseInput,
           threadId: thread.id,
           threadTitle: thread.title,
+          computerUseEnabled: serverSettings.computerUseEnabled,
+          serverMode: services.serverConfig.mode,
         })
       : baseInput;
     const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
