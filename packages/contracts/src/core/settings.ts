@@ -218,6 +218,8 @@ export const ServerSettings = Schema.Struct({
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ServerSettings = typeof ServerSettings.Type;
 
@@ -401,6 +403,8 @@ export const ServerSettingsPatch = Schema.Struct({
       enabled: Schema.optionalKey(Schema.Boolean),
     }),
   ),
+  computerUseEnabled: Schema.optionalKey(Schema.Boolean),
+  hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),

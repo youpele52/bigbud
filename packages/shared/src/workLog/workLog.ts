@@ -25,7 +25,8 @@ export interface WorkLogEntry {
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
   itemType?: ToolLifecycleItemType;
-  requestKind?: "command" | "file-read" | "file-change";
+  requestKind?: "browser" | "command" | "file-read" | "file-change";
+  attachmentUrl?: string;
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -133,6 +134,7 @@ function mergeDerivedWorkLogEntries(
   const toolTitle = next.toolTitle ?? previous.toolTitle;
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
+  const attachmentUrl = next.attachmentUrl ?? previous.attachmentUrl;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
   return {
     ...previous,
@@ -144,6 +146,7 @@ function mergeDerivedWorkLogEntries(
     ...(toolTitle ? { toolTitle } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
+    ...(attachmentUrl ? { attachmentUrl } : {}),
     ...(collapseKey ? { collapseKey } : {}),
   };
 }
