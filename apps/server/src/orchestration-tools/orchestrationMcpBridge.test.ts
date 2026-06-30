@@ -16,8 +16,10 @@ import {
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
 import {
   createThreadOrchestrationToolToken,
+  isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
   readThreadOrchestrationToolAuth,
+  writeThreadOrchestrationToolAuth,
 } from "./ThreadOrchestrationToolAuth.ts";
 
 describe("orchestrationMcpBridge", () => {
@@ -137,6 +139,53 @@ describe("orchestrationMcpBridge", () => {
       expect(createThreadOrchestrationToolToken()).not.toBe(bridge.token);
     } finally {
       await bridge.cleanup();
+      expect(
+        await readThreadOrchestrationToolAuth({
+          stateDir,
+          threadId: "thread-1",
+        }),
+      ).toBeNull();
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects expired thread tool auth records", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "bigbud-thread-tool-auth-"));
+    await writeThreadOrchestrationToolAuth({
+      stateDir,
+      threadId: "thread-expired",
+      token: "token-expired",
+    });
+    const filePath = path.join(stateDir, "thread-tool-auth", "thread-expired.json");
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        threadId: "thread-expired",
+        token: "token-expired",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+
+    try {
+      const record = await readThreadOrchestrationToolAuth({
+        stateDir,
+        threadId: "thread-expired",
+      });
+      expect(
+        isThreadOrchestrationToolAuthorized({
+          record,
+          threadId: "thread-expired",
+          token: "token-expired",
+        }),
+      ).toBe(false);
+      expect(
+        await readThreadOrchestrationToolAuthByToken({
+          stateDir,
+          token: "token-expired",
+        }),
+      ).toBeNull();
+    } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }
   });

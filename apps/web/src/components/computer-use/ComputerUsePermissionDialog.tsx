@@ -23,28 +23,45 @@ export function ComputerUsePermissionDialog({
 }: ComputerUsePermissionDialogProps) {
   const { updateSettings } = useUpdateSettings();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleEnable = useCallback(async () => {
     setIsRequesting(true);
-    updateSettings({
-      computerUseEnabled: true,
-      hasSeenComputerUsePrompt: true,
-    });
+    setErrorMessage(null);
 
     try {
       const bridge = window.desktopBridge;
       if (bridge?.installComputerUseRuntime) {
-        await bridge.installComputerUseRuntime();
+        const installResult = await bridge.installComputerUseRuntime();
+        if (!installResult.ok) {
+          throw new Error(installResult.status.message ?? "Computer Use runtime install failed.");
+        }
       }
       if (bridge?.requestComputerUsePermissions) {
-        await bridge.requestComputerUsePermissions();
+        const permissions = await bridge.requestComputerUsePermissions();
+        if (!permissions.granted) {
+          throw new Error(
+            permissions.message ??
+              "Computer Use needs Accessibility and Screen Recording permissions before it can be enabled.",
+          );
+        }
       }
-    } catch {
-      // Permission prompts may fail if the runtime is not installed yet.
+      updateSettings({
+        computerUseEnabled: true,
+        hasSeenComputerUsePrompt: true,
+      });
+      onOpenChange(false);
+    } catch (error) {
+      updateSettings({
+        computerUseEnabled: false,
+        hasSeenComputerUsePrompt: true,
+      });
+      setErrorMessage(
+        error instanceof Error ? error.message : "Computer Use could not be enabled.",
+      );
+    } finally {
+      setIsRequesting(false);
     }
-
-    setIsRequesting(false);
-    onOpenChange(false);
   }, [onOpenChange, updateSettings]);
 
   const handleDismiss = useCallback(() => {
@@ -96,6 +113,8 @@ export function ComputerUsePermissionDialog({
               You can change this anytime in Settings → AI → Computer Use.
             </p>
           </div>
+
+          {errorMessage ? <p className="text-xs text-destructive">{errorMessage}</p> : null}
         </DialogPanel>
 
         <DialogFooter>

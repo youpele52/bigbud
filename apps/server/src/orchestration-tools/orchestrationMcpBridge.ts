@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { ORCHESTRATION_MCP_SERVER_NAME } from "./orchestrationMcpBridge.template.shared.ts";
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
+import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth.ts";
 import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
@@ -83,6 +84,10 @@ export async function createThreadOrchestrationBridge(
     bridgeDir,
     token,
     cleanup: async () => {
+      await deleteThreadOrchestrationToolAuth({
+        stateDir: input.stateDir,
+        threadId: input.threadId,
+      });
       await rm(bridgeDir, { recursive: true, force: true });
     },
   };

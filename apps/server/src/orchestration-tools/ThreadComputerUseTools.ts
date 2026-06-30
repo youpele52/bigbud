@@ -2,12 +2,18 @@ import { ATTACHMENTS_ROUTE_PREFIX } from "../attachments/attachmentPaths.ts";
 import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore.ts";
 import type { ComputerUseAction, ComputerUseResult, ThreadId } from "@bigbud/contracts";
 import { CommandId, EventId } from "@bigbud/contracts";
-import { Effect, type FileSystem, type Path } from "effect";
+import {
+  DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
+  DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+} from "@bigbud/contracts/settings";
+import { Effect, Option, type FileSystem, type Path } from "effect";
 
 import type { ComputerUseShape } from "../computer-use/Services/ComputerUse.ts";
 import { isDesktopSurfaceAction } from "../computer-use/Layers/ComputerUse.ts";
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
 import { type OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+
+const COMPUTER_USE_TOOL_TITLE = "computer_use";
 
 function summarizeRequestedAction(action: ComputerUseAction): string {
   switch (action.action) {
@@ -59,6 +65,84 @@ function isMutatingAction(action: ComputerUseAction): boolean {
     default:
       return true;
   }
+}
+
+function parseTimestamp(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function latestUserMessageTimestamp(thread: {
+  readonly messages: ReadonlyArray<{ readonly role: string; readonly createdAt: string }>;
+}): number | null {
+  let latest: number | null = null;
+  for (const message of thread.messages) {
+    if (message.role !== "user") {
+      continue;
+    }
+    const timestamp = parseTimestamp(message.createdAt);
+    if (timestamp !== null && (latest === null || timestamp > latest)) {
+      latest = timestamp;
+    }
+  }
+  return latest;
+}
+
+function firstComputerUseActivityAfter(
+  thread: {
+    readonly activities: ReadonlyArray<{
+      readonly kind: string;
+      readonly createdAt: string;
+      readonly payload: unknown;
+    }>;
+  },
+  timestamp: number | null,
+): number | null {
+  let first: number | null = null;
+  for (const activity of thread.activities) {
+    if (activity.kind !== "tool.started") {
+      continue;
+    }
+    const payload = activity.payload;
+    const title =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>).title
+        : undefined;
+    if (title !== COMPUTER_USE_TOOL_TITLE) {
+      continue;
+    }
+    const activityTimestamp = parseTimestamp(activity.createdAt);
+    if (activityTimestamp === null || (timestamp !== null && activityTimestamp <= timestamp)) {
+      continue;
+    }
+    if (first === null || activityTimestamp < first) {
+      first = activityTimestamp;
+    }
+  }
+  return first;
+}
+
+function hasComputerUseCheckInExpired(input: {
+  readonly thread: {
+    readonly messages: ReadonlyArray<{ readonly role: string; readonly createdAt: string }>;
+    readonly activities: ReadonlyArray<{
+      readonly kind: string;
+      readonly createdAt: string;
+      readonly payload: unknown;
+    }>;
+  };
+  readonly checkInIntervalMs: number;
+  readonly nowMs: number;
+}): boolean {
+  const latestUserMessage = latestUserMessageTimestamp(input.thread);
+  const firstComputerUseActivity = firstComputerUseActivityAfter(input.thread, latestUserMessage);
+  return (
+    firstComputerUseActivity !== null &&
+    input.nowMs - firstComputerUseActivity >= input.checkInIntervalMs
+  );
 }
 
 const appendToolActivity = (input: {
@@ -146,6 +230,8 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     readonly serverMode: "web" | "desktop";
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
+    readonly checkInIntervalMs?: number;
+    readonly actionTimeoutMs?: number;
   }) {
     const thread = yield* input.orchestrationEngine
       .getReadModel()
@@ -178,6 +264,19 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
         ),
       );
     }
+    if (
+      hasComputerUseCheckInExpired({
+        thread,
+        checkInIntervalMs: input.checkInIntervalMs ?? DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+        nowMs: Date.now(),
+      })
+    ) {
+      return yield* Effect.fail(
+        new Error(
+          "Computer use has been running for a while. Ask the user whether to continue before using computer_use again.",
+        ),
+      );
+    }
 
     const safetyViolation = guardComputerUseAction(input.action);
     if (safetyViolation) {
@@ -195,7 +294,21 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
       data: { action: input.action },
     });
 
-    const executed = yield* input.computerUse.execute(input.threadId, input.action);
+    const actionTimeoutMs = input.actionTimeoutMs ?? DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS;
+    const executed = yield* input.computerUse.execute(input.threadId, input.action).pipe(
+      Effect.timeoutOption(actionTimeoutMs),
+      Effect.flatMap((result) =>
+        Option.match(result, {
+          onNone: () =>
+            Effect.fail(
+              new Error(
+                `Computer-use action timed out after ${Math.round(actionTimeoutMs / 1_000)} seconds.`,
+              ),
+            ),
+          onSome: (value) => Effect.succeed(value),
+        }),
+      ),
+    );
     const result = yield* persistScreenshot({
       attachmentsDir: input.attachmentsDir,
       fileSystem: input.fileSystem,

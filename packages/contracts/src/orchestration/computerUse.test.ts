@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
-import { ComputerUseAction } from "./computerUse";
+import {
+  COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH,
+  COMPUTER_USE_COORDINATE_MAX,
+  COMPUTER_USE_TEXT_MAX_CHARS,
+  COMPUTER_USE_WAIT_DURATION_MS_MAX,
+  ComputerUseAction,
+} from "./computerUse";
 
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 
@@ -56,6 +62,43 @@ describe("ComputerUseAction", () => {
         action: "click",
         x: "bad",
         y: 20,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects out-of-range action payloads", () => {
+    expect(() =>
+      decodeComputerUseAction({
+        action: "click",
+        x: COMPUTER_USE_COORDINATE_MAX + 1,
+        y: 20,
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeComputerUseAction({
+        action: "type",
+        text: "x".repeat(COMPUTER_USE_TEXT_MAX_CHARS + 1),
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeComputerUseAction({
+        action: "wait",
+        durationMs: COMPUTER_USE_WAIT_DURATION_MS_MAX + 1,
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeComputerUseAction({
+        action: "get_accessibility_tree",
+        maxDepth: COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH + 1,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects unsupported navigation schemes", () => {
+    expect(() =>
+      decodeComputerUseAction({
+        action: "navigate",
+        url: "file:///etc/passwd",
       }),
     ).toThrow();
   });

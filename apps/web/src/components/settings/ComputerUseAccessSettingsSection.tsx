@@ -21,6 +21,7 @@ import {
   useDesktopComputerUsePermissions,
   useDesktopComputerUseStatus,
 } from "../../lib/desktopComputerUseReactQuery";
+import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 function formatStatusLabel(source: string | undefined): string {
@@ -196,6 +197,28 @@ export function ComputerUseAccessSettingsSection() {
     setIsResetting(false);
   }, [updateSettings]);
 
+  const handleComputerUseEnabledChange = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        updateSettings({ computerUseEnabled: false });
+        return;
+      }
+      if (!status?.available || !permissions?.granted) {
+        toastManager.add({
+          type: "info",
+          title: "Computer Use permissions needed",
+          description:
+            permissions?.message ??
+            "Install the runtime and grant Accessibility and Screen Recording before enabling desktop automation.",
+        });
+        updateSettings({ computerUseEnabled: false });
+        return;
+      }
+      updateSettings({ computerUseEnabled: true });
+    },
+    [permissions, status?.available, updateSettings],
+  );
+
   if (!isDesktop) {
     return null;
   }
@@ -208,7 +231,7 @@ export function ComputerUseAccessSettingsSection() {
         control={
           <Switch
             checked={settings.computerUseEnabled}
-            onCheckedChange={(checked) => updateSettings({ computerUseEnabled: Boolean(checked) })}
+            onCheckedChange={(checked) => handleComputerUseEnabledChange(Boolean(checked))}
             aria-label="Enable desktop computer use"
           />
         }
@@ -220,6 +243,8 @@ export function ComputerUseAccessSettingsSection() {
           description="With desktop automation disabled, agents cannot open or read native apps like Calendar or Reminders. Browser automation inside bigbud may still work."
         />
       ) : null}
+
+      <ComputerUseLimitSettingsRows settings={settings} />
 
       <SettingsRow
         title="macOS permissions"

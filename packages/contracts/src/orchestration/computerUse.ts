@@ -2,7 +2,23 @@ import { Schema } from "effect";
 
 import { PositiveInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 
-const Coordinate = Schema.Number;
+export const COMPUTER_USE_COORDINATE_MIN = -100_000;
+export const COMPUTER_USE_COORDINATE_MAX = 100_000;
+export const COMPUTER_USE_SCROLL_DELTA_MIN = -50_000;
+export const COMPUTER_USE_SCROLL_DELTA_MAX = 50_000;
+export const COMPUTER_USE_TEXT_MAX_CHARS = 10_000;
+export const COMPUTER_USE_KEY_MAX_CHARS = 128;
+export const COMPUTER_USE_APP_NAME_MAX_CHARS = 256;
+export const COMPUTER_USE_URL_MAX_CHARS = 4_096;
+export const COMPUTER_USE_WAIT_DURATION_MS_MAX = 15 * 60_000;
+export const COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH = 50;
+
+const Coordinate = Schema.Number.check(
+  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_COORDINATE_MIN),
+).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_COORDINATE_MAX));
+const ScrollDelta = Schema.Number.check(
+  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_SCROLL_DELTA_MIN),
+).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_SCROLL_DELTA_MAX));
 const OptionalCoordinate = Schema.optional(Coordinate);
 const Surface = Schema.Literals(["browser", "desktop"]);
 export type ComputerUseSurface = typeof Surface.Type;
@@ -26,7 +42,10 @@ export type ComputerUseCaptureAction = typeof ComputerUseCaptureAction.Type;
 
 export const ComputerUseNavigateAction = Schema.Struct({
   action: Schema.Literal("navigate"),
-  url: TrimmedNonEmptyString,
+  url: TrimmedNonEmptyString.check(
+    Schema.isMaxLength(COMPUTER_USE_URL_MAX_CHARS),
+    Schema.isPattern(/^https?:\/\//i),
+  ),
   ...surfaceField,
   ...captureAfterField,
 });
@@ -55,8 +74,8 @@ export type ComputerUseDragAction = typeof ComputerUseDragAction.Type;
 
 export const ComputerUseScrollAction = Schema.Struct({
   action: Schema.Literal("scroll"),
-  deltaX: Schema.optional(Coordinate),
-  deltaY: Schema.optional(Coordinate),
+  deltaX: Schema.optional(ScrollDelta),
+  deltaY: Schema.optional(ScrollDelta),
   x: OptionalCoordinate,
   y: OptionalCoordinate,
   ...surfaceField,
@@ -66,7 +85,7 @@ export type ComputerUseScrollAction = typeof ComputerUseScrollAction.Type;
 
 export const ComputerUseTypeAction = Schema.Struct({
   action: Schema.Literal("type"),
-  text: Schema.String,
+  text: Schema.String.check(Schema.isMaxLength(COMPUTER_USE_TEXT_MAX_CHARS)),
   ...surfaceField,
   ...captureAfterField,
 });
@@ -74,7 +93,7 @@ export type ComputerUseTypeAction = typeof ComputerUseTypeAction.Type;
 
 export const ComputerUseKeyAction = Schema.Struct({
   action: Schema.Literal("key"),
-  key: TrimmedNonEmptyString,
+  key: TrimmedNonEmptyString.check(Schema.isMaxLength(COMPUTER_USE_KEY_MAX_CHARS)),
   ...surfaceField,
   ...captureAfterField,
 });
@@ -82,7 +101,7 @@ export type ComputerUseKeyAction = typeof ComputerUseKeyAction.Type;
 
 export const ComputerUseWaitAction = Schema.Struct({
   action: Schema.Literal("wait"),
-  durationMs: PositiveInt,
+  durationMs: PositiveInt.check(Schema.isLessThanOrEqualTo(COMPUTER_USE_WAIT_DURATION_MS_MAX)),
   ...surfaceField,
   ...captureAfterField,
 });
@@ -117,7 +136,7 @@ export type ComputerUseDoctorAction = typeof ComputerUseDoctorAction.Type;
 
 export const ComputerUseLaunchAppAction = Schema.Struct({
   action: Schema.Literal("launch_app"),
-  name: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString.check(Schema.isMaxLength(COMPUTER_USE_APP_NAME_MAX_CHARS)),
   background: Schema.optional(Schema.Boolean),
 });
 export type ComputerUseLaunchAppAction = typeof ComputerUseLaunchAppAction.Type;
@@ -126,7 +145,9 @@ export const ComputerUseFocusAppAction = Schema.Struct({
   action: Schema.Literal("focus_app"),
   pid: Schema.optional(PositiveInt),
   windowId: Schema.optional(PositiveInt),
-  name: Schema.optional(TrimmedNonEmptyString),
+  name: Schema.optional(
+    TrimmedNonEmptyString.check(Schema.isMaxLength(COMPUTER_USE_APP_NAME_MAX_CHARS)),
+  ),
 });
 export type ComputerUseFocusAppAction = typeof ComputerUseFocusAppAction.Type;
 
@@ -134,7 +155,9 @@ export const ComputerUseGetAccessibilityTreeAction = Schema.Struct({
   action: Schema.Literal("get_accessibility_tree"),
   pid: Schema.optional(PositiveInt),
   windowId: Schema.optional(PositiveInt),
-  maxDepth: Schema.optional(PositiveInt),
+  maxDepth: Schema.optional(
+    PositiveInt.check(Schema.isLessThanOrEqualTo(COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH)),
+  ),
 });
 export type ComputerUseGetAccessibilityTreeAction =
   typeof ComputerUseGetAccessibilityTreeAction.Type;

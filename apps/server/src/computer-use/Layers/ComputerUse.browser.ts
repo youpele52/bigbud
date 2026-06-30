@@ -13,6 +13,7 @@ import type {
 import { Effect } from "effect";
 
 import { ComputerUseError } from "../Services/ComputerUse.ts";
+import { guardComputerUseTarget, isComputerUseMutatingAction } from "../computerUseSafety.ts";
 
 function toBrowserClickInput(
   action: Extract<ComputerUseAction, { action: "click" }>,
@@ -73,6 +74,20 @@ const withBrowserPage = (
 > =>
   Effect.gen(function* () {
     yield* browser.launch(threadId).pipe(Effect.mapError((cause) => new ComputerUseError(cause)));
+
+    if (action.action !== "navigate" && isComputerUseMutatingAction(action)) {
+      const currentPageInfo = yield* browser
+        .getPageInfo(threadId)
+        .pipe(Effect.mapError((cause) => new ComputerUseError(cause)));
+      const safetyViolation = guardComputerUseTarget({
+        action,
+        surface: "browser",
+        url: currentPageInfo.url,
+      });
+      if (safetyViolation) {
+        return yield* new ComputerUseError({ message: safetyViolation });
+      }
+    }
 
     switch (action.action) {
       case "capture":
