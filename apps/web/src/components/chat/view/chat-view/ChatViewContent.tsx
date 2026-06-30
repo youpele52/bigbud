@@ -1,6 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
@@ -10,6 +10,8 @@ import { ChatHeader } from "../../common/ChatHeader";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
+import { deriveUserTurnAnchorsFromThreadMessages } from "../../scroller/chatScroll.timelineRows";
+import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
@@ -137,12 +139,37 @@ export function ChatViewContent({
     [base, runtime],
   );
 
-  const handleOpenReplySource = useCallback((messageId: MessageId) => {
-    setFocusMessageId(null);
-    window.requestAnimationFrame(() => {
-      setFocusMessageId(messageId);
-    });
-  }, []);
+  const handleOpenReplySource = useCallback(
+    (messageId: MessageId) => {
+      runtime.scrollBehavior.scrollToMessage(messageId, {
+        align: "center",
+        behavior: "smooth",
+      });
+      setFocusMessageId(null);
+      window.requestAnimationFrame(() => {
+        setFocusMessageId(messageId);
+      });
+    },
+    [runtime.scrollBehavior],
+  );
+
+  const userTurnAnchors = useMemo(
+    () => deriveUserTurnAnchorsFromThreadMessages(base.activeThread?.messages ?? []),
+    [base.activeThread?.messages],
+  );
+
+  const handleJumpToTurn = useCallback(
+    (messageId: MessageId) => {
+      const didScroll = runtime.scrollBehavior.scrollToMessage(messageId, {
+        align: "start",
+        behavior: "smooth",
+      });
+      if (!didScroll) {
+        handleOpenReplySource(messageId);
+      }
+    },
+    [handleOpenReplySource, runtime.scrollBehavior],
+  );
 
   useEffect(() => {
     if (!searchFocusRequest) {
@@ -199,93 +226,106 @@ export function ChatViewContent({
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 flex-col">
-            <div
-              ref={runtime.scrollBehavior.setMessagesScrollContainerRef}
-              className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-5 sm:py-4"
-              onScroll={runtime.scrollBehavior.onMessagesScroll}
-              onClickCapture={runtime.scrollBehavior.onMessagesClickCapture}
-              onWheel={runtime.scrollBehavior.onMessagesWheel}
-              onPointerDown={runtime.scrollBehavior.onMessagesPointerDown}
-              onPointerUp={runtime.scrollBehavior.onMessagesPointerUp}
-              onPointerCancel={runtime.scrollBehavior.onMessagesPointerCancel}
-              onTouchStart={runtime.scrollBehavior.onMessagesTouchStart}
-              onTouchMove={runtime.scrollBehavior.onMessagesTouchMove}
-              onTouchEnd={runtime.scrollBehavior.onMessagesTouchEnd}
-              onTouchCancel={runtime.scrollBehavior.onMessagesTouchEnd}
-            >
-              {base.activeThread?.parentThread ? (
-                <div className="mb-4 flex items-center gap-3">
-                  <span className="h-px flex-1 bg-border" />
-                  <Link
-                    to="/$threadId"
-                    params={{
-                      threadId: base.activeThread.parentThread.threadId,
-                    }}
-                    className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80 outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Branched from {base.activeThread.parentThread.title}
-                  </Link>
-                  <span className="h-px flex-1 bg-border" />
-                </div>
-              ) : null}
-              {base.activeThread && (base.activeThread.watchingThreads?.length ?? 0) > 0 ? (
-                <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
-                    Watching
-                  </span>
-                  {base.activeThread.watchingThreads!.map((watch) => (
+            <div className="relative min-h-0 flex-1">
+              <div
+                ref={runtime.scrollBehavior.setMessagesScrollContainerRef}
+                className="h-full min-h-0 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 sm:px-5 sm:py-4 [scrollbar-gutter:stable]"
+                onScroll={runtime.scrollBehavior.onMessagesScroll}
+                onClickCapture={runtime.scrollBehavior.onMessagesClickCapture}
+                onWheel={runtime.scrollBehavior.onMessagesWheel}
+                onPointerDown={runtime.scrollBehavior.onMessagesPointerDown}
+                onPointerUp={runtime.scrollBehavior.onMessagesPointerUp}
+                onPointerCancel={runtime.scrollBehavior.onMessagesPointerCancel}
+                onTouchStart={runtime.scrollBehavior.onMessagesTouchStart}
+                onTouchMove={runtime.scrollBehavior.onMessagesTouchMove}
+                onTouchEnd={runtime.scrollBehavior.onMessagesTouchEnd}
+                onTouchCancel={runtime.scrollBehavior.onMessagesTouchEnd}
+              >
+                {base.activeThread?.parentThread ? (
+                  <div className="mb-4 flex items-center gap-3">
+                    <span className="h-px flex-1 bg-border" />
                     <Link
-                      key={watch.threadId}
                       to="/$threadId"
-                      params={{ threadId: watch.threadId }}
-                      className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      params={{
+                        threadId: base.activeThread.parentThread.threadId,
+                      }}
+                      className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80 outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      {watch.title}
+                      Branched from {base.activeThread.parentThread.title}
                     </Link>
-                  ))}
-                </div>
-              ) : null}
-              <MessagesTimeline
-                key={base.activeThread!.id}
-                isWorking={thread.isWorking}
-                activeTurnInProgress={interactions.activeTurnInProgress}
-                activeTurnStartedAt={thread.activeWorkStartedAt}
-                scrollContainer={runtime.scrollBehavior.messagesScrollElement}
-                timelineEntries={timeline.timelineEntries}
-                completionDividerBeforeEntryId={timeline.completionDividerBeforeEntryId}
-                completionSummary={thread.completionSummary}
-                turnDiffSummaryByAssistantMessageId={timeline.turnDiffSummaryByAssistantMessageId}
-                nowIso={thread.nowIso}
-                expandedWorkGroups={base.expandedWorkGroups}
-                onToggleWorkGroup={interactions.onToggleWorkGroup}
-                changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
-                onSetChangedFilesExpanded={(turnId, expanded) => {
-                  if (!base.isServerThread) {
-                    return;
-                  }
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                ) : null}
+                {base.activeThread && (base.activeThread.watchingThreads?.length ?? 0) > 0 ? (
+                  <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+                      Watching
+                    </span>
+                    {base.activeThread.watchingThreads!.map((watch) => (
+                      <Link
+                        key={watch.threadId}
+                        to="/$threadId"
+                        params={{ threadId: watch.threadId }}
+                        className="rounded-full border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground outline-hidden transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {watch.title}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+                <MessagesTimeline
+                  key={base.activeThread!.id}
+                  isWorking={thread.isWorking}
+                  activeTurnInProgress={interactions.activeTurnInProgress}
+                  activeTurnStartedAt={thread.activeWorkStartedAt}
+                  scrollContainer={runtime.scrollBehavior.messagesScrollElement}
+                  timelineEntries={timeline.timelineEntries}
+                  completionDividerBeforeEntryId={timeline.completionDividerBeforeEntryId}
+                  completionSummary={thread.completionSummary}
+                  turnDiffSummaryByAssistantMessageId={timeline.turnDiffSummaryByAssistantMessageId}
+                  nowIso={thread.nowIso}
+                  expandedWorkGroups={base.expandedWorkGroups}
+                  onToggleWorkGroup={interactions.onToggleWorkGroup}
+                  changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
+                  onSetChangedFilesExpanded={(turnId, expanded) => {
+                    if (!base.isServerThread) {
+                      return;
+                    }
 
-                  base.setThreadChangedFilesExpanded(base.activeThread!.id, turnId, expanded);
-                }}
-                onOpenTurnDiff={interactions.onOpenTurnDiff}
-                revertTurnCountByUserMessageId={timeline.revertTurnCountByUserMessageId}
-                onRevertUserMessage={interactions.onRevertUserMessage}
-                isRevertingCheckpoint={base.isRevertingCheckpoint}
-                onImageExpand={base.setExpandedImage}
-                markdownCwd={composer.gitCwd ?? undefined}
-                resolvedTheme={base.resolvedTheme}
-                timestampFormat={base.timestampFormat}
-                workspaceRoot={workspaceRoot}
-                workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
-                focusMessageId={focusMessageId}
-                onReplyToMessage={handleReplyToMessage}
-                onOpenReplySource={handleOpenReplySource}
-                onBranchThread={(messageId) => {
-                  void branchThread(base.activeThread!.id, {
-                    upToMessageId: messageId,
-                    navigateToBranch: true,
-                  });
-                }}
-              />
+                    base.setThreadChangedFilesExpanded(base.activeThread!.id, turnId, expanded);
+                  }}
+                  onOpenTurnDiff={interactions.onOpenTurnDiff}
+                  revertTurnCountByUserMessageId={timeline.revertTurnCountByUserMessageId}
+                  onRevertUserMessage={interactions.onRevertUserMessage}
+                  isRevertingCheckpoint={base.isRevertingCheckpoint}
+                  onImageExpand={base.setExpandedImage}
+                  markdownCwd={composer.gitCwd ?? undefined}
+                  resolvedTheme={base.resolvedTheme}
+                  timestampFormat={base.timestampFormat}
+                  workspaceRoot={workspaceRoot}
+                  workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
+                  focusMessageId={focusMessageId}
+                  onReplyToMessage={handleReplyToMessage}
+                  onOpenReplySource={handleOpenReplySource}
+                  onBranchThread={(messageId) => {
+                    void branchThread(base.activeThread!.id, {
+                      upToMessageId: messageId,
+                      navigateToBranch: true,
+                    });
+                  }}
+                  onReaderPositionChange={runtime.scrollBehavior.updateReaderPosition}
+                />
+              </div>
+
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-7 items-center justify-center sm:w-8">
+                <ThreadReaderOutline
+                  anchors={userTurnAnchors}
+                  currentAnchorMessageId={
+                    runtime.scrollBehavior.readerPosition.currentAnchorMessageId
+                  }
+                  onJumpToMessage={handleJumpToTurn}
+                />
+              </div>
             </div>
 
             {interactions.pendingProviderSwitchConfirmation ? (

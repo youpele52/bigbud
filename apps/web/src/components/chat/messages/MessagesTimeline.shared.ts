@@ -2,6 +2,7 @@ import { type ExecutionTargetId, type MessageId, type TurnId } from "@bigbud/con
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 
 import { type deriveTimelineEntries } from "../../../logic/session";
+import { type ChatReaderPosition } from "../scroller/chatScroll.constants";
 import { type ExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { type TurnDiffSummary } from "../../../models/types";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
@@ -37,6 +38,7 @@ export interface MessagesTimelineProps {
   onReplyToMessage?: (messageId: MessageId) => void;
   onOpenReplySource?: (messageId: MessageId) => void;
   onBranchThread?: (messageId: MessageId) => void;
+  onReaderPositionChange?: (position: ChatReaderPosition) => void;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{
