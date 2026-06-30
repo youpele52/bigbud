@@ -23,20 +23,24 @@ export function ComputerUsePermissionDialog({
 }: ComputerUsePermissionDialogProps) {
   const { updateSettings } = useUpdateSettings();
   const [isRequesting, setIsRequesting] = useState(false);
+  const [requestStep, setRequestStep] = useState<"install" | "permissions" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleEnable = useCallback(async () => {
     setIsRequesting(true);
+    setRequestStep("install");
     setErrorMessage(null);
 
     try {
       const bridge = window.desktopBridge;
-      if (bridge?.installComputerUseRuntime) {
+      const runtimeStatus = await bridge?.getComputerUseRuntimeStatus?.();
+      if (!runtimeStatus?.available && bridge?.installComputerUseRuntime) {
         const installResult = await bridge.installComputerUseRuntime();
         if (!installResult.ok) {
           throw new Error(installResult.status.message ?? "Computer Use runtime install failed.");
         }
       }
+      setRequestStep("permissions");
       if (bridge?.requestComputerUsePermissions) {
         const permissions = await bridge.requestComputerUsePermissions();
         if (!permissions.granted) {
@@ -60,6 +64,7 @@ export function ComputerUsePermissionDialog({
         error instanceof Error ? error.message : "Computer Use could not be enabled.",
       );
     } finally {
+      setRequestStep(null);
       setIsRequesting(false);
     }
   }, [onOpenChange, updateSettings]);
@@ -125,7 +130,7 @@ export function ComputerUsePermissionDialog({
             {isRequesting ? (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Requesting...
+                {requestStep === "permissions" ? "Requesting access..." : "Installing..."}
               </span>
             ) : (
               <span className="flex items-center gap-1.5">
