@@ -37,7 +37,11 @@ export function getSafeExternalUrl(rawUrl: unknown): string | null {
     return null;
   }
 
-  if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+  if (
+    parsedUrl.protocol !== "https:" &&
+    parsedUrl.protocol !== "http:" &&
+    parsedUrl.protocol !== "x-apple.systempreferences:"
+  ) {
     return null;
   }
 
@@ -215,7 +219,14 @@ export function configureApplicationMenu(deps: MenuManagerDeps): void {
               },
               { type: "separator" as const },
             ]),
-        { role: process.platform === "darwin" ? "close" : "quit" },
+        ...(process.platform === "darwin"
+          ? [
+              {
+                label: "Close Window",
+                click: () => deps.getMainWindow()?.close(),
+              },
+            ]
+          : [{ role: "quit" as const }]),
       ],
     },
     { role: "editMenu" },
@@ -242,7 +253,19 @@ export function configureApplicationMenu(deps: MenuManagerDeps): void {
         { role: "togglefullscreen" },
       ],
     },
-    { role: "windowMenu" },
+    ...(process.platform === "darwin"
+      ? [
+          {
+            label: "Window",
+            submenu: [
+              { role: "minimize" as const },
+              { role: "zoom" as const },
+              { type: "separator" as const },
+              { role: "front" as const },
+            ],
+          },
+        ]
+      : [{ role: "windowMenu" as const }]),
     {
       role: "help",
       submenu: [

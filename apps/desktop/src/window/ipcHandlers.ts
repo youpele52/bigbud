@@ -21,10 +21,13 @@ import type {
   DesktopUpdateCheckResult,
   DesktopUpdateState,
 } from "@bigbud/contracts";
-
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import { getSafeExternalUrl } from "./menuManager";
 import { getDestructiveMenuIcon } from "../env/pathResolver";
+import {
+  registerComputerUseIpcHandlers,
+  type ComputerUseIpcHandlerDeps,
+} from "./ipcHandlers.computerUse";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -83,7 +86,7 @@ export function showDesktopNotification(
 // IPC handler registration
 // ---------------------------------------------------------------------------
 
-export interface IpcHandlerDeps {
+export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   // Channel names
   readonly PICK_FOLDER_CHANNEL: string;
   readonly CONFIRM_CHANNEL: string;
@@ -133,6 +136,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
     GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
+    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL,
+    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL,
+    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL,
+    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL,
+    RUN_COMPUTER_USE_DOCTOR_CHANNEL,
     GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
     ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
@@ -154,6 +162,19 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.removeAllListeners(GET_MOBILE_BACKEND_BASE_URL_CHANNEL);
   ipcMain.on(GET_MOBILE_BACKEND_BASE_URL_CHANNEL, (event) => {
     event.returnValue = deps.getMobileBackendBaseUrl();
+  });
+
+  registerComputerUseIpcHandlers({
+    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL,
+    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL,
+    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL,
+    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL,
+    RUN_COMPUTER_USE_DOCTOR_CHANNEL,
+    getComputerUseRuntimeStatus: deps.getComputerUseRuntimeStatus,
+    getComputerUsePermissionsStatus: deps.getComputerUsePermissionsStatus,
+    requestComputerUsePermissions: deps.requestComputerUsePermissions,
+    installComputerUseRuntime: deps.installComputerUseRuntime,
+    runComputerUseDoctor: deps.runComputerUseDoctor,
   });
 
   ipcMain.removeHandler(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL);
