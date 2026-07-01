@@ -53,7 +53,6 @@ function resolveArchive(
 
   if (platform === "win") {
     const label = arch === "arm64" ? "windows-arm64" : "windows-x86_64";
-    const stageDir = `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}`;
     return {
       archiveName: `cua-driver-rs-${CUA_DRIVER_VERSION}-${label}-binary.zip`,
       sha256:
@@ -61,7 +60,7 @@ function resolveArchive(
           ? "7d950d24aaf902357ce51827d23dd9c9c89a62720c1ff77effeec971139c696f"
           : "8cde6fa362a5d6c7d3e38be29ffd36eba42bdfb235cb0692bec79697a54affbe",
       binaryName: "cua-driver.exe",
-      binaryPath: [stageDir, "cua-driver.exe"],
+      binaryPath: ["cua-driver.exe"],
       appPath: null,
     };
   }
