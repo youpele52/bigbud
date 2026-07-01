@@ -8,7 +8,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Added **Computer Use** — AI agents can now reach beyond the chat and work with your applications, browser, and desktop to navigate pages, fill forms, write emails, book appointments, check your calendar, open apps, take screenshots, click, type, scroll, and carry out other tasks — on macOS, Windows, and Linux.
 - **Desktop automation is permission-gated** — requires explicit opt-in from **Settings → AI → Computer Use**, macOS Accessibility and Screen Recording permissions, and `full-access` runtime mode for mutating actions. Read-only actions (capture, list windows, list apps, diagnostics) work in any mode.
-- **Safety-first guardrails** — Dangerous key combos (Cmd+Q, Alt+F4, etc.) and sensitive text patterns (passwords, API keys, credit card numbers, SSNs) are blocked before reaching the driver.
+- **Designed with safety and security as a foundation** — Dangerous key combos and sensitive text patterns (passwords, API keys, credit card numbers, SSNs) are blocked before reaching the driver. Configurable check-in and action timeout limits are exposed under **Settings → AI → Computer Use**, and desktop/browser targets containing sensitive fields are blocked automatically. The managed runtime installer verifies pinned release checksums on every install.
+- **Optimistic background setup** — Enabling Computer Use through the permission dialog or settings toggle now triggers the runtime install asynchronously with toast feedback instead of showing a blocking spinner, while macOS permission prompts continue in parallel.
 - **Cross-provider support** — All runtime providers (Codex, Claude, Copilot, OpenCode, Pi, etc.) receive computer-use capability instructions in their context, with the tool surfaced through per-provider bridges.
 
 ### Orchestration Thread Tools
@@ -43,6 +44,19 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Working Indicators
 
 - Refined the "working" state across desktop and mobile with a shimmer treatment on the action verb, so long-running agent turns feel more alive and easier to notice at a glance.
+
+### Annotations
+
+- Simplified the annotation composer to a single neutral **comment** intent — removed the Ask / Context / Fix toggle so every annotation surface (file viewer, terminal, browser element, PDF region) shares the same "Comment on selection" flow.
+- Annotation panels now **anchor below the selection** when there's room, flip above if the viewport is tight, and fall back to the previous placement — keeping the composer near the content you're annotating.
+- Browser annotation technical details (raw CSS selectors, region coordinates) are now hidden behind a compact chevron-toggle instead of a heavy disclosure block, keeping the default view clean.
+
+### Thread Reader
+
+- Added **native reader-position tracking** — the thread view now tracks the scroll anchor between user turns, keeps a `readerPosition` state, and provides `scrollToMessage` / `scrollToUserTurnAnchor` helpers for programmatic navigation.
+- Added a **ThreadReaderOutline** — a dot strip overlaid beside the scrollbar gutter that maps every user turn, with a sidebar-matched jump menu for clicking directly to any turn in the conversation.
+- Sending a message now anchors the new user turn with a peek of the previous turn, and user messages get a reduced-motion-aware entrance animation.
+- Replaced the Popover-based jump menu with a clipped scroll container capped at 50dvh, matching sidebar thread row typography and keeping the scrollbar inside the rounded menu bounds.
 
 ### OpenCode
 

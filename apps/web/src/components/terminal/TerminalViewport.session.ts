@@ -49,6 +49,7 @@ interface UseTerminalViewportSessionInput {
   onRequestTerminalAnnotation: (input: {
     selection: TerminalContextSelection;
     position: { x: number; y: number };
+    selectionRect: { left: number; top: number; right: number; bottom: number } | null;
   }) => void;
 }
 
@@ -74,6 +75,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const onRequestTerminalAnnotation = (input: {
       selection: TerminalContextSelection;
       position: { x: number; y: number };
+      selectionRect: { left: number; top: number; right: number; bottom: number } | null;
     }) => onRequestTerminalAnnotationRef.current(input);
     const terminalHydratedRef = input.terminalHydratedRef;
     const lastAppliedTerminalEventIdRef = input.lastAppliedTerminalEventIdRef;
@@ -118,6 +120,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const readSelectionAction = (): {
       position: { x: number; y: number };
       selection: TerminalContextSelection;
+      selectionRect: { left: number; top: number; right: number; bottom: number } | null;
     } | null => {
       const activeTerminal = input.terminalRef.current;
       const mountElement = input.containerRef.current;
@@ -145,6 +148,15 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       });
       return {
         position,
+        selectionRect:
+          selectionRect === null
+            ? null
+            : {
+                left: selectionRect.left,
+                top: selectionRect.top,
+                right: selectionRect.right,
+                bottom: selectionRect.bottom,
+              },
         selection: {
           terminalId: input.terminalId,
           terminalLabel: readTerminalLabel(),
@@ -187,6 +199,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           onRequestTerminalAnnotation({
             selection: nextAction.selection,
             position: nextAction.position,
+            selectionRect: nextAction.selectionRect,
           });
           terminalRef.current?.clearSelection();
         }

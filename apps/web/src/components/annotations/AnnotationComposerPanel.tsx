@@ -1,6 +1,5 @@
 import type { AnnotationIntent } from "../../stores/composer";
 import { Button } from "../ui/button";
-import { cn } from "~/lib/utils";
 import { useState } from "react";
 
 interface AnnotationComposerPanelProps {
@@ -9,29 +8,10 @@ interface AnnotationComposerPanelProps {
   onSubmit: (input: { intent: AnnotationIntent; comment: string }) => void;
 }
 
-const INTENT_OPTIONS: ReadonlyArray<{ intent: AnnotationIntent; label: string }> = [
-  { intent: "ask", label: "Ask" },
-  { intent: "context", label: "Context" },
-  { intent: "fix", label: "Fix" },
-];
-
-const PLACEHOLDER_BY_INTENT: Record<AnnotationIntent, string> = {
-  ask: "Ask a question or give an instruction...",
-  context: "Anything to add? (optional)",
-  fix: "What should happen here?",
-};
-
-const TITLE_BY_INTENT: Record<AnnotationIntent, string> = {
-  ask: "Ask about selection",
-  context: "Add context",
-  fix: "Annotate selection",
-};
-
-const SUBMIT_LABEL_BY_INTENT: Record<AnnotationIntent, string> = {
-  ask: "Add to chat",
-  context: "Add as context",
-  fix: "Add task",
-};
+const DEFAULT_INTENT: AnnotationIntent = "comment";
+const COMMENT_TITLE = "Comment on selection";
+const COMMENT_PLACEHOLDER = "Ask a question or request a change";
+const COMMENT_SUBMIT_LABEL = "Add comment";
 
 export function formatAnnotationTargetLabel(range: { startLine: number; endLine: number }): string {
   return range.startLine === range.endLine
@@ -44,7 +24,6 @@ export function AnnotationComposerPanel({
   onCancel,
   onSubmit,
 }: AnnotationComposerPanelProps) {
-  const [intent, setIntent] = useState<AnnotationIntent>("fix");
   const [comment, setComment] = useState("");
 
   return (
@@ -52,24 +31,8 @@ export function AnnotationComposerPanel({
       className="rounded-[20px] border border-border bg-card p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]"
       style={{ width: "min(420px, calc(100vw - 32px))" }}
     >
-      <div className="mb-2.5 flex gap-0.5" role="group" aria-label="Annotation intent">
-        {INTENT_OPTIONS.map((option) => (
-          <button
-            key={option.intent}
-            type="button"
-            aria-pressed={intent === option.intent}
-            className={cn(
-              "h-7 w-16 cursor-pointer rounded-md border-0 bg-transparent text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              intent === option.intent && "bg-foreground/8 font-semibold text-foreground",
-            )}
-            onClick={() => setIntent(option.intent)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
       <p id="annotation-composer-title" className="mb-2 text-sm font-medium text-foreground">
-        {TITLE_BY_INTENT[intent]}
+        {COMMENT_TITLE}
       </p>
       <p
         id="annotation-composer-target"
@@ -81,7 +44,7 @@ export function AnnotationComposerPanel({
       <textarea
         value={comment}
         onChange={(event) => setComment(event.target.value)}
-        placeholder={PLACEHOLDER_BY_INTENT[intent]}
+        placeholder={COMMENT_PLACEHOLDER}
         aria-labelledby="annotation-composer-title annotation-composer-target"
         className="field-sizing-content min-h-[120px] w-full rounded-2xl border border-border bg-card p-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45"
       />
@@ -96,10 +59,10 @@ export function AnnotationComposerPanel({
         </Button>
         <Button
           type="button"
-          onClick={() => onSubmit({ intent, comment: comment.trim() })}
+          onClick={() => onSubmit({ intent: DEFAULT_INTENT, comment: comment.trim() })}
           className="h-9 rounded-[10px] px-3 text-sm"
         >
-          {SUBMIT_LABEL_BY_INTENT[intent]}
+          {COMMENT_SUBMIT_LABEL}
         </Button>
       </div>
     </div>

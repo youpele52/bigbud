@@ -103,6 +103,10 @@ Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 ### Computer Use: your agent, your extra hands
 
-Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms.
+Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms. Safety and security are built into the feature from the ground up — sensitive inputs are blocked before reaching the driver, and you control the limits in **Settings → AI → Computer Use**.
 
 Enable it in **Settings → AI → Computer Use** and your agent becomes an extension of your workflow — macOS, Windows, or Linux.
+
+### Thread Reader Outline
+
+The thread view now tracks your reading position between turns and provides a **reader outline** — a dot strip beside the scrollbar gutter that maps every user turn, with a jump menu for clicking directly to any point in the conversation. Sending a message anchors the new turn with a peek of the previous one, and user messages animate in with reduced-motion awareness.
