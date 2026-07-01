@@ -82,5 +82,51 @@ describe("DiscoveryRegistry — opencode config agents", () => {
         assert.strictEqual(security?.description, "Security review");
       }),
     );
+
+    it.effect("discovers packaged bundled opencode agents from BIGBUD_BUNDLED_AGENTS_DIR", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "disc-test-" });
+        const bundledAgentsDir = yield* fs.makeTempDirectoryScoped({
+          prefix: "disc-bundled-agents-",
+        });
+        const previousBundledAgentsDir = process.env.BIGBUD_BUNDLED_AGENTS_DIR;
+
+        try {
+          process.env.BIGBUD_BUNDLED_AGENTS_DIR = bundledAgentsDir;
+          yield* writeFile(
+            path.join(bundledAgentsDir, "packaged-reviewer.md"),
+            [
+              "---",
+              "description: Review packaged builds",
+              "mode: subagent",
+              "---",
+              "",
+              "Debug issues step by step.",
+            ].join("\n"),
+          );
+
+          const catalog = yield* getCatalog(cwd);
+
+          const agent = catalog.agents.find(
+            (entry) => entry.provider === "opencode" && entry.name === "packaged-reviewer",
+          );
+          assert.isDefined(agent, "packaged bundled opencode agent should be discovered");
+          assert.strictEqual(agent?.description, "Review packaged builds");
+          assert.strictEqual(agent?.source, "system");
+          assert.strictEqual(
+            agent?.sourcePath,
+            path.join(bundledAgentsDir, "packaged-reviewer.md"),
+          );
+        } finally {
+          if (previousBundledAgentsDir === undefined) {
+            delete process.env.BIGBUD_BUNDLED_AGENTS_DIR;
+          } else {
+            process.env.BIGBUD_BUNDLED_AGENTS_DIR = previousBundledAgentsDir;
+          }
+        }
+      }),
+    );
   });
 });

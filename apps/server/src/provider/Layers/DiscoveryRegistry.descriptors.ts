@@ -46,6 +46,20 @@ function bundledSkillsDescriptor(): DiscoveryFileDescriptor | null {
   };
 }
 
+function bundledAgentsDescriptor(): DiscoveryFileDescriptor | null {
+  const bundledAgentsDir = process.env.BIGBUD_BUNDLED_AGENTS_DIR?.trim();
+  if (!bundledAgentsDir) {
+    return null;
+  }
+
+  return {
+    provider: "opencode",
+    kind: "agent",
+    source: "system",
+    path: bundledAgentsDir,
+  };
+}
+
 export function buildDiscoveryFileDescriptors(input: {
   readonly path: Path.Path;
   readonly cwd: string;
@@ -316,8 +330,10 @@ export function buildDiscoveryFileDescriptors(input: {
     },
   ] satisfies ReadonlyArray<DiscoveryFileDescriptor>;
 
-  const bundled = bundledSkillsDescriptor();
-  return bundled ? [...descriptors, bundled] : descriptors;
+  const bundled = [bundledSkillsDescriptor(), bundledAgentsDescriptor()].filter(
+    (descriptor): descriptor is DiscoveryFileDescriptor => descriptor !== null,
+  );
+  return bundled.length > 0 ? [...descriptors, ...bundled] : descriptors;
 }
 
 export function buildDiscoveryConfigDescriptors(input: {
