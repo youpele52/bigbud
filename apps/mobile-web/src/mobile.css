@@ -16,3 +16,45 @@ body {
 #root {
   min-height: 100dvh;
 }
+
+.shimmer {
+  display: inline-block;
+  color: inherit;
+  background-image: linear-gradient(
+    100deg,
+    currentColor 0%,
+    color-mix(in srgb, currentColor 40%, transparent) 40%,
+    currentColor 80%
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: mobile-shimmer 1.6s linear infinite;
+}
+
+.shimmer-color-info-foreground\/60 {
+  background-image: linear-gradient(
+    100deg,
+    var(--info-foreground) 0%,
+    color-mix(in srgb, var(--info-foreground) 60%, transparent) 42%,
+    var(--info-foreground) 80%
+  );
+}
+
+@keyframes mobile-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}

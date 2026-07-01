@@ -11,6 +11,7 @@ import {
   resolveBackendCwd,
   resolveBackendEntry,
   resolveBackendLauncherPath,
+  resolvePackagedBundledAgentsDir,
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
 } from "../env/pathResolver";
@@ -173,6 +174,7 @@ export function startBackend(): void {
   const captureBackendLogs = backendLogSink !== null;
   const packagedOpencodeBinDir = resolvePackagedOpencodeBinaryDir();
   const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
+  const packagedBundledAgentsDir = resolvePackagedBundledAgentsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
   const computerUseRuntimeEnv = resolveComputerUseRuntimeEnv(_deps.baseDir);
 
@@ -199,6 +201,9 @@ export function startBackend(): void {
           : {}),
         ...(packagedBundledSkillsDir
           ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
+          : {}),
+        ...(packagedBundledAgentsDir
+          ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
           : {}),
         ...computerUseRuntimeEnv,
         ELECTRON_RUN_AS_NODE: "1",

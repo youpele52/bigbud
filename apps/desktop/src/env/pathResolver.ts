@@ -208,6 +208,13 @@ export function resolvePackagedBundledSkillsDir(): string | null {
   return FS.existsSync(skillsDir) ? skillsDir : null;
 }
 
+export function resolvePackagedBundledAgentsDir(): string | null {
+  if (!app.isPackaged) return null;
+
+  const agentsDir = Path.join(process.resourcesPath, "server/bundled-agents");
+  return FS.existsSync(agentsDir) ? agentsDir : null;
+}
+
 /**
  * Ensures native/external modules are resolvable in packaged builds.
  *

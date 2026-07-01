@@ -8,6 +8,7 @@ import {
   buildAppUnderTest,
   getWsServerUrl,
   serverTestLayer,
+  withRetriedWsRpcClient,
   withWsRpcClient,
 } from "./server.test.helpers.ts";
 
@@ -311,7 +312,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
 
       const wsUrl = yield* getWsServerUrl("/ws");
       const result = yield* Effect.scoped(
-        withWsRpcClient(wsUrl, (client) =>
+        withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.shellOpenInEditor]({
             cwd: "/tmp/project",
             editor: "cursor",

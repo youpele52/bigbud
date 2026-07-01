@@ -44,7 +44,9 @@ function MobileMessage({
   if (message.role === "assistant") {
     return (
       <article className="min-w-0 px-1">
-        <ChatMarkdown cwd={cwd} isStreaming={message.streaming} text={message.text} />
+        <div data-message-id={message.id} data-message-role={message.role}>
+          <ChatMarkdown cwd={cwd} isStreaming={message.streaming} text={message.text} />
+        </div>
       </article>
     );
   }
@@ -58,7 +60,12 @@ function MobileMessage({
   }
 
   return (
-    <div className="group flex flex-col items-end gap-1">
+    <div
+      className="group flex flex-col items-end gap-1"
+      data-message-id={message.id}
+      data-message-role={message.role}
+      data-scroll-anchor="true"
+    >
       <article className="max-w-[85%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
         <UserMessageBody
           cwd={cwd}
