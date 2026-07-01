@@ -17,11 +17,27 @@ function isTailnetHostname(hostname: string): boolean {
 }
 
 export function resolveHostedMobileWebBaseUrl(): string {
+  return HOSTED_MOBILE_WEB_BASE_URL;
+}
+
+export function resolveLocalMobileWebBaseUrl(): string | null {
   const fromEnv = import.meta.env.VITE_MOBILE_WEB_URL;
   if (typeof fromEnv === "string" && fromEnv.length > 0) {
     return stripTrailingSlash(fromEnv);
   }
-  return HOSTED_MOBILE_WEB_BASE_URL;
+
+  const desktopBackendBaseUrl = resolveDesktopMobileBackendBaseUrl();
+  if (!desktopBackendBaseUrl) {
+    return null;
+  }
+
+  const url = new URL(desktopBackendBaseUrl);
+  if (!isLocalDesktopBackendProtocol(url.protocol)) {
+    return null;
+  }
+  url.port = String(DEFAULT_MOBILE_WEB_PORT);
+  url.pathname = "/";
+  return stripTrailingSlash(url.toString());
 }
 
 export function shouldResetMobileAppUrlToHosted(
@@ -91,7 +107,7 @@ export function resolveStoredMobileWebBaseUrl(
   stored: string | null | undefined,
   backendBaseUrl: string,
 ): string {
-  const fallback = resolveDefaultMobileWebBaseUrl();
+  const fallback = resolveMobileWebBaseUrlForBackend(backendBaseUrl);
   const storedValue = stored?.trim();
   if (!storedValue) {
     return fallback;
@@ -100,6 +116,21 @@ export function resolveStoredMobileWebBaseUrl(
     return fallback;
   }
   return stripTrailingSlash(storedValue);
+}
+
+function resolveMobileWebBaseUrlForBackend(backendBaseUrl: string): string {
+  try {
+    const backendUrl = new URL(normalizeBackendBaseUrl(backendBaseUrl));
+    if (
+      isTailnetHostname(backendUrl.hostname) &&
+      !isLocalDesktopBackendProtocol(backendUrl.protocol)
+    ) {
+      return resolveHostedMobileWebBaseUrl();
+    }
+  } catch {
+    // Fall back to the default local-or-dev companion when the backend URL is malformed.
+  }
+  return resolveDefaultMobileWebBaseUrl();
 }
 
 function resolveDesktopMobileBackendBaseUrl(): string | null {
@@ -130,19 +161,12 @@ export function normalizeBackendBaseUrl(value: string): string {
 }
 
 export function resolveDefaultMobileWebBaseUrl(): string {
-  const desktopBackendBaseUrl = resolveDesktopMobileBackendBaseUrl();
-  if (desktopBackendBaseUrl) {
-    const url = new URL(desktopBackendBaseUrl);
-    if (!isLocalDesktopBackendProtocol(url.protocol)) {
-      return resolveHostedMobileWebBaseUrl();
-    }
-    url.port = String(DEFAULT_MOBILE_WEB_PORT);
-    url.pathname = "/";
-    return stripTrailingSlash(url.toString());
+  const localMobileWebBaseUrl = resolveLocalMobileWebBaseUrl();
+  if (localMobileWebBaseUrl) {
+    return localMobileWebBaseUrl;
   }
-  const fromEnv = import.meta.env.VITE_MOBILE_WEB_URL;
-  if (typeof fromEnv === "string" && fromEnv.length > 0) {
-    return stripTrailingSlash(fromEnv);
+  if (resolveDesktopMobileBackendBaseUrl()) {
+    return resolveHostedMobileWebBaseUrl();
   }
   return `http://localhost:${DEFAULT_MOBILE_WEB_PORT}`;
 }

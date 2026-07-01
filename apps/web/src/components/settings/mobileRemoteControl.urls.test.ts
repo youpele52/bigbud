@@ -6,6 +6,7 @@ import {
   resolveDefaultBackendBaseUrl,
   resolveDefaultMobileWebBaseUrl,
   resolveHostedMobileWebBaseUrl,
+  resolveLocalMobileWebBaseUrl,
   resolveStoredBackendBaseUrl,
   resolveStoredMobileWebBaseUrl,
   shouldPreferLiveBackendBaseUrl,
@@ -34,10 +35,12 @@ describe("mobileRemoteControl.urls", () => {
     });
 
     expect(resolveDefaultBackendBaseUrl()).toBe("http://192.168.1.24:3774");
+    expect(resolveLocalMobileWebBaseUrl()).toBe("http://192.168.1.24:5740");
     expect(resolveDefaultMobileWebBaseUrl()).toBe("http://192.168.1.24:5740");
   });
 
   it("uses the hosted mobile app for remote tailnet backends", () => {
+    vi.stubEnv("VITE_MOBILE_WEB_URL", "http://localhost:5740");
     vi.stubGlobal("window", {
       desktopBridge: {
         getWsUrl: () => "ws://127.0.0.1:3774/?token=abc123",
@@ -49,7 +52,18 @@ describe("mobileRemoteControl.urls", () => {
     });
 
     expect(resolveDefaultBackendBaseUrl()).toBe("https://bigbud-dev.tail123.ts.net");
-    expect(resolveDefaultMobileWebBaseUrl()).toBe(HOSTED_MOBILE_WEB_BASE_URL);
+    expect(resolveLocalMobileWebBaseUrl()).toBe("http://localhost:5740");
+    expect(resolveDefaultMobileWebBaseUrl()).toBe("http://localhost:5740");
+    expect(resolveHostedMobileWebBaseUrl()).toBe(HOSTED_MOBILE_WEB_BASE_URL);
+  });
+
+  it("keeps the production companion separate from the dev mobile web override", () => {
+    vi.stubGlobal("window", {
+      location: {
+        origin: "http://127.0.0.1:3020",
+      },
+    });
+
     expect(resolveHostedMobileWebBaseUrl()).toBe(HOSTED_MOBILE_WEB_BASE_URL);
   });
 
