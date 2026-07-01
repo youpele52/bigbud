@@ -19,12 +19,38 @@ function resolveCopilotCliPath(): string | undefined {
   return undefined;
 }
 
+function buildNodeWrapper(input: {
+  readonly cliPath: string;
+  readonly nodeExecutablePath: string;
+  readonly platform: NodeJS.Platform;
+}): { readonly wrapperPath: string; readonly content: string } {
+  const id = randomUUID();
+
+  if (input.platform === "win32") {
+    return {
+      wrapperPath: join(tmpdir(), `copilot-node-wrapper-${id}.cmd`),
+      content: `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${input.nodeExecutablePath}" "${input.cliPath}" %*\r\n`,
+    };
+  }
+
+  return {
+    wrapperPath: join(tmpdir(), `copilot-node-wrapper-${id}.sh`),
+    content: `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${input.nodeExecutablePath}" "${input.cliPath}" "$@"\n`,
+  };
+}
+
 export function makeNodeWrapperCliPath(): string | undefined {
   if (!("electron" in process.versions)) return undefined;
   const cliPath = resolveCopilotCliPath();
   if (!cliPath) return undefined;
-  const wrapperPath = join(tmpdir(), `copilot-node-wrapper-${randomUUID()}.sh`);
-  writeFileSync(wrapperPath, `#!/bin/sh\nexec node ${JSON.stringify(cliPath)} "$@"\n`, "utf8");
-  chmodSync(wrapperPath, 0o755);
-  return wrapperPath;
+  const wrapper = buildNodeWrapper({
+    cliPath,
+    nodeExecutablePath: process.execPath,
+    platform: process.platform,
+  });
+  writeFileSync(wrapper.wrapperPath, wrapper.content, "utf8");
+  chmodSync(wrapper.wrapperPath, 0o755);
+  return wrapper.wrapperPath;
 }
+
+export { buildNodeWrapper };

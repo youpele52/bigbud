@@ -15,6 +15,7 @@ export interface ThreadOrchestrationSessionBridgeInput {
   readonly threadId: string;
   readonly host: string | undefined;
   readonly port: number;
+  readonly serverName?: string;
 }
 
 export const THREAD_ORCHESTRATION_API_PATH = "/api/internal/thread-tools";

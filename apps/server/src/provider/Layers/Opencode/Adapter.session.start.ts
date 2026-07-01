@@ -20,7 +20,10 @@ import {
 } from "./Adapter.session.helpers.ts";
 import { createOpencodeRemoteWorkspaceBridge } from "./OpencodeRemoteWorkspaceBridge.ts";
 import {
+  buildOpencodeAllowedTools,
+  buildOpencodeThreadOrchestrationServerName,
   composeBridgeCleanups,
+  disconnectOpencodeOrchestrationMcpBridge,
   prepareThreadOrchestrationMcpBridge,
   registerOpencodeOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
@@ -137,6 +140,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             threadId: input.threadId,
             host: deps.serverConfig.host,
             port: deps.serverConfig.port,
+            serverName: buildOpencodeThreadOrchestrationServerName(input.threadId),
           }),
         catch: (cause) =>
           new ProviderAdapterProcessError({
@@ -203,6 +207,50 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         ),
       );
       const client = serverHandle.client;
+      const cleanupConnectedBridge = composeBridgeCleanups(async () => {
+        try {
+          await disconnectOpencodeOrchestrationMcpBridge({
+            client,
+            ...(serverDirectory ? { directory: serverDirectory } : {}),
+            serverName: orchestrationBridge.serverName,
+          });
+        } catch {
+          // Best effort: bridge cleanup below removes BigBud auth and files.
+        }
+      }, cleanupBridge);
+      const allowedTools = yield* Effect.tryPromise({
+        try: async () => {
+          const toolIdsResponse = await client.tool.ids(
+            serverDirectory ? { directory: serverDirectory } : undefined,
+          );
+          if (toolIdsResponse.error || !Array.isArray(toolIdsResponse.data)) {
+            throw new Error(
+              `Failed to list ${deps.provider} tool IDs: ${String(toolIdsResponse.error)}`,
+            );
+          }
+          return buildOpencodeAllowedTools({
+            toolIds: toolIdsResponse.data,
+            serverName: orchestrationBridge.serverName,
+          });
+        },
+        catch: (cause) =>
+          new ProviderAdapterProcessError({
+            provider: deps.provider,
+            threadId: input.threadId,
+            detail: toMessage(
+              cause,
+              `Failed to resolve ${deps.provider} tool availability for this thread.`,
+            ),
+            cause,
+          }),
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            serverHandle.release();
+            void cleanupConnectedBridge().catch(() => undefined);
+          }),
+        ),
+      );
 
       let modelID: string | undefined;
       let providerID: string | undefined;
@@ -251,7 +299,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       const record: ActiveOpencodeSession = {
         client,
         releaseServer: () => serverHandle.release(),
-        cleanupBridge,
+        cleanupBridge: cleanupConnectedBridge,
         opencodeSessionId,
         threadId: input.threadId,
         createdAt,
@@ -273,6 +321,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
         lastUsage: undefined,
         wasRetrying: false,
         reasoningPartIds: new Set(),
+        allowedTools,
       };
 
       deps.sessions.set(input.threadId, record);

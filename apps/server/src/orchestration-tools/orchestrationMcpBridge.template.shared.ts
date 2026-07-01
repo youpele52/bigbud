@@ -19,7 +19,7 @@ import {
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
 
-export const ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
+export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
