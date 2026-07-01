@@ -96,15 +96,19 @@ export function ComposerAnnotationPreviews({
             backgroundColor:
               annotation.intent === "fix"
                 ? "rgb(254 226 226)"
-                : annotation.intent === "context"
-                  ? "rgb(254 249 195)"
-                  : "rgb(219 234 254)",
+                : annotation.intent === "comment"
+                  ? "rgb(229 231 235)"
+                  : annotation.intent === "context"
+                    ? "rgb(254 249 195)"
+                    : "rgb(219 234 254)",
             color:
               annotation.intent === "fix"
                 ? "rgb(153 27 27)"
-                : annotation.intent === "context"
-                  ? "rgb(161 98 7)"
-                  : "rgb(29 78 216)",
+                : annotation.intent === "comment"
+                  ? "rgb(55 65 81)"
+                  : annotation.intent === "context"
+                    ? "rgb(161 98 7)"
+                    : "rgb(29 78 216)",
           }}
         >
           {annotation.intent}

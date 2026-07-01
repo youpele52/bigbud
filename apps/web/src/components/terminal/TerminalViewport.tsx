@@ -100,11 +100,16 @@ export function TerminalViewport({
     null,
   );
   const handleRequestTerminalAnnotation = useEffectEvent(
-    (input: { selection: TerminalContextSelection; position: { x: number; y: number } }) => {
+    (input: {
+      selection: TerminalContextSelection;
+      position: { x: number; y: number };
+      selectionRect: { left: number; top: number; right: number; bottom: number } | null;
+    }) => {
       setPendingAnnotation({
         selection: input.selection,
         anchorX: input.position.x,
         anchorY: input.position.y,
+        selectionRect: input.selectionRect,
       });
     },
   );

@@ -52,8 +52,10 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
   const comment = candidate.comment;
   const createdAt = candidate.createdAt;
   const rawIntent = candidate.intent;
-  const intent: "ask" | "context" | "fix" =
-    rawIntent === "ask" || rawIntent === "context" || rawIntent === "fix" ? rawIntent : "fix";
+  const intent: "ask" | "context" | "fix" | "comment" =
+    rawIntent === "ask" || rawIntent === "context" || rawIntent === "fix" || rawIntent === "comment"
+      ? rawIntent
+      : "comment";
   if (
     typeof id !== "string" ||
     id.length === 0 ||

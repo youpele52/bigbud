@@ -24,7 +24,7 @@ export const ComposerAnnotationViewport = Schema.Struct({
 });
 export type ComposerAnnotationViewport = typeof ComposerAnnotationViewport.Type;
 
-export const AnnotationIntentSchema = Schema.Literals(["ask", "context", "fix"]);
+export const AnnotationIntentSchema = Schema.Literals(["ask", "context", "fix", "comment"]);
 export type AnnotationIntent = typeof AnnotationIntentSchema.Type;
 
 export const ComposerAnnotationAttachmentBase = Schema.Struct({

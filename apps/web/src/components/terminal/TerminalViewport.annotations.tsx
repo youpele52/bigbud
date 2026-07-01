@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AnnotationComposerPanel,
@@ -11,6 +12,12 @@ export interface PendingTerminalAnnotation {
   readonly selection: TerminalContextSelection;
   readonly anchorX: number;
   readonly anchorY: number;
+  readonly selectionRect: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null;
 }
 
 interface TerminalViewportAnnotationComposerProps {
@@ -29,18 +36,38 @@ export function TerminalViewportAnnotationComposer({
   onCancel,
 }: TerminalViewportAnnotationComposerProps) {
   const { selection } = pendingAnnotation;
-  const { left, top } = resolveTerminalAnnotationOverlayPosition({
+  const panelRef = useRef<HTMLDivElement>(null);
+  const fallbackPosition = resolveTerminalAnnotationOverlayPosition({
     anchorX: pendingAnnotation.anchorX,
     anchorY: pendingAnnotation.anchorY,
   });
+  const [position, setPosition] = useState(fallbackPosition);
   const lineRange = {
     startLine: selection.lineStart,
     endLine: selection.lineEnd,
   };
 
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const selectionRect = pendingAnnotation.selectionRect;
+    if (!panel || selectionRect === null) {
+      setPosition(fallbackPosition);
+      return;
+    }
+
+    const nextPosition = resolveTerminalAnnotationOverlayPosition({
+      anchorX: pendingAnnotation.anchorX,
+      anchorY: pendingAnnotation.anchorY,
+      selectionRect,
+      panelWidth: panel.getBoundingClientRect().width,
+      panelHeight: panel.getBoundingClientRect().height,
+    });
+    setPosition(nextPosition);
+  }, [fallbackPosition, pendingAnnotation]);
+
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[200]">
-      <div className="pointer-events-auto fixed" style={{ left, top }}>
+      <div ref={panelRef} className="pointer-events-auto fixed" style={position}>
         <AnnotationComposerPanel
           targetLabel={formatAnnotationTargetLabel(lineRange)}
           onCancel={onCancel}

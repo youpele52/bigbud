@@ -55,7 +55,7 @@ export function makeAnnotation(input: {
   id: string;
   imageId: string;
   comment?: string;
-  intent?: "ask" | "context" | "fix";
+  intent?: "ask" | "context" | "fix" | "comment";
 }): ComposerAnnotationAttachment {
   return {
     id: input.id,
@@ -81,7 +81,7 @@ export function makeAnnotation(input: {
 export function makeCodeAnnotation(input: {
   id: string;
   comment?: string;
-  intent?: "ask" | "context" | "fix";
+  intent?: "ask" | "context" | "fix" | "comment";
 }): ComposerAnnotationAttachment {
   return {
     id: input.id,
@@ -105,7 +105,7 @@ export function makeCodeAnnotation(input: {
 export function makeTerminalAnnotation(input: {
   id: string;
   comment?: string;
-  intent?: "ask" | "context" | "fix";
+  intent?: "ask" | "context" | "fix" | "comment";
   terminalId?: string;
   terminalLabel?: string;
   lineStart?: number;
