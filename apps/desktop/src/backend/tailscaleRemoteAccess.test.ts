@@ -47,6 +47,69 @@ describe("tailscaleRemoteAccess", () => {
     });
   });
 
+  it("accepts serve targets that include a trailing slash", async () => {
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          BackendState: "Running",
+          Self: { DNSName: "bigbud-dev.tail123.ts.net.", Online: true },
+        }),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          Web: {
+            "bigbud-dev.tail123.ts.net:443": {
+              Handlers: {
+                "/": {
+                  Proxy: "http://127.0.0.1:3774/",
+                },
+              },
+            },
+          },
+        }),
+        stderr: "",
+      });
+
+    await expect(getDesktopTailscaleRemoteAccessStatus(3774, execFile)).resolves.toMatchObject({
+      serving: true,
+      remoteBaseUrl: "https://bigbud-dev.tail123.ts.net",
+      error: null,
+    });
+  });
+
+  it("rejects serve targets for a different backend port", async () => {
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          BackendState: "Running",
+          Self: { DNSName: "bigbud-dev.tail123.ts.net.", Online: true },
+        }),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          Web: {
+            "bigbud-dev.tail123.ts.net:443": {
+              Handlers: {
+                "/": {
+                  Proxy: "http://127.0.0.1:4888",
+                },
+              },
+            },
+          },
+        }),
+        stderr: "",
+      });
+
+    await expect(getDesktopTailscaleRemoteAccessStatus(3774, execFile)).resolves.toMatchObject({
+      serving: false,
+      error: "Tailscale Serve is not exposing this desktop backend.",
+    });
+  });
+
   it("reports missing CLI cleanly", async () => {
     const execFile = vi.fn().mockRejectedValueOnce(new Error("spawn tailscale ENOENT"));
 

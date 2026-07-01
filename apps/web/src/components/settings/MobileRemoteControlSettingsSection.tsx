@@ -6,6 +6,7 @@ import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Button } from "../ui/button";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
@@ -15,6 +16,7 @@ import {
   resolveDefaultBackendBaseUrl,
   resolveDefaultMobileWebBaseUrl,
   resolveHostedMobileWebBaseUrl,
+  resolveLocalMobileWebBaseUrl,
   resolveStoredBackendBaseUrl,
   resolveStoredMobileWebBaseUrl,
   shouldPreferLiveBackendBaseUrl,
@@ -86,6 +88,8 @@ export function MobileRemoteControlSettingsSection() {
     refetchInterval: 10_000,
   });
   const tailscaleStatus = tailscaleQuery.data;
+  const hostedMobileBaseUrl = resolveHostedMobileWebBaseUrl();
+  const localDevMobileBaseUrl = resolveLocalMobileWebBaseUrl();
 
   useEffect(() => {
     const status = tailscaleStatus;
@@ -307,13 +311,28 @@ export function MobileRemoteControlSettingsSection() {
 
         <SettingsRow
           title="Mobile app URL"
-          description="Root origin of the hosted mobile companion (for example https://mobile.bigbud.app). Pairing links add /mobile automatically. Dev uses the local mobile dev server."
+          description="Root origin of the mobile companion. Pairing links add /mobile automatically."
         >
-          <div className="mt-3">
+          <div className="mt-3 space-y-3">
             <Input
               value={mobileBaseUrl}
               onChange={(event) => setMobileBaseUrl(event.target.value)}
             />
+            <ToggleGroup
+              value={mobileBaseUrl === hostedMobileBaseUrl ? ["production"] : ["local"]}
+              onValueChange={(values) => {
+                const value = values[0];
+                if (value === "production") setMobileBaseUrl(hostedMobileBaseUrl);
+                else if (value === "local" && localDevMobileBaseUrl) {
+                  setMobileBaseUrl(localDevMobileBaseUrl);
+                }
+              }}
+            >
+              <ToggleGroupItem value="production">bigbud</ToggleGroupItem>
+              {localDevMobileBaseUrl ? (
+                <ToggleGroupItem value="local">Local</ToggleGroupItem>
+              ) : null}
+            </ToggleGroup>
           </div>
         </SettingsRow>
 
