@@ -21,6 +21,7 @@ export type ComposerPromptSegment =
 
 interface SplitPromptIntoComposerSegmentsOptions {
   readonly allowTrailingAgentAndSkillMentions?: boolean;
+  readonly allowTrailingPathMentions?: boolean;
 }
 
 const MENTION_TOKEN_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
@@ -155,7 +156,7 @@ function shouldKeepTrailingMentionAsText(
   options: SplitPromptIntoComposerSegmentsOptions,
 ): boolean {
   if (mention.mentionKind === "path") {
-    return true;
+    return !options.allowTrailingPathMentions;
   }
   return !options.allowTrailingAgentAndSkillMentions;
 }

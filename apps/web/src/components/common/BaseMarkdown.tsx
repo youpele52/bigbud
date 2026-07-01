@@ -24,6 +24,7 @@ import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../utils/markdown";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
+import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
 
 interface BaseMarkdownProps {
   text: string;
@@ -181,10 +182,12 @@ export const BaseMarkdown = memo(function BaseMarkdown({
           );
         }
 
+        const linkText = typeof props.children === "string" ? props.children : "";
         return (
           <a
             {...props}
             href={href}
+            className="inline-flex items-center gap-1"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -205,7 +208,15 @@ export const BaseMarkdown = memo(function BaseMarkdown({
                   }
                 : undefined
             }
-          />
+          >
+            <VscodeEntryIcon
+              pathValue={linkText || href}
+              kind="file"
+              theme={resolvedTheme}
+              className="size-3.5 opacity-70"
+            />
+            <span>{props.children}</span>
+          </a>
         );
       },
       code({ node: _node, className: codeClassName, children, ...props }) {
@@ -221,7 +232,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
 
         return (
           <code
-            className={cn(codeClassName, "cursor-pointer")}
+            className={cn(codeClassName, "inline-flex cursor-pointer items-center gap-1")}
             title="Double-click to open"
             onDoubleClick={(event) => {
               event.preventDefault();
@@ -245,7 +256,13 @@ export const BaseMarkdown = memo(function BaseMarkdown({
             }
             {...props}
           >
-            {children}
+            <VscodeEntryIcon
+              pathValue={inlineText}
+              kind="file"
+              theme={resolvedTheme}
+              className="size-3 opacity-70"
+            />
+            <span>{children}</span>
           </code>
         );
       },
@@ -268,7 +285,7 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         );
       },
     }),
-    [cwd, diffThemeName, isStreaming, onFileContextMenu],
+    [cwd, diffThemeName, isStreaming, onFileContextMenu, resolvedTheme],
   );
 
   return (

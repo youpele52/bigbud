@@ -1,4 +1,4 @@
-import { DumbbellIcon, FileIcon } from "lucide-react";
+import { DumbbellIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { TerminalContextInlineChip } from "../terminal/TerminalContextInlineChip";
 import {
@@ -14,22 +14,39 @@ import {
 } from "../view/composerInlineChip";
 import { cn } from "~/lib/utils";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
+import { resolvePathLinkTarget } from "../../../utils/terminal/links.utils";
 import {
   ChatFileTargetContextMenu,
   useChatFileTargetContextMenu,
 } from "../common/ChatFileTargetContextMenu";
 import { openChatFileTarget } from "../common/chatFileTargets";
+import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
+import { useTheme } from "../../../hooks/useTheme";
+import { inferEntryKindFromPath } from "../../../lib/vscode-icons";
 
 const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
   "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
 
+function resolveUserMessageMentionTarget(rawValue: string, cwd: string | undefined): string | null {
+  if (cwd) {
+    return resolvePathLinkTarget(rawValue, cwd);
+  }
+  return resolveMarkdownFileLinkTarget(rawValue, cwd);
+}
+
 const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
+  rawValue?: string;
   mentionKind: "path" | "agent" | "skill";
   targetPath?: string | null;
   workspaceRoot?: string | undefined;
 }) {
+  const { resolvedTheme } = useTheme();
   const clickable = props.mentionKind === "path" && props.targetPath;
+  const inferredPathKind =
+    props.mentionKind === "path"
+      ? inferEntryKindFromPath(props.rawValue ?? props.label)
+      : undefined;
   const { contextMenuState, hideContextMenu, showContextMenu } = useChatFileTargetContextMenu();
   return (
     <>
@@ -43,7 +60,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
                 event.stopPropagation();
                 const targetPath = props.targetPath;
                 if (!targetPath) return;
-                openChatFileTarget(targetPath, props.workspaceRoot);
+                openChatFileTarget(targetPath, props.workspaceRoot, inferredPathKind ?? "file");
               }
             : undefined
         }
@@ -57,7 +74,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
                 showContextMenu({
                   targetPath,
                   workspaceRoot: props.workspaceRoot,
-                  kind: "file",
+                  kind: inferredPathKind ?? "file",
                   x: event.clientX,
                   y: event.clientY,
                 });
@@ -66,7 +83,12 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
         }
       >
         {props.mentionKind === "path" ? (
-          <FileIcon className="size-3.5 shrink-0 opacity-85" />
+          <VscodeEntryIcon
+            pathValue={props.label}
+            kind={inferredPathKind ?? "file"}
+            theme={resolvedTheme}
+            className="shrink-0 opacity-85"
+          />
         ) : props.mentionKind === "skill" ? (
           <DumbbellIcon className="size-3.5 shrink-0 opacity-85" />
         ) : (
@@ -82,6 +104,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
 function renderUserMessageTextWithMentionChips(text: string, cwd: string | undefined): ReactNode {
   const segments = splitPromptIntoComposerSegments(text, [], {
     allowTrailingAgentAndSkillMentions: true,
+    allowTrailingPathMentions: true,
   });
   if (segments.length === 0) {
     return text;
@@ -101,10 +124,11 @@ function renderUserMessageTextWithMentionChips(text: string, cwd: string | undef
         <UserMessageMentionChip
           key={`user-message-mention:${mentionKeyIndex}:${segment.rawValue}`}
           label={segment.displayLabel}
+          rawValue={segment.rawValue}
           mentionKind={segment.mentionKind}
           targetPath={
             segment.mentionKind === "path"
-              ? resolveMarkdownFileLinkTarget(segment.rawValue, cwd)
+              ? resolveUserMessageMentionTarget(segment.rawValue, cwd)
               : null
           }
           workspaceRoot={cwd}

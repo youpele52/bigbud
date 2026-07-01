@@ -26,6 +26,22 @@ describe("splitPromptIntoComposerSegments", () => {
     ]);
   });
 
+  it("parses a trailing path mention when explicitly allowed", () => {
+    expect(
+      splitPromptIntoComposerSegments("Inspect @src/components", [], {
+        allowTrailingPathMentions: true,
+      }),
+    ).toEqual([
+      { type: "text", text: "Inspect " },
+      {
+        type: "mention",
+        rawValue: "src/components",
+        displayLabel: "components",
+        mentionKind: "path",
+      },
+    ]);
+  });
+
   it("keeps newlines around mention tokens", () => {
     expect(splitPromptIntoComposerSegments("one\n@src/index.ts \ntwo")).toEqual([
       { type: "text", text: "one\n" },

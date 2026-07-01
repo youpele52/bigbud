@@ -45,10 +45,14 @@ export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThr
   );
 }
 
-function openChatFilePath(path: string, markdownCwd: string | undefined): void {
+function openChatFilePath(
+  path: string,
+  markdownCwd: string | undefined,
+  kind: "file" | "directory" = "file",
+): void {
   const targetPath = resolveMarkdownFileLinkTarget(path, markdownCwd);
   if (!targetPath) return;
-  openChatFileTarget(targetPath, markdownCwd);
+  openChatFileTarget(targetPath, markdownCwd, kind);
 }
 
 export function UserFileReferenceChips(props: {
@@ -83,7 +87,7 @@ export function UserFileReferenceChips(props: {
                   ? (event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      openChatFilePath(fileTargetPath, props.markdownCwd);
+                      openChatFilePath(fileTargetPath, props.markdownCwd, kind);
                     }
                   : undefined
               }
@@ -107,7 +111,7 @@ export function UserFileReferenceChips(props: {
                 pathValue={file.type === "path" ? file.path : (file.sourcePath ?? file.name)}
                 kind={kind}
                 theme={props.resolvedTheme}
-                className="shrink-0 opacity-60"
+                className="shrink-0"
               />
               <span
                 className="min-w-0 truncate text-[11px] text-muted-foreground/60"
