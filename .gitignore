@@ -26,5 +26,8 @@ docs/ideas/
 docs/handoff/
 build-certs/
 apps/server/userdata/
-.bigbud/
+# Bundled native skills ship with the app; ignore other local runtime state.
+.bigbud/*
+!.bigbud/skills/
+!.bigbud/skills/**
 .opencode/
