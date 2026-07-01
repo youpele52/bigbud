@@ -34,6 +34,7 @@ function makeSession(): ActiveOpencodeSession {
     lastUsage: undefined,
     wasRetrying: false,
     reasoningPartIds: new Set(),
+    allowedTools: {},
   };
 }
 

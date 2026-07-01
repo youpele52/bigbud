@@ -36,6 +36,7 @@ function makeSession(
     lastUsage: undefined,
     wasRetrying: false,
     reasoningPartIds: new Set(),
+    allowedTools: {},
   };
 }
 

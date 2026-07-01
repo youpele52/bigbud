@@ -156,6 +156,7 @@ export function makeSendTurnMethod(deps: TurnMethodDeps): OpencodeAdapterShape["
                     },
                   }
                 : {}),
+              tools: record.allowedTools,
               turnStillActive: () => record.activeTurnId === turnId,
               onDelta: async (delta: StreamedPromptDelta) => {
                 const runtimeEvent = await runPromise(

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { ORCHESTRATION_MCP_SERVER_NAME } from "./orchestrationMcpBridge.template.shared.ts";
+import { DEFAULT_ORCHESTRATION_MCP_SERVER_NAME } from "./orchestrationMcpBridge.template.shared.ts";
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
 import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth.ts";
 import {
@@ -15,10 +15,11 @@ export interface ThreadOrchestrationBridgeInput {
   readonly threadId: string;
   readonly host: string | undefined;
   readonly port: number;
+  readonly serverName?: string;
 }
 
 export interface ThreadOrchestrationBridge {
-  readonly serverName: typeof ORCHESTRATION_MCP_SERVER_NAME;
+  readonly serverName: string;
   readonly serverPath: string;
   readonly bridgeDir: string;
   readonly token: string;
@@ -77,9 +78,10 @@ export async function createThreadOrchestrationBridge(
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
   const serverPath = path.join(bridgeDir, ".bigbud", "orchestration-mcp-server.mjs");
   await writeFile(serverPath, renderOrchestrationMcpServerSource(httpConfig), "utf8");
+  const serverName = input.serverName?.trim() || DEFAULT_ORCHESTRATION_MCP_SERVER_NAME;
 
   return {
-    serverName: ORCHESTRATION_MCP_SERVER_NAME,
+    serverName,
     serverPath,
     bridgeDir,
     token,

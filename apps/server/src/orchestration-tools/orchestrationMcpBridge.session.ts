@@ -15,6 +15,34 @@ import {
 
 export { resolveOrchestrationBridgeHost, type ThreadOrchestrationSessionBridgeInput };
 
+const ORCHESTRATION_SERVER_NAME_PREFIX = "bigbud_orchestration";
+
+function sanitizeOpencodeToolSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+export function buildOpencodeThreadOrchestrationServerName(threadId: string): string {
+  return `${ORCHESTRATION_SERVER_NAME_PREFIX}_${sanitizeOpencodeToolSegment(threadId)}`;
+}
+
+export function buildOpencodeAllowedTools(input: {
+  readonly toolIds: ReadonlyArray<string>;
+  readonly serverName: string;
+}): Record<string, boolean> {
+  const currentPrefix = `${sanitizeOpencodeToolSegment(input.serverName)}_`;
+  const tools: Record<string, boolean> = {};
+
+  for (const toolId of input.toolIds) {
+    if (toolId.startsWith(`${ORCHESTRATION_SERVER_NAME_PREFIX}_`)) {
+      tools[toolId] = toolId.startsWith(currentPrefix);
+      continue;
+    }
+    tools[toolId] = true;
+  }
+
+  return tools;
+}
+
 export function composeBridgeCleanups(
   ...cleanups: ReadonlyArray<(() => Promise<void>) | undefined>
 ): () => Promise<void> {
@@ -75,6 +103,22 @@ export async function registerOpencodeOrchestrationMcpBridge(input: {
   });
   if (connectResult.error) {
     throw new Error(`Failed to connect orchestration MCP server: ${String(connectResult.error)}`);
+  }
+}
+
+export async function disconnectOpencodeOrchestrationMcpBridge(input: {
+  readonly client: OpencodeClient;
+  readonly directory?: string;
+  readonly serverName: string;
+}): Promise<void> {
+  const disconnectResult = await input.client.mcp.disconnect({
+    name: input.serverName,
+    ...(input.directory ? { directory: input.directory } : {}),
+  });
+  if (disconnectResult.error) {
+    throw new Error(
+      `Failed to disconnect orchestration MCP server: ${String(disconnectResult.error)}`,
+    );
   }
 }
 

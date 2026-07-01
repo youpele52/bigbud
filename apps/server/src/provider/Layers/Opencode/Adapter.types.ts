@@ -73,6 +73,7 @@ export interface ActiveOpencodeSession {
    * (field: "text") from assistant-text deltas (also field: "text").
    */
   readonly reasoningPartIds: Set<string>;
+  readonly allowedTools: Record<string, boolean>;
 }
 
 export interface OpencodeAdapterLiveOptions {
