@@ -302,25 +302,35 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   yield* Effect.log(
     `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
   );
-  if (electronBuilderResult.fallback) {
-    yield* runCommand(
-      ChildProcess.make({
+  const electronBuilderCommand = electronBuilderResult.fallback
+    ? ChildProcess.make({
         cwd: stageAppDir,
         env: buildEnv,
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
-      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`,
-    );
-  } else {
-    yield* runCommand(
-      ChildProcess.make({
+      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`
+    : ChildProcess.make({
         cwd: stageAppDir,
         env: buildEnv,
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
-      })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`,
+      })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`;
+  const maxAttempts = options.platform === "mac" && options.target === "dmg" ? 3 : 1;
+  const runElectronBuilderAttempt = (attempt: number): ReturnType<typeof runCommand> =>
+    runCommand(electronBuilderCommand).pipe(
+      Effect.catchTag("BuildScriptError", (error) => {
+        if (attempt >= maxAttempts) {
+          return Effect.fail(error);
+        }
+        return Effect.log(
+          `[desktop-artifact] electron-builder attempt ${attempt}/${maxAttempts} failed; retrying in 5 seconds...`,
+        ).pipe(
+          Effect.flatMap(() => Effect.sleep("5 seconds")),
+          Effect.flatMap(() => runElectronBuilderAttempt(attempt + 1)),
+        );
+      }),
     );
-  }
+  yield* runElectronBuilderAttempt(1);
 
   const stageDistDir = path.join(stageAppDir, "dist");
   if (!(yield* fs.exists(stageDistDir))) {
