@@ -201,4 +201,52 @@ describe("MessagesTimeline inline chips", () => {
     expect(markup).toContain("review");
     expect(markup).not.toContain("@skill::review");
   });
+
+  it("renders root-level folder mentions as clickable inline chips in user messages", async () => {
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-folder-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-folder-1"),
+              role: "user",
+              text: "inspect @release",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd="/Users/alice/project"
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot="/Users/alice/project"
+      />,
+    );
+
+    expect(markup).toContain("inspect ");
+    expect(markup).toContain("release");
+    expect(markup).toContain("cursor-pointer");
+    expect(markup).toContain("Double-click to open");
+    expect(markup).not.toContain("@release");
+  });
 });

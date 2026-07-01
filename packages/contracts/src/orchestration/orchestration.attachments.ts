@@ -35,6 +35,9 @@ export const ChatFileAttachment = Schema.Struct({
    * set to the attachmentsDir copy for web (base64 transport). Providers should use this
    * to reference the file in prompt context rather than the internal attachmentsDir copy. */
   sourcePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+  entryKind: Schema.optional(Schema.Literals(["file", "directory"])).pipe(
+    Schema.withDecodingDefault(() => "file" as const),
+  ),
 });
 export type ChatFileAttachment = typeof ChatFileAttachment.Type;
 

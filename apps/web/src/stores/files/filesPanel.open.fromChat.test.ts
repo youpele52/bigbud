@@ -73,4 +73,44 @@ describe("openPathFromChat", () => {
       },
     });
   });
+
+  it("opens workspace directories in the files panel tree", async () => {
+    resetFilesPanelState();
+
+    await openPathFromChat(
+      "/Users/alice/project/src/components",
+      "/Users/alice/project",
+      "directory",
+    );
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: null,
+      previewPath: null,
+      directoryNavigationRequest: {
+        path: "src/components",
+        workspaceRootOverride: null,
+        requestId: 1,
+      },
+    });
+    expect(useFilesPanelStore.getState().fileOpenRequest).toBeNull();
+  });
+
+  it("opens external directories by rooting the files panel to the target folder", async () => {
+    resetFilesPanelState();
+
+    await openPathFromChat("/Users/alice/other-project/docs", "/Users/alice/project", "directory");
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: "/Users/alice/other-project/docs",
+      previewPath: null,
+      directoryNavigationRequest: {
+        path: "",
+        workspaceRootOverride: "/Users/alice/other-project/docs",
+        requestId: 1,
+      },
+    });
+    expect(useFilesPanelStore.getState().fileOpenRequest).toBeNull();
+  });
 });
