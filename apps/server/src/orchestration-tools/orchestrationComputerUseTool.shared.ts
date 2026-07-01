@@ -1,0 +1,138 @@
+import {
+  COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH,
+  COMPUTER_USE_APP_NAME_MAX_CHARS,
+  COMPUTER_USE_COORDINATE_MAX,
+  COMPUTER_USE_COORDINATE_MIN,
+  COMPUTER_USE_KEY_MAX_CHARS,
+  COMPUTER_USE_SCROLL_DELTA_MAX,
+  COMPUTER_USE_SCROLL_DELTA_MIN,
+  COMPUTER_USE_TEXT_MAX_CHARS,
+  COMPUTER_USE_URL_MAX_CHARS,
+  COMPUTER_USE_WAIT_DURATION_MS_MAX,
+} from "@bigbud/contracts/orchestration/computerUse.ts";
+import {
+  COMPUTER_USE_TOOL_DESCRIPTION,
+  renderCallOrchestrationToolSource,
+} from "./threadOrchestrationBridge.shared.ts";
+
+export const COMPUTER_USE_ACTION_ENUM = [
+  "capture",
+  "navigate",
+  "click",
+  "drag",
+  "scroll",
+  "type",
+  "key",
+  "wait",
+  "get_page_info",
+  "list_windows",
+  "list_apps",
+  "check_permissions",
+  "doctor",
+  "launch_app",
+  "focus_app",
+  "get_accessibility_tree",
+] as const;
+
+export const COPILOT_COMPUTER_USE_PARAMETERS = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: [...COMPUTER_USE_ACTION_ENUM] },
+    surface: { type: "string", enum: ["browser", "desktop"] },
+    url: { type: "string", maxLength: COMPUTER_USE_URL_MAX_CHARS, pattern: "^https?://" },
+    x: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    y: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    button: { type: "string", enum: ["left", "middle", "right"] },
+    startX: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    startY: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    endX: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    endY: {
+      type: "number",
+      minimum: COMPUTER_USE_COORDINATE_MIN,
+      maximum: COMPUTER_USE_COORDINATE_MAX,
+    },
+    deltaX: {
+      type: "number",
+      minimum: COMPUTER_USE_SCROLL_DELTA_MIN,
+      maximum: COMPUTER_USE_SCROLL_DELTA_MAX,
+    },
+    deltaY: {
+      type: "number",
+      minimum: COMPUTER_USE_SCROLL_DELTA_MIN,
+      maximum: COMPUTER_USE_SCROLL_DELTA_MAX,
+    },
+    text: { type: "string", maxLength: COMPUTER_USE_TEXT_MAX_CHARS },
+    key: { type: "string", maxLength: COMPUTER_USE_KEY_MAX_CHARS },
+    durationMs: { type: "integer", minimum: 1, maximum: COMPUTER_USE_WAIT_DURATION_MS_MAX },
+    prompt: { type: "boolean" },
+    name: { type: "string", maxLength: COMPUTER_USE_APP_NAME_MAX_CHARS },
+    pid: { type: "integer", minimum: 1 },
+    windowId: { type: "integer", minimum: 1 },
+    maxDepth: { type: "integer", minimum: 1, maximum: COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH },
+    captureAfter: { type: "boolean" },
+  },
+  required: ["action"],
+  additionalProperties: false,
+} as const;
+
+export function renderPiComputerUseToolSource(): string {
+  return [
+    "const computerUseTool = defineTool({",
+    '  name: "computer_use",',
+    '  label: "computer_use",',
+    `  description: ${JSON.stringify(COMPUTER_USE_TOOL_DESCRIPTION)},`,
+    "  parameters: Type.Object({",
+    '    action: Type.String({ description: "Computer-use action name" }),',
+    '    surface: Type.Optional(Type.Union([Type.Literal("browser"), Type.Literal("desktop")])),',
+    `    url: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_URL_MAX_CHARS}, pattern: "^https?://" })),`,
+    `    x: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    `    y: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    '    button: Type.Optional(Type.Union([Type.Literal("left"), Type.Literal("middle"), Type.Literal("right")])),',
+    `    startX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    `    startY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    `    endX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    `    endY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+    `    deltaX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
+    `    deltaY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
+    `    text: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_TEXT_MAX_CHARS} })),`,
+    `    key: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_KEY_MAX_CHARS} })),`,
+    `    durationMs: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_WAIT_DURATION_MS_MAX} })),`,
+    "    prompt: Type.Optional(Type.Boolean()),",
+    `    name: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_APP_NAME_MAX_CHARS} })),`,
+    "    pid: Type.Optional(Type.Number()),",
+    "    windowId: Type.Optional(Type.Number()),",
+    `    maxDepth: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH} })),`,
+    "    captureAfter: Type.Optional(Type.Boolean()),",
+    "  }),",
+    "  async execute(_toolCallId, args) {",
+    "    const result = await callOrchestrationTool({",
+    "      action: 'computer_use',",
+    "      computerUseAction: args,",
+    "    });",
+    "    return textResult(JSON.stringify(result.result ?? {}, null, 2));",
+    "  },",
+    "});",
+  ].join("\n");
+}
+
+export { COMPUTER_USE_TOOL_DESCRIPTION, renderCallOrchestrationToolSource };

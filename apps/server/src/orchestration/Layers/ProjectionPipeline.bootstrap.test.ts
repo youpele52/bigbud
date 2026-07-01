@@ -20,7 +20,9 @@ import {
   BaseTestLayer,
   makeProjectionPipelinePrefixedTestLayer,
 } from "./ProjectionPipeline.test.helpers.ts";
+import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
 it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   it.effect("bootstraps all projection states and writes projection rows", () =>
@@ -213,11 +215,13 @@ const engineLayer = it.layer(
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     Layer.provideMerge(SqlitePersistenceMemory),
+    Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(
       ServerConfig.layerTest(process.cwd(), {
         prefix: "t3-projection-pipeline-engine-dispatch-",
       }),
     ),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(NodeServices.layer),
   ),
 );

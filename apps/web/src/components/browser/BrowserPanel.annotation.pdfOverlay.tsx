@@ -19,15 +19,10 @@ interface SelectionRect {
 }
 
 const EMPTY_RECT: SelectionRect = { x: 0, y: 0, width: 0, height: 0 };
+const COMMENT_INTENT: BrowserAnnotationIntent = "comment";
 
 function mix(color: string, amount: number): string {
   return `color-mix(in srgb, ${color} ${amount}%, transparent)`;
-}
-
-function annotationLabel(intent: BrowserAnnotationIntent): string {
-  if (intent === "fix") return "Add task";
-  if (intent === "context") return "Add as context";
-  return "Add to chat";
 }
 
 function buildRegionSelection(
@@ -60,17 +55,49 @@ function buildRegionSelection(
 
 export function BrowserPdfAnnotationOverlay({ theme, onResolve }: PdfAnnotationOverlayProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const [intent, setIntent] = useState<BrowserAnnotationIntent>("ask");
+  const panelRef = useRef<HTMLDivElement>(null);
   const [comment, setComment] = useState("");
   const [dragging, setDragging] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [rect, setRect] = useState<SelectionRect>(EMPTY_RECT);
+  const [panelPosition, setPanelPosition] = useState<{ left: number; top: number } | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   const hasSelection = rect.width >= 6 && rect.height >= 6;
 
   useEffect(() => {
     rootRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    const root = rootRef.current;
+    if (!hasSelection || dragging || !panel || !root) {
+      setPanelPosition(null);
+      return;
+    }
+
+    const rootBounds = root.getBoundingClientRect();
+    const panelBounds = panel.getBoundingClientRect();
+    const edgePadding = 16;
+    const gap = 8;
+    const fallback = null;
+    const maxLeft = Math.max(edgePadding, rootBounds.width - panelBounds.width - edgePadding);
+    const left = Math.min(Math.max(rect.x, edgePadding), maxLeft);
+    const belowTop = rect.y + rect.height + gap;
+    if (belowTop + panelBounds.height + edgePadding <= rootBounds.height) {
+      setPanelPosition({ left, top: belowTop });
+      return;
+    }
+
+    const aboveTop = rect.y - panelBounds.height - gap;
+    if (aboveTop >= edgePadding) {
+      setPanelPosition({ left, top: aboveTop });
+      return;
+    }
+
+    setPanelPosition(fallback);
+  }, [dragging, hasSelection, rect]);
 
   const readLocalPoint = (clientX: number, clientY: number) => {
     const bounds = rootRef.current?.getBoundingClientRect();
@@ -147,12 +174,6 @@ export function BrowserPdfAnnotationOverlay({ theme, onResolve }: PdfAnnotationO
     event.preventDefault();
   };
 
-  const modeButtonStyle = (mode: BrowserAnnotationIntent) => ({
-    background: intent === mode ? mix(theme.foreground, 8) : "transparent",
-    color: intent === mode ? theme.foreground : theme.mutedForeground,
-    fontWeight: intent === mode ? 600 : 500,
-  });
-
   return (
     <div
       ref={rootRef}
@@ -190,31 +211,41 @@ export function BrowserPdfAnnotationOverlay({ theme, onResolve }: PdfAnnotationO
 
       {hasSelection && !dragging && (
         <div
-          className="absolute bottom-4 right-4 w-[min(420px,calc(100%-32px))] cursor-default rounded-[20px] border p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]"
+          ref={panelRef}
+          className="absolute w-[min(420px,calc(100%-32px))] cursor-default rounded-[20px] border p-3.5 shadow-[0_18px_54px_rgba(0,0,0,0.24)]"
           style={{
             background: theme.card,
             borderColor: theme.border,
             color: theme.foreground,
+            ...(panelPosition === null
+              ? { right: 16, bottom: 16 }
+              : { left: panelPosition.left, top: panelPosition.top }),
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <p className="mb-2 text-sm font-medium text-foreground">Annotate PDF region</p>
-          <p className="mb-2.5 text-xs leading-snug text-muted-foreground">
-            Selected region: x={rect.x} y={rect.y} width={rect.width} height={rect.height}
-          </p>
-          <div className="mb-2.5 flex gap-0.5">
-            {(["ask", "context", "fix"] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className="h-7 w-16 rounded-md border-0 px-0 text-xs capitalize"
-                style={modeButtonStyle(mode)}
-                onClick={() => setIntent(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+          <p className="mb-2 text-sm font-medium text-foreground">Comment on selection</p>
+          <button
+            type="button"
+            className="mb-2.5 flex max-w-full items-center gap-1.5 text-left text-xs leading-snug text-muted-foreground"
+            onClick={() => setShowDetails((current) => !current)}
+          >
+            <span className="block truncate">Selected region</span>
+            <span
+              aria-hidden="true"
+              className={
+                showDetails
+                  ? "text-[20px] rotate-180 transition-transform"
+                  : "text-[20px] transition-transform"
+              }
+            >
+              ▾
+            </span>
+          </button>
+          {showDetails ? (
+            <div className="mb-2.5 px-1 text-xs leading-snug text-muted-foreground">
+              x={rect.x} y={rect.y} width={rect.width} height={rect.height}
+            </div>
+          ) : null}
           <textarea
             className="min-h-[120px] w-full resize-y rounded-2xl border p-3 text-sm outline-none"
             style={{
@@ -224,6 +255,7 @@ export function BrowserPdfAnnotationOverlay({ theme, onResolve }: PdfAnnotationO
             }}
             value={comment}
             onChange={(event) => setComment(event.target.value)}
+            placeholder="Ask a question or request a change"
             autoFocus
           />
           <div className="mt-3 flex justify-end gap-2">
@@ -247,9 +279,11 @@ export function BrowserPdfAnnotationOverlay({ theme, onResolve }: PdfAnnotationO
                 borderColor: theme.primary,
                 color: theme.primaryForeground,
               }}
-              onClick={() => onResolve(buildRegionSelection(rect, comment, intent, readViewport()))}
+              onClick={() =>
+                onResolve(buildRegionSelection(rect, comment, COMMENT_INTENT, readViewport()))
+              }
             >
-              {annotationLabel(intent)}
+              Add comment
             </button>
           </div>
         </div>

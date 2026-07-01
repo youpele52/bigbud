@@ -1,13 +1,16 @@
-import { AlertCircleIcon, XIcon } from "lucide-react";
+import { AlertCircleIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Button } from "../ui/button";
-import { readNativeApi } from "../../rpc/nativeApi";
-import { cn } from "~/lib/utils";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
-import { shouldShowPreviewLoading } from "./FilePreview.logic";
+import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
+import { FilePreviewHeader } from "./FilePreviewHeader";
+import {
+  buildAbsolutePreviewPath,
+  buildFilePreviewBreadcrumb,
+  shouldShowPreviewLoading,
+} from "./FilePreview.logic";
 import { type CodeAnnotationDraft } from "./FilePreview";
 import {
   cellSource,
@@ -37,19 +40,6 @@ interface LineRange {
   endLine: number;
 }
 
-function fileNameFromPath(pathValue: string): string {
-  const segments = pathValue.split("/");
-  return segments.at(-1) ?? pathValue;
-}
-
-function buildBreadcrumb(projectName: string | undefined, cwd: string, relativePath: string) {
-  const rootName = projectName ?? fileNameFromPath(cwd);
-  return [rootName, ...relativePath.split("/").filter(Boolean)].map((label, index, parts) => ({
-    id: parts.slice(0, index + 1).join("/"),
-    label,
-  }));
-}
-
 function notebookSizerCellKey(source: string, executionCount: number | null | undefined) {
   return `${executionCount ?? "none"}:${source}`;
 }
@@ -75,6 +65,10 @@ export const IpynbPreview = memo(function IpynbPreview({
   const measureRef = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const themeName = resolveDiffThemeName(resolvedTheme);
+  const absolutePath = useMemo(
+    () => buildAbsolutePreviewPath(cwd, relativePath),
+    [cwd, relativePath],
+  );
 
   useEffect(() => {
     loadPreview();
@@ -118,7 +112,7 @@ export const IpynbPreview = memo(function IpynbPreview({
   );
 
   const breadcrumb = useMemo(
-    () => buildBreadcrumb(projectName, cwd, relativePath),
+    () => buildFilePreviewBreadcrumb(projectName, cwd, relativePath),
     [cwd, projectName, relativePath],
   );
 
@@ -145,31 +139,56 @@ export const IpynbPreview = memo(function IpynbPreview({
 
   const handleNotebookContextMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (!onCreateAnnotation) return;
-      const selection = window.getSelection();
-      const selectedText = selection?.toString().trim();
-      if (!selectedText || selectedText.length < 2) return;
-      const startIndex = flatSource.indexOf(selectedText);
-      if (startIndex === -1) return;
-      const api = readNativeApi();
-      if (!api?.contextMenu) return;
-      const endIndex = startIndex + selectedText.length;
-      const startLine = flatSource.slice(0, startIndex).split("\n").length;
-      const endLine = flatSource.slice(0, endIndex).split("\n").length;
+      const selectedText = window.getSelection()?.toString().trim() ?? "";
+      let annotationRange: LineRange | null = null;
+      if (onCreateAnnotation && selectedText.length >= 2) {
+        const startIndex = flatSource.indexOf(selectedText);
+        if (startIndex !== -1) {
+          const endIndex = startIndex + selectedText.length;
+          annotationRange = {
+            startLine: flatSource.slice(0, startIndex).split("\n").length,
+            endLine: flatSource.slice(0, endIndex).split("\n").length,
+          };
+        }
+      }
+
       event.preventDefault();
       event.stopPropagation();
-      void api.contextMenu
-        .show([{ id: "annotate-selection", label: "Annotate selection" }], {
-          x: event.clientX,
-          y: event.clientY,
-        })
-        .then((action) => {
-          if (action === "annotate-selection") {
-            setSelectedRange({ startLine, endLine });
-          }
-        });
+
+      void showFilePreviewContextMenu({
+        position: { x: event.clientX, y: event.clientY },
+        absolutePath,
+        relativePath,
+        selectedText,
+        canSelectAll: true,
+        onSelectAll: () => {
+          selectElementContents(scrollContainerRef.current);
+        },
+        onAnnotateSelection:
+          annotationRange === null
+            ? undefined
+            : () => {
+                setSelectedRange(annotationRange);
+              },
+      });
     },
-    [flatSource, onCreateAnnotation],
+    [absolutePath, flatSource, onCreateAnnotation, relativePath],
+  );
+
+  const handleHeaderContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      void showFilePreviewContextMenu({
+        position: { x: event.clientX, y: event.clientY },
+        absolutePath,
+        relativePath,
+        selectedText: "",
+        canSelectAll: false,
+      });
+    },
+    [absolutePath, relativePath],
   );
 
   const annotationComposer = useMemo(() => {
@@ -235,33 +254,11 @@ export const IpynbPreview = memo(function IpynbPreview({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {measureSizer}
-      <div className="flex items-center gap-2 border-b border-border px-2 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs">
-            {breadcrumb.map((part, index) => (
-              <span key={part.id} className="flex min-w-0 items-center gap-1">
-                {index > 0 ? <span className="text-muted-foreground/45">&gt;</span> : null}
-                <span
-                  className={cn(
-                    "truncate",
-                    index === breadcrumb.length - 1
-                      ? "font-medium text-foreground"
-                      : "text-muted-foreground/75",
-                  )}
-                  title={part.label}
-                >
-                  {part.label}
-                </span>
-              </span>
-            ))}
-          </div>
-        </div>
-        {onBack ? (
-          <Button type="button" variant="ghost" size="icon-xs" onClick={onBack} aria-label="Close">
-            <XIcon />
-          </Button>
-        ) : null}
-      </div>
+      <FilePreviewHeader
+        breadcrumb={breadcrumb}
+        onBack={onBack}
+        onContextMenu={handleHeaderContextMenu}
+      />
 
       {shouldShowPreviewLoading(state) ? (
         <div className="p-3 text-sm text-muted-foreground/70">Loading notebook...</div>

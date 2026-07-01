@@ -18,6 +18,7 @@ An AI workspace for everyone. It keeps your research, writing, coding, files, an
   - [From Source](#from-source)
 - [Provider Setup](#provider-setup)
 - [Remote Projects](#remote-projects)
+- [Computer Use](#computer-use)
 - [Speech to Text](#speech-to-text)
   - [Bring Your Own Key](#bring-your-own-key)
   - [How It Works](#how-it-works)
@@ -40,6 +41,9 @@ An AI workspace for everyone. It keeps your research, writing, coding, files, an
 - **Replies, pinning, and thread organization** — Reply to any message, pin important chats, and keep context intact across reconnects
 - **Approvals and full access mode** — Review approval requests with better thread context, or auto-approve commands and edits for autonomous runs
 - **System control** — Tell agents to execute commands and perform tasks on your PC/Mac
+- **Computer Use (Desktop & Browser Automation)** — Agents can control the in-app browser and, on desktop, your macOS machine — navigate, click, type, scroll, capture screenshots, launch apps, list windows, and more. Permission-gated with safety guardrails
+- **Inline video preview** — Play video files (.mp4, .webm, .mov, .avi) directly in the Files panel with native controls and HTTP Range streaming
+- **Right panel tab management** — Close the active right-panel tab (browser, diff, files, git, kanban, notes, terminal) with `Cmd+W` / `Ctrl+W`
 - **Thread forking** — Branch a conversation from any point to explore alternatives
 
 <p align="center">
@@ -105,6 +109,26 @@ bigbud can connect to remote projects over SSH while keeping the app experience 
 - **Remote workspace support** — Open and work in remote projects across Codex, Claude, Copilot, OpenCode, and Pi where supported
 - **Safer reconnects** — After restart, saved remote workspaces stay disconnected until SSH access is verified again
 - **Flexible unlock flow** — Reconnect with SSH keys or temporary password-based SSH unlock without saving secrets
+
+## Computer Use
+
+bigbud's **Computer Use** feature lets AI agents control the in-app browser and, on desktop, your macOS machine. This enables agents to navigate web pages, fill forms, take screenshots, open applications, and more — all within your session.
+
+### Desktop Automation
+
+Desktop computer use works through the open-source `cua-driver` MCP backend and requires macOS Accessibility and Screen Recording permissions.
+
+- **Permission-gated** — Enable in **Settings → AI → Computer Use**. Mutating actions (click, type, key presses) require `full-access` runtime mode; read-only actions (capture, list windows, diagnostics) work in any mode.
+- **Safety guardrails** — Dangerous key combos (Cmd+Q, Alt+F4) and sensitive text (passwords, API keys, credit card numbers) are blocked before reaching the driver.
+- **First-run setup** — On desktop, a setup dialog guides you through enabling the feature, installing the `cua-driver` runtime, and granting macOS permissions.
+
+### Browser Automation
+
+Browser actions (navigate, click, type, scroll, capture screenshots) work through a built-in Playwright-based `BrowserManager`. Browser automation does not require permission opt-in and works in both desktop and web modes.
+
+### Cross-Provider Support
+
+Computer Use capabilities are injected into all supported providers (Codex, Claude, Copilot, OpenCode, Pi) via per-provider bridges — MCP stdio servers, Copilot SDK tools, and Pi coding agent extensions — set up automatically at session start.
 
 ## Speech to Text
 

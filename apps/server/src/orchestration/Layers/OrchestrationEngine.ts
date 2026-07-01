@@ -11,9 +11,11 @@ import {
   Duration,
   Effect,
   Exit,
+  FileSystem,
   Layer,
   Metric,
   Option,
+  Path,
   PubSub,
   Queue,
   Schema,
@@ -44,13 +46,18 @@ import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
+import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
 import {
-  archiveThreadViaOrchestration,
-  getThreadStatusViaOrchestration,
-  renameThreadViaOrchestration,
+  archiveThreadViaOrchestration as archiveThreadViaThreadTools,
+  getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
+  renameThreadViaOrchestration as renameThreadViaThreadTools,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
+import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 
 interface CommandEnvelope {
   command: OrchestrationCommand;
@@ -86,6 +93,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const computerUse = yield* ComputerUse;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const serverConfig = yield* ServerConfig;
+  const serverSettingsService = yield* ServerSettingsService;
 
   let readModel = createEmptyReadModel(new Date().toISOString());
 
@@ -320,27 +332,47 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   setThreadOrchestrationToolDispatcher({
     rename: (input) =>
-      renameThreadViaOrchestration({
+      renameThreadViaThreadTools({
         orchestrationEngine: engine,
         threadId: input.threadId,
         title: input.title,
       }),
     archive: (input) =>
-      archiveThreadViaOrchestration({
+      archiveThreadViaThreadTools({
         orchestrationEngine: engine,
         threadId: input.threadId,
       }),
     getStatus: (input) =>
-      getThreadStatusViaOrchestration({
+      getThreadStatusViaThreadTools({
         orchestrationEngine: engine,
         callerThreadId: input.callerThreadId,
         threadId: input.threadId,
       }),
+    computerUse: (input) =>
+      Effect.gen(function* () {
+        const settings = yield* serverSettingsService.getSettings.pipe(
+          Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+        );
+        return yield* computerUseViaOrchestration({
+          attachmentsDir: serverConfig.attachmentsDir,
+          computerUse,
+          computerUseEnabled: settings.computerUseEnabled,
+          fileSystem,
+          orchestrationEngine: engine,
+          path,
+          serverMode: serverConfig.mode,
+          threadId: input.threadId,
+          action: input.action,
+          checkInIntervalMs: settings.computerUseCheckInIntervalMs,
+          actionTimeoutMs: settings.computerUseActionTimeoutMs,
+        });
+      }),
   });
 
   yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       setThreadOrchestrationToolDispatcher(null);
+      yield* computerUse.dispose;
     }),
   );
 

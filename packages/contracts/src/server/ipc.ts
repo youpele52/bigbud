@@ -129,6 +129,8 @@ import type {
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
 import { ServerSettings, ServerSettingsPatch } from "../core/settings";
+import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+export * from "./ipc.desktopComputerUse";
 
 export interface ContextMenuItem<T extends string = string> {
   id: T;
@@ -204,7 +206,7 @@ export interface DesktopTailscaleRemoteAccessStatus {
   error: string | null;
 }
 
-export interface DesktopBridge {
+export interface DesktopBridge extends DesktopComputerUseBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;

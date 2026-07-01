@@ -49,13 +49,15 @@ bigbud brings everything into one window. Here are the key areas to know:
 
 **Right side panel** — Use the right panel to view and work with your own files, write notes, browse the web, and more without leaving your chat. Press `Cmd + T` (macOS) or `Ctrl + T` (Windows/Linux) to open the panel switcher and choose from:
 
-- **Files** — Browse and open project files
+- **Files** — Browse and open project files (including inline video preview for `.mp4`, `.webm`, `.mov`, `.avi`)
 - **Notes** — Write markdown notes
 - **Browser** — Open a website alongside your workspace
 - **Terminal** — Start an interactive shell
 - **Diff** — View code changes side by side
 - **Kanban** — Track work across columns
 - **Git** — Inspect repo changes
+
+Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 **Search** — Find anything fast:
 
@@ -77,6 +79,7 @@ bigbud brings everything into one window. Here are the key areas to know:
 | `Cmd + Shift + B`                     | `Ctrl + Shift + B`                      | toggle browser panel           |
 | `Cmd + Shift + E`                     | `Ctrl + Shift + E`                      | toggle files panel             |
 | `Cmd + Shift + N`                     | `Ctrl + Shift + N`                      | new local thread               |
+| `Cmd + W`                             | `Ctrl + W`                              | close active right panel tab   |
 | `Cmd + Shift + [` / `Cmd + Shift + ]` | `Ctrl + Shift + [` / `Ctrl + Shift + ]` | previous / next thread         |
 
 ### 7. Next steps
@@ -97,3 +100,13 @@ bigbud brings everything into one window. Here are the key areas to know:
 ### Thread-aware agents: drag & drop context into AI
 
 <iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
+
+### Computer Use: your agent, your extra hands
+
+Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms. Safety and security are built into the feature from the ground up — sensitive inputs are blocked before reaching the driver, and you control the limits in **Settings → AI → Computer Use**.
+
+Enable it in **Settings → AI → Computer Use** and your agent becomes an extension of your workflow — macOS, Windows, or Linux.
+
+### Thread Reader Outline
+
+The thread view now tracks your reading position between turns and provides a **reader outline** — a dot strip beside the scrollbar gutter that maps every user turn, with a jump menu for clicking directly to any point in the conversation. Sending a message anchors the new turn with a peek of the previous one, and user messages animate in with reduced-motion awareness.

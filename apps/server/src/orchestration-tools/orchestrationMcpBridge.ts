@@ -2,8 +2,9 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { ORCHESTRATION_MCP_SERVER_NAME } from "./orchestrationMcpBridge.template.shared.ts";
+import { DEFAULT_ORCHESTRATION_MCP_SERVER_NAME } from "./orchestrationMcpBridge.template.shared.ts";
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
+import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth.ts";
 import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
@@ -14,10 +15,11 @@ export interface ThreadOrchestrationBridgeInput {
   readonly threadId: string;
   readonly host: string | undefined;
   readonly port: number;
+  readonly serverName?: string;
 }
 
 export interface ThreadOrchestrationBridge {
-  readonly serverName: typeof ORCHESTRATION_MCP_SERVER_NAME;
+  readonly serverName: string;
   readonly serverPath: string;
   readonly bridgeDir: string;
   readonly token: string;
@@ -48,6 +50,14 @@ export interface AcpOrchestrationBridgeConfig {
   }>;
 }
 
+export interface OpencodeOrchestrationBridgeConfig {
+  readonly name: string;
+  readonly config: {
+    readonly type: "local";
+    readonly command: Array<string>;
+  };
+}
+
 function quoteTomlString(value: string): string {
   return JSON.stringify(value);
 }
@@ -68,13 +78,18 @@ export async function createThreadOrchestrationBridge(
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
   const serverPath = path.join(bridgeDir, ".bigbud", "orchestration-mcp-server.mjs");
   await writeFile(serverPath, renderOrchestrationMcpServerSource(httpConfig), "utf8");
+  const serverName = input.serverName?.trim() || DEFAULT_ORCHESTRATION_MCP_SERVER_NAME;
 
   return {
-    serverName: ORCHESTRATION_MCP_SERVER_NAME,
+    serverName,
     serverPath,
     bridgeDir,
     token,
     cleanup: async () => {
+      await deleteThreadOrchestrationToolAuth({
+        stateDir: input.stateDir,
+        threadId: input.threadId,
+      });
       await rm(bridgeDir, { recursive: true, force: true });
     },
   };
@@ -106,10 +121,23 @@ export function buildClaudeOrchestrationBridgeConfig(
       },
     },
     allowedTools: [
+      `mcp__${bridge.serverName}__computer_use`,
       `mcp__${bridge.serverName}__rename_thread`,
       `mcp__${bridge.serverName}__archive_thread`,
       `mcp__${bridge.serverName}__get_thread_status`,
     ],
+  };
+}
+
+export function buildOpencodeOrchestrationBridgeConfig(
+  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath">,
+): OpencodeOrchestrationBridgeConfig {
+  return {
+    name: bridge.serverName,
+    config: {
+      type: "local",
+      command: [process.execPath, bridge.serverPath],
+    },
   };
 }
 

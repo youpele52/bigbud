@@ -1,7 +1,8 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const THREAD_TOOL_AUTH_DIR = "thread-tool-auth";
+export const THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS = 24 * 60 * 60_000;
 
 export interface ThreadOrchestrationToolAuthRecord {
   readonly threadId: string;
@@ -39,7 +40,21 @@ export async function writeThreadOrchestrationToolAuth(input: {
     token: input.token,
     createdAt: new Date().toISOString(),
   };
-  await writeFile(filePath, JSON.stringify(record), "utf8");
+  await writeFile(filePath, JSON.stringify(record), { encoding: "utf8", mode: 0o600 });
+}
+
+export async function deleteThreadOrchestrationToolAuth(input: {
+  readonly stateDir: string;
+  readonly threadId: string;
+}): Promise<void> {
+  await rm(resolveThreadOrchestrationToolAuthPath(input), { force: true });
+}
+
+function isExpired(record: ThreadOrchestrationToolAuthRecord, nowMs = Date.now()): boolean {
+  const createdAtMs = Date.parse(record.createdAt);
+  return (
+    !Number.isFinite(createdAtMs) || nowMs - createdAtMs > THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS
+  );
 }
 
 export async function readThreadOrchestrationToolAuth(input: {
@@ -86,6 +101,10 @@ export async function readThreadOrchestrationToolAuthByToken(input: {
         stateDir: input.stateDir,
         threadId,
       });
+      if (record && isExpired(record)) {
+        await deleteThreadOrchestrationToolAuth({ stateDir: input.stateDir, threadId });
+        continue;
+      }
       if (record?.token === input.token) {
         return record;
       }
@@ -104,5 +123,9 @@ export function isThreadOrchestrationToolAuthorized(input: {
   if (!input.record || !input.token) {
     return false;
   }
-  return input.record.threadId === input.threadId && input.record.token === input.token;
+  return (
+    !isExpired(input.record) &&
+    input.record.threadId === input.threadId &&
+    input.record.token === input.token
+  );
 }

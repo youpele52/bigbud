@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 
@@ -276,6 +277,28 @@ textarea::placeholder {
 
 .turn-chip-strip::-webkit-scrollbar {
   display: none;
+}
+
+@keyframes user-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+[data-user-message-row] {
+  animation: user-message-enter 220ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-user-message-row] {
+    animation: none;
+  }
 }
 
 /* Terminal drawer scrollbar parity with chat */

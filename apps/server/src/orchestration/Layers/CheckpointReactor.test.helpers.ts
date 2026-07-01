@@ -39,8 +39,10 @@ import {
 } from "../../provider/Services/ProviderService.ts";
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { WorkspaceEntriesLive } from "../../workspace/Layers/WorkspaceEntries.ts";
 import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
+import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────
 
@@ -268,6 +270,8 @@ export async function createHarness(options?: {
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     Layer.provide(SqlitePersistenceMemory),
+    Layer.provideMerge(ComputerUseDisabledTestLayer),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
   );
 
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {

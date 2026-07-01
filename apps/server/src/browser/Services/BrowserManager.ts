@@ -13,6 +13,29 @@ export interface BrowserScreenshotResult {
   readonly mimeType: string;
 }
 
+export interface BrowserMousePosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface BrowserClickInput extends BrowserMousePosition {
+  readonly button?: "left" | "middle" | "right";
+}
+
+export interface BrowserDragInput {
+  readonly startX: number;
+  readonly startY: number;
+  readonly endX: number;
+  readonly endY: number;
+}
+
+export interface BrowserScrollInput {
+  readonly deltaX?: number;
+  readonly deltaY?: number;
+  readonly x?: number;
+  readonly y?: number;
+}
+
 export class BrowserManagerError extends Data.TaggedError("BrowserManagerError")<{
   readonly message: string;
   readonly cause?: unknown;
@@ -38,6 +61,30 @@ export interface BrowserManagerShape {
   readonly screenshot: (
     threadId: ThreadId,
   ) => Effect.Effect<BrowserScreenshotResult, BrowserManagerError>;
+
+  readonly click: (
+    threadId: ThreadId,
+    input: BrowserClickInput,
+  ) => Effect.Effect<void, BrowserManagerError>;
+
+  readonly drag: (
+    threadId: ThreadId,
+    input: BrowserDragInput,
+  ) => Effect.Effect<void, BrowserManagerError>;
+
+  readonly scroll: (
+    threadId: ThreadId,
+    input: BrowserScrollInput,
+  ) => Effect.Effect<void, BrowserManagerError>;
+
+  readonly typeText: (threadId: ThreadId, text: string) => Effect.Effect<void, BrowserManagerError>;
+
+  readonly keyPress: (threadId: ThreadId, key: string) => Effect.Effect<void, BrowserManagerError>;
+
+  readonly wait: (
+    threadId: ThreadId,
+    durationMs: number,
+  ) => Effect.Effect<void, BrowserManagerError>;
 
   /**
    * Get the current page info (URL, title).

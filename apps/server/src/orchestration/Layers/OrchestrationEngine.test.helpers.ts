@@ -2,10 +2,12 @@ import { CheckpointRef, MessageId, ProjectId, TurnId } from "@bigbud/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer, ManagedRuntime, Metric } from "effect";
 
+import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
@@ -19,6 +21,11 @@ export const asCheckpointRef = (value: string): CheckpointRef => CheckpointRef.m
 export function now(): string {
   return new Date().toISOString();
 }
+
+export const ComputerUseDisabledTestLayer = Layer.succeed(ComputerUse, {
+  execute: () => Effect.die(new Error("Unexpected computer-use execution in test")),
+  dispose: Effect.void,
+});
 
 export const hasMetricSnapshot = (
   snapshots: ReadonlyArray<Metric.Metric.Snapshot>,
@@ -41,7 +48,9 @@ export async function createOrchestrationSystem() {
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     Layer.provide(SqlitePersistenceMemory),
+    Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(ServerConfigLayer),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
     Layer.provideMerge(NodeServices.layer),
   );
   const runtime = ManagedRuntime.make(orchestrationLayer);

@@ -17,6 +17,8 @@ import type { PendingApproval, PendingUserInput, ActivePlanState } from "./sessi
 
 function requestKindFromRequestType(requestType: unknown): PendingApproval["requestKind"] | null {
   switch (requestType) {
+    case "browser_approval":
+      return "browser";
     case "command_execution_approval":
     case "exec_command_approval":
       return "command";
@@ -141,7 +143,8 @@ export function derivePendingApprovals(
         : null;
     const requestKind =
       payload &&
-      (payload.requestKind === "command" ||
+      (payload.requestKind === "browser" ||
+        payload.requestKind === "command" ||
         payload.requestKind === "file-read" ||
         payload.requestKind === "file-change")
         ? payload.requestKind

@@ -4,7 +4,7 @@ import {
   normalizeBrowserAnnotationViewport,
 } from "../../stores/composer/types.annotation.store";
 
-export type BrowserAnnotationIntent = "ask" | "context" | "fix";
+export type BrowserAnnotationIntent = "ask" | "context" | "fix" | "comment";
 
 export interface BrowserAnnotationElement {
   readonly selector: string;
@@ -77,9 +77,11 @@ export function buildBrowserAnnotationPrompt(annotation: BrowserAnnotationResult
   const closingLine =
     intent === "fix"
       ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
-      : intent === "context"
-        ? "Refer to the attached screenshot and selected element metadata when responding."
-        : undefined;
+      : intent === "comment"
+        ? "Use the attached screenshot and selected element metadata as context. If the comment asks for a change, make it. If it asks a question, answer it."
+        : intent === "context"
+          ? "Refer to the attached screenshot and selected element metadata when responding."
+          : undefined;
 
   const lines = [
     "Browser annotation",
@@ -159,12 +161,18 @@ export function browserAnnotationPickerScript(
     modeButton: `width:64px;height:28px;padding:0;border-radius:6px;border:0;background:transparent;color:${theme.mutedForeground};cursor:pointer;font-size:12px;font-weight:500;letter-spacing:0.01em;text-transform:capitalize;`,
     modeButtonActive: `width:64px;height:28px;padding:0;border-radius:6px;border:0;background:${mix(theme.foreground, 8)};color:${theme.foreground};cursor:pointer;font-size:12px;font-weight:600;letter-spacing:0.01em;text-transform:capitalize;`,
     title: `font-weight:500;margin-bottom:8px;color:${theme.foreground};letter-spacing:-0.01em;font-size:14px;`,
-    target: `margin-bottom:10px;color:${theme.mutedForeground};word-break:break-word;font-size:12px;line-height:1.35;`,
+    targetToggle: `display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:0;border:0;background:transparent;color:${theme.mutedForeground};cursor:pointer;font-size:12px;line-height:1.35;text-align:left;max-width:100%;`,
+    targetPreview:
+      "display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;",
+    targetChevron: `flex:none;color:${theme.mutedForeground};font-size:20px;line-height:1;transition:transform 150ms ease;`,
+    detailsBody: `max-height:140px;overflow:auto;margin-bottom:10px;padding:0 0.25rem;color:${theme.mutedForeground};font-size:12px;line-height:1.35;white-space:pre-wrap;word-break:break-word;`,
     textarea: `width:100%;min-height:120px;resize:vertical;border-radius:16px;border:1px solid ${theme.border};background:${theme.card};color:${theme.foreground};padding:12px;box-sizing:border-box;outline:none;font:14px/1.45 ui-sans-serif,system-ui,sans-serif;box-shadow:inset 0 0 0 1px ${mix(theme.ring, 0)};`,
     actions: "display:flex;gap:8px;justify-content:flex-end;margin-top:12px;",
     cancel: `padding:7px 12px;border-radius:10px;border:1px solid ${theme.border};background:${mix(theme.foreground, 4)};color:${theme.foreground};cursor:pointer;font-size:14px;`,
     submit: `padding:7px 12px;border-radius:10px;border:1px solid ${theme.primary};background:${theme.primary};color:${theme.primaryForeground};cursor:pointer;font-size:14px;`,
   } as const;
+  const PANEL_EDGE_PADDING = 16;
+  const PANEL_GAP = 8;
   const ROLE_BY_TAG: Record<string, string> = {
     A: "link",
     BUTTON: "button",
@@ -209,6 +217,19 @@ export function browserAnnotationPickerScript(
     }
     return parts.join(" > ");
   };
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- this function is stringified for webview injection.
+  const summarizeElement = (el: HTMLElement): string => {
+    const text = (el.innerText || el.textContent || "").trim().replace(/\s+/g, " ");
+    if (text.length > 0) {
+      return text.length > 50 ? `${text.slice(0, 47)}...` : text;
+    }
+    const ariaLabel = (el.getAttribute("aria-label") || "").trim();
+    if (ariaLabel.length > 0) {
+      return ariaLabel;
+    }
+    const role = (el.getAttribute("role") || "").trim();
+    return role.length > 0 ? `${el.tagName.toLowerCase()} (${role})` : el.tagName.toLowerCase();
+  };
   const describeElement = (el: HTMLElement): BrowserAnnotationElement => {
     const rect = el.getBoundingClientRect();
     return {
@@ -233,11 +254,17 @@ export function browserAnnotationPickerScript(
     const root = make("div", { style: STYLE.root });
     root.id = "__bigbud_annotation_root";
     const box = make("div", { style: STYLE.box });
-    const target = make("div", { style: STYLE.target });
+    const target = make("button", { style: STYLE.targetToggle }) as HTMLButtonElement;
+    const targetPreview = make("span", { style: STYLE.targetPreview });
+    const targetChevron = make("span", { text: "▾", style: STYLE.targetChevron });
+    target.append(targetPreview, targetChevron);
+    const details = make("div", { style: `${STYLE.detailsBody};display:none;` });
+    const detailsBody = make("div", { style: STYLE.detailsBody });
+    details.append(detailsBody);
     const textarea = make("textarea", { style: STYLE.textarea }) as HTMLTextAreaElement;
     const cancel = make("button", { text: "Cancel", style: STYLE.cancel }) as HTMLButtonElement;
     const submit = make("button", {
-      text: "Add to chat",
+      text: "Add comment",
       style: STYLE.submit,
     }) as HTMLButtonElement;
     cancel.type = "button";
@@ -245,25 +272,50 @@ export function browserAnnotationPickerScript(
     const actions = make("div", { style: STYLE.actions });
     actions.append(cancel, submit);
     const panel = make("div", { style: STYLE.panel });
+    const positionPanelNearSelection = (rect: { left: number; top: number; bottom: number }) => {
+      const panelWidth = panel.offsetWidth;
+      const panelHeight = panel.offsetHeight;
+      if (panelWidth <= 0 || panelHeight <= 0) {
+        panel.style.left = "";
+        panel.style.top = "";
+        panel.style.right = "16px";
+        panel.style.bottom = "16px";
+        return;
+      }
+      const maxLeft = Math.max(
+        PANEL_EDGE_PADDING,
+        window.innerWidth - panelWidth - PANEL_EDGE_PADDING,
+      );
+      const left = Math.min(Math.max(Math.round(rect.left), PANEL_EDGE_PADDING), maxLeft);
+      const belowTop = Math.round(rect.bottom + PANEL_GAP);
+      if (belowTop + panelHeight + PANEL_EDGE_PADDING <= window.innerHeight) {
+        panel.style.left = `${left}px`;
+        panel.style.top = `${belowTop}px`;
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        return;
+      }
+
+      const aboveTop = Math.round(rect.top - panelHeight - PANEL_GAP);
+      if (aboveTop >= PANEL_EDGE_PADDING) {
+        panel.style.left = `${left}px`;
+        panel.style.top = `${aboveTop}px`;
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+        return;
+      }
+
+      panel.style.left = "";
+      panel.style.top = "";
+      panel.style.right = "16px";
+      panel.style.bottom = "16px";
+    };
     panel.id = "__bigbud_annotation_panel";
+    target.type = "button";
 
-    const modeBar = make("div", { style: STYLE.modeBar });
-    const modeAsk = make("button", {
-      text: "Ask",
-      style: STYLE.modeButtonActive,
-    }) as HTMLButtonElement;
-    const modeContext = make("button", {
-      text: "Context",
-      style: STYLE.modeButton,
-    }) as HTMLButtonElement;
-    const modeFix = make("button", { text: "Fix", style: STYLE.modeButton }) as HTMLButtonElement;
-    modeAsk.type = "button";
-    modeContext.type = "button";
-    modeFix.type = "button";
-    modeBar.append(modeAsk, modeContext, modeFix);
-
-    const titleEl = make("div", { text: "Ask about selection", style: STYLE.title });
-    panel.append(modeBar, titleEl, target, textarea, actions);
+    textarea.placeholder = "Ask a question or request a change";
+    const titleEl = make("div", { text: "Comment on selection", style: STYLE.title });
+    panel.append(titleEl, target, details, textarea, actions);
     root.append(box, panel);
     document.documentElement.appendChild(root);
 
@@ -271,51 +323,13 @@ export function browserAnnotationPickerScript(
       selected: HTMLElement | null;
       locked: boolean;
       finished: boolean;
-      intent: "ask" | "context" | "fix";
+      intent: "comment";
     } = {
       selected: null,
       locked: false,
       finished: false,
-      intent: "ask",
+      intent: "comment",
     };
-
-    const MODE_CONFIG: Record<
-      "ask" | "context" | "fix",
-      { title: string; placeholder: string; submit: string }
-    > = {
-      ask: {
-        title: "Ask about selection",
-        placeholder: "Ask a question or give an instruction...",
-        submit: "Add to chat",
-      },
-      context: {
-        title: "Add context",
-        placeholder: "Anything to add? (optional)",
-        submit: "Add as context",
-      },
-      fix: {
-        title: "Annotate selection",
-        placeholder: "What should happen here?",
-        submit: "Add task",
-      },
-    };
-
-    const setMode = (mode: "ask" | "context" | "fix") => {
-      state.intent = mode;
-      const config = MODE_CONFIG[mode];
-      titleEl.textContent = config.title;
-      textarea.placeholder = config.placeholder;
-      submit.textContent = config.submit;
-      const activeStyle = STYLE.modeButtonActive;
-      const inactiveStyle = STYLE.modeButton;
-      modeAsk.style.cssText = mode === "ask" ? activeStyle : inactiveStyle;
-      modeContext.style.cssText = mode === "context" ? activeStyle : inactiveStyle;
-      modeFix.style.cssText = mode === "fix" ? activeStyle : inactiveStyle;
-    };
-
-    modeAsk.addEventListener("click", () => setMode("ask"));
-    modeContext.addEventListener("click", () => setMode("context"));
-    modeFix.addEventListener("click", () => setMode("fix"));
     const updateHighlight = (el: HTMLElement | null) => {
       if (!el) {
         box.style.display = "none";
@@ -387,8 +401,13 @@ export function browserAnnotationPickerScript(
       state.locked = true;
       state.selected = el;
       updateHighlight(el);
-      target.textContent = `${el.tagName.toLowerCase()} ${buildSelector(el)}`.trim();
+      targetPreview.textContent = summarizeElement(el);
+      details.style.display = "none";
+      targetChevron.style.transform = "rotate(0deg)";
+      detailsBody.textContent = buildSelector(el);
       panel.style.display = "block";
+      const rect = el.getBoundingClientRect();
+      positionPanelNearSelection(rect);
       textarea.focus();
     }
     function onKeyDown(event: KeyboardEvent) {
@@ -418,6 +437,11 @@ export function browserAnnotationPickerScript(
 
     cancel.addEventListener("click", () => finish({ cancelled: true }));
     submit.addEventListener("click", send);
+    target.addEventListener("click", () => {
+      const nextOpen = details.style.display === "none";
+      details.style.display = nextOpen ? "block" : "none";
+      targetChevron.style.transform = nextOpen ? "rotate(180deg)" : "rotate(0deg)";
+    });
     document.addEventListener("mousemove", onMouseMove, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);

@@ -15,7 +15,8 @@ export interface WorkLogPayloadDetails {
   readonly changedFiles?: ReadonlyArray<string>;
   readonly toolTitle?: string;
   readonly itemType?: ToolLifecycleItemType;
-  readonly requestKind?: "command" | "file-read" | "file-change";
+  readonly requestKind?: "browser" | "command" | "file-read" | "file-change";
+  readonly attachmentUrl?: string;
 }
 
 export function extractWorkLogPayloadDetails(
@@ -28,6 +29,7 @@ export function extractWorkLogPayloadDetails(
     typeof payload?.detail === "string" ? stripTrailingExitCode(payload.detail).output : null;
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
+  const attachmentUrl = extractAttachmentUrl(payload);
 
   return {
     ...(detail ? { detail } : {}),
@@ -37,6 +39,7 @@ export function extractWorkLogPayloadDetails(
     ...(title ? { toolTitle: title } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
+    ...(attachmentUrl ? { attachmentUrl } : {}),
   };
 }
 
@@ -260,6 +263,8 @@ function requestKindFromRequestType(
   requestType: unknown,
 ): WorkLogPayloadDetails["requestKind"] | null {
   switch (requestType) {
+    case "browser_approval":
+      return "browser";
     case "command_execution_approval":
     case "exec_command_approval":
       return "command";
@@ -286,6 +291,7 @@ function extractWorkLogRequestKind(
   payload: Record<string, unknown> | null,
 ): WorkLogPayloadDetails["requestKind"] | undefined {
   if (
+    payload?.requestKind === "browser" ||
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
     payload?.requestKind === "file-change"
@@ -357,4 +363,15 @@ function extractChangedFiles(payload: Record<string, unknown> | null): string[] 
   const seen = new Set<string>();
   collectChangedFiles(asRecord(payload?.data), changedFiles, seen, 0);
   return changedFiles;
+}
+
+function extractAttachmentUrl(payload: Record<string, unknown> | null): string | null {
+  const data = asRecord(payload?.data);
+  const direct = asTrimmedString(data?.attachmentUrl);
+  if (direct) {
+    return direct;
+  }
+  const result = asRecord(data?.result);
+  const screenshot = asRecord(result?.screenshot);
+  return asTrimmedString(screenshot?.attachmentUrl);
 }

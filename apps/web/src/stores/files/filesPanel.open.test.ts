@@ -149,6 +149,12 @@ describe("canOpenPathInternally", () => {
     );
   });
 
+  it("allows video previews in the files panel", () => {
+    expect(
+      canOpenPathInternally("/Users/alice/project/assets/demo.mp4", "/Users/alice/project"),
+    ).toBe(true);
+  });
+
   it("allows html files in browser and file viewer", () => {
     expect(
       canOpenPathInternally("/Users/alice/project/public/index.html", "/Users/alice/project"),
@@ -359,6 +365,28 @@ describe("openPathInFilesPanelIfSupported", () => {
       workspaceRootOverride: null,
       fileOpenRequest: {
         path: "assets/logo.png",
+        position: null,
+        workspaceRootOverride: null,
+        requestId: 1,
+      },
+    });
+  });
+
+  it("opens workspace videos in the files panel", () => {
+    resetFilesPanelState();
+
+    expect(
+      openPathInFilesPanelIfSupported(
+        "/Users/alice/project/assets/demo.mp4",
+        "/Users/alice/project",
+      ),
+    ).toBe(true);
+
+    expect(useFilesPanelStore.getState()).toMatchObject({
+      open: true,
+      workspaceRootOverride: null,
+      fileOpenRequest: {
+        path: "assets/demo.mp4",
         position: null,
         workspaceRootOverride: null,
         requestId: 1,

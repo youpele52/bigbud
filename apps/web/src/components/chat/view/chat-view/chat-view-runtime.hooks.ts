@@ -366,10 +366,25 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     [base.serverThread],
   );
 
+  const latestUserMessageId = useMemo(() => {
+    const messages = base.activeThread?.messages;
+    if (!messages) {
+      return null;
+    }
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === "user") {
+        return message.id;
+      }
+    }
+    return null;
+  }, [base.activeThread?.messages]);
+
   const scrollBehavior = useScrollBehavior({
     activeThreadId: base.activeThreadId,
     composerFooterActionLayoutKey,
     composerFooterHasWideActions: thread.composerFooterHasWideActions,
+    latestUserMessageId,
     messageCount: timeline.timelineEntries.length,
     phase: thread.phase,
     composerFormRef: base.composerFormRef,

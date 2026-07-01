@@ -99,6 +99,73 @@ function makeBrowserManager(): BrowserManagerShape {
       return { data: new Uint8Array(buffer), mimeType: "image/png" };
     });
 
+  const click: BrowserManagerShape["click"] = (threadId, input) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: async () => {
+          await record.page.mouse.click(input.x, input.y, {
+            button: input.button ?? "left",
+          });
+        },
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to click in browser page.", cause }),
+      });
+    });
+
+  const drag: BrowserManagerShape["drag"] = (threadId, input) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: async () => {
+          await record.page.mouse.move(input.startX, input.startY);
+          await record.page.mouse.down();
+          await record.page.mouse.move(input.endX, input.endY, { steps: 12 });
+          await record.page.mouse.up();
+        },
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to drag in browser page.", cause }),
+      });
+    });
+
+  const scroll: BrowserManagerShape["scroll"] = (threadId, input) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: async () => {
+          if (input.x !== undefined && input.y !== undefined) {
+            await record.page.mouse.move(input.x, input.y);
+          }
+          await record.page.mouse.wheel(input.deltaX ?? 0, input.deltaY ?? 0);
+        },
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to scroll browser page.", cause }),
+      });
+    });
+
+  const typeText: BrowserManagerShape["typeText"] = (threadId, text) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: () => record.page.keyboard.type(text),
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to type in browser page.", cause }),
+      });
+    });
+
+  const keyPress: BrowserManagerShape["keyPress"] = (threadId, key) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: () => record.page.keyboard.press(key),
+        catch: (cause) =>
+          new BrowserManagerError({ message: `Failed to press key "${key}".`, cause }),
+      });
+    });
+
+  const wait: BrowserManagerShape["wait"] = (_threadId, durationMs) =>
+    Effect.sleep(`${Math.max(1, Math.round(durationMs))} millis`);
+
   const getPageInfo: BrowserManagerShape["getPageInfo"] = (threadId) =>
     Effect.gen(function* () {
       const record = yield* getContext(threadId);
@@ -142,6 +209,12 @@ function makeBrowserManager(): BrowserManagerShape {
     launch,
     navigate,
     screenshot,
+    click,
+    drag,
+    scroll,
+    typeText,
+    keyPress,
+    wait,
     getPageInfo,
     close,
     closeAll,

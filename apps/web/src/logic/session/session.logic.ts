@@ -56,7 +56,7 @@ export const PROVIDER_OPTIONS: Array<{
 
 export interface PendingApproval {
   requestId: ApprovalRequestId;
-  requestKind: "command" | "file-read" | "file-change" | "tool";
+  requestKind: "browser" | "command" | "file-read" | "file-change" | "tool";
   createdAt: string;
   detail?: string;
   autoApproveAfterMs?: number;

@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { useRightPanelCloseTabShortcut } from "~/stores/rightPanel/useRightPanelCloseTabShortcut";
+
 import ThreadSidebar from "../sidebar/Sidebar";
 import {
   getBrowserPanelPlaceholderWidth,
@@ -14,6 +16,7 @@ const THREAD_SIDEBAR_MAX_WIDTH = 30 * 16;
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  useRightPanelCloseTabShortcut();
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;

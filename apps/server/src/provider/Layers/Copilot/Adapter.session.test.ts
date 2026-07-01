@@ -98,6 +98,13 @@ describe("CopilotAdapter remote workspace sessions", () => {
             lastAssistantExcerpt: null,
             updatedAt: new Date().toISOString(),
           }),
+        computerUse: () =>
+          Effect.succeed({
+            surface: "browser",
+            action: "capture",
+            summary: "Captured the current page at about:blank.",
+            page: { url: "about:blank", title: "" },
+          }),
       });
 
       const adapter = yield* CopilotAdapter;
@@ -127,6 +134,10 @@ describe("CopilotAdapter remote workspace sessions", () => {
         createdConfig.tools?.some((tool) => tool.name === "bash"),
         true,
       );
+      assert.equal(
+        createdConfig.tools?.some((tool) => tool.name === "computer_use"),
+        true,
+      );
       assert.equal(!!createdConfig.createSessionFsHandler, true);
 
       assert.equal(!!createdClientOptions?.sessionFs, true);
@@ -147,4 +158,85 @@ describe("CopilotAdapter remote workspace sessions", () => {
       assert.equal(existsSync(syntheticCwd), false);
     }).pipe(Effect.provide(layer));
   });
+
+  it.effect(
+    "binds orchestration tool handlers to the correct thread for concurrent sessions",
+    () => {
+      const client = new FakeCopilotClient();
+      const renameCalls: string[] = [];
+      const layer = makeCopilotAdapterLive({
+        clientFactory: () => client as unknown as import("@github/copilot-sdk").CopilotClient,
+      }).pipe(
+        Layer.provideMerge(ServerConfig.layerTest("/tmp/copilot-adapter-test", "/tmp")),
+        Layer.provideMerge(ServerSettingsService.layerTest()),
+        Layer.provideMerge(NodeServices.layer),
+      );
+
+      return Effect.gen(function* () {
+        setThreadOrchestrationToolDispatcher({
+          rename: ({ threadId, title }) => {
+            renameCalls.push(`${threadId}:${title}`);
+            return Effect.succeed({ title });
+          },
+          archive: () => Effect.succeed({ archived: true as const }),
+          getStatus: ({ threadId }) =>
+            Effect.succeed({
+              threadId,
+              title: "Thread",
+              workflowStatus: "idle",
+              isAgentActive: false,
+              isWorkflowComplete: false,
+              sessionStatus: null,
+              latestTurnState: null,
+              latestTurnCompletedAt: null,
+              hasPendingApprovals: false,
+              hasPendingUserInput: false,
+              hasActionableProposedPlan: false,
+              lastAssistantExcerpt: null,
+              updatedAt: new Date().toISOString(),
+            }),
+          computerUse: () =>
+            Effect.succeed({
+              surface: "browser",
+              action: "capture",
+              summary: "Captured the current page at about:blank.",
+              page: { url: "about:blank", title: "" },
+            }),
+        });
+
+        const adapter = yield* CopilotAdapter;
+        const threadA = ThreadId.makeUnsafe("thread-copilot-audit-a");
+        const threadB = ThreadId.makeUnsafe("thread-copilot-audit-b");
+        yield* adapter.startSession({
+          threadId: threadA,
+          provider: "copilot",
+          cwd: "/tmp/copilot-project-a",
+          runtimeMode: "approval-required",
+        });
+        yield* adapter.startSession({
+          threadId: threadB,
+          provider: "copilot",
+          cwd: "/tmp/copilot-project-b",
+          runtimeMode: "approval-required",
+        });
+
+        const configA = client.createSessionCalls[0];
+        const configB = client.createSessionCalls[1];
+        assert.equal(!!configA && !!configB, true);
+        const renameToolA = configA?.tools?.find((tool) => tool.name === "rename_thread");
+        const renameToolB = configB?.tools?.find((tool) => tool.name === "rename_thread");
+        assert.equal(!!renameToolA && !!renameToolB, true);
+
+        yield* Effect.promise(async () => {
+          await renameToolA!.handler({ title: "Thread A title" }, {} as never);
+          await renameToolB!.handler({ title: "Thread B title" }, {} as never);
+        });
+
+        assert.deepEqual(renameCalls, [
+          "thread-copilot-audit-a:Thread A title",
+          "thread-copilot-audit-b:Thread B title",
+        ]);
+      }).pipe(Effect.provide(layer));
+    },
+  );
 });

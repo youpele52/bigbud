@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { renderPiOrchestrationBridgeSource } from "./PiOrchestrationBridge.template.ts";
+import { deleteThreadOrchestrationToolAuth } from "./ThreadOrchestrationToolAuth.ts";
 import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
@@ -36,6 +37,10 @@ export async function createPiOrchestrationBridge(
     bridgeDir,
     extraArgs: ["--extension", extensionPath],
     cleanup: async () => {
+      await deleteThreadOrchestrationToolAuth({
+        stateDir: input.stateDir,
+        threadId: input.threadId,
+      });
       await rm(bridgeDir, { recursive: true, force: true });
     },
   };

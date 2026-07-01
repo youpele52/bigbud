@@ -17,11 +17,13 @@ import { useUpdateSettings } from "../../hooks/useSettings";
 interface FileAccessPermissionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onFinished?: () => void;
 }
 
 export function FileAccessPermissionDialog({
   open,
   onOpenChange,
+  onFinished,
 }: FileAccessPermissionDialogProps) {
   const { updateSettings } = useUpdateSettings();
   const [selectedLevel, setSelectedLevel] = useState<"unrestricted" | "common-folders">(
@@ -38,12 +40,15 @@ export function FileAccessPermissionDialog({
     });
 
     setIsRequesting(false);
+    onFinished?.();
     onOpenChange(false);
-  }, [selectedLevel, updateSettings, onOpenChange]);
+  }, [onFinished, onOpenChange, selectedLevel, updateSettings]);
 
   const handleDismiss = useCallback(() => {
+    updateSettings({ hasSeenFileAccessPrompt: true });
+    onFinished?.();
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [onFinished, onOpenChange, updateSettings]);
 
   return (
     <Dialog
@@ -133,8 +138,8 @@ export function FileAccessPermissionDialog({
               <div className="flex items-start gap-2 px-7 py-1 mt-8">
                 <FolderOpenIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                 <p className="text-[11px] text-muted-foreground">
-                  You can change this anytime in Settings → General → File Access. macOS will ask
-                  you to confirm access for each folder.
+                  You can change this anytime in Settings → AI → File Access. macOS will ask you to
+                  confirm access for each folder.
                 </p>
               </div>
             </div>

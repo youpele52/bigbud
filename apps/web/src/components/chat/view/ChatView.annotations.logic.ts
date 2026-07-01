@@ -12,6 +12,15 @@ import {
   type ComposerTerminalAnnotationAttachment,
 } from "../../../stores/composer/types.annotation.store";
 
+const COMMENT_INSTRUCTION_LINE =
+  "Use the selected content and the user's comment as context. If the comment asks for a change, make it. If it asks a question, answer it.";
+
+const BROWSER_COMMENT_INSTRUCTION_LINE =
+  "Use the attached screenshot and selected element metadata as context. If the comment asks for a change, make it. If it asks a question, answer it.";
+
+const PDF_REGION_COMMENT_INSTRUCTION_LINE =
+  "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first. Use the user's comment as context. If the comment asks for a change, make it. If it asks a question, answer it. Only use broader document context when it materially helps answer the user's question.";
+
 export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAttachment): string {
   const userInstruction = normalizeAnnotationComment(annotation.comment).trim();
   const normalizedInstruction = userInstruction || "(no instruction provided)";
@@ -22,9 +31,11 @@ export function buildCodeAnnotationPrompt(annotation: ComposerCodeAnnotationAtta
   const closingLine =
     annotation.intent === "fix"
       ? "Use the selected code and user instruction to make the appropriate code change."
-      : annotation.intent === "context"
-        ? "Use the selected code as context when responding."
-        : undefined;
+      : annotation.intent === "comment"
+        ? COMMENT_INSTRUCTION_LINE
+        : annotation.intent === "context"
+          ? "Use the selected code as context when responding."
+          : undefined;
   const lines = [
     "Code annotation",
     "",
@@ -62,9 +73,11 @@ export function buildTerminalAnnotationPrompt(
   const closingLine =
     annotation.intent === "fix"
       ? "Use the selected terminal output and user instruction to make the appropriate change."
-      : annotation.intent === "context"
-        ? "Use the selected terminal output as context when responding."
-        : undefined;
+      : annotation.intent === "comment"
+        ? COMMENT_INSTRUCTION_LINE
+        : annotation.intent === "context"
+          ? "Use the selected terminal output as context when responding."
+          : undefined;
   const lines = [
     "Terminal annotation",
     "",
@@ -108,14 +121,18 @@ export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttac
   const closingLine = isPdfRegion
     ? intent === "fix"
       ? "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first and make the appropriate code or content change only if the user asked for one. Only use broader document context when it materially helps answer the user's question."
-      : intent === "context"
-        ? "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first when responding. Only use broader document context when it materially helps answer the user's question."
-        : "The attached screenshot is tightly cropped to the selected PDF region. Focus your answer on that selected region first. Only use broader document context when it materially helps answer the user's question."
+      : intent === "comment"
+        ? PDF_REGION_COMMENT_INSTRUCTION_LINE
+        : intent === "context"
+          ? "The attached screenshot is tightly cropped to the selected PDF region. Focus on that selected region first when responding. Only use broader document context when it materially helps answer the user's question."
+          : "The attached screenshot is tightly cropped to the selected PDF region. Focus your answer on that selected region first. Only use broader document context when it materially helps answer the user's question."
     : intent === "fix"
       ? "Use the attached screenshot and selected element metadata to make the appropriate code change."
-      : intent === "context"
-        ? "Refer to the attached screenshot and selected element metadata when responding."
-        : undefined;
+      : intent === "comment"
+        ? BROWSER_COMMENT_INSTRUCTION_LINE
+        : intent === "context"
+          ? "Refer to the attached screenshot and selected element metadata when responding."
+          : undefined;
 
   const lines = [
     "Browser annotation",

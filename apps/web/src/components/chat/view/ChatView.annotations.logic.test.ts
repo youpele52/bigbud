@@ -157,6 +157,32 @@ describe("appendBrowserAnnotationsToPrompt", () => {
     expect(prompt).toContain("What does this do?");
   });
 
+  it("uses neutral comment framing for comment intent", () => {
+    const annotation: ComposerAnnotationAttachment = {
+      id: "annotation-1",
+      imageId: "image-1",
+      comment: "Should this stay as-is?",
+      intent: "comment",
+      page: { title: "Dashboard", url: "https://example.com/dashboard" },
+      element: {
+        selector: "#save",
+        tag: "button",
+        role: "button",
+        text: "Save",
+        ariaLabel: null,
+        id: "save",
+        className: "primary",
+        rect: { x: 1, y: 2, width: 3, height: 4 },
+      },
+      viewport: { width: 1280, height: 720, devicePixelRatio: 2 },
+      createdAt: "2026-05-02T00:00:00.000Z",
+    };
+
+    const prompt = appendBrowserAnnotationsToPrompt("", [annotation]);
+    expect(prompt).toContain("If the comment asks for a change, make it.");
+    expect(prompt).toContain("If it asks a question, answer it.");
+  });
+
   it("appends code annotation file and selected line context", () => {
     const annotation: ComposerAnnotationAttachment = {
       id: "code-annotation-1",
@@ -232,5 +258,27 @@ describe("appendBrowserAnnotationsToPrompt", () => {
 
     expect(prompt).toContain("make the appropriate change");
     expect(prompt).toContain("Line: 4");
+  });
+
+  it("uses terminal comment framing for comment intent", () => {
+    const prompt = buildTerminalAnnotationPrompt({
+      id: "terminal-annotation-1",
+      kind: "terminal",
+      comment: "Should we retry this?",
+      intent: "comment",
+      createdAt: "2026-06-23T00:00:00.000Z",
+      terminal: {
+        terminalId: "terminal-1",
+        terminalLabel: "Terminal 1",
+      },
+      selection: {
+        startLine: 4,
+        endLine: 4,
+        text: "npm ERR! missing script: test",
+      },
+    });
+
+    expect(prompt).toContain("If the comment asks for a change, make it.");
+    expect(prompt).toContain("If it asks a question, answer it.");
   });
 });
