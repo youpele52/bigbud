@@ -110,13 +110,23 @@ export const stagePackagedCuaDriverRuntime = Effect.fn("stagePackagedCuaDriverRu
     );
     yield* verifySha256(archivePath, archive.sha256);
 
-    yield* runCommand(
-      ChildProcess.make({
-        cwd: downloadDir,
-        ...commandOutputOptions(input.verbose),
-        shell: shellOptionForPlatform(input.platform),
-      })`tar -xf ${archive.archiveName} -C extract`,
-    );
+    if (input.platform === "win") {
+      yield* runCommand(
+        ChildProcess.make({
+          cwd: downloadDir,
+          ...commandOutputOptions(input.verbose),
+          shell: true,
+        })`powershell -NoProfile -Command "Expand-Archive -Path ${archive.archiveName} -DestinationPath extract -Force"`,
+      );
+    } else {
+      yield* runCommand(
+        ChildProcess.make({
+          cwd: downloadDir,
+          ...commandOutputOptions(input.verbose),
+          shell: shellOptionForPlatform(input.platform),
+        })`tar -xf ${archive.archiveName} -C extract`,
+      );
+    }
 
     const binarySourcePath = path.join(extractDir, ...archive.binaryPath);
     if (!(yield* fs.exists(binarySourcePath))) {
