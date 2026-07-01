@@ -1,9 +1,8 @@
 import { isRemoteExecutionTargetId, type ProjectEntry, type ThreadId } from "@bigbud/contracts";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { isImageFilePath } from "../../lib/workspaceFilePreview";
+import { isImageFilePath, isVideoFilePath } from "../../lib/workspaceFilePreview";
 
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useDefaultChatCwd } from "../../rpc/serverState";
@@ -14,6 +13,7 @@ import { useUiStateStore } from "../../stores/ui";
 import { FilesPanelContextMenu, useFilesPanelContextMenu } from "./FilesPanel.contextMenu";
 import { FilePreview, type CodeAnnotationDraft } from "./FilePreview";
 import { ImagePreview } from "./ImagePreview";
+import { VideoPreview } from "./VideoPreview";
 import { IpynbPreview } from "./IpynbPreview";
 import { FilesPanelHeader } from "./FilesPanel.header";
 import { buildAbsolutePreviewPath } from "./FilePreview.logic";
@@ -45,7 +45,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
   const { resolvedTheme } = useTheme();
   const defaultChatCwd = useDefaultChatCwd();
-  const { copyToClipboard } = useCopyToClipboard<{ path: string }>();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const workspaceRoot = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? null;
   const activeWorkspaceRoot = workspaceRootOverride ?? workspaceRoot;
@@ -254,6 +253,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     }
     const isIpynb = previewPath.toLowerCase().endsWith(".ipynb");
     const isImage = isImageFilePath(previewPath);
+    const isVideo = isVideoFilePath(previewPath);
     const handleBack = () => {
       setPreviewPath(null);
       setPreviewPosition(null);
@@ -263,6 +263,14 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         <div className="min-h-0 flex-1" style={{ minWidth: FILE_PREVIEW_MIN_WIDTH }}>
           {isImage ? (
             <ImagePreview
+              cwd={activeWorkspaceRoot}
+              relativePath={previewPath}
+              executionTargetId={activeWorkspaceExecutionTargetId}
+              projectName={activeProjectName}
+              onBack={handleBack}
+            />
+          ) : isVideo ? (
+            <VideoPreview
               cwd={activeWorkspaceRoot}
               relativePath={previewPath}
               executionTargetId={activeWorkspaceExecutionTargetId}
@@ -336,7 +344,6 @@ export const FilesPanelContent = memo(function FilesPanelContent({
         contextMenuState={contextMenuState}
         workspaceRoot={activeWorkspaceRoot ?? undefined}
         onClose={closeContextMenu}
-        onCopyPath={(path) => copyToClipboard(path, { path })}
       />
     </>
   );

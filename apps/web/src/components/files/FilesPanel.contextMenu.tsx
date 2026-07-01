@@ -34,7 +34,6 @@ export function FilesPanelContextMenu(props: {
   workspaceRoot: string | undefined;
   contextMenuState: ContextMenuTarget | null;
   onClose: () => void;
-  onCopyPath: (path: string) => void;
 }) {
   return (
     <FileTargetContextMenu
@@ -45,7 +44,6 @@ export function FilesPanelContextMenu(props: {
         props.contextMenuState ? { x: props.contextMenuState.x, y: props.contextMenuState.y } : null
       }
       onClose={props.onClose}
-      onCopyPath={props.onCopyPath}
     />
   );
 }

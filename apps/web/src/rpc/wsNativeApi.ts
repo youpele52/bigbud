@@ -9,6 +9,15 @@ import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 
 let instance: { api: NativeApi } | null = null;
 
+function shouldOpenViaDesktopShell(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol !== "http:" && protocol !== "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function __resetWsNativeApiForTests() {
   instance = null;
   __resetWsRpcClientForTests();
@@ -89,6 +98,11 @@ export function createWsNativeApi(): NativeApi {
         const nextUrl = url.trim();
         if (!nextUrl) {
           throw new Error("Unable to open link.");
+        }
+
+        if (window.desktopBridge && shouldOpenViaDesktopShell(nextUrl)) {
+          await window.desktopBridge.openExternal(nextUrl);
+          return;
         }
 
         openBrowserPanel({ url: nextUrl });

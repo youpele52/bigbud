@@ -3,6 +3,8 @@ import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { measureElement as measureVirtualElement, useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
+import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
+import { deriveChatScrollRowsFromTimeline } from "../scroller/chatScroll.timelineRows";
 import {
   deriveMessagesTimelineRows,
   estimateMessagesTimelineRowHeight,
@@ -47,6 +49,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onOpenReplySource = () => {},
   onBranchThread,
   onVirtualizerSnapshot,
+  onReaderPositionChange,
 }: MessagesTimelineProps) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
@@ -256,6 +259,59 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         }),
     });
   }, [onVirtualizerSnapshot, rowVirtualizer, rows, virtualizedRowCount]);
+
+  useLayoutEffect(() => {
+    if (!onReaderPositionChange || !scrollContainer || virtualizedRowCount === 0) {
+      return;
+    }
+
+    const publishReaderPosition = () => {
+      const measurements = rowVirtualizer.measurementsCache
+        .slice(0, virtualizedRowCount)
+        .map((measurement) => ({
+          index: measurement.index,
+          start: measurement.start,
+          end: measurement.end,
+          size: measurement.size,
+        }));
+      const { anchorRows, messageRows } = deriveChatScrollRowsFromTimeline({
+        rows,
+        measurements,
+        virtualizedRowCount,
+        totalVirtualSize: rowVirtualizer.getTotalSize(),
+        scrollContainer,
+        estimateRowHeight: (row) =>
+          estimateMessagesTimelineRowHeight(row, {
+            expandedWorkGroups,
+            timelineWidthPx,
+            turnDiffSummaryByAssistantMessageId,
+          }),
+      });
+      onReaderPositionChange(
+        deriveChatReaderPosition({
+          anchorRows,
+          messageRows,
+          scrollTop: scrollContainer.scrollTop,
+          viewportHeight: scrollContainer.clientHeight,
+        }),
+      );
+    };
+
+    publishReaderPosition();
+    scrollContainer.addEventListener("scroll", publishReaderPosition, { passive: true });
+    return () => {
+      scrollContainer.removeEventListener("scroll", publishReaderPosition);
+    };
+  }, [
+    expandedWorkGroups,
+    onReaderPositionChange,
+    rowVirtualizer,
+    rows,
+    scrollContainer,
+    timelineWidthPx,
+    turnDiffSummaryByAssistantMessageId,
+    virtualizedRowCount,
+  ]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const nonVirtualizedRows = rows.slice(virtualizedRowCount);

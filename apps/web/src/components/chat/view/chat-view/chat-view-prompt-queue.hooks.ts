@@ -117,6 +117,7 @@ export function useChatViewPromptQueue({
     beginLocalDispatch: thread.beginLocalDispatch,
     resetLocalDispatch: thread.resetLocalDispatch,
     forceStickToBottom: runtime.scrollBehavior.forceStickToBottom,
+    scrollToUserTurnAnchor: runtime.scrollBehavior.scrollToUserTurnAnchor,
     bootstrapSourceThreadId: base.composerDraft.bootstrapSourceThreadId,
     clearBootstrapSourceThreadId: (threadId) => base.setBootstrapSourceThreadId(threadId, null),
     replyTarget: base.composerDraft.replyTarget,

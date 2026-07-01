@@ -14,6 +14,7 @@ export * from "./server/ipc";
 export * from "./workspace/terminal";
 export * from "./orchestration/provider";
 export * from "./orchestration/providerRuntime";
+export * from "./orchestration/computerUse";
 export * from "./core/model";
 export * from "./server/keybindings";
 export * from "./server/kanban";

@@ -11,11 +11,16 @@ import {
   type OrchestrationEventStoreShape,
 } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
-import { asProjectId, now } from "./OrchestrationEngine.test.helpers.ts";
+import {
+  asProjectId,
+  ComputerUseDisabledTestLayer,
+  now,
+} from "./OrchestrationEngine.test.helpers.ts";
 
 describe("OrchestrationEngine", () => {
   it("keeps processing queued commands after a storage failure", async () => {
@@ -65,7 +70,9 @@ describe("OrchestrationEngine", () => {
         Layer.provide(Layer.succeed(OrchestrationEventStore, flakyStore)),
         Layer.provide(OrchestrationCommandReceiptRepositoryLive),
         Layer.provide(SqlitePersistenceMemory),
+        Layer.provideMerge(ComputerUseDisabledTestLayer),
         Layer.provideMerge(ServerConfigLayer),
+        Layer.provideMerge(ServerSettingsService.layerTest()),
         Layer.provideMerge(NodeServices.layer),
       ),
     );

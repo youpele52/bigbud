@@ -5,7 +5,7 @@ import { extractTrailingAnnotations } from "./terminalContext.annotations";
 
 function makeTerminalAnnotationPrompt(input?: {
   comment?: string;
-  intent?: "ask" | "context" | "fix";
+  intent?: "ask" | "context" | "fix" | "comment";
   lineStart?: number;
   lineEnd?: number;
   text?: string;

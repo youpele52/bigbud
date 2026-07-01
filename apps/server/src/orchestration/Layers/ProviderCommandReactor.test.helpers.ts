@@ -55,6 +55,7 @@ import { WorkspacePathsLive } from "../../workspace/Layers/WorkspacePaths.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
+import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -289,6 +290,12 @@ export async function createHarness(input?: {
     launch: () => Effect.void,
     navigate: () => unsupported(),
     screenshot: () => unsupported(),
+    click: () => unsupported(),
+    drag: () => unsupported(),
+    scroll: () => unsupported(),
+    typeText: () => unsupported(),
+    keyPress: () => unsupported(),
+    wait: () => unsupported(),
     getPageInfo: () => unsupported(),
     close: browserClose,
     closeAll: () => Effect.void,
@@ -309,6 +316,7 @@ export async function createHarness(input?: {
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
     Layer.provide(SqlitePersistenceMemory),
+    Layer.provideMerge(ComputerUseDisabledTestLayer),
   );
   const layer = ProviderCommandReactorLive.pipe(
     Layer.provideMerge(orchestrationLayer),

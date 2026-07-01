@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type MessageId } from "@bigbud/contracts";
+
+import { type ChatReaderPosition } from "../scroller/chatScroll.constants";
 import { isScrollContainerNearBottom } from "../../../utils/scroll";
+import { useChatScrollExtensions } from "./ChatView.scrollBehavior.extensions";
 
 interface UseScrollBehaviorInput {
   activeThreadId: string | null;
   composerFooterActionLayoutKey: string;
   composerFooterHasWideActions: boolean;
+  latestUserMessageId: MessageId | null;
   messageCount: number;
   phase: string;
   composerFormRef: React.RefObject<HTMLFormElement | null>;
@@ -25,6 +30,16 @@ export interface UseScrollBehaviorResult {
   isComposerPrimaryActionsCompact: boolean;
   scrollMessagesToBottom: (behavior?: ScrollBehavior) => void;
   forceStickToBottom: () => void;
+  scrollToMessage: (
+    messageId: MessageId,
+    options?: {
+      align?: "start" | "center" | "end";
+      behavior?: ScrollBehavior;
+    },
+  ) => boolean;
+  scrollToUserTurnAnchor: (messageId: MessageId) => void;
+  readerPosition: ChatReaderPosition;
+  updateReaderPosition: (position: ChatReaderPosition) => void;
   onMessagesScroll: () => void;
   onMessagesWheel: (event: React.WheelEvent<HTMLDivElement>) => void;
   onMessagesPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -40,6 +55,7 @@ export function useScrollBehavior({
   activeThreadId,
   composerFooterActionLayoutKey,
   composerFooterHasWideActions,
+  latestUserMessageId,
   messageCount,
   phase,
   composerFormRef,
@@ -104,6 +120,16 @@ export function useScrollBehavior({
     scrollMessagesToBottom();
     scheduleStickToBottom();
   }, [cancelPendingStickToBottom, scheduleStickToBottom, scrollMessagesToBottom]);
+
+  const { readerPosition, scrollToMessage, scrollToUserTurnAnchor, updateReaderPosition } =
+    useChatScrollExtensions({
+      activeThreadId,
+      latestUserMessageId,
+      messagesScrollRef,
+      scheduleStickToBottom,
+      setShowScrollToBottom,
+      shouldAutoScrollRef,
+    });
 
   const onMessagesClickCapture = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -329,6 +355,10 @@ export function useScrollBehavior({
     isComposerPrimaryActionsCompact,
     scrollMessagesToBottom,
     forceStickToBottom,
+    scrollToMessage,
+    scrollToUserTurnAnchor,
+    readerPosition,
+    updateReaderPosition,
     onMessagesScroll,
     onMessagesWheel,
     onMessagesPointerDown,

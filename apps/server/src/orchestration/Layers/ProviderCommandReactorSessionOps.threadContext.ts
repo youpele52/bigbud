@@ -20,7 +20,26 @@ export function prependThreadContextToProviderInput(input: {
   readonly providerInputText: string;
   readonly threadId: string;
   readonly threadTitle: string;
+  readonly computerUseEnabled?: boolean;
+  readonly serverMode?: "web" | "desktop";
 }): string {
+  const computerUseLines =
+    input.computerUseEnabled === false
+      ? [
+          "Desktop computer use is disabled in Bigbud settings, so native app automation (Calendar, Reminders, screen control, etc.) is unavailable.",
+          'Browser automation via `computer_use` with `surface: "browser"` may still work when the browser panel is available.',
+        ]
+      : input.serverMode === "web"
+        ? [
+            'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`. Desktop automation requires the Bigbud desktop app.',
+            'For in-app browser automation, call `computer_use` with `surface: "browser"`.',
+          ]
+        : [
+            'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`.',
+            'For in-app browser automation, call `computer_use` with `surface: "browser"`.',
+            "Use `check_permissions` or `doctor` first if desktop automation fails.",
+          ];
+
   const contextBlock = [
     "Current thread context:",
     `- Thread ID: ${input.threadId}`,
@@ -29,6 +48,7 @@ export function prependThreadContextToProviderInput(input: {
     "To rename the current thread, call the `rename_thread` tool with the new title.",
     "To archive the current thread, call the `archive_thread` tool.",
     "To check whether another thread's agent is still active, call `get_thread_status` with that thread's ID.",
+    ...computerUseLines,
     "You must not delete threads.",
   ].join("\n");
   if (!input.providerInputText) {

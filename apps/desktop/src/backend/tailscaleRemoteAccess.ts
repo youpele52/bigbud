@@ -60,17 +60,38 @@ function isNonEmptyRecord(value: unknown): value is Record<string, unknown> {
   return isRecord(value) && Object.keys(value).length > 0;
 }
 
-function valueIncludesTarget(value: unknown, targets: ReadonlySet<string>): boolean {
-  if (typeof value === "string") {
-    return targets.has(value);
-  }
+function collectProxyTargets(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.some((entry) => valueIncludesTarget(entry, targets));
+    return value.flatMap((entry) => collectProxyTargets(entry));
   }
-  if (isRecord(value)) {
-    return Object.values(value).some((entry) => valueIncludesTarget(entry, targets));
+  if (!isRecord(value)) {
+    return [];
   }
-  return false;
+
+  const targets =
+    typeof value.Proxy === "string" && value.Proxy.trim().length > 0 ? [value.Proxy] : [];
+  return [...targets, ...Object.values(value).flatMap((entry) => collectProxyTargets(entry))];
+}
+
+function isExpectedProxyTarget(target: string, backendPort: number): boolean {
+  const trimmed = target.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const withProtocol = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+  try {
+    const parsed = new URL(withProtocol);
+    return (
+      parsed.hostname === LOOPBACK_PROXY_TARGET_HOST &&
+      parsed.port === String(backendPort) &&
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (parsed.pathname === "/" || parsed.pathname.length === 0)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function runTailscaleJsonCommand(
@@ -128,13 +149,9 @@ export async function getDesktopTailscaleRemoteAccessStatus(
     }
 
     const serveConfig = await runTailscaleJsonCommand(["serve", "status", "--json"], runExecFile);
-    const expectedTargets = new Set([
-      `${LOOPBACK_PROXY_TARGET_HOST}:${backendPort}`,
-      `http://${LOOPBACK_PROXY_TARGET_HOST}:${backendPort}`,
-      `https://${LOOPBACK_PROXY_TARGET_HOST}:${backendPort}`,
-    ]);
     const serving =
-      isNonEmptyRecord(serveConfig) && valueIncludesTarget(serveConfig, expectedTargets);
+      isNonEmptyRecord(serveConfig) &&
+      collectProxyTargets(serveConfig).some((target) => isExpectedProxyTarget(target, backendPort));
 
     return {
       installed: true,

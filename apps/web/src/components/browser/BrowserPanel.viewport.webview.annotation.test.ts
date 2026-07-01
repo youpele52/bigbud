@@ -48,7 +48,7 @@ describe("webview PDF annotation helpers", () => {
     const selection: Exclude<BrowserAnnotationSelection, { cancelled: true }> = {
       cancelled: false,
       comment: "Inspect this",
-      intent: "ask",
+      intent: "comment",
       element: {
         selector: "",
         tag: "pdf-region",
@@ -68,7 +68,7 @@ describe("webview PDF annotation helpers", () => {
 
     await expect(captureBrowserAnnotation(webview, selection)).resolves.toMatchObject({
       comment: "Inspect this",
-      intent: "ask",
+      intent: "comment",
       page: {
         url: "http://127.0.0.1:3773/api/workspace-file-preview?relativePath=a.pdf",
         title: "a.pdf",

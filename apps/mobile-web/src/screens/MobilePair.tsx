@@ -22,6 +22,20 @@ function readPairingSecret() {
 
 const MOBILE_PAIRING_REQUEST_TIMEOUT_MS = 10_000;
 
+function normalizeBackendBaseUrl(raw: string | null): string {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
 function formatMobileBackendError(error: unknown): string {
   if (
     error instanceof Error &&
@@ -58,10 +72,15 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
   const { setSession } = useMobileSessionState();
   const [label, setLabel] = useState("mobile-device");
   const [error, setError] = useState<string | null>(null);
-  const backendBaseUrl = useMemo(() => {
-    const backend = new URL(window.location.href).searchParams.get("backend");
-    return backend?.trim() ?? "";
-  }, []);
+  const rawBackendBaseUrl = useMemo(
+    () => new URL(window.location.href).searchParams.get("backend"),
+    [],
+  );
+  const backendBaseUrl = useMemo(
+    () => normalizeBackendBaseUrl(rawBackendBaseUrl),
+    [rawBackendBaseUrl],
+  );
+  const invalidBackendBaseUrl = rawBackendBaseUrl !== null && backendBaseUrl.length === 0;
   const secret = useMemo(() => readPairingSecret(), []);
   const missingSecret = secret.length === 0;
 
@@ -96,6 +115,9 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
   async function confirmPairing() {
     setError(null);
     try {
+      if (!backendBaseUrl) {
+        throw new Error("This pairing link is missing a valid backend origin.");
+      }
       const response = await fetchWithTimeout(
         `${backendBaseUrl}/api/mobile/pairing/${pairingId}/exchange`,
         {
@@ -163,6 +185,12 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
         {statusQuery.isError ? (
           <p className="text-xs text-destructive">{formatMobileBackendError(statusQuery.error)}</p>
         ) : null}
+        {invalidBackendBaseUrl ? (
+          <p className="text-xs text-destructive">
+            This pairing link is missing a valid backend origin. Create a fresh link from the
+            desktop app.
+          </p>
+        ) : null}
         {missingSecret ? (
           <p className="text-xs text-destructive">
             This pairing link is missing its secret token. Open the original full link again.
@@ -171,7 +199,7 @@ export function MobilePair({ pairingId }: { pairingId: string }) {
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
         <MobileActions>
           <Button
-            disabled={!statusQuery.data?.available || missingSecret}
+            disabled={!statusQuery.data?.available || invalidBackendBaseUrl || missingSecret}
             onClick={() => void confirmPairing()}
           >
             Confirm pairing

@@ -59,6 +59,12 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedRightPanelNewTab.command, "rightPanel.newTab");
 
+    const parsedRightPanelCloseTab = yield* decode(KeybindingRule, {
+      key: "mod+w",
+      command: "rightPanel.closeTab",
+    });
+    assert.strictEqual(parsedRightPanelCloseTab.command, "rightPanel.closeTab");
+
     const parsedLocal = yield* decode(KeybindingRule, {
       key: "mod+alt+n",
       command: "chat.newLocal",

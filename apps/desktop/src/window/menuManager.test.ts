@@ -51,7 +51,7 @@ vi.mock("electron", () => ({
   },
 }));
 
-import { configureApplicationMenu, makeResolveIconPath } from "./menuManager";
+import { configureApplicationMenu, getSafeExternalUrl, makeResolveIconPath } from "./menuManager";
 
 function getViewMenuEntries(): readonly MenuTemplateEntry[] {
   const viewMenu = menuHarness.buildTemplate?.find((entry) => entry.label === "View");
@@ -62,7 +62,61 @@ function getViewMenuEntries(): readonly MenuTemplateEntry[] {
   return viewMenu.submenu;
 }
 
+function collectAccelerators(entries: readonly MenuTemplateEntry[] | undefined): string[] {
+  if (!entries) {
+    return [];
+  }
+
+  return entries.flatMap((entry) => {
+    const accelerators = entry.accelerator ? [entry.accelerator] : [];
+    return accelerators.concat(collectAccelerators(entry.submenu));
+  });
+}
+
+function getFileMenuEntries(): readonly MenuTemplateEntry[] {
+  const fileMenu = menuHarness.buildTemplate?.find((entry) => entry.label === "File");
+  if (!fileMenu || !Array.isArray(fileMenu.submenu)) {
+    throw new Error("Expected File menu entries to be configured.");
+  }
+
+  return fileMenu.submenu;
+}
+
+function getWindowMenuEntries(): readonly MenuTemplateEntry[] {
+  const windowMenu = menuHarness.buildTemplate?.find((entry) => entry.label === "Window");
+  if (!windowMenu || !Array.isArray(windowMenu.submenu)) {
+    throw new Error("Expected Window menu entries to be configured.");
+  }
+
+  return windowMenu.submenu;
+}
+
 describe("configureApplicationMenu", () => {
+  it("does not bind mod+w to close the desktop window", () => {
+    menuHarness.buildTemplate = null;
+
+    configureApplicationMenu({
+      menuActionChannel: "desktop:menu-action",
+      getMainWindow: () => focusedWindow as never,
+      setMainWindow: vi.fn(),
+      makeWindow: () => focusedWindow as never,
+      checkForUpdates: async () => false,
+      getUpdateState: () => ({ status: "idle" }) as never,
+      isDevelopment: false,
+    });
+
+    expect(collectAccelerators(menuHarness.buildTemplate ?? [])).not.toContain("CmdOrCtrl+W");
+
+    if (process.platform === "darwin") {
+      expect(getFileMenuEntries()).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: "close" })]),
+      );
+      expect(getWindowMenuEntries()).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: "close" })]),
+      );
+    }
+  });
+
   it("replaces full-app reload roles with browser reload actions", () => {
     menuHarness.buildTemplate = null;
 
@@ -167,5 +221,19 @@ describe("configureApplicationMenu", () => {
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("getSafeExternalUrl", () => {
+  it("allows macOS System Settings deep links", () => {
+    expect(
+      getSafeExternalUrl(
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+      ),
+    ).toBe("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
+  });
+
+  it("rejects unsupported protocols", () => {
+    expect(getSafeExternalUrl("file:///etc/passwd")).toBeNull();
   });
 });

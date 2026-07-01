@@ -2,6 +2,81 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.649 (2 July, 2026)
+
+### Computer Use (Desktop & Browser Automation)
+
+- Added **Computer Use** — AI agents can now reach beyond the chat and work with your applications, browser, and desktop to navigate pages, fill forms, write emails, book appointments, check your calendar, open apps, take screenshots, click, type, scroll, and carry out other tasks — on macOS, Windows, and Linux.
+- **Desktop automation is permission-gated** — requires explicit opt-in from **Settings → AI → Computer Use**, macOS Accessibility and Screen Recording permissions, and `full-access` runtime mode for mutating actions. Read-only actions (capture, list windows, list apps, diagnostics) work in any mode.
+- **Designed with safety and security as a foundation** — Dangerous key combos and sensitive text patterns (passwords, API keys, credit card numbers, SSNs) are blocked before reaching the driver. Configurable check-in and action timeout limits are exposed under **Settings → AI → Computer Use**, and desktop/browser targets containing sensitive fields are blocked automatically. The managed runtime installer verifies pinned release checksums on every install.
+- **Optimistic background setup** — Enabling Computer Use through the permission dialog or settings toggle now triggers the runtime install asynchronously with toast feedback instead of showing a blocking spinner, while macOS permission prompts continue in parallel.
+- **Cross-provider support** — All runtime providers (Codex, Claude, Copilot, OpenCode, Pi, etc.) receive computer-use capability instructions in their context, with the tool surfaced through per-provider bridges.
+
+### Orchestration Thread Tools
+
+- Added a **thread-aware MCP bridge** — agents from any provider can rename threads, archive threads, check thread status, and execute computer/browser actions through a unified internal HTTP API (`/api/internal/thread-tools`) with token-based auth.
+- **Per-provider tool bridges** — Copilot receives native SDK `Tool` objects; Codex and Claude use a dynamically generated MCP stdio server; OpenCode uses a local command bridge; Pi uses a coding agent extension. All bridges are set up at session start and torn down on disconnect.
+- The server prepends computer-use capability instructions into every provider input turn, telling the agent which surfaces are available and how to use them based on current settings and runtime mode.
+- Copilot orchestration tool handlers are now verified to bind to the correct thread when multiple Copilot sessions run concurrently.
+
+### Inline Video Preview
+
+- **Video files now play inline** in the Files panel — `.mp4`, `.webm`, `.mov`, and `.avi` files open with native `<video>` controls instead of launching the external browser.
+- **HTTP Range request support** — the file-serving endpoint now handles `Range` headers (including suffix ranges) for partial content delivery (`206 Partial Content`), enabling smooth streaming for video and large files.
+
+### Attachment Previews
+
+- Chat messages now render **image attachments as clickable zoomable previews** and **video attachments as inline players**, served through a new `/attachments/<id>` HTTP route.
+- Computer-use screenshots captured during a session are displayed inline in the timeline work entries, persisted as file attachments and served by attachment ID.
+
+### Right Panel
+
+- Pressing `Cmd+W` / `Ctrl+W` now closes the **active right-panel tab** (browser, diff, files, git, kanban, notes, terminal) instead of triggering a system-level close event. Respects terminal focus context.
+
+### Files Panel
+
+- Added **Copy relative path** to file and folder right-click menus in the Files panel, so you can grab a workspace-friendly path without trimming the absolute one by hand.
+- Reordered the shared file actions to a more predictable sequence — **Select All**, **Open externally**, **Copy relative path**, then **Copy path** where each action applies.
+
+### File Viewer
+
+- Right-clicking an open file now shows the same file actions directly inside the viewer and on the file name breadcrumb, making it easier to open the file elsewhere or copy its path without going back to the tree.
+
+### Working Indicators
+
+- Refined the "working" state across desktop and mobile with a shimmer treatment on the action verb, so long-running agent turns feel more alive and easier to notice at a glance.
+
+### Annotations
+
+- Simplified the annotation composer to a single neutral **comment** intent — removed the Ask / Context / Fix toggle so every annotation surface (file viewer, terminal, browser element, PDF region) shares the same "Comment on selection" flow.
+- Annotation panels now **anchor below the selection** when there's room, flip above if the viewport is tight, and fall back to the previous placement — keeping the composer near the content you're annotating.
+- Browser annotation technical details (raw CSS selectors, region coordinates) are now hidden behind a compact chevron-toggle instead of a heavy disclosure block, keeping the default view clean.
+
+### Thread Reader
+
+- Added **native reader-position tracking** — the thread view now tracks the scroll anchor between user turns, keeps a `readerPosition` state, and provides `scrollToMessage` / `scrollToUserTurnAnchor` helpers for programmatic navigation.
+- Added a **ThreadReaderOutline** — a dot strip overlaid beside the scrollbar gutter that maps every user turn, with a sidebar-matched jump menu for clicking directly to any turn in the conversation.
+- Sending a message now anchors the new user turn with a peek of the previous turn, and user messages get a reduced-motion-aware entrance animation.
+- Replaced the Popover-based jump menu with a clipped scroll container capped at 50dvh, matching sidebar thread row typography and keeping the scrollbar inside the rounded menu bounds.
+
+### OpenCode
+
+- Fixed OpenCode orchestration tools so they no longer write helper files into your project folders during a session; the runtime now keeps those temporary tool registrations out of the workspace.
+- OpenCode orchestration bridges are now **scoped per thread** — each session registers a uniquely named MCP server and only that thread's rename, archive, status, and computer-use tools are enabled, preventing cross-thread leakage when multiple OpenCode sessions run concurrently.
+- Session teardown now disconnects the thread-scoped orchestration MCP bridge cleanly.
+
+### Mobile Remote Companion
+
+- Pairing links now **validate the backend origin** — the mobile companion normalizes the `backend` query parameter and shows a clear error when it is missing or malformed, instead of failing silently mid-exchange.
+- **Mobile app URL** settings now include a **bigbud / Local** toggle so you can switch between the hosted companion and your local dev server without hand-editing the URL.
+- Fixed default mobile companion URL resolution — the production origin (`https://mobile.bigbud.app`) stays separate from local dev overrides, and tailnet backends still default to the hosted companion when appropriate.
+
+### Desktop
+
+- Fixed **Tailscale Serve** status detection to recognize proxy targets with trailing slashes and reject serve configs pointing at a different backend port.
+- Fixed **Copilot CLI** invocation inside the Electron desktop app — the node wrapper now launches via the app executable with `ELECTRON_RUN_AS_NODE` on macOS, Linux, and Windows.
+- File access and Computer Use permission dialogs now wait until server config has loaded before appearing, avoiding premature startup prompts.
+
 ## v0.1.648 (26 June, 2026)
 
 ### Mobile Remote Companion

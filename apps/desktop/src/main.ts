@@ -29,6 +29,13 @@ import {
   enableDesktopTailscaleRemoteAccess,
   getDesktopTailscaleRemoteAccessStatus,
 } from "./backend/tailscaleRemoteAccess";
+import {
+  getComputerUsePermissionsStatus,
+  getComputerUseRuntimeStatus,
+  installComputerUseRuntime,
+  requestComputerUsePermissions,
+  runComputerUseDoctor,
+} from "./backend/cuaDriver";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
   formatErrorMessage,
@@ -75,6 +82,11 @@ const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
 const UPDATE_CHECK_CHANNEL = "desktop:update-check";
 const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
 const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
+const GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL = "desktop:get-computer-use-runtime-status";
+const GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL = "desktop:get-computer-use-permissions-status";
+const REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL = "desktop:request-computer-use-permissions";
+const INSTALL_COMPUTER_USE_RUNTIME_CHANNEL = "desktop:install-computer-use-runtime";
+const RUN_COMPUTER_USE_DOCTOR_CHANNEL = "desktop:run-computer-use-doctor";
 const GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL = "desktop:get-tailscale-remote-access-status";
 const ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:enable-tailscale-remote-access";
 const DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:disable-tailscale-remote-access";
@@ -300,6 +312,11 @@ async function bootstrap(): Promise<void> {
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
     GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
+    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL,
+    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL,
+    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL,
+    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL,
+    RUN_COMPUTER_USE_DOCTOR_CHANNEL,
     GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
     ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
@@ -321,6 +338,11 @@ async function bootstrap(): Promise<void> {
     installDownloadedUpdate,
     resolveIconPath,
     getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
+    getComputerUseRuntimeStatus: () => getComputerUseRuntimeStatus(BASE_DIR),
+    getComputerUsePermissionsStatus: () => getComputerUsePermissionsStatus(BASE_DIR),
+    requestComputerUsePermissions: () => requestComputerUsePermissions(BASE_DIR),
+    installComputerUseRuntime: () => installComputerUseRuntime(BASE_DIR),
+    runComputerUseDoctor: () => runComputerUseDoctor(BASE_DIR),
     getTailscaleRemoteAccessStatus: async () => {
       const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
       mobileBackendBaseUrl =

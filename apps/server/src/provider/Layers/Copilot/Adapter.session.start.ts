@@ -194,6 +194,15 @@ export const makeStartSession =
               })
               .pipe(Effect.map((status) => status as unknown as Record<string, unknown>)),
           ),
+        computerUse: (action) =>
+          Effect.runPromise(
+            dispatcher
+              .computerUse({
+                threadId: input.threadId,
+                action,
+              })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

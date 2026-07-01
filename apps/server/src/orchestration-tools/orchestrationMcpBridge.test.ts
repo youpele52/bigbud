@@ -8,6 +8,7 @@ import {
   buildAcpOrchestrationBridgeConfig,
   buildClaudeOrchestrationBridgeConfig,
   buildCodexOrchestrationBridgeConfig,
+  buildOpencodeOrchestrationBridgeConfig,
   createThreadOrchestrationBridge,
   mergeClaudeQueryOptions,
   mergeCodexConfigArgs,
@@ -15,8 +16,10 @@ import {
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
 import {
   createThreadOrchestrationToolToken,
+  isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
   readThreadOrchestrationToolAuth,
+  writeThreadOrchestrationToolAuth,
 } from "./ThreadOrchestrationToolAuth.ts";
 
 describe("orchestrationMcpBridge", () => {
@@ -29,6 +32,7 @@ describe("orchestrationMcpBridge", () => {
     });
 
     expect(source).toContain("/api/internal/thread-tools");
+    expect(source).toContain("computer_use");
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
     expect(source).toContain("get_thread_status");
@@ -63,12 +67,31 @@ describe("orchestrationMcpBridge", () => {
     expect(merged.allowedTools).toEqual(
       expect.arrayContaining([
         "Read",
+        "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__get_thread_status",
       ]),
     );
     expect((merged.mcpServers as Record<string, unknown>)["bigbud_orchestration"]).toBeDefined();
     expect(merged.mcpServers?.existing).toBeDefined();
+  });
+
+  it("builds OpenCode MCP config for orchestration tools", () => {
+    const bridge = {
+      serverName: "bigbud_orchestration" as const,
+      serverPath: "/tmp/orchestration-mcp-server.mjs",
+      bridgeDir: "/tmp/bridge",
+      token: "token-1",
+      cleanup: async () => undefined,
+    };
+
+    expect(buildOpencodeOrchestrationBridgeConfig(bridge)).toEqual({
+      name: "bigbud_orchestration",
+      config: {
+        type: "local",
+        command: [process.execPath, bridge.serverPath],
+      },
+    });
   });
 
   it("builds ACP stdio MCP config for orchestration tools", () => {
@@ -116,6 +139,53 @@ describe("orchestrationMcpBridge", () => {
       expect(createThreadOrchestrationToolToken()).not.toBe(bridge.token);
     } finally {
       await bridge.cleanup();
+      expect(
+        await readThreadOrchestrationToolAuth({
+          stateDir,
+          threadId: "thread-1",
+        }),
+      ).toBeNull();
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects expired thread tool auth records", async () => {
+    const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "bigbud-thread-tool-auth-"));
+    await writeThreadOrchestrationToolAuth({
+      stateDir,
+      threadId: "thread-expired",
+      token: "token-expired",
+    });
+    const filePath = path.join(stateDir, "thread-tool-auth", "thread-expired.json");
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        threadId: "thread-expired",
+        token: "token-expired",
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+      "utf8",
+    );
+
+    try {
+      const record = await readThreadOrchestrationToolAuth({
+        stateDir,
+        threadId: "thread-expired",
+      });
+      expect(
+        isThreadOrchestrationToolAuthorized({
+          record,
+          threadId: "thread-expired",
+          token: "token-expired",
+        }),
+      ).toBe(false);
+      expect(
+        await readThreadOrchestrationToolAuthByToken({
+          stateDir,
+          token: "token-expired",
+        }),
+      ).toBeNull();
+    } finally {
       await fs.rm(stateDir, { recursive: true, force: true });
     }
   });

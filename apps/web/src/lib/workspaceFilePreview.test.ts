@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isHtmlFilePath, isImageFilePath } from "./workspaceFilePreview";
+import {
+  isHtmlFilePath,
+  isImageFilePath,
+  isVideoFilePath,
+  isVideoMimeType,
+} from "./workspaceFilePreview";
 
 describe("isImageFilePath", () => {
   it("recognizes common raster and vector image extensions", () => {
@@ -35,5 +40,30 @@ describe("isHtmlFilePath", () => {
 
   it("strips line suffixes before checking the extension", () => {
     expect(isHtmlFilePath("/tmp/workspace/public/index.html:12")).toBe(true);
+  });
+});
+
+describe("isVideoFilePath", () => {
+  it("recognizes common video extensions", () => {
+    expect(isVideoFilePath("assets/demo.mp4")).toBe(true);
+    expect(isVideoFilePath("assets/clip.WEBM")).toBe(true);
+    expect(isVideoFilePath("assets/screencast.mov")).toBe(true);
+  });
+
+  it("ignores non-video files", () => {
+    expect(isVideoFilePath("README.md")).toBe(false);
+    expect(isVideoFilePath("assets/logo.png")).toBe(false);
+  });
+});
+
+describe("isVideoMimeType", () => {
+  it("recognizes video mime types", () => {
+    expect(isVideoMimeType("video/mp4")).toBe(true);
+    expect(isVideoMimeType("VIDEO/WEBM")).toBe(true);
+  });
+
+  it("ignores non-video mime types", () => {
+    expect(isVideoMimeType("image/png")).toBe(false);
+    expect(isVideoMimeType("application/pdf")).toBe(false);
   });
 });
