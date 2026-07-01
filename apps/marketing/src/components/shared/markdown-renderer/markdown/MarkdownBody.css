@@ -46,6 +46,15 @@
   line-height: 1.15;
 }
 
+.md-heading:is(h4, h5, h6) {
+  margin-top: 1.15rem;
+  margin-bottom: 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
 .md-paragraph {
   max-width: var(--md-content-max-width);
   margin-top: 1.25rem;
