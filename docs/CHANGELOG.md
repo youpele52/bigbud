@@ -17,6 +17,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added a **thread-aware MCP bridge** — agents from any provider can rename threads, archive threads, check thread status, and execute computer/browser actions through a unified internal HTTP API (`/api/internal/thread-tools`) with token-based auth.
 - **Per-provider tool bridges** — Copilot receives native SDK `Tool` objects; Codex and Claude use a dynamically generated MCP stdio server; OpenCode uses a local command bridge; Pi uses a coding agent extension. All bridges are set up at session start and torn down on disconnect.
 - The server prepends computer-use capability instructions into every provider input turn, telling the agent which surfaces are available and how to use them based on current settings and runtime mode.
+- Copilot orchestration tool handlers are now verified to bind to the correct thread when multiple Copilot sessions run concurrently.
 
 ### Inline Video Preview
 
@@ -61,6 +62,20 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### OpenCode
 
 - Fixed OpenCode orchestration tools so they no longer write helper files into your project folders during a session; the runtime now keeps those temporary tool registrations out of the workspace.
+- OpenCode orchestration bridges are now **scoped per thread** — each session registers a uniquely named MCP server and only that thread's rename, archive, status, and computer-use tools are enabled, preventing cross-thread leakage when multiple OpenCode sessions run concurrently.
+- Session teardown now disconnects the thread-scoped orchestration MCP bridge cleanly.
+
+### Mobile Remote Companion
+
+- Pairing links now **validate the backend origin** — the mobile companion normalizes the `backend` query parameter and shows a clear error when it is missing or malformed, instead of failing silently mid-exchange.
+- **Mobile app URL** settings now include a **bigbud / Local** toggle so you can switch between the hosted companion and your local dev server without hand-editing the URL.
+- Fixed default mobile companion URL resolution — the production origin (`https://mobile.bigbud.app`) stays separate from local dev overrides, and tailnet backends still default to the hosted companion when appropriate.
+
+### Desktop
+
+- Fixed **Tailscale Serve** status detection to recognize proxy targets with trailing slashes and reject serve configs pointing at a different backend port.
+- Fixed **Copilot CLI** invocation inside the Electron desktop app — the node wrapper now launches via the app executable with `ELECTRON_RUN_AS_NODE` on macOS, Linux, and Windows.
+- File access and Computer Use permission dialogs now wait until server config has loaded before appearing, avoiding premature startup prompts.
 
 ## v0.1.648 (26 June, 2026)
 
