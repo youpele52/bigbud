@@ -115,7 +115,7 @@ export const stagePackagedCuaDriverRuntime = Effect.fn("stagePackagedCuaDriverRu
         cwd: downloadDir,
         ...commandOutputOptions(input.verbose),
         shell: shellOptionForPlatform(input.platform),
-      })`tar -xf ${archivePath} -C ${extractDir}`,
+      })`tar -xf ${archive.archiveName} -C extract`,
     );
 
     const binarySourcePath = path.join(extractDir, ...archive.binaryPath);
