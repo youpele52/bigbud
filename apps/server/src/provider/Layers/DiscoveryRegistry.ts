@@ -6,7 +6,18 @@ import type {
   ServerDiscoveryCatalog,
   ServerDiscoveryProviderLabel,
 } from "@bigbud/contracts";
-import { Effect, Equal, FileSystem, Layer, Path, PubSub, Ref, Stream } from "effect";
+import {
+  Duration,
+  Effect,
+  Equal,
+  FileSystem,
+  Layer,
+  Path,
+  PubSub,
+  Ref,
+  Schedule,
+  Stream,
+} from "effect";
 
 import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
@@ -45,6 +56,15 @@ const CLAUDE_JSON_NAME_REGEX = /"name"\s*:\s*"([^"]+)"/;
 const CLAUDE_JSON_DESCRIPTION_REGEX = /"description"\s*:\s*"([^"]+)"/;
 const SIMPLE_NAME_REGEX = /^(?:name|title):\s*(.+)$/im;
 const SIMPLE_DESCRIPTION_REGEX = /^description:\s*(.+)$/im;
+
+function resolveDiscoveryFallbackRescanInterval(): Duration.Duration {
+  const rawIntervalMs = process.env.BIGBUD_DISCOVERY_FALLBACK_RESCAN_MS?.trim();
+  const parsedMs = rawIntervalMs ? Number.parseInt(rawIntervalMs, 10) : Number.NaN;
+  if (Number.isFinite(parsedMs) && parsedMs > 0) {
+    return Duration.millis(parsedMs);
+  }
+  return Duration.minutes(2);
+}
 
 function trimToUndefined(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -388,6 +408,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
+  const fallbackRescanInterval = resolveDiscoveryFallbackRescanInterval();
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerDiscoveryCatalog>(),
     PubSub.shutdown,
@@ -555,6 +576,9 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       ),
     { concurrency: "unbounded" },
   ).pipe(Effect.asVoid);
+  yield* Effect.forkScoped(
+    Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)),
+  );
 
   return {
     getCatalog: syncCatalog({ publish: false }),

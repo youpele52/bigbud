@@ -64,4 +64,37 @@ describe("ComposerCommandMenu", () => {
     expect(markup).toContain("Models");
     expect(markup).toContain("GPT-5");
   });
+
+  it("renders an open-source action for discovery items with source paths", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerCommandMenu
+        items={[
+          {
+            id: "slash-agent:opencode:reviewer",
+            type: "agent",
+            agent: {
+              id: "reviewer",
+              provider: "opencode",
+              name: "reviewer",
+              source: "user",
+              sourcePath: "/Users/alice/.config/opencode/agents/reviewer.md",
+              description: "Reviews code changes.",
+            },
+            label: "reviewer",
+            description: "Reviews code changes.",
+          },
+        ]}
+        resolvedTheme="dark"
+        isLoading={false}
+        triggerKind="slash-command"
+        discoverySearch={{ command: "agents", query: "", onQueryChange: vi.fn() }}
+        activeItemId={null}
+        onHighlightedItemChange={vi.fn()}
+        onSelect={vi.fn()}
+        onOpenItemSourcePath={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Open source file");
+  });
 });

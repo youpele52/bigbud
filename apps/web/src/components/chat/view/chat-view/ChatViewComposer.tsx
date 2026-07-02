@@ -24,6 +24,7 @@ import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
+import { openChatFileTarget } from "../../common/chatFileTargets";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
@@ -220,6 +221,17 @@ export function ChatViewComposer({
     setSyntheticMenuHighlightId(null);
   }, []);
 
+  const onOpenDiscoveryItemSourcePath = useCallback(
+    (item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>) => {
+      const sourcePath = item.type === "agent" ? item.agent.sourcePath : item.skill.sourcePath;
+      if (!sourcePath) {
+        return;
+      }
+      openChatFileTarget(sourcePath, base.activeProjectCwd ?? undefined);
+    },
+    [base.activeProjectCwd],
+  );
+
   const onCallAgent = useCallback(() => {
     setSyntheticMenuKind("agent");
     setSyntheticMenuHighlightId(null);
@@ -330,6 +342,7 @@ export function ChatViewComposer({
               onSyntheticMenuHighlight={onSyntheticMenuHighlight}
               onSyntheticMenuSelect={onSyntheticMenuSelect}
               onSyntheticMenuSearchChange={onSyntheticMenuSearchChange}
+              onOpenDiscoveryItemSourcePath={onOpenDiscoveryItemSourcePath}
             />
 
             {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (

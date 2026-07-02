@@ -17,6 +17,9 @@ interface ChatViewComposerMenuLayerProps {
   onSyntheticMenuHighlight: (itemId: string | null) => void;
   onSyntheticMenuSelect: (item: ComposerCommandItem) => void;
   onSyntheticMenuSearchChange: (query: string) => void;
+  onOpenDiscoveryItemSourcePath: (
+    item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>,
+  ) => void;
 }
 
 export function ChatViewComposerMenuLayer({
@@ -32,6 +35,7 @@ export function ChatViewComposerMenuLayer({
   onSyntheticMenuHighlight,
   onSyntheticMenuSelect,
   onSyntheticMenuSearchChange,
+  onOpenDiscoveryItemSourcePath,
 }: ChatViewComposerMenuLayerProps) {
   if (syntheticMenuKind && !disabled) {
     const discoverySearch = {
@@ -50,6 +54,7 @@ export function ChatViewComposerMenuLayer({
           activeItemId={syntheticMenuHighlightId}
           onHighlightedItemChange={onSyntheticMenuHighlight}
           onSelect={onSyntheticMenuSelect}
+          onOpenItemSourcePath={onOpenDiscoveryItemSourcePath}
         />
       </div>
     );
@@ -83,6 +88,7 @@ export function ChatViewComposerMenuLayer({
         activeItemId={composer.activeComposerMenuItem?.id ?? null}
         onHighlightedItemChange={interactions.composerCommandHandlers.onComposerMenuItemHighlighted}
         onSelect={interactions.composerCommandHandlers.onSelectComposerItem}
+        onOpenItemSourcePath={onOpenDiscoveryItemSourcePath}
       />
     </div>
   );
