@@ -1,8 +1,12 @@
 import { type MessageId } from "@bigbud/contracts";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+
+const BASE_SEGMENT_WIDTH_PX = 8;
+const NEIGHBOR_SEGMENT_WIDTH_PX = 16;
+const CURRENT_SEGMENT_WIDTH_PX = 22;
+const HOVERED_SEGMENT_WIDTH_PX = 32;
 
 interface ThreadReaderOutlineProps {
   anchors: ReadonlyArray<{ messageId: MessageId; label: string }>;
@@ -18,69 +22,173 @@ export function ThreadReaderOutline({
   className,
 }: ThreadReaderOutlineProps) {
   const [hoveredAnchorIndex, setHoveredAnchorIndex] = useState<number | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(
+    () => () => {
+      if (clickTimeoutRef.current !== null) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!outlineOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (rootRef.current?.contains(event.target as Node) ?? false) {
+        return;
+      }
+      setOutlineOpen(false);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [outlineOpen]);
 
   if (anchors.length < 2) {
     return null;
   }
 
   return (
-    <Menu>
-      <MenuTrigger
-        aria-label="Open transcript outline"
-        className={cn(
-          "pointer-events-auto flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 transition-colors outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
-          className,
-        )}
-        onMouseLeave={() => setHoveredAnchorIndex(null)}
-      >
-        {anchors.map((anchor, index) => {
-          const isCurrent = anchor.messageId === currentAnchorMessageId;
-          const hoverDistance =
-            hoveredAnchorIndex === null ? null : Math.abs(hoveredAnchorIndex - index);
+    <div
+      ref={rootRef}
+      aria-label="Transcript outline"
+      className={cn(
+        "pointer-events-auto relative flex w-full flex-col items-end justify-center gap-px rounded-md px-1 py-1 transition-colors hover:bg-accent/20",
+        className,
+      )}
+      onPointerMove={(event) => {
+        if (outlineOpen) {
+          return;
+        }
 
-          return (
+        let nearestIndex: number | null = null;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+
+        for (const [index, button] of buttonRefs.current.entries()) {
+          if (!button) {
+            continue;
+          }
+          const rect = button.getBoundingClientRect();
+          const centerY = rect.top + rect.height / 2;
+          const distance = Math.abs(event.clientY - centerY);
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestIndex = index;
+          }
+        }
+
+        if (nearestIndex !== null && nearestIndex !== hoveredAnchorIndex) {
+          setHoveredAnchorIndex(nearestIndex);
+        }
+      }}
+      onMouseLeave={() => {
+        setHoveredAnchorIndex(null);
+        if (!outlineOpen) {
+          return;
+        }
+      }}
+    >
+      {outlineOpen ? (
+        <div className="absolute right-full top-1/2 mr-3 flex max-h-[50dvh] w-56 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border/70 bg-background/96 shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
+          <div className="overflow-y-auto overscroll-y-contain px-1 py-2">
+            {anchors.map((anchor) => {
+              const isCurrent = currentAnchorMessageId === anchor.messageId;
+
+              return (
+                <button
+                  key={anchor.messageId}
+                  type="button"
+                  aria-current={isCurrent ? "location" : undefined}
+                  className={cn(
+                    "flex min-h-7 w-full cursor-pointer items-center rounded-lg px-2 text-left text-sm outline-none transition-colors",
+                    isCurrent
+                      ? "bg-accent/85 font-medium text-foreground hover:bg-accent dark:bg-accent/55 dark:hover:bg-accent/70"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                  onClick={() => {
+                    setOutlineOpen(false);
+                    onJumpToMessage(anchor.messageId);
+                  }}
+                >
+                  <span className="line-clamp-2 min-w-0">{anchor.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      {anchors.map((anchor, index) => {
+        const isCurrent = anchor.messageId === currentAnchorMessageId;
+        const isHovered = hoveredAnchorIndex === index;
+        const hoverDistance =
+          hoveredAnchorIndex === null ? null : Math.abs(hoveredAnchorIndex - index);
+        const widthPx =
+          hoverDistance === 0
+            ? HOVERED_SEGMENT_WIDTH_PX
+            : hoverDistance === 1
+              ? NEIGHBOR_SEGMENT_WIDTH_PX
+              : isCurrent
+                ? CURRENT_SEGMENT_WIDTH_PX
+                : BASE_SEGMENT_WIDTH_PX;
+
+        return (
+          <button
+            key={anchor.messageId}
+            type="button"
+            aria-label={anchor.label}
+            aria-current={isCurrent ? "location" : undefined}
+            className="relative flex h-2.5 w-full items-center justify-end outline-none"
+            ref={(node) => {
+              buttonRefs.current[index] = node;
+            }}
+            onClick={() => {
+              if (clickTimeoutRef.current !== null) {
+                clearTimeout(clickTimeoutRef.current);
+              }
+              clickTimeoutRef.current = setTimeout(() => {
+                setOutlineOpen(false);
+                onJumpToMessage(anchor.messageId);
+                clickTimeoutRef.current = null;
+              }, 180);
+            }}
+            onDoubleClick={() => {
+              if (clickTimeoutRef.current !== null) {
+                clearTimeout(clickTimeoutRef.current);
+                clickTimeoutRef.current = null;
+              }
+              setOutlineOpen(true);
+              setHoveredAnchorIndex(index);
+            }}
+            onFocus={() => setHoveredAnchorIndex(index)}
+          >
+            {isHovered && !outlineOpen ? (
+              <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-56 -translate-y-1/2 rounded-xl border border-border/70 bg-background/96 px-3 py-2 text-left text-sm text-foreground shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
+                <span className="line-clamp-3 block">{anchor.label}</span>
+              </span>
+            ) : null}
             <span
-              key={anchor.messageId}
               data-current={isCurrent}
               className={cn(
-                "h-px w-3 rounded-full bg-muted-foreground/35 transition-transform duration-150 ease-out dark:bg-muted-foreground/30",
-                hoverDistance === 0 &&
-                  "scale-[4] bg-muted-foreground/55 dark:bg-muted-foreground/72",
-                hoverDistance === 1 &&
-                  "scale-200 bg-muted-foreground/45 dark:bg-muted-foreground/56",
-                isCurrent && "bg-foreground dark:bg-foreground",
+                "block h-0.5 rounded-full bg-muted-foreground/20 transition-[width,background-color] duration-150 ease-out dark:bg-muted-foreground/22",
+                hoverDistance === 0 && "bg-muted-foreground/48 dark:bg-muted-foreground/70",
+                hoverDistance === 1 && "bg-muted-foreground/34 dark:bg-muted-foreground/48",
+                isCurrent && "bg-foreground/85 dark:bg-foreground/88",
               )}
-              onMouseEnter={() => setHoveredAnchorIndex(index)}
+              style={{ width: `${widthPx}px` }}
             />
-          );
-        })}
-      </MenuTrigger>
-      <MenuPopup
-        align="center"
-        side="left"
-        sideOffset={8}
-        className="pointer-events-auto w-56 overflow-hidden p-0 [&>div]:max-h-[50dvh] [&>div]:overflow-y-auto [&>div]:overscroll-y-contain [&>div]:px-1 [&>div]:py-2 [&>div]:[scrollbar-gutter:stable]"
-      >
-        {anchors.map((anchor) => {
-          const isCurrent = currentAnchorMessageId === anchor.messageId;
-
-          return (
-            <MenuItem
-              key={anchor.messageId}
-              aria-current={isCurrent ? "location" : undefined}
-              className={cn(
-                "h-7 min-h-7 cursor-pointer rounded-lg px-2 text-xs sm:min-h-7 sm:text-xs",
-                isCurrent
-                  ? "bg-accent/85 font-medium text-foreground hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-              onClick={() => onJumpToMessage(anchor.messageId)}
-            >
-              <span className="line-clamp-1 min-w-0">{anchor.label}</span>
-            </MenuItem>
-          );
-        })}
-      </MenuPopup>
-    </Menu>
+          </button>
+        );
+      })}
+    </div>
   );
 }
