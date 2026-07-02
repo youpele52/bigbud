@@ -72,13 +72,13 @@ export function renderOpencodeOrchestrationRuntimeSource(
 ): string {
   const config = renderThreadOrchestrationConfigLiteral(input);
   return [
-    `const CONFIG = ${config} as const;`,
+    `const CONFIG = ${config};`,
     "",
-    renderCallOrchestrationToolSource(true),
+    renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
     "",
-    "export async function renameThread(input: { readonly title: string }) {",
+    "export async function renameThread(input) {",
     "  const title = input.title.trim();",
     "  if (title.length === 0) throw new Error('Thread title cannot be empty.');",
     "  const result = await callOrchestrationTool({",
@@ -94,7 +94,7 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "  return { message: 'Archived the current thread.' };",
     "}",
     "",
-    "export async function getThreadStatus(input: { readonly threadId: string }) {",
+    "export async function getThreadStatus(input) {",
     "  const threadId = input.threadId.trim();",
     "  if (threadId.length === 0) throw new Error('Thread ID is required.');",
     "  const result = await callOrchestrationTool({ action: 'get_status', threadId });",

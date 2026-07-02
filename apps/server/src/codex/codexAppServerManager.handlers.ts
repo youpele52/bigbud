@@ -330,6 +330,33 @@ export function handleServerRequest(
     return;
   }
 
+  if (request.method === "item/tool/call" && context.dynamicToolCallHandler) {
+    const params = readObject(request.params);
+    const namespace = readString(params, "namespace");
+    void context
+      .dynamicToolCallHandler({
+        tool: readString(params, "tool") ?? "",
+        arguments: params?.arguments,
+        ...(namespace ? { namespace } : {}),
+      })
+      .then((result) => {
+        callbacks.writeMessage(context, {
+          id: request.id,
+          result,
+        });
+      })
+      .catch((error) => {
+        callbacks.writeMessage(context, {
+          id: request.id,
+          error: {
+            code: -32000,
+            message: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
+    return;
+  }
+
   callbacks.writeMessage(context, {
     id: request.id,
     error: {

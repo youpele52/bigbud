@@ -6,7 +6,7 @@ import {
 } from "@bigbud/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerTriggerKind } from "../../../logic/composer";
-import { BookOpenIcon, BotIcon } from "lucide-react";
+import { BookOpenIcon, BotIcon, FolderOpenIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Badge } from "../../ui/badge";
 import {
@@ -73,6 +73,7 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
   activeItemId: string | null;
   onHighlightedItemChange: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
+  onOpenItemSourcePath?: (item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const discoveryInputRef = useRef<HTMLInputElement>(null);
@@ -151,6 +152,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                   isActive={props.activeItemId === item.id}
                   onHighlight={props.onHighlightedItemChange}
                   onSelect={props.onSelect}
+                  {...(props.onOpenItemSourcePath
+                    ? { onOpenItemSourcePath: props.onOpenItemSourcePath }
+                    : {})}
                 />
               ))}
             </CommandGroup>
@@ -163,6 +167,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                 isActive={props.activeItemId === item.id}
                 onHighlight={props.onHighlightedItemChange}
                 onSelect={props.onSelect}
+                {...(props.onOpenItemSourcePath
+                  ? { onOpenItemSourcePath: props.onOpenItemSourcePath }
+                  : {})}
               />
             ))
           )}
@@ -195,7 +202,20 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
   isActive: boolean;
   onHighlight: (itemId: string | null) => void;
   onSelect: (item: ComposerCommandItem) => void;
+  onOpenItemSourcePath?: (item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>) => void;
 }) {
+  const sourcePath =
+    props.item.type === "agent"
+      ? props.item.agent.sourcePath
+      : props.item.type === "skill"
+        ? props.item.skill.sourcePath
+        : undefined;
+  const canOpenSourcePath =
+    (props.item.type === "agent" || props.item.type === "skill") &&
+    typeof sourcePath === "string" &&
+    sourcePath.length > 0 &&
+    typeof props.onOpenItemSourcePath === "function";
+
   const itemBody = (
     <>
       {props.item.type === "path" ? (
@@ -238,6 +258,27 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           <span className="max-w-[36%] min-w-0 truncate text-muted-foreground/70 text-xs">
             {props.item.description}
           </span>
+          {canOpenSourcePath ? (
+            <button
+              type="button"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/75 transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Open source file"
+              aria-label={`Open source file for ${props.item.label}`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (props.item.type === "agent" || props.item.type === "skill") {
+                  props.onOpenItemSourcePath?.(props.item);
+                }
+              }}
+            >
+              <FolderOpenIcon className="size-3.5" />
+            </button>
+          ) : null}
         </>
       ) : (
         <>

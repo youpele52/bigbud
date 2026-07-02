@@ -202,6 +202,113 @@ describe("MessagesTimeline inline chips", () => {
     expect(markup).not.toContain("@skill::review");
   });
 
+  it("renders clickable agent chips when source path metadata is present", async () => {
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-agent-source-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-agent-source-1"),
+              role: "user",
+              text: [
+                "@agent::git-commit-and-push commit only the code you touched",
+                "",
+                "Referenced agent: git-commit-and-push",
+                "Provider: opencode",
+                "Source path: /Users/alice/.config/opencode/agents/git-commit-and-push.md",
+              ].join("\n"),
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd="/Users/alice/project"
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot="/Users/alice/project"
+      />,
+    );
+
+    expect(markup).toContain("git-commit-and-push");
+    expect(markup).toContain("cursor-pointer");
+    expect(markup).toContain("Click to open");
+  });
+
+  it("does not render clickable agent chip when source path metadata is ambiguous", async () => {
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        isWorking={false}
+        activeTurnInProgress={false}
+        activeTurnStartedAt={null}
+        scrollContainer={null}
+        timelineEntries={[
+          {
+            id: "entry-agent-source-ambiguous-1",
+            kind: "message",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            message: {
+              id: MessageId.makeUnsafe("message-agent-source-ambiguous-1"),
+              role: "user",
+              text: [
+                "@agent::review check this change",
+                "",
+                "Referenced agent: review",
+                "Provider: opencode",
+                "Source path: /Users/alice/.config/opencode/agents/review.md",
+                "",
+                "Referenced agent: review",
+                "Provider: codex",
+                "Source path: /Users/alice/.codex/agents/review.toml",
+              ].join("\n"),
+              createdAt: "2026-03-17T19:12:28.000Z",
+              streaming: false,
+            },
+          },
+        ]}
+        completionDividerBeforeEntryId={null}
+        completionSummary={null}
+        turnDiffSummaryByAssistantMessageId={new Map()}
+        nowIso="2026-03-17T19:12:30.000Z"
+        expandedWorkGroups={{}}
+        onToggleWorkGroup={() => {}}
+        changedFilesExpandedByTurnId={{}}
+        onSetChangedFilesExpanded={() => {}}
+        onOpenTurnDiff={() => {}}
+        revertTurnCountByUserMessageId={new Map()}
+        onRevertUserMessage={() => {}}
+        isRevertingCheckpoint={false}
+        onImageExpand={() => {}}
+        markdownCwd="/Users/alice/project"
+        resolvedTheme="light"
+        timestampFormat="locale"
+        workspaceRoot="/Users/alice/project"
+      />,
+    );
+
+    expect(markup).toContain("review");
+    expect(markup).not.toContain("Click to open");
+  });
+
   it("renders root-level folder mentions as clickable inline chips in user messages", async () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline

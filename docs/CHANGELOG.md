@@ -2,6 +2,40 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.650 (2 July, 2026)
+
+### Computer Use (Desktop & Browser Automation)
+
+- Computer Use permission dialogs, settings descriptions, and toast notifications now use **platform-aware copy** — the text automatically reflects macOS, Windows, or Linux instead of always saying "macOS". The macOS-specific "System Settings" permission-manager row is hidden on non-mac platforms.
+
+### Thread Reader
+
+- Redesigned the **transcript outline** — click any segment in the dot strip to jump directly to that turn, or double-click to open a full menu of all user turns for quick navigation. Hovering over a segment now shows a label preview tooltip, and each segment's width adapts based on proximity to the cursor and whether it represents the current turn, making it easier to target the right spot.
+
+### Chat Mentions
+
+- Agent and skill mentions in **user message bubbles** are now openable directly from the timeline when a source file can be resolved.
+- Mention source resolution is now **ambiguity-safe** — if multiple possible source files match the same mention, bigbud avoids opening the wrong file.
+
+### Orchestration Thread Tools
+
+- Hardened Codex and OpenCode thread-tool wiring with a **dynamic fallback path** for orchestration calls, so rename, archive, status, and computer/browser actions stay bound to the correct thread context even when MCP namespace discovery is unavailable at startup.
+- Thread-tools authorization now better separates **caller-thread authentication** from **target-thread status lookup** for `get_status`, while keeping mutation operations strictly scoped.
+- Updated generated OpenCode and Pi orchestration bridge sources to emit **runtime-safe JavaScript syntax** in executed bridge files.
+
+### Agent & Skill Discovery
+
+- Discovery now **auto-refreshes live** across all supported provider roots (Codex, Claude, Copilot, Cursor, OpenCode, Pi, Devin, KiloCode, bigbud), so adding, editing, or removing agent/skill files is picked up without restarting the app.
+- Added a **periodic fallback discovery rescan** to keep catalogs current even if an underlying filesystem watch event is missed.
+
+### Markdown File Viewer
+
+- Markdown preview in the Files panel now **formats YAML frontmatter** for readable in-app display — `---` delimiters render as horizontal rules, YAML keys are boldened, and indentation (non-breaking spaces) preserves the nested structure so metadata is visible without looking like headings.
+
+### Mobile Remote Companion
+
+- Added a **setup guide link** next to the "Enable mobile remote control" switch in **Settings → Mobile Remote** that opens the documentation at bigbud.app/docs for step-by-step pairing instructions.
+
 ## v0.1.649 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)

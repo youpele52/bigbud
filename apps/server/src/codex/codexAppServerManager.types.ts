@@ -45,6 +45,32 @@ export interface PendingUserInputRequest {
   itemId?: ProviderItemId;
 }
 
+export interface CodexDynamicToolSpec {
+  readonly namespace?: string;
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Record<string, unknown>;
+  readonly deferLoading?: boolean;
+}
+
+export interface CodexDynamicToolCallInput {
+  readonly namespace?: string;
+  readonly tool: string;
+  readonly arguments: unknown;
+}
+
+export interface CodexDynamicToolCallResult {
+  readonly contentItems: ReadonlyArray<
+    | { readonly type: "inputText"; readonly text: string }
+    | { readonly type: "inputImage"; readonly imageUrl: string }
+  >;
+  readonly success: boolean;
+}
+
+export type CodexDynamicToolCallHandler = (
+  input: CodexDynamicToolCallInput,
+) => Promise<CodexDynamicToolCallResult>;
+
 export interface CodexUserInputAnswer {
   answers: string[];
 }
@@ -59,6 +85,7 @@ export interface CodexSessionContext {
   pendingUserInputs: Map<ApprovalRequestId, PendingUserInputRequest>;
   collabReceiverTurns: Map<string, TurnId>;
   nextRequestId: number;
+  dynamicToolCallHandler?: CodexDynamicToolCallHandler | undefined;
   cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   stopping: boolean;
 }
@@ -110,6 +137,9 @@ export interface CodexAppServerStartSessionInput {
   readonly binaryPath: string;
   readonly homePath?: string;
   readonly configArgs?: ReadonlyArray<string>;
+  readonly expectedMcpServerNames?: ReadonlyArray<string>;
+  readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
+  readonly dynamicToolCallHandler?: CodexDynamicToolCallHandler;
   readonly cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
   readonly developerInstructions?: string;
   readonly runtimeMode: RuntimeMode;

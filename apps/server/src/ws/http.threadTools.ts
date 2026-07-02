@@ -66,7 +66,6 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
 
     if (
       authRecord === null ||
-      (body.threadId !== undefined && body.threadId !== authRecord.threadId) ||
       !isThreadOrchestrationToolAuthorized({
         record: authRecord,
         threadId: authRecord?.threadId ?? "",
@@ -81,6 +80,15 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
 
     if (body.action === "rename") {
+      if (body.threadId === undefined || body.threadId !== authRecord.threadId) {
+        return yield* new ThreadToolRequestError({
+          status: body.threadId === undefined ? 400 : 401,
+          message:
+            body.threadId === undefined
+              ? "Current thread ID is required."
+              : "Unauthorized thread tool request.",
+        });
+      }
       const title = body.title?.trim() ?? "";
       const result = yield* dispatcher.rename({ threadId, title }).pipe(
         Effect.mapError(
@@ -147,6 +155,15 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       return yield* HttpServerResponse.json({ ok: true, result });
     }
 
+    if (body.threadId === undefined || body.threadId !== authRecord.threadId) {
+      return yield* new ThreadToolRequestError({
+        status: body.threadId === undefined ? 400 : 401,
+        message:
+          body.threadId === undefined
+            ? "Current thread ID is required."
+            : "Unauthorized thread tool request.",
+      });
+    }
     yield* dispatcher.archive({ threadId }).pipe(
       Effect.mapError(
         (error) =>

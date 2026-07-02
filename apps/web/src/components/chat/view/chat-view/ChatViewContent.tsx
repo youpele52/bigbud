@@ -317,7 +317,7 @@ export function ChatViewContent({
                 />
               </div>
 
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-7 items-center justify-center sm:w-8">
+              <div className="pointer-events-none absolute inset-y-0 right-2 z-20 flex w-10 items-center justify-end sm:right-2 sm:w-10">
                 <ThreadReaderOutline
                   anchors={userTurnAnchors}
                   currentAnchorMessageId={

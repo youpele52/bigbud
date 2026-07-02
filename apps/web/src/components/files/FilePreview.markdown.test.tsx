@@ -32,4 +32,28 @@ describe("FilePreviewMarkdownContent", () => {
     expect(markup).toContain('data-preserve-line-breaks="true"');
     expect(markup).toContain("# Changelog");
   });
+
+  it("formats YAML frontmatter so delimiters render as horizontal rules", () => {
+    const contents = [
+      "---",
+      "name: ai-seo",
+      'description: "When the user wants to optimize content for AI search engines."',
+      "metadata:",
+      "  version: 2.0.0",
+      "---",
+      "# AI SEO",
+      "Body text",
+    ].join("\n");
+
+    const markup = renderToStaticMarkup(
+      <FilePreviewMarkdownContent contents={contents} cwd="/workspace" />,
+    );
+
+    expect(markup).toContain("**name:** ai-seo");
+    expect(markup).toContain("**description:**");
+    expect(markup).toContain("When the user wants to optimize content for AI search engines.");
+    expect(markup).toContain("**version:** 2.0.0");
+    expect(markup).toContain("# AI SEO");
+    expect(markup).toContain("Body text");
+  });
 });

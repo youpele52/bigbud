@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
+import { ExternalLinkIcon, SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -261,7 +261,19 @@ export function MobileRemoteControlSettingsSection() {
               aria-label="Enable mobile remote control"
             />
           }
-        />
+        >
+          <p className="pt-1 text-xs text-muted-foreground">
+            <a
+              href="https://bigbud.app/docs/#advanced-features"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-4 hover:text-foreground hover:decoration-solid"
+            >
+              Get step-by-step setup help
+              <ExternalLinkIcon className="size-3" />
+            </a>
+          </p>
+        </SettingsRow>
 
         <SettingsRow
           title="Tailscale remote backend"

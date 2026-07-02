@@ -43,7 +43,7 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "  writeMessage({ jsonrpc: JSONRPC_VERSION, id, error: { code, message } });",
     "}",
     "",
-    renderCallOrchestrationToolSource(false),
+    renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
     "",

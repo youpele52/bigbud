@@ -1,5 +1,5 @@
 import { DumbbellIcon } from "lucide-react";
-import { memo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { TerminalContextInlineChip } from "../terminal/TerminalContextInlineChip";
 import {
   buildInlineTerminalContextText,
@@ -23,6 +23,7 @@ import { openChatFileTarget } from "../common/chatFileTargets";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import { useTheme } from "../../../hooks/useTheme";
 import { inferEntryKindFromPath } from "../../../lib/vscode-icons";
+import { useServerDiscoveredAgents, useServerDiscoveredSkills } from "../../../rpc/serverState";
 
 const USER_MESSAGE_MENTION_BADGE_CLASS_NAME =
   "inline-flex shrink-0 rounded-sm border border-border/70 bg-background/60 px-1 py-0 text-[10px] font-semibold uppercase leading-none text-muted-foreground";
@@ -34,6 +35,69 @@ function resolveUserMessageMentionTarget(rawValue: string, cwd: string | undefin
   return resolveMarkdownFileLinkTarget(rawValue, cwd);
 }
 
+function normalizeMentionName(
+  mentionKind: "path" | "agent" | "skill",
+  rawValue: string,
+  displayLabel: string,
+): string {
+  if (mentionKind === "agent") {
+    return rawValue.replace(/^agent::?/, "").trim() || displayLabel.trim();
+  }
+  if (mentionKind === "skill") {
+    return rawValue.replace(/^skill::?/, "").trim() || displayLabel.trim();
+  }
+  return displayLabel.trim();
+}
+
+function addSourcePathToLookup(
+  lookup: Map<string, Set<string>>,
+  key: string,
+  sourcePath: string,
+): void {
+  const existing = lookup.get(key);
+  if (existing) {
+    existing.add(sourcePath);
+    return;
+  }
+  lookup.set(key, new Set([sourcePath]));
+}
+
+function resolveUniqueSourcePath(paths: ReadonlyArray<string | null | undefined>): string | null {
+  const uniquePaths = [...new Set(paths.filter((value): value is string => !!value))];
+  return uniquePaths.length === 1 ? uniquePaths[0]! : null;
+}
+
+function buildReferencedSourcePathLookup(messageText: string): {
+  byName: Map<string, Set<string>>;
+} {
+  const byName = new Map<string, Set<string>>();
+  const lines = messageText.split(/\r?\n/);
+  let currentKind: "agent" | "skill" | null = null;
+  let currentName: string | null = null;
+
+  for (const line of lines) {
+    const referencedAgentMatch = line.match(/^Referenced agent:\s*(.+)$/i);
+    if (referencedAgentMatch?.[1]) {
+      currentKind = "agent";
+      currentName = referencedAgentMatch[1].trim().toLowerCase();
+      continue;
+    }
+    const referencedSkillMatch = line.match(/^Referenced skill:\s*(.+)$/i);
+    if (referencedSkillMatch?.[1]) {
+      currentKind = "skill";
+      currentName = referencedSkillMatch[1].trim().toLowerCase();
+      continue;
+    }
+    const sourcePathMatch = line.match(/^Source path:\s*(.+)$/i);
+    if (sourcePathMatch?.[1] && currentKind && currentName) {
+      const sourcePath = sourcePathMatch[1].trim();
+      addSourcePathToLookup(byName, `${currentKind}:${currentName}`, sourcePath);
+    }
+  }
+
+  return { byName };
+}
+
 const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
   rawValue?: string;
@@ -42,7 +106,7 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   workspaceRoot?: string | undefined;
 }) {
   const { resolvedTheme } = useTheme();
-  const clickable = props.mentionKind === "path" && props.targetPath;
+  const clickable = typeof props.targetPath === "string" && props.targetPath.length > 0;
   const inferredPathKind =
     props.mentionKind === "path"
       ? inferEntryKindFromPath(props.rawValue ?? props.label)
@@ -52,9 +116,26 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
     <>
       <span
         className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]", clickable && "cursor-pointer")}
-        title={clickable ? "Double-click to open" : undefined}
-        onDoubleClick={
+        title={
           clickable
+            ? props.mentionKind === "path"
+              ? "Double-click to open"
+              : "Click to open"
+            : undefined
+        }
+        onClick={
+          clickable && props.mentionKind !== "path"
+            ? (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const targetPath = props.targetPath;
+                if (!targetPath) return;
+                openChatFileTarget(targetPath, props.workspaceRoot, "file");
+              }
+            : undefined
+        }
+        onDoubleClick={
+          clickable && props.mentionKind === "path"
             ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -101,13 +182,24 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   );
 });
 
-function renderUserMessageTextWithMentionChips(text: string, cwd: string | undefined): ReactNode {
-  const segments = splitPromptIntoComposerSegments(text, [], {
+function renderUserMessageTextWithMentionChips(input: {
+  readonly text: string;
+  readonly cwd: string | undefined;
+  readonly messageText: string;
+  readonly discoveredAgents: ReadonlyArray<{ name: string; sourcePath?: string | undefined }>;
+  readonly discoveredSkills: ReadonlyArray<{
+    name: string;
+    displayName?: string | undefined;
+    sourcePath?: string | undefined;
+  }>;
+}): ReactNode {
+  const referencedSourcePathLookup = buildReferencedSourcePathLookup(input.messageText);
+  const segments = splitPromptIntoComposerSegments(input.text, [], {
     allowTrailingAgentAndSkillMentions: true,
     allowTrailingPathMentions: true,
   });
   if (segments.length === 0) {
-    return text;
+    return input.text;
   }
 
   let textKeyIndex = 0;
@@ -126,12 +218,38 @@ function renderUserMessageTextWithMentionChips(text: string, cwd: string | undef
           label={segment.displayLabel}
           rawValue={segment.rawValue}
           mentionKind={segment.mentionKind}
-          targetPath={
-            segment.mentionKind === "path"
-              ? resolveUserMessageMentionTarget(segment.rawValue, cwd)
-              : null
-          }
-          workspaceRoot={cwd}
+          targetPath={(() => {
+            if (segment.mentionKind === "path") {
+              return resolveUserMessageMentionTarget(segment.rawValue, input.cwd);
+            }
+            const mentionName = normalizeMentionName(
+              segment.mentionKind,
+              segment.rawValue,
+              segment.displayLabel,
+            );
+            const lookupKey = `${segment.mentionKind}:${mentionName.toLowerCase()}`;
+            const lookupMatch = resolveUniqueSourcePath([
+              ...(referencedSourcePathLookup.byName.get(lookupKey) ?? new Set()).values(),
+            ]);
+            if (lookupMatch) {
+              return lookupMatch;
+            }
+            if (segment.mentionKind === "agent") {
+              const discoveredPaths = input.discoveredAgents
+                .filter((agent) => agent.name.trim().toLowerCase() === mentionName.toLowerCase())
+                .map((agent) => agent.sourcePath);
+              return resolveUniqueSourcePath(discoveredPaths);
+            }
+            const discoveredPaths = input.discoveredSkills
+              .filter(
+                (skill) =>
+                  skill.name.trim().toLowerCase() === mentionName.toLowerCase() ||
+                  skill.displayName?.trim().toLowerCase() === mentionName.toLowerCase(),
+              )
+              .map((skill) => skill.sourcePath);
+            return resolveUniqueSourcePath(discoveredPaths);
+          })()}
+          workspaceRoot={input.cwd}
         />
       );
     }
@@ -155,6 +273,26 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
   terminalContexts: ParsedTerminalContextEntry[];
   cwd: string | undefined;
 }) {
+  const discoveredAgents = useServerDiscoveredAgents();
+  const discoveredSkills = useServerDiscoveredSkills();
+  const discoveredAgentEntries = useMemo(
+    () =>
+      discoveredAgents.map((agent) => ({
+        name: agent.name,
+        sourcePath: agent.sourcePath,
+      })),
+    [discoveredAgents],
+  );
+  const discoveredSkillEntries = useMemo(
+    () =>
+      discoveredSkills.map((skill) => ({
+        name: skill.name,
+        displayName: skill.displayName,
+        sourcePath: skill.sourcePath,
+      })),
+    [discoveredSkills],
+  );
+
   if (props.terminalContexts.length > 0) {
     const hasEmbeddedInlineLabels = textContainsInlineTerminalContextLabels(
       props.text,
@@ -223,7 +361,13 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
     if (props.text.length > 0) {
       inlineNodes.push(
         <span key="user-message-terminal-context-inline-text">
-          {renderUserMessageTextWithMentionChips(props.text, props.cwd)}
+          {renderUserMessageTextWithMentionChips({
+            text: props.text,
+            cwd: props.cwd,
+            messageText: props.text,
+            discoveredAgents: discoveredAgentEntries,
+            discoveredSkills: discoveredSkillEntries,
+          })}
         </span>,
       );
     } else if (inlinePrefix.length === 0) {
@@ -243,7 +387,13 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
 
   return (
     <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
-      {renderUserMessageTextWithMentionChips(props.text, props.cwd)}
+      {renderUserMessageTextWithMentionChips({
+        text: props.text,
+        cwd: props.cwd,
+        messageText: props.text,
+        discoveredAgents: discoveredAgentEntries,
+        discoveredSkills: discoveredSkillEntries,
+      })}
     </div>
   );
 });

@@ -6,6 +6,10 @@ import {
   setDesktopComputerUseStatusQueryData,
 } from "../../lib/desktopComputerUseReactQuery";
 import { toastManager } from "../ui/toast";
+import {
+  getComputerUsePermissionsToastDescription,
+  getComputerUsePermissionsToastTitle,
+} from "./computerUsePlatformCopy";
 
 interface EnableComputerUseOptions {
   readonly queryClient: QueryClient;
@@ -24,6 +28,7 @@ export function enableComputerUseInBackground(options: EnableComputerUseOptions)
 
 async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions): Promise<void> {
   const bridge = window.desktopBridge;
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   if (!bridge) {
     return;
   }
@@ -68,10 +73,8 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
 
     toastManager.add({
       type: "info",
-      title: "Finish macOS permissions",
-      description:
-        permissions.message ??
-        "Approve Accessibility and Screen Recording to finish enabling Computer Use.",
+      title: getComputerUsePermissionsToastTitle(platform),
+      description: permissions.message ?? getComputerUsePermissionsToastDescription(platform),
     });
   } catch (error) {
     toastManager.add({

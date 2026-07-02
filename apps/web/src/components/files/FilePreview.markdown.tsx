@@ -1,4 +1,7 @@
+import { useMemo } from "react";
+
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
+import { formatYamlFrontmatterForPreview } from "~/utils/markdown";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { FilePreviewAnnotationComposer } from "./FilePreview.annotations";
 import type { CodeAnnotationDraft } from "./FilePreview";
@@ -49,10 +52,12 @@ export function FilePreviewMarkdownContent({
   cwd,
   onContextMenu,
 }: FilePreviewMarkdownContentProps) {
+  const renderedContents = useMemo(() => formatYamlFrontmatterForPreview(contents), [contents]);
+
   return (
     <div className="p-3" onContextMenu={onContextMenu}>
       <BaseMarkdown
-        text={contents}
+        text={renderedContents}
         cwd={cwd}
         isStreaming={false}
         className="file-preview-markdown"

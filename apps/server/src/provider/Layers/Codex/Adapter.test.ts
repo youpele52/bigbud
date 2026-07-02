@@ -69,22 +69,21 @@ validationLayer("CodexAdapterLive validation", (it) => {
       });
 
       const startInput = validationManager.startSessionImpl.mock.calls[0]?.[0];
-      assert.deepStrictEqual(startInput, {
-        provider: "codex",
-        threadId: asThreadId("thread-1"),
-        providerRuntimeExecutionTargetId: "local",
-        workspaceExecutionTargetId: "local",
-        executionTargetId: "local",
-        binaryPath: "codex",
-        model: "gpt-5.3-codex",
-        serviceTier: "fast",
-        runtimeMode: "full-access",
-        configArgs: startInput?.configArgs,
-        cleanupRemoteWorkspaceBridge: startInput?.cleanupRemoteWorkspaceBridge,
-      });
+      assert.equal(startInput?.provider, "codex");
+      assert.equal(startInput?.threadId, asThreadId("thread-1"));
+      assert.equal(startInput?.providerRuntimeExecutionTargetId, "local");
+      assert.equal(startInput?.workspaceExecutionTargetId, "local");
+      assert.equal(startInput?.executionTargetId, "local");
+      assert.equal(startInput?.binaryPath, "codex");
+      assert.equal(startInput?.model, "gpt-5.3-codex");
+      assert.equal(startInput?.serviceTier, "fast");
+      assert.equal(startInput?.runtimeMode, "full-access");
+      assert.deepStrictEqual(startInput?.expectedMcpServerNames, ["bigbud_orchestration"]);
       expect(startInput?.configArgs?.some((arg) => arg.includes("bigbud_orchestration"))).toBe(
         true,
       );
+      expect(Array.isArray(startInput?.dynamicTools)).toBe(true);
+      expect(typeof startInput?.dynamicToolCallHandler).toBe("function");
       expect(typeof startInput?.cleanupRemoteWorkspaceBridge).toBe("function");
     }),
   );
