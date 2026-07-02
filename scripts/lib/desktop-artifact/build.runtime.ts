@@ -8,6 +8,7 @@ import { ChildProcess } from "effect/unstable/process";
 
 import {
   BuildArch,
+  BuildPlatform,
   BuildScriptError,
   RepoRoot,
   commandOutputOptions,
@@ -106,9 +107,21 @@ export const stagePackagedOpencodeWindowsBinary = Effect.fn("stagePackagedOpenco
   },
 );
 
-export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(function* () {
+const WINDOWS_ELECTRON_BUILDER_VERSION = "26.15.3";
+
+export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(function* (
+  platform: typeof BuildPlatform.Type,
+) {
   const repoRoot = yield* RepoRoot;
   const path = yield* Path.Path;
+
+  if (platform === "win") {
+    return {
+      binary: "bunx",
+      fallback: true,
+      packageSpecifier: `electron-builder@${WINDOWS_ELECTRON_BUILDER_VERSION}`,
+    } as const;
+  }
 
   const localBinary = yield* Effect.try({
     try: () => {
@@ -129,13 +142,13 @@ export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBin
   });
 
   if (localBinary) {
-    return { binary: localBinary, fallback: false } as const;
+    return { binary: localBinary, fallback: false, packageSpecifier: undefined } as const;
   }
 
   yield* Effect.logWarning(
     "[desktop-artifact] Could not resolve local electron-builder; falling back to bunx. Add 'electron-builder' to apps/desktop devDependencies for reproducible builds.",
   );
-  return { binary: "bunx", fallback: true } as const;
+  return { binary: "bunx", fallback: true, packageSpecifier: "electron-builder" } as const;
 });
 
 export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(

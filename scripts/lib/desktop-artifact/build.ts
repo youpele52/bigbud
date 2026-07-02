@@ -298,7 +298,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  const electronBuilderResult = yield* resolveElectronBuilderBinary();
+  const electronBuilderResult = yield* resolveElectronBuilderBinary(options.platform);
   yield* Effect.log(
     `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
   );
@@ -308,7 +308,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
         env: buildEnv,
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
-      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`
+      })`bunx ${electronBuilderResult.packageSpecifier} ${platformConfig.cliFlag} --${options.arch} --publish never`
     : ChildProcess.make({
         cwd: stageAppDir,
         env: buildEnv,
