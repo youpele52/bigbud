@@ -25,6 +25,20 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("token-1");
   });
 
+  it("renders JavaScript-safe Pi bridge source", () => {
+    const source = renderPiOrchestrationBridgeSource({
+      host: "127.0.0.1",
+      port: 3773,
+      threadId: "thread-1",
+      token: "token-1",
+    });
+
+    expect(source).not.toContain("type ExtensionAPI");
+    expect(source).not.toContain(" as const");
+    expect(source).not.toContain("message: string");
+    expect(source).toContain("export default function bigbudOrchestrationBridge(pi) {");
+  });
+
   it("writes a Pi extension and per-thread auth record", async () => {
     const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), "bigbud-pi-orchestration-auth-"));
     const bridge = await createPiOrchestrationBridge({

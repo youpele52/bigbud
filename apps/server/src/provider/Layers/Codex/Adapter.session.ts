@@ -26,6 +26,10 @@ import {
   prepareThreadOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { mergeCodexConfigArgs } from "../../../orchestration-tools/orchestrationMcpBridge.ts";
+import {
+  createCodexThreadOrchestrationDynamicToolHandler,
+  createCodexThreadOrchestrationDynamicTools,
+} from "../../../orchestration-tools/codexThreadDynamicTools.ts";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
   appendAttachedImageOcrContents,
@@ -146,6 +150,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           }),
       });
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
+      const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools();
       const mergedConfigArgs = mergeCodexConfigArgs(
         remoteWorkspaceBridge?.configArgs,
         orchestrationConfig,
@@ -171,6 +176,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         binaryPath,
         ...(homePath ? { homePath } : {}),
         ...(mergedConfigArgs.length > 0 ? { configArgs: mergedConfigArgs } : {}),
+        expectedMcpServerNames: [orchestrationConfig.serverName],
+        dynamicTools: orchestrationDynamicTools,
+        dynamicToolCallHandler: createCodexThreadOrchestrationDynamicToolHandler(input.threadId),
         ...(cleanupBridge ? { cleanupRemoteWorkspaceBridge: cleanupBridge } : {}),
         ...(remoteWorkspaceBridge?.promptPrefix
           ? { developerInstructions: remoteWorkspaceBridge.promptPrefix }

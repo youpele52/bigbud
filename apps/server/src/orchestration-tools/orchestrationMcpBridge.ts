@@ -28,6 +28,7 @@ export interface ThreadOrchestrationBridge {
 
 export interface CodexOrchestrationBridgeConfig {
   readonly configArgs: ReadonlyArray<string>;
+  readonly serverName: string;
 }
 
 export interface ClaudeOrchestrationBridgeConfig {
@@ -99,6 +100,7 @@ export function buildCodexOrchestrationBridgeConfig(
   bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath" | "bridgeDir">,
 ): CodexOrchestrationBridgeConfig {
   return {
+    serverName: bridge.serverName,
     configArgs: [
       "-c",
       `mcp_servers.${bridge.serverName}.command=${quoteTomlString(process.execPath)}`,

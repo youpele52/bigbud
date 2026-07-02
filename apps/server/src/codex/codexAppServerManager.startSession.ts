@@ -38,6 +38,131 @@ export interface StartSessionOps {
   readonly stopSession: (threadId: ThreadId) => void;
 }
 
+const MCP_SERVER_STATUS_RETRY_DELAY_MS = 150;
+const MCP_SERVER_STATUS_TIMEOUT_MS = 4_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readMcpServerStatusEntries(value: unknown): Array<Record<string, unknown>> {
+  const entries: Array<Record<string, unknown>> = [];
+
+  const visit = (candidate: unknown) => {
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) {
+        visit(item);
+      }
+      return;
+    }
+
+    if (!candidate || typeof candidate !== "object") {
+      return;
+    }
+
+    const record = candidate as Record<string, unknown>;
+    if (typeof record.name === "string") {
+      entries.push(record);
+    }
+
+    for (const nested of Object.values(record)) {
+      visit(nested);
+    }
+  };
+
+  visit(value);
+  return entries;
+}
+
+export function hasReadyMcpServers(
+  value: unknown,
+  expectedServerNames: ReadonlyArray<string>,
+): boolean {
+  if (expectedServerNames.length === 0) {
+    return true;
+  }
+
+  const expected = new Set(expectedServerNames);
+  const ready = new Set<string>();
+
+  for (const entry of readMcpServerStatusEntries(value)) {
+    const name = typeof entry.name === "string" ? entry.name : undefined;
+    if (!name || !expected.has(name)) {
+      continue;
+    }
+
+    const tools = Array.isArray(entry.tools) ? entry.tools : undefined;
+    if (tools && tools.length > 0) {
+      ready.add(name);
+      continue;
+    }
+
+    const startupStatus =
+      typeof entry.startupStatus === "string"
+        ? entry.startupStatus.toLowerCase()
+        : typeof entry.status === "string"
+          ? entry.status.toLowerCase()
+          : typeof entry.state === "string"
+            ? entry.state.toLowerCase()
+            : undefined;
+    if (
+      startupStatus === "ready" ||
+      startupStatus === "running" ||
+      startupStatus === "connected" ||
+      startupStatus === "ok" ||
+      startupStatus === "completed"
+    ) {
+      ready.add(name);
+    }
+  }
+
+  return expectedServerNames.every((name) => ready.has(name));
+}
+
+export async function waitForMcpServersReady(
+  context: CodexSessionContext,
+  ops: Pick<StartSessionOps, "emitLifecycleEvent" | "sendRequest">,
+  expectedServerNames: ReadonlyArray<string>,
+): Promise<void> {
+  if (expectedServerNames.length === 0) {
+    return;
+  }
+
+  const deadline = Date.now() + MCP_SERVER_STATUS_TIMEOUT_MS;
+  do {
+    let status: unknown;
+    try {
+      status = await ops.sendRequest(
+        context,
+        "mcpServerStatus/list",
+        {
+          detail: "toolsAndAuthOnly",
+          cursor: null,
+          limit: 100,
+        },
+        1_000,
+      );
+    } catch (error) {
+      ops.emitLifecycleEvent(
+        context,
+        "session/mcpStatusUnavailable",
+        error instanceof Error ? error.message : "Codex MCP server status probe failed.",
+      );
+      return;
+    }
+    if (hasReadyMcpServers(status, expectedServerNames)) {
+      return;
+    }
+    await sleep(MCP_SERVER_STATUS_RETRY_DELAY_MS);
+  } while (Date.now() < deadline);
+
+  ops.emitLifecycleEvent(
+    context,
+    "session/mcpStatusPending",
+    `Codex MCP servers were not ready before thread start: ${expectedServerNames.join(", ")}.`,
+  );
+}
+
 export async function startSession(
   input: CodexAppServerStartSessionInput,
   ops: StartSessionOps,
@@ -89,6 +214,9 @@ export async function startSession(
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
       nextRequestId: 1,
+      ...(input.dynamicToolCallHandler
+        ? { dynamicToolCallHandler: input.dynamicToolCallHandler }
+        : {}),
       ...(input.cleanupRemoteWorkspaceBridge
         ? { cleanupRemoteWorkspaceBridge: input.cleanupRemoteWorkspaceBridge }
         : {}),
@@ -101,8 +229,8 @@ export async function startSession(
     ops.emitLifecycleEvent(context, "session/connecting", "Starting codex app-server");
 
     await ops.sendRequest(context, "initialize", buildCodexInitializeParams());
-
     ops.writeMessage(context, { method: "initialized" });
+    await waitForMcpServersReady(context, ops, input.expectedMcpServerNames ?? []);
     try {
       const modelListResponse = await ops.sendRequest(context, "model/list", {});
       console.log("codex model/list response", modelListResponse);
@@ -139,6 +267,9 @@ export async function startSession(
     const threadStartParams = {
       ...sessionOverrides,
       experimentalRawEvents: false,
+      ...(input.dynamicTools && input.dynamicTools.length > 0
+        ? { dynamicTools: input.dynamicTools }
+        : {}),
     };
     const resumeThreadId = readResumeThreadId(input);
     ops.emitLifecycleEvent(

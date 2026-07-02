@@ -67,10 +67,9 @@ export function renderThreadOrchestrationConfigLiteral(
   return JSON.stringify(config, null, 2);
 }
 
-export function renderCallOrchestrationToolSource(typed: boolean): string {
-  const payloadType = typed ? " as { readonly message?: string; readonly title?: string }" : "";
+export function renderCallOrchestrationToolSource(): string {
   return [
-    "async function callOrchestrationTool(body: Record<string, unknown>) {",
+    "async function callOrchestrationTool(body) {",
     `  const response = await fetch(\`http://\${CONFIG.host}:\${CONFIG.port}${THREAD_ORCHESTRATION_API_PATH}\`, {`,
     "    method: 'POST',",
     "    headers: {",
@@ -79,7 +78,7 @@ export function renderCallOrchestrationToolSource(typed: boolean): string {
     "    },",
     "    body: JSON.stringify(body),",
     "  });",
-    `  const payload = (await response.json().catch(() => ({})))${payloadType};`,
+    "  const payload = await response.json().catch(() => ({}));",
     "  if (!response.ok) {",
     "    const message =",
     "      typeof payload?.message === 'string'",

@@ -11,6 +11,7 @@ import {
   setThreadOrchestrationToolDispatcher,
 } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
+import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 
 const THREAD_ID = "thread-http-computer-use";
 const THREAD_TOOL_TOKEN = "thread-tool-token-http-computer-use";
@@ -164,6 +165,82 @@ describe("thread orchestration tools route", () => {
 
         assert.equal(response.status, 401);
         expect(rename).not.toHaveBeenCalled();
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+
+    it.effect("allows get_status to inspect a different target thread as the caller", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const tempBaseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "thread-tools-status-target-",
+        });
+        const { stateDir } = yield* deriveServerPaths(tempBaseDir, undefined);
+        const getStatus = vi.fn(({ threadId }: { callerThreadId: ThreadId; threadId: ThreadId }) =>
+          Effect.succeed({
+            threadId,
+            title: "Other Thread",
+            workflowStatus: "idle",
+            isAgentActive: false,
+            isWorkflowComplete: false,
+            sessionStatus: null,
+            latestTurnState: null,
+            latestTurnCompletedAt: null,
+            hasPendingApprovals: false,
+            hasPendingUserInput: false,
+            hasActionableProposedPlan: false,
+            lastAssistantExcerpt: null,
+            updatedAt: new Date().toISOString(),
+          } satisfies ThreadWorkflowStatusSnapshot),
+        );
+
+        yield* Effect.promise(() =>
+          writeThreadOrchestrationToolAuth({
+            stateDir,
+            threadId: THREAD_ID,
+            token: THREAD_TOOL_TOKEN,
+          }),
+        );
+
+        setThreadOrchestrationToolDispatcher({
+          rename: () => Effect.succeed({ title: "Renamed" }),
+          archive: () => Effect.succeed({ archived: true as const }),
+          getStatus,
+          computerUse: () =>
+            Effect.succeed({
+              surface: "browser" as const,
+              action: "capture",
+              summary: "Unused",
+            }),
+        });
+
+        yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
+
+        const url = yield* getHttpServerUrl("/api/internal/thread-tools");
+        const response = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-bigbud-thread-tool-token": THREAD_TOOL_TOKEN,
+            },
+            body: JSON.stringify({
+              action: "get_status",
+              threadId: "thread-other",
+            }),
+          }),
+        );
+
+        assert.equal(response.status, 200);
+        const body = (yield* Effect.promise(() => response.json())) as {
+          ok: boolean;
+          status?: { threadId?: string };
+        };
+        expect(body.ok).toBe(true);
+        expect(body.status?.threadId).toBe("thread-other");
+        expect(getStatus).toHaveBeenCalledWith({
+          callerThreadId: ThreadId.makeUnsafe(THREAD_ID),
+          threadId: ThreadId.makeUnsafe("thread-other"),
+        });
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
     );
 
