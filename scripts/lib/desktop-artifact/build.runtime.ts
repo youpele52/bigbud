@@ -113,8 +113,8 @@ export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBin
   const localBinary = yield* Effect.try({
     try: () => {
       const require = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
-      const entry = require.resolve("electron-builder");
-      const pkgDir = dirname(entry);
+      const packageJsonPath = require.resolve("electron-builder/package.json");
+      const pkgDir = dirname(packageJsonPath);
       const cliPath = path.join(pkgDir, "cli.js");
       if (existsSync(cliPath)) {
         return cliPath;
