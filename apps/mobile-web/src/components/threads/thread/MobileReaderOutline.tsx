@@ -35,26 +35,26 @@ export function MobileReaderOutline({
   }
 
   return (
-    <div ref={menuRef} className="pointer-events-auto relative">
+    <div ref={menuRef} className="pointer-events-auto relative flex items-center justify-center">
       <button
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Open transcript outline"
-        className="flex flex-col items-center justify-center gap-1 rounded-md px-1 py-2 outline-none transition-colors active:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex flex-col items-end justify-center gap-px rounded-md px-1 py-1 outline-none transition-colors active:bg-accent/25 focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setOpen((current) => !current)}
         type="button"
       >
         {anchors.map((anchor) => (
           <span
             key={anchor.messageId}
-            className="h-0.5 w-4 rounded-full bg-muted-foreground/35 data-[current=true]:bg-foreground"
+            className="h-0.5 w-3 rounded-full bg-muted-foreground/28 data-[current=true]:bg-foreground"
             data-current={anchor.messageId === currentAnchorMessageId}
           />
         ))}
       </button>
       {open ? (
         <div
-          className="absolute top-1/2 right-full z-50 mr-2 max-h-[50dvh] w-56 -translate-y-1/2 overflow-y-auto overscroll-y-contain rounded-xl border border-border bg-popover p-1.5 shadow-lg"
+          className="absolute top-1/2 right-full z-50 mr-3 max-h-[calc((100dvh-11rem-env(safe-area-inset-bottom))/3)] w-56 -translate-y-1/2 overflow-y-auto overscroll-y-contain rounded-xl border border-border/70 bg-background/96 p-1.5 shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92"
           role="menu"
         >
           {anchors.map((anchor) => {
@@ -64,9 +64,9 @@ export function MobileReaderOutline({
                 key={anchor.messageId}
                 aria-current={isCurrent ? "location" : undefined}
                 className={cn(
-                  "block h-8 w-full rounded-lg px-2 text-left text-xs transition-colors",
+                  "block min-h-7 w-full rounded-lg px-2 text-left text-sm transition-colors",
                   isCurrent
-                    ? "bg-accent font-medium text-foreground"
+                    ? "bg-accent/85 font-medium text-foreground active:bg-accent"
                     : "text-muted-foreground active:bg-accent active:text-foreground",
                 )}
                 onClick={() => {
@@ -76,7 +76,7 @@ export function MobileReaderOutline({
                 role="menuitem"
                 type="button"
               >
-                <span className="line-clamp-1">{anchor.label}</span>
+                <span className="line-clamp-2">{anchor.label}</span>
               </button>
             );
           })}

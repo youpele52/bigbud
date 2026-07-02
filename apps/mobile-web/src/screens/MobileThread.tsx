@@ -597,7 +597,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
             verb={workingVerb}
           />
         ) : null}
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-7 items-center justify-center">
+        <div className="pointer-events-none absolute top-0 right-0 bottom-[calc(11rem+env(safe-area-inset-bottom))] z-20 flex w-7 items-center justify-center">
           <MobileReaderOutline
             anchors={userTurnAnchors}
             currentAnchorMessageId={readerPosition.currentAnchorMessageId}
