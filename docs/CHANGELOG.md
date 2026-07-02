@@ -16,6 +16,27 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Added a **setup guide link** next to the "Enable mobile remote control" switch in **Settings → Mobile Remote** that opens the documentation at bigbud.app/docs for step-by-step pairing instructions.
 
+### Agent & Skill Discovery
+
+- Discovery now **auto-refreshes live** across all supported provider roots (Codex, Claude, Copilot, Cursor, OpenCode, Pi, Devin, KiloCode, bigbud), so adding, editing, or removing agent/skill files is picked up without restarting the app.
+- Added a **periodic fallback discovery rescan** to keep catalogs current even if an underlying filesystem watch event is missed.
+
+### Chat Mentions
+
+- Agent and skill mentions in **user message bubbles** are now openable directly from the timeline when a source file can be resolved.
+- Mention source resolution is now **ambiguity-safe** — if multiple possible source files match the same mention, bigbud avoids opening the wrong file.
+
+### Orchestration Thread Tools
+
+- Hardened Codex and OpenCode thread-tool wiring so rename, archive, status, and computer/browser actions stay bound to the correct active thread context across provider transports.
+- Codex sessions now support a **dynamic tool fallback path** for thread orchestration calls, reducing dependence on MCP namespace discovery availability during startup.
+- Thread-tools authorization now better separates **caller-thread authentication** from **target-thread status lookup** for `get_status`, while keeping mutation operations strictly scoped.
+- Updated generated OpenCode and Pi orchestration bridge sources to emit **runtime-safe JavaScript syntax** in executed bridge files.
+
+### Markdown File Viewer
+
+- Markdown preview in the Files panel now **formats YAML frontmatter** for readable in-app display — `---` delimiters render as horizontal rules, YAML keys are boldened, and indentation (non-breaking spaces) preserves the nested structure so metadata is visible without looking like headings.
+
 ## v0.1.649 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)
