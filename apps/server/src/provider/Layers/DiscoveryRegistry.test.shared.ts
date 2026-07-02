@@ -4,7 +4,7 @@ import { Effect, FileSystem, Layer, Path, Stream } from "effect";
 
 import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
-import { DiscoveryRegistry } from "../Services/DiscoveryRegistry";
+import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/DiscoveryRegistry";
 import { DiscoveryRegistryLive } from "./DiscoveryRegistry";
 
 const makeStubSettingsLayer = () =>
@@ -16,7 +16,7 @@ const makeStubSettingsLayer = () =>
     streamChanges: Stream.empty,
   });
 
-const makeRegistryLayer = (cwd: string) =>
+export const makeRegistryLayer = (cwd: string) =>
   DiscoveryRegistryLive.pipe(
     Layer.provideMerge(makeStubSettingsLayer()),
     Layer.provideMerge(ServerConfig.layerTest(cwd, { prefix: "discovery-registry-test-" })),
@@ -29,10 +29,25 @@ export const getCatalog = (cwd: string) =>
     return yield* registry.getCatalog;
   }).pipe(Effect.provide(makeRegistryLayer(cwd)));
 
+export const withRegistry = <A>(
+  cwd: string,
+  use: (registry: DiscoveryRegistryShape) => Effect.Effect<A>,
+) =>
+  Effect.gen(function* () {
+    const registry = yield* DiscoveryRegistry;
+    return yield* use(registry);
+  }).pipe(Effect.provide(makeRegistryLayer(cwd)));
+
 export const writeFile = (filePath: string, content: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     yield* fs.makeDirectory(path.dirname(filePath), { recursive: true });
     yield* fs.writeFileString(filePath, content);
+  });
+
+export const removePath = (targetPath: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    yield* fs.remove(targetPath, { recursive: true }).pipe(Effect.catch(() => Effect.void));
   });

@@ -16,6 +16,7 @@ import {
   buildDiscoveryFileDescriptors,
   type DiscoveryFileDescriptor,
 } from "./DiscoveryRegistry.descriptors.ts";
+import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
 
 interface ParsedDiscoveryFileEntry {
   readonly kind: DiscoveryFileDescriptor["kind"];
@@ -330,6 +331,53 @@ const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive
     .filter(predicate);
 });
 
+const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(function* (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  rawPath: string,
+) {
+  // Avoid recursively watching broad system roots for optional descriptors.
+  if (rawPath.startsWith("/etc/")) {
+    const exists = yield* fs.exists(rawPath).pipe(
+      Effect.tapError((error) =>
+        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+          path: rawPath,
+          error: String(error),
+        }),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
+    return exists ? rawPath : null;
+  }
+
+  const candidates = [rawPath];
+  const parentPath = path.dirname(rawPath);
+  if (parentPath !== rawPath) {
+    candidates.push(parentPath);
+  }
+  const grandParentPath = path.dirname(parentPath);
+  if (grandParentPath !== parentPath) {
+    candidates.push(grandParentPath);
+  }
+
+  for (const currentPath of candidates) {
+    const exists = yield* fs.exists(currentPath).pipe(
+      Effect.tapError((error) =>
+        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+          path: currentPath,
+          error: String(error),
+        }),
+      ),
+      Effect.orElseSucceed(() => false),
+    );
+    if (exists) {
+      return currentPath;
+    }
+  }
+
+  return null;
+});
+
 export const haveDiscoveryChanged = (
   previousCatalog: ServerDiscoveryCatalog,
   nextCatalog: ServerDiscoveryCatalog,
@@ -362,6 +410,26 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         cwd: config.cwd,
       }),
     );
+
+  const resolveWatchTargets = () =>
+    Effect.gen(function* () {
+      const [fileDescriptors, configDescriptors] = yield* Effect.all(
+        [resolveKnownFileDescriptors(), resolveConfigDescriptors()],
+        { concurrency: "unbounded" },
+      );
+      const candidates = [
+        ...fileDescriptors.map((entry) => entry.path),
+        ...configDescriptors.map((entry) => entry.path),
+      ];
+      const existingPaths = yield* Effect.forEach(
+        candidates,
+        (candidate) => resolveExistingWatchPath(fs, path, candidate),
+        { concurrency: "unbounded" },
+      );
+      return [
+        ...new Set(existingPaths.filter((entry): entry is string => entry !== null)),
+      ].toSorted((left, right) => left.localeCompare(right));
+    });
 
   const scanDiscoveryFiles = () =>
     Effect.gen(function* () {
@@ -468,6 +536,25 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   yield* Stream.runForEach(serverSettings.streamChanges, () => syncCatalog()).pipe(
     Effect.forkScoped,
   );
+  const watchTargets = yield* resolveWatchTargets();
+  yield* Effect.logInfo(
+    `[DiscoveryRegistry] watching ${watchTargets.length} roots for auto-discovery changes`,
+  );
+  yield* Effect.forEach(
+    watchTargets,
+    (watchPath) =>
+      Stream.runForEach(createDiscoveryWatchStream(watchPath), () => syncCatalog()).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: watch stream failed", {
+            watchPath,
+            error: String(error),
+          }),
+        ),
+        Effect.catch(() => Effect.void),
+        Effect.forkScoped,
+      ),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.asVoid);
 
   return {
     getCatalog: syncCatalog({ publish: false }),
