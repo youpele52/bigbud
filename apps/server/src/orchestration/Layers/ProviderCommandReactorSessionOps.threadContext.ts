@@ -48,6 +48,7 @@ export function prependThreadContextToProviderInput(input: {
     "To rename the current thread, call the `rename_thread` tool with the new title.",
     "To archive the current thread, call the `archive_thread` tool.",
     "To check whether another thread's agent is still active, call `get_thread_status` with that thread's ID.",
+    "If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with `rename_thread`, `archive_thread`, or `get_thread_status` for this current thread.",
     ...computerUseLines,
     "You must not delete threads.",
   ].join("\n");

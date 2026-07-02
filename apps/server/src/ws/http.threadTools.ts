@@ -81,6 +81,12 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
 
     if (body.action === "rename") {
+      if (body.threadId === undefined) {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: "Current thread ID is required.",
+        });
+      }
       const title = body.title?.trim() ?? "";
       const result = yield* dispatcher.rename({ threadId, title }).pipe(
         Effect.mapError(
@@ -147,6 +153,12 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       return yield* HttpServerResponse.json({ ok: true, result });
     }
 
+    if (body.threadId === undefined) {
+      return yield* new ThreadToolRequestError({
+        status: 400,
+        message: "Current thread ID is required.",
+      });
+    }
     yield* dispatcher.archive({ threadId }).pipe(
       Effect.mapError(
         (error) =>

@@ -99,5 +99,138 @@ describe("thread orchestration tools route", () => {
         expect(getThreadOrchestrationToolDispatcher()?.computerUse).toBe(computerUse);
       }).pipe(Effect.provide(NodeHttpServer.layerTest)),
     );
+
+    it.effect("rejects thread tool requests when the requested thread differs from the token", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const tempBaseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "thread-tools-auth-mismatch-",
+        });
+        const { stateDir } = yield* deriveServerPaths(tempBaseDir, undefined);
+        const rename = vi.fn(() => Effect.succeed({ title: "Should not rename" }));
+
+        yield* Effect.promise(() =>
+          writeThreadOrchestrationToolAuth({
+            stateDir,
+            threadId: THREAD_ID,
+            token: THREAD_TOOL_TOKEN,
+          }),
+        );
+
+        setThreadOrchestrationToolDispatcher({
+          rename,
+          archive: () => Effect.succeed({ archived: true as const }),
+          getStatus: () =>
+            Effect.succeed({
+              threadId: ThreadId.makeUnsafe(THREAD_ID),
+              title: "Thread",
+              workflowStatus: "idle",
+              isAgentActive: false,
+              isWorkflowComplete: false,
+              sessionStatus: null,
+              latestTurnState: null,
+              latestTurnCompletedAt: null,
+              hasPendingApprovals: false,
+              hasPendingUserInput: false,
+              hasActionableProposedPlan: false,
+              lastAssistantExcerpt: null,
+              updatedAt: new Date().toISOString(),
+            }),
+          computerUse: () =>
+            Effect.succeed({
+              surface: "browser" as const,
+              action: "capture",
+              summary: "Unused",
+            }),
+        });
+
+        yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
+
+        const url = yield* getHttpServerUrl("/api/internal/thread-tools");
+        const response = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-bigbud-thread-tool-token": THREAD_TOOL_TOKEN,
+            },
+            body: JSON.stringify({
+              action: "rename",
+              threadId: "thread-other",
+              title: "Wrong thread",
+            }),
+          }),
+        );
+
+        assert.equal(response.status, 401);
+        expect(rename).not.toHaveBeenCalled();
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
+
+    it.effect("requires rename requests to include the current thread ID", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const tempBaseDir = yield* fileSystem.makeTempDirectoryScoped({
+          prefix: "thread-tools-rename-thread-id-",
+        });
+        const { stateDir } = yield* deriveServerPaths(tempBaseDir, undefined);
+        const rename = vi.fn(() => Effect.succeed({ title: "Should not rename" }));
+
+        yield* Effect.promise(() =>
+          writeThreadOrchestrationToolAuth({
+            stateDir,
+            threadId: THREAD_ID,
+            token: THREAD_TOOL_TOKEN,
+          }),
+        );
+
+        setThreadOrchestrationToolDispatcher({
+          rename,
+          archive: () => Effect.succeed({ archived: true as const }),
+          getStatus: () =>
+            Effect.succeed({
+              threadId: ThreadId.makeUnsafe(THREAD_ID),
+              title: "Thread",
+              workflowStatus: "idle",
+              isAgentActive: false,
+              isWorkflowComplete: false,
+              sessionStatus: null,
+              latestTurnState: null,
+              latestTurnCompletedAt: null,
+              hasPendingApprovals: false,
+              hasPendingUserInput: false,
+              hasActionableProposedPlan: false,
+              lastAssistantExcerpt: null,
+              updatedAt: new Date().toISOString(),
+            }),
+          computerUse: () =>
+            Effect.succeed({
+              surface: "browser" as const,
+              action: "capture",
+              summary: "Unused",
+            }),
+        });
+
+        yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
+
+        const url = yield* getHttpServerUrl("/api/internal/thread-tools");
+        const response = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-bigbud-thread-tool-token": THREAD_TOOL_TOKEN,
+            },
+            body: JSON.stringify({
+              action: "rename",
+              title: "Missing thread ID",
+            }),
+          }),
+        );
+
+        assert.equal(response.status, 400);
+        expect(rename).not.toHaveBeenCalled();
+      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    );
   });
 });
