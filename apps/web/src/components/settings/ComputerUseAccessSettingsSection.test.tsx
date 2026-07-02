@@ -35,6 +35,13 @@ import { ComputerUseAccessSettingsSection } from "./ComputerUseAccessSettingsSec
 
 describe("ComputerUseAccessSettingsSection", () => {
   beforeEach(() => {
+    Object.defineProperty(Navigator.prototype, "platform", {
+      configurable: true,
+      value: "MacIntel",
+    });
+  });
+
+  beforeEach(() => {
     mockSettings.computerUseEnabled = false;
     mockNativeApi.present = true;
   });
@@ -57,12 +64,28 @@ describe("ComputerUseAccessSettingsSection", () => {
     expect(markup).toContain("Action timeout");
   });
 
-  it("shows the macOS permissions row in the desktop shell", () => {
+  it("shows the macOS permissions row in the desktop shell on macOS", () => {
     mockSettings.computerUseEnabled = true;
 
     const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
 
     expect(markup).toContain("macOS permissions");
     expect(markup).toContain("Request access");
+  });
+
+  it("uses generic desktop wording on non-mac platforms", () => {
+    Object.defineProperty(Navigator.prototype, "platform", {
+      configurable: true,
+      value: "Linux x86_64",
+    });
+    mockSettings.computerUseEnabled = true;
+
+    const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
+
+    expect(markup).toContain("Desktop permissions");
+    expect(markup).toContain("native desktop apps");
+    expect(markup).not.toContain("macOS permissions");
+    expect(markup).not.toContain("Calendar and Reminders");
+    expect(markup).not.toContain("System Settings");
   });
 });

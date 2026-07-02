@@ -2,6 +2,20 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.650 (2 July, 2026)
+
+### Thread Reader
+
+- Redesigned the **transcript outline** — click any segment in the dot strip to jump directly to that turn, or double-click to open a full menu of all user turns for quick navigation. Hovering over a segment now shows a label preview tooltip, and each segment's width adapts based on proximity to the cursor and whether it represents the current turn, making it easier to target the right spot.
+
+### Computer Use (Desktop & Browser Automation)
+
+- Computer Use permission dialogs, settings descriptions, and toast notifications now use **platform-aware copy** — the text automatically reflects macOS, Windows, or Linux instead of always saying "macOS". The macOS-specific "System Settings" permission-manager row is hidden on non-mac platforms.
+
+### Mobile Remote Companion
+
+- Added a **setup guide link** next to the "Enable mobile remote control" switch in **Settings → Mobile Remote** that opens the documentation at bigbud.app/docs for step-by-step pairing instructions.
+
 ## v0.1.649 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)

@@ -24,6 +24,14 @@ import {
 import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { enableComputerUseInBackground } from "../computer-use/computerUseEnable";
+import {
+  getComputerUseLimitedCapabilityDescription,
+  getComputerUsePermissionsDescription,
+  getComputerUsePermissionsRequestFallback,
+  getComputerUsePermissionsTitle,
+  getComputerUseSettingsDescription,
+  isMacComputerUsePlatform,
+} from "../computer-use/computerUsePlatformCopy";
 
 function formatStatusLabel(source: string | undefined): string {
   switch (source) {
@@ -84,6 +92,8 @@ function PermissionStatusGrid({
 
 export function ComputerUseAccessSettingsSection() {
   const isDesktop = Boolean(readNativeApi());
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+  const isMac = isMacComputerUsePlatform(platform);
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const queryClient = useQueryClient();
@@ -157,9 +167,7 @@ export function ComputerUseAccessSettingsSection() {
       toastManager.add({
         type: nextStatus.granted ? "success" : "info",
         title: nextStatus.granted ? "Desktop permissions granted" : "Desktop permissions needed",
-        description:
-          nextStatus.message ??
-          "macOS may still require approval in System Settings for Accessibility and Screen Recording.",
+        description: nextStatus.message ?? getComputerUsePermissionsRequestFallback(platform),
       });
     },
     onError: (error) => {
@@ -220,7 +228,7 @@ export function ComputerUseAccessSettingsSection() {
     <SettingsSection title="Computer Use" icon={<BotIcon className="size-3" />}>
       <SettingsRow
         title="Enable desktop automation"
-        description="Allow agents to control native macOS apps such as Calendar and Reminders, capture screens, and interact through accessibility."
+        description={getComputerUseSettingsDescription(platform)}
         control={
           <Switch
             checked={settings.computerUseEnabled}
@@ -233,15 +241,15 @@ export function ComputerUseAccessSettingsSection() {
       {!settings.computerUseEnabled ? (
         <SettingsRow
           title="Limited capability"
-          description="With desktop automation disabled, agents cannot open or read native apps like Calendar or Reminders. Browser automation inside bigbud may still work."
+          description={getComputerUseLimitedCapabilityDescription(platform)}
         />
       ) : null}
 
       <ComputerUseLimitSettingsRows settings={settings} />
 
       <SettingsRow
-        title="macOS permissions"
-        description="Desktop automation requires Accessibility and Screen Recording access. macOS will prompt when permissions are first requested."
+        title={getComputerUsePermissionsTitle(platform)}
+        description={getComputerUsePermissionsDescription(platform)}
         status={
           permissionsQuery.isLoading ? (
             "Checking permission status."
@@ -326,7 +334,7 @@ export function ComputerUseAccessSettingsSection() {
         }
       />
 
-      {/mac/i.test(navigator.platform) ? (
+      {isMac ? (
         <SettingsRow
           title="System Settings"
           description="Manage Accessibility and Screen Recording permissions in macOS System Settings."

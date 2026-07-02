@@ -13,6 +13,10 @@ import {
 import { Button } from "../ui/button";
 import { useUpdateSettings } from "../../hooks/useSettings";
 import { enableComputerUseInBackground } from "./computerUseEnable";
+import {
+  getComputerUseDialogDescription,
+  getComputerUsePermissionPromptDescription,
+} from "./computerUsePlatformCopy";
 
 interface ComputerUsePermissionDialogProps {
   open: boolean;
@@ -23,6 +27,7 @@ export function ComputerUsePermissionDialog({
   open,
   onOpenChange,
 }: ComputerUsePermissionDialogProps) {
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   const { updateSettings } = useUpdateSettings();
   const queryClient = useQueryClient();
 
@@ -57,19 +62,13 @@ export function ComputerUsePermissionDialog({
             <BotIcon className="size-4 text-primary" />
             Enable Computer Use
           </DialogTitle>
-          <DialogDescription>
-            bigbud can automate native macOS apps and the in-app browser so agents can help with
-            tasks like checking Calendar, reading Reminders, and interacting with other desktop
-            software.
-          </DialogDescription>
+          <DialogDescription>{getComputerUseDialogDescription()}</DialogDescription>
         </DialogHeader>
 
         <DialogPanel className="space-y-4 text-xs text-muted-foreground">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">Allow computer use</p>
-            <p>
-              Requires Accessibility and Screen Recording. macOS will prompt you after you continue.
-            </p>
+            <p>{getComputerUsePermissionPromptDescription(platform)}</p>
           </div>
 
           <div className="space-y-1">

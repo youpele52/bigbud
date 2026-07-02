@@ -50,6 +50,10 @@ function getTestWindow(): Window & typeof globalThis & { desktopBridge?: unknown
 describe("enableComputerUseInBackground", () => {
   beforeEach(() => {
     addToast.mockReset();
+    Object.defineProperty(Navigator.prototype, "platform", {
+      configurable: true,
+      value: "MacIntel",
+    });
   });
 
   it("enables immediately and skips reinstall when the runtime is already available", async () => {
@@ -120,6 +124,40 @@ describe("enableComputerUseInBackground", () => {
       type: "info",
       title: "Setting up Computer Use",
       description: "bigbud is preparing desktop automation in the background.",
+    });
+  });
+
+  it("uses a generic permissions toast outside macOS", async () => {
+    Object.defineProperty(Navigator.prototype, "platform", {
+      configurable: true,
+      value: "Linux x86_64",
+    });
+
+    const queryClient = new QueryClient();
+    const updateSettings = vi.fn();
+    const requestPermissions = vi.fn().mockResolvedValue({
+      runtimeAvailable: true,
+      granted: false,
+      message: null,
+      permissions: [],
+    });
+
+    getTestWindow().desktopBridge = makeDesktopBridge({
+      getComputerUseRuntimeStatus: async () => managedRuntime,
+      requestComputerUsePermissions: requestPermissions,
+    });
+
+    enableComputerUseInBackground({ queryClient, updateSettings });
+
+    await vi.waitFor(() => {
+      expect(requestPermissions).toHaveBeenCalledTimes(1);
+    });
+
+    expect(addToast).toHaveBeenCalledWith({
+      type: "info",
+      title: "Finish desktop permissions",
+      description:
+        "Approve any operating system permission prompts to finish enabling Computer Use.",
     });
   });
 });
