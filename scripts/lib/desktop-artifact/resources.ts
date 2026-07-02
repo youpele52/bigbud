@@ -265,17 +265,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       macConfig.identity = null;
     }
     buildConfig.mac = macConfig;
-
-    // Work around electron-builder/dmgbuild bug where DMG size is underestimated
-    // for large apps, causing ditto to silently skip files during DMG creation.
-    // The final DMG is still shrunk to the minimum size after copying, so the
-    // compressed artifact size does not increase.
-    // https://github.com/electron-userland/electron-builder/issues/9706
-    if (target === "dmg") {
-      buildConfig.dmg = {
-        size: "3g",
-      };
-    }
   }
 
   if (platform === "linux") {
