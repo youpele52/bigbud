@@ -576,9 +576,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       ),
     { concurrency: "unbounded" },
   ).pipe(Effect.asVoid);
-  yield* Effect.forkScoped(
-    Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)),
-  );
+  yield* Effect.forkScoped(Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)));
 
   return {
     getCatalog: syncCatalog({ publish: false }),
