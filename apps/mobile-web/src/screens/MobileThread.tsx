@@ -25,6 +25,7 @@ import {
   resolveMobileUserInputAnswers,
 } from "../components/threads/thread/composer/MobileComposer";
 import { MobileMessages } from "../components/threads/thread/MobileMessages";
+import { MobileReaderOutline } from "../components/threads/thread/MobileReaderOutline";
 import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
@@ -48,6 +49,12 @@ import {
   resolveThreadWorkspaceRoot,
 } from "../lib/mobileModels";
 import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
+import {
+  deriveMobileReaderPosition,
+  deriveUserTurnAnchorsFromThreadMessages,
+  readerPositionEquals,
+  type ChatReaderPosition,
+} from "../logic/mobileReaderPosition.logic";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useMobileSessionState } from "../context/MobileSessionContext";
@@ -88,6 +95,10 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const [isRespondingToUserInput, setIsRespondingToUserInput] = useState(false);
   const [pendingModelSelection, setPendingModelSelection] = useState<ModelSelection | null>(null);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
+  const [readerPosition, setReaderPosition] = useState<ChatReaderPosition>({
+    currentAnchorMessageId: null,
+    visibleMessageIds: [],
+  });
 
   const messagesScrollRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
@@ -147,7 +158,11 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   );
   const activePendingApproval = approvals[0] ?? null;
   const activePendingUserInput = !activePendingApproval ? (pendingUserInputs[0] ?? null) : null;
-  const isRunning = thread?.session?.status === "running";
+  const isRunning =
+    thread?.session?.status === "running" &&
+    (thread.session.activeTurnId === null ||
+      thread.latestTurn?.turnId !== thread.session.activeTurnId ||
+      thread.latestTurn.completedAt === null);
   const showWorkingIndicator =
     isRunning && activePendingApproval === null && activePendingUserInput === null;
   const { workingVerb, nowIso } = useMobileWorkingState(showWorkingIndicator);
@@ -220,6 +235,47 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     }
   }, [isRunning, thread]);
 
+  const userTurnAnchors = useMemo(
+    () => deriveUserTurnAnchorsFromThreadMessages(thread?.messages ?? []),
+    [thread?.messages],
+  );
+
+  useLayoutEffect(() => {
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer || userTurnAnchors.length === 0) {
+      setReaderPosition((current) =>
+        current.currentAnchorMessageId === null && current.visibleMessageIds.length === 0
+          ? current
+          : { currentAnchorMessageId: null, visibleMessageIds: [] },
+      );
+      return;
+    }
+
+    const publishReaderPosition = () => {
+      const next = deriveMobileReaderPosition(scrollContainer);
+      setReaderPosition((current) => (readerPositionEquals(current, next) ? current : next));
+    };
+
+    publishReaderPosition();
+    scrollContainer.addEventListener("scroll", publishReaderPosition, { passive: true });
+    const frameId = window.requestAnimationFrame(publishReaderPosition);
+    return () => {
+      scrollContainer.removeEventListener("scroll", publishReaderPosition);
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [thread?.messages, userTurnAnchors.length]);
+
+  const scrollToMessage = useCallback((messageId: MessageId) => {
+    const scrollContainer = messagesScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+    const element = scrollContainer.querySelector<HTMLElement>(
+      `[data-message-id="${CSS.escape(messageId)}"]`,
+    );
+    element?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, []);
+
   const interruptTurn = useCallback(async () => {
     if (!client) {
       return;
@@ -230,8 +286,8 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       threadId,
       createdAt: new Date().toISOString(),
     });
-    await snapshotQuery.refetch();
-  }, [client, snapshotQuery, threadId]);
+    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
+  }, [client, snapshotQuery, threadId, threadQuery]);
 
   if (!session) {
     return <p className="px-1 py-8 text-sm text-muted-foreground">This phone is not paired yet.</p>;
@@ -354,7 +410,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
             delete next[activePendingUserInput.requestId];
             return next;
           });
-          await snapshotQuery.refetch();
+          await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
         } finally {
           setIsRespondingToUserInput(false);
         }
@@ -374,6 +430,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
 
     const trimmedPrompt = prompt.trim();
     const createdAt = new Date().toISOString();
+    const messageId = newMessageId();
 
     if (isDraft && draftThread && project) {
       await client.dispatchCommand({
@@ -395,7 +452,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
           modelSelection: selectedModelSelection,
         }),
         message: {
-          messageId: newMessageId(),
+          messageId,
           role: "user",
           text: trimmedPrompt,
           attachments: [],
@@ -404,7 +461,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       clearMobileDraftThread(threadId);
       setPendingModelSelection(null);
       setPrompt("");
-      await snapshotQuery.refetch();
+      await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
       return;
     }
 
@@ -421,14 +478,14 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       createdAt,
       modelSelection: selectedModelSelection,
       message: {
-        messageId: newMessageId(),
+        messageId,
         role: "user",
         text: trimmedPrompt,
         attachments: [],
       },
     });
     setPrompt("");
-    await snapshotQuery.refetch();
+    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
   }
 
   async function respondToApproval(
@@ -446,7 +503,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
       decision,
       createdAt: new Date().toISOString(),
     });
-    await snapshotQuery.refetch();
+    await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
   }
 
   function handleToggleUserInputOption(questionId: string, optionLabel: string) {
@@ -540,6 +597,13 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
             verb={workingVerb}
           />
         ) : null}
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-20 flex w-7 items-center justify-center">
+          <MobileReaderOutline
+            anchors={userTurnAnchors}
+            currentAnchorMessageId={readerPosition.currentAnchorMessageId}
+            onJumpToMessage={scrollToMessage}
+          />
+        </div>
       </div>
 
       <MobileComposer

@@ -253,7 +253,12 @@ export function openDirectoryInFilesPanelIfSupported(
 export async function openPathFromChat(
   targetPath: string,
   workspaceRoot: string | undefined,
+  kind: "file" | "directory" = "file",
 ): Promise<void> {
+  if (kind === "directory" && openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot)) {
+    return;
+  }
+
   if (openPathInBrowserPanelIfSupported(targetPath, workspaceRoot)) {
     return;
   }

@@ -101,12 +101,27 @@ Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 <iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
 
-### Computer Use: your agent, your extra hands
-
-Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms. Safety and security are built into the feature from the ground up — sensitive inputs are blocked before reaching the driver, and you control the limits in **Settings → AI → Computer Use**.
-
-Enable it in **Settings → AI → Computer Use** and your agent becomes an extension of your workflow — macOS, Windows, or Linux.
-
 ### Thread Reader Outline
 
 The thread view now tracks your reading position between turns and provides a **reader outline** — a dot strip beside the scrollbar gutter that maps every user turn, with a jump menu for clicking directly to any point in the conversation. Sending a message anchors the new turn with a peek of the previous one, and user messages animate in with reduced-motion awareness.
+
+## Advanced Features
+
+### Computer use: your agent, your extra hands
+
+Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms. Safety and security are built into the feature from the ground up — sensitive inputs are blocked before reaching the driver, and you control the limits in **Settings → AI → Computer use**.
+
+Enable it in **Settings → AI → Computer use** and your agent becomes an extension of your workflow — macOS, Windows, or Linux.
+
+#### Mobile Companion over Tailscale
+
+Use Tailscale when your phone needs to reach the desktop backend away from the same local network.
+
+1. Create a Tailscale account at [tailscale.com](https://tailscale.com/) and sign in with the same account on your laptop and phone.
+2. Install Tailscale on the laptop running bigbud, then open Tailscale and confirm it says **Connected**.
+3. Install Tailscale on your phone from the iOS App Store or Google Play, sign in to the same account, and confirm the phone is also **Connected**.
+4. In the bigbud desktop app, open **Settings → Mobile Remote Control** and enable **Tailscale Serve**.
+5. Copy or scan the mobile companion pairing link from that settings screen on your phone.
+6. Keep the desktop app running. The phone connects through your private Tailnet, so prompts and responses can move between the mobile companion and the desktop session.
+
+If the phone cannot connect, check that both devices are logged into the same Tailnet, Tailscale is connected on both devices, and **Tailscale Serve** is enabled in bigbud.

@@ -1,4 +1,5 @@
 import { type MessageId } from "@bigbud/contracts";
+import { useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
@@ -16,6 +17,8 @@ export function ThreadReaderOutline({
   onJumpToMessage,
   className,
 }: ThreadReaderOutlineProps) {
+  const [hoveredAnchorIndex, setHoveredAnchorIndex] = useState<number | null>(null);
+
   if (anchors.length < 2) {
     return null;
   }
@@ -25,17 +28,32 @@ export function ThreadReaderOutline({
       <MenuTrigger
         aria-label="Open transcript outline"
         className={cn(
-          "pointer-events-auto flex flex-col items-center justify-center gap-1 rounded-md px-1 py-2 transition-colors outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
+          "pointer-events-auto flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 transition-colors outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
           className,
         )}
+        onMouseLeave={() => setHoveredAnchorIndex(null)}
       >
-        {anchors.map((anchor) => (
-          <span
-            key={anchor.messageId}
-            data-current={anchor.messageId === currentAnchorMessageId}
-            className="h-0.5 w-4 rounded-full bg-muted-foreground/35 data-[current=true]:bg-foreground"
-          />
-        ))}
+        {anchors.map((anchor, index) => {
+          const isCurrent = anchor.messageId === currentAnchorMessageId;
+          const hoverDistance =
+            hoveredAnchorIndex === null ? null : Math.abs(hoveredAnchorIndex - index);
+
+          return (
+            <span
+              key={anchor.messageId}
+              data-current={isCurrent}
+              className={cn(
+                "h-px w-3 rounded-full bg-muted-foreground/35 transition-transform duration-150 ease-out dark:bg-muted-foreground/30",
+                hoverDistance === 0 &&
+                  "scale-[4] bg-muted-foreground/55 dark:bg-muted-foreground/72",
+                hoverDistance === 1 &&
+                  "scale-200 bg-muted-foreground/45 dark:bg-muted-foreground/56",
+                isCurrent && "bg-foreground dark:bg-foreground",
+              )}
+              onMouseEnter={() => setHoveredAnchorIndex(index)}
+            />
+          );
+        })}
       </MenuTrigger>
       <MenuPopup
         align="center"
