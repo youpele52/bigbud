@@ -7,19 +7,22 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { selectTerminalEventEntries, selectTerminalEventLastId } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
 import {
-  getTerminalSelectionRect,
-  resolveTerminalSelectionActionPosition,
-  selectTerminalEventEntriesAfterSnapshot,
   shouldHandleTerminalSelectionMouseUp,
   terminalSelectionActionDelayForClickCount,
   terminalThemeFromApp,
   writeSystemMessage,
-  writeTerminalSnapshot,
 } from "./ThreadTerminalDrawer.logic";
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 import { applyPendingTerminalEvents, makeApplyTerminalEvent } from "./TerminalViewport.events";
 import { makeTerminalLinkProvider } from "./TerminalViewport.links";
-import { canTerminalAutoFocus } from "~/lib/terminalFocus";
+import {
+  clearSelectionAction,
+  fitAndResizeServerTerminal,
+  openTerminalSession,
+  showTerminalSelectionAction,
+  waitForBundledTerminalFont,
+  writeTerminalOpenFailure,
+} from "./TerminalViewport.session.helpers";
 
 interface UseTerminalViewportSessionInput {
   containerRef: RefObject<HTMLDivElement | null>;
@@ -82,6 +85,11 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const selectionActionTimerRef = input.selectionActionTimerRef;
     const terminalRef = input.terminalRef;
     const fitAddonRef = input.fitAddonRef;
+    const clearSelectionActionState = () =>
+      clearSelectionAction({
+        selectionActionRequestIdRef: input.selectionActionRequestIdRef,
+        selectionActionTimerRef: input.selectionActionTimerRef,
+      });
 
     let disposed = false;
     const fitAddon = new FitAddon();
@@ -109,105 +117,6 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       return;
     }
 
-    const clearSelectionAction = () => {
-      input.selectionActionRequestIdRef.current += 1;
-      if (input.selectionActionTimerRef.current !== null) {
-        window.clearTimeout(input.selectionActionTimerRef.current);
-        input.selectionActionTimerRef.current = null;
-      }
-    };
-
-    const readSelectionAction = (): {
-      position: { x: number; y: number };
-      selection: TerminalContextSelection;
-      selectionRect: { left: number; top: number; right: number; bottom: number } | null;
-    } | null => {
-      const activeTerminal = input.terminalRef.current;
-      const mountElement = input.containerRef.current;
-      if (!activeTerminal || !mountElement || !activeTerminal.hasSelection()) {
-        return null;
-      }
-      const selectionText = activeTerminal.getSelection();
-      const selectionPosition = activeTerminal.getSelectionPosition();
-      const normalizedText = selectionText.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
-      if (!selectionPosition || normalizedText.length === 0) {
-        return null;
-      }
-      const lineStart = selectionPosition.start.y + 1;
-      const lineCount = normalizedText.split("\n").length;
-      const lineEnd = Math.max(lineStart, lineStart + lineCount - 1);
-      const bounds = mountElement.getBoundingClientRect();
-      const selectionRect = getTerminalSelectionRect(mountElement);
-      const position = resolveTerminalSelectionActionPosition({
-        bounds,
-        selectionRect:
-          selectionRect === null
-            ? null
-            : { right: selectionRect.right, bottom: selectionRect.bottom },
-        pointer: input.selectionPointerRef.current,
-      });
-      return {
-        position,
-        selectionRect:
-          selectionRect === null
-            ? null
-            : {
-                left: selectionRect.left,
-                top: selectionRect.top,
-                right: selectionRect.right,
-                bottom: selectionRect.bottom,
-              },
-        selection: {
-          terminalId: input.terminalId,
-          terminalLabel: readTerminalLabel(),
-          lineStart,
-          lineEnd,
-          text: normalizedText,
-        },
-      };
-    };
-
-    const showSelectionAction = async () => {
-      if (input.selectionActionOpenRef.current) {
-        return;
-      }
-      const nextAction = readSelectionAction();
-      if (!nextAction) {
-        clearSelectionAction();
-        return;
-      }
-      const requestId = ++input.selectionActionRequestIdRef.current;
-      input.selectionActionOpenRef.current = true;
-      try {
-        const clicked = await api.contextMenu.show(
-          [
-            { id: "add-to-chat", label: "Add to chat" },
-            { id: "annotate-selection", label: "Annotate selection" },
-          ],
-          nextAction.position,
-        );
-        if (requestId !== input.selectionActionRequestIdRef.current) {
-          return;
-        }
-        if (clicked === "add-to-chat") {
-          onAddTerminalContext(nextAction.selection);
-          terminalRef.current?.clearSelection();
-          terminalRef.current?.focus();
-          return;
-        }
-        if (clicked === "annotate-selection") {
-          onRequestTerminalAnnotation({
-            selection: nextAction.selection,
-            position: nextAction.position,
-            selectionRect: nextAction.selectionRect,
-          });
-          terminalRef.current?.clearSelection();
-        }
-      } finally {
-        input.selectionActionOpenRef.current = false;
-      }
-    };
-
     const terminalLinksDisposable = terminal.registerLinkProvider(
       makeTerminalLinkProvider({ terminalRef: input.terminalRef, cwd: input.cwd, api }),
     );
@@ -225,7 +134,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       if (input.terminalRef.current?.hasSelection()) {
         return;
       }
-      clearSelectionAction();
+      clearSelectionActionState();
     });
 
     const handleMouseUp = (event: MouseEvent) => {
@@ -242,12 +151,24 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       input.selectionActionTimerRef.current = window.setTimeout(() => {
         input.selectionActionTimerRef.current = null;
         window.requestAnimationFrame(() => {
-          void showSelectionAction();
+          void showTerminalSelectionAction({
+            containerRef: input.containerRef,
+            terminalRef: input.terminalRef,
+            selectionPointerRef: input.selectionPointerRef,
+            selectionActionRequestIdRef: input.selectionActionRequestIdRef,
+            selectionActionOpenRef: input.selectionActionOpenRef,
+            selectionActionTimerRef: input.selectionActionTimerRef,
+            terminalId: input.terminalId,
+            clearSelectionAction: clearSelectionActionState,
+            onAddTerminalContext,
+            onRequestTerminalAnnotation,
+            readTerminalLabel,
+          });
         });
       }, delay);
     };
     const handlePointerDown = (event: PointerEvent) => {
-      clearSelectionAction();
+      clearSelectionActionState();
       input.selectionGestureActiveRef.current = event.button === 0;
     };
     window.addEventListener("mouseup", handleMouseUp);
@@ -268,7 +189,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       terminalRef: input.terminalRef,
       hasHandledExitRef: input.hasHandledExitRef,
       writeBatcher,
-      clearSelectionAction,
+      clearSelectionAction: clearSelectionActionState,
       handleSessionExited: () => onSessionExitedRef.current(),
     });
     const unsubscribeTerminalEvents = useTerminalStateStore.subscribe((state, previousState) => {
@@ -302,129 +223,53 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
 
     let initialFitResizeTimer: number | null = null;
     let openTerminalRetryTimer: number | null = null;
-    const waitForBundledTerminalFont = async () => {
-      if (!input.usesBundledTerminalFont || typeof document.fonts === "undefined") {
-        return;
-      }
-      const fontLoadTarget = `${input.terminalFontSize}px "MesloLGL Nerd Font Mono"`;
-      if (document.fonts.check(fontLoadTarget)) {
-        return;
-      }
-      const timeout = new Promise<void>((resolve) => {
-        window.setTimeout(resolve, 1_000);
-      });
-      await Promise.race([
-        document.fonts.load(fontLoadTarget).then(() => undefined),
-        timeout,
-      ]).catch(() => undefined);
-    };
-
-    const fitTerminal = () => {
-      const activeTerminal = input.terminalRef.current;
-      const activeFitAddon = input.fitAddonRef.current;
-      if (!activeTerminal || !activeFitAddon) return;
-      const wasAtBottom =
-        activeTerminal.buffer.active.viewportY >= activeTerminal.buffer.active.baseY;
-      activeFitAddon.fit();
-      if (wasAtBottom) {
-        activeTerminal.scrollToBottom();
-      }
-    };
-    const resizeServerTerminal = () => {
-      const activeTerminal = input.terminalRef.current;
-      if (!activeTerminal) return;
-      void api.terminal
-        .resize({
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          cols: activeTerminal.cols,
-          rows: activeTerminal.rows,
-        })
-        .catch(() => undefined);
-    };
-    const fitAndResizeServerTerminal = () => {
-      const activeTerminal = input.terminalRef.current;
-      if (!activeTerminal) return;
-      fitTerminal();
-      resizeServerTerminal();
-    };
-
-    const hasUsableViewportSize = () => {
-      const mountElement = input.containerRef.current;
-      if (!mountElement) return false;
-      const { width, height } = mountElement.getBoundingClientRect();
-      return width >= 32 && height >= 32;
-    };
-
     const runOpenTerminal = async () => {
       try {
-        const activeTerminal = input.terminalRef.current;
-        if (!activeTerminal || !input.fitAddonRef.current) return;
-        await waitForBundledTerminalFont();
-        if (disposed) return;
-        await new Promise<void>((resolve) => {
-          window.requestAnimationFrame(() => resolve());
+        const opened = await openTerminalSession({
+          disposed: () => disposed,
+          terminalRef: input.terminalRef,
+          fitAddonRef: input.fitAddonRef,
+          writeBatcher,
+          threadId: input.threadId,
+          terminalId: input.terminalId,
+          executionTargetId: input.executionTargetId,
+          cwd: input.cwd,
+          runtimeEnv: input.runtimeEnv,
+          worktreePathRef: input.worktreePathRef,
+          usesBundledTerminalFont: input.usesBundledTerminalFont,
+          terminalFontSize: input.terminalFontSize,
+          applyTerminalEvent,
+          lastAppliedTerminalEventIdRef: input.lastAppliedTerminalEventIdRef,
+          terminalHydratedRef: input.terminalHydratedRef,
+          autoFocusRef: input.autoFocusRef,
+          containerRef: input.containerRef,
         });
-        if (disposed) return;
-        if (!hasUsableViewportSize()) {
+        if (!opened) {
           openTerminalRetryTimer = window.setTimeout(() => {
             openTerminalRetryTimer = null;
             void runOpenTerminal();
           }, 50);
-          return;
-        }
-        fitAndResizeServerTerminal();
-        const snapshot = await api.terminal.open({
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-          cwd: input.cwd,
-          ...(input.worktreePathRef.current !== undefined
-            ? { worktreePath: input.worktreePathRef.current }
-            : {}),
-          cols: activeTerminal.cols,
-          rows: activeTerminal.rows,
-          ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
-        });
-        if (disposed) return;
-        writeBatcher.flush();
-        writeTerminalSnapshot(activeTerminal, snapshot);
-        const bufferedEntries = selectTerminalEventEntries(
-          useTerminalStateStore.getState().terminalEventEntriesByKey,
-          input.threadId,
-          input.terminalId,
-        );
-        const replayEntries = selectTerminalEventEntriesAfterSnapshot(
-          bufferedEntries,
-          snapshot.updatedAt,
-        );
-        for (const entry of replayEntries) {
-          applyTerminalEvent(entry.event);
-        }
-        input.lastAppliedTerminalEventIdRef.current = bufferedEntries.at(-1)?.id ?? 0;
-        input.terminalHydratedRef.current = true;
-        if (input.autoFocusRef.current && canTerminalAutoFocus()) {
-          window.requestAnimationFrame(() => {
-            if (canTerminalAutoFocus()) {
-              activeTerminal.focus();
-            }
-          });
         }
       } catch (err) {
         if (disposed) return;
-        writeSystemMessage(
-          terminal,
-          err instanceof Error ? err.message : "Failed to open terminal",
-        );
+        writeTerminalOpenFailure(terminal, err);
       }
     };
 
     initialFitResizeTimer = window.setTimeout(() => {
-      void waitForBundledTerminalFont().then(() => {
+      void waitForBundledTerminalFont({
+        usesBundledTerminalFont: input.usesBundledTerminalFont,
+        terminalFontSize: input.terminalFontSize,
+      }).then(() => {
         if (disposed) return;
         window.requestAnimationFrame(() => {
           if (disposed) return;
-          fitAndResizeServerTerminal();
+          fitAndResizeServerTerminal({
+            terminalRef: input.terminalRef,
+            fitAddonRef: input.fitAddonRef,
+            threadId: input.threadId,
+            terminalId: input.terminalId,
+          });
         });
       });
     }, 30);
