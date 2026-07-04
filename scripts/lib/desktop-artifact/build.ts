@@ -20,8 +20,8 @@ import {
 } from "./shared.ts";
 import {
   pickExternalDependencies,
-  pickNonNativeExternalDependencies,
   pruneMacServerRuntimeArtifacts,
+  pruneSourceMaps,
   resolveElectronBuilderBinary,
   stagePackagedOpencodeWindowsBinary,
 } from "./build.runtime.ts";
@@ -144,6 +144,8 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   }
   yield* assertPlatformBuildResources(options.platform, stageResourcesDir, options.verbose);
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));
+  yield* pruneSourceMaps(path.join(stageAppDir, "apps/desktop/dist-electron"), "desktop bundle");
+  yield* pruneSourceMaps(path.join(stageServerDir, "dist"), "server bundle");
 
   if (isWindowsBuildPlatform(options.platform)) {
     yield* stagePackagedOpencodeWindowsBinary({
@@ -165,10 +167,6 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // Only packages that cannot be bundled (native addons, runtime require.resolve)
   // need to be installed in the staged server directory.
   const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
-  const serverNonNativeExternalDependencies = pickNonNativeExternalDependencies(
-    resolvedServerDependencies,
-  );
-
   const stagePackageJson: StagePackageJson = {
     name: "bigbud-desktop",
     version: appVersion,
@@ -188,10 +186,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       stageResourcesDir,
       repoRoot,
     ),
-    dependencies: {
-      ...serverNonNativeExternalDependencies,
-      ...resolvedDesktopRuntimeDependencies,
-    },
+    dependencies: resolvedDesktopRuntimeDependencies,
     devDependencies: {
       electron: desktopPackageJson.dependencies.electron,
     },
@@ -223,6 +218,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       shell: shellOptionForPlatform(options.platform),
     })`bun install --production`,
   );
+  yield* pruneSourceMaps(path.join(stageAppDir, "node_modules"), "desktop runtime dependencies");
   // Use npm (not bun) for the server directory so node_modules follows the
   // standard flat layout that Node.js expects. Bun's symlink-based hoisting
   // does not survive electron-builder's file copy to extraResources.
