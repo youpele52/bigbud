@@ -2,8 +2,6 @@ import { Schema } from "effect";
 import {
   ExecutionTargetId,
   IsoDateTime,
-  NonNegativeInt,
-  ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
@@ -13,6 +11,13 @@ import { ModelCapabilities } from "../core/model";
 import { ProviderKind } from "../orchestration/orchestration";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
 import { ServerSettings } from "../core/settings";
+import {
+  ServerLifecycleReadyPayload,
+  ServerLifecycleStreamEvent,
+  ServerLifecycleStreamReadyEvent,
+  ServerLifecycleStreamWelcomeEvent,
+  ServerLifecycleWelcomePayload,
+} from "./server.lifecycle";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
   kind: Schema.Literal("keybindings.malformed-config"),
@@ -118,12 +123,6 @@ export const ServerDiscoverySource = Schema.Literals([
 ]);
 export type ServerDiscoverySource = typeof ServerDiscoverySource.Type;
 
-/**
- * Provider label attached to a discovered skill or agent. Extends
- * `ProviderKind` with the `bigbud` pseudo-label so skills discovered under
- * `.bigbud/skills/` are surfaced and labelled consistently alongside the
- * other providers, without participating in the runtime provider system.
- */
 export const ServerDiscoveryProviderLabel = Schema.Literals(SERVER_DISCOVERY_PROVIDER_LABELS);
 export type ServerDiscoveryProviderLabel = typeof ServerDiscoveryProviderLabel.Type;
 
@@ -383,43 +382,15 @@ export const ServerConfigStreamEvent = Schema.Union([
 ]);
 export type ServerConfigStreamEvent = typeof ServerConfigStreamEvent.Type;
 
-export const ServerLifecycleReadyPayload = Schema.Struct({
-  at: IsoDateTime,
-});
-export type ServerLifecycleReadyPayload = typeof ServerLifecycleReadyPayload.Type;
-
-export const ServerLifecycleWelcomePayload = Schema.Struct({
-  cwd: TrimmedNonEmptyString,
-  projectName: TrimmedNonEmptyString,
-  bootstrapProjectId: Schema.optional(ProjectId),
-  bootstrapThreadId: Schema.optional(ThreadId),
-  defaultChatCwd: Schema.optional(TrimmedNonEmptyString),
-});
-export type ServerLifecycleWelcomePayload = typeof ServerLifecycleWelcomePayload.Type;
-
-export const ServerLifecycleStreamWelcomeEvent = Schema.Struct({
-  version: Schema.Literal(1),
-  sequence: NonNegativeInt,
-  type: Schema.Literal("welcome"),
-  payload: ServerLifecycleWelcomePayload,
-});
-export type ServerLifecycleStreamWelcomeEvent = typeof ServerLifecycleStreamWelcomeEvent.Type;
-
-export const ServerLifecycleStreamReadyEvent = Schema.Struct({
-  version: Schema.Literal(1),
-  sequence: NonNegativeInt,
-  type: Schema.Literal("ready"),
-  payload: ServerLifecycleReadyPayload,
-});
-export type ServerLifecycleStreamReadyEvent = typeof ServerLifecycleStreamReadyEvent.Type;
-
-export const ServerLifecycleStreamEvent = Schema.Union([
-  ServerLifecycleStreamWelcomeEvent,
-  ServerLifecycleStreamReadyEvent,
-]);
-export type ServerLifecycleStreamEvent = typeof ServerLifecycleStreamEvent.Type;
-
 export const ServerProviderUpdatedPayload = Schema.Struct({
   providers: ServerProviders,
 });
 export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.Type;
+
+export {
+  ServerLifecycleReadyPayload,
+  ServerLifecycleStreamEvent,
+  ServerLifecycleStreamReadyEvent,
+  ServerLifecycleStreamWelcomeEvent,
+  ServerLifecycleWelcomePayload,
+};

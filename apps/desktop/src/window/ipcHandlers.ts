@@ -1,20 +1,10 @@
-import {
-  BrowserWindow,
-  clipboard,
-  dialog,
-  ipcMain,
-  Menu,
-  nativeTheme,
-  Notification,
-  shell,
-} from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, shell } from "electron";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { MenuItemConstructorOptions } from "electron";
 import type {
   ContextMenuItem,
-  DesktopNotificationInput,
   DesktopTailscaleRemoteAccessStatus,
   DesktopTheme,
   DesktopUpdateActionResult,
@@ -22,6 +12,10 @@ import type {
   DesktopUpdateState,
 } from "@bigbud/contracts";
 import { showDesktopConfirmDialog } from "./confirmDialog";
+import {
+  isDesktopNotificationSupported,
+  showDesktopNotification,
+} from "./ipcHandlers.notifications";
 import { getSafeExternalUrl } from "./menuManager";
 import { getDestructiveMenuIcon } from "../env/pathResolver";
 import {
@@ -43,44 +37,6 @@ function getSafeTheme(rawTheme: unknown): DesktopTheme | null {
 // ---------------------------------------------------------------------------
 // Desktop notification
 // ---------------------------------------------------------------------------
-
-/**
- * Show a native OS desktop notification and wire up a click handler that
- * restores and focuses the main window.
- */
-export function showDesktopNotification(
-  input: DesktopNotificationInput,
-  resolveIconPath: (ext: "ico" | "icns" | "png") => string | null,
-  getMainWindow: () => BrowserWindow | null,
-): boolean {
-  if (!Notification.isSupported()) {
-    return false;
-  }
-
-  const { title, body, silent } = input;
-  if (typeof title !== "string" || title.trim().length === 0) {
-    return false;
-  }
-
-  const iconPath = resolveIconPath("png");
-  const notification = new Notification({
-    title,
-    ...(typeof body === "string" && body.length > 0 ? { body } : {}),
-    ...(silent === true ? { silent: true } : {}),
-    ...(iconPath ? { icon: iconPath } : {}),
-  });
-
-  notification.on("click", () => {
-    const window = getMainWindow() ?? BrowserWindow.getAllWindows()[0];
-    if (!window) return;
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.focus();
-  });
-
-  notification.show();
-  return true;
-}
 
 // ---------------------------------------------------------------------------
 // IPC handler registration
@@ -348,7 +304,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   });
 
   ipcMain.removeHandler(NOTIFICATIONS_IS_SUPPORTED_CHANNEL);
-  ipcMain.handle(NOTIFICATIONS_IS_SUPPORTED_CHANNEL, () => Notification.isSupported());
+  ipcMain.handle(NOTIFICATIONS_IS_SUPPORTED_CHANNEL, () => isDesktopNotificationSupported());
 
   ipcMain.removeHandler(NOTIFICATIONS_SHOW_CHANNEL);
   ipcMain.handle(NOTIFICATIONS_SHOW_CHANNEL, (_event, input: unknown) => {

@@ -16,7 +16,6 @@ import { resolveProviderSessionExecutionTargets } from "../../providerSessionExe
 import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
-  ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
 import type { PiAdapterShape } from "../../Services/Pi/Adapter.ts";
@@ -34,13 +33,12 @@ import {
   appendPiAttachmentInstructions,
   applyModelSelection,
   buildResumeCursor,
-  makeAppendTextFileAttachments,
-  makeResolveImages,
-  makeStopSessionRecord,
   refreshSessionState,
 } from "./Adapter.session.helpers.ts";
 import { makePiSessionControlMethods } from "./Adapter.session.control.ts";
 import { makeRespondToUserInput } from "./Adapter.methods.respondToUserInput.ts";
+import { requirePiSession } from "./Adapter.methods.session.ts";
+import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { normalizeString, readResumeCursor, toMessage } from "./Adapter.utils.ts";
 
 export function makePiAdapterMethods(deps: {
@@ -56,21 +54,13 @@ export function makePiAdapterMethods(deps: {
   readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
   readonly sessions: Map<ThreadId, ActivePiSession>;
 }) {
-  const resolveImages = makeResolveImages(deps.attachmentsDir);
-  const appendTextFileAttachments = makeAppendTextFileAttachments(deps.attachmentsDir);
-  const stopSessionRecord = makeStopSessionRecord({
+  const { appendTextFileAttachments, resolveImages, stopSessionRecord } = createPiMethodSetup({
+    attachmentsDir: deps.attachmentsDir,
     emit: deps.emit,
     makeSyntheticEvent: deps.makeSyntheticEvent,
   });
 
-  const requireSession = (
-    threadId: ThreadId,
-  ): Effect.Effect<ActivePiSession, ProviderAdapterSessionNotFoundError> => {
-    const session = deps.sessions.get(threadId);
-    return session
-      ? Effect.succeed(session)
-      : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }));
-  };
+  const requireSession = (threadId: ThreadId) => requirePiSession(deps.sessions, threadId);
 
   const startSession: PiAdapterShape["startSession"] = Effect.fn("startSession")(function* (input) {
     const piSettings = yield* deps.serverSettings.getSettings.pipe(

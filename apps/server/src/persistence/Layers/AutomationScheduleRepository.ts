@@ -3,7 +3,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Schema } from "effect";
 
-import { toPersistenceSqlError, AutomationScheduleNotFoundError } from "../Errors.ts";
+import { AutomationScheduleNotFoundError } from "../Errors.ts";
+import {
+  mapAutomationSchedulePersistenceError,
+  mapAutomationSchedulePersistenceErrorAllowNotFound,
+} from "./AutomationScheduleRepository.errors.ts";
 import { makeAutomationRunQueries } from "./AutomationScheduleRepository.runs.ts";
 import {
   AutomationScheduleRepository,
@@ -331,87 +335,37 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
     });
 
   const create: AutomationScheduleRepositoryShape["create"] = (input) =>
-    createSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.create:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("create")(createSchedule(input));
 
   const getById: AutomationScheduleRepositoryShape["getById"] = (input) =>
-    getScheduleById(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.getById:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("getById")(getScheduleById(input));
 
   const listByProject: AutomationScheduleRepositoryShape["listByProject"] = (input) =>
-    listSchedulesByProject(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.listByProject:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("listByProject")(listSchedulesByProject(input));
 
   const listAll: AutomationScheduleRepositoryShape["listAll"] = () =>
-    listAllSchedules({}).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.listAll:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("listAll")(listAllSchedules({}));
 
   const claimDue: AutomationScheduleRepositoryShape["claimDue"] = (input) =>
-    claimDueSchedules(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.claimDue:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("claimDue")(claimDueSchedules(input));
 
   const update: AutomationScheduleRepositoryShape["update"] = (input) =>
-    updateSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.update:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("update")(updateSchedule(input));
 
   const updateNextRun: AutomationScheduleRepositoryShape["updateNextRun"] = (input) =>
-    updateScheduleNextRun(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.updateNextRun:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("updateNextRun")(updateScheduleNextRun(input));
 
   const pause: AutomationScheduleRepositoryShape["pause"] = (input) =>
-    pauseSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        Schema.is(AutomationScheduleNotFoundError)(cause)
-          ? cause
-          : toPersistenceSqlError("AutomationScheduleRepository.pause:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceErrorAllowNotFound("pause")(pauseSchedule(input));
 
   const resume: AutomationScheduleRepositoryShape["resume"] = (input) =>
-    resumeSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        Schema.is(AutomationScheduleNotFoundError)(cause)
-          ? cause
-          : toPersistenceSqlError("AutomationScheduleRepository.resume:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceErrorAllowNotFound("resume")(resumeSchedule(input));
 
   const complete: AutomationScheduleRepositoryShape["complete"] = (input) =>
-    completeSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        toPersistenceSqlError("AutomationScheduleRepository.complete:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceError("complete")(completeSchedule(input));
 
   const deleteScheduleById: AutomationScheduleRepositoryShape["delete"] = (input) =>
-    deleteSchedule(input).pipe(
-      Effect.mapError((cause) =>
-        Schema.is(AutomationScheduleNotFoundError)(cause)
-          ? cause
-          : toPersistenceSqlError("AutomationScheduleRepository.delete:query")(cause),
-      ),
-    );
+    mapAutomationSchedulePersistenceErrorAllowNotFound("delete")(deleteSchedule(input));
 
   return {
     create,
