@@ -8,6 +8,7 @@ import {
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
+import { isElectron } from "~/config/env";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useSettings } from "../../hooks/useSettings";
 import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
@@ -19,6 +20,11 @@ import {
   TerminalViewportAnnotationComposer,
   type PendingTerminalAnnotation,
 } from "./TerminalViewport.annotations";
+import {
+  acceptsTerminalDrop,
+  pasteDroppedTerminalPaths,
+  readDroppedTerminalPaths,
+} from "./TerminalViewport.session.helpers";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
@@ -90,6 +96,7 @@ export function TerminalViewport({
   const lastAppliedTerminalEventIdRef = useRef(0);
   const terminalHydratedRef = useRef(false);
   const resizeRequestStateRef = useRef({ inFlight: false, pending: false });
+  const dragDepthRef = useRef(0);
   const handleSessionExited = useEffectEvent(() => {
     onSessionExited();
   });
@@ -99,6 +106,7 @@ export function TerminalViewport({
   const [pendingAnnotation, setPendingAnnotation] = useState<PendingTerminalAnnotation | null>(
     null,
   );
+  const [isDragOver, setIsDragOver] = useState(false);
   const handleRequestTerminalAnnotation = useEffectEvent(
     (input: {
       selection: TerminalContextSelection;
@@ -224,6 +232,58 @@ export function TerminalViewport({
       requestTerminalResize,
     });
   });
+  const readNativeFilePath = useEffectEvent((file: File) =>
+    isElectron ? (window.desktopBridge?.getFilePath(file) ?? "") : "",
+  );
+  const hasAcceptedDropData = useEffectEvent((event: React.DragEvent<HTMLDivElement>) =>
+    acceptsTerminalDrop(Array.from(event.dataTransfer.types)),
+  );
+  const onDragEnter = useEffectEvent((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAcceptedDropData(event)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDragOver(true);
+  });
+  const onDragOver = useEffectEvent((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAcceptedDropData(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDragOver(true);
+  });
+  const onDragLeave = useEffectEvent((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAcceptedDropData(event)) {
+      return;
+    }
+    event.preventDefault();
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDragOver(false);
+    }
+  });
+  const onDrop = useEffectEvent((event: React.DragEvent<HTMLDivElement>) => {
+    if (!hasAcceptedDropData(event)) {
+      return;
+    }
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragOver(false);
+    const paths = readDroppedTerminalPaths({
+      dataTransfer: event.dataTransfer,
+      readNativeFilePath,
+    });
+    pasteDroppedTerminalPaths({
+      terminal: terminalRef.current,
+      paths,
+    });
+  });
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -292,7 +352,16 @@ export function TerminalViewport({
   }, []);
 
   return (
-    <div ref={wrapperRef} className="relative h-full w-full overflow-hidden rounded-[4px]">
+    <div
+      ref={wrapperRef}
+      className={`relative h-full w-full overflow-hidden rounded-[4px] ${
+        isDragOver ? "ring-1 ring-primary/45" : ""
+      }`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div ref={mountRef} className="h-full w-full" />
       {pendingAnnotation ? (
         <TerminalViewportAnnotationComposer

@@ -1,4 +1,4 @@
-import { type ThreadId } from "@bigbud/contracts";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
@@ -8,6 +8,7 @@ import { useComposerDraftStore } from "../../stores/composer";
 import { selectThreadTerminalState, useTerminalStateStore } from "../../stores/terminal";
 import { useDefaultChatCwd } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { resolveTerminalBaseLabel, resolveTerminalProvider } from "./terminalDisplay";
 
 export interface TerminalLaunchContext {
   cwd: string;
@@ -21,6 +22,8 @@ export interface UseThreadTerminalDrawerResult {
   effectiveWorktreePath: string | null;
   runtimeEnv: Record<string, string>;
   executionTargetId: string | undefined;
+  terminalBaseLabel: string;
+  terminalProvider: ProviderKind | null;
   splitTerminal: () => void;
   createNewTerminal: () => void;
   activateTerminal: (terminalId: string) => void;
@@ -96,6 +99,22 @@ export function useThreadTerminalDrawer(
         : {},
     [effectiveWorktreePath, project],
   );
+  const terminalBaseLabel = useMemo(
+    () =>
+      resolveTerminalBaseLabel({
+        projectName: project?.name,
+        cwd,
+      }),
+    [cwd, project?.name],
+  );
+  const terminalProvider = useMemo(
+    () =>
+      resolveTerminalProvider({
+        sessionProvider: serverThread?.session?.provider,
+        modelProvider: serverThread?.modelSelection.provider,
+      }),
+    [serverThread?.modelSelection.provider, serverThread?.session?.provider],
+  );
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -165,6 +184,8 @@ export function useThreadTerminalDrawer(
     effectiveWorktreePath,
     runtimeEnv,
     executionTargetId: project ? resolveWorkspaceExecutionTargetId(project) : undefined,
+    terminalBaseLabel,
+    terminalProvider,
     splitTerminal,
     createNewTerminal,
     activateTerminal,

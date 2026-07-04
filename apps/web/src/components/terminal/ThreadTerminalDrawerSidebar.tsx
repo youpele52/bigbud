@@ -1,6 +1,8 @@
+import { type ProviderKind } from "@bigbud/contracts";
 import { Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 
 import { type ThreadTerminalGroup } from "../../models/types";
 import { TerminalActionButton } from "./TerminalActionButton";
@@ -10,6 +12,7 @@ interface ThreadTerminalDrawerSidebarProps {
   resolvedActiveTerminalId: string;
   normalizedTerminalIds: ReadonlyArray<string>;
   terminalLabelById: ReadonlyMap<string, string>;
+  terminalProvider: ProviderKind | null;
   showGroupHeaders: boolean;
   hasReachedSplitLimit: boolean;
   splitTerminalActionLabel: string;
@@ -27,6 +30,7 @@ export function ThreadTerminalDrawerSidebar({
   resolvedActiveTerminalId,
   normalizedTerminalIds,
   terminalLabelById,
+  terminalProvider,
   showGroupHeaders,
   hasReachedSplitLimit,
   splitTerminalActionLabel,
@@ -38,6 +42,8 @@ export function ThreadTerminalDrawerSidebar({
   onActiveTerminalChange,
   onCloseTerminal,
 }: ThreadTerminalDrawerSidebarProps) {
+  const ProviderIcon = terminalProvider ? PROVIDER_ICON_BY_PROVIDER[terminalProvider] : null;
+
   return (
     <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
@@ -119,7 +125,11 @@ export function ThreadTerminalDrawerSidebar({
                         className="flex min-w-0 flex-1 items-center gap-1 text-left"
                         onClick={() => onActiveTerminalChange(terminalId)}
                       >
-                        <TerminalSquare className="size-3 shrink-0" />
+                        {ProviderIcon ? (
+                          <ProviderIcon className="size-3 shrink-0" />
+                        ) : (
+                          <TerminalSquare className="size-3 shrink-0" />
+                        )}
                         <span className="truncate">
                           {terminalLabelById.get(terminalId) ?? "Terminal"}
                         </span>

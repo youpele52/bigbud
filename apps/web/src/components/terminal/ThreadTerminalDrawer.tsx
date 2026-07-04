@@ -1,5 +1,6 @@
 import {
   type ExecutionTargetId,
+  type ProviderKind,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
@@ -15,6 +16,7 @@ import { ThreadTerminalDrawerSidebar } from "./ThreadTerminalDrawerSidebar";
 import { ThreadTerminalDrawerFloatingActions } from "./ThreadTerminalDrawerFloatingActions";
 import { useThreadTerminalDrawerResize } from "./ThreadTerminalDrawer.resize";
 import { ThreadTerminalDrawerViewport } from "./ThreadTerminalDrawerViewport";
+import { buildTerminalLabelMap } from "./terminalDisplay";
 
 // Re-export pure utilities consumed by tests and other modules
 export {
@@ -48,6 +50,8 @@ interface ThreadTerminalDrawerProps {
   onHeightChange: (height: number) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   keybindings: ResolvedKeybindingsConfig;
+  terminalBaseLabel: string;
+  terminalProvider: ProviderKind | null;
   mode?: "drawer" | "panel";
 }
 
@@ -74,6 +78,8 @@ export default function ThreadTerminalDrawer({
   onHeightChange,
   onAddTerminalContext,
   keybindings,
+  terminalBaseLabel,
+  terminalProvider,
   mode = "drawer",
 }: ThreadTerminalDrawerProps) {
   const {
@@ -182,11 +188,8 @@ export default function ThreadTerminalDrawer({
     resolvedTerminalGroups.some((terminalGroup) => terminalGroup.terminalIds.length > 1);
   const hasReachedSplitLimit = visibleTerminalIds.length >= MAX_TERMINALS_PER_GROUP;
   const terminalLabelById = useMemo(
-    () =>
-      new Map(
-        normalizedTerminalIds.map((terminalId, index) => [terminalId, `Terminal ${index + 1}`]),
-      ),
-    [normalizedTerminalIds],
+    () => buildTerminalLabelMap(normalizedTerminalIds, terminalBaseLabel),
+    [normalizedTerminalIds, terminalBaseLabel],
   );
   const splitTerminalActionLabel = hasReachedSplitLimit
     ? `Split Terminal (max ${MAX_TERMINALS_PER_GROUP} per group)`
@@ -267,6 +270,7 @@ export default function ThreadTerminalDrawer({
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               normalizedTerminalIds={normalizedTerminalIds}
               terminalLabelById={terminalLabelById}
+              terminalProvider={terminalProvider}
               showGroupHeaders={showGroupHeaders}
               hasReachedSplitLimit={hasReachedSplitLimit}
               splitTerminalActionLabel={splitTerminalActionLabel}

@@ -113,6 +113,8 @@ export function PersistentThreadTerminalDrawer({
         newShortcutLabel={animatedVisible ? newShortcutLabel : undefined}
         closeShortcutLabel={animatedVisible ? closeShortcutLabel : undefined}
         keybindings={keybindings}
+        terminalBaseLabel={drawer.terminalBaseLabel}
+        terminalProvider={drawer.terminalProvider}
         onActiveTerminalChange={drawer.activateTerminal}
         onCloseTerminal={drawer.closeTerminal}
         onHeightChange={drawer.setTerminalHeight}
