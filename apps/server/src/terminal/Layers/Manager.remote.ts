@@ -1,10 +1,11 @@
 import { buildSshCommandInvocation } from "../../ssh/sshCommand.ts";
+import { type ShellCandidate } from "./Manager.shell";
 
 export function buildRemoteTerminalShellCandidate(input: {
   readonly executionTargetId: string;
   readonly cwd: string;
   readonly runtimeEnv: Record<string, string> | null;
-}): { shell: string; args: string[] } {
+}): ShellCandidate {
   const invocation = buildSshCommandInvocation({
     executionTargetId: input.executionTargetId,
     cwd: input.cwd,
@@ -17,5 +18,6 @@ export function buildRemoteTerminalShellCandidate(input: {
   return {
     shell: invocation.command,
     args: [...invocation.args],
+    dropPathMode: "posix",
   };
 }

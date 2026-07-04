@@ -74,6 +74,7 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     threadId: session.threadId,
     terminalId: session.terminalId,
     executionTargetId: session.executionTargetId,
+    dropPathMode: session.dropPathMode,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
     status: session.status,

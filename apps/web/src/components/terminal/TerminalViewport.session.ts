@@ -1,6 +1,10 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { type ExecutionTargetId, type ThreadId } from "@bigbud/contracts";
+import {
+  type ExecutionTargetId,
+  type TerminalDropPathMode,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { useEffect, useRef, type MutableRefObject, type RefObject } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -38,6 +42,7 @@ interface UseTerminalViewportSessionInput {
   terminalHydratedRef: MutableRefObject<boolean>;
   autoFocusRef: MutableRefObject<boolean>;
   worktreePathRef: MutableRefObject<string | null | undefined>;
+  dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
   threadId: ThreadId;
   terminalId: string;
   readTerminalLabel: () => string;
@@ -188,6 +193,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const applyTerminalEvent = makeApplyTerminalEvent({
       terminalRef: input.terminalRef,
       hasHandledExitRef: input.hasHandledExitRef,
+      dropPathModeRef: input.dropPathModeRef,
       writeBatcher,
       clearSelectionAction: clearSelectionActionState,
       handleSessionExited: () => onSessionExitedRef.current(),
@@ -236,6 +242,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           cwd: input.cwd,
           runtimeEnv: input.runtimeEnv,
           worktreePathRef: input.worktreePathRef,
+          dropPathModeRef: input.dropPathModeRef,
           usesBundledTerminalFont: input.usesBundledTerminalFont,
           terminalFontSize: input.terminalFontSize,
           applyTerminalEvent,
@@ -303,9 +310,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   }, [
     input.autoFocusRef,
     input.containerRef,
-    input.cwd,
-    input.executionTargetId,
-    input.fitAddonRef,
+      input.cwd,
+      input.dropPathModeRef,
+      input.executionTargetId,
+      input.fitAddonRef,
     input.hasHandledExitRef,
     input.lastAppliedTerminalEventIdRef,
     input.runtimeEnv,

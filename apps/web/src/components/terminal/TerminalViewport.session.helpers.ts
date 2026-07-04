@@ -1,9 +1,13 @@
 import { type FitAddon } from "@xterm/addon-fit";
 import { type Terminal } from "@xterm/xterm";
-import { type ExecutionTargetId, type TerminalEvent, type ThreadId } from "@bigbud/contracts";
+import {
+  type ExecutionTargetId,
+  type TerminalDropPathMode,
+  type TerminalEvent,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { type MutableRefObject, type RefObject } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
-import { BIGBUD_FILES_PANEL_DRAG_MIME, parseFilesPanelDragEntry } from "../files/filesPanel.dnd";
 
 import { readNativeApi } from "../../rpc/nativeApi";
 import { selectTerminalEventEntries } from "../../stores/terminal";
@@ -56,6 +60,7 @@ interface TerminalOpenSessionInput {
   readonly cwd: string;
   readonly runtimeEnv?: Record<string, string> | undefined;
   readonly worktreePathRef: MutableRefObject<string | null | undefined>;
+  readonly dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
   readonly usesBundledTerminalFont: boolean;
   readonly terminalFontSize: number;
   readonly applyTerminalEvent: (event: TerminalEvent) => void;
@@ -71,72 +76,6 @@ export function clearSelectionAction(refs: TerminalSelectionActionStateRefs) {
     window.clearTimeout(refs.selectionActionTimerRef.current);
     refs.selectionActionTimerRef.current = null;
   }
-}
-
-export function acceptsTerminalDrop(types: ReadonlyArray<string>): boolean {
-  return types.includes(BIGBUD_FILES_PANEL_DRAG_MIME) || types.includes("Files");
-}
-
-interface ReadDroppedTerminalPathsInput {
-  dataTransfer: Pick<DataTransfer, "files" | "getData" | "types">;
-  readNativeFilePath: (file: File) => string;
-}
-
-export function readDroppedTerminalPaths(
-  input: ReadDroppedTerminalPathsInput,
-): ReadonlyArray<string> {
-  if (input.dataTransfer.types.includes(BIGBUD_FILES_PANEL_DRAG_MIME)) {
-    const payload = parseFilesPanelDragEntry(
-      input.dataTransfer.getData(BIGBUD_FILES_PANEL_DRAG_MIME),
-    );
-    if (payload) {
-      return [payload.path];
-    }
-  }
-
-  const paths = Array.from(input.dataTransfer.files, input.readNativeFilePath).filter(
-    (path) => path.length > 0,
-  );
-  if (paths.length > 0) {
-    return paths;
-  }
-
-  return [];
-}
-
-function looksLikeWindowsPath(path: string): boolean {
-  return /^[a-zA-Z]:[\\/]/.test(path) || path.startsWith("\\\\");
-}
-
-function quotePosixPath(path: string): string {
-  if (path.length === 0) {
-    return "''";
-  }
-  return `'${path.replaceAll("'", `'\\''`)}'`;
-}
-
-function quoteWindowsPath(path: string): string {
-  if (path.length === 0) {
-    return '""';
-  }
-  return `"${path.replaceAll('"', '""')}"`;
-}
-
-export function formatDroppedTerminalPath(path: string): string {
-  return looksLikeWindowsPath(path) ? quoteWindowsPath(path) : quotePosixPath(path);
-}
-
-export function pasteDroppedTerminalPaths(input: {
-  terminal: Pick<Terminal, "focus" | "paste"> | null;
-  paths: ReadonlyArray<string>;
-}): boolean {
-  if (!input.terminal || input.paths.length === 0) {
-    return false;
-  }
-
-  input.terminal.focus();
-  input.terminal.paste(input.paths.map(formatDroppedTerminalPath).join(" "));
-  return true;
 }
 
 export function readTerminalSelectionAction(input: ReadTerminalSelectionActionInput): {
@@ -340,6 +279,7 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
     ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
   });
   if (input.disposed()) return true;
+  input.dropPathModeRef.current = snapshot.dropPathMode;
   input.writeBatcher.flush();
   writeTerminalSnapshot(activeTerminal, snapshot);
   const bufferedEntries = selectTerminalEventEntries(

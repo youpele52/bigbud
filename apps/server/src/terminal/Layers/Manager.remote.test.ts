@@ -21,6 +21,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       );
 
       expect(snapshot.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+      expect(snapshot.dropPathMode).toBe("posix");
       expect(ptyAdapter.spawnInputs).toHaveLength(1);
       const spawnInput = ptyAdapter.spawnInputs[0];
       expect(spawnInput).toBeDefined();

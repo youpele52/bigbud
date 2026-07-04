@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import {
   type ExecutionTargetId,
+  isRemoteExecutionTargetId,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
@@ -24,7 +25,7 @@ import {
   acceptsTerminalDrop,
   pasteDroppedTerminalPaths,
   readDroppedTerminalPaths,
-} from "./TerminalViewport.session.helpers";
+} from "./TerminalViewport.drop";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
@@ -95,6 +96,7 @@ export function TerminalViewport({
   const selectionActionTimerRef = useRef<number | null>(null);
   const lastAppliedTerminalEventIdRef = useRef(0);
   const terminalHydratedRef = useRef(false);
+  const dropPathModeRef = useRef<"posix" | "powershell" | "cmd" | "wsl" | "msys">("posix");
   const resizeRequestStateRef = useRef({ inFlight: false, pending: false });
   const dragDepthRef = useRef(0);
   const handleSessionExited = useEffectEvent(() => {
@@ -178,6 +180,7 @@ export function TerminalViewport({
     terminalHydratedRef,
     autoFocusRef,
     worktreePathRef,
+    dropPathModeRef,
     threadId,
     terminalId,
     readTerminalLabel,
@@ -279,9 +282,15 @@ export function TerminalViewport({
       dataTransfer: event.dataTransfer,
       readNativeFilePath,
     });
+    const pasteablePaths = (
+      isRemoteExecutionTargetId(executionTargetId)
+        ? paths.filter((path) => path.origin === "internal")
+        : paths
+    ).map((path) => path.path);
     pasteDroppedTerminalPaths({
       terminal: terminalRef.current,
-      paths,
+      paths: pasteablePaths,
+      dropPathMode: dropPathModeRef.current,
     });
   });
 

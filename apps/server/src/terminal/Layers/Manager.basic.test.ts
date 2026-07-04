@@ -126,4 +126,23 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       expect(ptyAdapter.spawnInputs).toHaveLength(2);
     }),
   );
+
+  it.effect("respawns the terminal when the execution target changes", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+      yield* manager.open(openInput());
+
+      const snapshot = yield* manager.open(
+        openInput({
+          executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
+          cwd: "/root/project",
+        }),
+      );
+
+      expect(snapshot.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+      expect(snapshot.dropPathMode).toBe("posix");
+      expect(ptyAdapter.spawnInputs).toHaveLength(2);
+      expect(ptyAdapter.spawnInputs[1]?.shell).toBe("ssh");
+    }),
+  );
 });

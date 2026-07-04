@@ -5,6 +5,7 @@ import { increment, terminalSessionsTotal } from "../../observability/Metrics";
 import { PtySpawnError, type PtyProcess } from "../Services/PTY";
 import {
   createTerminalSpawnEnv,
+  defaultTerminalDropPathMode,
   formatShellCandidate,
   isRetryableShellSpawnError,
   resolveShellCandidates,
@@ -27,11 +28,18 @@ export { pollSubprocessActivityWith } from "./Manager.process-drain.poll.ts";
 export function trySpawnWith(
   ctx: ProcessLifecycleContext,
   session: TerminalSessionState,
-  shellCandidates: ReadonlyArray<{ shell: string; args?: string[] }>,
+  shellCandidates: ReadonlyArray<{
+    shell: string;
+    args?: string[];
+    dropPathMode: TerminalSessionState["dropPathMode"];
+  }>,
   spawnEnv: NodeJS.ProcessEnv,
   index = 0,
   lastError: PtySpawnError | null = null,
-): Effect.Effect<{ process: PtyProcess; shellLabel: string }, PtySpawnError> {
+): Effect.Effect<
+  { process: PtyProcess; shellLabel: string; dropPathMode: TerminalSessionState["dropPathMode"] },
+  PtySpawnError
+> {
   return Effect.gen(function* () {
     if (index >= shellCandidates.length) {
       const detail = lastError?.message ?? "Failed to spawn PTY process";
@@ -72,6 +80,7 @@ export function trySpawnWith(
       return {
         process: attempt.success,
         shellLabel: formatShellCandidate(candidate),
+        dropPathMode: candidate.dropPathMode,
       };
     }
 
@@ -157,6 +166,7 @@ export function startSessionWith(
       session.rows = input.rows;
       session.exitCode = null;
       session.exitSignal = null;
+      session.dropPathMode = defaultTerminalDropPathMode(session.executionTargetId);
       session.hasRunningSubprocess = false;
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
@@ -168,6 +178,7 @@ export function startSessionWith(
 
     let ptyProcess: PtyProcess | null = null;
     let startedShell: string | null = null;
+    let startedDropPathMode: TerminalSessionState["dropPathMode"] | null = null;
 
     const startResult = yield* Effect.result(
       increment(terminalSessionsTotal, { lifecycle: eventType }).pipe(
@@ -183,6 +194,7 @@ export function startSessionWith(
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
             ptyProcess = spawnResult.process;
             startedShell = spawnResult.shellLabel;
+            startedDropPathMode = spawnResult.dropPathMode;
 
             const processPid = ptyProcess.pid;
             const runtimeEpoch = session.runtimeEpoch;
@@ -208,6 +220,7 @@ export function startSessionWith(
               session.process = ptyProcess;
               session.pid = processPid;
               session.status = "running";
+              session.dropPathMode = startedDropPathMode ?? session.dropPathMode;
               session.updatedAt = new Date().toISOString();
               session.unsubscribeData = unsubscribeData;
               session.unsubscribeExit = unsubscribeExit;

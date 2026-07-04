@@ -94,6 +94,7 @@ describe("ProjectSetupScriptRunner", () => {
       Effect.succeed({
         threadId: "thread-1",
         terminalId: "setup-setup",
+        dropPathMode: "posix" as const,
         cwd: "/repo/worktrees/a",
         worktreePath: "/repo/worktrees/a",
         status: "running" as const,

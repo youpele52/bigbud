@@ -1,4 +1,4 @@
-import { type TerminalEvent } from "@bigbud/contracts";
+import { type TerminalDropPathMode, type TerminalEvent } from "@bigbud/contracts";
 import { type Terminal } from "@xterm/xterm";
 
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
@@ -17,6 +17,10 @@ interface NumberRefLike {
   current: number;
 }
 
+interface DropPathModeRefLike {
+  current: TerminalDropPathMode;
+}
+
 interface TerminalEventEntry {
   readonly id: number;
   readonly event: TerminalEvent;
@@ -25,6 +29,7 @@ interface TerminalEventEntry {
 export function makeApplyTerminalEvent(input: {
   readonly terminalRef: TerminalRefLike;
   readonly hasHandledExitRef: BooleanRefLike;
+  readonly dropPathModeRef: DropPathModeRefLike;
   readonly writeBatcher: TerminalWriteBatcher;
   readonly clearSelectionAction: () => void;
   readonly handleSessionExited: () => void;
@@ -47,6 +52,7 @@ export function makeApplyTerminalEvent(input: {
 
     if (event.type === "started" || event.type === "restarted") {
       input.hasHandledExitRef.current = false;
+      input.dropPathModeRef.current = event.snapshot.dropPathMode;
       input.clearSelectionAction();
       input.writeBatcher.flush();
       writeTerminalSnapshot(activeTerminal, event.snapshot);

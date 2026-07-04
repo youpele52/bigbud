@@ -6,6 +6,7 @@ import { terminalRunningSubprocessFromEvent } from "./activity.utils";
 const snapshot: TerminalSessionSnapshot = {
   threadId: "thread-1",
   terminalId: "default",
+  dropPathMode: "posix",
   cwd: "/tmp",
   worktreePath: null,
   status: "running",

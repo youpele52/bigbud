@@ -7,7 +7,7 @@ import { Effect, Equal, Option } from "effect";
 
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
 import { TerminalNotRunningError } from "../Services/Manager";
-import { normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
+import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
 import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { assertSshExecutionTargetReady } from "../../ssh/sshVerification.ts";
@@ -86,6 +86,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             threadId: input.threadId,
             terminalId,
             executionTargetId,
+            dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             history,
@@ -125,11 +126,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const targetCols = input.cols ?? liveSession.cols;
         const targetRows = input.rows ?? liveSession.rows;
         const runtimeEnvChanged = !Equal.equals(currentRuntimeEnv, nextRuntimeEnv);
+        const executionTargetChanged = liveSession.executionTargetId !== executionTargetId;
 
-        if (liveSession.cwd !== input.cwd || runtimeEnvChanged) {
+        if (liveSession.cwd !== input.cwd || runtimeEnvChanged || executionTargetChanged) {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           yield* stopProcess(liveSession);
           liveSession.executionTargetId = executionTargetId;
+          liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           liveSession.cwd = input.cwd;
           liveSession.worktreePath = input.worktreePath ?? null;
           liveSession.runtimeEnv = nextRuntimeEnv;
@@ -138,6 +141,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         } else if (liveSession.status === "exited" || liveSession.status === "error") {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           liveSession.executionTargetId = executionTargetId;
+          liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.worktreePath = input.worktreePath ?? null;
           resetSessionRuntimeState(liveSession);
@@ -240,6 +244,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             threadId: input.threadId,
             terminalId,
             executionTargetId,
+            dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             history: "",
@@ -259,6 +264,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           yield* flushPtyOutput(session.threadId, session.terminalId);
           yield* stopProcess(session);
           session.executionTargetId = executionTargetId;
+          session.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           session.cwd = input.cwd;
           session.worktreePath = input.worktreePath ?? null;
           session.runtimeEnv = normalizedRuntimeEnv(input.env);

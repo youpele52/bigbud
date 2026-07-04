@@ -39,6 +39,7 @@ function makeTerminalEvent(
         snapshot: {
           threadId: THREAD_ID,
           terminalId: "default",
+          dropPathMode: "posix",
           cwd: "/tmp/workspace",
           worktreePath: null,
           status: "running",
@@ -59,6 +60,7 @@ function makeStartedTerminalEvent(terminalId: string): TerminalEvent {
     snapshot: {
       threadId: THREAD_ID,
       terminalId,
+      dropPathMode: "posix",
       cwd: "/tmp/worktree",
       worktreePath: "/tmp/worktree",
       status: "running",
