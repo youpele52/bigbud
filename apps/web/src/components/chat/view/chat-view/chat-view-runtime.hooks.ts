@@ -52,7 +52,7 @@ interface ChatViewRuntimeInput {
 
 export function useChatViewRuntime({ base, thread, composer, timeline }: ChatViewRuntimeInput) {
   const { setPullRequestDialogState } = base;
-  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
+  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
 
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
@@ -81,7 +81,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
       if (!base.activeProject) {
         throw new Error("No active project is available for this pull request.");
       }
-      const verified = await ensureRemoteExecutionTargetAccess({
+      const verified = await beginRemoteExecutionTargetAccessCheck({
         executionTargetId: resolveWorkspaceExecutionTargetId(base.activeProject),
         ...(base.activeProject.cwd ? { cwd: base.activeProject.cwd } : {}),
         onVerified: async () => {
@@ -126,7 +126,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
       });
       return nextThreadId;
     },
-    [base, ensureRemoteExecutionTargetAccess],
+    [base, beginRemoteExecutionTargetAccessCheck],
   );
 
   const handlePreparedPullRequestThread = useCallback(

@@ -55,7 +55,7 @@ export function useSidebarProjectActions({
   const verifiedExecutionTargetIds = useRemoteAccessStore(
     (store) => store.verifiedExecutionTargetIds,
   );
-  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
+  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -304,7 +304,7 @@ export function useSidebarProjectActions({
         return;
       }
 
-      void ensureRemoteExecutionTargetAccess({
+      void beginRemoteExecutionTargetAccessCheck({
         executionTargetId,
         ...(project.cwd ? { cwd: project.cwd } : {}),
         onVerified: () => {
@@ -316,7 +316,7 @@ export function useSidebarProjectActions({
     [
       clearSelection,
       dragInProgressRef,
-      ensureRemoteExecutionTargetAccess,
+      beginRemoteExecutionTargetAccessCheck,
       projects,
       selectedThreadIdsSize,
       setProjectExpanded,
@@ -348,7 +348,7 @@ export function useSidebarProjectActions({
         return;
       }
 
-      void ensureRemoteExecutionTargetAccess({
+      void beginRemoteExecutionTargetAccessCheck({
         executionTargetId,
         ...(project.cwd ? { cwd: project.cwd } : {}),
         onVerified: () => {
@@ -359,7 +359,7 @@ export function useSidebarProjectActions({
     },
     [
       dragInProgressRef,
-      ensureRemoteExecutionTargetAccess,
+      beginRemoteExecutionTargetAccessCheck,
       projects,
       setProjectExpanded,
       setSelectedProject,
