@@ -18,6 +18,23 @@ import {
   type ProjectionKanbanRepositoryShape,
 } from "../Services/ProjectionKanban.ts";
 
+const resolveMtime = (stat: { mtime: Date | Option.Option<Date> }): Date =>
+  Option.isOption(stat.mtime) ? Option.getOrElse(stat.mtime, () => new Date(0)) : stat.mtime;
+
+const resolveLatestUpdatedAt = (input: {
+  readonly metadataUpdatedAt: string;
+  readonly markdownMtime: Date;
+  readonly metadataMtime: Date;
+}): string => {
+  const metadataUpdatedAtTime = Date.parse(input.metadataUpdatedAt);
+  const latestTime = Math.max(
+    Number.isNaN(metadataUpdatedAtTime) ? 0 : metadataUpdatedAtTime,
+    input.markdownMtime.getTime(),
+    input.metadataMtime.getTime(),
+  );
+  return new Date(latestTime).toISOString();
+};
+
 const makeProjectionKanbanRepository = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -54,6 +71,12 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       return Option.none<StoredKanbanCard>();
     }
 
+    const markdownStat = yield* fs.stat(absolutePath).pipe(Effect.option);
+    const metadataStat = yield* fs.stat(metadataPath).pipe(Effect.option);
+    if (Option.isNone(markdownStat) || Option.isNone(metadataStat)) {
+      return Option.none<StoredKanbanCard>();
+    }
+
     const cardId = path.relative(config.stateDir, absolutePath) as KanbanCardId;
 
     return Option.some({
@@ -64,7 +87,11 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       absolutePath,
       content: content.value,
       createdAt: metadata.createdAt,
-      updatedAt: metadata.updatedAt,
+      updatedAt: resolveLatestUpdatedAt({
+        metadataUpdatedAt: metadata.updatedAt,
+        markdownMtime: resolveMtime(markdownStat.value),
+        metadataMtime: resolveMtime(metadataStat.value),
+      }),
       position: metadata.position,
     });
   });

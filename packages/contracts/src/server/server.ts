@@ -11,6 +11,7 @@ import { ModelCapabilities } from "../core/model";
 import { ProviderKind } from "../orchestration/orchestration";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
 import { ServerSettings } from "../core/settings";
+import { ServerStoragePaths } from "./server.storage";
 import {
   ServerLifecycleReadyPayload,
   ServerLifecycleStreamEvent,
@@ -168,6 +169,7 @@ export type ServerObservability = typeof ServerObservability.Type;
 
 export const ServerConfig = Schema.Struct({
   cwd: TrimmedNonEmptyString,
+  storage: ServerStoragePaths,
   keybindingsConfigPath: TrimmedNonEmptyString,
   keybindings: ResolvedKeybindingsConfig,
   issues: ServerConfigIssues,

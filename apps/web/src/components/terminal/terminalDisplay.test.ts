@@ -51,6 +51,17 @@ describe("terminalDisplay", () => {
     ]);
   });
 
+  it("prefers custom terminal label overrides over fallback labels", () => {
+    expect([
+      ...buildTerminalLabelMap(["default", "terminal-2"], "bigbud", {
+        "terminal-2": "infra shell",
+      }).entries(),
+    ]).toEqual([
+      ["default", "bigbud"],
+      ["terminal-2", "infra shell"],
+    ]);
+  });
+
   it("prefers the active session provider and falls back to the model provider", () => {
     expect(
       resolveTerminalProvider({

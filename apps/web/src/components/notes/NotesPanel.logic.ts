@@ -2,9 +2,11 @@ import { NoteId, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { useDirectoryChangeRefresh } from "~/hooks/useDirectoryChangeRefresh";
+import { getNotesWatchRoots } from "~/hooks/storageRoots";
 import { basenameOfPath } from "~/lib/vscode-icons";
 import { ensureNativeApi } from "~/rpc/nativeApi";
-import { useDefaultChatCwd } from "~/rpc/serverState";
+import { useDefaultChatCwd, useServerConfig } from "~/rpc/serverState";
 import { useProjectById, useThreadById } from "~/stores/main";
 import type { AnnotationIntent } from "~/stores/composer";
 import { useComposerDraftStore } from "~/stores/composer";
@@ -38,6 +40,7 @@ export function useNotesPanelState(input: UseNotesPanelStateInput) {
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
   const defaultChatCwd = useDefaultChatCwd();
+  const serverConfig = useServerConfig();
   const addAnnotation = useComposerDraftStore((state) => state.addAnnotation);
   const { copyToClipboard } = useCopyToClipboard();
   const workspaceRoot = deriveWorkspaceRoot(thread?.worktreePath, project?.cwd, defaultChatCwd);
@@ -150,11 +153,14 @@ export function useNotesPanelState(input: UseNotesPanelStateInput) {
 
   useEffect(() => {
     void loadNotes();
-    const intervalId = window.setInterval(() => {
+  }, [loadNotes]);
+
+  useDirectoryChangeRefresh({
+    watchRoots: getNotesWatchRoots(serverConfig?.storage, projectId, resolvedScope),
+    refresh: () => {
       void refreshNotesList();
-    }, 3000);
-    return () => window.clearInterval(intervalId);
-  }, [loadNotes, refreshNotesList]);
+    },
+  });
 
   useEffect(() => {
     if (!selectedNoteId) {

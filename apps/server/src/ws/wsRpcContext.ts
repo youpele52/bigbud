@@ -197,6 +197,10 @@ export const makeWsRpcContext = Effect.gen(function* () {
 
     return {
       cwd: config.cwd,
+      storage: {
+        notesDir: config.notesDir,
+        kanbanDir: config.kanbanDir,
+      },
       keybindingsConfigPath: config.keybindingsConfigPath,
       keybindings: keybindingsConfig.keybindings,
       issues: keybindingsConfig.issues,

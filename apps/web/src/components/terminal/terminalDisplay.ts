@@ -23,12 +23,14 @@ export function resolveTerminalBaseLabel(input: ResolveTerminalBaseLabelInput): 
 export function buildTerminalLabelMap(
   terminalIds: ReadonlyArray<string>,
   baseLabel: string,
+  overridesByTerminalId: Readonly<Record<string, string>> = {},
 ): ReadonlyMap<string, string> {
   return new Map(
-    terminalIds.map((terminalId, index) => [
-      terminalId,
-      index === 0 ? baseLabel : `${baseLabel} ${index + 1}`,
-    ]),
+    terminalIds.map((terminalId, index) => {
+      const fallbackLabel = index === 0 ? baseLabel : `${baseLabel} ${index + 1}`;
+      const override = overridesByTerminalId[terminalId]?.trim();
+      return [terminalId, override && override.length > 0 ? override : fallbackLabel];
+    }),
   );
 }
 

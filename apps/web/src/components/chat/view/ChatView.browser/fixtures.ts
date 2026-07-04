@@ -102,6 +102,10 @@ function isoAt(offsetSeconds: number): string {
 export function createBaseServerConfig(): ServerConfig {
   return {
     cwd: "/repo/project",
+    storage: {
+      notesDir: "/repo/project/.t3/notes",
+      kanbanDir: "/repo/project/.t3/kanban",
+    },
     keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
     keybindings: [],
     issues: [],

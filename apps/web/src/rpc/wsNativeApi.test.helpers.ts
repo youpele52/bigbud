@@ -296,6 +296,10 @@ export const defaultProviders: ReadonlyArray<ServerProvider> = [
 
 export const baseServerConfig: ServerConfig = {
   cwd: "/tmp/workspace",
+  storage: {
+    notesDir: "/tmp/workspace/.config/notes",
+    kanbanDir: "/tmp/workspace/.config/kanban",
+  },
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
   keybindings: [],
   issues: [],

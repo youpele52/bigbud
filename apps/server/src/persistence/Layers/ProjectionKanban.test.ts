@@ -1,3 +1,4 @@
+import { utimes } from "node:fs/promises";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -28,6 +29,7 @@ const makeServerConfigLayer = (tempDir: string) =>
     keybindingsConfigPath: `${tempDir}/keybindings.json`,
     settingsPath: `${tempDir}/settings.json`,
     notesDir: `${tempDir}/notes`,
+    kanbanDir: `${tempDir}/kanban`,
     worktreesDir: `${tempDir}/worktrees`,
     attachmentsDir: `${tempDir}/attachments`,
     logsDir: `${tempDir}/logs`,
@@ -133,6 +135,43 @@ projectionKanbanLayer("ProjectionKanban repository", (it) => {
       assert.ok(listed.some((card) => card.title === "Valid"));
       assert.ok(!listed.some((card) => card.absolutePath.endsWith("/missing-sidecar.md")));
       assert.ok(!listed.some((card) => card.absolutePath.endsWith("/bad-meta.md")));
+    }),
+  );
+
+  it.effect("surfaces external markdown edits through updatedAt", () =>
+    Effect.gen(function* () {
+      const kanban = yield* ProjectionKanbanRepository;
+      const fs = yield* FileSystem.FileSystem;
+
+      const created = yield* kanban.create({
+        projectId: null,
+        title: "Editable",
+        content: "# Editable\n",
+        status: "backlog",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        updatedAt: "2026-06-23T00:00:00.000Z",
+      });
+
+      yield* fs.writeFileString(created.absolutePath, "# Edited by agent\n");
+      yield* Effect.tryPromise(() =>
+        utimes(
+          created.absolutePath,
+          new Date("2027-06-23T00:05:00.000Z"),
+          new Date("2027-06-23T00:05:00.000Z"),
+        ),
+      );
+
+      const refreshed = yield* kanban.getById({ cardId: created.cardId }).pipe(
+        Effect.map((card) => {
+          if (card._tag === "None") {
+            throw new Error("Expected kanban card to exist");
+          }
+          return card.value;
+        }),
+      );
+
+      assert.equal(refreshed.content, "# Edited by agent\n");
+      assert.equal(refreshed.updatedAt, "2027-06-23T00:05:00.000Z");
     }),
   );
 });

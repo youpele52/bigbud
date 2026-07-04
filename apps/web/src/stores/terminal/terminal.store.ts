@@ -32,6 +32,13 @@ import {
   applyTerminalEventsToState,
   ensurePanelTerminalInState,
 } from "./terminal.store.panel";
+import {
+  clearTerminalLabelOverrideByThreadId,
+  removeOrphanedTerminalLabelOverrides,
+  removeTerminalLabelOverridesForThread,
+  setTerminalLabelOverrideByThreadId,
+} from "./terminal.store.labels";
+import { type TerminalStateStoreState } from "./terminal.store.types";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
 export {
@@ -49,50 +56,6 @@ function createTerminalStateStorage() {
       [TERMINAL_STATE_STORAGE_KEY]: LEGACY_TERMINAL_STATE_STORAGE_KEYS,
     },
   });
-}
-
-interface TerminalStateStoreState {
-  terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
-  panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
-  terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
-  terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
-  terminalEventLastIdsByKey: Record<string, number>;
-  nextTerminalEventId: number;
-  setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
-  setTerminalHeight: (threadId: ThreadId, height: number) => void;
-  splitTerminal: (threadId: ThreadId, terminalId: string) => void;
-  newTerminal: (threadId: ThreadId, terminalId: string) => void;
-  ensureTerminal: (
-    threadId: ThreadId,
-    terminalId: string,
-    options?: { open?: boolean; active?: boolean },
-  ) => void;
-  setActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
-  closeTerminal: (threadId: ThreadId, terminalId: string) => void;
-  setPanelTerminalOpen: (threadId: ThreadId, open: boolean) => void;
-  setPanelTerminalHeight: (threadId: ThreadId, height: number) => void;
-  splitPanelTerminal: (threadId: ThreadId, terminalId: string) => void;
-  newPanelTerminal: (threadId: ThreadId, terminalId: string) => void;
-  ensurePanelTerminal: (
-    threadId: ThreadId,
-    terminalId: string,
-    options?: { open?: boolean; active?: boolean },
-  ) => void;
-  setPanelActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
-  closePanelTerminal: (threadId: ThreadId, terminalId: string) => void;
-  setTerminalLaunchContext: (threadId: ThreadId, context: ThreadTerminalLaunchContext) => void;
-  clearTerminalLaunchContext: (threadId: ThreadId) => void;
-  setTerminalActivity: (
-    threadId: ThreadId,
-    terminalId: string,
-    hasRunningSubprocess: boolean,
-  ) => void;
-  recordTerminalEvent: (event: import("@bigbud/contracts").TerminalEvent) => void;
-  applyTerminalEvent: (event: import("@bigbud/contracts").TerminalEvent) => void;
-  applyTerminalEvents: (events: ReadonlyArray<import("@bigbud/contracts").TerminalEvent>) => void;
-  clearTerminalState: (threadId: ThreadId) => void;
-  removeTerminalState: (threadId: ThreadId) => void;
-  removeOrphanedTerminalStates: (activeThreadIds: Set<ThreadId>) => void;
 }
 
 export const useTerminalStateStore = create<TerminalStateStoreState>()(
@@ -139,6 +102,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       return {
         terminalStateByThreadId: {},
         panelTerminalStateByThreadId: {},
+        terminalLabelOverridesByThreadId: {},
         terminalLaunchContextByThreadId: {},
         terminalEventEntriesByKey: {},
         terminalEventLastIdsByKey: {},
@@ -180,6 +144,31 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           updateTerminal(threadId, (state) => setThreadActiveTerminal(state, terminalId)),
         closeTerminal: (threadId, terminalId) =>
           updateTerminal(threadId, (state) => closeThreadTerminal(state, terminalId)),
+        setTerminalLabelOverride: (threadId, terminalId, label) =>
+          set((state) => {
+            const nextOverrides = setTerminalLabelOverrideByThreadId(
+              state.terminalLabelOverridesByThreadId,
+              threadId,
+              terminalId,
+              label,
+            );
+            if (!nextOverrides) {
+              return state;
+            }
+            return { terminalLabelOverridesByThreadId: nextOverrides };
+          }),
+        clearTerminalLabelOverride: (threadId, terminalId) =>
+          set((state) => {
+            const nextOverrides = clearTerminalLabelOverrideByThreadId(
+              state.terminalLabelOverridesByThreadId,
+              threadId,
+              terminalId,
+            );
+            if (!nextOverrides) {
+              return state;
+            }
+            return { terminalLabelOverridesByThreadId: nextOverrides };
+          }),
         setPanelTerminalOpen: (threadId, open) =>
           updatePanelTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
         setPanelTerminalHeight: (threadId, height) =>
@@ -237,8 +226,14 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               () => createDefaultThreadTerminalState(),
             );
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
+            const hadLabelOverrides =
+              state.terminalLabelOverridesByThreadId[threadId] !== undefined;
             const { [threadId]: _removed, ...remainingLaunchContexts } =
               state.terminalLaunchContextByThreadId;
+            const remainingLabelOverrides = removeTerminalLabelOverridesForThread(
+              state.terminalLabelOverridesByThreadId,
+              threadId,
+            );
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
             let removedEventEntries = false;
@@ -253,6 +248,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
               nextTerminalStateByThreadId === state.terminalStateByThreadId &&
               nextPanelTerminalStateByThreadId === state.panelTerminalStateByThreadId &&
               !hadLaunchContext &&
+              !hadLabelOverrides &&
               !removedEventEntries
             ) {
               return state;
@@ -260,6 +256,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             return {
               terminalStateByThreadId: nextTerminalStateByThreadId,
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
+              terminalLabelOverridesByThreadId: remainingLabelOverrides,
               terminalLaunchContextByThreadId: remainingLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
               terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
@@ -270,6 +267,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const hadTerminalState = state.terminalStateByThreadId[threadId] !== undefined;
             const hadPanelTerminalState =
               state.panelTerminalStateByThreadId[threadId] !== undefined;
+            const hadLabelOverrides =
+              state.terminalLabelOverridesByThreadId[threadId] !== undefined;
             const hadLaunchContext = state.terminalLaunchContextByThreadId[threadId] !== undefined;
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
@@ -284,6 +283,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (
               !hadTerminalState &&
               !hadPanelTerminalState &&
+              !hadLabelOverrides &&
               !hadLaunchContext &&
               !removedEventEntries
             ) {
@@ -293,11 +293,16 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             delete nextTerminalStateByThreadId[threadId];
             const nextPanelTerminalStateByThreadId = { ...state.panelTerminalStateByThreadId };
             delete nextPanelTerminalStateByThreadId[threadId];
+            const nextLabelOverridesByThreadId = removeTerminalLabelOverridesForThread(
+              state.terminalLabelOverridesByThreadId,
+              threadId,
+            );
             const nextLaunchContexts = { ...state.terminalLaunchContextByThreadId };
             delete nextLaunchContexts[threadId];
             return {
               terminalStateByThreadId: nextTerminalStateByThreadId,
               panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
+              terminalLabelOverridesByThreadId: nextLabelOverridesByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
               terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
@@ -314,6 +319,11 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             const orphanedLaunchContextIds = Object.keys(
               state.terminalLaunchContextByThreadId,
             ).filter((id) => !activeThreadIds.has(id as ThreadId));
+            const { orphanedThreadIds: orphanedLabelOverrideIds, nextOverridesByThreadId } =
+              removeOrphanedTerminalLabelOverrides(
+                state.terminalLabelOverridesByThreadId,
+                activeThreadIds,
+              );
             const nextTerminalEventEntriesByKey = { ...state.terminalEventEntriesByKey };
             const nextTerminalEventLastIdsByKey = { ...state.terminalEventLastIdsByKey };
             let removedEventEntries = false;
@@ -328,6 +338,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             if (
               orphanedIds.length === 0 &&
               orphanedPanelIds.length === 0 &&
+              orphanedLabelOverrideIds.length === 0 &&
               orphanedLaunchContextIds.length === 0 &&
               !removedEventEntries
             ) {
@@ -348,6 +359,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             return {
               terminalStateByThreadId: next,
               panelTerminalStateByThreadId: nextPanel,
+              terminalLabelOverridesByThreadId: nextOverridesByThreadId,
               terminalLaunchContextByThreadId: nextLaunchContexts,
               terminalEventEntriesByKey: nextTerminalEventEntriesByKey,
               terminalEventLastIdsByKey: nextTerminalEventLastIdsByKey,
@@ -361,6 +373,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       storage: createJSONStorage(createTerminalStateStorage),
       partialize: (state) => ({
         terminalStateByThreadId: state.terminalStateByThreadId,
+        terminalLabelOverridesByThreadId: state.terminalLabelOverridesByThreadId,
       }),
     },
   ),

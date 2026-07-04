@@ -2,6 +2,32 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.651 (8 July, 2026)
+
+### Terminal
+
+- Added contextual terminal labels and provider icons so terminal tabs now read like the active project or directory instead of generic terminal slots.
+- Added **bold drag-and-drop support** for file and folder paths into the terminal, and made dropped paths shell-aware across local and remote sessions so Windows shells, PowerShell, WSL, MSYS, and SSH-backed terminals receive the right format instead of a one-size-fits-all string.
+
+### Remote Access
+
+- Split remote access checks into foreground and background flows so the app can keep the UI responsive while remote execution status continues to resolve in the background.
+
+### Startup
+
+- Reduced first-turn startup blocking in server bootstrap so new sessions can begin sooner while the rest of the thread plumbing finishes wiring up.
+
+### Desktop
+
+- Unified the macOS open and closed desktop app icons so packaged and running states now stay visually consistent.
+- Cut duplicate desktop runtime payloads from the build pipeline to shrink the app package and keep the runtime artifacts leaner.
+
+### Maintenance
+
+- Removed stale remote-access and planning documents that no longer matched the current codebase.
+- Split web composer, notes, terminal, and RPC client logic into smaller modules to keep the codebase easier to navigate and maintain.
+- Split backend contracts and server helpers into focused modules to reduce file size and keep the server-side architecture easier to reason about.
+
 ## v0.1.650 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)
