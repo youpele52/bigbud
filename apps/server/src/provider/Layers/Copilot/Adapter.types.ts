@@ -198,7 +198,7 @@ export function eventBase(input: {
   };
 }
 
-export { makeNodeWrapperCliPath } from "./Adapter.types.cli.ts";
+export { makeCliRuntimeConnection, makeNodeWrapperCliPath } from "./Adapter.types.cli.ts";
 export {
   approvalDecisionToPermissionResult,
   getCopilotSessionApprovalMetadata,

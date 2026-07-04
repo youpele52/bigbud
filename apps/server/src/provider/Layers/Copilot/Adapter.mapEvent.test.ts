@@ -140,7 +140,7 @@ describe("CopilotAdapter.mapEvent", () => {
         id: "sdk-event-4",
         parentId: null,
         timestamp: "2026-05-14T00:00:04.000Z",
-        data: { reason: "user_cancelled" },
+        data: { reason: "user_initiated" },
       } as SessionEvent),
     );
 
@@ -151,7 +151,7 @@ describe("CopilotAdapter.mapEvent", () => {
       provider: "copilot",
       threadId: "thread-1",
       turnId: "turn-1",
-      payload: { reason: "user_cancelled" },
+      payload: { reason: "user_initiated" },
     });
   });
 

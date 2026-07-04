@@ -4,7 +4,7 @@ import {
   type ProviderSession,
   type ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { Duration, Effect, Option } from "effect";
 
 import {
   providerMetricAttributes,
@@ -24,6 +24,8 @@ import {
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
+
+const PROVIDER_SESSION_START_TIMEOUT = Duration.seconds(45);
 
 type UpsertSessionBinding = (
   session: ProviderSession,
@@ -138,10 +140,18 @@ export function makeStartSessionInternal(input: {
           ? persistedBinding.resumeCursor
           : undefined);
       const adapter = yield* input.registry.getByProvider(startInput.provider);
-      const session = yield* adapter.startSession({
-        ...startInput,
-        ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
-      });
+      const sessionOption = yield* adapter
+        .startSession({
+          ...startInput,
+          ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
+        })
+        .pipe(Effect.timeoutOption(PROVIDER_SESSION_START_TIMEOUT));
+      const session =
+        Option.getOrUndefined(sessionOption) ??
+        (yield* toValidationError(
+          "ProviderService.startSession",
+          `Provider '${startInput.provider}' session startup timed out after ${Duration.toSeconds(PROVIDER_SESSION_START_TIMEOUT)}s before the first turn could be sent.`,
+        ));
 
       if (session.provider !== adapter.provider) {
         return yield* toValidationError(

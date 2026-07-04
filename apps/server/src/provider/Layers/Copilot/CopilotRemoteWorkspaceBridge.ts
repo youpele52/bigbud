@@ -40,7 +40,7 @@ function normalizeRemoteCommandResult(output: string, exitCode: number): ToolRes
     resultType: exitCode === 0 ? "success" : "failure",
     ...(exitCode === 0 ? {} : { error: textResultForLlm }),
     sessionLog: textResultForLlm,
-    toolTelemetry: { exitCode },
+    toolTelemetry: { command: { exitCode } },
   };
 }
 
@@ -81,7 +81,7 @@ export interface CopilotRemoteWorkspaceBridge {
   readonly clientSessionFsConfig: SessionFsConfig;
   readonly sessionConfig: Pick<
     SessionConfig,
-    "createSessionFsHandler" | "excludedTools" | "systemMessage" | "tools"
+    "createSessionFsProvider" | "excludedTools" | "systemMessage" | "tools"
   >;
 }
 
@@ -103,7 +103,7 @@ export async function createCopilotRemoteWorkspaceBridge(
     cleanup: bridge.cleanup,
     clientSessionFsConfig: bridge.sessionFsConfig,
     sessionConfig: {
-      createSessionFsHandler: () => bridge.createSessionFsHandler(),
+      createSessionFsProvider: () => bridge.createSessionFsHandler(),
       excludedTools: [...COPILOT_REMOTE_WORKSPACE_EXCLUDED_TOOLS],
       tools: [createRemoteBashTool(workspaceTarget)],
       systemMessage: {

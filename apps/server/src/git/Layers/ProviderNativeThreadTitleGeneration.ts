@@ -15,7 +15,10 @@ import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 import type { ThreadTitleGenerationInput } from "../Services/TextGeneration.ts";
 import { buildThreadTitlePrompt } from "../Prompts.ts";
 import { limitSection, sanitizeThreadTitle } from "../Utils.ts";
-import { makeNodeWrapperCliPath } from "../../provider/Layers/Copilot/Adapter.types.ts";
+import {
+  makeCliRuntimeConnection,
+  makeNodeWrapperCliPath,
+} from "../../provider/Layers/Copilot/Adapter.types.ts";
 import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
 import {
@@ -86,9 +89,10 @@ export const generateCopilotThreadTitleNative = (
     const binaryPath = copilotSettings?.binaryPath;
     const useCustomBinary = binaryPath !== undefined && binaryPath !== "copilot";
     const resolvedCliPath = useCustomBinary ? binaryPath : makeNodeWrapperCliPath();
+    const connection = makeCliRuntimeConnection(resolvedCliPath);
     const clientOptions: CopilotClientOptions = {
-      ...(resolvedCliPath !== undefined ? { cliPath: resolvedCliPath } : {}),
-      ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(connection ? { connection } : {}),
+      ...(input.cwd ? { workingDirectory: input.cwd } : {}),
       logLevel: "error",
     };
 

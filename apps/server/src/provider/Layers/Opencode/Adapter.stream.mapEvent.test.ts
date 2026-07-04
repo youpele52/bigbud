@@ -58,6 +58,7 @@ it.effect("infers context compaction from busy status messages as a fallback", (
 
   return Effect.gen(function* () {
     const events = yield* mapEvent(session, {
+      id: "sdk-session-status-1",
       type: "session.status",
       properties: {
         sessionID: session.opencodeSessionId,
@@ -82,6 +83,7 @@ it.effect("infers context compaction from busy status messages as a fallback", (
           source: "opencode.sdk.session-event",
           method: "session.status",
           payload: {
+            id: "sdk-session-status-1",
             type: "session.status",
             properties: {
               sessionID: session.opencodeSessionId,
@@ -112,6 +114,7 @@ it.effect("maps native session.compacted events to thread compacted state", () =
 
   return Effect.gen(function* () {
     const events = yield* mapEvent(session, {
+      id: "sdk-session-compacted-1",
       type: "session.compacted",
       properties: {
         sessionID: session.opencodeSessionId,
@@ -132,6 +135,7 @@ it.effect("maps native session.compacted events to thread compacted state", () =
           source: "opencode.sdk.session-event",
           method: "session.compacted",
           payload: {
+            id: "sdk-session-compacted-1",
             type: "session.compacted",
             properties: {
               sessionID: session.opencodeSessionId,
@@ -158,6 +162,7 @@ it.effect("maps message.part.updated(reasoning) + message.part.delta to reasonin
   return Effect.gen(function* () {
     // First, register the part as reasoning via message.part.updated
     const updatedEvents = yield* mapEvent(session, {
+      id: "sdk-message-part-updated-1",
       type: "message.part.updated",
       properties: {
         sessionID: session.opencodeSessionId,
@@ -172,6 +177,7 @@ it.effect("maps message.part.updated(reasoning) + message.part.delta to reasonin
 
     // Then a delta arrives with field: "text" — must map to reasoning_text
     const deltaEvents = yield* mapEvent(session, {
+      id: "sdk-message-part-delta-1",
       type: "message.part.delta",
       properties: {
         sessionID: session.opencodeSessionId,
@@ -201,6 +207,7 @@ it.effect(
 
     return Effect.gen(function* () {
       const deltaEvents = yield* mapEvent(session, {
+        id: "sdk-message-part-delta-2",
         type: "message.part.delta",
         properties: {
           sessionID: session.opencodeSessionId,
