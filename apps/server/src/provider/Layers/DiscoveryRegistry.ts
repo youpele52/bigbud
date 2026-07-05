@@ -77,52 +77,46 @@ const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive
     .filter(predicate);
 });
 
-const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(function* (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  rawPath: string,
-) {
-  // Avoid recursively watching broad system roots for optional descriptors.
-  if (rawPath.startsWith("/etc/")) {
-    const exists = yield* fs.exists(rawPath).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-          path: rawPath,
-          error: String(error),
-        }),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-    return exists ? rawPath : null;
-  }
-
-  const candidates = [rawPath];
-  const parentPath = path.dirname(rawPath);
-  if (parentPath !== rawPath) {
-    candidates.push(parentPath);
-  }
-  const grandParentPath = path.dirname(parentPath);
-  if (grandParentPath !== parentPath) {
-    candidates.push(grandParentPath);
-  }
-
-  for (const currentPath of candidates) {
-    const exists = yield* fs.exists(currentPath).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-          path: currentPath,
-          error: String(error),
-        }),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-    if (exists) {
-      return currentPath;
+export const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(
+  function* (fs: FileSystem.FileSystem, path: Path.Path, rawPath: string) {
+    // Avoid recursively watching broad system roots for optional descriptors.
+    if (rawPath.startsWith("/etc/")) {
+      const exists = yield* fs.exists(rawPath).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+            path: rawPath,
+            error: String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => false),
+      );
+      return exists ? rawPath : null;
     }
-  }
 
-  return null;
-});
+    const candidates = [rawPath];
+    const parentPath = path.dirname(rawPath);
+    if (parentPath !== rawPath) {
+      candidates.push(parentPath);
+    }
+
+    for (const currentPath of candidates) {
+      const exists = yield* fs.exists(currentPath).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+            path: currentPath,
+            error: String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => false),
+      );
+      if (exists) {
+        return currentPath;
+      }
+    }
+
+    return null;
+  },
+);
 
 export const haveDiscoveryChanged = (
   previousCatalog: ServerDiscoveryCatalog,
