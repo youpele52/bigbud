@@ -74,6 +74,12 @@ import {
   ServerVerifyExecutionTargetResult,
 } from "./server";
 import {
+  ServerGetHandoffJobInput,
+  ServerHandoffJob,
+  ServerHandoffJobError,
+  ServerStartHandoffJobInput,
+} from "./server.handoff";
+import {
   ServerCreateMobileRemotePairingInput,
   ServerListMobileRemoteSessionsResult,
   ServerMobileRemoteError,
@@ -146,6 +152,18 @@ export const WsServerExportThreadContextRpc = Rpc.make(WS_METHODS.serverExportTh
   payload: ServerExportThreadContextInput,
   success: ServerExportThreadContextResult,
   error: ServerExportThreadContextError,
+});
+
+export const WsServerStartHandoffJobRpc = Rpc.make(WS_METHODS.serverStartHandoffJob, {
+  payload: ServerStartHandoffJobInput,
+  success: ServerHandoffJob,
+  error: ServerHandoffJobError,
+});
+
+export const WsServerGetHandoffJobRpc = Rpc.make(WS_METHODS.serverGetHandoffJob, {
+  payload: ServerGetHandoffJobInput,
+  success: ServerHandoffJob,
+  error: ServerHandoffJobError,
 });
 
 export const WsServerCreateMobileRemotePairingRpc = Rpc.make(

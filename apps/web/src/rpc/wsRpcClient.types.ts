@@ -38,6 +38,8 @@ import {
   type ServerDeleteAutomationInput,
   type ServerExportThreadContextInput,
   type ServerExportThreadContextResult,
+  type ServerGetHandoffJobInput,
+  type ServerHandoffJob,
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
   type ServerListAllAutomationsInput,
@@ -52,6 +54,7 @@ import {
   type ServerResumeAutomationInput,
   type ServerRevokeMobileRemoteSessionInput,
   type ServerSettingsPatch,
+  type ServerStartHandoffJobInput,
   type ServerTriggerAutomationInput,
   type ServerTriggerAutomationResult,
   type ServerUpdateAutomationInput,
@@ -187,6 +190,8 @@ export interface WsRpcClient {
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
+    readonly getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
     readonly createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;

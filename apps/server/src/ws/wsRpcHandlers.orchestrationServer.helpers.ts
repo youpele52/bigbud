@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import path from "node:path";
 import { Effect, Schema, Stream } from "effect";
 import {
   ProjectDirectoryWatchError,
@@ -22,32 +19,9 @@ import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import type { WsRpcContext } from "./wsRpcContext";
+import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { makeServerConfigUpdateStream } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
-
-const HANDOFF_TMP_DIR = path.join(homedir(), ".bigbud", "skills", "handoff", "tmp");
-
-function slugifyHandoffTitle(value: string | undefined): string {
-  const base = (value ?? "handoff")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-  return base.length > 0 ? base : "handoff";
-}
-
-export async function writeHandoffDocumentFile(input: {
-  readonly title?: string | undefined;
-  readonly content: string;
-}): Promise<string> {
-  await mkdir(HANDOFF_TMP_DIR, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:]/g, "").replace(/\..+$/, "").replace("T", "-");
-  const suffix = crypto.randomUUID().slice(0, 8);
-  const fileName = `${stamp}-${slugifyHandoffTitle(input.title)}-${suffix}.md`;
-  const filePath = path.join(HANDOFF_TMP_DIR, fileName);
-  await writeFile(filePath, `${input.content.trim()}\n`, "utf8");
-  return filePath;
-}
 
 export function makeServerWsRpcHandlers(context: WsRpcContext) {
   return {
@@ -143,6 +117,17 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         }),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverStartHandoffJob]: (input: {
+      readonly threadId: ThreadId;
+      readonly focus?: string | undefined;
+    }) =>
+      observeRpcEffect(WS_METHODS.serverStartHandoffJob, context.handoffJobs.startJob(input), {
+        "rpc.aggregate": "server",
+      }),
+    [WS_METHODS.serverGetHandoffJob]: (input: { readonly jobId: string }) =>
+      observeRpcEffect(WS_METHODS.serverGetHandoffJob, context.handoffJobs.getJob(input.jobId), {
+        "rpc.aggregate": "server",
+      }),
     [WS_METHODS.serverCreateMobileRemotePairing]: (input: {
       readonly scope: "read-only" | "approve-only" | "thread-control";
       readonly baseUrl: string;

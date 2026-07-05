@@ -80,6 +80,8 @@ export const WS_METHODS = {
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",
+  serverStartHandoffJob: "server.startHandoffJob",
+  serverGetHandoffJob: "server.getHandoffJob",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",

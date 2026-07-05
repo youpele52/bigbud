@@ -83,6 +83,11 @@ import type {
   ServerExportThreadContextResult,
 } from "./server";
 import type {
+  ServerGetHandoffJobInput,
+  ServerHandoffJob,
+  ServerStartHandoffJobInput,
+} from "./server.handoff";
+import type {
   ServerCreateMobileRemotePairingInput,
   ServerListMobileRemoteSessionsResult,
   ServerMobileRemotePairing,
@@ -345,6 +350,8 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
+    getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
     createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
