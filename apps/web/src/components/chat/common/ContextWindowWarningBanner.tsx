@@ -45,7 +45,7 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
         <AlertTitle>Context window warning</AlertTitle>
         <AlertDescription>
           Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
-          tokens. Consider using a handoff skill or /compact.
+          tokens. Consider using handoff or /compact.
           <ContextWindowRecoveryActions
             handoffAvailable={handoffAvailable}
             compactAvailable={compactAvailable}

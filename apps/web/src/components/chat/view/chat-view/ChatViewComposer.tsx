@@ -87,7 +87,7 @@ export function ChatViewComposer({
     insertMention,
   });
 
-  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
 
   return (

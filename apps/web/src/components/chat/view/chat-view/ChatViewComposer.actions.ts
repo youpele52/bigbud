@@ -4,7 +4,6 @@ import {
   detectComposerTrigger,
   expandCollapsedComposerCursor,
 } from "~/logic/composer";
-import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
@@ -90,9 +89,15 @@ export function useChatViewComposerActions(input: UseChatViewComposerActionsInpu
   );
 
   const onUseHandoffFromMeter = useCallback(() => {
-    setPromptAndCursor(HANDOFF_SKILL_PROMPT);
-    input.interactions.onSend();
-  }, [input.interactions, setPromptAndCursor]);
+    const activeThread = input.base.activeThread;
+    if (!activeThread) {
+      return;
+    }
+    void input.interactions.onCreateHandoffBranch(
+      activeThread.modelSelection,
+      "Continue this work in a fresh branch with the generated handoff.",
+    );
+  }, [input.base.activeThread, input.interactions]);
 
   const onCompactFromMeter = useCallback(() => {
     setPromptAndCursor("/compact");

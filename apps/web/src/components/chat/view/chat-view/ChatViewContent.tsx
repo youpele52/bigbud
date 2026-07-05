@@ -1,8 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
@@ -68,17 +66,19 @@ export function ChatViewContent({
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
 
-  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
 
   const onUseHandoffFromBanner = useCallback(() => {
-    const nextPrompt = HANDOFF_SKILL_PROMPT;
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
+    const activeThread = base.activeThread;
+    if (!activeThread) {
+      return;
+    }
+    void interactions.onCreateHandoffBranch(
+      activeThread.modelSelection,
+      "Continue this work in a fresh branch with the generated handoff.",
+    );
+  }, [base.activeThread, interactions]);
 
   const onCompactFromBanner = useCallback(() => {
     const nextPrompt = "/compact";

@@ -7,13 +7,8 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { resolveAppModelSelection, resolveSelectableProvider } from "~/models/provider";
 import { providerSupportsSubProviderID } from "../ChatView.modelSelection.logic";
 import { useThreadActions } from "~/hooks/useThreadActions";
-import {
-  buildHandoffSeedMessage,
-  dispatchHandoffSkillTurn,
-  HandoffError,
-  waitForHandoffDocument,
-} from "~/lib/handoff";
-import { readNativeApi } from "~/rpc/nativeApi";
+import { HandoffError } from "~/lib/handoff";
+import { branchThreadWithHandoffJob } from "~/lib/handoffJobs";
 import { toastManager } from "~/components/ui/toast";
 
 export interface PendingProviderSwitchConfirmation {
@@ -79,7 +74,13 @@ export function useChatViewProviderSwitch({
   );
 
   const branchThreadWithHandoff = useCallback(
-    async (nextModelSelection: ModelSelection) => {
+    async (
+      nextModelSelection: ModelSelection,
+      options?: {
+        readonly focus?: string;
+        readonly closeConfirmationOnStart?: boolean;
+      },
+    ) => {
       if (!base.activeThread || !base.isServerThread) {
         runtime.scheduleComposerFocus();
         return;
@@ -90,43 +91,49 @@ export function useChatViewProviderSwitch({
       handoffInProgressRef.current = true;
       setIsGeneratingHandoff(true);
       setHandoffError(null);
+      let progressToastId: ReturnType<typeof toastManager.add> | null = null;
 
       try {
-        const api = readNativeApi();
-        if (!api) {
-          throw new HandoffError("Native API is not available.");
+        if (options?.closeConfirmationOnStart) {
+          setPendingProviderSwitchConfirmation(null);
         }
-        const requestMessageId = await dispatchHandoffSkillTurn({
-          threadId: base.activeThread.id,
-          runtimeMode: base.activeThread.runtimeMode,
-          interactionMode: base.activeThread.interactionMode,
+        const sourceThreadId = base.activeThread.id;
+        progressToastId = toastManager.add({
+          type: "info",
+          title: "Preparing handoff",
+          description: "bigbud is generating a handoff document in the background.",
         });
-        const handoffDocument = await waitForHandoffDocument(base.activeThread.id, {
-          requestMessageId,
+        const branchedThreadId = await branchThreadWithHandoffJob({
+          sourceThreadId,
+          nextModelSelection,
+          ...(options?.focus ? { focus: options.focus } : {}),
+          branchThread,
         });
-        const { path: handoffFilePath } = await api.server.writeHandoffDocument({
-          title: base.activeThread.title,
-          content: handoffDocument,
+        toastManager.update(progressToastId, {
+          type: "success",
+          title: "Handoff ready",
+          description: "A new branch was created from the generated handoff.",
         });
-        const handoffSeedMessage = buildHandoffSeedMessage(handoffFilePath);
-
-        const branchedThreadId = await branchThread(base.activeThread.id, {
-          modelSelection: nextModelSelection,
-          navigateToBranch: true,
-          seedMessages: [handoffSeedMessage],
-        });
-
         if (branchedThreadId) {
           base.setStickyComposerModelSelection(nextModelSelection);
         }
       } catch (err) {
         const message = err instanceof HandoffError ? err.message : "Could not generate handoff.";
         setHandoffError(message);
-        toastManager.add({
-          type: "error",
-          title: "Handoff failed",
-          description: message,
-        });
+        if (progressToastId !== null) {
+          toastManager.update(progressToastId, {
+            type: "error",
+            title: "Handoff failed",
+            description: message,
+          });
+        }
+        if (progressToastId === null) {
+          toastManager.add({
+            type: "error",
+            title: "Handoff failed",
+            description: message,
+          });
+        }
         setIsGeneratingHandoff(false);
         handoffInProgressRef.current = false;
         return;
@@ -134,7 +141,6 @@ export function useChatViewProviderSwitch({
 
       setIsGeneratingHandoff(false);
       handoffInProgressRef.current = false;
-      setPendingProviderSwitchConfirmation(null);
       runtime.scheduleComposerFocus();
     },
     [base, branchThread, runtime],
@@ -198,7 +204,10 @@ export function useChatViewProviderSwitch({
       return;
     }
 
-    void branchThreadWithHandoff(nextModelSelection);
+    void branchThreadWithHandoff(nextModelSelection, {
+      focus: `Continue this work in a new ${pendingProviderSwitchConfirmation.targetLabel} branch.`,
+      closeConfirmationOnStart: true,
+    });
   }, [
     branchMode,
     branchThreadForProviderChange,
@@ -213,12 +222,20 @@ export function useChatViewProviderSwitch({
     runtime.scheduleComposerFocus();
   }, [runtime]);
 
+  const onCreateHandoffBranch = useCallback(
+    async (nextModelSelection: ModelSelection, focus?: string) => {
+      await branchThreadWithHandoff(nextModelSelection, focus ? { focus } : undefined);
+    },
+    [branchThreadWithHandoff],
+  );
+
   return {
     pendingProviderSwitchConfirmation,
     branchMode,
     setBranchMode,
     isGeneratingHandoff,
     handoffError,
+    onCreateHandoffBranch,
     onProviderModelSelect,
     onConfirmPendingProviderSwitch,
     onDismissPendingProviderSwitch,
