@@ -183,7 +183,8 @@ function findButtonByText(text: string): HTMLButtonElement | null {
 }
 
 function findMenuTrigger(): HTMLButtonElement | null {
-  return (document.querySelector('[aria-label="Git actions"]') ?? null) as HTMLButtonElement | null;
+  return (document.querySelector('[aria-label="Quick actions"]') ??
+    null) as HTMLButtonElement | null;
 }
 
 function findMenuItemByText(text: string): HTMLElement | null {
@@ -223,11 +224,18 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
     try {
       const menuTrigger = findMenuTrigger();
-      expect(menuTrigger, "Unable to find Git actions menu trigger").toBeTruthy();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
       if (!(menuTrigger instanceof HTMLButtonElement)) {
-        throw new Error("Unable to find Git actions menu trigger");
+        throw new Error("Unable to find Quick actions menu trigger");
       }
       menuTrigger.click();
+
+      const gitMenuItem = findMenuItemByText("Git");
+      expect(gitMenuItem, 'Unable to find "Git" menu item').toBeTruthy();
+      if (!gitMenuItem) {
+        throw new Error('Unable to find "Git" menu item');
+      }
+      gitMenuItem.click();
 
       const pushMenuItem = findMenuItemByText("Push");
       expect(pushMenuItem, 'Unable to find "Push" menu item').toBeTruthy();

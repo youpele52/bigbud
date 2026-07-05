@@ -1,13 +1,13 @@
 import type { GitStatusResult } from "@bigbud/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  ChevronDownIcon,
   CloudUploadIcon,
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
   HistoryIcon,
   Rows3Icon,
+  Settings2Icon,
   Trash2Icon,
 } from "lucide-react";
 
@@ -17,7 +17,16 @@ import {
   getMenuActionDisabledReason,
 } from "./GitActionsControl.logic";
 import { Button } from "~/components/ui/button";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
+  MenuTrigger,
+} from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { invalidateGitStatusQuery } from "~/lib/gitReactQuery";
 
@@ -67,14 +76,13 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
       <MenuTrigger
         render={
           <Button
-            aria-label="Git actions"
+            aria-label="Quick actions"
             className="relative"
             disabled={props.isInitPending || props.isGitActionRunning}
             size="xs"
             variant="toolbar"
           >
-            <GitBranchIcon aria-hidden="true" className="size-3.5" />
-            <ChevronDownIcon aria-hidden="true" className="size-3" />
+            <Settings2Icon aria-hidden="true" className="size-3.5" />
             {showStatusDot && (
               <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary" />
             )}
@@ -82,59 +90,67 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
         }
       />
       <MenuPopup align="end" className="w-full">
-        {props.gitActionMenuItems.map((item, index) => {
-          const previousItem = props.gitActionMenuItems[index - 1];
-          const showSeparator =
-            previousItem && groupIndexForItem(item) !== groupIndexForItem(previousItem);
-          const disabledReason = getMenuActionDisabledReason({
-            item,
-            gitStatus: props.gitStatusForActions,
-            isBusy: props.isGitActionRunning,
-            hasOriginRemote: props.hasOriginRemote,
-          });
+        <MenuSub>
+          <MenuSubTrigger className="[&>span:last-child]:hidden">
+            <GitBranchIcon aria-hidden="true" className="size-4" />
+            Git
+          </MenuSubTrigger>
+          <MenuSubPopup className="w-full">
+            {props.gitActionMenuItems.map((item, index) => {
+              const previousItem = props.gitActionMenuItems[index - 1];
+              const showSeparator =
+                previousItem && groupIndexForItem(item) !== groupIndexForItem(previousItem);
+              const disabledReason = getMenuActionDisabledReason({
+                item,
+                gitStatus: props.gitStatusForActions,
+                isBusy: props.isGitActionRunning,
+                hasOriginRemote: props.hasOriginRemote,
+              });
 
-          return (
-            <div key={`${item.id}-${item.label}`}>
-              {showSeparator && <MenuSeparator />}
-              {item.disabled && disabledReason ? (
-                <Popover>
-                  <PopoverTrigger
-                    openOnHover
-                    nativeButton={false}
-                    render={<span className="block w-max cursor-not-allowed" />}
-                  >
-                    <MenuItem className="w-full" disabled variant={item.variant ?? "default"}>
+              return (
+                <div key={`${item.id}-${item.label}`}>
+                  {showSeparator && <MenuSeparator />}
+                  {item.disabled && disabledReason ? (
+                    <Popover>
+                      <PopoverTrigger
+                        openOnHover
+                        nativeButton={false}
+                        render={<span className="block w-max cursor-not-allowed" />}
+                      >
+                        <MenuItem className="w-full" disabled variant={item.variant ?? "default"}>
+                          <GitActionItemIcon icon={item.icon} />
+                          {item.label}
+                        </MenuItem>
+                      </PopoverTrigger>
+                      <PopoverPopup tooltipStyle side="left" align="center">
+                        {disabledReason}
+                      </PopoverPopup>
+                    </Popover>
+                  ) : (
+                    <MenuItem
+                      disabled={item.disabled}
+                      variant={item.variant ?? "default"}
+                      onClick={() => {
+                        props.onMenuItemSelect(item);
+                      }}
+                    >
                       <GitActionItemIcon icon={item.icon} />
                       {item.label}
                     </MenuItem>
-                  </PopoverTrigger>
-                  <PopoverPopup tooltipStyle side="left" align="center">
-                    {disabledReason}
-                  </PopoverPopup>
-                </Popover>
-              ) : (
-                <MenuItem
-                  disabled={item.disabled}
-                  variant={item.variant ?? "default"}
-                  onClick={() => {
-                    props.onMenuItemSelect(item);
-                  }}
-                >
-                  <GitActionItemIcon icon={item.icon} />
-                  {item.label}
-                </MenuItem>
-              )}
-            </div>
-          );
-        })}
-        {props.gitStatusForActions?.branch === null && props.isRepo && (
-          <p className="px-2 py-1.5 text-xs text-warning">
-            Detached HEAD: create and checkout a branch to enable push and pull actions.
-          </p>
-        )}
-        {props.gitStatusError && (
-          <p className="px-2 py-1.5 text-xs text-destructive">{props.gitStatusError.message}</p>
-        )}
+                  )}
+                </div>
+              );
+            })}
+            {props.gitStatusForActions?.branch === null && props.isRepo && (
+              <p className="px-2 py-1.5 text-xs text-warning">
+                Detached HEAD: create and checkout a branch to enable push and pull actions.
+              </p>
+            )}
+            {props.gitStatusError && (
+              <p className="px-2 py-1.5 text-xs text-destructive">{props.gitStatusError.message}</p>
+            )}
+          </MenuSubPopup>
+        </MenuSub>
       </MenuPopup>
     </Menu>
   );
