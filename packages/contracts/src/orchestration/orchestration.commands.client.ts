@@ -23,6 +23,7 @@ import {
 } from "./orchestration.provider";
 import { ProjectScript } from "./orchestration.project";
 import {
+  ElevatorSummary,
   OrchestrationMessage,
   ParentThreadReference,
   SourceProposedPlanReference,
@@ -104,6 +105,8 @@ const ThreadMetaUpdateCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   title: Schema.optional(TrimmedNonEmptyString),
+  elevatorSummary: Schema.optional(ElevatorSummary),
+  elevatorSummaryMessageCount: Schema.optional(NonNegativeInt),
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),

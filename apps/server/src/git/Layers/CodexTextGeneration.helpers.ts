@@ -12,7 +12,8 @@ export type CodexTextGenerationOperation =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "generateThreadElevatorSummary";
 
 export const readStreamAsString = <E>(
   operation: CodexTextGenerationOperation,

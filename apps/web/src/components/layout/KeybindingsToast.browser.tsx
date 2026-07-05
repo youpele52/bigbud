@@ -116,6 +116,8 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         id: THREAD_ID,
         projectId: PROJECT_ID,
         title: "Test thread",
+        elevatorSummary: "Test thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: {
           provider: "codex",
           model: "gpt-5",

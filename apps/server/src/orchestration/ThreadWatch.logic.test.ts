@@ -19,6 +19,8 @@ function makeThread(overrides: Partial<OrchestrationThread> = {}): Orchestration
     id: WATCHED_THREAD_ID,
     projectId: "project-1" as never,
     title: "Watched thread",
+    elevatorSummary: "Watched thread",
+    elevatorSummaryMessageCount: 0,
     modelSelection: { provider: "codex" as const, model: "gpt-5" },
     runtimeMode: "approval-required" as const,
     interactionMode: "default" as const,

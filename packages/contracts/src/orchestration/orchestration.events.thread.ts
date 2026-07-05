@@ -22,6 +22,7 @@ import {
   RuntimeMode,
 } from "./orchestration.provider";
 import {
+  ElevatorSummary,
   OrchestrationCheckpointFile,
   OrchestrationCheckpointStatus,
   OrchestrationMessageReply,
@@ -81,6 +82,8 @@ export const ThreadUnarchivedPayload = Schema.Struct({
 export const ThreadMetaUpdatedPayload = Schema.Struct({
   threadId: ThreadId,
   title: Schema.optional(TrimmedNonEmptyString),
+  elevatorSummary: Schema.optional(ElevatorSummary),
+  elevatorSummaryMessageCount: Schema.optional(NonNegativeInt),
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),

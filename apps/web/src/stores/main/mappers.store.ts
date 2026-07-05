@@ -196,6 +196,8 @@ export function mapThread(thread: OrchestrationThread): Thread {
     executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
+    elevatorSummary: thread.elevatorSummary,
+    elevatorSummaryMessageCount: thread.elevatorSummaryMessageCount,
     modelSelection: normalizeModelSlug(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
@@ -272,6 +274,8 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
     executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
+    elevatorSummary: thread.elevatorSummary ?? null,
+    elevatorSummaryMessageCount: thread.elevatorSummaryMessageCount ?? 0,
     interactionMode: thread.interactionMode,
     session: thread.session,
     createdAt: thread.createdAt,
@@ -302,6 +306,8 @@ export function sidebarThreadSummariesEqual(
     left.workspaceExecutionTargetId === right.workspaceExecutionTargetId &&
     left.executionTargetId === right.executionTargetId &&
     left.title === right.title &&
+    left.elevatorSummary === right.elevatorSummary &&
+    left.elevatorSummaryMessageCount === right.elevatorSummaryMessageCount &&
     left.interactionMode === right.interactionMode &&
     left.session === right.session &&
     left.createdAt === right.createdAt &&

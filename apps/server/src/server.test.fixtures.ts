@@ -55,6 +55,8 @@ export const makeDefaultOrchestrationReadModel = () => {
         id: defaultThreadId,
         projectId: defaultProjectId,
         title: "Default Thread",
+        elevatorSummary: "Default Thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: defaultModelSelection,
         interactionMode: "default" as const,
         runtimeMode: "full-access" as const,

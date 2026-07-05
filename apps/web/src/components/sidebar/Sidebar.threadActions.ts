@@ -1,7 +1,6 @@
 import { useCallback, type MouseEvent } from "react";
 import { FAVORITE_THREAD_LIMIT, type ThreadId } from "@bigbud/contracts";
 import { isMacPlatform } from "../../lib/utils";
-import { useUiStateStore } from "../../stores/ui";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useUpdateSettings } from "../../hooks/useSettings";
@@ -16,6 +15,10 @@ import type {
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
 
+function normalizeSummaryText(value: string | null | undefined): string {
+  return value?.trim().replace(/\s+/g, " ") ?? "";
+}
+
 /** Encapsulates all thread-level actions for the sidebar. */
 export function useSidebarThreadActions({
   sidebarThreadsById,
@@ -24,7 +27,6 @@ export function useSidebarThreadActions({
   navigateToThreadRoute,
   cancelProjectRename,
 }: SidebarThreadActionsInput): SidebarThreadActionsOutput {
-  const markThreadUnread = useUiStateStore((store) => store.markThreadUnread);
   const { updateSettings } = useUpdateSettings();
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
@@ -62,7 +64,8 @@ export function useSidebarThreadActions({
     removeFromSelection,
   });
 
-  const { copyThreadIdToClipboard, copyPathToClipboard } = useSidebarThreadClipboardActions();
+  const { copyElevatorSummaryToClipboard, copyThreadIdToClipboard, copyPathToClipboard } =
+    useSidebarThreadClipboardActions();
 
   const attemptArchiveThread = useCallback(
     async (threadId: ThreadId) => {
@@ -203,6 +206,10 @@ export function useSidebarThreadActions({
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
       const isFavorite = appSettings.favoriteThreadIds.includes(threadId);
+      const normalizedTitle = normalizeSummaryText(thread.title);
+      const normalizedElevatorSummary = normalizeSummaryText(thread.elevatorSummary);
+      const hasElevatorSummary =
+        normalizedElevatorSummary.length > 0 && normalizedElevatorSummary !== normalizedTitle;
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
@@ -212,7 +219,11 @@ export function useSidebarThreadActions({
             label: isFavorite ? "Unpin thread" : "Pin thread",
           },
           { id: "archive", label: "Archive thread" },
-          { id: "mark-unread", label: "Mark unread" },
+          {
+            id: "copy-elevator-summary",
+            label: "Elevator summary",
+            disabled: !hasElevatorSummary,
+          },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           { id: "delete", label: "Delete", destructive: true },
@@ -249,8 +260,10 @@ export function useSidebarThreadActions({
         return;
       }
 
-      if (clicked === "mark-unread") {
-        markThreadUnread(threadId, thread.latestTurn?.completedAt);
+      if (clicked === "copy-elevator-summary") {
+        copyElevatorSummaryToClipboard(normalizedElevatorSummary, {
+          summary: normalizedElevatorSummary,
+        });
         return;
       }
       if (clicked === "copy-path") {
@@ -278,10 +291,10 @@ export function useSidebarThreadActions({
       appSettings.favoriteThreadIds,
       appSettings.confirmThreadArchive,
       attemptArchiveThread,
+      copyElevatorSummaryToClipboard,
       copyPathToClipboard,
       copyThreadIdToClipboard,
       handleBranchThread,
-      markThreadUnread,
       requestThreadDelete,
       renamingCommittedRef,
       setRenamingThreadId,
@@ -300,21 +313,9 @@ export function useSidebarThreadActions({
       const count = ids.length;
 
       const clicked = await api.contextMenu.show(
-        [
-          { id: "mark-unread", label: `Mark unread (${count})` },
-          { id: "delete", label: `Delete (${count})`, destructive: true },
-        ],
+        [{ id: "delete", label: `Delete (${count})`, destructive: true }],
         position,
       );
-
-      if (clicked === "mark-unread") {
-        for (const id of ids) {
-          const thread = sidebarThreadsById[id];
-          markThreadUnread(id, thread?.latestTurn?.completedAt);
-        }
-        clearSelection();
-        return;
-      }
 
       if (clicked !== "delete") return;
 
@@ -335,13 +336,10 @@ export function useSidebarThreadActions({
     },
     [
       appSettings.confirmThreadDelete,
-      clearSelection,
       deleteThread,
-      markThreadUnread,
       removeFromSelection,
       selectedThreadIds,
       setPendingDeleteConfirmation,
-      sidebarThreadsById,
     ],
   );
 

@@ -17,6 +17,7 @@ import {
 import {
   type BranchNameGenerationInput,
   type CommitMessageGenerationInput,
+  type ThreadElevatorSummaryGenerationInput,
   type PrContentGenerationInput,
   TextGeneration,
   type TextGenerationProvider,
@@ -27,6 +28,7 @@ import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
 import {
   generateCopilotThreadTitleNative,
+  generateOpencodeThreadElevatorSummaryNative,
   generateOpencodeThreadTitleNative,
   generatePiThreadTitleNative,
 } from "./ProviderNativeThreadTitleGeneration.ts";
@@ -107,6 +109,15 @@ export function normalizeGitBranchNameGenerationInput(
   };
 }
 
+export function normalizeThreadElevatorSummaryGenerationInput(
+  input: ThreadElevatorSummaryGenerationInput,
+): ThreadElevatorSummaryGenerationInput {
+  return {
+    ...input,
+    modelSelection: normalizeTextGenerationModelSelection(input.modelSelection),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Routing implementation
 // ---------------------------------------------------------------------------
@@ -181,6 +192,29 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
           );
         default:
           return route("codex").generateThreadTitle(input);
+      }
+    },
+    generateThreadElevatorSummary: (input) => {
+      switch (input.modelSelection.provider) {
+        case "opencode":
+          return generateOpencodeThreadElevatorSummaryNative(
+            {
+              serverSettingsService,
+              opencodeServerManager,
+            },
+            {
+              cwd: input.cwd,
+              transcript: input.transcript,
+              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+              modelSelection: input.modelSelection,
+            },
+          );
+        default: {
+          const normalizedInput = normalizeThreadElevatorSummaryGenerationInput(input);
+          return route(normalizedInput.modelSelection.provider).generateThreadElevatorSummary(
+            normalizedInput,
+          );
+        }
       }
     },
   } satisfies TextGenerationShape;

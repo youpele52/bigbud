@@ -21,6 +21,12 @@ import { ChatAttachment } from "./orchestration.attachments";
 import { ModelSelection } from "./orchestration.provider";
 import { OrchestrationProject } from "./orchestration.project";
 
+export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
+export const ElevatorSummary = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(ELEVATOR_SUMMARY_MAX_CHARS),
+);
+export type ElevatorSummary = typeof ElevatorSummary.Type;
+
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 
@@ -168,6 +174,8 @@ export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  elevatorSummary: Schema.NullOr(ElevatorSummary).pipe(Schema.withDecodingDefault(() => null)),
+  elevatorSummaryMessageCount: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 0)),
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),

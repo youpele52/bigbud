@@ -5,6 +5,7 @@ import { toastManager } from "../ui/toast";
 export interface SidebarThreadClipboardActions {
   copyThreadIdToClipboard: (value: string, context: { threadId: ThreadId }) => void;
   copyPathToClipboard: (value: string, context: { path: string }) => void;
+  copyElevatorSummaryToClipboard: (value: string, context: { summary: string }) => void;
 }
 
 export function useSidebarThreadClipboardActions(): SidebarThreadClipboardActions {
@@ -44,8 +45,28 @@ export function useSidebarThreadClipboardActions(): SidebarThreadClipboardAction
     },
   });
 
+  const { copyToClipboard: copyElevatorSummaryToClipboard } = useCopyToClipboard<{
+    summary: string;
+  }>({
+    onCopy: (ctx) => {
+      toastManager.add({
+        type: "success",
+        title: "Elevator summary copied",
+        description: ctx.summary,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "Failed to copy elevator summary",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    },
+  });
+
   return {
     copyThreadIdToClipboard,
     copyPathToClipboard,
+    copyElevatorSummaryToClipboard,
   };
 }

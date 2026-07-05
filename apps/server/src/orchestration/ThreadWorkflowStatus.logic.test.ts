@@ -13,6 +13,8 @@ function makeThread(overrides: Partial<Parameters<typeof resolveThreadWorkflowSt
     id: THREAD_ID,
     projectId: "project-1" as never,
     title: "Feature A",
+    elevatorSummary: "Feature A",
+    elevatorSummaryMessageCount: 0,
     modelSelection: { provider: "codex" as const, model: "gpt-5" },
     runtimeMode: "approval-required" as const,
     interactionMode: "default" as const,

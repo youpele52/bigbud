@@ -27,6 +27,39 @@ import {
 } from "./Schemas.ts";
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
 
+function resolveSyncedElevatorSummaryUpdate(input: {
+  readonly currentTitle: string;
+  readonly currentElevatorSummary: string | null;
+  readonly currentElevatorSummaryMessageCount: number;
+  readonly nextTitle?: string;
+  readonly nextElevatorSummary?: string;
+  readonly nextElevatorSummaryMessageCount?: number;
+}) {
+  if (
+    input.nextElevatorSummary !== undefined ||
+    input.nextElevatorSummaryMessageCount !== undefined
+  ) {
+    return {
+      ...(input.nextElevatorSummary !== undefined
+        ? { elevatorSummary: input.nextElevatorSummary }
+        : {}),
+      ...(input.nextElevatorSummaryMessageCount !== undefined
+        ? { elevatorSummaryMessageCount: input.nextElevatorSummaryMessageCount }
+        : {}),
+    };
+  }
+  if (
+    input.nextTitle === undefined ||
+    input.currentElevatorSummaryMessageCount !== 0 ||
+    input.currentElevatorSummary !== input.currentTitle
+  ) {
+    return {};
+  }
+  return {
+    elevatorSummary: input.nextTitle,
+  };
+}
+
 export function projectThreadCreated(
   nextBase: OrchestrationReadModel,
   event: Extract<OrchestrationEvent, { type: "thread.created" }>,
@@ -44,6 +77,8 @@ export function projectThreadCreated(
         id: payload.threadId,
         projectId: payload.projectId,
         title: payload.title,
+        elevatorSummary: payload.title,
+        elevatorSummaryMessageCount: 0,
         providerRuntimeExecutionTargetId:
           payload.providerRuntimeExecutionTargetId ??
           payload.executionTargetId ??
@@ -168,6 +203,23 @@ export function projectThreadMetaUpdated(
       ...nextBase,
       threads: updateThread(nextBase.threads, payload.threadId, {
         ...(payload.title !== undefined ? { title: payload.title } : {}),
+        ...resolveSyncedElevatorSummaryUpdate({
+          currentTitle:
+            nextBase.threads.find((entry) => entry.id === payload.threadId)?.title ?? "",
+          currentElevatorSummary:
+            nextBase.threads.find((entry) => entry.id === payload.threadId)?.elevatorSummary ??
+            null,
+          currentElevatorSummaryMessageCount:
+            nextBase.threads.find((entry) => entry.id === payload.threadId)
+              ?.elevatorSummaryMessageCount ?? 0,
+          ...(payload.title !== undefined ? { nextTitle: payload.title } : {}),
+          ...(payload.elevatorSummary !== undefined
+            ? { nextElevatorSummary: payload.elevatorSummary }
+            : {}),
+          ...(payload.elevatorSummaryMessageCount !== undefined
+            ? { nextElevatorSummaryMessageCount: payload.elevatorSummaryMessageCount }
+            : {}),
+        }),
         ...(payload.providerRuntimeExecutionTargetId !== undefined
           ? { providerRuntimeExecutionTargetId: payload.providerRuntimeExecutionTargetId }
           : {}),

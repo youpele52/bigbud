@@ -15,6 +15,8 @@ export function makeThread(overrides: Partial<Thread> = {}): Thread {
     codexThreadId: null,
     projectId: ProjectId.makeUnsafe("project-1"),
     title: "Thread",
+    elevatorSummary: "Thread",
+    elevatorSummaryMessageCount: 0,
     modelSelection: {
       provider: "codex",
       model: "gpt-5-codex",
@@ -92,6 +94,8 @@ export function makeReadModelThread(overrides: Partial<OrchestrationReadModel["t
     id: ThreadId.makeUnsafe("thread-1"),
     projectId: ProjectId.makeUnsafe("project-1"),
     title: "Thread",
+    elevatorSummary: "Thread",
+    elevatorSummaryMessageCount: 0,
     modelSelection: {
       provider: "codex",
       model: "gpt-5.3-codex",

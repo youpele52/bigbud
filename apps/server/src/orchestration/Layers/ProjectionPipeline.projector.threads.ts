@@ -12,6 +12,39 @@ import {
 } from "./ProjectionPipeline.helpers.ts";
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
 
+function resolveSyncedElevatorSummary(input: {
+  readonly currentTitle: string;
+  readonly currentElevatorSummary: string | null;
+  readonly currentElevatorSummaryMessageCount: number;
+  readonly nextTitle?: string;
+  readonly nextElevatorSummary?: string;
+  readonly nextElevatorSummaryMessageCount?: number;
+}) {
+  if (
+    input.nextElevatorSummary !== undefined ||
+    input.nextElevatorSummaryMessageCount !== undefined
+  ) {
+    return {
+      ...(input.nextElevatorSummary !== undefined
+        ? { elevatorSummary: input.nextElevatorSummary }
+        : {}),
+      ...(input.nextElevatorSummaryMessageCount !== undefined
+        ? { elevatorSummaryMessageCount: input.nextElevatorSummaryMessageCount }
+        : {}),
+    };
+  }
+  if (
+    input.nextTitle === undefined ||
+    input.currentElevatorSummaryMessageCount !== 0 ||
+    input.currentElevatorSummary !== input.currentTitle
+  ) {
+    return {};
+  }
+  return {
+    elevatorSummary: input.nextTitle,
+  };
+}
+
 export function makeThreadsProjector(
   deps: Pick<ProjectorDeps, "projectionThreadRepository">,
 ): ProjectorDefinition {
@@ -27,6 +60,8 @@ export function makeThreadsProjector(
           threadId: event.payload.threadId,
           projectId: event.payload.projectId,
           title: event.payload.title,
+          elevatorSummary: event.payload.title,
+          elevatorSummaryMessageCount: 0,
           providerRuntimeExecutionTargetId:
             event.payload.providerRuntimeExecutionTargetId ??
             event.payload.executionTargetId ??
@@ -123,6 +158,18 @@ export function makeThreadsProjector(
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
           ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+          ...resolveSyncedElevatorSummary({
+            currentTitle: existingRow.value.title,
+            currentElevatorSummary: existingRow.value.elevatorSummary,
+            currentElevatorSummaryMessageCount: existingRow.value.elevatorSummaryMessageCount,
+            ...(event.payload.title !== undefined ? { nextTitle: event.payload.title } : {}),
+            ...(event.payload.elevatorSummary !== undefined
+              ? { nextElevatorSummary: event.payload.elevatorSummary }
+              : {}),
+            ...(event.payload.elevatorSummaryMessageCount !== undefined
+              ? { nextElevatorSummaryMessageCount: event.payload.elevatorSummaryMessageCount }
+              : {}),
+          }),
           ...(event.payload.providerRuntimeExecutionTargetId !== undefined
             ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
             : {}),

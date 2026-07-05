@@ -24,6 +24,8 @@ function makeReadModel(runtimeMode: "approval-required" | "full-access"): Orches
         id: THREAD_ID,
         projectId: ProjectId.makeUnsafe("project-1"),
         title: "Computer use thread",
+        elevatorSummary: "Computer use thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: { provider: "codex", model: "gpt-5" },
         runtimeMode,
         interactionMode: "default",

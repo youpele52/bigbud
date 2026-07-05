@@ -12,9 +12,12 @@ import { Effect, Option } from "effect";
 
 import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 
-import type { ThreadTitleGenerationInput } from "../Services/TextGeneration.ts";
-import { buildThreadTitlePrompt } from "../Prompts.ts";
-import { limitSection, sanitizeThreadTitle } from "../Utils.ts";
+import type {
+  ThreadElevatorSummaryGenerationInput,
+  ThreadTitleGenerationInput,
+} from "../Services/TextGeneration.ts";
+import { buildThreadElevatorSummaryPrompt, buildThreadTitlePrompt } from "../Prompts.ts";
+import { limitSection, sanitizeElevatorSummary, sanitizeThreadTitle } from "../Utils.ts";
 import {
   makeCliRuntimeConnection,
   makeNodeWrapperCliPath,
@@ -22,6 +25,7 @@ import {
 import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
 import {
+  extractOpencodeResponseSummary,
   extractOpencodeResponseTitle,
   extractTitleFromTextCandidate,
 } from "./ProviderNativeThreadTitleGeneration.opencode.ts";
@@ -36,6 +40,13 @@ type CopilotThreadTitleGenerationInput = Omit<ThreadTitleGenerationInput, "model
 };
 
 type OpencodeThreadTitleGenerationInput = Omit<ThreadTitleGenerationInput, "modelSelection"> & {
+  readonly modelSelection: OpencodeModelSelection;
+};
+
+type OpencodeThreadElevatorSummaryGenerationInput = Omit<
+  ThreadElevatorSummaryGenerationInput,
+  "modelSelection"
+> & {
   readonly modelSelection: OpencodeModelSelection;
 };
 
@@ -268,6 +279,138 @@ export const generateOpencodeThreadTitleNative = (
       return {
         title: sanitizeThreadTitle(
           extractOpencodeResponseTitle({
+            info: promptResp.data.info,
+            parts: promptResp.data.parts,
+          }) ?? "",
+        ),
+      };
+    } finally {
+      serverHandle.release();
+    }
+  });
+
+export const generateOpencodeThreadElevatorSummaryNative = (
+  deps: NativeThreadTitleGenerationDeps,
+  input: OpencodeThreadElevatorSummaryGenerationInput,
+) =>
+  Effect.gen(function* () {
+    const serverHandle = yield* Effect.tryPromise({
+      try: () => deps.opencodeServerManager.acquire({ directory: input.cwd }),
+      catch: (cause) =>
+        new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail:
+            cause instanceof Error
+              ? `OpenCode server startup failed: ${cause.message}`
+              : "OpenCode server startup failed.",
+          cause,
+        }),
+    });
+
+    const client = serverHandle.client;
+    const { prompt } = buildThreadElevatorSummaryPrompt({
+      transcript: input.transcript,
+      attachments: input.attachments,
+    });
+
+    try {
+      const sessionResp = yield* Effect.tryPromise({
+        try: () =>
+          client.session.create({
+            title: "Thread elevator summary generation",
+          }),
+        catch: (cause) =>
+          new TextGenerationError({
+            operation: "generateThreadElevatorSummary",
+            detail:
+              cause instanceof Error
+                ? `OpenCode session creation failed: ${cause.message}`
+                : "OpenCode session creation failed.",
+            cause,
+          }),
+      });
+
+      if (sessionResp.error || !sessionResp.data) {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: `OpenCode session creation failed: ${String(sessionResp.error)}`,
+        });
+      }
+
+      const sessionID = sessionResp.data.id;
+      const providerID =
+        input.modelSelection.subProviderID ??
+        (yield* Effect.tryPromise({
+          try: () => resolveProviderIDForModel(client, input.modelSelection.model),
+          catch: () => undefined as never,
+        }).pipe(Effect.orElseSucceed(() => undefined)));
+
+      if (!providerID) {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: `Unable to resolve OpenCode provider for model '${input.modelSelection.model}'.`,
+        });
+      }
+
+      const promptResp = yield* Effect.tryPromise({
+        try: () =>
+          client.session.prompt({
+            sessionID,
+            parts: [{ type: "text", text: prompt }],
+            format: {
+              type: "json_schema",
+              schema: {
+                type: "object",
+                properties: {
+                  summary: { type: "string" },
+                },
+                required: ["summary"],
+              },
+            },
+            model: {
+              providerID,
+              modelID: input.modelSelection.model,
+            },
+            tools: {},
+            noReply: false,
+            system:
+              "You generate concise thread summaries. Return only structured output with a summary field.",
+          }),
+        catch: (cause) =>
+          new TextGenerationError({
+            operation: "generateThreadElevatorSummary",
+            detail:
+              cause instanceof Error
+                ? `OpenCode thread elevator summary generation failed: ${cause.message}`
+                : "OpenCode thread elevator summary generation failed.",
+            cause,
+          }),
+      }).pipe(
+        Effect.timeoutOption(OPENCODE_TIMEOUT_MS),
+        Effect.flatMap(
+          Option.match({
+            onNone: () =>
+              Effect.fail(
+                new TextGenerationError({
+                  operation: "generateThreadElevatorSummary",
+                  detail: "OpenCode thread elevator summary generation timed out.",
+                }),
+              ),
+            onSome: (value) => Effect.succeed(value),
+          }),
+        ),
+      );
+
+      if (promptResp.error || !promptResp.data) {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: `OpenCode thread elevator summary generation failed: ${String(promptResp.error)}`,
+        });
+      }
+
+      return {
+        summary: sanitizeElevatorSummary(
+          extractOpencodeResponseSummary({
             info: promptResp.data.info,
             parts: promptResp.data.parts,
           }) ?? "",

@@ -303,6 +303,8 @@ export const buildAppUnderTest = (options?: {
                       threadId: thread.id,
                       projectId: thread.projectId,
                       title: thread.title,
+                      elevatorSummary: thread.elevatorSummary,
+                      elevatorSummaryMessageCount: thread.elevatorSummaryMessageCount,
                       providerRuntimeExecutionTargetId: "local",
                       workspaceExecutionTargetId: "local",
                       executionTargetId: "local",

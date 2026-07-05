@@ -84,6 +84,8 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          COALESCE(elevator_summary, title) AS "elevatorSummary",
+          elevator_summary_message_count AS "elevatorSummaryMessageCount",
           provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
           workspace_execution_target_id AS "workspaceExecutionTargetId",
           execution_target_id AS "executionTargetId",

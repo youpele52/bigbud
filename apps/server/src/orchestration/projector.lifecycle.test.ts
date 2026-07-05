@@ -44,6 +44,8 @@ describe("orchestration projector — thread lifecycle", () => {
         id: "thread-1",
         projectId: "project-1",
         title: "demo",
+        elevatorSummary: "demo",
+        elevatorSummaryMessageCount: 0,
         providerRuntimeExecutionTargetId: "local",
         workspaceExecutionTargetId: "local",
         executionTargetId: "local",

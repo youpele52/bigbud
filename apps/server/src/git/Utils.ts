@@ -118,6 +118,27 @@ export function sanitizeThreadTitle(raw: string): string {
   return `${normalized.slice(0, 47).trimEnd()}...`;
 }
 
+/** Normalise a raw elevator summary to a single line with a strict 150-char cap. */
+export function sanitizeElevatorSummary(raw: string): string {
+  const normalized = raw
+    .trim()
+    .split(/\r?\n/g)[0]
+    ?.trim()
+    .replace(/^['"`]+|['"`]+$/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (!normalized || normalized.trim().length === 0) {
+    return "";
+  }
+
+  if (normalized.length <= 150) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 147).trimEnd()}...`;
+}
+
 /** CLI name to human-readable label, e.g. "codex" → "Codex CLI (`codex`)" */
 function cliLabel(cliName: string): string {
   const capitalized = cliName.charAt(0).toUpperCase() + cliName.slice(1);
