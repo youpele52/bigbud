@@ -36,6 +36,7 @@ interface ChatViewComposerProps {
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   interactions: ChatViewInteractionsState;
+  onOpenOrchestra: () => void;
   onOpenReplySource: (messageId: MessageId) => void;
 }
 
@@ -46,6 +47,7 @@ export function ChatViewComposer({
   thread,
   runtime,
   interactions,
+  onOpenOrchestra,
   onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
@@ -249,6 +251,7 @@ export function ChatViewComposer({
                 interactionMode={base.interactionMode}
                 runtimeMode={base.runtimeMode}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
+                onOpenOrchestra={onOpenOrchestra}
                 onProviderModelSelect={interactions.onProviderModelSelect}
                 onProviderUnlock={() => base.setProviderUnlocked(true)}
                 onToggleInteractionMode={runtime.toggleInteractionMode}

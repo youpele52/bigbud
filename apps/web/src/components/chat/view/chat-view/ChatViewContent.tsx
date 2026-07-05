@@ -15,6 +15,7 @@ import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import PlanSidebar from "../../plan/PlanSidebar";
+import { OrchestraDialog } from "../../orchestra/OrchestraDialog";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
@@ -65,6 +66,7 @@ export function ChatViewContent({
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
+  const [orchestraOpen, setOrchestraOpen] = useState(false);
 
   const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
@@ -190,16 +192,16 @@ export function ChatViewContent({
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
-          openInCwd={composer.gitCwd}
+          openInCwd={workspaceRoot ?? null}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
-          gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}
           rightPanelOpen={rightPanelOpen}
+          onOpenOrchestra={() => setOrchestraOpen(true)}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
@@ -363,6 +365,7 @@ export function ChatViewContent({
               thread={thread}
               runtime={runtime}
               interactions={interactions}
+              onOpenOrchestra={() => setOrchestraOpen(true)}
               onOpenReplySource={handleOpenReplySource}
             />
           </div>
@@ -442,6 +445,19 @@ export function ChatViewContent({
           onNavigate={interactions.navigateExpandedImage}
         />
       ) : null}
+
+      <OrchestraDialog
+        activeProject={base.activeProject}
+        activeThread={base.activeThread}
+        defaultModelSelection={composer.selectedModelSelection}
+        discoveredSkills={composer.discoveredSkills}
+        modelOptionsByProvider={composer.modelOptionsByProvider}
+        open={orchestraOpen}
+        providers={composer.providerStatuses}
+        prompt={base.prompt}
+        runtimeMode={base.runtimeMode}
+        onOpenChange={setOrchestraOpen}
+      />
     </div>
   );
 }

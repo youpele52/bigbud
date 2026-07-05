@@ -6,6 +6,7 @@ import {
   GitBranchIcon,
   GitCommitIcon,
   HistoryIcon,
+  ListMusicIcon,
   Rows3Icon,
   Settings2Icon,
   Trash2Icon,
@@ -40,6 +41,7 @@ export interface GitActionsControlActionProps {
   gitStatusForActions: GitStatusResult | null;
   gitStatusError: Error | null;
   gitActionMenuItems: ReadonlyArray<GitActionMenuItem>;
+  onOpenOrchestra?: (() => void) | undefined;
   onMenuItemSelect: (item: GitActionMenuItem) => void;
 }
 
@@ -151,6 +153,15 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
             )}
           </MenuSubPopup>
         </MenuSub>
+        {props.onOpenOrchestra ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onClick={props.onOpenOrchestra}>
+              <ListMusicIcon aria-hidden="true" className="size-4" />
+              Orchestrate
+            </MenuItem>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

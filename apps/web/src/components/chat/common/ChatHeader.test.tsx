@@ -50,10 +50,10 @@ describe("ChatHeader", () => {
     activeThreadTitle: "Thread",
     availableEditors: [],
     diffOpen: false,
-    gitCwd: null,
     keybindings: DEFAULT_BINDINGS,
     onAddProjectScript: async () => undefined,
     onDeleteProjectScript: async () => undefined,
+    onOpenOrchestra: () => undefined,
     onRunProjectScript: () => undefined,
     onToggleRightPanel: () => undefined,
     onUpdateProjectScript: async () => undefined,
@@ -95,5 +95,19 @@ describe("ChatHeader", () => {
 
     expect(runningMarkup).toContain("bg-info-foreground");
     expect(compactingMarkup).toContain("bg-warning");
+  });
+
+  it("renders quick actions when chat has an open folder without a project header", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarProvider defaultOpen>
+        <ChatHeader
+          activeThreadId={"thread-chat-folder" as never}
+          {...baseProps}
+          openInCwd="/repo/project"
+        />
+      </SidebarProvider>,
+    );
+
+    expect(markup).toContain('aria-label="Quick actions"');
   });
 });

@@ -136,6 +136,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
         />
       }
       onToggleInteractionMode={vi.fn()}
+      onOpenOrchestra={vi.fn()}
       onTogglePlanSidebar={vi.fn()}
       onRuntimeModeChange={vi.fn()}
     />,

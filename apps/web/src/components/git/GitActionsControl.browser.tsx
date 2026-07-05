@@ -201,7 +201,11 @@ function Harness() {
       <button type="button" onClick={() => setActiveThreadId(THREAD_B)}>
         Switch thread
       </button>
-      <GitActionsControl gitCwd={GIT_CWD} activeThreadId={activeThreadId} />
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={activeThreadId}
+        onOpenOrchestra={vi.fn()}
+      />
     </>
   );
 }
@@ -331,6 +335,45 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
       expect(setDraftThreadContextSpy).not.toHaveBeenCalled();
       expect(setThreadBranchSpy).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("shows orchestrate in the quick actions menu below git", async () => {
+    const onOpenOrchestra = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={THREAD_A}
+        onOpenOrchestra={onOpenOrchestra}
+      />,
+      {
+        container: host,
+      },
+    );
+
+    try {
+      const menuTrigger = findMenuTrigger();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error("Unable to find Quick actions menu trigger");
+      }
+      menuTrigger.click();
+
+      const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+      const gitMenuItem = findMenuItemByText("Git");
+      const orchestrateMenuItem = findMenuItemByText("Orchestrate");
+
+      expect(gitMenuItem, 'Unable to find "Git" menu item').toBeTruthy();
+      expect(orchestrateMenuItem, 'Unable to find "Orchestrate" menu item').toBeTruthy();
+      expect(menuItems.indexOf(gitMenuItem!)).toBeLessThan(menuItems.indexOf(orchestrateMenuItem!));
+
+      orchestrateMenuItem?.click();
+      expect(onOpenOrchestra).toHaveBeenCalledOnce();
     } finally {
       await screen.unmount();
       host.remove();

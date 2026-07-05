@@ -4,7 +4,9 @@ import { getWsRpcClient } from "../rpc/wsRpcClient";
 
 /** Mounts server state sync on startup. Renders nothing. */
 export function ServerStateBootstrap() {
-  useEffect(() => startServerStateSync(getWsRpcClient().server), []);
+  useEffect(() => {
+    return startServerStateSync(getWsRpcClient().server);
+  }, []);
 
   return null;
 }

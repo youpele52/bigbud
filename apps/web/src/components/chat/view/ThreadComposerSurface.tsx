@@ -70,6 +70,7 @@ export function ThreadComposerSurface({
       thread={thread}
       runtime={runtime}
       interactions={interactions}
+      onOpenOrchestra={() => undefined}
       onOpenReplySource={() => undefined}
     />
   );
