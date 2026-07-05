@@ -25,6 +25,7 @@ import {
   resolveElectronBuilderBinary,
   stagePackagedOpencodeWindowsBinary,
 } from "./build.runtime.ts";
+import { stageBundledSkills } from "./bundledSkills.ts";
 import {
   assertPlatformBuildResources,
   createBuildConfig,
@@ -142,6 +143,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   if (yield* fs.exists(serverBundledAgentsDir)) {
     yield* fs.copy(serverBundledAgentsDir, path.join(stageServerDir, "bundled-agents"));
   }
+  yield* stageBundledSkills({ repoRoot, stageServerDir });
   yield* assertPlatformBuildResources(options.platform, stageResourcesDir, options.verbose);
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));
   yield* pruneSourceMaps(path.join(stageAppDir, "apps/desktop/dist-electron"), "desktop bundle");

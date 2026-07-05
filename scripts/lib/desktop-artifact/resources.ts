@@ -231,10 +231,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         from: "apps/server",
         to: "server",
       },
-      {
-        from: join(repoRoot, ".bigbud/skills"),
-        to: "server/bundled-skills",
-      },
     ],
     afterExtract: join(repoRoot, "apps/desktop/scripts/afterExtract.cjs"),
     afterPack: join(repoRoot, "apps/desktop/scripts/afterPack.cjs"),
