@@ -53,7 +53,7 @@ interface ThreadTerminalDrawerProps {
   keybindings: ResolvedKeybindingsConfig;
   terminalBaseLabel: string;
   terminalLabelOverrides: Readonly<Record<string, string>>;
-  terminalProvider: ProviderKind | null;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   mode?: "drawer" | "panel";
   onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
   onClearTerminalLabelOverride: (terminalId: string) => void;
@@ -84,7 +84,7 @@ export default function ThreadTerminalDrawer({
   keybindings,
   terminalBaseLabel,
   terminalLabelOverrides,
-  terminalProvider,
+  terminalProviderById,
   mode = "drawer",
   onSetTerminalLabelOverride,
   onClearTerminalLabelOverride,
@@ -358,7 +358,7 @@ export default function ThreadTerminalDrawer({
               editingTerminalId={editingTerminalId}
               terminalRenameDraft={terminalRenameDraft}
               renameInputRef={onRenameInputMount}
-              terminalProvider={terminalProvider}
+              terminalProviderById={terminalProviderById}
               showGroupHeaders={showGroupHeaders}
               hasReachedSplitLimit={hasReachedSplitLimit}
               renameTerminalActionLabel={renameTerminalActionLabel}

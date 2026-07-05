@@ -43,15 +43,15 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
 }
 
 describe("SidebarActionsSection", () => {
-  it("renders the New chat, Search, and Automations actions with icons", () => {
+  it("renders the New chat, Search, and Scheduled actions with icons", () => {
     const html = renderActions();
 
     expect(html).toContain('aria-label="New chat"');
     expect(html).toContain('aria-label="Open search"');
-    expect(html).toContain('aria-label="Open automations"');
+    expect(html).toContain('aria-label="Open scheduled"');
     expect(html).toContain("New chat");
     expect(html).toContain("Search");
-    expect(html).toContain("Automations");
+    expect(html).toContain("Scheduled");
   });
 
   it("applies the group class so per-row hover reveal works for the kbd hint", () => {

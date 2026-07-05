@@ -32,7 +32,7 @@ import {
 } from "./useAutomationBuilderThread";
 
 export function AutomationsPage() {
-  usePageTitle("Automations");
+  usePageTitle("Scheduled");
 
   const api = readNativeApi();
   const navigate = useNavigate();
@@ -139,7 +139,7 @@ export function AutomationsPage() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
           <div className="mx-auto w-full max-w-[44rem] px-4 sm:px-6">
             <div className="border-b border-border/70 pt-7 pb-2">
-              <p className="text-sm text-foreground">Schedule tasks</p>
+              <p className="text-sm text-foreground">Scheduled tasks</p>
             </div>
 
             <AutomationListContent

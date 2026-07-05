@@ -13,7 +13,7 @@ export function AutomationListPageHeader({ actions }: AutomationListPageHeaderPr
     <ContentPanelHeaderBar
       actions={actions}
       title={
-        <h2 className="min-w-0 shrink truncate text-sm font-medium text-foreground">Automations</h2>
+        <h2 className="min-w-0 shrink truncate text-sm font-medium text-foreground">Scheduled</h2>
       }
     />
   );
@@ -34,7 +34,7 @@ export function AutomationDetailPageHeader({ actions, title }: AutomationDetailP
             to="/automations"
             className="text-foreground transition-colors hover:text-foreground/80"
           >
-            Automations
+            Scheduled
           </Link>
           <span className="text-muted-foreground"> › {truncateThreadName(title)}</span>
         </h2>

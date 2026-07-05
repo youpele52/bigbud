@@ -5,10 +5,14 @@ import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projec
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useComposerDraftStore } from "../../stores/composer";
-import { selectThreadTerminalState, useTerminalStateStore } from "../../stores/terminal";
+import {
+  selectTerminalEventEntries,
+  selectThreadTerminalState,
+  useTerminalStateStore,
+} from "../../stores/terminal";
 import { useDefaultChatCwd } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { resolveTerminalBaseLabel, resolveTerminalProvider } from "./terminalDisplay";
+import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 
@@ -26,7 +30,7 @@ export interface UseThreadTerminalDrawerResult {
   executionTargetId: string | undefined;
   terminalBaseLabel: string;
   terminalLabelOverrides: Record<string, string>;
-  terminalProvider: ProviderKind | null;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   splitTerminal: () => void;
   createNewTerminal: () => void;
   activateTerminal: (terminalId: string) => void;
@@ -76,6 +80,9 @@ export function useThreadTerminalDrawer(
   const terminalLabelOverrides = useTerminalStateStore(
     (state) => state.terminalLabelOverridesByThreadId[threadId] ?? EMPTY_TERMINAL_LABEL_OVERRIDES,
   );
+  const terminalEventEntriesByKey = useTerminalStateStore(
+    (state) => state.terminalEventEntriesByKey,
+  );
   const storeSetTerminalLabelOverride = useTerminalStateStore(
     (state) => state.setTerminalLabelOverride,
   );
@@ -121,14 +128,21 @@ export function useThreadTerminalDrawer(
       }),
     [cwd, project?.name],
   );
-  const terminalProvider = useMemo(
-    () =>
-      resolveTerminalProvider({
-        sessionProvider: serverThread?.session?.provider,
-        modelProvider: serverThread?.modelSelection.provider,
-      }),
-    [serverThread?.modelSelection.provider, serverThread?.session?.provider],
-  );
+  const terminalProviderById = useMemo(() => {
+    const nextById: Record<string, ProviderKind> = {};
+    for (const terminalId of terminalState.terminalIds) {
+      const eventEntries = selectTerminalEventEntries(
+        terminalEventEntriesByKey,
+        threadId,
+        terminalId,
+      );
+      const terminalProvider = resolveTerminalProviderFromEvents(eventEntries);
+      if (terminalProvider) {
+        nextById[terminalId] = terminalProvider;
+      }
+    }
+    return nextById;
+  }, [terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -214,7 +228,7 @@ export function useThreadTerminalDrawer(
     executionTargetId: project ? resolveWorkspaceExecutionTargetId(project) : undefined,
     terminalBaseLabel,
     terminalLabelOverrides,
-    terminalProvider,
+    terminalProviderById,
     splitTerminal,
     createNewTerminal,
     activateTerminal,

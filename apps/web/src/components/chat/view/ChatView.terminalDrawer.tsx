@@ -115,7 +115,7 @@ export function PersistentThreadTerminalDrawer({
         keybindings={keybindings}
         terminalBaseLabel={drawer.terminalBaseLabel}
         terminalLabelOverrides={drawer.terminalLabelOverrides}
-        terminalProvider={drawer.terminalProvider}
+        terminalProviderById={drawer.terminalProviderById}
         onActiveTerminalChange={drawer.activateTerminal}
         onCloseTerminal={drawer.closeTerminal}
         onSetTerminalLabelOverride={drawer.setTerminalLabelOverride}

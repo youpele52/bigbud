@@ -16,7 +16,7 @@ interface ThreadTerminalDrawerSidebarProps {
   editingTerminalId: string | null;
   terminalRenameDraft: string;
   renameInputRef: (element: HTMLInputElement | null) => void;
-  terminalProvider: ProviderKind | null;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   showGroupHeaders: boolean;
   hasReachedSplitLimit: boolean;
   renameTerminalActionLabel: string;
@@ -43,7 +43,7 @@ export function ThreadTerminalDrawerSidebar({
   editingTerminalId,
   terminalRenameDraft,
   renameInputRef,
-  terminalProvider,
+  terminalProviderById,
   showGroupHeaders,
   hasReachedSplitLimit,
   renameTerminalActionLabel,
@@ -61,8 +61,6 @@ export function ThreadTerminalDrawerSidebar({
   onActiveTerminalChange,
   onCloseTerminal,
 }: ThreadTerminalDrawerSidebarProps) {
-  const ProviderIcon = terminalProvider ? PROVIDER_ICON_BY_PROVIDER[terminalProvider] : null;
-
   return (
     <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
@@ -130,6 +128,10 @@ export function ThreadTerminalDrawerSidebar({
               <div className={showGroupHeaders ? "ml-1 border-l border-border/60 pl-1.5" : ""}>
                 {terminalGroup.terminalIds.map((terminalId) => {
                   const isActive = terminalId === resolvedActiveTerminalId;
+                  const terminalProvider = terminalProviderById[terminalId] ?? null;
+                  const ProviderIcon = terminalProvider
+                    ? PROVIDER_ICON_BY_PROVIDER[terminalProvider]
+                    : null;
                   const closeTerminalLabel = `Close ${
                     terminalLabelById.get(terminalId) ?? "terminal"
                   }${isActive && closeShortcutLabel ? ` (${closeShortcutLabel})` : ""}`;
