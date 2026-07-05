@@ -5,7 +5,7 @@ import {
   type ProviderSession,
 } from "@bigbud/contracts";
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
-import { Effect, type ServiceMap } from "effect";
+import { Cause, Duration, Effect, type ServiceMap } from "effect";
 
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
@@ -32,6 +32,8 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { startEventStream, toMessage } from "./Adapter.stream.ts";
+
+const OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT = Duration.millis(5_500);
 
 export interface StartSessionDeps {
   readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
@@ -199,10 +201,12 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
             cause,
           }),
       }).pipe(
-        Effect.tapError(() =>
-          Effect.sync(() => {
-            serverHandle.release();
-            void cleanupBridge().catch(() => undefined);
+        Effect.timeout(OPENCODE_ORCHESTRATION_MCP_REGISTRATION_TIMEOUT),
+        Effect.catchCause((cause) =>
+          Effect.logWarning("opencode orchestration MCP registration failed; continuing", {
+            provider: deps.provider,
+            threadId: input.threadId,
+            cause: Cause.pretty(cause),
           }),
         ),
       );

@@ -36,6 +36,10 @@ function trimToUndefined(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function sanitizeDiscoveredValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 function inferNameFromPath(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
   const lastSegment = normalized.split("/").at(-1) ?? normalized;
@@ -50,7 +54,7 @@ function buildDiscoveryId(
   kind: "agent" | "skill",
   name: string,
 ): string {
-  return `${provider}:${kind}:${name.trim().toLowerCase()}`;
+  return `${provider}:${kind}:${sanitizeDiscoveredValue(name).toLowerCase()}`;
 }
 
 function parseFrontmatter(content: string): {
@@ -136,17 +140,17 @@ export function parseDiscoveryFile(
       : input.provider === "claudeAgent" && input.kind === "agent" && input.path.endsWith(".json")
         ? parseClaudeJsonAgent(input.content, fallbackName)
         : parseMarkdownDiscovery(input.content, fallbackName);
-  const name = parsed.name.trim();
+  const name = sanitizeDiscoveredValue(parsed.name);
   const base = {
     id: buildDiscoveryId(input.provider, input.kind, name),
     provider: input.provider,
     name,
     source: input.source,
     ...(input.kind === "skill" && "displayName" in parsed && parsed.displayName
-      ? { displayName: String(parsed.displayName) }
+      ? { displayName: sanitizeDiscoveredValue(String(parsed.displayName)) }
       : {}),
-    ...(parsed.description ? { description: parsed.description } : {}),
-    sourcePath: input.path,
+    ...(parsed.description ? { description: sanitizeDiscoveredValue(parsed.description) } : {}),
+    sourcePath: sanitizeDiscoveredValue(input.path),
   };
   return input.kind === "agent"
     ? {
@@ -218,10 +222,10 @@ function parseOpencodeJsonConfigAgents(
     entries.push({
       id: buildDiscoveryId("opencode", "agent", name),
       provider: "opencode",
-      name,
+      name: sanitizeDiscoveredValue(name),
       source,
-      ...(description ? { description } : {}),
-      sourcePath: configPath,
+      ...(description ? { description: sanitizeDiscoveredValue(description) } : {}),
+      sourcePath: sanitizeDiscoveredValue(configPath),
     } satisfies ServerDiscoveredAgent);
   }
   return entries;
@@ -242,10 +246,10 @@ export function parseOpencodeConfigAgents(
       {
         id: buildDiscoveryId("opencode", "agent", name),
         provider: "opencode" as const,
-        name,
+        name: sanitizeDiscoveredValue(name),
         source: configPath.includes(`${OS.homedir()}/`) ? "user" : "project",
-        ...(description ? { description } : {}),
-        sourcePath: configPath,
+        ...(description ? { description: sanitizeDiscoveredValue(description) } : {}),
+        sourcePath: sanitizeDiscoveredValue(configPath),
       } satisfies ServerDiscoveredAgent,
     ];
   });

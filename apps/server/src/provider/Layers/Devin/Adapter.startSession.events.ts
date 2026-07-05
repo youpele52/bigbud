@@ -1,5 +1,5 @@
 import { type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
-import { Effect, Stream } from "effect";
+import { Effect, Scope, Stream } from "effect";
 
 import {
   type DevinAdapterLiveOptions,
@@ -80,7 +80,11 @@ export function emitPlanUpdate(
   });
 }
 
-export function forkNotificationFiber(deps: DevinStartSessionEventDeps, ctx: DevinSessionContext) {
+export function forkNotificationFiber(
+  deps: DevinStartSessionEventDeps,
+  ctx: DevinSessionContext,
+  scope: Scope.Scope,
+) {
   return Stream.runDrain(
     Stream.mapEffect(ctx.acp.getEvents(), (event) =>
       Effect.gen(function* () {
@@ -152,5 +156,5 @@ export function forkNotificationFiber(deps: DevinStartSessionEventDeps, ctx: Dev
         }
       }),
     ),
-  ).pipe(Effect.forkChild);
+  ).pipe(Effect.forkIn(scope));
 }
