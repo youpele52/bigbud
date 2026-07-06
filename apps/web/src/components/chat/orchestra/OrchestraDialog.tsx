@@ -1,12 +1,12 @@
 import {
   type ModelSelection,
   type RuntimeMode,
+  type ServerDiscoveredAgent,
   type ServerDiscoveredSkill,
   type ServerProvider,
 } from "@bigbud/contracts";
-import { type ComponentProps, useEffect, useRef, useState } from "react";
-import { MessageSquareTextIcon, XIcon } from "lucide-react";
-import { createModelSelection } from "~/models/provider";
+import { useEffect, useRef, useState } from "react";
+import { MessageSquareTextIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -17,12 +17,9 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
 import { Radio, RadioGroup } from "~/components/ui/radio-group";
-import { Textarea } from "~/components/ui/textarea";
 import { toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { ProviderModelPicker } from "../provider/ProviderModelPicker";
+import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 
 import {
   createOrchestraOperations,
@@ -35,9 +32,9 @@ import {
   resolveOrchestraScoreName,
   validateOrchestraScoreName,
 } from "./orchestra.naming";
+import { OrchestraPlayerComposer } from "./OrchestraPlayerComposer";
+import { type ModelOptionsByProvider } from "./OrchestraPlayerComposer.types";
 import type { Project, Thread } from "../../../models/types";
-
-type ModelOptionsByProvider = ComponentProps<typeof ProviderModelPicker>["modelOptionsByProvider"];
 
 function createAssignment(modelSelection: ModelSelection, prompt = ""): OrchestraAssignmentDraft {
   return {
@@ -58,11 +55,13 @@ export function OrchestraDialog(props: {
   activeProject: Project | null | undefined;
   activeThread: Thread | null | undefined;
   defaultModelSelection: ModelSelection;
+  discoveredAgents: ReadonlyArray<ServerDiscoveredAgent>;
   discoveredSkills: ReadonlyArray<ServerDiscoveredSkill>;
   modelOptionsByProvider: ModelOptionsByProvider;
   open: boolean;
   providers: ReadonlyArray<ServerProvider>;
   prompt: string;
+  resolvedTheme: "light" | "dark";
   runtimeMode: RuntimeMode;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -197,7 +196,7 @@ export function OrchestraDialog(props: {
         </DialogHeader>
         <DialogPanel className="space-y-6">
           <section className="w-full space-y-2 md:max-w-[50%]">
-            <Label className="text-sm">Score name</Label>
+            <h3 className="font-medium text-sm">Score name</h3>
             <Input
               value={scoreName}
               maxLength={ORCHESTRA_SCORE_NAME_MAX_LENGTH}
@@ -205,14 +204,14 @@ export function OrchestraDialog(props: {
               placeholder="Optional. Leave blank and bigbud will name it for you."
               onChange={(event) => setScoreName(event.currentTarget.value)}
             />
-            {scoreNameError ? <p className="text-destructive text-xs">{scoreNameError}</p> : null}
+            {scoreNameError ? <p className="text-destructive text-sm">{scoreNameError}</p> : null}
           </section>
 
           <section className="space-y-3">
             <div className="space-y-1">
-              <p className="font-medium text-sm">How the ensemble enters</p>
+              <h3 className="font-medium text-sm">How the ensemble enters</h3>
               {mode === "sequence" && !handoffAvailable ? (
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground text-sm">
                   In sequence needs the discovered `handoff` skill before it can start.
                 </p>
               ) : null}
@@ -243,70 +242,32 @@ export function OrchestraDialog(props: {
 
           <section className="space-y-3">
             <div className="space-y-1">
-              <p className="font-medium text-sm">Parts</p>
-              <p className="text-muted-foreground text-xs">
+              <h3 className="font-medium text-sm">Parts</h3>
+              <p className="text-muted-foreground text-sm">
                 You set the parts. Each player performs in a separate child thread.
               </p>
             </div>
             <div className="space-y-3">
               {assignments.map((assignment, index) => (
-                <div
+                <OrchestraPlayerComposer
                   key={assignment.id}
-                  className="relative grid gap-3 rounded-xl border border-border/70 p-3 md:grid-cols-[15rem_minmax(0,1fr)]"
-                >
-                  <div className="absolute end-2 top-2">
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                            aria-label="Remove agent"
-                            disabled={assignments.length <= 2}
-                          />
-                        }
-                        onClick={() => removeAssignment(assignment.id)}
-                      >
-                        <XIcon className="size-4" />
-                      </TooltipTrigger>
-                      <TooltipPopup side="top">
-                        {assignments.length <= 2 ? "Keep at least two agents" : "Kick out"}
-                      </TooltipPopup>
-                    </Tooltip>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Player {index + 1}</Label>
-                    <ProviderModelPicker
-                      provider={assignment.modelSelection.provider}
-                      model={assignment.modelSelection.model}
-                      lockedProvider={null}
-                      providers={props.providers}
-                      modelOptionsByProvider={props.modelOptionsByProvider}
-                      triggerVariant="outline"
-                      triggerClassName="w-full max-w-none shrink-0 justify-start text-foreground/90 hover:text-foreground"
-                      onProviderModelChange={(provider, model, subProviderID) => {
-                        const nextSelection = createModelSelection(provider, model);
-                        updateAssignment(assignment.id, {
-                          modelSelection: subProviderID
-                            ? ({ ...nextSelection, subProviderID } as ModelSelection)
-                            : nextSelection,
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Cue</Label>
-                    <Textarea
-                      value={assignment.prompt}
-                      onChange={(event) =>
-                        updateAssignment(assignment.id, { prompt: event.currentTarget.value })
-                      }
-                      placeholder="Write this player's cue"
-                    />
-                  </div>
-                </div>
+                  index={index}
+                  assignment={assignment}
+                  providers={props.providers}
+                  modelOptionsByProvider={props.modelOptionsByProvider}
+                  discoveredAgents={props.discoveredAgents}
+                  discoveredSkills={props.discoveredSkills}
+                  activeProjectCwd={props.activeProject?.cwd ?? null}
+                  workspaceExecutionTargetId={
+                    props.activeProject
+                      ? resolveWorkspaceExecutionTargetId(props.activeProject)
+                      : undefined
+                  }
+                  resolvedTheme={props.resolvedTheme}
+                  canRemove={assignments.length > 2}
+                  onChange={(update) => updateAssignment(assignment.id, update)}
+                  onRemove={() => removeAssignment(assignment.id)}
+                />
               ))}
             </div>
             <div className="flex justify-center">
@@ -316,17 +277,17 @@ export function OrchestraDialog(props: {
             </div>
           </section>
 
-          <section className="space-y-2">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <MessageSquareTextIcon className="size-3.5" />
-              <span className="font-medium text-sm">Opened from</span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <MessageSquareTextIcon className="size-3.5 text-muted-foreground" />
+              <span className="font-medium text-xs">Opened from</span>
             </div>
-            <p className="line-clamp-2 pl-5.5 text-sm leading-6 text-foreground/90">
+            <div className="line-clamp-2 pl-5.5 text-xs text-muted-foreground">
               {props.activeThread?.title ?? "New chat in the current workspace"}
-            </p>
-          </section>
+            </div>
+          </div>
         </DialogPanel>
-        <DialogFooter>
+        <DialogFooter variant="bare">
           <Button type="button" variant="ghost" onClick={() => props.onOpenChange(false)}>
             Cancel
           </Button>

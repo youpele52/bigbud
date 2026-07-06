@@ -450,11 +450,13 @@ export function ChatViewContent({
         activeProject={base.activeProject}
         activeThread={base.activeThread}
         defaultModelSelection={composer.selectedModelSelection}
+        discoveredAgents={composer.discoveredAgents}
         discoveredSkills={composer.discoveredSkills}
         modelOptionsByProvider={composer.modelOptionsByProvider}
         open={orchestraOpen}
         providers={composer.providerStatuses}
         prompt={base.prompt}
+        resolvedTheme={base.resolvedTheme}
         runtimeMode={base.runtimeMode}
         onOpenChange={setOrchestraOpen}
       />
