@@ -1,5 +1,5 @@
 import { type MessageId } from "@bigbud/contracts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "~/lib/utils";
 
@@ -7,6 +7,9 @@ const BASE_SEGMENT_WIDTH_PX = 8;
 const NEIGHBOR_SEGMENT_WIDTH_PX = 16;
 const CURRENT_SEGMENT_WIDTH_PX = 22;
 const HOVERED_SEGMENT_WIDTH_PX = 32;
+const SEGMENT_BUTTON_HEIGHT_PX = 10;
+const SEGMENT_GAP_PX = 1;
+const OUTLINE_VERTICAL_PADDING_PX = 8;
 
 interface ThreadReaderOutlineProps {
   anchors: ReadonlyArray<{ messageId: MessageId; label: string }>;
@@ -26,6 +29,7 @@ export function ThreadReaderOutline({
   const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [rootHeightPx, setRootHeightPx] = useState<number>(0);
 
   useEffect(
     () => () => {
@@ -54,16 +58,54 @@ export function ThreadReaderOutline({
     };
   }, [outlineOpen]);
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) {
+      return;
+    }
+
+    const updateHeight = () => {
+      const nextHeight = root.getBoundingClientRect().height;
+      setRootHeightPx((currentHeight) => {
+        if (Math.abs(currentHeight - nextHeight) < 0.5) {
+          return currentHeight;
+        }
+        return nextHeight;
+      });
+    };
+
+    updateHeight();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateHeight();
+    });
+    observer.observe(root);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   if (anchors.length < 2) {
     return null;
   }
+
+  const naturalStackHeightPx =
+    anchors.length * SEGMENT_BUTTON_HEIGHT_PX + (anchors.length - 1) * SEGMENT_GAP_PX;
+  const availableTrackHeightPx = Math.max(0, rootHeightPx - OUTLINE_VERTICAL_PADDING_PX);
+  const shouldCompress =
+    availableTrackHeightPx > 0 && naturalStackHeightPx > availableTrackHeightPx;
 
   return (
     <div
       ref={rootRef}
       aria-label="Transcript outline"
       className={cn(
-        "pointer-events-auto relative flex w-full flex-col items-end justify-center gap-px rounded-md px-1 py-1 transition-colors hover:bg-accent/20",
+        "pointer-events-auto h-full w-full overflow-hidden rounded-md px-1 py-1 transition-colors hover:bg-accent/20",
+        shouldCompress ? "relative" : "relative flex flex-col items-end justify-center gap-px",
         className,
       )}
       onPointerMove={(event) => {
@@ -141,16 +183,33 @@ export function ThreadReaderOutline({
                 ? CURRENT_SEGMENT_WIDTH_PX
                 : BASE_SEGMENT_WIDTH_PX;
 
+        const compressedTopPx =
+          anchors.length <= 1 || availableTrackHeightPx <= 0
+            ? OUTLINE_VERTICAL_PADDING_PX / 2 + SEGMENT_BUTTON_HEIGHT_PX / 2
+            : OUTLINE_VERTICAL_PADDING_PX / 2 +
+              (index / (anchors.length - 1)) * availableTrackHeightPx;
+
         return (
           <button
             key={anchor.messageId}
             type="button"
             aria-label={anchor.label}
             aria-current={isCurrent ? "location" : undefined}
-            className="relative flex h-2.5 w-full items-center justify-end outline-none"
+            className={cn(
+              "relative flex h-2.5 w-full items-center justify-end outline-none",
+              shouldCompress ? "absolute left-0" : "",
+            )}
             ref={(node) => {
               buttonRefs.current[index] = node;
             }}
+            style={
+              shouldCompress
+                ? {
+                    top: `${compressedTopPx}px`,
+                    transform: "translateY(-50%)",
+                  }
+                : undefined
+            }
             onClick={() => {
               if (clickTimeoutRef.current !== null) {
                 clearTimeout(clickTimeoutRef.current);
