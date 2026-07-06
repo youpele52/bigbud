@@ -9,7 +9,7 @@
  * @module ProviderRegistryLive
  */
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
-import { Deferred, Effect, Equal, Layer, Option, PubSub, Ref, Stream } from "effect";
+import { Deferred, Effect, Layer, Option, PubSub, Ref, Stream } from "effect";
 
 import { ClaudeProviderLive } from "./Claude/Provider";
 import { CopilotProviderLive } from "./Copilot/Provider";
@@ -29,6 +29,7 @@ import { OpencodeProvider } from "../Services/Opencode/Provider";
 import { PiProvider } from "../Services/Pi/Provider";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 import type { ServerProviderShape } from "../Services/ServerProvider";
+import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
 
 interface ProviderRegistration {
   readonly provider: ProviderKind;
@@ -46,7 +47,7 @@ const loadProviders = (
 export const haveProvidersChanged = (
   previousProviders: ReadonlyArray<ServerProvider>,
   nextProviders: ReadonlyArray<ServerProvider>,
-): boolean => !Equal.equals(previousProviders, nextProviders);
+): boolean => haveProviderSnapshotsChanged(previousProviders, nextProviders);
 
 /** Returns the first provider with status "ready", or None. */
 const findFirstReadyProvider = (

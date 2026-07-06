@@ -299,7 +299,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   yield* Effect.forkScoped(Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)));
 
   return {
-    getCatalog: syncCatalog({ publish: false }),
+    getCatalog: Ref.get(catalogRef),
     refresh: (_provider?: ProviderKind) => syncCatalog(),
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);

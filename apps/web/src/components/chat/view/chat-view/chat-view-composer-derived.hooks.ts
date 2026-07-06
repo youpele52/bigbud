@@ -8,10 +8,10 @@ import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { projectScriptCwd } from "@bigbud/shared/projectScripts";
 import {
   useServerAvailableEditors,
-  useServerConfig,
   useServerDiscoveredAgents,
   useServerDiscoveredSkills,
   useServerKeybindings,
+  useServerProviders,
 } from "~/rpc/serverState";
 import { shortcutLabelForCommand } from "../../../../models/keybindings";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
@@ -73,8 +73,7 @@ function resolveModelDiscoverySearch(query: string | undefined): {
 }
 
 export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
-  const serverConfig = useServerConfig();
-  const providerStatuses = serverConfig?.providers ?? EMPTY_PROVIDERS;
+  const providerStatuses = useServerProviders() ?? EMPTY_PROVIDERS;
   const {
     sessionProvider,
     selectedProviderByThreadId,
