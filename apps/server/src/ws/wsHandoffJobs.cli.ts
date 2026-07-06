@@ -210,6 +210,7 @@ export function generateCodexHandoff(
               [
                 "exec",
                 "--ephemeral",
+                "--skip-git-repo-check",
                 "-s",
                 "read-only",
                 "--model",
