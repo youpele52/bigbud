@@ -1,11 +1,12 @@
 import { BarChart3Icon, BotIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 import { type ServerUsageRange, type ServerUsageSummaryResult } from "@bigbud/contracts";
 
 import { usePageTitle } from "~/hooks/usePageTitle";
 import { readNativeApi } from "~/rpc/nativeApi";
+import { useServerProviders } from "~/rpc/serverState";
 import { formatHumanReadableDate } from "~/utils/timestamp";
 import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 import { BigbudLoader } from "../layout/BigbudLoader";
@@ -18,6 +19,7 @@ import { StandaloneChatPageHeader } from "../standalone/StandaloneChatPageHeader
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { UsageBreakdownCard, type UsageBreakdownView } from "./UsageBreakdownCard";
 import { formatCompactNumber } from "./UsagePage.format";
+import { applyUsageDisplayLabels } from "./UsagePage.labels";
 import { UsageTokenMixCard } from "./UsageTokenMixCard";
 
 const RANGE_OPTIONS: ReadonlyArray<ServerUsageRange> = ["24h", "7d", "30d", "all"];
@@ -33,10 +35,15 @@ export function UsagePage() {
   usePageTitle("Usage");
 
   const api = readNativeApi();
+  const serverProviders = useServerProviders();
   const [range, setRange] = useState<ServerUsageRange>("7d");
   const [summary, setSummary] = useState<ServerUsageSummaryResult | null>(null);
   const [breakdownView, setBreakdownView] = useState<UsageBreakdownView>("bar");
   const [loading, setLoading] = useState(true);
+  const displaySummary = useMemo(
+    () => (summary ? applyUsageDisplayLabels(summary, serverProviders) : null),
+    [serverProviders, summary],
+  );
 
   useEffect(() => {
     if (!api) {
@@ -99,29 +106,33 @@ export function UsagePage() {
       ) : (
         <section className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-4 px-4 py-6 sm:px-6">
-            {summary ? (
+            {displaySummary ? (
               <>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <UsageStatCard
                     icon={SigmaIcon}
                     label="Total tokens"
-                    value={summary.totals.usedTokens.toLocaleString()}
+                    value={displaySummary.totals.usedTokens.toLocaleString()}
                   />
                   <UsageStatCard
-                    icon={resolveUsageProviderIcon(summary.favoriteProvider?.id ?? null)}
+                    icon={resolveUsageProviderIcon(displaySummary.favoriteProvider?.id ?? null)}
                     label="Top provider"
-                    value={summary.favoriteProvider?.label ?? "None"}
+                    value={displaySummary.favoriteProvider?.label ?? "None"}
                   />
                   <UsageStatCard
                     icon={BotIcon}
                     label="Top model"
-                    value={summary.favoriteModel?.label ?? "None"}
+                    value={displaySummary.favoriteModel?.label ?? "None"}
                   />
-                  <UsageStatCard icon={FlameIcon} label="Streak" value={`${summary.streakDays}d`} />
+                  <UsageStatCard
+                    icon={FlameIcon}
+                    label="Streak"
+                    value={`${displaySummary.streakDays}d`}
+                  />
                 </div>
 
-                {summary.buckets.length > 0 ? (
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                {displaySummary.buckets.length > 0 ? (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
                     <Card>
                       <CardHeader>
                         <CardTitle>Token usage</CardTitle>
@@ -129,7 +140,7 @@ export function UsagePage() {
                       <CardContent className="space-y-4">
                         <ChartContainer className="h-80 min-h-80" config={chartConfig}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={summary.buckets}>
+                            <BarChart data={displaySummary.buckets}>
                               <CartesianGrid
                                 vertical={false}
                                 stroke="var(--border)"
@@ -140,7 +151,7 @@ export function UsagePage() {
                                 dataKey="bucketStart"
                                 minTickGap={24}
                                 tickFormatter={(value) =>
-                                  formatBucketAxisLabel(value, summary.range)
+                                  formatBucketAxisLabel(value, displaySummary.range)
                                 }
                                 tickLine={false}
                               />
@@ -151,10 +162,11 @@ export function UsagePage() {
                                 width={48}
                               />
                               <ChartTooltip
+                                cursor={{ fill: "var(--muted)", fillOpacity: 0.35 }}
                                 content={
                                   <ChartTooltipContent
                                     labelFormatter={(value) =>
-                                      formatBucketTooltipLabel(value, summary.range)
+                                      formatBucketTooltipLabel(value, displaySummary.range)
                                     }
                                   />
                                 }
@@ -192,10 +204,10 @@ export function UsagePage() {
                         </ChartContainer>
                       </CardContent>
                     </Card>
-                    <UsageTokenMixCard totals={summary.totals} />
+                    <UsageTokenMixCard totals={displaySummary.totals} />
                   </div>
                 ) : (
-                  <Card>
+                  <Card className="mt-4">
                     <CardContent className="p-0">
                       <Empty className="min-h-72">
                         <EmptyMedia variant="icon">
@@ -212,7 +224,7 @@ export function UsagePage() {
                   </Card>
                 )}
 
-                <section className="space-y-3">
+                <section className="mt-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-medium text-foreground">Breakdown</h3>
                     <ToggleGroup
@@ -240,21 +252,21 @@ export function UsagePage() {
                     className={`grid gap-4 ${breakdownView === "pie" ? "grid-cols-1" : "lg:grid-cols-2"}`}
                   >
                     <UsageBreakdownCard
-                      entries={summary.providers}
+                      entries={displaySummary.providers}
                       title="Providers"
-                      totalTokens={summary.totals.usedTokens}
+                      totalTokens={displaySummary.totals.usedTokens}
                       view={breakdownView}
                     />
                     <UsageBreakdownCard
-                      entries={summary.models}
+                      entries={displaySummary.models}
                       title="Models"
-                      totalTokens={summary.totals.usedTokens}
+                      totalTokens={displaySummary.totals.usedTokens}
                       view={breakdownView}
                     />
                   </div>
                 </section>
 
-                <section className="mt-6 space-y-4 text-xs text-muted-foreground">
+                <section className="mt-24 space-y-4 text-xs text-muted-foreground">
                   <p>
                     <span className="mr-1">*</span>
                     Token counts are reported differently by each provider. bigbud normalizes
