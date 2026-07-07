@@ -30,6 +30,7 @@ function makeFakeCodexBinary(
     requireImage?: boolean;
     requireFastServiceTier?: boolean;
     requireReasoningEffort?: string;
+    requireSkipGitRepoCheck?: boolean;
     forbidReasoningEffort?: boolean;
     stdinMustContain?: string;
     stdinMustNotContain?: string;
@@ -50,7 +51,13 @@ function makeFakeCodexBinary(
         'seen_image="0"',
         'seen_fast_service_tier="0"',
         'seen_reasoning_effort=""',
+        'seen_skip_git_repo_check="0"',
         "while [ $# -gt 0 ]; do",
+        '  if [ "$1" = "--skip-git-repo-check" ]; then',
+        '    seen_skip_git_repo_check="1"',
+        "    shift",
+        "    continue",
+        "  fi",
         '  if [ "$1" = "--image" ]; then',
         "    shift",
         '    if [ -n "$1" ]; then',
@@ -105,6 +112,14 @@ function makeFakeCodexBinary(
               "fi",
             ]
           : []),
+        ...(input.requireSkipGitRepoCheck
+          ? [
+              'if [ "$seen_skip_git_repo_check" != "1" ]; then',
+              '  printf "%s\\n" "missing --skip-git-repo-check" >&2',
+              `  exit 8`,
+              "fi",
+            ]
+          : []),
         ...(input.forbidReasoningEffort
           ? [
               'if [ -n "$seen_reasoning_effort" ]; then',
@@ -154,6 +169,7 @@ export function withFakeCodexEnv<A, E, R>(
     requireImage?: boolean;
     requireFastServiceTier?: boolean;
     requireReasoningEffort?: string;
+    requireSkipGitRepoCheck?: boolean;
     forbidReasoningEffort?: boolean;
     stdinMustContain?: string;
     stdinMustNotContain?: string;

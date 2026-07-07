@@ -23,6 +23,8 @@ export default Effect.gen(function* () {
       thread_id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT NOT NULL,
+      elevator_summary TEXT,
+      elevator_summary_message_count INTEGER NOT NULL DEFAULT 0,
       execution_target_id TEXT NOT NULL DEFAULT 'local',
       model TEXT NOT NULL,
       branch TEXT,

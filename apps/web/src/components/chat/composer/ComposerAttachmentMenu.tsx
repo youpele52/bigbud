@@ -10,7 +10,16 @@ export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props
   onCallAgent: () => void;
   onUseSkill: () => void;
   disabled?: boolean;
+  showAttachFiles?: boolean;
+  showReadDialog?: boolean;
+  showCallAgent?: boolean;
+  showUseSkill?: boolean;
 }) {
+  const showAttachFiles = props.showAttachFiles ?? true;
+  const showReadDialog = props.showReadDialog ?? true;
+  const showCallAgent = props.showCallAgent ?? true;
+  const showUseSkill = props.showUseSkill ?? true;
+
   return (
     <Menu>
       <Tooltip>
@@ -35,22 +44,30 @@ export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props
         <TooltipPopup>Add files &amp; more</TooltipPopup>
       </Tooltip>
       <MenuPopup align="end" side="top">
-        <MenuItem onClick={props.onAttachFiles}>
-          <PaperclipIcon className="size-4 shrink-0" />
-          Add photos and files
-        </MenuItem>
-        <MenuItem onClick={props.onOpenReadDialog}>
-          <BookOpenIcon className="size-4 shrink-0" />
-          Read document or URL
-        </MenuItem>
-        <MenuItem onClick={props.onCallAgent}>
-          <BotIcon className="size-4 shrink-0" />
-          Call agent
-        </MenuItem>
-        <MenuItem onClick={props.onUseSkill}>
-          <DumbbellIcon className="size-4 shrink-0" />
-          Use skill
-        </MenuItem>
+        {showAttachFiles ? (
+          <MenuItem onClick={props.onAttachFiles}>
+            <PaperclipIcon className="size-4 shrink-0" />
+            Add photos and files
+          </MenuItem>
+        ) : null}
+        {showReadDialog ? (
+          <MenuItem onClick={props.onOpenReadDialog}>
+            <BookOpenIcon className="size-4 shrink-0" />
+            Read document or URL
+          </MenuItem>
+        ) : null}
+        {showCallAgent ? (
+          <MenuItem onClick={props.onCallAgent}>
+            <BotIcon className="size-4 shrink-0" />
+            Call agent
+          </MenuItem>
+        ) : null}
+        {showUseSkill ? (
+          <MenuItem onClick={props.onUseSkill}>
+            <DumbbellIcon className="size-4 shrink-0" />
+            Use skill
+          </MenuItem>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

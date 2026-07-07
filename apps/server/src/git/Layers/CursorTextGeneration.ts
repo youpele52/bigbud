@@ -17,14 +17,21 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadElevatorSummaryPrompt,
   buildThreadTitlePrompt,
 } from "../Prompts.ts";
 import {
+  type ThreadElevatorSummaryGenerationResult,
   type ThreadTitleGenerationResult,
   type TextGenerationShape,
   TextGeneration,
 } from "../Services/TextGeneration.ts";
-import { sanitizeCommitSubject, sanitizePrTitle, sanitizeThreadTitle } from "../Utils.ts";
+import {
+  sanitizeCommitSubject,
+  sanitizeElevatorSummary,
+  sanitizePrTitle,
+  sanitizeThreadTitle,
+} from "../Utils.ts";
 
 const CURSOR_TIMEOUT_MS = 180_000;
 const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
@@ -39,7 +46,8 @@ function mapCursorTextGenerationError(
     | "generateCommitMessage"
     | "generatePrContent"
     | "generateBranchName"
-    | "generateThreadTitle",
+    | "generateThreadTitle"
+    | "generateThreadElevatorSummary",
   detail: string,
   cause: unknown,
 ): TextGenerationError {
@@ -129,7 +137,8 @@ const makeCursorTextGeneration = Effect.gen(function* () {
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadElevatorSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -364,11 +373,40 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     } satisfies ThreadTitleGenerationResult;
   });
 
+  const generateThreadElevatorSummary: TextGenerationShape["generateThreadElevatorSummary"] =
+    Effect.fn("CursorTextGeneration.generateThreadElevatorSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadElevatorSummaryPrompt({
+        transcript: input.transcript,
+        attachments: input.attachments,
+      });
+
+      if (input.modelSelection.provider !== "cursor") {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: "Invalid model selection.",
+        });
+      }
+
+      const generated = yield* runCursorJson({
+        operation: "generateThreadElevatorSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+        cursorSettings: yield* loadCursorSettings,
+      });
+
+      return {
+        summary: sanitizeElevatorSummary(generated.summary),
+      } satisfies ThreadElevatorSummaryGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadElevatorSummary,
   } satisfies TextGenerationShape;
 });
 

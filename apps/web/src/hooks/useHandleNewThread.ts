@@ -63,7 +63,7 @@ export function useHandleNewThread() {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const navigate = useNavigate();
-  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
+  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
   const routeThreadId = useParams({
     strict: false,
     select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
@@ -113,7 +113,7 @@ export function useHandleNewThread() {
           return true;
         }
 
-        return ensureRemoteExecutionTargetAccess({
+        return beginRemoteExecutionTargetAccessCheck({
           executionTargetId: resolveWorkspaceExecutionTargetId(project),
           ...(project.cwd ? { cwd: project.cwd } : {}),
           onVerified: () => handleNewThread(projectId, normalizedOptions),
@@ -191,7 +191,7 @@ export function useHandleNewThread() {
         });
       })();
     },
-    [ensureRemoteExecutionTargetAccess, navigate, projects, routeThreadId],
+    [beginRemoteExecutionTargetAccessCheck, navigate, projects, routeThreadId],
   );
 
   return {

@@ -1,8 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
@@ -17,6 +15,7 @@ import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
 import PlanSidebar from "../../plan/PlanSidebar";
+import { OrchestraDialog } from "../../orchestra/OrchestraDialog";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
@@ -67,18 +66,21 @@ export function ChatViewContent({
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
+  const [orchestraOpen, setOrchestraOpen] = useState(false);
 
-  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
 
   const onUseHandoffFromBanner = useCallback(() => {
-    const nextPrompt = HANDOFF_SKILL_PROMPT;
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
+    const activeThread = base.activeThread;
+    if (!activeThread) {
+      return;
+    }
+    void interactions.onCreateHandoffBranch(
+      activeThread.modelSelection,
+      "Continue this work in a fresh branch with the generated handoff.",
+    );
+  }, [base.activeThread, interactions]);
 
   const onCompactFromBanner = useCallback(() => {
     const nextPrompt = "/compact";
@@ -190,16 +192,16 @@ export function ChatViewContent({
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
-          openInCwd={composer.gitCwd}
+          openInCwd={workspaceRoot ?? null}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
-          gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}
           rightPanelOpen={rightPanelOpen}
+          onOpenOrchestra={() => setOrchestraOpen(true)}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
@@ -317,7 +319,7 @@ export function ChatViewContent({
                 />
               </div>
 
-              <div className="pointer-events-none absolute inset-y-0 right-2 z-20 flex w-10 items-center justify-end sm:right-2 sm:w-10">
+              <div className="pointer-events-none absolute top-1/2 right-2 z-20 flex h-[75%] w-10 -translate-y-1/2 items-center justify-end sm:right-2 sm:w-10">
                 <ThreadReaderOutline
                   anchors={userTurnAnchors}
                   currentAnchorMessageId={
@@ -363,6 +365,7 @@ export function ChatViewContent({
               thread={thread}
               runtime={runtime}
               interactions={interactions}
+              onOpenOrchestra={() => setOrchestraOpen(true)}
               onOpenReplySource={handleOpenReplySource}
             />
           </div>
@@ -442,6 +445,21 @@ export function ChatViewContent({
           onNavigate={interactions.navigateExpandedImage}
         />
       ) : null}
+
+      <OrchestraDialog
+        activeProject={base.activeProject}
+        activeThread={base.activeThread}
+        defaultModelSelection={composer.selectedModelSelection}
+        discoveredAgents={composer.discoveredAgents}
+        discoveredSkills={composer.discoveredSkills}
+        modelOptionsByProvider={composer.modelOptionsByProvider}
+        open={orchestraOpen}
+        providers={composer.providerStatuses}
+        prompt={base.prompt}
+        resolvedTheme={base.resolvedTheme}
+        runtimeMode={base.runtimeMode}
+        onOpenChange={setOrchestraOpen}
+      />
     </div>
   );
 }

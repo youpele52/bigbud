@@ -144,6 +144,8 @@ function mapThreadFromCreatedEvent(
     id: event.payload.threadId,
     projectId: event.payload.projectId,
     title: event.payload.title,
+    elevatorSummary: event.payload.title,
+    elevatorSummaryMessageCount: 0,
     ...(event.payload.providerRuntimeExecutionTargetId !== undefined
       ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
       : {}),

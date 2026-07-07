@@ -4,6 +4,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import type { ServerProviderShape } from "./Services/ServerProvider";
 import { ServerSettingsError } from "@bigbud/contracts";
+import { areProviderSnapshotsEqual } from "./providerSnapshot.equal";
 
 export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(function* <
   Settings,
@@ -50,7 +51,13 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     }
 
     const nextSnapshot = yield* input.checkProvider;
+    const previousSnapshot = yield* Ref.get(snapshotRef);
+    const snapshotChanged = !areProviderSnapshotsEqual(previousSnapshot, nextSnapshot);
     yield* Ref.set(settingsRef, nextSettings);
+    if (!snapshotChanged) {
+      return previousSnapshot;
+    }
+
     yield* Ref.set(snapshotRef, nextSnapshot);
     yield* PubSub.publish(changesPubSub, nextSnapshot);
 

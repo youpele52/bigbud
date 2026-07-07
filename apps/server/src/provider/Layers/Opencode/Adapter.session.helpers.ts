@@ -11,6 +11,7 @@ import type {
 } from "@bigbud/contracts";
 import type { PermissionRuleset } from "@opencode-ai/sdk/v2";
 
+import { listOpencodeProviders } from "./Provider.sdk.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 // ── Model selection type guard ────────────────────────────────────────
@@ -84,14 +85,12 @@ export async function resolveProviderIDForModel(
   modelID: string,
 ): Promise<string | undefined> {
   try {
-    const providersResp = await client.config.providers();
-    if (providersResp.data) {
-      for (const p of providersResp.data.providers) {
-        if (p.models && modelID) {
-          if (modelID in p.models) return p.id;
-          for (const m of Object.values(p.models)) {
-            if ((m as { id?: string }).id === modelID) return p.id;
-          }
+    const providers = await listOpencodeProviders(client);
+    for (const p of providers) {
+      if (p.models && modelID) {
+        if (modelID in p.models) return p.id;
+        for (const m of Object.values(p.models)) {
+          if ((m as { id?: string }).id === modelID) return p.id;
         }
       }
     }

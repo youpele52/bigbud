@@ -87,10 +87,14 @@ export type TerminalCloseInput = typeof TerminalCloseInput.Type;
 export const TerminalSessionStatus = Schema.Literals(["starting", "running", "exited", "error"]);
 export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 
+export const TerminalDropPathMode = Schema.Literals(["posix", "powershell", "cmd", "wsl", "msys"]);
+export type TerminalDropPathMode = typeof TerminalDropPathMode.Type;
+
 export const TerminalSessionSnapshot = Schema.Struct({
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
   executionTargetId: Schema.optional(ExecutionTargetId),
+  dropPathMode: TerminalDropPathMode,
   cwd: Schema.String.check(Schema.isNonEmpty()),
   worktreePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
   status: TerminalSessionStatus,

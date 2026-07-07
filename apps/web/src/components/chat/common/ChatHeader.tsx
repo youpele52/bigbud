@@ -29,11 +29,11 @@ interface ChatHeaderProps {
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
-  gitCwd: string | null;
   executionTargetId?: string | undefined;
   sidebarToggleShortcutLabel: string | null;
   rightPanelToggleShortcutLabel: string | null;
   rightPanelOpen: boolean;
+  onOpenOrchestra: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -50,11 +50,11 @@ export const ChatHeader = memo(function ChatHeader({
   preferredScriptId,
   keybindings,
   availableEditors,
-  gitCwd,
   executionTargetId,
   sidebarToggleShortcutLabel,
   rightPanelToggleShortcutLabel,
   rightPanelOpen,
+  onOpenOrchestra,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -110,11 +110,12 @@ export const ChatHeader = memo(function ChatHeader({
               openInCwd={openInCwd}
             />
           )}
-          {activeProjectName && gitCwd && (
+          {openInCwd && (
             <GitActionsControl
-              gitCwd={gitCwd}
+              gitCwd={openInCwd}
               executionTargetId={executionTargetId}
               activeThreadId={activeThreadId}
+              onOpenOrchestra={onOpenOrchestra}
             />
           )}
           <Tooltip>

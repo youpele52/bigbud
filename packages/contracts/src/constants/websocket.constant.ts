@@ -80,6 +80,8 @@ export const WS_METHODS = {
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",
+  serverStartHandoffJob: "server.startHandoffJob",
+  serverGetHandoffJob: "server.getHandoffJob",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",
@@ -93,6 +95,7 @@ export const WS_METHODS = {
   serverDeleteAutomation: "server.deleteAutomation",
   serverTriggerAutomation: "server.triggerAutomation",
   serverListAutomationRuns: "server.listAutomationRuns",
+  serverGetUsageSummary: "server.getUsageSummary",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",

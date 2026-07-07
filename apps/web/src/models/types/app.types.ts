@@ -159,6 +159,8 @@ export interface Thread {
     title: string;
   };
   title: string;
+  elevatorSummary?: string | null;
+  elevatorSummaryMessageCount?: number;
   modelSelection: ModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
@@ -193,6 +195,8 @@ export interface SidebarThreadSummary {
     title: string;
   };
   title: string;
+  elevatorSummary?: string | null;
+  elevatorSummaryMessageCount?: number;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
   createdAt: string;

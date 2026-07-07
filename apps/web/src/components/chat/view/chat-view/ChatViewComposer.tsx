@@ -1,18 +1,10 @@
 import { type MessageId } from "@bigbud/contracts";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  collapseExpandedComposerCursor,
-  detectComposerTrigger,
-  expandCollapsedComposerCursor,
-} from "~/logic/composer";
-import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
-import { buildSkillMentionPrompt } from "~/lib/skillMentions";
+import { useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
 import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
 import { ComposerAttachmentMenu } from "../../composer/ComposerAttachmentMenu";
-import { type ComposerCommandItem } from "../../composer/ComposerCommandMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
 import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
 import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
@@ -24,12 +16,13 @@ import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
-import { openChatFileTarget } from "../../common/chatFileTargets";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 
+import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
 import { ChatViewComposerMenuLayer } from "./ChatViewComposerMenuLayer";
+import { useChatViewComposerSyntheticMenu } from "./ChatViewComposer.syntheticMenu";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
@@ -43,6 +36,7 @@ interface ChatViewComposerProps {
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   interactions: ChatViewInteractionsState;
+  onOpenOrchestra: () => void;
   onOpenReplySource: (messageId: MessageId) => void;
 }
 
@@ -53,6 +47,7 @@ export function ChatViewComposer({
   thread,
   runtime,
   interactions,
+  onOpenOrchestra,
   onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
@@ -67,234 +62,34 @@ export function ChatViewComposer({
   const [isRecording, setIsRecording] = useState(false);
   const micRef = useRef<ComposerMicButtonHandle>(null);
   const activeReplyTarget = base.composerDraft.replyTarget;
+  const {
+    insertMention,
+    onCompactFromMeter,
+    onMicTranscript,
+    onOpenReadDialog,
+    onSubmitReadFiles,
+    onSubmitReadUrl,
+    onUseHandoffFromMeter,
+  } = useChatViewComposerActions({ base, runtime, interactions });
+  const {
+    onCallAgent,
+    onOpenDiscoveryItemSourcePath,
+    onSyntheticMenuHighlight,
+    onSyntheticMenuSearchChange,
+    onSyntheticMenuSelect,
+    onUseSkill,
+    syntheticMenuHighlightId,
+    syntheticMenuItems,
+    syntheticMenuKind,
+    syntheticMenuRef,
+    syntheticMenuSearch,
+  } = useChatViewComposerSyntheticMenu({
+    composer,
+    activeProjectCwd: base.activeProjectCwd,
+    insertMention,
+  });
 
-  /**
-   * Injects transcript text into the composer the same way setPromptFromTraits
-   * does in chat-view-interactions: update the store, sync promptRef, advance
-   * the cursor to end, and schedule a focus on the editor. This ensures the
-   * Lexical editor picks up the change on both web and Electron.
-   */
-  const onMicTranscript = useCallback(
-    (text: string) => {
-      if (text === base.promptRef.current) return;
-      base.promptRef.current = text;
-      base.setPrompt(text);
-      base.setComposerCursor(base.collapseExpandedComposerCursor(text, text.length));
-      base.setComposerTrigger(base.detectComposerTrigger(text, text.length));
-      runtime.scheduleComposerFocus();
-    },
-    [base, runtime],
-  );
-
-  // Synthetic composer menu (opened from the + button, not from typed triggers)
-  const [syntheticMenuKind, setSyntheticMenuKind] = useState<"agent" | "skill" | null>(null);
-  const [syntheticMenuHighlightId, setSyntheticMenuHighlightId] = useState<string | null>(null);
-  const [syntheticMenuSearch, setSyntheticMenuSearch] = useState("");
-  const syntheticMenuRef = useRef<HTMLDivElement>(null);
-
-  // Reset search when menu opens or closes
-  useEffect(() => {
-    setSyntheticMenuSearch("");
-  }, [syntheticMenuKind]);
-
-  // Dismiss synthetic menu on Escape
-  useEffect(() => {
-    if (!syntheticMenuKind) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSyntheticMenuKind(null);
-        setSyntheticMenuHighlightId(null);
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [syntheticMenuKind]);
-
-  // Dismiss synthetic menu on click outside
-  useEffect(() => {
-    if (!syntheticMenuKind) return;
-    const handler = (e: MouseEvent) => {
-      if (syntheticMenuRef.current && !syntheticMenuRef.current.contains(e.target as Node)) {
-        setSyntheticMenuKind(null);
-        setSyntheticMenuHighlightId(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [syntheticMenuKind]);
-
-  /** Insert a mention (agent or skill) at the current cursor position. */
-  const insertMention = useCallback(
-    (mention: string) => {
-      const snapshot = base.composerEditorRef.current?.readSnapshot();
-      const value = snapshot?.value ?? base.promptRef.current;
-      const expandedCursor =
-        snapshot?.expandedCursor ?? expandCollapsedComposerCursor(value, base.composerCursor);
-
-      if (base.composerDraft.shellMode) {
-        base.setComposerShellMode(false);
-      }
-
-      const prefix = expandedCursor > 0 && !/\s/.test(value[expandedCursor - 1] ?? "") ? " " : "";
-      const insertion = prefix + mention;
-      const newValue = value.slice(0, expandedCursor) + insertion + value.slice(expandedCursor);
-      const newExpandedCursor = expandedCursor + insertion.length;
-      const newCursor = collapseExpandedComposerCursor(newValue, newExpandedCursor);
-
-      base.promptRef.current = newValue;
-      base.setPrompt(newValue);
-      base.setComposerCursor(newCursor);
-      base.setComposerTrigger(detectComposerTrigger(newValue, newExpandedCursor));
-      runtime.scheduleComposerFocus();
-    },
-    [base, runtime],
-  );
-
-  const syntheticAgentItems = useMemo<ComposerCommandItem[]>(() => {
-    const query = syntheticMenuSearch.toLowerCase().trim();
-    return composer.discoveredAgents
-      .filter((agent) => {
-        if (!query) return true;
-        return (
-          agent.name.toLowerCase().includes(query) ||
-          agent.provider.toLowerCase().includes(query) ||
-          (agent.description?.toLowerCase().includes(query) ?? false)
-        );
-      })
-      .map((agent) => ({
-        id: `agent:${agent.provider}:${agent.id}`,
-        type: "agent" as const,
-        agent,
-        label: `@${agent.name}`,
-        description: agent.description ?? "",
-      }));
-  }, [composer.discoveredAgents, syntheticMenuSearch]);
-
-  const syntheticSkillItems = useMemo<ComposerCommandItem[]>(() => {
-    const query = syntheticMenuSearch.toLowerCase().trim();
-    return composer.discoveredSkills
-      .filter((skill) => {
-        if (!query) return true;
-        const skillLabel = skill.displayName ?? skill.name;
-        return (
-          skill.name.toLowerCase().includes(query) ||
-          skillLabel.toLowerCase().includes(query) ||
-          skill.provider.toLowerCase().includes(query) ||
-          (skill.description?.toLowerCase().includes(query) ?? false)
-        );
-      })
-      .map((skill) => ({
-        id: `provider-skill:${skill.provider}:${skill.id}`,
-        type: "skill" as const,
-        skill,
-        label: `$${skill.displayName ?? skill.name}`,
-        description: skill.description ?? "",
-      }));
-  }, [composer.discoveredSkills, syntheticMenuSearch]);
-
-  const syntheticMenuItems =
-    syntheticMenuKind === "agent"
-      ? syntheticAgentItems
-      : syntheticMenuKind === "skill"
-        ? syntheticSkillItems
-        : [];
-
-  const onSyntheticMenuSelect = useCallback(
-    (item: ComposerCommandItem) => {
-      if (item.type === "agent") {
-        insertMention(`@agent::${item.agent.name} `);
-      } else if (item.type === "skill") {
-        insertMention(`${buildSkillMentionPrompt(item.skill.name)} `);
-      }
-      setSyntheticMenuKind(null);
-      setSyntheticMenuHighlightId(null);
-    },
-    [insertMention],
-  );
-
-  const onSyntheticMenuHighlight = useCallback((itemId: string | null) => {
-    setSyntheticMenuHighlightId(itemId);
-  }, []);
-
-  const onSyntheticMenuSearchChange = useCallback((query: string) => {
-    setSyntheticMenuSearch(query);
-    setSyntheticMenuHighlightId(null);
-  }, []);
-
-  const onOpenDiscoveryItemSourcePath = useCallback(
-    (item: Extract<ComposerCommandItem, { type: "agent" | "skill" }>) => {
-      const sourcePath = item.type === "agent" ? item.agent.sourcePath : item.skill.sourcePath;
-      if (!sourcePath) {
-        return;
-      }
-      openChatFileTarget(sourcePath, base.activeProjectCwd ?? undefined);
-    },
-    [base.activeProjectCwd],
-  );
-
-  const onCallAgent = useCallback(() => {
-    setSyntheticMenuKind("agent");
-    setSyntheticMenuHighlightId(null);
-  }, []);
-
-  const onUseSkill = useCallback(() => {
-    setSyntheticMenuKind("skill");
-    setSyntheticMenuHighlightId(null);
-  }, []);
-
-  const onOpenReadDialog = useCallback(() => {
-    base.setReadDocumentDialogOpen(true);
-  }, [base]);
-
-  const onSubmitReadUrl = useCallback(
-    async (url: string) => {
-      const nextPrompt = `/read ${url}`;
-      base.promptRef.current = nextPrompt;
-      base.setPrompt(nextPrompt);
-      base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-      base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-      interactions.onSend();
-    },
-    [base, interactions],
-  );
-
-  const onSubmitReadFiles = useCallback(
-    async (files: File[]) => {
-      interactions.addComposerFiles(files);
-      const nextPrompt =
-        base.promptRef.current.trim().length > 0
-          ? base.promptRef.current
-          : "Read the attached documents and use them as context.";
-      base.promptRef.current = nextPrompt;
-      base.setPrompt(nextPrompt);
-      base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-      base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-      window.requestAnimationFrame(() => {
-        interactions.onSend();
-      });
-    },
-    [base, interactions],
-  );
-
-  const onUseHandoffFromMeter = useCallback(() => {
-    const nextPrompt = HANDOFF_SKILL_PROMPT;
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
-
-  const onCompactFromMeter = useCallback(() => {
-    const nextPrompt = "/compact";
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
-
-  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
 
   return (
@@ -456,6 +251,7 @@ export function ChatViewComposer({
                 interactionMode={base.interactionMode}
                 runtimeMode={base.runtimeMode}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
+                onOpenOrchestra={onOpenOrchestra}
                 onProviderModelSelect={interactions.onProviderModelSelect}
                 onProviderUnlock={() => base.setProviderUnlocked(true)}
                 onToggleInteractionMode={runtime.toggleInteractionMode}

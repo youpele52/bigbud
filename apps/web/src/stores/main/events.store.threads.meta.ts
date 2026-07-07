@@ -4,6 +4,23 @@ import { normalizeModelSlug } from "./mappers.store";
 import { type AppState } from "./main.store";
 import { buildLatestTurn, updateThreadState } from "./helpers.store";
 
+function resolveSyncedElevatorSummary(thread: {
+  readonly title: string;
+  readonly elevatorSummary?: string | null;
+  readonly elevatorSummaryMessageCount?: number;
+  readonly nextTitle?: string;
+}) {
+  if ((thread.elevatorSummaryMessageCount ?? 0) !== 0) {
+    return {};
+  }
+  if ((thread.elevatorSummary ?? null) !== thread.title) {
+    return {};
+  }
+  return {
+    elevatorSummary: thread.nextTitle ?? thread.title,
+  };
+}
+
 export function applyThreadMetaEvent(
   state: AppState,
   event: OrchestrationEvent,
@@ -42,27 +59,47 @@ export function applyThreadMetaEvent(
     }
 
     case "thread.meta-updated": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
-        ...thread,
-        ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
-        ...(event.payload.providerRuntimeExecutionTargetId !== undefined
-          ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
-          : {}),
-        ...(event.payload.workspaceExecutionTargetId !== undefined
-          ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
-          : {}),
-        ...(event.payload.executionTargetId !== undefined
-          ? { executionTargetId: event.payload.executionTargetId }
-          : {}),
-        ...(event.payload.modelSelection !== undefined
-          ? { modelSelection: normalizeModelSlug(event.payload.modelSelection) }
-          : {}),
-        ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
-        ...(event.payload.worktreePath !== undefined
-          ? { worktreePath: event.payload.worktreePath }
-          : {}),
-        updatedAt: event.payload.updatedAt,
-      }));
+      return updateThreadState(state, event.payload.threadId, (thread) => {
+        const nextThread = {
+          ...thread,
+          ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
+          ...(event.payload.elevatorSummary !== undefined
+            ? { elevatorSummary: event.payload.elevatorSummary }
+            : {}),
+          ...(event.payload.elevatorSummaryMessageCount !== undefined
+            ? { elevatorSummaryMessageCount: event.payload.elevatorSummaryMessageCount }
+            : {}),
+          ...(event.payload.providerRuntimeExecutionTargetId !== undefined
+            ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
+            : {}),
+          ...(event.payload.workspaceExecutionTargetId !== undefined
+            ? { workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId }
+            : {}),
+          ...(event.payload.executionTargetId !== undefined
+            ? { executionTargetId: event.payload.executionTargetId }
+            : {}),
+          ...(event.payload.modelSelection !== undefined
+            ? { modelSelection: normalizeModelSlug(event.payload.modelSelection) }
+            : {}),
+          ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
+          ...(event.payload.worktreePath !== undefined
+            ? { worktreePath: event.payload.worktreePath }
+            : {}),
+          updatedAt: event.payload.updatedAt,
+        };
+        return {
+          ...nextThread,
+          ...(event.payload.elevatorSummary === undefined &&
+          event.payload.elevatorSummaryMessageCount === undefined
+            ? resolveSyncedElevatorSummary({
+                title: thread.title,
+                elevatorSummary: thread.elevatorSummary ?? null,
+                elevatorSummaryMessageCount: thread.elevatorSummaryMessageCount ?? 0,
+                ...(event.payload.title !== undefined ? { nextTitle: event.payload.title } : {}),
+              })
+            : {}),
+        };
+      });
     }
 
     case "thread.runtime-mode-set": {

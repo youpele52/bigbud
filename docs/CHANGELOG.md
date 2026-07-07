@@ -2,6 +2,68 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.651 (7 July, 2026)
+
+### Orchestra
+
+- Added **Orchestra** from the composer and quick-actions menus: set a score name, choose multiple players with their own provider/model and cue, then press **Play** to launch each part as its own child thread.
+- Orchestra can run players **together** or **in sequence**. Sequential runs use handoff between child threads so each next player receives a clean summary from the previous one instead of a raw transcript dump.
+- Orchestra runs now create a fresh parent score thread automatically, so you no longer need to start a normal chat first. Child thread titles are prefixed with the score name so related runs are easy to spot in the sidebar.
+- Orchestra keeps the setup dialog aligned with the actual launch state, so once child threads are created the run moves forward cleanly instead of inviting duplicate retries.
+
+### Usage
+
+- Added a local **Usage** dashboard under **Scheduled** in the sidebar, with 24h, 7d, 30d, and All ranges for reviewing token usage stored on this device.
+- Usage now shows total tokens, top provider, top model, streak, time-series token activity, token mix, and provider/model breakdowns with bar and pie chart views.
+- Added plain-language token explanations for cached, input, output, and reasoning tokens, plus a note that provider token counts are directional rather than billing-accurate.
+
+### Thread Reader
+
+- Added **thread elevator summaries** across contracts, projections, title generation, and the sidebar so longer threads can surface a compact, readable summary where a title alone is not enough context.
+
+### Handoff
+
+- Added server-side **handoff jobs** and RPC plumbing so handoff document generation can run as a tracked background workflow instead of blocking the active chat surface.
+- Switched chat handoff flows to background branch jobs, keeping the dialog responsive while branch setup and handoff generation continue behind the scenes.
+
+### Terminal
+
+- Added contextual terminal labels and provider icons so terminal tabs now read like the active project or directory instead of generic terminal slots.
+- Added **bold drag-and-drop support** for file and folder paths into the terminal, and made dropped paths shell-aware across local and remote sessions so Windows shells, PowerShell, WSL, MSYS, and SSH-backed terminals receive the right format instead of a one-size-fits-all string.
+- Added terminal rename overrides and storage-aware refresh handling so terminal labels stay useful even after the underlying workspace, note, or kanban storage root changes.
+
+### Quick Actions
+
+- Generalized the Git actions control into a broader **Quick actions** menu, making room for non-Git actions like Orchestra while preserving the existing Git workflows.
+
+### Remote Access
+
+- Split remote access checks into foreground and background flows so the app can keep the UI responsive while remote execution status continues to resolve in the background.
+
+### Provider Orchestration
+
+- Hardened provider orchestration bridges and OpenCode runtime handling, including safer MCP bridge session behavior, thread-tool response handling, and runtime SDK resolution.
+
+### Agent & Skill Discovery
+
+- Tightened discovery watch-path fallback logic so missing optional provider folders no longer cause broad parent directories to be watched unnecessarily.
+
+### Startup
+
+- Reduced first-turn startup blocking in server bootstrap so new sessions can begin sooner while the rest of the thread plumbing finishes wiring up.
+
+### Desktop
+
+- Unified the macOS open and closed desktop app icons so packaged and running states now stay visually consistent.
+- Cut duplicate desktop runtime payloads from the build pipeline to shrink the app package and keep the runtime artifacts leaner.
+- Fixed desktop packaging so bundled native skills are included in generated artifacts.
+
+### Maintenance
+
+- Removed stale remote-access and planning documents that no longer matched the current codebase.
+- Split web composer, notes, terminal, and RPC client logic into smaller modules to keep the codebase easier to navigate and maintain.
+- Split backend contracts and server helpers into focused modules to reduce file size and keep the server-side architecture easier to reason about.
+
 ## v0.1.650 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)

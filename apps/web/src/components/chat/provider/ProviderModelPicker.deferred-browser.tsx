@@ -277,6 +277,7 @@ describe("ProviderModelPicker", () => {
         expect(text).toContain("Codex");
         expect(text).toContain("Claude");
         expect(text).not.toContain("Claude Sonnet 4.6");
+        expect(document.querySelectorAll('input[placeholder="Search models"]')).toHaveLength(0);
       });
     } finally {
       await mounted.cleanup();

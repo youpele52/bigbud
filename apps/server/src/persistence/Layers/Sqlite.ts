@@ -2,6 +2,7 @@ import { Effect, Layer, FileSystem, Path } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
+import { ensureProjectionThreadsElevatorSummaryColumns } from "../Migrations/ProjectionThreadsElevatorSummary.columns.ts";
 import { ServerConfig } from "../../startup/config.ts";
 
 type RuntimeSqliteLayerConfig = {
@@ -32,6 +33,7 @@ const setup = Layer.effectDiscard(
     yield* sql`PRAGMA journal_mode = WAL;`;
     yield* sql`PRAGMA foreign_keys = ON;`;
     yield* runMigrations();
+    yield* ensureProjectionThreadsElevatorSummaryColumns(sql);
   }),
 );
 

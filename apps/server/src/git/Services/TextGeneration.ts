@@ -75,6 +75,18 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
+export interface ThreadElevatorSummaryGenerationInput {
+  cwd: string;
+  transcript: string;
+  attachments?: ReadonlyArray<ChatAttachment> | undefined;
+  /** What model and provider to use for generation. */
+  modelSelection: ModelSelection;
+}
+
+export interface ThreadElevatorSummaryGenerationResult {
+  summary: string;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
@@ -82,6 +94,9 @@ export interface TextGenerationService {
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
   generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
   generateThreadTitle(input: ThreadTitleGenerationInput): Promise<ThreadTitleGenerationResult>;
+  generateThreadElevatorSummary(
+    input: ThreadElevatorSummaryGenerationInput,
+  ): Promise<ThreadElevatorSummaryGenerationResult>;
 }
 
 /**
@@ -115,6 +130,13 @@ export interface TextGenerationShape {
   readonly generateThreadTitle: (
     input: ThreadTitleGenerationInput,
   ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+  /**
+   * Generate a concise thread elevator summary from a thread transcript.
+   */
+  readonly generateThreadElevatorSummary: (
+    input: ThreadElevatorSummaryGenerationInput,
+  ) => Effect.Effect<ThreadElevatorSummaryGenerationResult, TextGenerationError>;
 }
 
 /**

@@ -9,6 +9,7 @@
 import {
   TerminalClearInput,
   TerminalCloseInput,
+  TerminalDropPathMode,
   TerminalEvent,
   TerminalCwdError,
   TerminalError,
@@ -37,6 +38,7 @@ export interface TerminalSessionState {
   threadId: string;
   terminalId: string;
   executionTargetId: string;
+  dropPathMode: TerminalDropPathMode;
   cwd: string;
   worktreePath: string | null;
   status: TerminalSessionStatus;
@@ -58,6 +60,7 @@ export interface TerminalSessionState {
 export interface ShellCandidate {
   shell: string;
   args?: string[];
+  dropPathMode: TerminalDropPathMode;
 }
 
 export interface TerminalStartInput extends TerminalOpenInput {

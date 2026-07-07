@@ -62,6 +62,8 @@ function makeThread(overrides: Partial<OrchestrationThread> & Pick<Orchestration
   return {
     projectId,
     title: "Thread",
+    elevatorSummary: "Thread",
+    elevatorSummaryMessageCount: 0,
     modelSelection,
     runtimeMode: "full-access" as const,
     interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,

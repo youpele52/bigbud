@@ -60,7 +60,7 @@ describe("ContextWindowWarningBanner", () => {
     );
 
     expect(markup).toContain("Context window warning");
-    expect(markup).toContain("Consider using a handoff skill or /compact");
+    expect(markup).toContain("Consider using handoff or /compact");
   });
 
   it("renders nothing when usedTokens is below threshold", () => {

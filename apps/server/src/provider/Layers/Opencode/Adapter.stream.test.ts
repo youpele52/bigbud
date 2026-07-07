@@ -42,6 +42,7 @@ function makeSession(
 
 function makePermissionAskedEvent(session: ActiveOpencodeSession): OpencodeEvent {
   return {
+    id: "sdk-permission-asked-1",
     type: "permission.asked",
     properties: {
       id: "perm-1",

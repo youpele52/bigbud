@@ -13,6 +13,13 @@ const HANDOFF_COMPLETION_GRACE_MS = 5_000;
 const HANDOFF_DOCUMENT_TAG_REGEX = /<handoff_document>\s*([\s\S]*?)\s*<\/handoff_document>/i;
 const MARKDOWN_HEADING_REGEX = /^#{1,6}\s+/m;
 const HANDOFF_FALLBACK_MIN_LENGTH = 200;
+const HANDOFF_SEED_PATH_MIME_TYPE = "text/markdown";
+const HANDOFF_SEED_PATH_ENTRY_KIND = "file";
+
+const HANDOFF_SEED_INSTRUCTION_LINES = [
+  "Before answering later requests in this branched thread, read the handoff document at the attached path.",
+  "Use that file as the authoritative summary/context for this branch.",
+] as const;
 
 export class HandoffError extends Error {
   override readonly name = "HandoffError";
@@ -91,19 +98,19 @@ export function buildHandoffSeedMessage(filePath: string): SeedMessageOutput {
     id: newMessageId(),
     role: "user",
     text: [
-      "Before answering later requests in this branched thread, read the handoff document at the attached path.",
+      HANDOFF_SEED_INSTRUCTION_LINES[0],
       `Handoff file: ${filePath}`,
-      "Use that file as the authoritative summary/context for this branch.",
+      HANDOFF_SEED_INSTRUCTION_LINES[1],
     ].join("\n"),
     attachments: [
       {
         type: "path",
         id: newMessageId(),
         name: fileNameFromPath(filePath),
-        mimeType: "text/markdown",
+        mimeType: HANDOFF_SEED_PATH_MIME_TYPE,
         sizeBytes: 0,
         path: filePath,
-        entryKind: "file",
+        entryKind: HANDOFF_SEED_PATH_ENTRY_KIND,
       },
     ],
     turnId: null,
@@ -111,6 +118,53 @@ export function buildHandoffSeedMessage(filePath: string): SeedMessageOutput {
     createdAt,
     updatedAt: createdAt,
   };
+}
+
+export function isHandoffSeedMessage(message: {
+  readonly role: "user" | "assistant" | "system";
+  readonly text: string;
+  readonly attachments?: ReadonlyArray<
+    | {
+        readonly type: "image";
+      }
+    | {
+        readonly type: "file";
+      }
+    | {
+        readonly type: "path";
+        readonly mimeType: string;
+        readonly sizeBytes: 0;
+        readonly path: string;
+        readonly entryKind: "file" | "directory";
+      }
+    | {
+        readonly type: "thread";
+      }
+  >;
+}): boolean {
+  if (message.role !== "user") {
+    return false;
+  }
+
+  if (
+    !HANDOFF_SEED_INSTRUCTION_LINES.every((line) => message.text.includes(line)) ||
+    !message.text.includes("Handoff file: ")
+  ) {
+    return false;
+  }
+
+  if ((message.attachments?.length ?? 0) !== 1) {
+    return false;
+  }
+
+  const [attachment] = message.attachments ?? [];
+  return (
+    attachment?.type === "path" &&
+    attachment.mimeType === HANDOFF_SEED_PATH_MIME_TYPE &&
+    attachment.sizeBytes === 0 &&
+    attachment.entryKind === HANDOFF_SEED_PATH_ENTRY_KIND &&
+    attachment.path.length > 0
+  );
 }
 
 /**

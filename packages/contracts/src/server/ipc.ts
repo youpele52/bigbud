@@ -83,6 +83,11 @@ import type {
   ServerExportThreadContextResult,
 } from "./server";
 import type {
+  ServerGetHandoffJobInput,
+  ServerHandoffJob,
+  ServerStartHandoffJobInput,
+} from "./server.handoff";
+import type {
   ServerCreateMobileRemotePairingInput,
   ServerListMobileRemoteSessionsResult,
   ServerMobileRemotePairing,
@@ -106,6 +111,7 @@ import type {
   ServerTriggerAutomationResult,
   ServerUpdateAutomationInput,
 } from "./automation";
+import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -345,6 +351,8 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
+    getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
     createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
@@ -369,6 +377,7 @@ export interface NativeApi {
     listAutomationRuns: (
       input: ServerListAutomationRunsInput,
     ) => Promise<ServerListAutomationRunsResult>;
+    getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

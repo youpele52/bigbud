@@ -1,18 +1,25 @@
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { readNativeApi } from "../rpc/nativeApi";
-import {
-  getPassphraseProtectedSshKeyPath,
-  getPasswordProtectedSshTargetLabel,
-  getSshAuthFailureToastTitle,
-} from "../lib/ssh";
 import { toastManager } from "../components/ui/toast";
+import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
+import { getSshAuthFailureToastTitle } from "../lib/ssh";
+import { readNativeApi } from "../rpc/nativeApi";
 import {
   type RemoteExecutionAuthMode,
   useRemoteAccessStore,
 } from "../stores/remoteAccess/remoteAccess.store";
-import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
+import {
+  REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS,
+  resolveRemoteExecutionCheckingStatus,
+  resolveRemoteExecutionFailureStatus,
+} from "./useRemoteExecutionAccessGate.shared";
+import {
+  ensureBackgroundRemoteExecutionToast,
+  formatRemoteExecutionToastDescription,
+  readRemoteExecutionCheck,
+  startRemoteExecutionCheck,
+} from "./useRemoteExecutionAccessGate.checks";
 
 interface EnsureRemoteExecutionTargetAccessInput {
   readonly executionTargetId: string | null | undefined;
@@ -23,6 +30,9 @@ interface EnsureRemoteExecutionTargetAccessInput {
 }
 
 export interface RemoteExecutionAccessGate {
+  readonly beginRemoteExecutionTargetAccessCheck: (
+    input: EnsureRemoteExecutionTargetAccessInput,
+  ) => Promise<boolean>;
   readonly ensureRemoteExecutionTargetAccess: (
     input: EnsureRemoteExecutionTargetAccessInput,
   ) => Promise<boolean>;
@@ -52,32 +62,39 @@ async function verifyRemoteExecutionTarget(input: {
   });
 }
 
-function resolveRemoteExecutionAuthRequirement(errorMessage: string): {
-  authMode: RemoteExecutionAuthMode;
-  promptLabel: string;
-} | null {
-  const keyPath = getPassphraseProtectedSshKeyPath(errorMessage);
-  if (keyPath) {
-    return {
-      authMode: "ssh-key-passphrase",
-      promptLabel: keyPath,
-    };
-  }
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
 
-  const targetLabel = getPasswordProtectedSshTargetLabel(errorMessage);
-  if (targetLabel) {
-    return {
-      authMode: "password",
-      promptLabel: targetLabel,
-    };
+function openRemoteExecutionAuthDialog(input: {
+  readonly executionTargetId: string;
+  readonly cwd?: string;
+  readonly onVerified?: () => Promise<void> | void;
+  readonly unavailableTitle?: string;
+  readonly authMode: RemoteExecutionAuthMode;
+  readonly promptLabel: string;
+}) {
+  if (!input.onVerified) {
+    return;
   }
-
-  return null;
+  useRemoteAccessStore.getState().openAuthDialog({
+    pendingAction: {
+      executionTargetId: input.executionTargetId,
+      ...(input.cwd ? { cwd: input.cwd } : {}),
+      onVerified: input.onVerified,
+      ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+    },
+    authMode: input.authMode,
+    promptLabel: input.promptLabel,
+  });
 }
 
 export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   const {
     verifiedExecutionTargetIds,
+    executionTargetChecks,
     pendingAction,
     isRemoteExecutionAuthDialogOpen,
     remoteExecutionAuthMode,
@@ -86,7 +103,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     remoteExecutionAuthError,
     isAuthenticatingRemoteExecution,
     markExecutionTargetVerified,
-    openAuthDialog,
+    setExecutionTargetCheck,
     closeAuthDialog,
     setRemoteExecutionAuthSecret,
     setRemoteExecutionAuthError,
@@ -94,6 +111,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   } = useRemoteAccessStore(
     useShallow((state) => ({
       verifiedExecutionTargetIds: state.verifiedExecutionTargetIds,
+      executionTargetChecks: state.executionTargetChecks,
       pendingAction: state.pendingAction,
       isRemoteExecutionAuthDialogOpen: state.isAuthDialogOpen,
       remoteExecutionAuthMode: state.authMode,
@@ -102,12 +120,89 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       remoteExecutionAuthError: state.authError,
       isAuthenticatingRemoteExecution: state.isAuthenticating,
       markExecutionTargetVerified: state.markExecutionTargetVerified,
-      openAuthDialog: state.openAuthDialog,
+      setExecutionTargetCheck: state.setExecutionTargetCheck,
       closeAuthDialog: state.closeAuthDialog,
       setRemoteExecutionAuthSecret: state.setAuthSecret,
       setRemoteExecutionAuthError: state.setAuthError,
       setIsAuthenticatingRemoteExecution: state.setIsAuthenticating,
     })),
+  );
+
+  const beginRemoteExecutionTargetAccessCheck = useCallback(
+    async (input: EnsureRemoteExecutionTargetAccessInput) => {
+      if (!input.executionTargetId || !isRemoteExecutionTargetId(input.executionTargetId)) {
+        if (!input.resumeOnUnlockOnly) {
+          await input.onVerified?.();
+        }
+        return true;
+      }
+      const executionTargetId = input.executionTargetId;
+
+      if (verifiedExecutionTargetIds[executionTargetId]) {
+        if (!input.resumeOnUnlockOnly) {
+          await input.onVerified?.();
+        }
+        return true;
+      }
+
+      const activeCheck = startRemoteExecutionCheck({
+        executionTargetId,
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+        ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+        verify: verifyRemoteExecutionTarget,
+      });
+      const outcome = await Promise.race([
+        activeCheck.promise.then(() => "settled" as const),
+        sleep(REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS).then(() => "timeout" as const),
+      ]);
+      const check =
+        executionTargetChecks[executionTargetId] ?? readRemoteExecutionCheck(executionTargetId);
+
+      if (outcome === "timeout") {
+        ensureBackgroundRemoteExecutionToast({
+          executionTargetId,
+          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+        });
+        if (!input.resumeOnUnlockOnly) {
+          await input.onVerified?.();
+        }
+        return true;
+      }
+
+      if (check?.status === "verified") {
+        if (!input.resumeOnUnlockOnly) {
+          await input.onVerified?.();
+        }
+        return true;
+      }
+
+      if (
+        check?.status === "auth_required" &&
+        check.authMode !== null &&
+        check.promptLabel !== null
+      ) {
+        openRemoteExecutionAuthDialog({
+          executionTargetId,
+          ...(input.cwd ? { cwd: input.cwd } : {}),
+          ...(input.onVerified ? { onVerified: input.onVerified } : {}),
+          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+          authMode: check.authMode,
+          promptLabel: check.promptLabel,
+        });
+        return false;
+      }
+
+      toastManager.add({
+        type: "error",
+        title: input.unavailableTitle ?? "Remote project unavailable",
+        description: formatRemoteExecutionToastDescription(
+          check ??
+            resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote project."),
+        ),
+      });
+      return false;
+    },
+    [executionTargetChecks, verifiedExecutionTargetIds],
   );
 
   const ensureRemoteExecutionTargetAccess = useCallback(
@@ -127,46 +222,45 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return true;
       }
 
-      try {
-        await verifyRemoteExecutionTarget({
+      const check = executionTargetChecks[executionTargetId];
+      if (
+        check?.status === "auth_required" &&
+        check.authMode !== null &&
+        check.promptLabel !== null
+      ) {
+        openRemoteExecutionAuthDialog({
           executionTargetId,
           ...(input.cwd ? { cwd: input.cwd } : {}),
-        });
-        markExecutionTargetVerified(executionTargetId);
-        if (!input.resumeOnUnlockOnly) {
-          await input.onVerified?.();
-        }
-        return true;
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to reconnect to the remote project.";
-        const requirement = resolveRemoteExecutionAuthRequirement(errorMessage);
-        if (requirement) {
-          if (!input.onVerified) {
-            throw error;
-          }
-          openAuthDialog({
-            pendingAction: {
-              executionTargetId,
-              ...(input.cwd ? { cwd: input.cwd } : {}),
-              onVerified: input.onVerified,
-              ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
-            },
-            authMode: requirement.authMode,
-            promptLabel: requirement.promptLabel,
-          });
-          return false;
-        }
-
-        toastManager.add({
-          type: "error",
-          title: input.unavailableTitle ?? "Remote project unavailable",
-          description: errorMessage,
+          ...(input.onVerified ? { onVerified: input.onVerified } : {}),
+          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+          authMode: check.authMode,
+          promptLabel: check.promptLabel,
         });
         return false;
       }
+      if (check?.status === "error") {
+        toastManager.add({
+          type: "error",
+          title: input.unavailableTitle ?? "Remote project unavailable",
+          description: formatRemoteExecutionToastDescription(check),
+        });
+        return false;
+      }
+
+      if (check?.status !== "checking") {
+        startRemoteExecutionCheck({
+          executionTargetId,
+          ...(input.cwd ? { cwd: input.cwd } : {}),
+          ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
+          verify: verifyRemoteExecutionTarget,
+        });
+      }
+      if (!input.resumeOnUnlockOnly) {
+        await input.onVerified?.();
+      }
+      return true;
     },
-    [markExecutionTargetVerified, openAuthDialog, verifiedExecutionTargetIds],
+    [executionTargetChecks, verifiedExecutionTargetIds],
   );
 
   const submitRemoteExecutionAuth = useCallback(async () => {
@@ -207,6 +301,10 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
           passphrase: secret,
         });
       }
+      setExecutionTargetCheck(
+        pendingAction.executionTargetId,
+        resolveRemoteExecutionCheckingStatus(),
+      );
       await verifyRemoteExecutionTarget({
         executionTargetId: pendingAction.executionTargetId,
         ...(pendingAction.cwd ? { cwd: pendingAction.cwd } : {}),
@@ -221,13 +319,14 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
           : remoteExecutionAuthMode === "password"
             ? "Failed to unlock the SSH password session."
             : "Failed to unlock the SSH key.";
-      const requirement = resolveRemoteExecutionAuthRequirement(errorMessage);
-      if (requirement && requirement.authMode === remoteExecutionAuthMode) {
+      const failureStatus = resolveRemoteExecutionFailureStatus(errorMessage);
+      setExecutionTargetCheck(pendingAction.executionTargetId, failureStatus);
+      if (failureStatus.status === "auth_required") {
         setRemoteExecutionAuthError(errorMessage);
         toastManager.add({
           type: "error",
           title: getSshAuthFailureToastTitle(remoteExecutionAuthMode),
-          description: errorMessage,
+          description: formatRemoteExecutionToastDescription(failureStatus),
         });
         return;
       }
@@ -236,7 +335,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       toastManager.add({
         type: "error",
         title: pendingAction.unavailableTitle ?? "Remote project unavailable",
-        description: errorMessage,
+        description: formatRemoteExecutionToastDescription(failureStatus),
       });
     } finally {
       setIsAuthenticatingRemoteExecution(false);
@@ -247,6 +346,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
     pendingAction,
     remoteExecutionAuthMode,
     remoteExecutionAuthSecret,
+    setExecutionTargetCheck,
     setIsAuthenticatingRemoteExecution,
     setRemoteExecutionAuthError,
   ]);
@@ -259,6 +359,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   }, [closeAuthDialog, isAuthenticatingRemoteExecution]);
 
   return {
+    beginRemoteExecutionTargetAccessCheck,
     ensureRemoteExecutionTargetAccess,
     isRemoteExecutionAuthDialogOpen,
     remoteExecutionAuthMode,

@@ -47,6 +47,11 @@ export interface FakeGitTextGeneration {
     message: string;
     modelSelection: ModelSelection;
   }) => Effect.Effect<{ title: string }, TextGenerationError>;
+  generateThreadElevatorSummary: (input: {
+    cwd: string;
+    transcript: string;
+    modelSelection: ModelSelection;
+  }) => Effect.Effect<{ summary: string }, TextGenerationError>;
 }
 
 function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): TextGenerationShape {
@@ -69,6 +74,10 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
     generateThreadTitle: () =>
       Effect.succeed({
         title: "Update workflow",
+      }),
+    generateThreadElevatorSummary: () =>
+      Effect.succeed({
+        summary: "Update workflow details",
       }),
     ...overrides,
   };
@@ -113,6 +122,17 @@ function createTextGeneration(overrides: Partial<FakeGitTextGeneration> = {}): T
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadTitle",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateThreadElevatorSummary: (input) =>
+      implementation.generateThreadElevatorSummary(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateThreadElevatorSummary",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

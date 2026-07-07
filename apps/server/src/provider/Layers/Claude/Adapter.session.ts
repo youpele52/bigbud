@@ -17,7 +17,6 @@ import {
   type EventId,
   ProviderItemId,
   type ProviderRuntimeEvent,
-  type RuntimeMode,
   type ProviderSession,
   type ProviderSessionStartInput,
   ThreadId,
@@ -59,6 +58,7 @@ import {
   toMessage,
   CLAUDE_SETTING_SOURCES,
 } from "./Adapter.utils.ts";
+import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
 
 export interface SessionStartDeps {
   readonly fileSystem: FileSystem.FileSystem;
@@ -84,17 +84,6 @@ export interface SessionStartDeps {
   readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly streamHandlers: StreamHandlers;
-}
-
-export function resolveBasePermissionMode(runtimeMode: RuntimeMode | undefined) {
-  switch (runtimeMode) {
-    case "auto-accept-edits":
-      return "acceptEdits" as const;
-    case "full-access":
-      return "bypassPermissions" as const;
-    default:
-      return undefined;
-  }
 }
 
 /** Log a raw SDK message to the native event log if enabled. */

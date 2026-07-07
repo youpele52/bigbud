@@ -55,7 +55,7 @@ export function useSidebarRemoteThreadActivation({
   projectCwdById,
   navigateToThreadRoute,
 }: SidebarRemoteThreadActivationInput): SidebarRemoteThreadActivationOutput {
-  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
+  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
 
   const reconnectRemoteThreadTerminals = useCallback(
     async (activation: PendingRemoteThreadActivation) => {
@@ -104,7 +104,7 @@ export function useSidebarRemoteThreadActivation({
       }
 
       void (async () => {
-        await ensureRemoteExecutionTargetAccess({
+        await beginRemoteExecutionTargetAccessCheck({
           executionTargetId: activation.executionTargetId,
           ...(activation.cwd ? { cwd: activation.cwd } : {}),
           onVerified: async () => {
@@ -122,7 +122,7 @@ export function useSidebarRemoteThreadActivation({
       })();
     },
     [
-      ensureRemoteExecutionTargetAccess,
+      beginRemoteExecutionTargetAccessCheck,
       navigateToThreadRoute,
       projectCwdById,
       reconnectRemoteThreadTerminals,

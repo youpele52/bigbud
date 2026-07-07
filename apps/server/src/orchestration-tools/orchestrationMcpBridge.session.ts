@@ -6,6 +6,7 @@ import {
   buildCodexOrchestrationBridgeConfig,
   buildOpencodeOrchestrationBridgeConfig,
   createThreadOrchestrationBridge,
+  OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS,
   type ThreadOrchestrationBridge,
 } from "./orchestrationMcpBridge.ts";
 import {
@@ -16,6 +17,27 @@ import {
 export { resolveOrchestrationBridgeHost, type ThreadOrchestrationSessionBridgeInput };
 
 const ORCHESTRATION_SERVER_NAME_PREFIX = "bigbud_orchestration";
+const OPENCODE_MCP_RPC_TIMEOUT_MS = OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS + 500;
+
+async function runOpencodeMcpRpc<T>(
+  operation: string,
+  fn: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const abortController = new AbortController();
+  const timer = setTimeout(() => abortController.abort(), OPENCODE_MCP_RPC_TIMEOUT_MS);
+  try {
+    return await fn(abortController.signal);
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      throw new Error(`${operation} timed out after ${OPENCODE_MCP_RPC_TIMEOUT_MS}ms.`, {
+        cause: error,
+      });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function sanitizeOpencodeToolSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -77,7 +99,9 @@ export function buildAcpSessionOrchestrationConfig(
 }
 
 export function buildOpencodeSessionOrchestrationConfig(
-  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath">,
+  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath"> & {
+    readonly bridgeDir?: string;
+  },
 ) {
   return buildOpencodeOrchestrationBridgeConfig(bridge);
 }
@@ -85,22 +109,47 @@ export function buildOpencodeSessionOrchestrationConfig(
 export async function registerOpencodeOrchestrationMcpBridge(input: {
   readonly client: OpencodeClient;
   readonly directory?: string;
-  readonly bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath">;
+  readonly bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath"> & {
+    readonly bridgeDir?: string;
+  };
 }): Promise<void> {
   const orchestration = buildOpencodeOrchestrationBridgeConfig(input.bridge);
-  const addResult = await input.client.mcp.add({
-    ...(input.directory ? { directory: input.directory } : {}),
-    name: orchestration.name,
-    config: orchestration.config,
-  });
+  const addResult = await runOpencodeMcpRpc("OpenCode MCP add", (signal) =>
+    input.client.mcp.add(
+      {
+        ...(input.directory ? { directory: input.directory } : {}),
+        name: orchestration.name,
+        config: orchestration.config,
+      },
+      { signal },
+    ),
+  );
   if (addResult.error) {
     throw new Error(`Failed to register orchestration MCP server: ${String(addResult.error)}`);
   }
+  const ownStatus =
+    addResult.data && typeof addResult.data === "object"
+      ? (addResult.data as Record<string, { status?: string; error?: string } | undefined>)[
+          orchestration.name
+        ]
+      : undefined;
+  if (ownStatus?.status === "failed" || ownStatus?.status === "disabled") {
+    throw new Error(
+      `OpenCode orchestration MCP server '${orchestration.name}' is ${ownStatus.status}${
+        ownStatus.error ? `: ${ownStatus.error}` : "."
+      }`,
+    );
+  }
 
-  const connectResult = await input.client.mcp.connect({
-    name: orchestration.name,
-    ...(input.directory ? { directory: input.directory } : {}),
-  });
+  const connectResult = await runOpencodeMcpRpc("OpenCode MCP connect", (signal) =>
+    input.client.mcp.connect(
+      {
+        name: orchestration.name,
+        ...(input.directory ? { directory: input.directory } : {}),
+      },
+      { signal },
+    ),
+  );
   if (connectResult.error) {
     throw new Error(`Failed to connect orchestration MCP server: ${String(connectResult.error)}`);
   }
@@ -111,10 +160,15 @@ export async function disconnectOpencodeOrchestrationMcpBridge(input: {
   readonly directory?: string;
   readonly serverName: string;
 }): Promise<void> {
-  const disconnectResult = await input.client.mcp.disconnect({
-    name: input.serverName,
-    ...(input.directory ? { directory: input.directory } : {}),
-  });
+  const disconnectResult = await runOpencodeMcpRpc("OpenCode MCP disconnect", (signal) =>
+    input.client.mcp.disconnect(
+      {
+        name: input.serverName,
+        ...(input.directory ? { directory: input.directory } : {}),
+      },
+      { signal },
+    ),
+  );
   if (disconnectResult.error) {
     throw new Error(
       `Failed to disconnect orchestration MCP server: ${String(disconnectResult.error)}`,

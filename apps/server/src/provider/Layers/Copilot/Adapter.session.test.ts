@@ -66,6 +66,7 @@ const THREAD_ID = ThreadId.makeUnsafe("thread-copilot-remote");
 describe("CopilotAdapter remote workspace sessions", () => {
   it.effect("starts remote workspace sessions locally with a remote session-fs bridge", () => {
     const client = new FakeCopilotClient();
+    const customBinaryPath = "/tmp/custom/copilot";
     let createdClientOptions: CopilotClientOptions | undefined;
     const layer = makeCopilotAdapterLive({
       clientFactory: (options: CopilotClientOptions) => {
@@ -74,7 +75,15 @@ describe("CopilotAdapter remote workspace sessions", () => {
       },
     }).pipe(
       Layer.provideMerge(ServerConfig.layerTest("/tmp/copilot-adapter-test", "/tmp")),
-      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(
+        ServerSettingsService.layerTest({
+          providers: {
+            copilot: {
+              binaryPath: customBinaryPath,
+            },
+          },
+        }),
+      ),
       Layer.provideMerge(NodeServices.layer),
     );
 
@@ -127,7 +136,11 @@ describe("CopilotAdapter remote workspace sessions", () => {
       }
 
       assert.equal(createdConfig.workingDirectory, "/srv/project");
-      assert.equal(createdConfig.excludedTools?.includes("read_bash"), true);
+      assert.equal(
+        Array.isArray(createdConfig.excludedTools) &&
+          createdConfig.excludedTools.includes("read_bash"),
+        true,
+      );
       assert.equal(createdConfig.systemMessage?.content?.includes("remote workspace mode"), true);
       assert.equal(createdConfig.systemMessage?.content?.includes("/srv/project"), true);
       assert.equal(
@@ -138,13 +151,19 @@ describe("CopilotAdapter remote workspace sessions", () => {
         createdConfig.tools?.some((tool) => tool.name === "computer_use"),
         true,
       );
-      assert.equal(!!createdConfig.createSessionFsHandler, true);
+      assert.equal(!!createdConfig.createSessionFsProvider, true);
 
       assert.equal(!!createdClientOptions?.sessionFs, true);
       assert.equal(createdClientOptions?.sessionFs?.initialCwd, "/srv/project");
       assert.equal(createdClientOptions?.sessionFs?.conventions, "posix");
+      const connection = createdClientOptions?.connection;
+      assert.equal(connection?.kind, "stdio");
+      if (connection?.kind !== "stdio") {
+        return;
+      }
+      assert.equal(connection.path, customBinaryPath);
 
-      const syntheticCwd = createdClientOptions?.cwd;
+      const syntheticCwd = createdClientOptions?.workingDirectory;
       assert.equal(typeof syntheticCwd, "string");
       if (!syntheticCwd) {
         return;
@@ -226,10 +245,22 @@ describe("CopilotAdapter remote workspace sessions", () => {
         const renameToolA = configA?.tools?.find((tool) => tool.name === "rename_thread");
         const renameToolB = configB?.tools?.find((tool) => tool.name === "rename_thread");
         assert.equal(!!renameToolA && !!renameToolB, true);
+        assert.equal(typeof renameToolA?.handler, "function");
+        assert.equal(typeof renameToolB?.handler, "function");
+        if (
+          renameToolA === undefined ||
+          renameToolB === undefined ||
+          typeof renameToolA.handler !== "function" ||
+          typeof renameToolB.handler !== "function"
+        ) {
+          return;
+        }
+        const renameToolAHandler = renameToolA.handler;
+        const renameToolBHandler = renameToolB.handler;
 
         yield* Effect.promise(async () => {
-          await renameToolA!.handler({ title: "Thread A title" }, {} as never);
-          await renameToolB!.handler({ title: "Thread B title" }, {} as never);
+          await renameToolAHandler({ title: "Thread A title" }, {} as never);
+          await renameToolBHandler({ title: "Thread B title" }, {} as never);
         });
 
         assert.deepEqual(renameCalls, [

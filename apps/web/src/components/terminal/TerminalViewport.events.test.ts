@@ -21,6 +21,7 @@ describe("makeApplyTerminalEvent", () => {
     const applyTerminalEvent = makeApplyTerminalEvent({
       terminalRef: { current: terminal as never },
       hasHandledExitRef: { current: false },
+      dropPathModeRef: { current: "posix" },
       writeBatcher,
       clearSelectionAction: vi.fn(),
       handleSessionExited: vi.fn(),
@@ -44,6 +45,7 @@ describe("makeApplyTerminalEvent", () => {
     const applyTerminalEvent = makeApplyTerminalEvent({
       terminalRef: { current: terminal as never },
       hasHandledExitRef: { current: true },
+      dropPathModeRef: { current: "posix" },
       writeBatcher,
       clearSelectionAction: vi.fn(),
       handleSessionExited: vi.fn(),
@@ -57,6 +59,7 @@ describe("makeApplyTerminalEvent", () => {
       snapshot: {
         threadId: "thread-1",
         terminalId: "default",
+        dropPathMode: "posix",
         cwd: "/tmp/workspace",
         worktreePath: null,
         status: "running",
@@ -78,6 +81,7 @@ describe("makeApplyTerminalEvent", () => {
     const applyTerminalEvent = makeApplyTerminalEvent({
       terminalRef: { current: terminal as never },
       hasHandledExitRef: { current: false },
+      dropPathModeRef: { current: "posix" },
       writeBatcher,
       clearSelectionAction: vi.fn(),
       handleSessionExited: vi.fn(),
@@ -104,6 +108,7 @@ describe("makeApplyTerminalEvent", () => {
     const applyTerminalEvent = makeApplyTerminalEvent({
       terminalRef: { current: terminal as never },
       hasHandledExitRef: { current: false },
+      dropPathModeRef: { current: "posix" },
       writeBatcher,
       clearSelectionAction: vi.fn(),
       handleSessionExited: vi.fn(),

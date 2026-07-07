@@ -33,6 +33,15 @@ import {
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
 
+const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;
+const LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS = "min-w-[40ch]";
+
+function providerModelListPopupClassName(options: ReadonlyArray<ModelOption>): string | undefined {
+  return options.length > LARGE_PROVIDER_MODEL_COUNT_THRESHOLD
+    ? LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS
+    : undefined;
+}
+
 export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   provider: ProviderKind;
   model: string;
@@ -92,6 +101,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     return result;
   }, [allRecentUsages, props.enableRecentlyUsed, props.modelOptionsByProvider]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [openedModelProviders, setOpenedModelProviders] = useState<ReadonlySet<ProviderKind>>(
+    () => new Set(),
+  );
   const [view, setView] = useState<"provider" | "model">(
     props.lockedProvider !== null ? "model" : "provider",
   );
@@ -100,6 +112,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     ? getProviderSnapshot(props.providers, activeProvider)
     : undefined;
   const selectedProviderOptions = props.modelOptionsByProvider[activeProvider];
+  const selectedProviderPopupClassName = providerModelListPopupClassName(selectedProviderOptions);
   const selectedProviderValue = props.provider === activeProvider ? props.model : "";
   // Extract slug from model value (strip ::subProviderID suffix if present)
   const modelSlug = props.model.includes("::")
@@ -145,6 +158,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           }
           if (open) {
             setView(props.lockedProvider !== null ? "model" : "provider");
+          } else {
+            setOpenedModelProviders(new Set());
           }
           setIsMenuOpen(open);
         }}
@@ -184,47 +199,49 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         </MenuTrigger>
         <MenuPopup
           align="start"
-          className={cn("[--available-height:min(24rem,70vh)]", props.popupClassName)}
+          className={cn(
+            "[--available-height:min(24rem,70vh)]",
+            selectedProviderPopupClassName,
+            props.popupClassName,
+          )}
         >
           {props.lockedProvider !== null && view === "model" ? (
-            <div className="max-h-(--available-height) overflow-y-auto">
-              <ModelList
-                groupLabelClassName={props.modelListGroupLabelClassName}
-                itemClassName={props.modelListItemClassName}
-                itemLabelClassName={props.modelListItemLabelClassName}
-                provider={props.lockedProvider}
-                searchbarClassName={props.modelListSearchbarClassName}
-                selectedValue={selectedProviderValue}
-                options={props.modelOptionsByProvider[props.lockedProvider]}
-                recentOptions={recentOptionsByProvider[props.lockedProvider]}
-                loading={
-                  props.providers !== undefined &&
-                  props.modelOptionsByProvider[props.lockedProvider].length === 0 &&
-                  (!activeProviderSnapshot || activeProviderSnapshot.status === "warning")
-                }
-                unavailableMessage={
-                  activeProviderSnapshot &&
-                  (!activeProviderSnapshot.enabled
-                    ? "Provider is disabled"
-                    : !activeProviderSnapshot.installed
-                      ? "Provider is not installed"
-                      : activeProviderSnapshot.auth.status === "unauthenticated"
-                        ? "Provider login required"
-                        : activeProviderSnapshot.status === "error"
-                          ? (activeProviderSnapshot.message ?? "Provider unavailable")
-                          : undefined)
-                }
-                onSelect={(value) => handleModelChange(props.lockedProvider!, value)}
-                {...(props.onProviderUnlock
-                  ? {
-                      onBack: () => {
-                        setView("provider");
-                        props.onProviderUnlock?.();
-                      },
-                    }
-                  : {})}
-              />
-            </div>
+            <ModelList
+              groupLabelClassName={props.modelListGroupLabelClassName}
+              itemClassName={props.modelListItemClassName}
+              itemLabelClassName={props.modelListItemLabelClassName}
+              provider={props.lockedProvider}
+              searchbarClassName={props.modelListSearchbarClassName}
+              selectedValue={selectedProviderValue}
+              options={props.modelOptionsByProvider[props.lockedProvider]}
+              recentOptions={recentOptionsByProvider[props.lockedProvider]}
+              loading={
+                props.providers !== undefined &&
+                props.modelOptionsByProvider[props.lockedProvider].length === 0 &&
+                (!activeProviderSnapshot || activeProviderSnapshot.status === "warning")
+              }
+              unavailableMessage={
+                activeProviderSnapshot &&
+                (!activeProviderSnapshot.enabled
+                  ? "Provider is disabled"
+                  : !activeProviderSnapshot.installed
+                    ? "Provider is not installed"
+                    : activeProviderSnapshot.auth.status === "unauthenticated"
+                      ? "Provider login required"
+                      : activeProviderSnapshot.status === "error"
+                        ? (activeProviderSnapshot.message ?? "Provider unavailable")
+                        : undefined)
+              }
+              onSelect={(value) => handleModelChange(props.lockedProvider!, value)}
+              {...(props.onProviderUnlock
+                ? {
+                    onBack: () => {
+                      setView("provider");
+                      props.onProviderUnlock?.();
+                    },
+                  }
+                : {})}
+            />
           ) : (
             <>
               {AVAILABLE_PROVIDER_OPTIONS.map((option) => {
@@ -232,6 +249,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 const liveProvider = props.providers
                   ? getProviderSnapshot(props.providers, option.value)
                   : undefined;
+                const providerPopupClassName = providerModelListPopupClassName(
+                  props.modelOptionsByProvider[option.value],
+                );
                 const isLoadingModels =
                   props.providers !== undefined &&
                   props.modelOptionsByProvider[option.value].length === 0 &&
@@ -281,7 +301,18 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   );
                 }
                 return (
-                  <MenuSub key={option.value}>
+                  <MenuSub
+                    key={option.value}
+                    onOpenChange={(open) => {
+                      if (!open) return;
+                      setOpenedModelProviders((current) => {
+                        if (current.has(option.value)) return current;
+                        const next = new Set(current);
+                        next.add(option.value);
+                        return next;
+                      });
+                    }}
+                  >
                     <MenuSubTrigger>
                       <OptionIcon
                         aria-hidden="true"
@@ -295,11 +326,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                     <MenuSubPopup
                       className={cn(
                         "[--available-height:min(24rem,70vh)] !p-0 overflow-hidden",
+                        providerPopupClassName,
                         props.subPopupClassName,
                       )}
                       sideOffset={4}
                     >
-                      <div className="max-h-(--available-height) overflow-y-auto">
+                      {openedModelProviders.has(option.value) ? (
                         <ModelList
                           groupLabelClassName={props.modelListGroupLabelClassName}
                           itemClassName={props.modelListItemClassName}
@@ -315,7 +347,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                             handleModelChange(option.value, value);
                           }}
                         />
-                      </div>
+                      ) : null}
                     </MenuSubPopup>
                   </MenuSub>
                 );

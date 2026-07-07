@@ -9,7 +9,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
-import { useDefaultChatCwd } from "~/rpc/serverState";
+import { useDirectoryChangeRefresh } from "~/hooks/useDirectoryChangeRefresh";
+import { getKanbanWatchRoots } from "~/hooks/storageRoots";
+import { useDefaultChatCwd, useServerConfig } from "~/rpc/serverState";
 import { ensureNativeApi } from "~/rpc/nativeApi";
 import { useKanbanPanelStore } from "~/stores/kanban/kanbanPanel.store";
 import { useProjectById, useThreadById } from "~/stores/main";
@@ -42,6 +44,7 @@ export const KanbanPanelContent = memo(function KanbanPanelContent({
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const project = useProjectById(thread?.projectId ?? selectedProjectId ?? null);
   const defaultChatCwd = useDefaultChatCwd();
+  const serverConfig = useServerConfig();
   const { copyToClipboard } = useCopyToClipboard();
   const cwd = thread?.worktreePath ?? project?.cwd ?? defaultChatCwd ?? undefined;
 
@@ -138,11 +141,14 @@ export const KanbanPanelContent = memo(function KanbanPanelContent({
 
   useEffect(() => {
     void loadCards();
-    const intervalId = window.setInterval(() => {
+  }, [loadCards]);
+
+  useDirectoryChangeRefresh({
+    watchRoots: getKanbanWatchRoots(serverConfig?.storage, projectId, resolvedScope),
+    refresh: () => {
       void refreshCardsList();
-    }, 3000);
-    return () => window.clearInterval(intervalId);
-  }, [loadCards, refreshCardsList]);
+    },
+  });
 
   const openCreateEditor = useCallback((status: KanbanStatus) => {
     setError(null);

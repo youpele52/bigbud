@@ -1,8 +1,8 @@
-import { type ComponentProps, forwardRef } from "react";
+import { type ComponentProps, type ReactNode, forwardRef } from "react";
 import {
   type ProviderInteractionMode,
-  type RuntimeMode,
   type ProviderKind,
+  type RuntimeMode,
 } from "@bigbud/contracts";
 import type { ServerProvider } from "@bigbud/contracts";
 import { cn } from "~/lib/utils";
@@ -26,7 +26,8 @@ interface ComposerFooterLeadingProps {
   planSidebarLabel: string;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
-  providerTraitsMenuContent: React.ReactNode;
+  providerTraitsMenuContent: ReactNode;
+  onOpenOrchestra: () => void;
   onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
   onProviderUnlock: () => void;
   onToggleInteractionMode: () => void;
@@ -51,6 +52,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       interactionMode,
       runtimeMode,
       providerTraitsMenuContent,
+      onOpenOrchestra,
       onProviderModelSelect,
       onProviderUnlock,
       onToggleInteractionMode,
@@ -66,7 +68,6 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           "-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
       >
-        {/* Provider/model picker */}
         <ProviderModelPicker
           compact
           provider={selectedProvider}
@@ -89,6 +90,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           planSidebarLabel={planSidebarLabel}
           runtimeMode={runtimeMode}
           traitsMenuContent={providerTraitsMenuContent}
+          onOpenOrchestra={onOpenOrchestra}
           onToggleInteractionMode={onToggleInteractionMode}
           onTogglePlanSidebar={onTogglePlanSidebar}
           onRuntimeModeChange={onRuntimeModeChange}

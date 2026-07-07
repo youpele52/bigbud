@@ -1,7 +1,9 @@
 import path from "node:path";
 
+import { type TerminalDropPathMode } from "@bigbud/contracts";
 import { Data, Effect, Encoding } from "effect";
 
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { runProcess } from "../../utils/processRunner";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,7 @@ export type TerminalSubprocessChecker = (
 export interface ShellCandidate {
   shell: string;
   args?: string[];
+  dropPathMode: TerminalDropPathMode;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,13 +76,53 @@ function normalizeShellCommand(value: string | undefined): string | null {
   return firstToken.replace(/^['"]|['"]$/g, "");
 }
 
+function resolveShellDropPathMode(command: string): TerminalDropPathMode {
+  const shellName = path.basename(command).toLowerCase();
+  if (process.platform !== "win32") {
+    return "posix";
+  }
+  if (
+    shellName === "powershell" ||
+    shellName === "powershell.exe" ||
+    shellName === "pwsh" ||
+    shellName === "pwsh.exe"
+  ) {
+    return "powershell";
+  }
+  if (shellName === "cmd" || shellName === "cmd.exe") {
+    return "cmd";
+  }
+  if (shellName === "wsl" || shellName === "wsl.exe") {
+    return "wsl";
+  }
+  if (
+    shellName === "bash" ||
+    shellName === "bash.exe" ||
+    shellName === "sh" ||
+    shellName === "sh.exe" ||
+    shellName === "zsh" ||
+    shellName === "zsh.exe"
+  ) {
+    return "msys";
+  }
+  return "cmd";
+}
+
+export function defaultTerminalDropPathMode(executionTargetId: string): TerminalDropPathMode {
+  if (!isLocalExecutionTarget(executionTargetId)) {
+    return "posix";
+  }
+  return process.platform === "win32" ? "cmd" : "posix";
+}
+
 function shellCandidateFromCommand(command: string | null): ShellCandidate | null {
   if (!command || command.length === 0) return null;
   const shellName = path.basename(command).toLowerCase();
+  const dropPathMode = resolveShellDropPathMode(command);
   if (process.platform !== "win32" && shellName === "zsh") {
-    return { shell: command, args: ["-o", "nopromptsp"] };
+    return { shell: command, args: ["-o", "nopromptsp"], dropPathMode };
   }
-  return { shell: command };
+  return { shell: command, dropPathMode };
 }
 
 export function formatShellCandidate(candidate: ShellCandidate): string {

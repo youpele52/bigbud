@@ -6,6 +6,11 @@ import type {
   ServerSettings,
 } from "@bigbud/contracts";
 import type { Path } from "effect";
+import {
+  bundledAgentsDescriptor,
+  bundledSkillsDescriptor,
+  expandTildePath,
+} from "./DiscoveryRegistry.descriptors.helpers.ts";
 
 type DiscoverySource = ServerDiscoveredAgent["source"];
 type DiscoveryProviderLabel = ServerDiscoveryProviderLabel;
@@ -20,44 +25,6 @@ export interface DiscoveryFileDescriptor {
 export interface DiscoveryConfigDescriptor {
   readonly provider: "opencode";
   readonly path: string;
-}
-
-function expandTildePath(path: Path.Path, input: string): string {
-  if (input === "~") {
-    return OS.homedir();
-  }
-  if (input.startsWith("~/") || input.startsWith("~\\")) {
-    return path.join(OS.homedir(), input.slice(2));
-  }
-  return input;
-}
-
-function bundledSkillsDescriptor(): DiscoveryFileDescriptor | null {
-  const bundledSkillsDir = process.env.BIGBUD_BUNDLED_SKILLS_DIR?.trim();
-  if (!bundledSkillsDir) {
-    return null;
-  }
-
-  return {
-    provider: "bigbud",
-    kind: "skill",
-    source: "system",
-    path: bundledSkillsDir,
-  };
-}
-
-function bundledAgentsDescriptor(): DiscoveryFileDescriptor | null {
-  const bundledAgentsDir = process.env.BIGBUD_BUNDLED_AGENTS_DIR?.trim();
-  if (!bundledAgentsDir) {
-    return null;
-  }
-
-  return {
-    provider: "opencode",
-    kind: "agent",
-    source: "system",
-    path: bundledAgentsDir,
-  };
 }
 
 export function buildDiscoveryFileDescriptors(input: {

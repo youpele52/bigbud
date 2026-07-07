@@ -125,6 +125,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     updateSettings: vi.fn(),
     readDocumentUrl: vi.fn(),
     writeHandoffDocument: vi.fn(),
+    startHandoffJob: vi.fn(),
+    getHandoffJob: vi.fn(),
     createMobileRemotePairing: vi.fn(),
     listMobileRemoteSessions: vi.fn(),
     revokeMobileRemoteSession: vi.fn(),
@@ -139,6 +141,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     deleteAutomation: vi.fn(),
     triggerAutomation: vi.fn(),
     listAutomationRuns: vi.fn(),
+    getUsageSummary: vi.fn(),
     subscribeConfig: vi.fn(),
     subscribeLifecycle: vi.fn(),
   },
@@ -296,6 +299,10 @@ export const defaultProviders: ReadonlyArray<ServerProvider> = [
 
 export const baseServerConfig: ServerConfig = {
   cwd: "/tmp/workspace",
+  storage: {
+    notesDir: "/tmp/workspace/.config/notes",
+    kanbanDir: "/tmp/workspace/.config/kanban",
+  },
   keybindingsConfigPath: "/tmp/workspace/.config/keybindings.json",
   keybindings: [],
   issues: [],

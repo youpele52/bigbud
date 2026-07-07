@@ -1,9 +1,10 @@
 import {
   type ExecutionTargetId,
+  type ProviderKind,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
 import {
@@ -13,8 +14,10 @@ import {
 } from "../../models/types";
 import { ThreadTerminalDrawerSidebar } from "./ThreadTerminalDrawerSidebar";
 import { ThreadTerminalDrawerFloatingActions } from "./ThreadTerminalDrawerFloatingActions";
+import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
 import { useThreadTerminalDrawerResize } from "./ThreadTerminalDrawer.resize";
 import { ThreadTerminalDrawerViewport } from "./ThreadTerminalDrawerViewport";
+import { buildTerminalLabelMap } from "./terminalDisplay";
 
 // Re-export pure utilities consumed by tests and other modules
 export {
@@ -48,7 +51,12 @@ interface ThreadTerminalDrawerProps {
   onHeightChange: (height: number) => void;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
   keybindings: ResolvedKeybindingsConfig;
+  terminalBaseLabel: string;
+  terminalLabelOverrides: Readonly<Record<string, string>>;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   mode?: "drawer" | "panel";
+  onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
+  onClearTerminalLabelOverride: (terminalId: string) => void;
 }
 
 export default function ThreadTerminalDrawer({
@@ -74,7 +82,12 @@ export default function ThreadTerminalDrawer({
   onHeightChange,
   onAddTerminalContext,
   keybindings,
+  terminalBaseLabel,
+  terminalLabelOverrides,
+  terminalProviderById,
   mode = "drawer",
+  onSetTerminalLabelOverride,
+  onClearTerminalLabelOverride,
 }: ThreadTerminalDrawerProps) {
   const {
     drawerHeight,
@@ -181,13 +194,18 @@ export default function ThreadTerminalDrawer({
     resolvedTerminalGroups.length > 1 ||
     resolvedTerminalGroups.some((terminalGroup) => terminalGroup.terminalIds.length > 1);
   const hasReachedSplitLimit = visibleTerminalIds.length >= MAX_TERMINALS_PER_GROUP;
-  const terminalLabelById = useMemo(
-    () =>
-      new Map(
-        normalizedTerminalIds.map((terminalId, index) => [terminalId, `Terminal ${index + 1}`]),
-      ),
-    [normalizedTerminalIds],
+  const terminalDefaultLabelById = useMemo(
+    () => buildTerminalLabelMap(normalizedTerminalIds, terminalBaseLabel),
+    [normalizedTerminalIds, terminalBaseLabel],
   );
+  const terminalLabelById = useMemo(
+    () => buildTerminalLabelMap(normalizedTerminalIds, terminalBaseLabel, terminalLabelOverrides),
+    [normalizedTerminalIds, terminalBaseLabel, terminalLabelOverrides],
+  );
+  const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null);
+  const [terminalRenameDraft, setTerminalRenameDraft] = useState("");
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const renameTerminalActionLabel = "Rename Terminal";
   const splitTerminalActionLabel = hasReachedSplitLimit
     ? `Split Terminal (max ${MAX_TERMINALS_PER_GROUP} per group)`
     : splitShortcutLabel
@@ -206,6 +224,58 @@ export default function ThreadTerminalDrawer({
   const onNewTerminalAction = useCallback(() => {
     onNewTerminal();
   }, [onNewTerminal]);
+  const onStartTerminalRename = useCallback(
+    (terminalId: string) => {
+      setEditingTerminalId(terminalId);
+      setTerminalRenameDraft(terminalLabelById.get(terminalId) ?? "");
+    },
+    [terminalLabelById],
+  );
+  const onCancelTerminalRename = useCallback(() => {
+    setEditingTerminalId(null);
+    setTerminalRenameDraft("");
+    renameInputRef.current = null;
+  }, []);
+  const onCommitTerminalRename = useCallback(() => {
+    if (!editingTerminalId) {
+      return;
+    }
+    const trimmedDraft = terminalRenameDraft.trim();
+    const defaultLabel = terminalDefaultLabelById.get(editingTerminalId)?.trim() ?? "Terminal";
+    if (trimmedDraft.length === 0 || trimmedDraft === defaultLabel) {
+      onClearTerminalLabelOverride(editingTerminalId);
+    } else {
+      onSetTerminalLabelOverride(editingTerminalId, trimmedDraft);
+    }
+    onCancelTerminalRename();
+  }, [
+    editingTerminalId,
+    onCancelTerminalRename,
+    onClearTerminalLabelOverride,
+    onSetTerminalLabelOverride,
+    terminalDefaultLabelById,
+    terminalRenameDraft,
+  ]);
+  const onResetTerminalRename = useCallback(
+    (terminalId: string) => {
+      onClearTerminalLabelOverride(terminalId);
+      if (editingTerminalId === terminalId) {
+        onCancelTerminalRename();
+      }
+    },
+    [editingTerminalId, onCancelTerminalRename, onClearTerminalLabelOverride],
+  );
+  const onRenameInputMount = useCallback((element: HTMLInputElement | null) => {
+    if (element && renameInputRef.current !== element) {
+      renameInputRef.current = element;
+      element.focus();
+      element.select();
+      return;
+    }
+    if (element === null && renameInputRef.current !== null) {
+      renameInputRef.current = null;
+    }
+  }, []);
 
   return (
     <aside
@@ -228,14 +298,32 @@ export default function ThreadTerminalDrawer({
       {!hasTerminalSidebar && (
         <ThreadTerminalDrawerFloatingActions
           hasReachedSplitLimit={hasReachedSplitLimit}
+          renameTerminalActionLabel={renameTerminalActionLabel}
           splitTerminalActionLabel={splitTerminalActionLabel}
           newTerminalActionLabel={newTerminalActionLabel}
           closeTerminalActionLabel={closeTerminalActionLabel}
           resolvedActiveTerminalId={resolvedActiveTerminalId}
+          onRenameTerminalAction={() => onStartTerminalRename(resolvedActiveTerminalId)}
           onSplitTerminalAction={onSplitTerminalAction}
           onNewTerminalAction={onNewTerminalAction}
           onCloseTerminal={onCloseTerminal}
         />
+      )}
+
+      {!hasTerminalSidebar && editingTerminalId === resolvedActiveTerminalId && (
+        <div className="pointer-events-none absolute left-2 top-2 z-20 max-w-[min(24rem,calc(100%-8rem))]">
+          <ThreadTerminalDrawerRenameEditor
+            value={terminalRenameDraft}
+            placeholder={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
+            onChange={setTerminalRenameDraft}
+            onCommit={onCommitTerminalRename}
+            onCancel={onCancelTerminalRename}
+            onReset={() => onResetTerminalRename(resolvedActiveTerminalId)}
+            autoFocus
+            inputRef={onRenameInputMount}
+            className="pointer-events-auto"
+          />
+        </div>
       )}
 
       <div className="min-h-0 w-full flex-1">
@@ -267,12 +355,22 @@ export default function ThreadTerminalDrawer({
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               normalizedTerminalIds={normalizedTerminalIds}
               terminalLabelById={terminalLabelById}
+              editingTerminalId={editingTerminalId}
+              terminalRenameDraft={terminalRenameDraft}
+              renameInputRef={onRenameInputMount}
+              terminalProviderById={terminalProviderById}
               showGroupHeaders={showGroupHeaders}
               hasReachedSplitLimit={hasReachedSplitLimit}
+              renameTerminalActionLabel={renameTerminalActionLabel}
               splitTerminalActionLabel={splitTerminalActionLabel}
               newTerminalActionLabel={newTerminalActionLabel}
               closeTerminalActionLabel={closeTerminalActionLabel}
               closeShortcutLabel={closeShortcutLabel}
+              onTerminalRenameDraftChange={setTerminalRenameDraft}
+              onStartTerminalRename={onStartTerminalRename}
+              onCommitTerminalRename={onCommitTerminalRename}
+              onCancelTerminalRename={onCancelTerminalRename}
+              onResetTerminalRename={onResetTerminalRename}
               onSplitTerminalAction={onSplitTerminalAction}
               onNewTerminalAction={onNewTerminalAction}
               onActiveTerminalChange={onActiveTerminalChange}

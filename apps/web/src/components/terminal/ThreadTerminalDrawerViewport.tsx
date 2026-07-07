@@ -15,7 +15,7 @@ interface ThreadTerminalDrawerViewportProps {
   visible: boolean;
   visibleTerminalIds: string[];
   resolvedActiveTerminalId: string;
-  terminalLabelById: Map<string, string>;
+  terminalLabelById: ReadonlyMap<string, string>;
   focusRequestId: number;
   resizeEpoch: number;
   drawerHeight: number;

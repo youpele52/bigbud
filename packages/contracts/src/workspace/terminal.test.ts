@@ -182,6 +182,7 @@ describe("TerminalSessionSnapshot", () => {
         threadId: "thread-1",
         terminalId: DEFAULT_TERMINAL_ID,
         executionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        dropPathMode: "posix",
         cwd: "/tmp/project",
         worktreePath: null,
         status: "running",
@@ -243,6 +244,7 @@ describe("TerminalEvent", () => {
         snapshot: {
           threadId: "thread-1",
           terminalId: DEFAULT_TERMINAL_ID,
+          dropPathMode: "posix",
           cwd: "/tmp/project/.t3/worktrees/feature-a",
           worktreePath: "/tmp/project/.t3/worktrees/feature-a",
           status: "running",

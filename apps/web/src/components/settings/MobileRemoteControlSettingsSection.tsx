@@ -12,46 +12,28 @@ import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import {
+  resolveHostedMobileWebBaseUrl,
+  resolveLocalMobileWebBaseUrl,
   normalizeBackendBaseUrl,
   resolveDefaultBackendBaseUrl,
   resolveDefaultMobileWebBaseUrl,
-  resolveHostedMobileWebBaseUrl,
-  resolveLocalMobileWebBaseUrl,
-  resolveStoredBackendBaseUrl,
-  resolveStoredMobileWebBaseUrl,
   shouldPreferLiveBackendBaseUrl,
   shouldResetMobileAppUrlToHosted,
 } from "./mobileRemoteControl.urls";
 import { MobileRemotePairingQrCode } from "./MobileRemotePairingQrCode";
+import {
+  MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY,
+  MOBILE_WEB_BASE_URL_STORAGE_KEY,
+  readStoredBackendBaseUrl,
+  readStoredMobileWebBaseUrl,
+  resolveMobileRemoteControlStatus,
+  resolveTailscaleRemoteBackendCheck,
+  stripTrailingSlash,
+  syncTailscaleDerivedUrls,
+} from "./MobileRemoteControlSettingsSection.status";
 
 const MOBILE_REMOTE_SESSIONS_QUERY_KEY = ["mobile-remote-sessions"] as const;
 const MOBILE_REMOTE_TAILSCALE_QUERY_KEY = ["mobile-remote-tailscale"] as const;
-const MOBILE_WEB_BASE_URL_STORAGE_KEY = "bigbud:mobile-web:base-url:v1";
-const MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY = "bigbud:mobile-remote:backend-url:v1";
-
-function stripTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
-function readStoredBackendBaseUrl(): string {
-  if (typeof window === "undefined") {
-    return normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
-  }
-  return resolveStoredBackendBaseUrl(
-    window.localStorage.getItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY),
-  );
-}
-
-function readStoredMobileWebBaseUrl(): string {
-  if (typeof window === "undefined") {
-    return resolveDefaultMobileWebBaseUrl();
-  }
-  const backendBaseUrl = readStoredBackendBaseUrl();
-  return resolveStoredMobileWebBaseUrl(
-    window.localStorage.getItem(MOBILE_WEB_BASE_URL_STORAGE_KEY),
-    backendBaseUrl,
-  );
-}
 
 export function MobileRemoteControlSettingsSection() {
   const settings = useSettings();
@@ -96,44 +78,15 @@ export function MobileRemoteControlSettingsSection() {
     if (!status) {
       return;
     }
-
-    if (status.serving && status.remoteBaseUrl) {
-      const nextRemoteBaseUrl = normalizeBackendBaseUrl(status.remoteBaseUrl);
-      setBackendBaseUrl((current) => {
-        const normalizedCurrent = normalizeBackendBaseUrl(current);
-        if (!shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextRemoteBaseUrl)) {
-          return current;
-        }
-        window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextRemoteBaseUrl);
-        return nextRemoteBaseUrl;
-      });
-      setMobileBaseUrl((current) => {
-        if (!shouldResetMobileAppUrlToHosted(current, nextRemoteBaseUrl)) {
-          return current;
-        }
-        const nextMobileBaseUrl = stripTrailingSlash(resolveHostedMobileWebBaseUrl());
-        window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextMobileBaseUrl);
-        return nextMobileBaseUrl;
-      });
-      return;
-    }
-
-    const nextLocalBackend = normalizeBackendBaseUrl(resolveDefaultBackendBaseUrl());
-    const nextLocalMobile = stripTrailingSlash(resolveDefaultMobileWebBaseUrl());
-    setBackendBaseUrl((current) => {
-      const normalizedCurrent = normalizeBackendBaseUrl(current);
-      if (!shouldPreferLiveBackendBaseUrl(normalizedCurrent, nextLocalBackend)) {
-        return current;
-      }
-      window.localStorage.setItem(MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY, nextLocalBackend);
-      return nextLocalBackend;
-    });
-    setMobileBaseUrl((current) => {
-      if (!shouldResetMobileAppUrlToHosted(current, nextLocalBackend)) {
-        return current;
-      }
-      window.localStorage.setItem(MOBILE_WEB_BASE_URL_STORAGE_KEY, nextLocalMobile);
-      return nextLocalMobile;
+    syncTailscaleDerivedUrls({
+      status,
+      setBackendBaseUrl,
+      setMobileBaseUrl,
+      shouldPreferLiveBackendBaseUrl,
+      shouldResetMobileAppUrlToHosted,
+      resolveHostedMobileWebBaseUrl,
+      resolveDefaultBackendBaseUrl,
+      resolveDefaultMobileWebBaseUrl,
     });
   }, [tailscaleStatus]);
 
@@ -208,37 +161,37 @@ export function MobileRemoteControlSettingsSection() {
 
   const activeSessionCount =
     sessionsQuery.data?.sessions.filter((session) => session.revokedAt === null).length ?? 0;
-  const status = useMemo(() => {
-    if (!settings.mobileRemoteControl.enabled) {
-      return "Disabled. Mobile sessions are rejected until you enable mobile remote control.";
-    }
-    return `${activeSessionCount} active mobile session${activeSessionCount === 1 ? "" : "s"}.`;
-  }, [activeSessionCount, settings.mobileRemoteControl.enabled]);
-  const tailscaleStatusLabel = useMemo(() => {
-    const status = tailscaleStatus;
-    if (tailscaleQuery.isLoading) {
-      return "Checking Tailscale remote access.";
-    }
-    if (!status) {
-      return "Desktop-only. Use Tailscale Serve to reach this backend from another Wi-Fi.";
-    }
-    if (status.error) {
-      return status.error;
-    }
-    if (status.serving && status.remoteBaseUrl) {
-      return `Remote backend available at ${status.remoteBaseUrl}.`;
-    }
-    if (status.running && !status.online) {
-      return "Tailscale is running, but this device is offline.";
-    }
-    if (status.running) {
-      return "Tailscale is connected, but Serve is not exposing this desktop backend.";
-    }
-    if (status.installed) {
-      return "Tailscale is installed but the daemon is not running.";
-    }
-    return "Tailscale CLI is not installed.";
-  }, [tailscaleQuery.isLoading, tailscaleStatus]);
+  const status = useMemo(
+    () =>
+      resolveMobileRemoteControlStatus({
+        enabled: settings.mobileRemoteControl.enabled,
+        activeSessionCount,
+      }),
+    [activeSessionCount, settings.mobileRemoteControl.enabled],
+  );
+  const tailscaleCheck = useMemo(
+    () =>
+      resolveTailscaleRemoteBackendCheck({
+        isLoading: tailscaleQuery.isLoading,
+        status: tailscaleStatus ?? null,
+        isMutating: enableTailscaleMutation.isPending || disableTailscaleMutation.isPending,
+        mutationErrorMessage:
+          (enableTailscaleMutation.error instanceof Error
+            ? enableTailscaleMutation.error.message
+            : null) ??
+          (disableTailscaleMutation.error instanceof Error
+            ? disableTailscaleMutation.error.message
+            : null),
+      }),
+    [
+      disableTailscaleMutation.error,
+      disableTailscaleMutation.isPending,
+      enableTailscaleMutation.error,
+      enableTailscaleMutation.isPending,
+      tailscaleQuery.isLoading,
+      tailscaleStatus,
+    ],
+  );
 
   return (
     <>
@@ -278,7 +231,7 @@ export function MobileRemoteControlSettingsSection() {
         <SettingsRow
           title="Tailscale remote backend"
           description="Private different-Wi-Fi access. This exposes the desktop backend through your tailnet over HTTPS."
-          status={tailscaleStatusLabel}
+          status={tailscaleCheck.message}
         >
           <div className="mt-3 space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -304,18 +257,13 @@ export function MobileRemoteControlSettingsSection() {
                 {normalizeBackendBaseUrl(tailscaleQuery.data.remoteBaseUrl)}
               </p>
             ) : null}
-            {enableTailscaleMutation.isError ? (
-              <p className="text-xs text-destructive">
-                {enableTailscaleMutation.error instanceof Error
-                  ? enableTailscaleMutation.error.message
-                  : "Failed to enable Tailscale Serve."}
-              </p>
-            ) : null}
-            {disableTailscaleMutation.isError ? (
-              <p className="text-xs text-destructive">
-                {disableTailscaleMutation.error instanceof Error
-                  ? disableTailscaleMutation.error.message
-                  : "Failed to disable Tailscale Serve."}
+            {tailscaleCheck.tip ? (
+              <p
+                className={`text-xs ${
+                  tailscaleCheck.status === "error" ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {tailscaleCheck.tip}
               </p>
             ) : null}
           </div>

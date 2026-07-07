@@ -49,6 +49,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const adapterScope = yield* Scope.Scope;
     const serverConfig = yield* Effect.service(ServerConfig);
     const serverSettingsService = yield* ServerSettingsService;
     const nativeEventLogger =
@@ -154,6 +155,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
               port: serverConfig.port,
             },
             sessions,
+            notificationScope: adapterScope,
             stopSessionInternal,
             getDevinSettings,
             makeEventStamp,

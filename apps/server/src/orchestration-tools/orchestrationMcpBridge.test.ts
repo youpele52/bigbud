@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
@@ -22,6 +23,34 @@ import {
   writeThreadOrchestrationToolAuth,
 } from "./ThreadOrchestrationToolAuth.ts";
 
+function parseMcpMessages(buffer: Buffer): Array<unknown> {
+  const messages: unknown[] = [];
+  let remaining = buffer;
+  while (true) {
+    const headerEnd = remaining.indexOf("\r\n\r\n");
+    if (headerEnd === -1) {
+      const newlineIndex = remaining.indexOf("\n");
+      if (newlineIndex === -1) return messages;
+      const line = remaining.subarray(0, newlineIndex).toString("utf8").trim();
+      if (line.length > 0) {
+        messages.push(JSON.parse(line) as unknown);
+      }
+      remaining = remaining.subarray(newlineIndex + 1);
+      continue;
+    }
+    const header = remaining.subarray(0, headerEnd).toString("utf8");
+    const match = header.match(/Content-Length:\s*(\d+)/i);
+    if (!match) return messages;
+    const contentLength = Number(match[1]);
+    const totalLength = headerEnd + 4 + contentLength;
+    if (remaining.length < totalLength) return messages;
+    messages.push(
+      JSON.parse(remaining.subarray(headerEnd + 4, totalLength).toString("utf8")) as unknown,
+    );
+    remaining = remaining.subarray(totalLength);
+  }
+}
+
 describe("orchestrationMcpBridge", () => {
   it("renders an MCP server that calls the internal thread-tools endpoint", () => {
     const source = renderOrchestrationMcpServerSource({
@@ -38,6 +67,82 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("get_thread_status");
     expect(source).toContain("token-1");
     expect(source).toContain("action: 'get_status'");
+  });
+
+  it("accepts newline-delimited JSON-RPC messages from OpenCode", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bigbud-opencode-mcp-"));
+    const serverPath = path.join(tempDir, "orchestration-mcp-server.mjs");
+    await fs.writeFile(
+      serverPath,
+      renderOrchestrationMcpServerSource({
+        host: "127.0.0.1",
+        port: 3773,
+        threadId: "thread-1",
+        token: "token-1",
+      }),
+      "utf8",
+    );
+
+    const child = spawn(process.execPath, [serverPath], {
+      cwd: tempDir,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+
+    const readMessages = async () => {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < 2_000) {
+        const messages = parseMcpMessages(Buffer.concat(chunks));
+        if (messages.length >= 2) return messages;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error("Timed out waiting for generated MCP server responses.");
+    };
+
+    try {
+      child.stdin.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: { roots: {} },
+            clientInfo: { name: "opencode", version: "1.17.13" },
+          },
+        })}\n`,
+      );
+      child.stdin.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/list",
+          params: {},
+        })}\n`,
+      );
+
+      const messages = await readMessages();
+      expect(messages[0]).toMatchObject({
+        id: 1,
+        result: {
+          protocolVersion: "2025-11-25",
+          serverInfo: { name: "bigbud-orchestration" },
+        },
+      });
+      expect(messages[1]).toMatchObject({
+        id: 2,
+        result: {
+          tools: expect.arrayContaining([
+            expect.objectContaining({ name: "rename_thread" }),
+            expect.objectContaining({ name: "computer_use" }),
+          ]),
+        },
+      });
+    } finally {
+      child.kill();
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("merges Codex and Claude orchestration config into existing provider config", () => {
@@ -90,6 +195,9 @@ describe("orchestrationMcpBridge", () => {
       config: {
         type: "local",
         command: [process.execPath, bridge.serverPath],
+        cwd: bridge.bridgeDir,
+        enabled: true,
+        timeout: 10_000,
       },
     });
   });

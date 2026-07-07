@@ -1,13 +1,20 @@
-import { type ThreadId } from "@bigbud/contracts";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useProjectById, useThreadById } from "../../stores/main";
 import { useComposerDraftStore } from "../../stores/composer";
-import { selectThreadTerminalState, useTerminalStateStore } from "../../stores/terminal";
+import {
+  selectTerminalEventEntries,
+  selectThreadTerminalState,
+  useTerminalStateStore,
+} from "../../stores/terminal";
 import { useDefaultChatCwd } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
+
+const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 
 export interface TerminalLaunchContext {
   cwd: string;
@@ -21,10 +28,15 @@ export interface UseThreadTerminalDrawerResult {
   effectiveWorktreePath: string | null;
   runtimeEnv: Record<string, string>;
   executionTargetId: string | undefined;
+  terminalBaseLabel: string;
+  terminalLabelOverrides: Record<string, string>;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   splitTerminal: () => void;
   createNewTerminal: () => void;
   activateTerminal: (terminalId: string) => void;
   closeTerminal: (terminalId: string) => void;
+  setTerminalLabelOverride: (terminalId: string, label: string) => void;
+  clearTerminalLabelOverride: (terminalId: string) => void;
   setTerminalHeight: (height: number) => void;
   focusRequestId: number;
   bumpFocusRequestId: () => void;
@@ -65,6 +77,18 @@ export function useThreadTerminalDrawer(
   const storeCloseTerminal = useTerminalStateStore((state) =>
     isPanel ? state.closePanelTerminal : state.closeTerminal,
   );
+  const terminalLabelOverrides = useTerminalStateStore(
+    (state) => state.terminalLabelOverridesByThreadId[threadId] ?? EMPTY_TERMINAL_LABEL_OVERRIDES,
+  );
+  const terminalEventEntriesByKey = useTerminalStateStore(
+    (state) => state.terminalEventEntriesByKey,
+  );
+  const storeSetTerminalLabelOverride = useTerminalStateStore(
+    (state) => state.setTerminalLabelOverride,
+  );
+  const storeClearTerminalLabelOverride = useTerminalStateStore(
+    (state) => state.clearTerminalLabelOverride,
+  );
 
   const [localFocusRequestId, setLocalFocusRequestId] = useState(0);
   const worktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
@@ -96,6 +120,29 @@ export function useThreadTerminalDrawer(
         : {},
     [effectiveWorktreePath, project],
   );
+  const terminalBaseLabel = useMemo(
+    () =>
+      resolveTerminalBaseLabel({
+        projectName: project?.name,
+        cwd,
+      }),
+    [cwd, project?.name],
+  );
+  const terminalProviderById = useMemo(() => {
+    const nextById: Record<string, ProviderKind> = {};
+    for (const terminalId of terminalState.terminalIds) {
+      const eventEntries = selectTerminalEventEntries(
+        terminalEventEntriesByKey,
+        threadId,
+        terminalId,
+      );
+      const terminalProvider = resolveTerminalProviderFromEvents(eventEntries);
+      if (terminalProvider) {
+        nextById[terminalId] = terminalProvider;
+      }
+    }
+    return nextById;
+  }, [terminalEventEntriesByKey, terminalState.terminalIds, threadId]);
 
   const bumpFocusRequestId = useCallback(() => {
     if (!visible) {
@@ -158,6 +205,20 @@ export function useThreadTerminalDrawer(
     [bumpFocusRequestId, storeCloseTerminal, terminalState.terminalIds.length, threadId],
   );
 
+  const setTerminalLabelOverride = useCallback(
+    (terminalId: string, label: string) => {
+      storeSetTerminalLabelOverride(threadId, terminalId, label);
+    },
+    [storeSetTerminalLabelOverride, threadId],
+  );
+
+  const clearTerminalLabelOverride = useCallback(
+    (terminalId: string) => {
+      storeClearTerminalLabelOverride(threadId, terminalId);
+    },
+    [storeClearTerminalLabelOverride, threadId],
+  );
+
   return {
     project,
     terminalState,
@@ -165,10 +226,15 @@ export function useThreadTerminalDrawer(
     effectiveWorktreePath,
     runtimeEnv,
     executionTargetId: project ? resolveWorkspaceExecutionTargetId(project) : undefined,
+    terminalBaseLabel,
+    terminalLabelOverrides,
+    terminalProviderById,
     splitTerminal,
     createNewTerminal,
     activateTerminal,
     closeTerminal,
+    setTerminalLabelOverride,
+    clearTerminalLabelOverride,
     setTerminalHeight,
     focusRequestId: localFocusRequestId,
     bumpFocusRequestId,

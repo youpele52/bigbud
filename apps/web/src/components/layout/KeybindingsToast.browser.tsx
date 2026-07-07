@@ -41,6 +41,10 @@ const wsLink = ws.link(/ws(s)?:\/\/.*/);
 function createBaseServerConfig(): ServerConfig {
   return {
     cwd: "/repo/project",
+    storage: {
+      notesDir: "/repo/project/.t3/notes",
+      kanbanDir: "/repo/project/.t3/kanban",
+    },
     keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
     keybindings: [],
     issues: [],
@@ -112,6 +116,8 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         id: THREAD_ID,
         projectId: PROJECT_ID,
         title: "Test thread",
+        elevatorSummary: "Test thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: {
           provider: "codex",
           model: "gpt-5",

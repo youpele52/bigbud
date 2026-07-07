@@ -7,9 +7,11 @@
  * @module ProjectionThreadRepository
  */
 import {
+  ElevatorSummary,
   ExecutionTargetId,
   IsoDateTime,
   ModelSelection,
+  NonNegativeInt,
   ParentThreadReference,
   ProjectId,
   ProviderInteractionMode,
@@ -26,6 +28,8 @@ export const ProjectionThread = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
   title: Schema.String,
+  elevatorSummary: Schema.NullOr(ElevatorSummary),
+  elevatorSummaryMessageCount: NonNegativeInt,
   providerRuntimeExecutionTargetId: ExecutionTargetId,
   workspaceExecutionTargetId: ExecutionTargetId,
   executionTargetId: ExecutionTargetId,

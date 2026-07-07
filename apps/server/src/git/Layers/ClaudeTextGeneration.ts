@@ -20,9 +20,11 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadElevatorSummaryPrompt,
   buildThreadTitlePrompt,
 } from "../Prompts.ts";
 import {
+  sanitizeElevatorSummary,
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
@@ -77,7 +79,8 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateThreadElevatorSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -330,11 +333,39 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     };
   });
 
+  const generateThreadElevatorSummary: TextGenerationShape["generateThreadElevatorSummary"] =
+    Effect.fn("ClaudeTextGeneration.generateThreadElevatorSummary")(function* (input) {
+      const { prompt, outputSchema } = buildThreadElevatorSummaryPrompt({
+        transcript: input.transcript,
+        attachments: input.attachments,
+      });
+
+      if (input.modelSelection.provider !== "claudeAgent") {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: "Invalid model selection.",
+        });
+      }
+
+      const generated = yield* runClaudeJson({
+        operation: "generateThreadElevatorSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeElevatorSummary(generated.summary),
+      };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadElevatorSummary,
   } satisfies TextGenerationShape;
 });
 

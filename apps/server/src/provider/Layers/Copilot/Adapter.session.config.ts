@@ -70,8 +70,8 @@ export function buildSessionConfig(input: {
     ...(input.sessionConfigOverrides?.mcpServers
       ? { mcpServers: input.sessionConfigOverrides.mcpServers }
       : {}),
-    ...(input.sessionConfigOverrides?.createSessionFsHandler
-      ? { createSessionFsHandler: input.sessionConfigOverrides.createSessionFsHandler }
+    ...(input.sessionConfigOverrides?.createSessionFsProvider
+      ? { createSessionFsProvider: input.sessionConfigOverrides.createSessionFsProvider }
       : {}),
     onPermissionRequest: (request) => {
       return new Promise((resolve) => {

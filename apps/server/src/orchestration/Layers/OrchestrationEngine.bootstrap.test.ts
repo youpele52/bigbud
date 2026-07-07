@@ -65,6 +65,8 @@ describe("OrchestrationEngine", () => {
           id: ThreadId.makeUnsafe("thread-bootstrap"),
           projectId: asProjectId("project-bootstrap"),
           title: "Bootstrap Thread",
+          elevatorSummary: "Bootstrap Thread",
+          elevatorSummaryMessageCount: 0,
           modelSelection: {
             provider: "codex" as const,
             model: "gpt-5-codex",
