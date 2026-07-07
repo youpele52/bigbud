@@ -227,11 +227,11 @@ export function UsagePage() {
                         }
                       }}
                     >
-                      <Toggle aria-label="Bars" value="bar">
-                        Bars
+                      <Toggle aria-label="Ranking" value="bar">
+                        Ranking
                       </Toggle>
-                      <Toggle aria-label="Pie" value="pie">
-                        Pie
+                      <Toggle aria-label="Share" value="pie">
+                        Share
                       </Toggle>
                     </ToggleGroup>
                   </div>
