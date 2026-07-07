@@ -25,7 +25,7 @@ export {
 
 export {
   findLatestProposedPlan,
-  findSidebarProposedPlan,
+  findPlanCardProposedPlan,
   hasActionableProposedPlan,
   hasToolActivityForTurn,
   deriveVisibleWorkLogEntries,

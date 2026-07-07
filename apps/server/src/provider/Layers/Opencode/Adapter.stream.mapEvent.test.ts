@@ -38,7 +38,7 @@ function makeSession(): ActiveOpencodeSession {
   };
 }
 
-function makeMapEventUnderTest() {
+function makeMapEventUnderTest(provider: "opencode" | "kilocode" = "opencode") {
   let stampIndex = 0;
 
   return makeMapEvent(
@@ -48,7 +48,7 @@ function makeMapEventUnderTest() {
         eventId: EventId.makeUnsafe(`evt-${++stampIndex}`),
         createdAt: CREATED_AT,
       }),
-    "opencode",
+    provider,
   );
 }
 
@@ -151,6 +151,95 @@ it.effect("maps native session.compacted events to thread compacted state", () =
         },
       },
     ]);
+  });
+});
+
+it.effect("maps todo.updated events to canonical turn.plan.updated events", () => {
+  const session = makeSession();
+  const mapEvent = makeMapEventUnderTest();
+
+  return Effect.gen(function* () {
+    const events = yield* mapEvent(session, {
+      id: "sdk-todo-updated-1",
+      type: "todo.updated",
+      properties: {
+        sessionID: session.opencodeSessionId,
+        todos: [
+          { content: "Plan the change", status: "pending" },
+          { content: "Implement it", status: "in_progress" },
+          { content: "Verify results", status: "completed" },
+          { content: "Skipped task", status: "cancelled" },
+          { content: " ", status: "inProgress" },
+        ],
+      },
+    } as OpencodeEvent);
+
+    assert.deepEqual(events, [
+      {
+        eventId: EventId.makeUnsafe("evt-1"),
+        provider: "opencode",
+        threadId: THREAD_ID,
+        createdAt: CREATED_AT,
+        turnId: TURN_ID,
+        providerRefs: {
+          providerTurnId: TURN_ID,
+        },
+        raw: {
+          source: "opencode.sdk.session-event",
+          method: "todo.updated",
+          payload: {
+            id: "sdk-todo-updated-1",
+            type: "todo.updated",
+            properties: {
+              sessionID: session.opencodeSessionId,
+              todos: [
+                { content: "Plan the change", status: "pending" },
+                { content: "Implement it", status: "in_progress" },
+                { content: "Verify results", status: "completed" },
+                { content: "Skipped task", status: "cancelled" },
+                { content: " ", status: "inProgress" },
+              ],
+            },
+          },
+        },
+        type: "turn.plan.updated",
+        payload: {
+          plan: [
+            { step: "Plan the change", status: "pending" },
+            { step: "Implement it", status: "inProgress" },
+            { step: "Verify results", status: "completed" },
+            { step: "Skipped task", status: "pending" },
+            { step: "Task", status: "inProgress" },
+          ],
+        },
+      },
+    ]);
+  });
+});
+
+it.effect("reuses todo.updated mapping for kilocode sessions", () => {
+  const session = makeSession();
+  const mapEvent = makeMapEventUnderTest("kilocode");
+
+  return Effect.gen(function* () {
+    const events = yield* mapEvent(session, {
+      id: "sdk-todo-updated-kilo-1",
+      type: "todo.updated",
+      properties: {
+        sessionID: session.opencodeSessionId,
+        todos: [{ content: "Ship KiloCode support", status: "completed" }],
+      },
+    } as OpencodeEvent);
+
+    assert.equal(events.length, 1);
+    const event = events[0];
+    assert.equal(event?.provider, "kilocode");
+    assert.equal(event?.type, "turn.plan.updated");
+    if (event?.type === "turn.plan.updated") {
+      assert.deepEqual(event.payload.plan, [
+        { step: "Ship KiloCode support", status: "completed" },
+      ]);
+    }
   });
 });
 

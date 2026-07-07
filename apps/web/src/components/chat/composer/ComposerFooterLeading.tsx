@@ -21,9 +21,9 @@ interface ComposerFooterLeadingProps {
   };
   hasThreadStarted: boolean;
   activePlan: boolean;
-  sidebarProposedPlan: boolean;
-  planSidebarOpen: boolean;
-  planSidebarLabel: string;
+  cardProposedPlan: boolean;
+  planCardOpen: boolean;
+  planCardLabel: string;
   interactionMode: ProviderInteractionMode;
   runtimeMode: RuntimeMode;
   providerTraitsMenuContent: ReactNode;
@@ -31,7 +31,7 @@ interface ComposerFooterLeadingProps {
   onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
   onProviderUnlock: () => void;
   onToggleInteractionMode: () => void;
-  onTogglePlanSidebar: () => void;
+  onTogglePlanCard: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }
 
@@ -46,9 +46,9 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       composerProviderState,
       hasThreadStarted,
       activePlan,
-      sidebarProposedPlan,
-      planSidebarOpen,
-      planSidebarLabel,
+      cardProposedPlan,
+      planCardOpen,
+      planCardLabel,
       interactionMode,
       runtimeMode,
       providerTraitsMenuContent,
@@ -56,7 +56,7 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       onProviderModelSelect,
       onProviderUnlock,
       onToggleInteractionMode,
-      onTogglePlanSidebar,
+      onTogglePlanCard,
       onRuntimeModeChange,
     }: ComposerFooterLeadingProps,
     ref,
@@ -84,15 +84,15 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
         />
 
         <CompactComposerControlsMenu
-          activePlan={Boolean(activePlan || sidebarProposedPlan || planSidebarOpen)}
+          activePlan={Boolean(activePlan || cardProposedPlan || planCardOpen)}
           interactionMode={interactionMode}
-          planSidebarOpen={planSidebarOpen}
-          planSidebarLabel={planSidebarLabel}
+          planCardOpen={planCardOpen}
+          planCardLabel={planCardLabel}
           runtimeMode={runtimeMode}
           traitsMenuContent={providerTraitsMenuContent}
           onOpenOrchestra={onOpenOrchestra}
           onToggleInteractionMode={onToggleInteractionMode}
-          onTogglePlanSidebar={onTogglePlanSidebar}
+          onTogglePlanCard={onTogglePlanCard}
           onRuntimeModeChange={onRuntimeModeChange}
         />
       </div>

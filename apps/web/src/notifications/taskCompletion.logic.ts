@@ -53,8 +53,7 @@ export function summarizeLatestAssistantMessage(thread: Thread): string | null {
  * Diffs two thread snapshots and returns candidates for completed-task
  * notifications. A candidate is emitted when:
  *   - The thread exists in both snapshots.
- *   - The thread exists in both snapshots.
- *   - The next thread has entered the same "Completed" state used by the sidebar.
+ *   - The next thread has entered the same "Completed" state shown in the plan card UI.
  *   - The previous thread was not already in that state.
  */
 export function collectCompletedThreadCandidates(

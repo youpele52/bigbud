@@ -24,7 +24,7 @@ import { useLocalDispatchState } from "../ChatView.localDispatch.logic";
 import {
   deriveVisibleWorkLogEntries,
   findLatestProposedPlan,
-  findSidebarProposedPlan,
+  findPlanCardProposedPlan,
 } from "../../../../logic/session";
 import { EMPTY_PENDING_USER_INPUT_ANSWERS } from "./shared";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -207,9 +207,9 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     );
   }, [activeLatestTurn?.turnId, activeThread?.proposedPlans, latestTurnSettled]);
 
-  const sidebarProposedPlan = useMemo(
+  const cardProposedPlan = useMemo(
     () =>
-      findSidebarProposedPlan({
+      findPlanCardProposedPlan({
         threads: threadPlanCatalog,
         latestTurn: activeLatestTurn,
         latestTurnSettled,
@@ -230,10 +230,10 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     latestTurnSettled &&
     hasActionableProposedPlan(activeProposedPlan);
 
-  // Show "Tasks" when the sidebar is displaying TodoWrite-driven step tracking
+  // Show "Tasks" when the floating card is displaying TodoWrite-driven step tracking
   // (no proposed plan markdown, not in plan-drafting mode). Show "Plan" when
   // there is a proposed plan or the thread is in plan interaction mode.
-  const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
+  const planCardLabel = cardProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
 
   const activePendingApproval = pendingApprovals[0] ?? null;
 
@@ -308,9 +308,9 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     activePendingProgress,
     activePendingResolvedAnswers,
     activeProposedPlan,
-    sidebarProposedPlan,
+    cardProposedPlan,
     activePlan,
-    planSidebarLabel,
+    planCardLabel,
     showPlanFollowUpPrompt,
     activePendingApproval,
     phase,

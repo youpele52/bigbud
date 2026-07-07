@@ -1,28 +1,29 @@
-import { memo, useState, useCallback } from "react";
+import { memo, type ReactNode, useCallback, useState } from "react";
 import type { ExecutionTargetId } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
-import { Button } from "../../ui/button";
-import { ScrollArea } from "../../ui/scroll-area";
-import ChatMarkdown from "../common/ChatMarkdown";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, EllipsisIcon, XIcon } from "lucide-react";
+
 import { cn } from "~/lib/utils";
-import type { ActivePlanState } from "../../../logic/session";
-import type { LatestProposedPlanState } from "../../../logic/session";
-import { formatTimestamp } from "../../../utils/timestamp";
+
+import type { ActivePlanState, LatestProposedPlanState } from "../../../logic/session";
 import {
-  proposedPlanTitle,
   buildProposedPlanMarkdownFilename,
-  normalizePlanMarkdownForExport,
   downloadPlanAsTextFile,
+  normalizePlanMarkdownForExport,
+  proposedPlanTitle,
   stripDisplayedPlanMarkdown,
 } from "../../../logic/proposed-plan";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { readNativeApi } from "../../../rpc/nativeApi";
-import { toastManager } from "../../ui/toast";
+import { formatTimestamp } from "../../../utils/timestamp";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { Button } from "../../ui/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
+import { ScrollArea } from "../../ui/scroll-area";
+import { toastManager } from "../../ui/toast";
 import { sidebarSectionLabelTextClassName } from "../../sidebar/SidebarSectionLabel";
+import ChatMarkdown from "../common/ChatMarkdown";
 
-function stepStatusIcon(status: string): React.ReactNode {
+function stepStatusIcon(status: string): ReactNode {
   if (status === "completed") {
     return (
       <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-success/18 bg-muted/18 text-success-foreground">
@@ -47,10 +48,9 @@ function stepStatusIcon(status: string): React.ReactNode {
   );
 }
 
-interface PlanSidebarProps {
+interface FloatingPlanCardProps {
   activePlan: ActivePlanState | null;
   activeProposedPlan: LatestProposedPlanState | null;
-  /** Badge label shown in the sidebar header. Defaults to "Plan". */
   label?: string;
   markdownCwd: string | undefined;
   workspaceRoot: string | undefined;
@@ -59,7 +59,7 @@ interface PlanSidebarProps {
   onClose: () => void;
 }
 
-const PlanSidebar = memo(function PlanSidebar({
+export const FloatingPlanCard = memo(function FloatingPlanCard({
   activePlan,
   activeProposedPlan,
   label = "Plan",
@@ -68,7 +68,7 @@ const PlanSidebar = memo(function PlanSidebar({
   workspaceExecutionTargetId,
   timestampFormat,
   onClose,
-}: PlanSidebarProps) {
+}: FloatingPlanCardProps) {
   const [proposedPlanExpanded, setProposedPlanExpanded] = useState(false);
   const [isSavingToWorkspace, setIsSavingToWorkspace] = useState(false);
   const { copyToClipboard, isCopied } = useCopyToClipboard();
@@ -76,11 +76,12 @@ const PlanSidebar = memo(function PlanSidebar({
   const planMarkdown = activeProposedPlan?.planMarkdown ?? null;
   const displayedPlanMarkdown = planMarkdown ? stripDisplayedPlanMarkdown(planMarkdown) : null;
   const planTitle = planMarkdown ? proposedPlanTitle(planMarkdown) : null;
+  const cardTimestamp = activePlan?.createdAt ?? activeProposedPlan?.createdAt ?? null;
 
   const handleCopyPlan = useCallback(() => {
     if (!planMarkdown) return;
     copyToClipboard(planMarkdown);
-  }, [planMarkdown, copyToClipboard]);
+  }, [copyToClipboard, planMarkdown]);
 
   const handleDownload = useCallback(() => {
     if (!planMarkdown) return;
@@ -121,18 +122,19 @@ const PlanSidebar = memo(function PlanSidebar({
   }, [planMarkdown, workspaceExecutionTargetId, workspaceRoot]);
 
   return (
-    <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border/70 bg-background/72 supports-[backdrop-filter]:bg-background/60 supports-[backdrop-filter]:backdrop-blur-md">
-      {/* Header */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
-        <div className="flex items-center gap-2">
-          <span className={sidebarSectionLabelTextClassName}>{label}</span>
-          {activePlan ? (
-            <span className="text-[11px] text-muted-foreground/55">
-              {formatTimestamp(activePlan.createdAt, timestampFormat)}
-            </span>
-          ) : null}
+    <div className="relative flex max-h-[min(28rem,calc(100dvh-15rem))] w-full flex-col overflow-hidden rounded-[24px] border border-border/80 bg-background/92 text-card-foreground shadow-[0_18px_54px_rgba(0,0,0,0.24)] supports-[backdrop-filter]:bg-background/80 supports-[backdrop-filter]:backdrop-blur-md">
+      <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={sidebarSectionLabelTextClassName}>{label}</span>
+            {cardTimestamp ? (
+              <span className="truncate text-xs text-muted-foreground/55">
+                {formatTimestamp(cardTimestamp, timestampFormat)}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {planMarkdown ? (
             <Menu>
               <MenuTrigger
@@ -165,7 +167,7 @@ const PlanSidebar = memo(function PlanSidebar({
             size="icon-xs"
             variant="ghost"
             onClick={onClose}
-            aria-label={`Close ${label.toLowerCase()} sidebar`}
+            aria-label={`Close ${label.toLowerCase()} card`}
             className="text-muted-foreground/50 hover:text-foreground/70"
           >
             <XIcon className="size-3.5" />
@@ -173,15 +175,12 @@ const PlanSidebar = memo(function PlanSidebar({
         </div>
       </div>
 
-      {/* Content */}
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-3">
-          {/* Explanation */}
+        <div className="space-y-4 p-4">
           {activePlan?.explanation ? (
-            <p className="text-sm leading-7 text-muted-foreground/78">{activePlan.explanation}</p>
+            <p className="text-sm leading-6 text-muted-foreground/78">{activePlan.explanation}</p>
           ) : null}
 
-          {/* Plan Steps */}
           {activePlan && activePlan.steps.length > 0 ? (
             <div className="space-y-1.5">
               <p className={cn(sidebarSectionLabelTextClassName, "mb-2")}>Steps</p>
@@ -202,11 +201,11 @@ const PlanSidebar = memo(function PlanSidebar({
                   {stepStatusIcon(step.status)}
                   <p
                     className={cn(
-                      "text-[13px] leading-snug",
+                      "text-sm leading-snug",
                       step.status === "completed"
                         ? "text-muted-foreground/52 line-through decoration-muted-foreground/20"
                         : step.status === "inProgress"
-                          ? "text-foreground/92 font-medium"
+                          ? "font-medium text-foreground/92"
                           : "text-muted-foreground/68",
                     )}
                   >
@@ -217,13 +216,12 @@ const PlanSidebar = memo(function PlanSidebar({
             </div>
           ) : null}
 
-          {/* Proposed Plan Markdown */}
           {planMarkdown ? (
             <div className="space-y-2">
               <button
                 type="button"
                 className="group flex w-full items-center gap-1.5 text-left"
-                onClick={() => setProposedPlanExpanded((v) => !v)}
+                onClick={() => setProposedPlanExpanded((value) => !value)}
               >
                 {proposedPlanExpanded ? (
                   <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/40 transition-transform" />
@@ -233,7 +231,7 @@ const PlanSidebar = memo(function PlanSidebar({
                 <span
                   className={cn(
                     sidebarSectionLabelTextClassName,
-                    "group-hover:text-muted-foreground/60",
+                    "truncate group-hover:text-muted-foreground/60",
                   )}
                 >
                   {planTitle ?? "Full Plan"}
@@ -251,11 +249,10 @@ const PlanSidebar = memo(function PlanSidebar({
             </div>
           ) : null}
 
-          {/* Empty state */}
           {!activePlan && !planMarkdown ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-[13px] text-muted-foreground/40">No active plan yet.</p>
-              <p className="mt-1 text-[11px] text-muted-foreground/30">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <p className="text-sm text-muted-foreground/40">No active plan yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground/30">
                 Plans will appear here when generated.
               </p>
             </div>
@@ -266,5 +263,4 @@ const PlanSidebar = memo(function PlanSidebar({
   );
 });
 
-export default PlanSidebar;
-export type { PlanSidebarProps };
+export type { FloatingPlanCardProps };

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveActivePlanState,
   findLatestProposedPlan,
-  findSidebarProposedPlan,
+  findPlanCardProposedPlan,
   hasActionableProposedPlan,
 } from "./session.logic";
 import { makeActivity } from "./session.logic.test.helpers";
@@ -152,10 +152,10 @@ describe("hasActionableProposedPlan", () => {
   });
 });
 
-describe("findSidebarProposedPlan", () => {
+describe("findPlanCardProposedPlan", () => {
   it("prefers the running turn source proposed plan when available on the same thread", () => {
     expect(
-      findSidebarProposedPlan({
+      findPlanCardProposedPlan({
         threads: [
           {
             id: ThreadId.makeUnsafe("thread-1"),
@@ -209,7 +209,7 @@ describe("findSidebarProposedPlan", () => {
 
   it("falls back to the latest proposed plan once the turn is settled", () => {
     expect(
-      findSidebarProposedPlan({
+      findPlanCardProposedPlan({
         threads: [
           {
             id: ThreadId.makeUnsafe("thread-1"),

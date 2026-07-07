@@ -15,13 +15,13 @@ import {
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   activePlan: boolean;
   interactionMode: ProviderInteractionMode;
-  planSidebarOpen: boolean;
-  planSidebarLabel: string;
+  planCardOpen: boolean;
+  planCardLabel: string;
   runtimeMode: RuntimeMode;
   traitsMenuContent?: ReactNode;
   onOpenOrchestra: () => void;
   onToggleInteractionMode: () => void;
-  onTogglePlanSidebar: () => void;
+  onTogglePlanCard: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
@@ -77,11 +77,11 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         {props.activePlan ? (
           <>
             <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanSidebar}>
+            <MenuItem onClick={props.onTogglePlanCard}>
               <ListTodoIcon className="size-4 shrink-0" />
-              {props.planSidebarOpen
-                ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-                : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`}
+              {props.planCardOpen
+                ? `Hide ${props.planCardLabel.toLowerCase()}`
+                : `Show ${props.planCardLabel.toLowerCase()}`}
             </MenuItem>
           </>
         ) : null}

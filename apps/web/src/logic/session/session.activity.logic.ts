@@ -246,7 +246,7 @@ export function deriveActivePlanState(
   const ordered = [...activities].toSorted(compareActivitiesByOrder);
   const allPlanActivities = ordered.filter((activity) => activity.kind === "turn.plan.updated");
   // Prefer plan activities from the latest turn; fall back to the most recent plan
-  // from any turn so the sidebar stays populated between turns.
+  // from any turn so the floating plan card stays populated between turns.
   const latest =
     (latestTurnId
       ? allPlanActivities.findLast((activity) => activity.turnId === latestTurnId)

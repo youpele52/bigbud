@@ -36,8 +36,8 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     composerTerminalContextsRef,
     detectComposerTrigger,
     dragDepthRef,
-    planSidebarDismissedForTurnRef,
-    planSidebarOpenOnNextThreadRef,
+    planCardDismissedForTurnRef,
+    planCardOpenOnNextThreadRef,
     prompt,
     promptRef,
     setComposerCursor,
@@ -49,7 +49,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     setIsRevertingCheckpoint,
     setNowTick,
     setOptimisticUserMessages,
-    setPlanSidebarOpen,
+    setPlanCardOpen,
     setProviderUnlocked,
     setTerminalFocusRequestId,
     setTerminalLaunchContext,
@@ -121,20 +121,20 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     setExpandedWorkGroups({});
     closePullRequestDialog();
     setProviderUnlocked(false);
-    if (planSidebarOpenOnNextThreadRef.current) {
-      planSidebarOpenOnNextThreadRef.current = false;
-      setPlanSidebarOpen(true);
+    if (planCardOpenOnNextThreadRef.current) {
+      planCardOpenOnNextThreadRef.current = false;
+      setPlanCardOpen(true);
     } else {
-      setPlanSidebarOpen(false);
+      setPlanCardOpen(false);
     }
-    planSidebarDismissedForTurnRef.current = null;
+    planCardDismissedForTurnRef.current = null;
   }, [
     activeThread?.id,
     closePullRequestDialog,
-    planSidebarDismissedForTurnRef,
-    planSidebarOpenOnNextThreadRef,
+    planCardDismissedForTurnRef,
+    planCardOpenOnNextThreadRef,
     setExpandedWorkGroups,
-    setPlanSidebarOpen,
+    setPlanCardOpen,
     setProviderUnlocked,
   ]);
   useEffect(() => {

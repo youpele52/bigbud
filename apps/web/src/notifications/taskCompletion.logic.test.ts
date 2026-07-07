@@ -82,7 +82,7 @@ describe("collectCompletedThreadCandidates", () => {
     expect(collectCompletedThreadCandidates([previous], [next])).toEqual([]);
   });
 
-  it("emits once when the thread enters the same completed state shown in the sidebar", () => {
+  it("emits once when the thread enters the same completed state shown in the plan card", () => {
     const previous = makeThread({
       latestTurn: {
         turnId: "turn-1" as never,

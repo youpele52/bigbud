@@ -245,9 +245,9 @@ export function ChatViewComposer({
                 composerProviderState={composer.composerProviderState}
                 hasThreadStarted={composer.hasThreadStarted}
                 activePlan={Boolean(thread.activePlan)}
-                sidebarProposedPlan={Boolean(thread.sidebarProposedPlan)}
-                planSidebarOpen={base.planSidebarOpen}
-                planSidebarLabel={thread.planSidebarLabel}
+                cardProposedPlan={Boolean(thread.cardProposedPlan)}
+                planCardOpen={base.planCardOpen}
+                planCardLabel={thread.planCardLabel}
                 interactionMode={base.interactionMode}
                 runtimeMode={base.runtimeMode}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
@@ -255,7 +255,7 @@ export function ChatViewComposer({
                 onProviderModelSelect={interactions.onProviderModelSelect}
                 onProviderUnlock={() => base.setProviderUnlocked(true)}
                 onToggleInteractionMode={runtime.toggleInteractionMode}
-                onTogglePlanSidebar={runtime.togglePlanSidebar}
+                onTogglePlanCard={runtime.togglePlanCard}
                 onRuntimeModeChange={runtime.handleRuntimeModeChange}
               />
 
