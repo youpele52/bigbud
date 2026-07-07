@@ -2,6 +2,25 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.652 (8 July, 2026)
+
+### Plans
+
+- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans.
+- Added plan-card actions for copying a proposed plan, downloading it as Markdown, or saving it straight into the current workspace.
+- Mapped OpenCode native `todo.updated` events into bigbud's shared plan-update flow so task progress stays in sync for OpenCode and KiloCode sessions too.
+
+### Desktop
+
+- Added a macOS-only **Window Material** preference under **Settings → General** with **Automatic**, **Solid**, and **Translucent** options, plus native desktop wiring and matching translucent app chrome so the change applies immediately.
+- Fixed packaged macOS app icon handling so installed builds resolve the bundled icon correctly and stop overriding the Dock icon at runtime, keeping the running and closed app icons consistent.
+
+### Usage
+
+- Localized **Usage** chart tooltip dates and month labels so activity reads naturally in your own locale instead of falling back to raw timestamp-style formatting.
+- Updated the Usage overview cards to reuse provider and model icon patterns already used elsewhere in the app, including a safe fallback icon when a provider is unknown.
+- Renamed the Usage breakdown view toggles from **Bars** and **Pie** to **Ranking** and **Share** for clearer at-a-glance comparison.
+
 ## v0.1.651 (7 July, 2026)
 
 ### Orchestra
