@@ -11,18 +11,20 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Orchestra runs now create a fresh parent score thread automatically, so you no longer need to start a normal chat first. Child thread titles are prefixed with the score name so related runs are easy to spot in the sidebar.
 - Orchestra keeps the setup dialog aligned with the actual launch state, so once child threads are created the run moves forward cleanly instead of inviting duplicate retries.
 
-### Handoff
+### Usage
 
-- Added server-side **handoff jobs** and RPC plumbing so handoff document generation can run as a tracked background workflow instead of blocking the active chat surface.
-- Switched chat handoff flows to background branch jobs, keeping the dialog responsive while branch setup and handoff generation continue behind the scenes.
+- Added a local **Usage** dashboard under **Scheduled** in the sidebar, with 24h, 7d, 30d, and All ranges for reviewing token usage stored on this device.
+- Usage now shows total tokens, top provider, top model, streak, time-series token activity, token mix, and provider/model breakdowns with bar and pie chart views.
+- Added plain-language token explanations for cached, input, output, and reasoning tokens, plus a note that provider token counts are directional rather than billing-accurate.
 
 ### Thread Reader
 
 - Added **thread elevator summaries** across contracts, projections, title generation, and the sidebar so longer threads can surface a compact, readable summary where a title alone is not enough context.
 
-### Quick Actions
+### Handoff
 
-- Generalized the Git actions control into a broader **Quick actions** menu, making room for non-Git actions like Orchestra while preserving the existing Git workflows.
+- Added server-side **handoff jobs** and RPC plumbing so handoff document generation can run as a tracked background workflow instead of blocking the active chat surface.
+- Switched chat handoff flows to background branch jobs, keeping the dialog responsive while branch setup and handoff generation continue behind the scenes.
 
 ### Terminal
 
@@ -30,17 +32,21 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added **bold drag-and-drop support** for file and folder paths into the terminal, and made dropped paths shell-aware across local and remote sessions so Windows shells, PowerShell, WSL, MSYS, and SSH-backed terminals receive the right format instead of a one-size-fits-all string.
 - Added terminal rename overrides and storage-aware refresh handling so terminal labels stay useful even after the underlying workspace, note, or kanban storage root changes.
 
+### Quick Actions
+
+- Generalized the Git actions control into a broader **Quick actions** menu, making room for non-Git actions like Orchestra while preserving the existing Git workflows.
+
 ### Remote Access
 
 - Split remote access checks into foreground and background flows so the app can keep the UI responsive while remote execution status continues to resolve in the background.
 
-### Agent & Skill Discovery
-
-- Tightened discovery watch-path fallback logic so missing optional provider folders no longer cause broad parent directories to be watched unnecessarily.
-
 ### Provider Orchestration
 
 - Hardened provider orchestration bridges and OpenCode runtime handling, including safer MCP bridge session behavior, thread-tool response handling, and runtime SDK resolution.
+
+### Agent & Skill Discovery
+
+- Tightened discovery watch-path fallback logic so missing optional provider folders no longer cause broad parent directories to be watched unnecessarily.
 
 ### Startup
 
