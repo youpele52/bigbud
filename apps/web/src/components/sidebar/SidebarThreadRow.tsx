@@ -144,6 +144,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
 
   const threadRowContent = (
     <SidebarMenuSubButton
+      ref={swipeReveal.registerRootElement}
       render={<div role="button" tabIndex={0} />}
       draggable
       size="sm"
@@ -162,7 +163,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       onPointerMove={swipeReveal.handlePointerMove}
       onPointerUp={swipeReveal.handlePointerUp}
       onPointerCancel={swipeReveal.handlePointerCancel}
-      onWheel={swipeReveal.handleWheel}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "copy";
         event.dataTransfer.setData(

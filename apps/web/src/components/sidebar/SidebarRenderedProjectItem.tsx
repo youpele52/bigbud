@@ -175,6 +175,7 @@ export function SidebarRenderedProjectItem({
               </button>
             ) : null}
             <button
+              ref={swipeReveal.registerRootElement}
               type="button"
               className="flex min-w-0 flex-1 touch-pan-y items-center gap-2 text-left"
               onPointerDownCapture={handleProjectTitlePointerDownCapture}
@@ -182,7 +183,6 @@ export function SidebarRenderedProjectItem({
               onPointerMove={swipeReveal.handlePointerMove}
               onPointerUp={swipeReveal.handlePointerUp}
               onPointerCancel={swipeReveal.handlePointerCancel}
-              onWheel={swipeReveal.handleWheel}
               onClick={(event) => {
                 if (swipeReveal.consumeGestureClickSuppression()) {
                   event.preventDefault();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const REVEAL_WIDTH_PX = 44;
 const OPEN_THRESHOLD_PX = 18;
@@ -23,6 +23,7 @@ export interface SwipeRevealActionState<TElement extends HTMLElement> {
   isRevealed: boolean;
   revealOffset: number;
   isActionVisible: boolean;
+  registerRootElement: (element: TElement | null) => void;
   registerBoundaryElement: (element: HTMLElement | null) => void;
   resetReveal: () => void;
   openReveal: () => void;
@@ -31,7 +32,6 @@ export interface SwipeRevealActionState<TElement extends HTMLElement> {
   handlePointerMove: (event: React.PointerEvent<TElement>) => void;
   handlePointerUp: (event: React.PointerEvent<TElement>) => void;
   handlePointerCancel: (event: React.PointerEvent<TElement>) => void;
-  handleWheel: (event: WheelEvent<TElement>) => void;
   consumeGestureClickSuppression: () => boolean;
 }
 
@@ -50,6 +50,7 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
   const rootElementRef = useRef<TElement | null>(null);
   const boundaryElementRef = useRef<HTMLElement | null>(null);
   const revealOffsetRef = useRef(0);
+  const [rootElement, setRootElement] = useState<TElement | null>(null);
 
   const setRevealPosition = useCallback((nextOffset: number) => {
     revealOffsetRef.current = nextOffset;
@@ -61,6 +62,11 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
     setRevealPosition(0);
     setIsRevealed(false);
   }, [setRevealPosition]);
+
+  const registerRootElement = useCallback((element: TElement | null) => {
+    rootElementRef.current = element;
+    setRootElement(element);
+  }, []);
 
   const registerBoundaryElement = useCallback((element: HTMLElement | null) => {
     boundaryElementRef.current = element;
@@ -206,7 +212,7 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
   );
 
   const handleWheel = useCallback(
-    (event: WheelEvent<TElement>) => {
+    (event: globalThis.WheelEvent) => {
       if (disabled) {
         return;
       }
@@ -234,6 +240,17 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
     [disabled, isRevealed, openReveal],
   );
 
+  useEffect(() => {
+    if (!rootElement) {
+      return;
+    }
+
+    rootElement.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      rootElement.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel, rootElement]);
+
   const consumeGestureClickSuppression = useCallback(() => {
     if (!suppressClickAfterGestureRef.current) {
       return false;
@@ -251,6 +268,7 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
     isRevealed,
     revealOffset,
     isActionVisible: isRevealed || revealOffset < 0,
+    registerRootElement,
     registerBoundaryElement,
     resetReveal,
     openReveal,
@@ -259,7 +277,6 @@ export function useSwipeRevealAction<TElement extends HTMLElement>({
     handlePointerMove,
     handlePointerUp,
     handlePointerCancel,
-    handleWheel,
     consumeGestureClickSuppression,
   };
 }
