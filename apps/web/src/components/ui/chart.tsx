@@ -37,10 +37,12 @@ const ChartTooltip = RechartsTooltip;
 function ChartTooltipContent({
   active,
   label,
+  labelFormatter,
   payload,
 }: {
   readonly active?: boolean;
   readonly label?: string;
+  readonly labelFormatter?: (label: string) => string;
   readonly payload?: ReadonlyArray<{
     readonly color?: string;
     readonly dataKey?: string | number;
@@ -52,9 +54,13 @@ function ChartTooltipContent({
     return null;
   }
 
+  const formattedLabel = label && labelFormatter ? labelFormatter(label) : label;
+
   return (
     <div className="min-w-40 rounded-md border border-border/70 bg-popover px-3 py-2 shadow-sm">
-      {label ? <div className="mb-2 text-xs font-medium text-foreground">{label}</div> : null}
+      {formattedLabel ? (
+        <div className="mb-2 text-xs font-medium text-foreground">{formattedLabel}</div>
+      ) : null}
       <div className="space-y-1.5">
         {payload.map((item) => (
           <div

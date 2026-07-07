@@ -1,11 +1,13 @@
-import { ActivityIcon, BarChart3Icon, FlameIcon, SigmaIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { BarChart3Icon, BotIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
+import { type ComponentType, useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
 import { type ServerUsageRange, type ServerUsageSummaryResult } from "@bigbud/contracts";
 
 import { usePageTitle } from "~/hooks/usePageTitle";
 import { readNativeApi } from "~/rpc/nativeApi";
+import { formatHumanReadableDate } from "~/utils/timestamp";
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 import { BigbudLoader } from "../layout/BigbudLoader";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
@@ -106,12 +108,12 @@ export function UsagePage() {
                     value={summary.totals.usedTokens.toLocaleString()}
                   />
                   <UsageStatCard
-                    icon={BarChart3Icon}
+                    icon={resolveUsageProviderIcon(summary.favoriteProvider?.id ?? null)}
                     label="Top provider"
                     value={summary.favoriteProvider?.label ?? "None"}
                   />
                   <UsageStatCard
-                    icon={ActivityIcon}
+                    icon={BotIcon}
                     label="Top model"
                     value={summary.favoriteModel?.label ?? "None"}
                   />
@@ -149,9 +151,12 @@ export function UsagePage() {
                                 width={48}
                               />
                               <ChartTooltip
-                                content={<ChartTooltipContent />}
-                                labelFormatter={(value) =>
-                                  formatBucketTooltipLabel(String(value), summary.range)
+                                content={
+                                  <ChartTooltipContent
+                                    labelFormatter={(value) =>
+                                      formatBucketTooltipLabel(value, summary.range)
+                                    }
+                                  />
                                 }
                               />
                               <Bar
@@ -289,7 +294,7 @@ function UsageStatCard({
   label,
   value,
 }: {
-  readonly icon: typeof SigmaIcon;
+  readonly icon: ComponentType<{ className?: string }>;
   readonly label: string;
   readonly value: string;
 }) {
@@ -312,6 +317,16 @@ function formatRangeOptionLabel(value: ServerUsageRange) {
   return value === "all" ? "All" : value;
 }
 
+function resolveUsageProviderIcon(
+  providerId: string | null,
+): ComponentType<{ className?: string }> {
+  if (providerId && providerId in PROVIDER_ICON_BY_PROVIDER) {
+    return PROVIDER_ICON_BY_PROVIDER[providerId as keyof typeof PROVIDER_ICON_BY_PROVIDER];
+  }
+
+  return CpuIcon;
+}
+
 function formatBucketAxisLabel(value: string, range: ServerUsageRange) {
   const date = new Date(value);
   if (range === "24h") {
@@ -324,16 +339,9 @@ function formatBucketAxisLabel(value: string, range: ServerUsageRange) {
 }
 
 function formatBucketTooltipLabel(value: string, range: ServerUsageRange) {
-  const date = new Date(value);
   if (range === "all") {
-    return new Intl.DateTimeFormat(undefined, {
-      month: "long",
-      year: "numeric",
-    }).format(date);
+    return formatHumanReadableDate(value, "month-year");
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    ...(range === "24h" ? { timeStyle: "medium" } : { timeStyle: "short" }),
-  }).format(date);
+  return formatHumanReadableDate(value, range === "24h" ? "date-time" : "date");
 }

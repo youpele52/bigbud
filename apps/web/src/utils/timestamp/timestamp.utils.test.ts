@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatHumanReadableDate,
   formatRelativeTime,
   formatRelativeTimeLabel,
+  getHumanReadableDateFormatOptions,
   getTimestampFormatOptions,
 } from "./timestamp.utils";
 
@@ -29,6 +31,28 @@ describe("getTimestampFormatOptions", () => {
       hour: "numeric",
       minute: "2-digit",
       hour12: false,
+    });
+  });
+});
+
+describe("getHumanReadableDateFormatOptions", () => {
+  it("builds a locale-aware long date formatter", () => {
+    expect(getHumanReadableDateFormatOptions("date")).toEqual({
+      dateStyle: "long",
+    });
+  });
+
+  it("builds a locale-aware long date and short time formatter", () => {
+    expect(getHumanReadableDateFormatOptions("date-time")).toEqual({
+      dateStyle: "long",
+      timeStyle: "short",
+    });
+  });
+
+  it("builds a locale-aware month and year formatter", () => {
+    expect(getHumanReadableDateFormatOptions("month-year")).toEqual({
+      month: "long",
+      year: "numeric",
     });
   });
 });
@@ -85,6 +109,13 @@ describe("formatRelativeTime", () => {
       expect(value).not.toContain("ago");
       expect(suffix).not.toBe("ago");
     }
+  });
+});
+
+describe("formatHumanReadableDate", () => {
+  it("formats ISO timestamps without returning the raw ISO string", () => {
+    const isoDate = "2026-07-05T00:00:00.000Z";
+    expect(formatHumanReadableDate(isoDate)).not.toBe(isoDate);
   });
 });
 
