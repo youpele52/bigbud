@@ -69,8 +69,12 @@ export function configureAppIdentity(identity: DesktopAppIdentity): void {
   }
 
   if (process.platform === "darwin" && app.dock) {
-    // Prefer the bundled .icns so the running Dock icon matches the closed app icon.
-    const iconPath = identity.resolveIconPath("icns") ?? identity.resolveIconPath("png");
+    // Packaged macOS apps already get their Dock icon from the app bundle.
+    if (app.isPackaged) {
+      return;
+    }
+
+    const iconPath = identity.resolveIconPath("png");
     if (iconPath) {
       app.dock.setIcon(iconPath);
     }
