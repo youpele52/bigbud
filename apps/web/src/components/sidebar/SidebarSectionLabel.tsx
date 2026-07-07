@@ -6,7 +6,7 @@ interface SidebarSectionLabelProps {
 }
 
 export const sidebarSectionLabelContainerClassName =
-  "sticky top-0 z-10 isolate -mx-2 bg-card px-4 pt-1.5 pb-2";
+  "sticky top-0 z-10 isolate -mx-2 bg-transparent px-4 pt-1.5 pb-2 backdrop-blur-[56px]";
 export const sidebarSectionLabelRowClassName = "flex items-center justify-between";
 export const sidebarSectionLabelTextClassName = "text-xs font-medium text-foreground/90";
 export const sidebarSectionLabelActionsClassName = "flex items-center gap-1";

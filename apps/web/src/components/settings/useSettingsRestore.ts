@@ -24,6 +24,9 @@ export function useSettingsRestore(onRestored?: () => void) {
   const changedSettingLabels = useMemo(
     () => [
       ...(theme !== "system" ? ["Theme"] : []),
+      ...(settings.windowMaterial !== DEFAULT_UNIFIED_SETTINGS.windowMaterial
+        ? ["Window Material"]
+        : []),
       ...(settings.timestampFormat !== DEFAULT_UNIFIED_SETTINGS.timestampFormat
         ? ["Time format"]
         : []),
@@ -73,6 +76,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.enableTaskCompletionToasts,
       settings.enableSystemTaskCompletionNotifications,
       settings.timestampFormat,
+      settings.windowMaterial,
       theme,
     ],
   );

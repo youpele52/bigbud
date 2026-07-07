@@ -16,12 +16,7 @@ import { SidebarRenderedProjectItem } from "./SidebarRenderedProjectItem";
 import { type RenderedProjectData } from "./SidebarRenderedProjectItem.types";
 import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import {
-  SidebarSectionLabel,
-  sidebarSectionLabelActionsClassName,
-  sidebarSectionLabelRowClassName,
-  sidebarSectionLabelTextClassName,
-} from "./SidebarSectionLabel";
+import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import type { RenderedProjectEntry, SharedProjectItemProps } from "./Sidebar.types";
 
 interface DesktopUpdateButtonProps {
@@ -206,10 +201,9 @@ export function SidebarProjectsSection({
         />
 
         <div className="mt-3">
-          <div className="-mx-2 px-4 pt-1.5 pb-2">
-            <div className={sidebarSectionLabelRowClassName}>
-              <div className={sidebarSectionLabelTextClassName}>Remote Projects</div>
-              <div className={sidebarSectionLabelActionsClassName}>
+          <SidebarSectionLabel
+            actions={
+              <>
                 <ProjectSortMenu
                   projectSortOrder={appSettingsSidebarProjectSortOrder}
                   threadSortOrder={appSettingsSidebarThreadSortOrder}
@@ -234,9 +228,11 @@ export function SidebarProjectsSection({
                   </TooltipTrigger>
                   <TooltipPopup side="right">Add remote project</TooltipPopup>
                 </Tooltip>
-              </div>
-            </div>
-          </div>
+              </>
+            }
+          >
+            Remote Projects
+          </SidebarSectionLabel>
 
           <SidebarProjectList
             renderedProjects={remoteProjects as unknown as RenderedProject[]}

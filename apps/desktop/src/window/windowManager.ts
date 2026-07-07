@@ -2,6 +2,59 @@ import * as Path from "node:path";
 
 import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
+import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
+
+const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
+const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
+const windowMaterials = new WeakMap<BrowserWindow, DesktopWindowMaterial>();
+
+function getOpaqueBackgroundColor(): string {
+  return nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
+}
+
+function resolveWindowMaterial(windowMaterial: DesktopWindowMaterial): "solid" | "translucent" {
+  if (process.platform !== "darwin") {
+    return "solid";
+  }
+
+  return windowMaterial === "solid" ? "solid" : "translucent";
+}
+
+export function getSafeWindowMaterial(rawWindowMaterial: unknown): DesktopWindowMaterial | null {
+  if (
+    rawWindowMaterial === "automatic" ||
+    rawWindowMaterial === "solid" ||
+    rawWindowMaterial === "translucent"
+  ) {
+    return rawWindowMaterial;
+  }
+
+  return null;
+}
+
+function getWindowMaterial(window: BrowserWindow): DesktopWindowMaterial {
+  return windowMaterials.get(window) ?? DEFAULT_WINDOW_MATERIAL;
+}
+
+export function applyWindowMaterial(
+  window: BrowserWindow,
+  windowMaterial: DesktopWindowMaterial,
+): void {
+  windowMaterials.set(window, windowMaterial);
+
+  if (resolveWindowMaterial(windowMaterial) === "translucent") {
+    if (process.platform === "darwin") {
+      window.setVibrancy("sidebar");
+    }
+    window.setBackgroundColor(MACOS_TRANSLUCENT_BACKGROUND_COLOR);
+    return;
+  }
+
+  if (process.platform === "darwin") {
+    window.setVibrancy(null);
+  }
+  window.setBackgroundColor(getOpaqueBackgroundColor());
+}
 
 // ---------------------------------------------------------------------------
 // Icon resolution
@@ -37,9 +90,6 @@ export interface CreateWindowDeps {
 }
 
 export function createWindow(deps: CreateWindowDeps): BrowserWindow {
-  const getBackgroundColor = (): string =>
-    nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
-
   const window = new BrowserWindow({
     width: 1100,
     height: 780,
@@ -51,7 +101,16 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     title: deps.appDisplayName,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: getBackgroundColor(),
+    backgroundColor:
+      resolveWindowMaterial(DEFAULT_WINDOW_MATERIAL) === "translucent"
+        ? MACOS_TRANSLUCENT_BACKGROUND_COLOR
+        : getOpaqueBackgroundColor(),
+    ...(process.platform === "darwin"
+      ? {
+          transparent: true,
+          visualEffectState: "active" as const,
+        }
+      : {}),
     webPreferences: {
       preload: Path.join(deps.desktopDir, "preload.js"),
       contextIsolation: true,
@@ -64,8 +123,9 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   });
 
   const syncBackgroundColorWithTheme = (): void => {
-    window.setBackgroundColor(getBackgroundColor());
+    applyWindowMaterial(window, getWindowMaterial(window));
   };
+  applyWindowMaterial(window, DEFAULT_WINDOW_MATERIAL);
   nativeTheme.on("updated", syncBackgroundColorWithTheme);
   window.on("closed", () => {
     nativeTheme.off("updated", syncBackgroundColorWithTheme);

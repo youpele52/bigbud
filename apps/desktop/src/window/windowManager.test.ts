@@ -41,6 +41,8 @@ vi.mock("electron", () => {
     once = vi.fn();
     show = vi.fn();
     setTitle = vi.fn();
+    setBackgroundColor = vi.fn();
+    setVibrancy = vi.fn();
     loadURL = vi.fn();
     contextMenuHandler: ((event: { preventDefault: () => void }, params: any) => void) | null =
       null;
@@ -102,6 +104,13 @@ describe("windowManager context menu", () => {
         webviewTag: true,
       }),
     });
+
+    if (process.platform === "darwin") {
+      expect(window?.options).toMatchObject({
+        transparent: true,
+        visualEffectState: "active",
+      });
+    }
   });
 
   it("adds Copy Image for image context menus", () => {

@@ -256,6 +256,7 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
     pickFolder: async () => null,
     confirm: async () => true,
     setTheme: async () => undefined,
+    setWindowMaterial: async () => undefined,
     showContextMenu: async () => null,
     openExternal: async () => true,
     onMenuAction: () => () => undefined,

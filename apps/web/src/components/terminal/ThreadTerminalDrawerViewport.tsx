@@ -74,7 +74,7 @@ export function ThreadTerminalDrawerViewport({
               }
             }}
           >
-            <div className="h-full p-1">
+            <div className="thread-terminal-theme-host h-full bg-background p-1">
               <TerminalViewport
                 terminalId={terminalId}
                 terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
@@ -90,7 +90,7 @@ export function ThreadTerminalDrawerViewport({
   }
 
   return (
-    <div className="h-full p-1">
+    <div className="thread-terminal-theme-host h-full bg-background p-1">
       <TerminalViewport
         key={resolvedActiveTerminalId}
         terminalId={resolvedActiveTerminalId}

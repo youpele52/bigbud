@@ -26,6 +26,7 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
   test("defaults terminal appearance settings for client settings", () => {
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("meslo-nerd-font-mono");
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontSize).toBe(12);
+    expect(DEFAULT_CLIENT_SETTINGS.windowMaterial).toBe("automatic");
   });
 
   test("defaults the context window warning threshold", () => {
@@ -69,10 +70,12 @@ it.effect("decodes valid terminal appearance settings", () =>
     const parsed = yield* decodeClientSettings({
       terminalFontFamily: "system-monospace",
       terminalFontSize: 14,
+      windowMaterial: "translucent",
     });
 
     assert.strictEqual(parsed.terminalFontFamily, "system-monospace");
     assert.strictEqual(parsed.terminalFontSize, 14);
+    assert.strictEqual(parsed.windowMaterial, "translucent");
   }),
 );
 

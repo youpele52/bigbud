@@ -26,6 +26,7 @@ import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
 import { ComputerUsePermissionDialog } from "../components/computer-use/ComputerUsePermissionDialog";
 import { useSettings } from "../hooks/useSettings";
+import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
 import {
   shouldChainComputerUsePrompt,
@@ -51,6 +52,7 @@ function RootRouteView() {
   const [showStartupSplash, setShowStartupSplash] = useState(() => !bootstrapComplete);
   const [startupSplashVisible, setStartupSplashVisible] = useState(() => !bootstrapComplete);
   const settings = useSettings();
+  useWindowMaterial();
   const serverConfig = useServerConfig();
   const [showFileAccessDialog, setShowFileAccessDialog] = useState(false);
   const [showComputerUseDialog, setShowComputerUseDialog] = useState(false);

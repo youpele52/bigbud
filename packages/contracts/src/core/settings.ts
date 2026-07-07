@@ -51,6 +51,7 @@ export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 
 export const TERMINAL_FONT_FAMILIES = ["meslo-nerd-font-mono", "system-monospace"] as const;
 export const TERMINAL_FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18] as const;
+export const DESKTOP_WINDOW_MATERIALS = ["automatic", "solid", "translucent"] as const;
 export const TERMINAL_FONT_SIZE_MIN = TERMINAL_FONT_SIZES[0];
 export const TERMINAL_FONT_SIZE_MAX = 18;
 export const CONTEXT_WINDOW_WARNING_THRESHOLD_MIN = 60_000;
@@ -65,6 +66,8 @@ export const DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS = 15 * 60_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
+export const DesktopWindowMaterial = Schema.Literals(DESKTOP_WINDOW_MATERIALS);
+export type DesktopWindowMaterial = typeof DesktopWindowMaterial.Type;
 const TerminalFontSize = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(TERMINAL_FONT_SIZE_MIN),
 ).check(Schema.isLessThanOrEqualTo(TERMINAL_FONT_SIZE_MAX));
@@ -94,6 +97,9 @@ export const ClientSettingsSchema = Schema.Struct({
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
   terminalFontFamily: TerminalFontFamily.pipe(
     Schema.withDecodingDefault(() => "meslo-nerd-font-mono" as const satisfies TerminalFontFamily),
+  ),
+  windowMaterial: DesktopWindowMaterial.pipe(
+    Schema.withDecodingDefault(() => "automatic" as const satisfies DesktopWindowMaterial),
   ),
   terminalFontSize: TerminalFontSize.pipe(Schema.withDecodingDefault(() => 12)),
   contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(

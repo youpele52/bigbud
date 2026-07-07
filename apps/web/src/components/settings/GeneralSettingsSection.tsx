@@ -1,10 +1,13 @@
 import {
   DEFAULT_UNIFIED_SETTINGS,
+  DESKTOP_WINDOW_MATERIALS,
+  type DesktopWindowMaterial,
   TERMINAL_FONT_FAMILIES,
   TERMINAL_FONT_SIZES,
   type TerminalFontFamily,
 } from "@bigbud/contracts/settings";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { isMacDesktopWindowMaterialSupported } from "../../hooks/useWindowMaterial";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -43,10 +46,25 @@ const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }>
   },
 ];
 
+const WINDOW_MATERIAL_OPTIONS: Array<{ value: DesktopWindowMaterial; label: string }> = [
+  {
+    value: DESKTOP_WINDOW_MATERIALS[0],
+    label: "Automatic",
+  },
+  {
+    value: DESKTOP_WINDOW_MATERIALS[1],
+    label: "Solid",
+  },
+  {
+    value: DESKTOP_WINDOW_MATERIALS[2],
+    label: "Translucent",
+  },
+];
 export function GeneralSettingsSection() {
   const { theme, setTheme } = useTheme();
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
+  const showWindowMaterialSetting = isMacDesktopWindowMaterialSupported();
 
   return (
     <>
@@ -83,6 +101,54 @@ export function GeneralSettingsSection() {
             </Select>
           }
         />
+
+        {showWindowMaterialSetting ? (
+          <SettingsRow
+            title="Window Material"
+            description="Controls the macOS desktop window appearance for shell chrome only. This does not change light or dark theme."
+            resetAction={
+              settings.windowMaterial !== DEFAULT_UNIFIED_SETTINGS.windowMaterial ? (
+                <SettingResetButton
+                  label="window material"
+                  onClick={() =>
+                    updateSettings({
+                      windowMaterial: DEFAULT_UNIFIED_SETTINGS.windowMaterial,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Select
+                value={settings.windowMaterial}
+                onValueChange={(value) => {
+                  if (
+                    value === DESKTOP_WINDOW_MATERIALS[0] ||
+                    value === DESKTOP_WINDOW_MATERIALS[1] ||
+                    value === DESKTOP_WINDOW_MATERIALS[2]
+                  ) {
+                    updateSettings({ windowMaterial: value });
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-40" aria-label="Window material preference">
+                  <SelectValue>
+                    {WINDOW_MATERIAL_OPTIONS.find(
+                      (option) => option.value === settings.windowMaterial,
+                    )?.label ?? "Automatic"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  {WINDOW_MATERIAL_OPTIONS.map((option) => (
+                    <SelectItem hideIndicator key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            }
+          />
+        ) : null}
 
         <SettingsRow
           title="Time format"

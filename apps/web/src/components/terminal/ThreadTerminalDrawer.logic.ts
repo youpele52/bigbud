@@ -42,12 +42,51 @@ export function selectPendingTerminalEventEntries(
   return entries.filter((entry) => entry.id > lastAppliedTerminalEventId);
 }
 
-export function terminalThemeFromApp(): ITheme {
+function isTransparentCssColor(value: string | null | undefined): boolean {
+  if (!value) {
+    return true;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.length === 0 ||
+    normalized === "transparent" ||
+    normalized === "rgba(0, 0, 0, 0)" ||
+    normalized === "rgba(0,0,0,0)"
+  );
+}
+
+export function resolveTerminalThemeBaseColors(options: {
+  isDark: boolean;
+  surfaceBackgroundColor: string | null | undefined;
+  surfaceForegroundColor: string | null | undefined;
+}): { background: string; foreground: string } {
+  const surfaceBackgroundColor = options.surfaceBackgroundColor ?? "";
+  const surfaceForegroundColor = options.surfaceForegroundColor ?? "";
+
+  return {
+    background: isTransparentCssColor(surfaceBackgroundColor)
+      ? options.isDark
+        ? "rgb(14, 18, 24)"
+        : "rgb(255, 255, 255)"
+      : surfaceBackgroundColor,
+    foreground: isTransparentCssColor(surfaceForegroundColor)
+      ? options.isDark
+        ? "rgb(237, 241, 247)"
+        : "rgb(28, 33, 41)"
+      : surfaceForegroundColor,
+  };
+}
+
+export function terminalThemeFromApp(themeHostElement?: HTMLElement | null): ITheme {
   const isDark = document.documentElement.classList.contains("dark");
-  const bodyStyles = getComputedStyle(document.body);
-  const background =
-    bodyStyles.backgroundColor || (isDark ? "rgb(14, 18, 24)" : "rgb(255, 255, 255)");
-  const foreground = bodyStyles.color || (isDark ? "rgb(237, 241, 247)" : "rgb(28, 33, 41)");
+  const themeHost = themeHostElement ?? document.body;
+  const hostStyles = getComputedStyle(themeHost);
+  const { background, foreground } = resolveTerminalThemeBaseColors({
+    isDark,
+    surfaceBackgroundColor: hostStyles.backgroundColor,
+    surfaceForegroundColor: hostStyles.color,
+  });
 
   if (isDark) {
     return {

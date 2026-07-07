@@ -99,13 +99,17 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     let disposed = false;
     const fitAddon = new FitAddon();
     const writeBatcher = new TerminalWriteBatcher();
+    const themeHost =
+      mount.closest<HTMLElement>(".thread-terminal-theme-host") ??
+      mount.closest<HTMLElement>(".thread-terminal-drawer") ??
+      mount;
     const terminal = new Terminal({
       cursorBlink: true,
       lineHeight: 1.2,
       fontSize: input.terminalFontSize,
       scrollback: 5_000,
       fontFamily: input.terminalFontFamily,
-      theme: terminalThemeFromApp(),
+      theme: terminalThemeFromApp(themeHost),
     });
     terminal.loadAddon(fitAddon);
     terminal.open(mount);
@@ -182,7 +186,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     const themeObserver = new MutationObserver(() => {
       const activeTerminal = input.terminalRef.current;
       if (!activeTerminal) return;
-      activeTerminal.options.theme = terminalThemeFromApp();
+      activeTerminal.options.theme = terminalThemeFromApp(themeHost);
       activeTerminal.refresh(0, activeTerminal.rows - 1);
     });
     themeObserver.observe(document.documentElement, {

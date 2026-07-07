@@ -22,6 +22,7 @@ import {
   registerComputerUseIpcHandlers,
   type ComputerUseIpcHandlerDeps,
 } from "./ipcHandlers.computerUse";
+import { applyWindowMaterial, getSafeWindowMaterial } from "./windowManager";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -47,6 +48,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly PICK_FOLDER_CHANNEL: string;
   readonly CONFIRM_CHANNEL: string;
   readonly SET_THEME_CHANNEL: string;
+  readonly SET_WINDOW_MATERIAL_CHANNEL: string;
   readonly CONTEXT_MENU_CHANNEL: string;
   readonly OPEN_EXTERNAL_CHANNEL: string;
   readonly GET_WS_URL_CHANNEL: string;
@@ -88,6 +90,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     PICK_FOLDER_CHANNEL,
     CONFIRM_CHANNEL,
     SET_THEME_CHANNEL,
+    SET_WINDOW_MATERIAL_CHANNEL,
     CONTEXT_MENU_CHANNEL,
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,
@@ -178,6 +181,21 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     }
 
     nativeTheme.themeSource = theme;
+  });
+
+  ipcMain.removeHandler(SET_WINDOW_MATERIAL_CHANNEL);
+  ipcMain.handle(SET_WINDOW_MATERIAL_CHANNEL, async (_event, rawWindowMaterial: unknown) => {
+    const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
+    if (!windowMaterial) {
+      return;
+    }
+
+    const window = BrowserWindow.getFocusedWindow() ?? deps.getMainWindow();
+    if (!window) {
+      return;
+    }
+
+    applyWindowMaterial(window, windowMaterial);
   });
 
   ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);

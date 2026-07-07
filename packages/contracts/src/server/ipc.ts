@@ -134,7 +134,7 @@ import type {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
-import { ServerSettings, ServerSettingsPatch } from "../core/settings";
+import { type DesktopWindowMaterial, ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 export * from "./ipc.desktopComputerUse";
 
@@ -223,6 +223,7 @@ export interface DesktopBridge extends DesktopComputerUseBridge {
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
+  setWindowMaterial: (windowMaterial: DesktopWindowMaterial) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
