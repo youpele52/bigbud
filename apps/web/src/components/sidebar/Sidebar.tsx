@@ -51,6 +51,10 @@ export default function Sidebar() {
               closeMobileSidebar();
               void navigate({ to: "/automations" });
             }}
+            onOpenUsage={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/usage" });
+            }}
             newThreadShortcutLabel={s.newThreadShortcutLabel}
           />
 

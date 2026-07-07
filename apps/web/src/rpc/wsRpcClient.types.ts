@@ -42,6 +42,7 @@ import {
   type ServerHandoffJob,
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
+  type ServerGetUsageSummaryInput,
   type ServerListAllAutomationsInput,
   type ServerListAllAutomationsResult,
   type ServerListAutomationRunsInput,
@@ -58,6 +59,7 @@ import {
   type ServerTriggerAutomationInput,
   type ServerTriggerAutomationResult,
   type ServerUpdateAutomationInput,
+  type ServerUsageSummaryResult,
   type TeachListProjectsInput,
   type TeachListProjectsResult,
   type ThinkingActivityDeltaEvent,
@@ -224,6 +226,9 @@ export interface WsRpcClient {
     readonly listAutomationRuns: (
       input: ServerListAutomationRunsInput,
     ) => Promise<ServerListAutomationRunsResult>;
+    readonly getUsageSummary: (
+      input: ServerGetUsageSummaryInput,
+    ) => Promise<ServerUsageSummaryResult>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };

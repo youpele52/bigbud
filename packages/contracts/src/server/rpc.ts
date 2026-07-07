@@ -34,6 +34,7 @@ import {
   WsServerTriggerAutomationRpc,
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
+import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
   WsGitCheckoutRpc,
   WsGitCreateBranchRpc,
@@ -94,6 +95,7 @@ export { WS_METHODS };
 export * from "./rpc.automation";
 export * from "./rpc.core";
 export * from "./rpc.stream";
+export * from "./rpc.usage";
 export * from "./rpc.workspace";
 
 export const WsRpcGroup = RpcGroup.make(
@@ -123,6 +125,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerDeleteAutomationRpc,
   WsServerTriggerAutomationRpc,
   WsServerListAutomationRunsRpc,
+  WsServerGetUsageSummaryRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,

@@ -208,6 +208,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverTriggerAutomation](input)),
       listAutomationRuns: (input) =>
         transport.request((client) => client[WS_METHODS.serverListAutomationRuns](input)),
+      getUsageSummary: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetUsageSummary](input)),
       subscribeConfig: (listener, options) =>
         subscribeEmptyInput(
           transport,

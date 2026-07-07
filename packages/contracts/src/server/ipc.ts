@@ -111,6 +111,7 @@ import type {
   ServerTriggerAutomationResult,
   ServerUpdateAutomationInput,
 } from "./automation";
+import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -376,6 +377,7 @@ export interface NativeApi {
     listAutomationRuns: (
       input: ServerListAutomationRunsInput,
     ) => Promise<ServerListAutomationRunsResult>;
+    getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;
