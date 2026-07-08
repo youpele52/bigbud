@@ -205,6 +205,8 @@ export function ChatViewContent({
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}
           rightPanelOpen={rightPanelOpen}
+          planCardLabel={thread.planCardLabel}
+          planCardOpen={base.planCardOpen}
           onOpenOrchestra={() => setOrchestraOpen(true)}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
@@ -212,6 +214,7 @@ export function ChatViewContent({
           onAddProjectScript={runtime.projectScripts.saveProjectScript}
           onUpdateProjectScript={runtime.projectScripts.updateProjectScript}
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
+          onTogglePlanCard={runtime.togglePlanCard}
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </ContentPanelHeader>

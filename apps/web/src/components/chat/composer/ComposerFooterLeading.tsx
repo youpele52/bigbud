@@ -20,8 +20,6 @@ interface ComposerFooterLeadingProps {
     modelPickerIconClassName?: string;
   };
   hasThreadStarted: boolean;
-  activePlan: boolean;
-  cardProposedPlan: boolean;
   planCardOpen: boolean;
   planCardLabel: string;
   interactionMode: ProviderInteractionMode;
@@ -45,8 +43,6 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       modelOptionsByProvider,
       composerProviderState,
       hasThreadStarted,
-      activePlan,
-      cardProposedPlan,
       planCardOpen,
       planCardLabel,
       interactionMode,
@@ -84,7 +80,6 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
         />
 
         <CompactComposerControlsMenu
-          activePlan={Boolean(activePlan || cardProposedPlan || planCardOpen)}
           interactionMode={interactionMode}
           planCardOpen={planCardOpen}
           planCardLabel={planCardLabel}

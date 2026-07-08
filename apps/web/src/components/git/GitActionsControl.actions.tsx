@@ -7,6 +7,7 @@ import {
   GitCommitIcon,
   HistoryIcon,
   ListMusicIcon,
+  ListTodoIcon,
   Rows3Icon,
   Settings2Icon,
   Trash2Icon,
@@ -42,7 +43,10 @@ export interface GitActionsControlActionProps {
   gitStatusError: Error | null;
   gitActionMenuItems: ReadonlyArray<GitActionMenuItem>;
   onOpenOrchestra?: (() => void) | undefined;
+  planCardLabel?: string | undefined;
+  planCardOpen?: boolean | undefined;
   onMenuItemSelect: (item: GitActionMenuItem) => void;
+  onTogglePlanCard?: (() => void) | undefined;
 }
 
 function GitActionItemIcon({ icon }: { icon: GitActionIconName }) {
@@ -159,6 +163,17 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
             <MenuItem onClick={props.onOpenOrchestra}>
               <ListMusicIcon aria-hidden="true" className="size-4" />
               Orchestrate
+            </MenuItem>
+          </>
+        ) : null}
+        {props.onTogglePlanCard ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onClick={props.onTogglePlanCard}>
+              <ListTodoIcon aria-hidden="true" className="size-4" />
+              {props.planCardOpen
+                ? `Hide ${(props.planCardLabel ?? "Tasks").toLowerCase()}`
+                : `Show ${(props.planCardLabel ?? "Tasks").toLowerCase()}`}
             </MenuItem>
           </>
         ) : null}

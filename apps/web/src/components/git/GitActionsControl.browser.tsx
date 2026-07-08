@@ -379,4 +379,48 @@ describe("GitActionsControl thread-scoped progress toast", () => {
       host.remove();
     }
   });
+
+  it("shows the plan toggle in quick actions below orchestrate", async () => {
+    const onTogglePlanCard = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={THREAD_A}
+        onOpenOrchestra={vi.fn()}
+        planCardLabel="Tasks"
+        planCardOpen={false}
+        onTogglePlanCard={onTogglePlanCard}
+      />,
+      {
+        container: host,
+      },
+    );
+
+    try {
+      const menuTrigger = findMenuTrigger();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error("Unable to find Quick actions menu trigger");
+      }
+      menuTrigger.click();
+
+      const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+      const orchestrateMenuItem = findMenuItemByText("Orchestrate");
+      const togglePlanCardMenuItem = findMenuItemByText("Show tasks");
+
+      expect(orchestrateMenuItem, 'Unable to find "Orchestrate" menu item').toBeTruthy();
+      expect(togglePlanCardMenuItem, 'Unable to find "Show tasks" menu item').toBeTruthy();
+      expect(menuItems.indexOf(orchestrateMenuItem!)).toBeLessThan(
+        menuItems.indexOf(togglePlanCardMenuItem!),
+      );
+
+      togglePlanCardMenuItem?.click();
+      expect(onTogglePlanCard).toHaveBeenCalledOnce();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
 });

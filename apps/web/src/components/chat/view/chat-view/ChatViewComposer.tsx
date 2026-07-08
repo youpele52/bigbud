@@ -244,8 +244,6 @@ export function ChatViewComposer({
                 modelOptionsByProvider={composer.modelOptionsByProvider}
                 composerProviderState={composer.composerProviderState}
                 hasThreadStarted={composer.hasThreadStarted}
-                activePlan={Boolean(thread.activePlan)}
-                cardProposedPlan={Boolean(thread.cardProposedPlan)}
                 planCardOpen={base.planCardOpen}
                 planCardLabel={thread.planCardLabel}
                 interactionMode={base.interactionMode}

@@ -13,7 +13,6 @@ import {
 } from "../../ui/menu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
-  activePlan: boolean;
   interactionMode: ProviderInteractionMode;
   planCardOpen: boolean;
   planCardLabel: string;
@@ -74,17 +73,13 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
-        {props.activePlan ? (
-          <>
-            <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanCard}>
-              <ListTodoIcon className="size-4 shrink-0" />
-              {props.planCardOpen
-                ? `Hide ${props.planCardLabel.toLowerCase()}`
-                : `Show ${props.planCardLabel.toLowerCase()}`}
-            </MenuItem>
-          </>
-        ) : null}
+        <MenuDivider />
+        <MenuItem onClick={props.onTogglePlanCard}>
+          <ListTodoIcon className="size-4 shrink-0" />
+          {props.planCardOpen
+            ? `Hide ${props.planCardLabel.toLowerCase()}`
+            : `Show ${props.planCardLabel.toLowerCase()}`}
+        </MenuItem>
       </MenuPopup>
     </Menu>
   );

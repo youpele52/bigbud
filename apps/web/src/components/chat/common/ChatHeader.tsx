@@ -33,11 +33,14 @@ interface ChatHeaderProps {
   sidebarToggleShortcutLabel: string | null;
   rightPanelToggleShortcutLabel: string | null;
   rightPanelOpen: boolean;
+  planCardLabel: string;
+  planCardOpen: boolean;
   onOpenOrchestra: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
+  onTogglePlanCard: () => void;
   onToggleRightPanel: () => void;
 }
 
@@ -54,11 +57,14 @@ export const ChatHeader = memo(function ChatHeader({
   sidebarToggleShortcutLabel,
   rightPanelToggleShortcutLabel,
   rightPanelOpen,
+  planCardLabel,
+  planCardOpen,
   onOpenOrchestra,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
+  onTogglePlanCard,
   onToggleRightPanel,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
@@ -116,6 +122,9 @@ export const ChatHeader = memo(function ChatHeader({
               executionTargetId={executionTargetId}
               activeThreadId={activeThreadId}
               onOpenOrchestra={onOpenOrchestra}
+              planCardLabel={planCardLabel}
+              planCardOpen={planCardOpen}
+              onTogglePlanCard={onTogglePlanCard}
             />
           )}
           <Tooltip>
