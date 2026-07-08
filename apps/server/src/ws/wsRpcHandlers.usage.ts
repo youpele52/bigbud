@@ -22,6 +22,7 @@ type UsageAccumulator = {
 
 type UsageEntry = UsageAccumulator & {
   createdAt: string;
+  createdAtMs: number;
   provider: string;
   model: string;
   interactionMode: string;
@@ -52,6 +53,11 @@ function getNumericField(payload: Record<string, unknown>, key: string) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
+function parseValidDate(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function toUsageEntry(
   activity: OrchestrationThreadActivity,
   provider: string,
@@ -68,8 +74,14 @@ function toUsageEntry(
     return null;
   }
 
+  const createdAt = parseValidDate(activity.createdAt);
+  if (!createdAt) {
+    return null;
+  }
+
   return {
-    createdAt: activity.createdAt,
+    createdAt: createdAt.toISOString(),
+    createdAtMs: createdAt.getTime(),
     provider,
     model,
     interactionMode,
@@ -98,7 +110,7 @@ function getRangeStart(range: ServerUsageRange, now: Date): Date | null {
 function getBucketStart(isoDate: string, range: ServerUsageRange) {
   const date = new Date(isoDate);
   if (range === "all") {
-    date.setUTCDate(1);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)).toISOString();
   } else if (range === "24h") {
     date.setUTCMinutes(0, 0, 0);
   } else {
@@ -234,7 +246,7 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
               if (!entry) {
                 continue;
               }
-              if (rangeStart && new Date(entry.createdAt).getTime() < rangeStart.getTime()) {
+              if (rangeStart && entry.createdAtMs < rangeStart.getTime()) {
                 continue;
               }
               entries.push(entry);
