@@ -143,8 +143,11 @@
 }
 
 .md-image {
+  display: block;
+  box-sizing: border-box;
   width: 100%;
   height: auto;
+  max-inline-size: 100%;
   max-width: var(--md-content-max-width);
   margin: 1.4rem 0;
   border: 1px solid var(--border);
@@ -155,6 +158,7 @@
 
 .md-image-frame {
   display: inline-flex;
+  box-sizing: border-box;
   max-width: min(100%, var(--md-content-max-width));
   margin: 0.5rem 0 1rem;
   padding: 0.75rem;
@@ -171,6 +175,23 @@
   border: 0;
   border-radius: 0;
   object-fit: contain;
+}
+
+@media (min-width: 1101px) {
+  .md-image {
+    width: auto;
+    max-width: min(100%, 50vw, var(--md-content-max-width));
+    max-height: 50vh;
+    object-fit: contain;
+  }
+
+  .md-image-frame {
+    max-width: min(100%, 50vw, var(--md-content-max-width));
+  }
+
+  .md-image--framed {
+    max-height: calc(50vh - 1.5rem);
+  }
 }
 
 .md-embed {
