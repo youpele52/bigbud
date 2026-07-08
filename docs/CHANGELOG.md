@@ -21,10 +21,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Usage
 
-- Localized **Usage** chart tooltip dates and month labels so activity reads naturally in your own locale instead of falling back to raw timestamp-style formatting.
-- Updated the Usage overview cards to reuse provider and model icon patterns already used elsewhere in the app, including a safe fallback icon when a provider is unknown.
-- Tightened Usage summary bucketing so the **All** range groups activity by UTC month and ignores invalid activity timestamps before they can skew the chart.
-- Renamed the Usage breakdown view toggles from **Bars** and **Pie** to **Ranking** and **Share** for clearer at-a-glance comparison.
+- Added **Usage** insights that help you understand where tokens go across every provider and model in bigbud — totals, trends, token mix, and plain-language explainers for cached, input, output, and reasoning tokens, all from activity stored locally on this device. ![Usage breakdown view with Ranking and Share toggles](https://assets.bigbud.app/content/Screenshot%202026-07-08%20at%2022.46.04.png)
+
+- Compare providers and models with **Ranking** and **Share** breakdown views, plus matching icons on overview cards so the dashboard reads like the rest of the app.
+- Chart tooltips and month labels follow your locale, and the **All** range groups activity by UTC month while filtering invalid timestamps before they can skew long-range totals.
 
 ### Sidebar
 
