@@ -3,6 +3,7 @@ import {
   KanbanCardId,
   NoteId,
   type ServerProvider,
+  ThreadId,
 } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -93,6 +94,49 @@ describe("wsNativeApi — server", () => {
     expect(rpcClientMock.server.writeHandoffDocument).toHaveBeenCalledWith({
       title: "Thread title",
       content: "# Handoff\n\nBody",
+    });
+  });
+
+  it("forwards handoff job RPCs directly to the RPC client", async () => {
+    const startedJob = {
+      jobId: "handoff-job-1",
+      threadId: "thread-1",
+      status: "queued" as const,
+      title: "Thread title",
+      createdAt: "2026-07-05T10:00:00.000Z",
+      updatedAt: "2026-07-05T10:00:00.000Z",
+      completedAt: null,
+      outputPath: null,
+      error: null,
+    };
+    const finishedJob = {
+      ...startedJob,
+      status: "succeeded" as const,
+      updatedAt: "2026-07-05T10:01:00.000Z",
+      completedAt: "2026-07-05T10:01:00.000Z",
+      outputPath: "/Users/test/.bigbud/skills/handoff/tmp/handoff.md",
+    };
+    rpcClientMock.server.startHandoffJob.mockResolvedValue(startedJob);
+    rpcClientMock.server.getHandoffJob.mockResolvedValue(finishedJob);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(
+      api.server.startHandoffJob({
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        focus: "Continue the refactor in a fresh thread",
+      }),
+    ).resolves.toEqual(startedJob);
+    await expect(api.server.getHandoffJob({ jobId: "handoff-job-1" })).resolves.toEqual(
+      finishedJob,
+    );
+    expect(rpcClientMock.server.startHandoffJob).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      focus: "Continue the refactor in a fresh thread",
+    });
+    expect(rpcClientMock.server.getHandoffJob).toHaveBeenCalledWith({
+      jobId: "handoff-job-1",
     });
   });
 

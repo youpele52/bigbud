@@ -56,8 +56,8 @@ export function ProviderSwitchBranchModal({
             >
               <span className="text-sm font-medium">Start with handoff summary</span>
               <span className="text-muted-foreground text-xs">
-                Run the curated handoff skill on this thread, then copy only the summary into the
-                new branch.
+                Generate a handoff document in the background, then seed the new branch with only
+                that summary.
               </span>
             </button>
 

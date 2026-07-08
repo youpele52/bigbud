@@ -4,6 +4,7 @@
  * Handles message filtering, capping, and preparation for branch operations.
  */
 import { type MessageId, type ThreadId } from "@bigbud/contracts";
+import { isHandoffSeedMessage } from "./handoff";
 import { newMessageId } from "./utils";
 
 /**
@@ -155,8 +156,12 @@ export function prepareSeedMessages(
   messages: ReadonlyArray<SeedMessageInput>,
 ): ReadonlyArray<SeedMessageOutput> {
   const nonStreaming = messages.filter((message) => !message.streaming);
+  const pruned = nonStreaming.filter((message) => !isHandoffSeedMessage(message));
+  const branchableMessages = pruned.length > 0 ? pruned : nonStreaming;
   const capped =
-    nonStreaming.length > MAX_SEED_MESSAGES ? nonStreaming.slice(-MAX_SEED_MESSAGES) : nonStreaming;
+    branchableMessages.length > MAX_SEED_MESSAGES
+      ? branchableMessages.slice(-MAX_SEED_MESSAGES)
+      : branchableMessages;
 
   return capped.map((message) =>
     Object.assign(

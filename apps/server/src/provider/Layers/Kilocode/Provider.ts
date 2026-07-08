@@ -17,6 +17,7 @@ import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../../Errors";
 import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
+import { listOpencodeProviders } from "../Opencode/Provider.sdk";
 import { isVersionAtLeast } from "../Opencode/Provider.version";
 
 const PROVIDER = "kilocode" as const;
@@ -279,13 +280,7 @@ export const checkKilocodeProviderStatus = Effect.fn("checkKilocodeProviderStatu
   const statusResult = yield* withKiloServer(
     resolveKilocodeBinary(kilocodeSettings.binaryPath),
     async (client) => {
-      const providersResp = await client.config.providers();
-
-      if (providersResp.error) {
-        throw new Error(`Failed to list KiloCode providers: ${String(providersResp.error)}`);
-      }
-
-      const providers = providersResp.data?.providers ?? [];
+      const providers = await listOpencodeProviders(client);
       const hasConfiguredProviders = providers.some(
         (p) => p.models && Object.keys(p.models).length > 0,
       );

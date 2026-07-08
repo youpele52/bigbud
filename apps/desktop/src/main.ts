@@ -72,6 +72,7 @@ import {
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
 const SET_THEME_CHANNEL = "desktop:set-theme";
+const SET_WINDOW_MATERIAL_CHANNEL = "desktop:set-window-material";
 const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
 const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
 const MENU_ACTION_CHANNEL = "desktop:menu-action";
@@ -308,6 +309,7 @@ async function bootstrap(): Promise<void> {
     PICK_FOLDER_CHANNEL,
     CONFIRM_CHANNEL,
     SET_THEME_CHANNEL,
+    SET_WINDOW_MATERIAL_CHANNEL,
     CONTEXT_MENU_CHANNEL,
     OPEN_EXTERNAL_CHANNEL,
     GET_WS_URL_CHANNEL,

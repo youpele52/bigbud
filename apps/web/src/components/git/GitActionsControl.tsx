@@ -43,6 +43,10 @@ interface GitActionsControlProps {
   gitCwd: string | null;
   executionTargetId?: string | undefined;
   activeThreadId: ThreadId | null;
+  onOpenOrchestra?: (() => void) | undefined;
+  planCardLabel?: string | undefined;
+  planCardOpen?: boolean | undefined;
+  onTogglePlanCard?: (() => void) | undefined;
 }
 
 interface PendingDefaultBranchAction {
@@ -58,6 +62,10 @@ export default function GitActionsControl({
   gitCwd,
   executionTargetId,
   activeThreadId,
+  onOpenOrchestra,
+  planCardLabel,
+  planCardOpen,
+  onTogglePlanCard,
 }: GitActionsControlProps) {
   const threadToastData = useMemo(
     () => (activeThreadId ? { threadId: activeThreadId } : undefined),
@@ -368,7 +376,11 @@ export default function GitActionsControl({
         gitStatusForActions={gitStatusForActions}
         gitStatusError={gitStatusError}
         gitActionMenuItems={gitActionMenuItems}
+        onOpenOrchestra={onOpenOrchestra}
+        planCardLabel={planCardLabel}
+        planCardOpen={planCardOpen}
         onMenuItemSelect={handleMenuItemSelect}
+        onTogglePlanCard={onTogglePlanCard}
       />
 
       <CommitDialog

@@ -15,6 +15,13 @@ import {
   type BuildPlatform,
 } from "./shared.ts";
 
+const DESKTOP_PACKAGED_APP_FILES = [
+  "package.json",
+  "apps/desktop/dist-electron/**",
+  "apps/desktop/resources/**",
+  "apps/desktop/prod-resources/**",
+] as const;
+
 function generateMacIconSet(
   sourcePng: string,
   targetIcns: string,
@@ -205,6 +212,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         email: "dev@bigbud.app",
       },
     },
+    // Keep the asar focused on the desktop shell. The backend runtime is staged
+    // separately under extraResources and launched from there at runtime.
+    files: [...DESKTOP_PACKAGED_APP_FILES],
     // Native .node addons cannot be loaded from inside an asar archive.
     // These packages must be unpacked to app.asar.unpacked/ at build time.
     asarUnpack: [
@@ -220,10 +230,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       {
         from: "apps/server",
         to: "server",
-      },
-      {
-        from: join(repoRoot, ".bigbud/skills"),
-        to: "server/bundled-skills",
       },
     ],
     afterExtract: join(repoRoot, "apps/desktop/scripts/afterExtract.cjs"),
@@ -265,17 +271,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       macConfig.identity = null;
     }
     buildConfig.mac = macConfig;
-
-    // Work around electron-builder/dmgbuild bug where DMG size is underestimated
-    // for large apps, causing ditto to silently skip files during DMG creation.
-    // The final DMG is still shrunk to the minimum size after copying, so the
-    // compressed artifact size does not increase.
-    // https://github.com/electron-userland/electron-builder/issues/9706
-    if (target === "dmg") {
-      buildConfig.dmg = {
-        size: "3g",
-      };
-    }
   }
 
   if (platform === "linux") {

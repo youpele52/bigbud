@@ -13,6 +13,7 @@ export function createTerminalSessionState(input: {
   readonly threadId: string;
   readonly terminalId: string;
   readonly executionTargetId: string;
+  readonly dropPathMode: TerminalSessionState["dropPathMode"];
   readonly cwd: string;
   readonly worktreePath: string | null;
   readonly history: string;
@@ -24,6 +25,7 @@ export function createTerminalSessionState(input: {
     threadId: input.threadId,
     terminalId: input.terminalId,
     executionTargetId: input.executionTargetId,
+    dropPathMode: input.dropPathMode,
     cwd: input.cwd,
     worktreePath: input.worktreePath,
     runtimeEpoch: 0,

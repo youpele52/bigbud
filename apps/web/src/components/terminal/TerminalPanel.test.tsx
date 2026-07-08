@@ -24,6 +24,8 @@ const mockUseThreadTerminalDrawer = vi.fn(() => ({
   effectiveWorktreePath: null,
   runtimeEnv: {},
   focusRequestId: 0,
+  terminalBaseLabel: "workspace",
+  terminalProvider: "codex",
   splitTerminal: () => undefined,
   createNewTerminal: () => undefined,
   activateTerminal: () => undefined,

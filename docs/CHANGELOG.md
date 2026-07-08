@@ -2,6 +2,98 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.652 (8 July, 2026)
+
+### Plans
+
+- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans. ![Floating Plan card showing current steps and task progress](https://assets.bigbud.app/content/plan-card.png)
+
+- Added plan-card actions for copying a proposed plan, downloading it as Markdown, or saving it straight into the current workspace.
+- Mapped OpenCode native `todo.updated` events into bigbud's shared plan-update flow so task progress stays in sync for OpenCode and KiloCode sessions too.
+- Added **Show/Hide Tasks** access to both the composer controls menu and the header quick-actions menu, so the floating Tasks/Plan card is reachable from either surface even before a plan is active.
+- Expanded floating Tasks/Plan tracking to **all providers** with a hybrid runtime model: providers with native plan/todo events keep using them, while Pi and Copilot now fall back to a shared `update_plan` tool that feeds the same canonical plan-update flow.
+- Tightened provider task-tracking instructions so agents call `update_plan` earlier and keep the floating Tasks card in sync throughout multi-step work instead of waiting until the end of a turn.
+
+### Desktop
+
+- Added a macOS-only **Window Material** preference under **Settings → General** with **Automatic**, **Solid**, and **Translucent** options, plus native desktop wiring and matching translucent app chrome so the change applies immediately.
+- Fixed packaged macOS app icon handling so installed builds resolve the bundled icon correctly and stop overriding the Dock icon at runtime, keeping the running and closed app icons consistent.
+
+### Usage
+
+- Localized **Usage** chart tooltip dates and month labels so activity reads naturally in your own locale instead of falling back to raw timestamp-style formatting.
+- Updated the Usage overview cards to reuse provider and model icon patterns already used elsewhere in the app, including a safe fallback icon when a provider is unknown.
+- Tightened Usage summary bucketing so the **All** range groups activity by UTC month and ignores invalid activity timestamps before they can skew the chart.
+- Renamed the Usage breakdown view toggles from **Bars** and **Pie** to **Ranking** and **Share** for clearer at-a-glance comparison.
+
+### Sidebar
+
+- Fixed sidebar swipe-reveal handling for project and thread rows by using native non-passive wheel listeners, keeping the gesture reliable without passive-listener warnings.
+
+## v0.1.651 (7 July, 2026)
+
+### Orchestra
+
+- Added **Orchestra** from the composer and quick-actions menus: set a score name, choose multiple players with their own provider/model and cue, then press **Play** to launch each part as its own child thread.
+- Orchestra can run players **together** or **in sequence**. Sequential runs use handoff between child threads so each next player receives a clean summary from the previous one instead of a raw transcript dump.
+- Orchestra runs now create a fresh parent score thread automatically, so you no longer need to start a normal chat first. Child thread titles are prefixed with the score name so related runs are easy to spot in the sidebar.
+- Orchestra keeps the setup dialog aligned with the actual launch state, so once child threads are created the run moves forward cleanly instead of inviting duplicate retries.
+
+<iframe src="https://www.youtube-nocookie.com/embed/xuj5rBaKPVQ" title="bigbud: Orchestra"></iframe>
+
+### Usage
+
+- Added a local **Usage** dashboard under **Scheduled** in the sidebar, with 24h, 7d, 30d, and All ranges for reviewing token usage stored on this device.
+- Usage now shows total tokens, top provider, top model, streak, time-series token activity, token mix, and provider/model breakdowns with bar and pie chart views.
+- Added plain-language token explanations for cached, input, output, and reasoning tokens, plus a note that provider token counts are directional rather than billing-accurate.
+
+### Thread Reader
+
+- Added **thread elevator summaries** across contracts, projections, title generation, and the sidebar so longer threads can surface a compact, readable summary where a title alone is not enough context.
+
+### Handoff
+
+- Added server-side **handoff jobs** and RPC plumbing so handoff document generation can run as a tracked background workflow instead of blocking the active chat surface.
+- Switched chat handoff flows to background branch jobs, keeping the dialog responsive while branch setup and handoff generation continue behind the scenes.
+
+### Terminal
+
+- Added contextual terminal labels and provider icons so terminal tabs now read like the active project or directory instead of generic terminal slots.
+- Added **bold drag-and-drop support** for file and folder paths into the terminal, and made dropped paths shell-aware across local and remote sessions so Windows shells, PowerShell, WSL, MSYS, and SSH-backed terminals receive the right format instead of a one-size-fits-all string.
+- Added terminal rename overrides and storage-aware refresh handling so terminal labels stay useful even after the underlying workspace, note, or kanban storage root changes.
+
+### Quick Actions
+
+- Generalized the Git actions control into a broader **Quick actions** menu, making room for non-Git actions like Orchestra while preserving the existing Git workflows.
+
+### Remote Access
+
+- Split remote access checks into foreground and background flows so the app can keep the UI responsive while remote execution status continues to resolve in the background.
+
+### Provider Orchestration
+
+- Hardened provider orchestration bridges and OpenCode runtime handling, including safer MCP bridge session behavior, thread-tool response handling, and runtime SDK resolution.
+
+### Agent & Skill Discovery
+
+- Tightened discovery watch-path fallback logic so missing optional provider folders no longer cause broad parent directories to be watched unnecessarily.
+
+### Startup
+
+- Reduced first-turn startup blocking in server bootstrap so new sessions can begin sooner while the rest of the thread plumbing finishes wiring up.
+
+### Desktop
+
+- Cut duplicate desktop runtime payloads from the build pipeline, reducing the packaged app size from about **1.5GB** to about **750MB** while keeping runtime artifacts leaner.
+- Unified the macOS open and closed desktop app icons so packaged and running states now stay visually consistent.
+- Fixed desktop packaging so bundled native skills are included in generated artifacts.
+
+### Maintenance
+
+- Removed stale remote-access and planning documents that no longer matched the current codebase.
+- Split web composer, notes, terminal, and RPC client logic into smaller modules to keep the codebase easier to navigate and maintain.
+- Split backend contracts and server helpers into focused modules to reduce file size and keep the server-side architecture easier to reason about.
+
 ## v0.1.650 (2 July, 2026)
 
 ### Computer Use (Desktop & Browser Automation)

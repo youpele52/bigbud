@@ -267,3 +267,32 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+export interface ThreadElevatorSummaryPromptInput {
+  transcript: string;
+  attachments?: ReadonlyArray<ChatAttachment> | undefined;
+}
+
+export function buildThreadElevatorSummaryPrompt(input: ThreadElevatorSummaryPromptInput) {
+  const prompt = buildPromptFromMessage({
+    instruction: "You write concise elevator summaries for active coding conversation threads.",
+    responseShape: "Return a JSON object with key: summary.",
+    rules: [
+      "Summarize the current thread in one sentence.",
+      "Describe the work, problem, or outcome directly instead of describing the conversation.",
+      "Keep it specific, current, and useful for quick sidebar hover context.",
+      "Strictly limit the summary to 150 characters or fewer.",
+      "Avoid quotes, filler, prefixes, bullets, and trailing punctuation.",
+      "Do not mention 'user', 'assistant', 'thread', or 'conversation'.",
+      "Do not write meta narration like 'The user is asking' or 'Assistant is working on'.",
+      "If images are attached, use them as primary context for visual/UI issues.",
+    ],
+    message: input.transcript,
+    attachments: input.attachments,
+  });
+  const outputSchema = Schema.Struct({
+    summary: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}

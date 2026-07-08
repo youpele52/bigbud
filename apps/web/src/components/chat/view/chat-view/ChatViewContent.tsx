@@ -1,8 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-
-import { HANDOFF_SKILL_PROMPT } from "~/lib/handoff";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
@@ -15,8 +13,9 @@ import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
+import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
-import PlanSidebar from "../../plan/PlanSidebar";
+import { OrchestraDialog } from "../../orchestra/OrchestraDialog";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
@@ -67,18 +66,21 @@ export function ChatViewContent({
   const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
   const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
+  const [orchestraOpen, setOrchestraOpen] = useState(false);
 
-  const handoffAvailable = composer.discoveredSkills.some((skill) => skill.name === "handoff");
+  const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
 
   const onUseHandoffFromBanner = useCallback(() => {
-    const nextPrompt = HANDOFF_SKILL_PROMPT;
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
+    const activeThread = base.activeThread;
+    if (!activeThread) {
+      return;
+    }
+    void interactions.onCreateHandoffBranch(
+      activeThread.modelSelection,
+      "Continue this work in a fresh branch with the generated handoff.",
+    );
+  }, [base.activeThread, interactions]);
 
   const onCompactFromBanner = useCallback(() => {
     const nextPrompt = "/compact";
@@ -96,26 +98,24 @@ export function ChatViewContent({
   // directory when a thread is running in a worktree rather than project root.
   const workspaceRoot = base.activeThread?.worktreePath ?? base.activeProject?.cwd ?? undefined;
 
-  // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
+  // Auto-open the floating plan card when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
-  const { planSidebarOpen, planSidebarDismissedForTurnRef, setPlanSidebarOpen, activeLatestTurn } =
-    base;
+  const { planCardOpen, planCardDismissedForTurnRef, setPlanCardOpen, activeLatestTurn } = base;
   useEffect(() => {
     if (!thread.activePlan) return;
-    if (planSidebarOpen) return;
+    if (planCardOpen) return;
     const latestTurnId = activeLatestTurn?.turnId ?? null;
     if (latestTurnId && thread.activePlan.turnId !== latestTurnId) return;
-    const turnKey =
-      thread.activePlan.turnId ?? thread.sidebarProposedPlan?.turnId ?? "__dismissed__";
-    if (planSidebarDismissedForTurnRef.current === turnKey) return;
-    setPlanSidebarOpen(true);
+    const turnKey = thread.activePlan.turnId ?? thread.cardProposedPlan?.turnId ?? "__dismissed__";
+    if (planCardDismissedForTurnRef.current === turnKey) return;
+    setPlanCardOpen(true);
   }, [
     thread.activePlan,
     activeLatestTurn?.turnId,
-    planSidebarOpen,
-    thread.sidebarProposedPlan?.turnId,
-    planSidebarDismissedForTurnRef,
-    setPlanSidebarOpen,
+    planCardOpen,
+    thread.cardProposedPlan?.turnId,
+    planCardDismissedForTurnRef,
+    setPlanCardOpen,
   ]);
 
   const handleReplyToMessage = useCallback(
@@ -183,6 +183,12 @@ export function ChatViewContent({
     clearSearchFocusRequest(searchFocusRequest.requestId);
   }, [base.activeThread?.id, clearSearchFocusRequest, handleOpenReplySource, searchFocusRequest]);
 
+  const handleClosePlanCard = useCallback(() => {
+    base.setPlanCardOpen(false);
+    base.planCardDismissedForTurnRef.current =
+      thread.activePlan?.turnId ?? thread.cardProposedPlan?.turnId ?? "__dismissed__";
+  }, [base, thread.activePlan?.turnId, thread.cardProposedPlan?.turnId]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       <ContentPanelHeader>
@@ -190,22 +196,25 @@ export function ChatViewContent({
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
-          openInCwd={composer.gitCwd}
+          openInCwd={workspaceRoot ?? null}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
-          gitCwd={composer.gitCwd}
           executionTargetId={projectWorkspaceExecutionTargetId}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}
           rightPanelOpen={rightPanelOpen}
+          planCardLabel={thread.planCardLabel}
+          planCardOpen={base.planCardOpen}
+          onOpenOrchestra={() => setOrchestraOpen(true)}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
           onAddProjectScript={runtime.projectScripts.saveProjectScript}
           onUpdateProjectScript={runtime.projectScripts.updateProjectScript}
           onDeleteProjectScript={runtime.projectScripts.deleteProjectScript}
+          onTogglePlanCard={runtime.togglePlanCard}
           onToggleRightPanel={runtime.onToggleRightPanel}
         />
       </ContentPanelHeader>
@@ -317,7 +326,7 @@ export function ChatViewContent({
                 />
               </div>
 
-              <div className="pointer-events-none absolute inset-y-0 right-2 z-20 flex w-10 items-center justify-end sm:right-2 sm:w-10">
+              <div className="pointer-events-none absolute top-1/2 right-2 z-20 flex h-[75%] w-10 -translate-y-1/2 items-center justify-end sm:right-2 sm:w-10">
                 <ThreadReaderOutline
                   anchors={userTurnAnchors}
                   currentAnchorMessageId={
@@ -338,6 +347,23 @@ export function ChatViewContent({
                 onCancel={interactions.onDismissPendingProviderSwitch}
                 onConfirm={interactions.onConfirmPendingProviderSwitch}
               />
+            ) : null}
+
+            {base.planCardOpen ? (
+              <div className="pointer-events-none absolute inset-x-3 bottom-3 z-30 sm:inset-x-auto sm:top-3 sm:right-3 sm:bottom-auto">
+                <div className="pointer-events-auto w-full sm:w-[22rem]">
+                  <FloatingPlanCard
+                    activePlan={thread.activePlan}
+                    activeProposedPlan={thread.cardProposedPlan}
+                    label={thread.planCardLabel}
+                    markdownCwd={composer.gitCwd ?? undefined}
+                    workspaceRoot={workspaceRoot}
+                    workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
+                    timestampFormat={base.timestampFormat}
+                    onClose={handleClosePlanCard}
+                  />
+                </div>
+              </div>
             ) : null}
 
             {runtime.scrollBehavior.showScrollToBottom ? (
@@ -363,6 +389,7 @@ export function ChatViewContent({
               thread={thread}
               runtime={runtime}
               interactions={interactions}
+              onOpenOrchestra={() => setOrchestraOpen(true)}
               onOpenReplySource={handleOpenReplySource}
             />
           </div>
@@ -396,24 +423,6 @@ export function ChatViewContent({
             />
           ) : null}
         </div>
-
-        {base.planSidebarOpen ? (
-          <PlanSidebar
-            activePlan={thread.activePlan}
-            activeProposedPlan={thread.sidebarProposedPlan}
-            label={thread.planSidebarLabel}
-            markdownCwd={composer.gitCwd ?? undefined}
-            workspaceRoot={workspaceRoot}
-            workspaceExecutionTargetId={projectWorkspaceExecutionTargetId}
-            timestampFormat={base.timestampFormat}
-            onClose={() => {
-              base.setPlanSidebarOpen(false);
-              // Track that the user explicitly dismissed for this turn so auto-open won't fight them.
-              base.planSidebarDismissedForTurnRef.current =
-                thread.activePlan?.turnId ?? thread.sidebarProposedPlan?.turnId ?? "__dismissed__";
-            }}
-          />
-        ) : null}
       </div>
 
       {base.mountedTerminalThreadIds.map((mountedThreadId) => (
@@ -442,6 +451,21 @@ export function ChatViewContent({
           onNavigate={interactions.navigateExpandedImage}
         />
       ) : null}
+
+      <OrchestraDialog
+        activeProject={base.activeProject}
+        activeThread={base.activeThread}
+        defaultModelSelection={composer.selectedModelSelection}
+        discoveredAgents={composer.discoveredAgents}
+        discoveredSkills={composer.discoveredSkills}
+        modelOptionsByProvider={composer.modelOptionsByProvider}
+        open={orchestraOpen}
+        providers={composer.providerStatuses}
+        prompt={base.prompt}
+        resolvedTheme={base.resolvedTheme}
+        runtimeMode={base.runtimeMode}
+        onOpenChange={setOrchestraOpen}
+      />
     </div>
   );
 }

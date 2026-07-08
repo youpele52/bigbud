@@ -71,6 +71,8 @@ const makeReadModel = (threadId: ThreadId | null, projectWorkspaceRoot: string |
               id: threadId,
               projectId,
               title: "Shell thread",
+              elevatorSummary: "Shell thread",
+              elevatorSummaryMessageCount: 0,
               executionTargetId: "local",
               modelSelection,
               interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,

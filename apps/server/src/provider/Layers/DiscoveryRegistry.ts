@@ -1,10 +1,8 @@
-import * as OS from "node:os";
 import type {
   ProviderKind,
   ServerDiscoveredAgent,
   ServerDiscoveredSkill,
   ServerDiscoveryCatalog,
-  ServerDiscoveryProviderLabel,
 } from "@bigbud/contracts";
 import {
   Duration,
@@ -25,37 +23,18 @@ import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/Disc
 import {
   buildDiscoveryConfigDescriptors,
   buildDiscoveryFileDescriptors,
-  type DiscoveryFileDescriptor,
 } from "./DiscoveryRegistry.descriptors.ts";
+import {
+  mergeEntries,
+  parseDiscoveryFile,
+  parseOpencodeConfigAgents,
+} from "./DiscoveryRegistry.parse.ts";
 import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
-
-interface ParsedDiscoveryFileEntry {
-  readonly kind: DiscoveryFileDescriptor["kind"];
-  readonly entry: ServerDiscoveredAgent | ServerDiscoveredSkill;
-}
 
 const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
   agents: [],
   skills: [],
 };
-
-const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/;
-const FRONTMATTER_NAME_REGEX = /^name:\s*(.+)$/im;
-const FRONTMATTER_DISPLAY_NAME_REGEX = /^(?:displayName|title):\s*(.+)$/im;
-const FRONTMATTER_DESCRIPTION_REGEX = /^(?:description|summary):\s*(.+)$/im;
-const HEADER_NAME_REGEX = /^#\s+(.+)$/m;
-const OPENCODE_AGENT_SECTION_REGEX = /^agent\s*=\s*\{([\s\S]*?)\}/gm;
-const OPENCODE_AGENT_NAME_REGEX = /name\s*=\s*"([^"]+)"/;
-const OPENCODE_AGENT_DESCRIPTION_REGEX = /description\s*=\s*"([^"]+)"/;
-const OPENCODE_JSON_AGENT_KEY_REGEX = /"agent"\s*:\s*\{/g;
-const OPENCODE_JSON_AGENT_ENTRY_START_REGEX = /"([^"]+)"\s*:\s*\{/g;
-const OPENCODE_JSON_AGENT_DESC_REGEX = /"description"\s*:\s*"([^"]*)"/;
-const CODEX_TOML_NAME_REGEX = /^name\s*=\s*(["'])(.*?)\1/m;
-const CODEX_TOML_DESCRIPTION_REGEX = /^description\s*=\s*(["'])(.*?)\1/m;
-const CLAUDE_JSON_NAME_REGEX = /"name"\s*:\s*"([^"]+)"/;
-const CLAUDE_JSON_DESCRIPTION_REGEX = /"description"\s*:\s*"([^"]+)"/;
-const SIMPLE_NAME_REGEX = /^(?:name|title):\s*(.+)$/im;
-const SIMPLE_DESCRIPTION_REGEX = /^description:\s*(.+)$/im;
 
 function resolveDiscoveryFallbackRescanInterval(): Duration.Duration {
   const rawIntervalMs = process.env.BIGBUD_DISCOVERY_FALLBACK_RESCAN_MS?.trim();
@@ -64,259 +43,6 @@ function resolveDiscoveryFallbackRescanInterval(): Duration.Duration {
     return Duration.millis(parsedMs);
   }
   return Duration.minutes(2);
-}
-
-function trimToUndefined(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function inferNameFromPath(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, "/");
-  const lastSegment = normalized.split("/").at(-1) ?? normalized;
-  if (/^(?:SKILL|skill)\.md$/u.test(lastSegment)) {
-    return normalized.split("/").at(-2) ?? "skill";
-  }
-  return lastSegment.replace(/\.(md|markdown|ya?ml|toml|json)$/i, "");
-}
-
-function buildDiscoveryId(
-  provider: ServerDiscoveryProviderLabel,
-  kind: "agent" | "skill",
-  name: string,
-): string {
-  return `${provider}:${kind}:${name.trim().toLowerCase()}`;
-}
-
-function parseFrontmatter(content: string): {
-  name?: string;
-  displayName?: string;
-  description?: string;
-} {
-  const frontmatter = FRONTMATTER_REGEX.exec(content)?.[1];
-  if (!frontmatter) {
-    return {};
-  }
-  const name = trimToUndefined(FRONTMATTER_NAME_REGEX.exec(frontmatter)?.[1]);
-  const displayName = trimToUndefined(FRONTMATTER_DISPLAY_NAME_REGEX.exec(frontmatter)?.[1]);
-  const description = trimToUndefined(FRONTMATTER_DESCRIPTION_REGEX.exec(frontmatter)?.[1]);
-  return {
-    ...(name ? { name } : {}),
-    ...(displayName ? { displayName } : {}),
-    ...(description ? { description } : {}),
-  };
-}
-
-function parseMarkdownDiscovery(
-  content: string,
-  fallbackName: string,
-): {
-  name: string;
-  displayName?: string;
-  description?: string;
-} {
-  const frontmatter = parseFrontmatter(content);
-  const headingName = trimToUndefined(HEADER_NAME_REGEX.exec(content)?.[1]);
-  const simpleName = trimToUndefined(SIMPLE_NAME_REGEX.exec(content)?.[1]);
-  const simpleDescription = trimToUndefined(SIMPLE_DESCRIPTION_REGEX.exec(content)?.[1]);
-  const name = frontmatter.name ?? simpleName ?? fallbackName;
-  const displayName = frontmatter.displayName ?? headingName;
-  const description = frontmatter.description ?? simpleDescription;
-  return {
-    name,
-    ...(displayName ? { displayName } : {}),
-    ...(description ? { description } : {}),
-  };
-}
-
-function parseClaudeJsonAgent(
-  content: string,
-  fallbackName: string,
-): {
-  name: string;
-  description?: string;
-} {
-  const parsedName = trimToUndefined(CLAUDE_JSON_NAME_REGEX.exec(content)?.[1]);
-  const parsedDescription = trimToUndefined(CLAUDE_JSON_DESCRIPTION_REGEX.exec(content)?.[1]);
-  const name = parsedName ?? fallbackName;
-  return {
-    name,
-    ...(parsedDescription ? { description: parsedDescription } : {}),
-  };
-}
-
-function parseCodexTomlAgent(
-  content: string,
-  fallbackName: string,
-): {
-  name: string;
-  description?: string;
-} {
-  const parsedName = trimToUndefined(CODEX_TOML_NAME_REGEX.exec(content)?.[2]);
-  const parsedDescription = trimToUndefined(CODEX_TOML_DESCRIPTION_REGEX.exec(content)?.[2]);
-  const name = parsedName ?? fallbackName;
-  return {
-    name,
-    ...(parsedDescription ? { description: parsedDescription } : {}),
-  };
-}
-
-function parseDiscoveryFile(
-  input: DiscoveryFileDescriptor & { readonly content: string },
-): ParsedDiscoveryFileEntry {
-  const fallbackName = inferNameFromPath(input.path);
-  const parsed =
-    input.provider === "codex" && input.kind === "agent"
-      ? parseCodexTomlAgent(input.content, fallbackName)
-      : input.provider === "claudeAgent" && input.kind === "agent" && input.path.endsWith(".json")
-        ? parseClaudeJsonAgent(input.content, fallbackName)
-        : parseMarkdownDiscovery(input.content, fallbackName);
-  const name = parsed.name.trim();
-  const base = {
-    id: buildDiscoveryId(input.provider, input.kind, name),
-    provider: input.provider,
-    name,
-    source: input.source,
-    ...(input.kind === "skill" && "displayName" in parsed && parsed.displayName
-      ? { displayName: String(parsed.displayName) }
-      : {}),
-    ...(parsed.description ? { description: parsed.description } : {}),
-    sourcePath: input.path,
-  };
-  return input.kind === "agent"
-    ? {
-        kind: input.kind,
-        entry: base satisfies ServerDiscoveredAgent,
-      }
-    : {
-        kind: input.kind,
-        entry: base satisfies ServerDiscoveredSkill,
-      };
-}
-
-function parseOpencodeJsonConfigAgents(
-  configPath: string,
-  content: string,
-): ReadonlyArray<ServerDiscoveredAgent> {
-  OPENCODE_JSON_AGENT_KEY_REGEX.lastIndex = 0;
-  const keyMatch = OPENCODE_JSON_AGENT_KEY_REGEX.exec(content);
-  if (!keyMatch) {
-    return [];
-  }
-
-  // Brace-count to find the matching closing brace of "agent": { ... }
-  const blockStart = keyMatch.index + keyMatch[0].length - 1;
-  let depth = 1;
-  let blockEnd = blockStart;
-  for (let i = blockStart + 1; i < content.length && depth > 0; i++) {
-    if (content[i] === "{") {
-      depth++;
-    } else if (content[i] === "}") {
-      depth--;
-    }
-    if (depth === 0) {
-      blockEnd = i;
-    }
-  }
-
-  const agentBlock = content.slice(blockStart + 1, blockEnd);
-  const source: ServerDiscoveredAgent["source"] = configPath.includes(`${OS.homedir()}/`)
-    ? ("user" as const)
-    : ("project" as const);
-
-  const entries: Array<ServerDiscoveredAgent> = [];
-  OPENCODE_JSON_AGENT_ENTRY_START_REGEX.lastIndex = 0;
-  let startMatch: RegExpExecArray | null;
-  while ((startMatch = OPENCODE_JSON_AGENT_ENTRY_START_REGEX.exec(agentBlock)) !== null) {
-    const name = trimToUndefined(startMatch[1]);
-    if (!name) {
-      continue;
-    }
-
-    // Brace-count to find the matching closing brace of this agent entry
-    const entryBracePos = startMatch.index + startMatch[0].length - 1;
-    let depth = 1;
-    let entryEnd = entryBracePos;
-    for (let i = entryBracePos + 1; i < agentBlock.length && depth > 0; i++) {
-      if (agentBlock[i] === "{") {
-        depth++;
-      } else if (agentBlock[i] === "}") {
-        depth--;
-      }
-      if (depth === 0) {
-        entryEnd = i;
-      }
-    }
-
-    // Skip past this full entry so nested "key": { ... } blocks are not matched
-    OPENCODE_JSON_AGENT_ENTRY_START_REGEX.lastIndex = entryEnd + 1;
-
-    const entryBody = agentBlock.slice(entryBracePos + 1, entryEnd);
-    const description = trimToUndefined(OPENCODE_JSON_AGENT_DESC_REGEX.exec(entryBody)?.[1]);
-    entries.push({
-      id: buildDiscoveryId("opencode", "agent", name),
-      provider: "opencode" as const,
-      name,
-      source,
-      ...(description ? { description } : {}),
-      sourcePath: configPath,
-    } satisfies ServerDiscoveredAgent);
-  }
-  return entries;
-}
-
-function parseOpencodeConfigAgents(
-  configPath: string,
-  content: string,
-): ReadonlyArray<ServerDiscoveredAgent> {
-  const entries = Array.from(content.matchAll(OPENCODE_AGENT_SECTION_REGEX)).flatMap((match) => {
-    const body = match[1] ?? "";
-    const name = trimToUndefined(OPENCODE_AGENT_NAME_REGEX.exec(body)?.[1]);
-    if (!name) {
-      return [];
-    }
-    const description = trimToUndefined(OPENCODE_AGENT_DESCRIPTION_REGEX.exec(body)?.[1]);
-    return [
-      {
-        id: buildDiscoveryId("opencode", "agent", name),
-        provider: "opencode" as const,
-        name,
-        source: configPath.includes(`${OS.homedir()}/`) ? ("user" as const) : ("project" as const),
-        ...(description ? { description } : {}),
-        sourcePath: configPath,
-      } satisfies ServerDiscoveredAgent,
-    ];
-  });
-  // Fall back to JSON-format config ("agent": { "name": { "description": "..." } })
-  if (entries.length === 0) {
-    return parseOpencodeJsonConfigAgents(configPath, content);
-  }
-  return entries;
-}
-
-function sortDiscoveredEntries<T extends ServerDiscoveredAgent | ServerDiscoveredSkill>(
-  entries: ReadonlyArray<T>,
-): Array<T> {
-  return [...entries].toSorted((left, right) => {
-    const byName = left.name.localeCompare(right.name);
-    if (byName !== 0) return byName;
-    const byProvider = left.provider.localeCompare(right.provider);
-    if (byProvider !== 0) return byProvider;
-    return left.id.localeCompare(right.id);
-  });
-}
-
-function mergeEntries<T extends ServerDiscoveredAgent | ServerDiscoveredSkill>(
-  entries: ReadonlyArray<T>,
-): Array<T> {
-  const deduped = new Map<string, T>();
-  for (const entry of entries) {
-    const key = `${entry.provider}:${entry.name.trim().toLowerCase()}`;
-    if (!deduped.has(key)) {
-      deduped.set(key, entry);
-    }
-  }
-  return sortDiscoveredEntries([...deduped.values()]);
 }
 
 const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive")(function* (
@@ -351,52 +77,46 @@ const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive
     .filter(predicate);
 });
 
-const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(function* (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  rawPath: string,
-) {
-  // Avoid recursively watching broad system roots for optional descriptors.
-  if (rawPath.startsWith("/etc/")) {
-    const exists = yield* fs.exists(rawPath).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-          path: rawPath,
-          error: String(error),
-        }),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-    return exists ? rawPath : null;
-  }
-
-  const candidates = [rawPath];
-  const parentPath = path.dirname(rawPath);
-  if (parentPath !== rawPath) {
-    candidates.push(parentPath);
-  }
-  const grandParentPath = path.dirname(parentPath);
-  if (grandParentPath !== parentPath) {
-    candidates.push(grandParentPath);
-  }
-
-  for (const currentPath of candidates) {
-    const exists = yield* fs.exists(currentPath).pipe(
-      Effect.tapError((error) =>
-        Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-          path: currentPath,
-          error: String(error),
-        }),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-    if (exists) {
-      return currentPath;
+export const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(
+  function* (fs: FileSystem.FileSystem, path: Path.Path, rawPath: string) {
+    // Avoid recursively watching broad system roots for optional descriptors.
+    if (rawPath.startsWith("/etc/")) {
+      const exists = yield* fs.exists(rawPath).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+            path: rawPath,
+            error: String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => false),
+      );
+      return exists ? rawPath : null;
     }
-  }
 
-  return null;
-});
+    const candidates = [rawPath];
+    const parentPath = path.dirname(rawPath);
+    if (parentPath !== rawPath) {
+      candidates.push(parentPath);
+    }
+
+    for (const currentPath of candidates) {
+      const exists = yield* fs.exists(currentPath).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
+            path: currentPath,
+            error: String(error),
+          }),
+        ),
+        Effect.orElseSucceed(() => false),
+      );
+      if (exists) {
+        return currentPath;
+      }
+    }
+
+    return null;
+  },
+);
 
 export const haveDiscoveryChanged = (
   previousCatalog: ServerDiscoveryCatalog,
@@ -579,7 +299,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   yield* Effect.forkScoped(Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)));
 
   return {
-    getCatalog: syncCatalog({ publish: false }),
+    getCatalog: Ref.get(catalogRef),
     refresh: (_provider?: ProviderKind) => syncCatalog(),
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);

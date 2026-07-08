@@ -1,5 +1,7 @@
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 
+export type HumanReadableDateFormat = "date" | "date-time" | "month-year";
+
 export function getTimestampFormatOptions(
   timestampFormat: TimestampFormat,
   includeSeconds: boolean,
@@ -20,7 +22,30 @@ export function getTimestampFormatOptions(
   };
 }
 
+export function getHumanReadableDateFormatOptions(
+  format: HumanReadableDateFormat,
+): Intl.DateTimeFormatOptions {
+  if (format === "month-year") {
+    return {
+      month: "long",
+      year: "numeric",
+    };
+  }
+
+  if (format === "date-time") {
+    return {
+      dateStyle: "long",
+      timeStyle: "short",
+    };
+  }
+
+  return {
+    dateStyle: "long",
+  };
+}
+
 const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const humanReadableDateFormatterCache = new Map<HumanReadableDateFormat, Intl.DateTimeFormat>();
 
 function getTimestampFormatter(
   timestampFormat: TimestampFormat,
@@ -38,6 +63,25 @@ function getTimestampFormatter(
   );
   timestampFormatterCache.set(cacheKey, formatter);
   return formatter;
+}
+
+function getHumanReadableDateFormatter(format: HumanReadableDateFormat): Intl.DateTimeFormat {
+  const cachedFormatter = humanReadableDateFormatterCache.get(format);
+  if (cachedFormatter) {
+    return cachedFormatter;
+  }
+
+  const formatter = new Intl.DateTimeFormat(undefined, getHumanReadableDateFormatOptions(format));
+  humanReadableDateFormatterCache.set(format, formatter);
+  return formatter;
+}
+
+export function formatHumanReadableDate(
+  value: string | Date,
+  format: HumanReadableDateFormat = "date",
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return getHumanReadableDateFormatter(format).format(date);
 }
 
 export function formatTimestamp(isoDate: string, timestampFormat: TimestampFormat): string {

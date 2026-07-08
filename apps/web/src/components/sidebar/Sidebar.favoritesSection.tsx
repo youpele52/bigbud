@@ -1,7 +1,6 @@
 import { ChevronRightIcon, PinIcon } from "lucide-react";
 import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarThreadRow } from "./SidebarThreadRow";
-import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuSub } from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
@@ -23,8 +22,6 @@ export function SidebarFavoritesSection({
 }: SidebarFavoritesSectionProps) {
   return (
     <SidebarGroup className="px-2 py-2">
-      <SidebarSectionLabel>Favourites</SidebarSectionLabel>
-
       {!bootstrapComplete ? (
         <div className="flex justify-center px-2 pt-6">
           <Spinner className={`${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/40`} />
@@ -35,7 +32,7 @@ export function SidebarFavoritesSection({
             <SidebarMenuButton
               render={<div />}
               size="sm"
-              className="gap-2 px-2 py-1.5 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
+              className="gap-2 px-2 py-1.5 pt-3 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground"
               onClick={() => onExpandedChange(!isExpanded)}
             >
               <button

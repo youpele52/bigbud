@@ -37,6 +37,7 @@ import {
 import { shouldAllowAutoTitleReplace } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { appendFileAttachmentsToProviderInput } from "./ProviderCommandReactorHandlers.attachments.ts";
 import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.delete.ts";
+import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
 import { makeProcessSessionHandlers } from "./ProviderCommandReactorHandlers.session.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
@@ -57,6 +58,7 @@ type ProviderIntentEvent = Extract<
     type:
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
+      | "thread.message-sent"
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
@@ -382,6 +384,14 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       }
       case "thread.turn-start-requested":
         yield* processTurnStartRequested(event);
+        return;
+      case "thread.message-sent":
+        if (event.payload.streaming) {
+          return;
+        }
+        yield* maybeGenerateThreadElevatorSummary(sessionOpServices)({
+          threadId: event.payload.threadId,
+        }).pipe(Effect.forkScoped);
         return;
       case "thread.turn-interrupt-requested":
         yield* processTurnInterruptRequested(event);

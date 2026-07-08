@@ -119,10 +119,9 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
         ];
   const screen = await render(
     <CompactComposerControlsMenu
-      activePlan={false}
       interactionMode="default"
-      planSidebarOpen={false}
-      planSidebarLabel="Plan"
+      planCardOpen={false}
+      planCardLabel="Plan"
       runtimeMode="approval-required"
       traitsMenuContent={
         <TraitsMenuContent
@@ -136,7 +135,8 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
         />
       }
       onToggleInteractionMode={vi.fn()}
-      onTogglePlanSidebar={vi.fn()}
+      onOpenOrchestra={vi.fn()}
+      onTogglePlanCard={vi.fn()}
       onRuntimeModeChange={vi.fn()}
     />,
     { container: host },
@@ -176,6 +176,16 @@ describe("CompactComposerControlsMenu", () => {
       expect(text).toContain("Fast Mode");
       expect(text).toContain("off");
       expect(text).toContain("on");
+    });
+  });
+
+  it("shows the plan toggle even without an active plan", async () => {
+    await using _ = await mountMenu();
+
+    await page.getByLabelText("More composer controls").click();
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent ?? "").toContain("Show plan");
     });
   });
 

@@ -13,7 +13,13 @@ import {
   type OpencodeServerAcquireInput,
   type OpencodeServerHandle,
 } from "../../Services/Opencode/ServerManager.ts";
-import { killChildTree } from "../../../codex/codexAppServerManager.utils.ts";
+import {
+  buildClientOptions,
+  readManagedServerListeningUrl,
+  resolveBinaryPath,
+  stopSpawnedChild,
+} from "./ServerManager.helpers.ts";
+export { readManagedServerListeningUrl } from "./ServerManager.helpers.ts";
 
 interface RunningServer {
   readonly url: string;
@@ -46,37 +52,7 @@ const SERVER_CONFIGS = {
     directoryHeader: "x-kilo-directory",
   },
 } as const;
-type ManagedServerConfig = (typeof SERVER_CONFIGS)[ManagedServerProvider];
-
-function stopSpawnedChild(child: ReturnType<typeof spawn>): void {
-  killChildTree(child as Parameters<typeof killChildTree>[0]);
-}
-
-export function readManagedServerListeningUrl(line: string): string | null {
-  if (!/^(?:opencode|kilo) server listening\b/.test(line)) {
-    return null;
-  }
-  const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
-  return match?.[1] ?? null;
-}
-
-function resolveBinaryPath(config: ManagedServerConfig, binaryPath: string | undefined): string {
-  const trimmed = binaryPath?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : config.defaultBinary;
-}
-
-function buildClientOptions(
-  config: ManagedServerConfig,
-  url: string,
-  directory: string | undefined,
-): Parameters<typeof createOpencodeClient>[0] {
-  const base: Parameters<typeof createOpencodeClient>[0] = { baseUrl: url };
-  if (!directory) return base;
-  if ("directoryHeader" in config) {
-    return { ...base, headers: { [config.directoryHeader]: encodeURIComponent(directory) } };
-  }
-  return { ...base, directory };
-}
+export type ManagedServerConfig = (typeof SERVER_CONFIGS)[ManagedServerProvider];
 
 export function formatMissingOpencodeBinaryDetail(input: {
   readonly provider?: ManagedServerProvider;

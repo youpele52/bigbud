@@ -216,8 +216,40 @@ describe("configureApplicationMenu", () => {
     fs.writeFileSync(resourceIconPath, "prod");
 
     try {
-      const resolveIconPath = makeResolveIconPath(desktopDir, "", true);
+      const resolveIconPath = makeResolveIconPath(
+        desktopDir,
+        path.join(tempRoot, "missing-resources"),
+        true,
+      );
       expect(resolveIconPath("png")).toBe(resourceIconPath);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers packaged resource icons outside app.asar when the app is installed", () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "bigbud-menu-manager-"));
+    const resourcesPath = path.join(tempRoot, "bigbud.app", "Contents", "Resources");
+    const desktopDir = path.join(resourcesPath, "app.asar", "apps", "desktop", "dist-electron");
+    const asarIconPath = path.join(
+      resourcesPath,
+      "app.asar",
+      "apps",
+      "desktop",
+      "resources",
+      "icon.icns",
+    );
+    const packagedIconPath = path.join(resourcesPath, "icon.icns");
+
+    fs.mkdirSync(path.dirname(asarIconPath), { recursive: true });
+    fs.mkdirSync(path.dirname(packagedIconPath), { recursive: true });
+    fs.mkdirSync(desktopDir, { recursive: true });
+    fs.writeFileSync(asarIconPath, "asar");
+    fs.writeFileSync(packagedIconPath, "packaged");
+
+    try {
+      const resolveIconPath = makeResolveIconPath(desktopDir, resourcesPath, false);
+      expect(resolveIconPath("icns")).toBe(packagedIconPath);
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }

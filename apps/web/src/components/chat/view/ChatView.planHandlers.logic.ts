@@ -28,8 +28,8 @@ export interface UsePlanHandlersInput {
   isSendBusy: boolean;
   isConnecting: boolean;
   sendInFlightRef: React.RefObject<boolean>;
-  planSidebarDismissedForTurnRef: React.RefObject<string | null>;
-  planSidebarOpenOnNextThreadRef: React.RefObject<boolean>;
+  planCardDismissedForTurnRef: React.RefObject<string | null>;
+  planCardOpenOnNextThreadRef: React.RefObject<boolean>;
   selectedProvider: ProviderKind;
   selectedModel: string | null;
   selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
@@ -38,7 +38,7 @@ export interface UsePlanHandlersInput {
   runtimeMode: RuntimeMode;
   shouldAutoScrollRef: React.RefObject<boolean>;
   setOptimisticUserMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
-  setPlanSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  setPlanCardOpen: React.Dispatch<React.SetStateAction<boolean>>;
   setThreadError: (threadId: ThreadId, error: string | null) => void;
   setComposerDraftInteractionMode: (threadId: ThreadId, mode: "default" | "plan") => void;
   beginLocalDispatch: (options?: { preparingWorktree?: boolean }) => void;
@@ -70,8 +70,8 @@ export function usePlanHandlers({
   isSendBusy,
   isConnecting,
   sendInFlightRef,
-  planSidebarDismissedForTurnRef,
-  planSidebarOpenOnNextThreadRef,
+  planCardDismissedForTurnRef,
+  planCardOpenOnNextThreadRef,
   selectedProvider,
   selectedModel,
   selectedProviderModels,
@@ -80,7 +80,7 @@ export function usePlanHandlers({
   runtimeMode,
   shouldAutoScrollRef,
   setOptimisticUserMessages,
-  setPlanSidebarOpen,
+  setPlanCardOpen,
   setThreadError,
   setComposerDraftInteractionMode,
   beginLocalDispatch,
@@ -179,12 +179,12 @@ export function usePlanHandlers({
             : {}),
           createdAt: messageCreatedAt,
         });
-        // Optimistically open the plan sidebar when implementing (not refining).
+        // Optimistically open the floating plan card when implementing (not refining).
         // "default" mode here means the agent is executing the plan, which produces
-        // step-tracking activities that the sidebar will display.
+        // step-tracking activities that the card will display.
         if (nextInteractionMode === "default") {
-          planSidebarDismissedForTurnRef.current = null;
-          setPlanSidebarOpen(true);
+          planCardDismissedForTurnRef.current = null;
+          setPlanCardOpen(true);
         }
         sendInFlightRef.current = false;
       } catch (err) {
@@ -208,7 +208,7 @@ export function usePlanHandlers({
       isSendBusy,
       isServerThread,
       persistThreadSettingsForNextTurn,
-      planSidebarDismissedForTurnRef,
+      planCardDismissedForTurnRef,
       resetLocalDispatch,
       runtimeMode,
       selectedPromptEffort,
@@ -221,7 +221,7 @@ export function usePlanHandlers({
       selectedModel,
       sendInFlightRef,
       shouldAutoScrollRef,
-      setPlanSidebarOpen,
+      setPlanCardOpen,
     ],
   );
 
@@ -309,8 +309,8 @@ export function usePlanHandlers({
         return waitForStartedServerThread(nextThreadId);
       })
       .then(() => {
-        // Signal that the plan sidebar should open on the new thread.
-        planSidebarOpenOnNextThreadRef.current = true;
+        // Signal that the floating plan card should open on the new thread.
+        planCardOpenOnNextThreadRef.current = true;
         return navigate({
           to: "/$threadId",
           params: { threadId: nextThreadId },
@@ -341,7 +341,7 @@ export function usePlanHandlers({
     isSendBusy,
     isServerThread,
     navigate,
-    planSidebarOpenOnNextThreadRef,
+    planCardOpenOnNextThreadRef,
     resetLocalDispatch,
     runtimeMode,
     selectedPromptEffort,

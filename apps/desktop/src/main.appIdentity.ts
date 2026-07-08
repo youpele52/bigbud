@@ -69,6 +69,11 @@ export function configureAppIdentity(identity: DesktopAppIdentity): void {
   }
 
   if (process.platform === "darwin" && app.dock) {
+    // Packaged macOS apps already get their Dock icon from the app bundle.
+    if (app.isPackaged) {
+      return;
+    }
+
     const iconPath = identity.resolveIconPath("png");
     if (iconPath) {
       app.dock.setIcon(iconPath);

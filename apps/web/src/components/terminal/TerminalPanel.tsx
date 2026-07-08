@@ -84,8 +84,13 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
         onSplitTerminal={drawer.splitTerminal}
         onNewTerminal={drawer.createNewTerminal}
         keybindings={keybindings}
+        terminalBaseLabel={drawer.terminalBaseLabel}
+        terminalLabelOverrides={drawer.terminalLabelOverrides}
+        terminalProviderById={drawer.terminalProviderById}
         onActiveTerminalChange={drawer.activateTerminal}
         onCloseTerminal={drawer.closeTerminal}
+        onSetTerminalLabelOverride={drawer.setTerminalLabelOverride}
+        onClearTerminalLabelOverride={drawer.clearTerminalLabelOverride}
         onHeightChange={drawer.setTerminalHeight}
         onAddTerminalContext={handleAddTerminalContext}
       />

@@ -1,21 +1,34 @@
-import { Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
+import { type ProviderKind } from "@bigbud/contracts";
+import { Pencil, Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 
 import { type ThreadTerminalGroup } from "../../models/types";
 import { TerminalActionButton } from "./TerminalActionButton";
+import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
 
 interface ThreadTerminalDrawerSidebarProps {
   resolvedTerminalGroups: ReadonlyArray<ThreadTerminalGroup>;
   resolvedActiveTerminalId: string;
   normalizedTerminalIds: ReadonlyArray<string>;
   terminalLabelById: ReadonlyMap<string, string>;
+  editingTerminalId: string | null;
+  terminalRenameDraft: string;
+  renameInputRef: (element: HTMLInputElement | null) => void;
+  terminalProviderById: Readonly<Record<string, ProviderKind>>;
   showGroupHeaders: boolean;
   hasReachedSplitLimit: boolean;
+  renameTerminalActionLabel: string;
   splitTerminalActionLabel: string;
   newTerminalActionLabel: string;
   closeTerminalActionLabel: string;
   closeShortcutLabel?: string | undefined;
+  onTerminalRenameDraftChange: (value: string) => void;
+  onStartTerminalRename: (terminalId: string) => void;
+  onCommitTerminalRename: () => void;
+  onCancelTerminalRename: () => void;
+  onResetTerminalRename: (terminalId: string) => void;
   onSplitTerminalAction: () => void;
   onNewTerminalAction: () => void;
   onActiveTerminalChange: (terminalId: string) => void;
@@ -27,12 +40,22 @@ export function ThreadTerminalDrawerSidebar({
   resolvedActiveTerminalId,
   normalizedTerminalIds,
   terminalLabelById,
+  editingTerminalId,
+  terminalRenameDraft,
+  renameInputRef,
+  terminalProviderById,
   showGroupHeaders,
   hasReachedSplitLimit,
+  renameTerminalActionLabel,
   splitTerminalActionLabel,
   newTerminalActionLabel,
   closeTerminalActionLabel,
   closeShortcutLabel,
+  onTerminalRenameDraftChange,
+  onStartTerminalRename,
+  onCommitTerminalRename,
+  onCancelTerminalRename,
+  onResetTerminalRename,
   onSplitTerminalAction,
   onNewTerminalAction,
   onActiveTerminalChange,
@@ -43,10 +66,17 @@ export function ThreadTerminalDrawerSidebar({
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
         <div className="inline-flex h-full items-stretch">
           <TerminalActionButton
+            className="inline-flex h-full items-center px-1 text-foreground/90 transition-colors hover:bg-accent/70"
+            onClick={() => onStartTerminalRename(resolvedActiveTerminalId)}
+            label={renameTerminalActionLabel}
+          >
+            <Pencil className="size-3.25" />
+          </TerminalActionButton>
+          <TerminalActionButton
             className={`inline-flex h-full items-center px-1 text-foreground/90 transition-colors ${
               hasReachedSplitLimit
-                ? "cursor-not-allowed opacity-45 hover:bg-transparent"
-                : "hover:bg-accent/70"
+                ? "border-l border-border/70 cursor-not-allowed opacity-45 hover:bg-transparent"
+                : "border-l border-border/70 hover:bg-accent/70"
             }`}
             onClick={onSplitTerminalAction}
             label={splitTerminalActionLabel}
@@ -98,6 +128,10 @@ export function ThreadTerminalDrawerSidebar({
               <div className={showGroupHeaders ? "ml-1 border-l border-border/60 pl-1.5" : ""}>
                 {terminalGroup.terminalIds.map((terminalId) => {
                   const isActive = terminalId === resolvedActiveTerminalId;
+                  const terminalProvider = terminalProviderById[terminalId] ?? null;
+                  const ProviderIcon = terminalProvider
+                    ? PROVIDER_ICON_BY_PROVIDER[terminalProvider]
+                    : null;
                   const closeTerminalLabel = `Close ${
                     terminalLabelById.get(terminalId) ?? "terminal"
                   }${isActive && closeShortcutLabel ? ` (${closeShortcutLabel})` : ""}`;
@@ -114,17 +148,36 @@ export function ThreadTerminalDrawerSidebar({
                       {showGroupHeaders && (
                         <span className="text-[10px] text-muted-foreground/80">└</span>
                       )}
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-1 text-left"
-                        onClick={() => onActiveTerminalChange(terminalId)}
-                      >
-                        <TerminalSquare className="size-3 shrink-0" />
-                        <span className="truncate">
-                          {terminalLabelById.get(terminalId) ?? "Terminal"}
-                        </span>
-                      </button>
-                      {normalizedTerminalIds.length > 1 && (
+                      {editingTerminalId === terminalId ? (
+                        <ThreadTerminalDrawerRenameEditor
+                          value={terminalRenameDraft}
+                          placeholder={terminalLabelById.get(terminalId) ?? "Terminal"}
+                          onChange={onTerminalRenameDraftChange}
+                          onCommit={onCommitTerminalRename}
+                          onCancel={onCancelTerminalRename}
+                          onReset={() => onResetTerminalRename(terminalId)}
+                          autoFocus
+                          inputRef={renameInputRef}
+                          className="min-w-0 flex-1"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                          onClick={() => onActiveTerminalChange(terminalId)}
+                          onDoubleClick={() => onStartTerminalRename(terminalId)}
+                        >
+                          {ProviderIcon ? (
+                            <ProviderIcon className="size-3 shrink-0" />
+                          ) : (
+                            <TerminalSquare className="size-3 shrink-0" />
+                          )}
+                          <span className="truncate">
+                            {terminalLabelById.get(terminalId) ?? "Terminal"}
+                          </span>
+                        </button>
+                      )}
+                      {editingTerminalId !== terminalId && normalizedTerminalIds.length > 1 && (
                         <Popover>
                           <PopoverTrigger
                             openOnHover

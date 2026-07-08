@@ -144,6 +144,8 @@ export const makeSendTurn =
 
       const turnId = TurnId.makeUnsafe(`copilot-turn-${randomUUID()}`);
       record.activeTurnId = turnId;
+      record.planTrackingToolCallIds.clear();
+      record.lastPlanFingerprint = undefined;
       record.updatedAt = new Date().toISOString();
 
       const sendPayload: Parameters<typeof record.session.send>[0] = {

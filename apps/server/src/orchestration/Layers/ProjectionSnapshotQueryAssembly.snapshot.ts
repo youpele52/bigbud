@@ -151,6 +151,8 @@ function mapThreadRow(
     id: row.threadId,
     projectId: row.projectId,
     title: row.title,
+    elevatorSummary: row.elevatorSummary,
+    elevatorSummaryMessageCount: row.elevatorSummaryMessageCount,
     providerRuntimeExecutionTargetId:
       row.providerRuntimeExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     workspaceExecutionTargetId:

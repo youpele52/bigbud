@@ -61,10 +61,10 @@ export function useChatViewBaseEphemeralState(input: {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>({});
-  const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [planCardOpen, setPlanCardOpen] = useState(false);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
-  const planSidebarDismissedForTurnRef = useRef<string | null>(null);
-  const planSidebarOpenOnNextThreadRef = useRef(false);
+  const planCardDismissedForTurnRef = useRef<string | null>(null);
+  const planCardOpenOnNextThreadRef = useRef(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [composerHighlightedItemId, setComposerHighlightedItemId] = useState<string | null>(null);
@@ -152,12 +152,12 @@ export function useChatViewBaseEphemeralState(input: {
     setPendingUserInputQuestionIndexByRequestId,
     expandedWorkGroups,
     setExpandedWorkGroups,
-    planSidebarOpen,
-    setPlanSidebarOpen,
+    planCardOpen,
+    setPlanCardOpen,
     providerUnlocked,
     setProviderUnlocked,
-    planSidebarDismissedForTurnRef,
-    planSidebarOpenOnNextThreadRef,
+    planCardDismissedForTurnRef,
+    planCardOpenOnNextThreadRef,
     nowTick,
     setNowTick,
     terminalFocusRequestId,

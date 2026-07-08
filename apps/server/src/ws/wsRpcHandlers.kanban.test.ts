@@ -31,6 +31,7 @@ const makeServerConfigLayer = (tempDir: string) =>
     keybindingsConfigPath: `${tempDir}/keybindings.json`,
     settingsPath: `${tempDir}/settings.json`,
     notesDir: `${tempDir}/notes`,
+    kanbanDir: `${tempDir}/kanban`,
     worktreesDir: `${tempDir}/worktrees`,
     attachmentsDir: `${tempDir}/attachments`,
     logsDir: `${tempDir}/logs`,

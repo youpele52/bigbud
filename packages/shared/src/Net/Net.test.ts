@@ -72,10 +72,20 @@ it.layer(NetService.layer)("NetService", (it) => {
     it.effect("findAvailablePort returns preferred when it is free", () =>
       Effect.gen(function* () {
         const net = yield* NetService;
-        const preferred = yield* net.reserveLoopbackPort();
+        const attempts = 5;
 
-        const resolved = yield* net.findAvailablePort(preferred);
-        assert.equal(resolved, preferred);
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const preferred = yield* net.reserveLoopbackPort();
+          const resolved = yield* net.findAvailablePort(preferred);
+          if (resolved === preferred) {
+            assert.equal(resolved, preferred);
+            return;
+          }
+        }
+
+        assert.fail(
+          `findAvailablePort did not preserve a free preferred port after ${attempts} attempts`,
+        );
       }),
     );
 

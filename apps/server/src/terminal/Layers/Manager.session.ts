@@ -1,66 +1,19 @@
 import {
   DEFAULT_TERMINAL_ID,
   TerminalExecutionTargetError,
-  type TerminalEvent,
-  type TerminalSessionSnapshot,
   resolveExecutionTargetId,
 } from "@bigbud/contracts";
 import { Effect, Equal, Option } from "effect";
 
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
-import {
-  TerminalCwdError,
-  TerminalNotRunningError,
-  TerminalSessionLookupError,
-  type TerminalManagerShape,
-} from "../Services/Manager";
-import { normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
-import {
-  DEFAULT_OPEN_COLS,
-  DEFAULT_OPEN_ROWS,
-  type TerminalManagerState,
-  type TerminalSessionState,
-  type TerminalStartInput,
-} from "./Manager.types";
+import { TerminalNotRunningError } from "../Services/Manager";
+import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
+import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { assertSshExecutionTargetReady } from "../../ssh/sshVerification.ts";
 import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state.ts";
-
-export interface SessionApiContext {
-  publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
-  modifyManagerState: <A>(
-    f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
-  ) => Effect.Effect<A>;
-  getSession: (
-    threadId: string,
-    terminalId: string,
-  ) => Effect.Effect<Option.Option<TerminalSessionState>>;
-  requireSession: (
-    threadId: string,
-    terminalId: string,
-  ) => Effect.Effect<TerminalSessionState, TerminalSessionLookupError>;
-  sessionsForThread: (threadId: string) => Effect.Effect<TerminalSessionState[]>;
-  withThreadLock: <A, E, R>(
-    threadId: string,
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E, R>;
-  stopProcess: (session: TerminalSessionState) => Effect.Effect<void>;
-  startSession: (
-    session: TerminalSessionState,
-    input: TerminalStartInput,
-    eventType: "started" | "restarted",
-  ) => Effect.Effect<void>;
-  flushPtyOutput: (threadId: string, terminalId: string) => Effect.Effect<void>;
-  persistHistory: (threadId: string, terminalId: string, history: string) => Effect.Effect<void>;
-  flushPersist: (threadId: string, terminalId: string) => Effect.Effect<void>;
-  readHistory: (threadId: string, terminalId: string) => Effect.Effect<string>;
-  deleteHistory: (threadId: string, terminalId: string) => Effect.Effect<void>;
-  deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
-  evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
-  assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
-  snapshot: (session: TerminalSessionState) => TerminalSessionSnapshot;
-  terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
-}
+import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
+import { type TerminalSessionState } from "./Manager.types";
 
 // ---------------------------------------------------------------------------
 // API method builders
@@ -133,6 +86,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             threadId: input.threadId,
             terminalId,
             executionTargetId,
+            dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             history,
@@ -172,11 +126,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         const targetCols = input.cols ?? liveSession.cols;
         const targetRows = input.rows ?? liveSession.rows;
         const runtimeEnvChanged = !Equal.equals(currentRuntimeEnv, nextRuntimeEnv);
+        const executionTargetChanged = liveSession.executionTargetId !== executionTargetId;
 
-        if (liveSession.cwd !== input.cwd || runtimeEnvChanged) {
+        if (liveSession.cwd !== input.cwd || runtimeEnvChanged || executionTargetChanged) {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           yield* stopProcess(liveSession);
           liveSession.executionTargetId = executionTargetId;
+          liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           liveSession.cwd = input.cwd;
           liveSession.worktreePath = input.worktreePath ?? null;
           liveSession.runtimeEnv = nextRuntimeEnv;
@@ -185,6 +141,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         } else if (liveSession.status === "exited" || liveSession.status === "error") {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
           liveSession.executionTargetId = executionTargetId;
+          liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.worktreePath = input.worktreePath ?? null;
           resetSessionRuntimeState(liveSession);
@@ -287,6 +244,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             threadId: input.threadId,
             terminalId,
             executionTargetId,
+            dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
             history: "",
@@ -306,6 +264,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           yield* flushPtyOutput(session.threadId, session.terminalId);
           yield* stopProcess(session);
           session.executionTargetId = executionTargetId;
+          session.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           session.cwd = input.cwd;
           session.worktreePath = input.worktreePath ?? null;
           session.runtimeEnv = normalizedRuntimeEnv(input.env);

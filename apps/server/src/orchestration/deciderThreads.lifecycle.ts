@@ -299,6 +299,12 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         payload: {
           threadId: command.threadId,
           ...(command.title !== undefined ? { title: command.title } : {}),
+          ...(command.elevatorSummary !== undefined
+            ? { elevatorSummary: command.elevatorSummary }
+            : {}),
+          ...(command.elevatorSummaryMessageCount !== undefined
+            ? { elevatorSummaryMessageCount: command.elevatorSummaryMessageCount }
+            : {}),
           ...(command.providerRuntimeExecutionTargetId !== undefined ||
           command.workspaceExecutionTargetId !== undefined ||
           command.executionTargetId !== undefined
@@ -313,7 +319,6 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         },
       };
     }
-
     case "thread.runtime-mode.set": {
       yield* requireThreadNotDeleting({
         readModel,

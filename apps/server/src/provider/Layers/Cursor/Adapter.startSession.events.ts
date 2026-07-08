@@ -1,5 +1,5 @@
 import { type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
-import { Effect, Stream } from "effect";
+import { Effect, Scope, Stream } from "effect";
 
 import {
   type CursorAdapterLiveOptions,
@@ -83,6 +83,7 @@ export function emitPlanUpdate(
 export function forkNotificationFiber(
   deps: CursorStartSessionEventDeps,
   ctx: CursorSessionContext,
+  scope: Scope.Scope,
 ) {
   return Stream.runDrain(
     Stream.mapEffect(ctx.acp.getEvents(), (event) =>
@@ -155,5 +156,5 @@ export function forkNotificationFiber(
         }
       }),
     ),
-  ).pipe(Effect.forkChild);
+  ).pipe(Effect.forkIn(scope));
 }

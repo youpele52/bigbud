@@ -61,6 +61,8 @@ export function makeDispatchBootstrapThreadCommand(
     command: Extract<OrchestrationCommand, { type: "thread.turn.start" | "thread.shell.run" }>,
   ): Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchCommandError> {
     return Effect.gen(function* () {
+      const services = yield* Effect.services();
+      const runFork = Effect.runForkWith(services);
       const bootstrap = command.bootstrap;
       const { bootstrap: _bootstrap, ...finalTurnStartCommand } = command;
       let createdThread = false;
@@ -195,6 +197,17 @@ export function makeDispatchBootstrapThreadCommand(
             })()
           : Effect.void;
 
+      const runPostDispatchBootstrapEffects = () =>
+        Effect.all(
+          [
+            targetWorktreePath
+              ? refreshGitStatus(targetWorktreePath).pipe(Effect.ignoreCause({ log: true }))
+              : Effect.void,
+            runSetupProgram(),
+          ],
+          { concurrency: "unbounded", discard: true },
+        );
+
       const bootstrapProgram = Effect.gen(function* () {
         if (bootstrap?.createThread) {
           yield* orchestrationEngine.dispatch({
@@ -244,12 +257,11 @@ export function makeDispatchBootstrapThreadCommand(
             branch: worktree.worktree.branch,
             worktreePath: targetWorktreePath,
           });
-          yield* refreshGitStatus(targetWorktreePath).pipe(Effect.ignoreCause({ log: true }));
         }
 
-        yield* runSetupProgram();
-
-        return yield* orchestrationEngine.dispatch(finalTurnStartCommand);
+        const dispatchResult = yield* orchestrationEngine.dispatch(finalTurnStartCommand);
+        runFork(runPostDispatchBootstrapEffects().pipe(Effect.ignoreCause({ log: true })));
+        return dispatchResult;
       });
 
       const toBootstrapDispatchCommandCauseError = (cause: Cause.Cause<unknown>) => {

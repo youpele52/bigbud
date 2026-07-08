@@ -35,6 +35,7 @@ import {
   type CopilotAdapterLiveOptions,
   type PendingApprovalRequest,
   type PendingUserInputRequest,
+  makeCliRuntimeConnection,
   makeNodeWrapperCliPath,
   toMessage,
 } from "./Adapter.types.ts";
@@ -158,9 +159,10 @@ export const makeStartSession =
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
       const sessionWorkingDirectory =
         remoteWorkspaceBridge?.clientSessionFsConfig.initialCwd ?? input.cwd;
+      const connection = makeCliRuntimeConnection(resolvedCliPath);
       const clientOptions: CopilotClientOptions = {
-        ...(resolvedCliPath !== undefined ? { cliPath: resolvedCliPath } : {}),
-        ...(runtimeCwd ? { cwd: runtimeCwd } : {}),
+        ...(connection ? { connection } : {}),
+        ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
         ...(remoteWorkspaceBridge?.clientSessionFsConfig
           ? { sessionFs: remoteWorkspaceBridge.clientSessionFsConfig }
           : {}),
@@ -276,6 +278,8 @@ export const makeStartSession =
         activeTurnId: undefined,
         activeMessageId: undefined,
         lastUsage: undefined,
+        planTrackingToolCallIds: new Set(),
+        lastPlanFingerprint: undefined,
         get stopped() {
           return stoppedRef.stopped;
         },

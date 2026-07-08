@@ -12,11 +12,10 @@ import {
   type ModelSelection,
   type OrchestrationSession,
   ProviderKind,
+  type ProviderSession,
   type OrchestrationThread,
   ThreadId,
-  type ProviderSession,
 } from "@bigbud/contracts";
-import { hasAnyAttachments } from "@bigbud/shared/history";
 import { Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -44,6 +43,7 @@ import {
   prependThreadContextToProviderInput,
   resolveAndExportThreadContextPath,
 } from "./ProviderCommandReactorSessionOps.threadContext.ts";
+import { shouldRebuildProviderContextFromTranscript } from "./ProviderCommandReactorSessionOps.context.ts";
 
 /** Service bundle accepted by session-op helpers. */
 export type SessionOpServices = {
@@ -62,28 +62,6 @@ export type SessionOpServices = {
   }) => Effect.Effect<void, OrchestrationDispatchError>;
   readonly resolveThread: (threadId: ThreadId) => Effect.Effect<OrchestrationThread | undefined>;
 };
-
-function shouldRebuildProviderContextFromTranscript(input: {
-  readonly thread: OrchestrationThread;
-  readonly bootstrapThread: OrchestrationThread | null;
-  readonly activeSession: ProviderSession | undefined;
-  readonly messageText: string;
-  readonly attachments: ReadonlyArray<ChatAttachment>;
-}): boolean {
-  if (input.bootstrapThread) {
-    return input.bootstrapThread.messages.length > 0 && !hasAnyAttachments(input.attachments);
-  }
-  if (input.activeSession) {
-    return false;
-  }
-  if (input.thread.messages.length <= 1) {
-    return false;
-  }
-  if (hasAnyAttachments(input.attachments)) {
-    return false;
-  }
-  return true;
-}
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (

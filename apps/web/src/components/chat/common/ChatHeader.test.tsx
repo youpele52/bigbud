@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 let mockIsThreadRunning = false;
@@ -23,6 +24,17 @@ import { SidebarProvider } from "../../ui/sidebar";
 import { ChatHeader } from "./ChatHeader";
 
 describe("ChatHeader", () => {
+  function renderHeader(input: Partial<React.ComponentProps<typeof ChatHeader>> = {}) {
+    const queryClient = new QueryClient();
+    return renderToStaticMarkup(
+      <QueryClientProvider client={queryClient}>
+        <SidebarProvider defaultOpen>
+          <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} {...input} />
+        </SidebarProvider>
+      </QueryClientProvider>,
+    );
+  }
+
   afterEach(() => {
     vi.restoreAllMocks();
     mockIsThreadRunning = false;
@@ -50,14 +62,17 @@ describe("ChatHeader", () => {
     activeThreadTitle: "Thread",
     availableEditors: [],
     diffOpen: false,
-    gitCwd: null,
     keybindings: DEFAULT_BINDINGS,
     onAddProjectScript: async () => undefined,
     onDeleteProjectScript: async () => undefined,
+    onOpenOrchestra: () => undefined,
+    onTogglePlanCard: () => undefined,
     onRunProjectScript: () => undefined,
     onToggleRightPanel: () => undefined,
     onUpdateProjectScript: async () => undefined,
     openInCwd: null,
+    planCardLabel: "Tasks",
+    planCardOpen: false,
     preferredScriptId: null,
     rightPanelOpen: false,
     rightPanelToggleShortcutLabel: null,
@@ -65,11 +80,7 @@ describe("ChatHeader", () => {
   } as const;
 
   it("renders the sidebar toggle and the right panel toggle", () => {
-    const markup = renderToStaticMarkup(
-      <SidebarProvider defaultOpen>
-        <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} />
-      </SidebarProvider>,
-    );
+    const markup = renderHeader();
 
     expect(markup).toContain('aria-label="Toggle sidebar"');
     expect(markup).toContain('aria-label="Open right panel"');
@@ -78,22 +89,27 @@ describe("ChatHeader", () => {
   it("shows blue dots while running and orange dots while compacting", () => {
     mockIsThreadRunning = true;
 
-    const runningMarkup = renderToStaticMarkup(
-      <SidebarProvider defaultOpen>
-        <ChatHeader activeThreadId={"thread-running" as never} {...baseProps} />
-      </SidebarProvider>,
-    );
+    const runningMarkup = renderHeader({
+      activeThreadId: "thread-running" as never,
+    });
 
     mockIsThreadRunning = false;
     mockIsThreadCompacting = true;
 
-    const compactingMarkup = renderToStaticMarkup(
-      <SidebarProvider defaultOpen>
-        <ChatHeader activeThreadId={"thread-compacting" as never} {...baseProps} />
-      </SidebarProvider>,
-    );
+    const compactingMarkup = renderHeader({
+      activeThreadId: "thread-compacting" as never,
+    });
 
     expect(runningMarkup).toContain("bg-info-foreground");
     expect(compactingMarkup).toContain("bg-warning");
+  });
+
+  it("renders quick actions when chat has an open folder without a project header", () => {
+    const markup = renderHeader({
+      activeThreadId: "thread-chat-folder" as never,
+      openInCwd: "/repo/project",
+    });
+
+    expect(markup).toContain('aria-label="Quick actions"');
   });
 });

@@ -83,6 +83,11 @@ import type {
   ServerExportThreadContextResult,
 } from "./server";
 import type {
+  ServerGetHandoffJobInput,
+  ServerHandoffJob,
+  ServerStartHandoffJobInput,
+} from "./server.handoff";
+import type {
   ServerCreateMobileRemotePairingInput,
   ServerListMobileRemoteSessionsResult,
   ServerMobileRemotePairing,
@@ -106,6 +111,7 @@ import type {
   ServerTriggerAutomationResult,
   ServerUpdateAutomationInput,
 } from "./automation";
+import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -128,7 +134,7 @@ import type {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
-import { ServerSettings, ServerSettingsPatch } from "../core/settings";
+import { type DesktopWindowMaterial, ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 export * from "./ipc.desktopComputerUse";
 
@@ -217,6 +223,7 @@ export interface DesktopBridge extends DesktopComputerUseBridge {
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
+  setWindowMaterial: (windowMaterial: DesktopWindowMaterial) => Promise<void>;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
@@ -345,6 +352,8 @@ export interface NativeApi {
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
     ) => Promise<ServerWriteHandoffDocumentResult>;
+    startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
+    getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
     createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
@@ -369,6 +378,7 @@ export interface NativeApi {
     listAutomationRuns: (
       input: ServerListAutomationRunsInput,
     ) => Promise<ServerListAutomationRunsResult>;
+    getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
     getSnapshot: () => Promise<OrchestrationReadModel>;

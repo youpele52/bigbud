@@ -20,11 +20,12 @@ import {
 } from "./shared.ts";
 import {
   pickExternalDependencies,
-  pickNonNativeExternalDependencies,
   pruneMacServerRuntimeArtifacts,
+  pruneSourceMaps,
   resolveElectronBuilderBinary,
   stagePackagedOpencodeWindowsBinary,
 } from "./build.runtime.ts";
+import { stageBundledSkills } from "./bundledSkills.ts";
 import {
   assertPlatformBuildResources,
   createBuildConfig,
@@ -142,8 +143,11 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   if (yield* fs.exists(serverBundledAgentsDir)) {
     yield* fs.copy(serverBundledAgentsDir, path.join(stageServerDir, "bundled-agents"));
   }
+  yield* stageBundledSkills({ repoRoot, stageServerDir });
   yield* assertPlatformBuildResources(options.platform, stageResourcesDir, options.verbose);
   yield* fs.copy(stageResourcesDir, path.join(stageAppDir, "apps/desktop/prod-resources"));
+  yield* pruneSourceMaps(path.join(stageAppDir, "apps/desktop/dist-electron"), "desktop bundle");
+  yield* pruneSourceMaps(path.join(stageServerDir, "dist"), "server bundle");
 
   if (isWindowsBuildPlatform(options.platform)) {
     yield* stagePackagedOpencodeWindowsBinary({
@@ -165,10 +169,6 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // Only packages that cannot be bundled (native addons, runtime require.resolve)
   // need to be installed in the staged server directory.
   const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
-  const serverNonNativeExternalDependencies = pickNonNativeExternalDependencies(
-    resolvedServerDependencies,
-  );
-
   const stagePackageJson: StagePackageJson = {
     name: "bigbud-desktop",
     version: appVersion,
@@ -188,10 +188,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       stageResourcesDir,
       repoRoot,
     ),
-    dependencies: {
-      ...serverNonNativeExternalDependencies,
-      ...resolvedDesktopRuntimeDependencies,
-    },
+    dependencies: resolvedDesktopRuntimeDependencies,
     devDependencies: {
       electron: desktopPackageJson.dependencies.electron,
     },
@@ -223,6 +220,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
       shell: shellOptionForPlatform(options.platform),
     })`bun install --production`,
   );
+  yield* pruneSourceMaps(path.join(stageAppDir, "node_modules"), "desktop runtime dependencies");
   // Use npm (not bun) for the server directory so node_modules follows the
   // standard flat layout that Node.js expects. Bun's symlink-based hoisting
   // does not survive electron-builder's file copy to extraResources.
@@ -298,7 +296,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     buildEnv.GYP_MSVS_VERSION = buildEnv.GYP_MSVS_VERSION ?? "2022";
   }
 
-  const electronBuilderResult = yield* resolveElectronBuilderBinary();
+  const electronBuilderResult = yield* resolveElectronBuilderBinary(options.platform);
   yield* Effect.log(
     `[desktop-artifact] Building ${options.platform}/${options.target} (arch=${options.arch}, version=${appVersion}) using ${electronBuilderResult.binary}...`,
   );
@@ -308,7 +306,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
         env: buildEnv,
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
-      })`bunx electron-builder ${platformConfig.cliFlag} --${options.arch} --publish never`
+      })`bunx ${electronBuilderResult.packageSpecifier} ${platformConfig.cliFlag} --${options.arch} --publish never`
     : ChildProcess.make({
         cwd: stageAppDir,
         env: buildEnv,

@@ -24,6 +24,27 @@ function message(
   };
 }
 
+function handoffSeedMessage(id: string, filePath = `/tmp/${id}.md`): SeedMessageInput {
+  return message(id, "user", {
+    text: [
+      "Before answering later requests in this branched thread, read the handoff document at the attached path.",
+      `Handoff file: ${filePath}`,
+      "Use that file as the authoritative summary/context for this branch.",
+    ].join("\n"),
+    attachments: [
+      {
+        type: "path",
+        id: `${id}-attachment`,
+        name: `${id}.md`,
+        mimeType: "text/markdown",
+        sizeBytes: 0,
+        path: filePath,
+        entryKind: "file",
+      },
+    ],
+  });
+}
+
 describe("sliceMessagesForBranch", () => {
   const messages = [
     message("m1", "user"),
@@ -99,5 +120,24 @@ describe("prepareSeedMessagesForBranch", () => {
     expect(() =>
       prepareSeedMessagesForBranch(messages, { upToMessageId: "nonexistent" as never }),
     ).toThrow(ThreadBranchError);
+  });
+
+  it("prunes synthetic handoff seed messages from later branch copies", () => {
+    const seeded = prepareSeedMessages([
+      handoffSeedMessage("m1"),
+      message("m2", "assistant", { text: "Handoff applied." }),
+      message("m3", "user", { text: "Continue from here." }),
+    ]);
+
+    expect(seeded).toHaveLength(2);
+    expect(seeded.map((entry) => entry.text)).toEqual(["Handoff applied.", "Continue from here."]);
+  });
+
+  it("keeps the handoff seed when pruning would otherwise leave the branch empty", () => {
+    const seeded = prepareSeedMessages([handoffSeedMessage("m1")]);
+
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0]?.attachments).toHaveLength(1);
+    expect(seeded[0]?.text).toContain("read the handoff document");
   });
 });

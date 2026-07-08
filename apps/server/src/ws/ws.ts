@@ -10,6 +10,7 @@ import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
 import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
+import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
@@ -22,6 +23,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       ...makeWsRpcKanbanHandlers(context),
       ...makeWsRpcNotesHandlers(context),
       ...makeWsRpcTeachHandlers(context),
+      ...makeWsRpcUsageHandlers(context),
       ...makeWsRpcGitTerminalHandlers(context),
     });
   }),

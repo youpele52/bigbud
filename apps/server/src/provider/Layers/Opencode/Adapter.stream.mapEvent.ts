@@ -36,6 +36,34 @@ export function openCodeQuestionId(index: number, header: string): string {
     .replace(/[^a-z0-9-]/g, "")}`;
 }
 
+function normalizeTodoStatus(status: unknown): "pending" | "inProgress" | "completed" {
+  if (status === "completed") {
+    return "completed";
+  }
+  if (status === "in_progress" || status === "inProgress") {
+    return "inProgress";
+  }
+  return "pending";
+}
+
+function mapTodoPlan(
+  todos: ReadonlyArray<{
+    content?: string;
+    status?: string;
+  }>,
+): ReadonlyArray<{
+  step: string;
+  status: "pending" | "inProgress" | "completed";
+}> {
+  return todos.map((todo) => ({
+    step:
+      typeof todo.content === "string" && todo.content.trim().length > 0
+        ? todo.content.trim()
+        : "Task",
+    status: normalizeTodoStatus(todo.status),
+  }));
+}
+
 /**
  * Map an OpenCode SSE event to zero or more ProviderRuntimeEvents.
  */
@@ -112,6 +140,33 @@ export function makeMapEvent(
               payload: {
                 state: "compacted",
                 detail: event.properties,
+              },
+            },
+          ];
+        }
+
+        case "todo.updated": {
+          const todoProps = event.properties as {
+            sessionID: string;
+            todos: Array<{
+              content?: string;
+              status?: string;
+            }>;
+          };
+
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt,
+                threadId: session.threadId,
+                provider,
+                ...(turnId ? { turnId } : {}),
+                raw,
+              }),
+              type: "turn.plan.updated",
+              payload: {
+                plan: mapTodoPlan(todoProps.todos ?? []),
               },
             },
           ];

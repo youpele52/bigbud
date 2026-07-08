@@ -1,6 +1,6 @@
 import type { Fiber } from "effect";
 
-import type { TerminalSessionStatus } from "@bigbud/contracts";
+import type { TerminalDropPathMode, TerminalSessionStatus } from "@bigbud/contracts";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 
@@ -24,6 +24,7 @@ export interface TerminalSessionState {
   threadId: string;
   terminalId: string;
   executionTargetId: string;
+  dropPathMode: TerminalDropPathMode;
   cwd: string;
   worktreePath: string | null;
   runtimeEpoch: number;

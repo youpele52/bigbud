@@ -65,21 +65,19 @@ export const makeProcessSessionHandlers = ({
     if (!thread) {
       return;
     }
-    const hasSession = thread.session && thread.session.status !== "stopped";
-    if (!hasSession) {
-      return yield* appendProviderFailureActivity({
-        threadId: event.payload.threadId,
-        kind: "provider.turn.interrupt.failed",
-        summary: "Provider turn interrupt failed",
-        detail: "No active provider session is bound to this thread.",
-        turnId: event.payload.turnId ?? null,
-        createdAt: event.payload.createdAt,
-      });
+    const runtimeSession = yield* providerService
+      .listSessions()
+      .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === thread.id)));
+    const boundSession =
+      thread.session && thread.session.status !== "stopped" ? thread.session : null;
+
+    if (!boundSession && !runtimeSession) {
+      return;
     }
 
     if (
       event.payload.turnId !== undefined &&
-      event.payload.turnId !== (thread.session?.activeTurnId ?? null)
+      event.payload.turnId !== (runtimeSession?.activeTurnId ?? boundSession?.activeTurnId ?? null)
     ) {
       return;
     }
@@ -93,11 +91,12 @@ export const makeProcessSessionHandlers = ({
       session: {
         threadId: thread.id,
         status: "ready",
-        providerName: thread.session?.providerName ?? null,
-        runtimeMode: thread.session?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+        providerName: runtimeSession?.provider ?? boundSession?.providerName ?? null,
+        runtimeMode:
+          runtimeSession?.runtimeMode ?? boundSession?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
         activeTurnId: null,
         reason: null,
-        lastError: thread.session?.lastError ?? null,
+        lastError: boundSession?.lastError ?? runtimeSession?.lastError ?? null,
         updatedAt: event.payload.createdAt,
       },
       createdAt: event.payload.createdAt,

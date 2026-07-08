@@ -1,7 +1,8 @@
 import { assert } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
 
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 
 import { ProviderService } from "../Services/ProviderService.ts";
 import { ProviderValidationError } from "../Errors.ts";
@@ -149,6 +150,34 @@ routing.layer("ProviderServiceLive routing", (it) => {
         assert.equal(startPayload.cwd, "/tmp/project-claude");
       }
     }),
+  );
+
+  it.effect("fails hung provider session starts instead of waiting indefinitely", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const threadId = asThreadId("thread-session-timeout");
+      routing.codex.startSession.mockImplementationOnce(() => Effect.never);
+      const fiber = yield* provider
+        .startSession(threadId, {
+          provider: "codex",
+          threadId,
+          cwd: "/tmp/project-timeout",
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.forkScoped);
+
+      yield* TestClock.adjust("45 seconds");
+      const exit = yield* Effect.result(Fiber.join(fiber));
+
+      assertFailure(
+        exit,
+        new ProviderValidationError({
+          operation: "ProviderService.startSession",
+          issue:
+            "Provider 'codex' session startup timed out after 45s before the first turn could be sent.",
+        }),
+      );
+    }).pipe(Effect.provide(TestClock.layer())),
   );
 
   it.effect("stops stale active sessions for the same thread when switching providers", () =>

@@ -15,6 +15,7 @@ type ProviderIntentEvent = Extract<
       | "project.deletion-requested"
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
+      | "thread.message-sent"
       | "thread.turn-interrupt-requested"
       | "thread.approval-response-requested"
       | "thread.user-input-response-requested"
@@ -67,6 +68,7 @@ const make = Effect.gen(function* () {
         event.type === "project.deletion-requested" ||
         event.type === "thread.runtime-mode-set" ||
         event.type === "thread.turn-start-requested" ||
+        event.type === "thread.message-sent" ||
         event.type === "thread.turn-interrupt-requested" ||
         event.type === "thread.approval-response-requested" ||
         event.type === "thread.user-input-response-requested" ||

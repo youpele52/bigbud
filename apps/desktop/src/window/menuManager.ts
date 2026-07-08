@@ -57,12 +57,17 @@ export function resolveResourcePath(
   desktopDir: string,
   resourcesPath: string,
 ): string | null {
-  const candidates = [
+  const bundledCandidates = [
     Path.join(desktopDir, "../resources", fileName),
     Path.join(desktopDir, "../prod-resources", fileName),
-    Path.join(resourcesPath, "resources", fileName),
-    Path.join(resourcesPath, fileName),
   ];
+  const packagedCandidates = [
+    Path.join(resourcesPath, fileName),
+    Path.join(resourcesPath, "resources", fileName),
+  ];
+  const candidates = app.isPackaged
+    ? [...packagedCandidates, ...bundledCandidates]
+    : [...bundledCandidates, ...packagedCandidates];
 
   for (const candidate of candidates) {
     if (FS.existsSync(candidate)) {

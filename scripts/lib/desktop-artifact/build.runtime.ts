@@ -8,6 +8,7 @@ import { ChildProcess } from "effect/unstable/process";
 
 import {
   BuildArch,
+  BuildPlatform,
   BuildScriptError,
   RepoRoot,
   commandOutputOptions,
@@ -24,8 +25,6 @@ const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
   "@earendil-works/pi-coding-agent",
 ]);
 
-const NATIVE_SERVER_EXTERNAL_PACKAGES = new Set(["node-pty"]);
-
 /** Filter a dependency map to only include packages that are external at runtime. */
 export function pickExternalDependencies(
   dependencies: Record<string, unknown>,
@@ -33,25 +32,6 @@ export function pickExternalDependencies(
   const result: Record<string, unknown> = {};
   for (const [name, version] of Object.entries(dependencies)) {
     if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name)) {
-      result[name] = version;
-    }
-  }
-  return result;
-}
-
-/**
- * Like pickExternalDependencies but excludes native compiled addons.
- *
- * Native addons must only live in the staged server directory (loaded from
- * _modules at runtime). Installing them in the app-root node_modules triggers
- * electron-builder's implicit npmRebuild which hangs on Windows.
- */
-export function pickNonNativeExternalDependencies(
-  dependencies: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [name, version] of Object.entries(dependencies)) {
-    if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name) && !NATIVE_SERVER_EXTERNAL_PACKAGES.has(name)) {
       result[name] = version;
     }
   }
@@ -106,15 +86,27 @@ export const stagePackagedOpencodeWindowsBinary = Effect.fn("stagePackagedOpenco
   },
 );
 
-export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(function* () {
+const WINDOWS_ELECTRON_BUILDER_VERSION = "26.15.3";
+
+export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBinary")(function* (
+  platform: typeof BuildPlatform.Type,
+) {
   const repoRoot = yield* RepoRoot;
   const path = yield* Path.Path;
+
+  if (platform === "win") {
+    return {
+      binary: "bunx",
+      fallback: true,
+      packageSpecifier: `electron-builder@${WINDOWS_ELECTRON_BUILDER_VERSION}`,
+    } as const;
+  }
 
   const localBinary = yield* Effect.try({
     try: () => {
       const require = createRequire(path.join(repoRoot, "apps/desktop/package.json"));
-      const entry = require.resolve("electron-builder");
-      const pkgDir = dirname(entry);
+      const packageJsonPath = require.resolve("electron-builder/package.json");
+      const pkgDir = dirname(packageJsonPath);
       const cliPath = path.join(pkgDir, "cli.js");
       if (existsSync(cliPath)) {
         return cliPath;
@@ -129,13 +121,13 @@ export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBin
   });
 
   if (localBinary) {
-    return { binary: localBinary, fallback: false } as const;
+    return { binary: localBinary, fallback: false, packageSpecifier: undefined } as const;
   }
 
   yield* Effect.logWarning(
     "[desktop-artifact] Could not resolve local electron-builder; falling back to bunx. Add 'electron-builder' to apps/desktop devDependencies for reproducible builds.",
   );
-  return { binary: "bunx", fallback: true } as const;
+  return { binary: "bunx", fallback: true, packageSpecifier: "electron-builder" } as const;
 });
 
 export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(
@@ -143,19 +135,47 @@ export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeAr
     yield* Effect.tryPromise({
       try: async () => {
         const removableDirectoryNames = new Set(["linux", "win32", "windows"]);
+        const removableDirectoryPatterns = [
+          /^linux-/i,
+          /^win32-/i,
+          /^clipboard-linux-/i,
+          /^clipboard-win32-/i,
+        ];
+        const removableDirectorySuffixes = new Set([".pdb"]);
+        const removableDirectoryRelativePaths = new Set([
+          join("node-pty", "prebuilds", "win32-arm64"),
+          join("node-pty", "prebuilds", "win32-x64"),
+          join("node-pty", "third_party", "conpty"),
+          join("node-pty", "deps", "winpty"),
+        ]);
 
-        const visit = async (currentDir: string): Promise<void> => {
+        const shouldRemoveDirectory = (entryName: string, relativePath: string): boolean =>
+          removableDirectoryNames.has(entryName.toLowerCase()) ||
+          removableDirectoryPatterns.some((pattern) => pattern.test(entryName)) ||
+          removableDirectoryRelativePaths.has(relativePath);
+
+        const visit = async (currentDir: string, relativeDir = ""): Promise<void> => {
           const entries = await readdir(currentDir, { withFileTypes: true });
           for (const entry of entries) {
-            if (!entry.isDirectory()) continue;
-
             const entryPath = join(currentDir, entry.name);
-            if (removableDirectoryNames.has(entry.name.toLowerCase())) {
+            const entryRelativePath = relativeDir ? join(relativeDir, entry.name) : entry.name;
+
+            if (entry.isDirectory() && shouldRemoveDirectory(entry.name, entryRelativePath)) {
               await rm(entryPath, { recursive: true, force: true });
               continue;
             }
 
-            await visit(entryPath);
+            if (entry.isDirectory()) {
+              await visit(entryPath, entryRelativePath);
+              continue;
+            }
+
+            if (
+              entry.isFile() &&
+              removableDirectorySuffixes.has(entry.name.slice(entry.name.lastIndexOf(".")))
+            ) {
+              await rm(entryPath, { force: true });
+            }
           }
         };
 
@@ -169,3 +189,34 @@ export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeAr
     });
   },
 );
+
+export const pruneSourceMaps = Effect.fn("pruneSourceMaps")(function* (
+  rootDir: string,
+  label: string,
+) {
+  yield* Effect.tryPromise({
+    try: async () => {
+      const visit = async (currentDir: string): Promise<void> => {
+        const entries = await readdir(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          const entryPath = join(currentDir, entry.name);
+          if (entry.isDirectory()) {
+            await visit(entryPath);
+            continue;
+          }
+
+          if (entry.isFile() && entry.name.endsWith(".map")) {
+            await rm(entryPath, { force: true });
+          }
+        }
+      };
+
+      await visit(rootDir);
+    },
+    catch: (cause) =>
+      new BuildScriptError({
+        message: `Failed to prune source maps from ${label} at ${rootDir}.`,
+        cause,
+      }),
+  });
+});

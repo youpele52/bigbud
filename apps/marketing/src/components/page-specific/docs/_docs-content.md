@@ -89,21 +89,33 @@ Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 
 ## Using bigbud
 
+### Orchestra
+
+Use Orchestra when you want several AI agents to tackle different parts of the same job, either in parallel or as a sequenced handoff.
+
+<iframe src="https://www.youtube-nocookie.com/embed/xuj5rBaKPVQ" title="bigbud: Orchestra"></iframe>
+
 ### Writing notes like a Pro
+
+Use notes to keep project context, drafts, and working memory close to your chats without jumping into a separate writing app.
 
 <iframe src="https://www.youtube-nocookie.com/embed/DPceRqM3Sis" title="bigbud: Writing notes like a Pro"></iframe>
 
 ### Using bigbud's Kanban board
 
+Use the Kanban board to turn loose ideas and agent work into visible tasks you can organize, revisit, and move through a workflow.
+
 <iframe src="https://www.youtube-nocookie.com/embed/R0WvKJjY62Q" title="bigbud: Using bigbud's Kanban board"></iframe>
 
 ### Thread-aware agents: drag & drop context into AI
+
+Drag threads into context when you want an agent to understand prior decisions or related work without pasting long transcripts by hand.
 
 <iframe src="https://www.youtube-nocookie.com/embed/Y6cBo1jKA24" title="bigbud: Thread-aware agents — drag & drop threads into AI context"></iframe>
 
 ### Thread Reader Outline
 
-The thread view now tracks your reading position between turns and provides a **reader outline** — a dot strip beside the scrollbar gutter that maps every user turn, with a jump menu for clicking directly to any point in the conversation. Sending a message anchors the new turn with a peek of the previous one, and user messages animate in with reduced-motion awareness.
+Use the reader outline to jump through long conversations by user turn, keep your reading position, and return to the exact part of a thread that matters.
 
 ## Advanced Features
 

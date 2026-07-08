@@ -69,10 +69,11 @@
     @apply border-border outline-ring/50;
   }
   html {
-    @apply bg-background;
+    background-color: var(--app-shell-window-background);
   }
   body {
-    @apply bg-background text-foreground relative;
+    @apply text-foreground relative;
+    background-color: var(--app-shell-window-background);
   }
 }
 
@@ -123,6 +124,16 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
+  --chart-1: color-mix(in srgb, var(--color-emerald-500) 86%, var(--color-white));
+  --chart-2: color-mix(in srgb, var(--color-sky-500) 88%, var(--color-white));
+  --chart-3: color-mix(in srgb, var(--color-amber-500) 90%, var(--color-white));
+  --chart-4: color-mix(in srgb, var(--color-rose-500) 84%, var(--color-white));
+  --chart-5: color-mix(in srgb, var(--color-neutral-500) 78%, var(--color-white));
+  --app-shell-window-background: var(--background);
+  --app-shell-sidebar-background: var(--card);
+  --app-shell-sidebar-blur: 0px;
+  --app-shell-header-background: var(--background);
+  --app-shell-header-blur: 0px;
 
   @variant dark {
     color-scheme: dark;
@@ -151,7 +162,20 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
+    --chart-1: color-mix(in srgb, var(--color-emerald-400) 88%, var(--color-white));
+    --chart-2: color-mix(in srgb, var(--color-sky-400) 88%, var(--color-white));
+    --chart-3: color-mix(in srgb, var(--color-amber-400) 90%, var(--color-white));
+    --chart-4: color-mix(in srgb, var(--color-rose-400) 88%, var(--color-white));
+    --chart-5: color-mix(in srgb, var(--color-neutral-300) 82%, var(--color-white));
   }
+}
+
+html[data-desktop-shell="macos"][data-window-material="translucent"] {
+  --app-shell-window-background: transparent;
+  --app-shell-sidebar-background: color-mix(in srgb, var(--background) 32%, transparent);
+  --app-shell-sidebar-blur: 56px;
+  --app-shell-header-background: color-mix(in srgb, var(--background) 38%, transparent);
+  --app-shell-header-blur: 44px;
 }
 
 body {
@@ -184,7 +208,7 @@ body,
 }
 
 #root {
-  background-color: var(--background);
+  background-color: var(--app-shell-window-background);
 }
 
 body::after {

@@ -79,6 +79,9 @@ describe("Opencode session orchestration MCP", () => {
           config: {
             type: "local",
             command: expect.arrayContaining([expect.any(String)]),
+            cwd: expect.stringContaining("bigbud-orchestration-mcp-"),
+            enabled: true,
+            timeout: 10_000,
           },
         },
       ]);
@@ -145,6 +148,9 @@ describe("Opencode session orchestration MCP", () => {
           config: {
             type: "local",
             command: expect.arrayContaining([expect.any(String)]),
+            cwd: expect.stringContaining("bigbud-orchestration-mcp-"),
+            enabled: true,
+            timeout: 10_000,
           },
         },
       ]);
@@ -221,6 +227,9 @@ describe("Opencode session orchestration MCP", () => {
             config: {
               type: "local",
               command: expect.arrayContaining([expect.any(String)]),
+              cwd: expect.stringContaining("bigbud-orchestration-mcp-"),
+              enabled: true,
+              timeout: 10_000,
             },
           },
         ]);
@@ -350,6 +359,62 @@ describe("Opencode session orchestration MCP", () => {
       expect(mcpDisconnectCalls).toEqual([
         { name: "bigbud_orchestration_thread-opencode-session-test" },
       ]);
+    }),
+  );
+
+  it.effect("continues starting the session when orchestration MCP registration fails", () =>
+    Effect.gen(function* () {
+      const sessions = new Map();
+      const handle: OpencodeServerHandle = {
+        client: makeMockOpencodeClient({
+          onMcpAdd: () => {
+            throw new Error("MCP handshake timed out.");
+          },
+        }),
+        url: "http://127.0.0.1:4103",
+        release() {},
+      };
+
+      const methods = makeSessionMethods({
+        provider: "opencode",
+        sessions,
+        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+        serverManager: {
+          acquire: async () => handle,
+        },
+        serverSettings: {
+          getSettings: Effect.succeed({
+            providers: {
+              opencode: {
+                binaryPath: "opencode",
+              },
+            },
+          } as never),
+        },
+        serverConfig: {
+          attachmentsDir: "/tmp/attachments",
+          stateDir: "/tmp/bigbud-state",
+          port: 3773,
+          host: "127.0.0.1",
+        },
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-mcp-failure")),
+        makeEventStamp: () =>
+          Effect.succeed({
+            eventId: EventId.makeUnsafe("evt-mcp-failure"),
+            createdAt: CREATED_AT,
+          }),
+        nativeEventLogger: undefined,
+        services: yield* Effect.services<never>(),
+      });
+
+      const session = yield* methods.startSession({
+        threadId: THREAD_ID,
+        provider: "opencode",
+        runtimeMode: "approval-required",
+      });
+
+      expect(session.threadId).toBe(THREAD_ID);
+      expect(sessions.has(THREAD_ID)).toBe(true);
     }),
   );
 });

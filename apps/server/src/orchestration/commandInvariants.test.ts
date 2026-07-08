@@ -58,6 +58,8 @@ const readModel: OrchestrationReadModel = {
       id: ThreadId.makeUnsafe("thread-1"),
       projectId: ProjectId.makeUnsafe("project-a"),
       title: "Thread A",
+      elevatorSummary: "Thread A",
+      elevatorSummaryMessageCount: 0,
       modelSelection: {
         provider: "codex",
         model: "gpt-5-codex",
@@ -82,6 +84,8 @@ const readModel: OrchestrationReadModel = {
       id: ThreadId.makeUnsafe("thread-2"),
       projectId: ProjectId.makeUnsafe("project-b"),
       title: "Thread B",
+      elevatorSummary: "Thread B",
+      elevatorSummaryMessageCount: 0,
       modelSelection: {
         provider: "codex",
         model: "gpt-5-codex",

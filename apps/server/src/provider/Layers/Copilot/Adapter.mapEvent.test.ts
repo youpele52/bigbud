@@ -3,6 +3,7 @@ import { EventId, ThreadId, TurnId } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionEvent } from "@github/copilot-sdk";
 
+import { BIGBUD_PLAN_TRACKING_TOOL_NAME } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import { mapEvent, type MapEventDeps } from "./Adapter.mapEvent.ts";
 import type { ActiveCopilotSession } from "./Adapter.types.ts";
 
@@ -40,6 +41,8 @@ function makeSession(): ActiveCopilotSession {
     activeTurnId: turnId("turn-1"),
     activeMessageId: undefined,
     lastUsage: undefined,
+    planTrackingToolCallIds: new Set(),
+    lastPlanFingerprint: undefined,
     stopped: false,
     lastError: undefined,
     cwd: undefined,
@@ -140,7 +143,7 @@ describe("CopilotAdapter.mapEvent", () => {
         id: "sdk-event-4",
         parentId: null,
         timestamp: "2026-05-14T00:00:04.000Z",
-        data: { reason: "user_cancelled" },
+        data: { reason: "user_initiated" },
       } as SessionEvent),
     );
 
@@ -151,7 +154,7 @@ describe("CopilotAdapter.mapEvent", () => {
       provider: "copilot",
       threadId: "thread-1",
       turnId: "turn-1",
-      payload: { reason: "user_cancelled" },
+      payload: { reason: "user_initiated" },
     });
   });
 
@@ -188,5 +191,57 @@ describe("CopilotAdapter.mapEvent", () => {
     );
 
     expect(events).toEqual([]);
+  });
+
+  it("maps update_plan tool executions to turn.plan.updated and dedupes repeats", async () => {
+    const session = makeSession();
+
+    const firstEvents = await Effect.runPromise(
+      mapEvent(makeDeps(), session, {
+        type: "tool.execution_start",
+        id: "sdk-event-7",
+        parentId: null,
+        timestamp: "2026-05-14T00:00:07.000Z",
+        data: {
+          toolCallId: "tool-call-1",
+          toolName: BIGBUD_PLAN_TRACKING_TOOL_NAME,
+          arguments: {
+            explanation: "Working plan",
+            plan: [{ step: "Inspect the repo", status: "inProgress" }],
+          },
+        },
+      } as SessionEvent),
+    );
+
+    expect(firstEvents).toHaveLength(1);
+    expect(firstEvents[0]).toMatchObject({
+      type: "turn.plan.updated",
+      provider: "copilot",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        explanation: "Working plan",
+        plan: [{ step: "Inspect the repo", status: "inProgress" }],
+      },
+    });
+
+    const repeatedEvents = await Effect.runPromise(
+      mapEvent(makeDeps(), session, {
+        type: "tool.execution_start",
+        id: "sdk-event-8",
+        parentId: null,
+        timestamp: "2026-05-14T00:00:08.000Z",
+        data: {
+          toolCallId: "tool-call-2",
+          toolName: BIGBUD_PLAN_TRACKING_TOOL_NAME,
+          arguments: {
+            explanation: "Working plan",
+            plan: [{ step: "Inspect the repo", status: "inProgress" }],
+          },
+        },
+      } as SessionEvent),
+    );
+
+    expect(repeatedEvents).toEqual([]);
   });
 });

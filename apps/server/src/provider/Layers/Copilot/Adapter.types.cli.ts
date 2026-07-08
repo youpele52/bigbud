@@ -4,6 +4,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import {
+  RuntimeConnection,
+  type RuntimeConnection as CopilotRuntimeConnection,
+} from "@github/copilot-sdk";
+
 function resolveCopilotCliPath(): string | undefined {
   try {
     const req = createRequire(import.meta.url);
@@ -51,6 +56,12 @@ export function makeNodeWrapperCliPath(): string | undefined {
   writeFileSync(wrapper.wrapperPath, wrapper.content, "utf8");
   chmodSync(wrapper.wrapperPath, 0o755);
   return wrapper.wrapperPath;
+}
+
+export function makeCliRuntimeConnection(
+  cliPath: string | undefined,
+): CopilotRuntimeConnection | undefined {
+  return cliPath === undefined ? undefined : RuntimeConnection.forStdio({ path: cliPath });
 }
 
 export { buildNodeWrapper };

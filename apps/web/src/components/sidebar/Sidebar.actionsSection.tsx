@@ -1,4 +1,4 @@
-import { ClockIcon, SearchIcon, SquarePenIcon } from "lucide-react";
+import { BarChart3Icon, ClockIcon, SearchIcon, SquarePenIcon } from "lucide-react";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
@@ -9,12 +9,14 @@ import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 interface SidebarActionsSectionProps {
   onNewChat: () => void;
   onOpenAutomations: () => void;
+  onOpenUsage: () => void;
   newThreadShortcutLabel: string | null | undefined;
 }
 
 export function SidebarActionsSection({
   onNewChat,
   onOpenAutomations,
+  onOpenUsage,
   newThreadShortcutLabel,
 }: SidebarActionsSectionProps) {
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
@@ -80,7 +82,7 @@ export function SidebarActionsSection({
           render={
             <button
               type="button"
-              aria-label="Open automations"
+              aria-label="Open scheduled"
               className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={onOpenAutomations}
             />
@@ -89,9 +91,28 @@ export function SidebarActionsSection({
           <ClockIcon
             className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
           />
-          <span className="flex-1">Automations</span>
+          <span className="flex-1">Scheduled</span>
         </TooltipTrigger>
-        <TooltipPopup side="right">Automations</TooltipPopup>
+        <TooltipPopup side="right">Scheduled</TooltipPopup>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Open usage"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onOpenUsage}
+            />
+          }
+        >
+          <BarChart3Icon
+            className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+          />
+          <span className="flex-1">Usage</span>
+        </TooltipTrigger>
+        <TooltipPopup side="right">Usage</TooltipPopup>
       </Tooltip>
     </div>
   );

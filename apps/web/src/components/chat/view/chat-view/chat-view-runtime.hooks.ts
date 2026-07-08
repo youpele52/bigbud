@@ -52,7 +52,7 @@ interface ChatViewRuntimeInput {
 
 export function useChatViewRuntime({ base, thread, composer, timeline }: ChatViewRuntimeInput) {
   const { setPullRequestDialogState } = base;
-  const { ensureRemoteExecutionTargetAccess } = useRemoteExecutionAccessGate();
+  const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
 
   const openPullRequestDialog = useCallback(
     (reference?: string) => {
@@ -81,7 +81,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
       if (!base.activeProject) {
         throw new Error("No active project is available for this pull request.");
       }
-      const verified = await ensureRemoteExecutionTargetAccess({
+      const verified = await beginRemoteExecutionTargetAccessCheck({
         executionTargetId: resolveWorkspaceExecutionTargetId(base.activeProject),
         ...(base.activeProject.cwd ? { cwd: base.activeProject.cwd } : {}),
         onVerified: async () => {
@@ -126,7 +126,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
       });
       return nextThreadId;
     },
-    [base, ensureRemoteExecutionTargetAccess],
+    [base, beginRemoteExecutionTargetAccessCheck],
   );
 
   const handlePreparedPullRequestThread = useCallback(
@@ -339,17 +339,17 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     handleInteractionModeChange(base.interactionMode === "plan" ? "default" : "plan");
   }, [base.interactionMode, handleInteractionModeChange]);
 
-  const togglePlanSidebar = useCallback(() => {
-    base.setPlanSidebarOpen((open) => {
+  const togglePlanCard = useCallback(() => {
+    base.setPlanCardOpen((open) => {
       if (open) {
-        base.planSidebarDismissedForTurnRef.current =
-          thread.activePlan?.turnId ?? thread.sidebarProposedPlan?.turnId ?? "__dismissed__";
+        base.planCardDismissedForTurnRef.current =
+          thread.activePlan?.turnId ?? thread.cardProposedPlan?.turnId ?? "__dismissed__";
       } else {
-        base.planSidebarDismissedForTurnRef.current = null;
+        base.planCardDismissedForTurnRef.current = null;
       }
       return !open;
     });
-  }, [base, thread.activePlan?.turnId, thread.sidebarProposedPlan?.turnId]);
+  }, [base, thread.activePlan?.turnId, thread.cardProposedPlan?.turnId]);
 
   const persistThreadSettingsForNextTurnCallback = useCallback(
     (input: {
@@ -420,7 +420,7 @@ export function useChatViewRuntime({ base, thread, composer, timeline }: ChatVie
     handleRuntimeModeChange,
     handleInteractionModeChange,
     toggleInteractionMode,
-    togglePlanSidebar,
+    togglePlanCard,
     persistThreadSettingsForNextTurn: persistThreadSettingsForNextTurnCallback,
     scrollBehavior,
     envLocked,

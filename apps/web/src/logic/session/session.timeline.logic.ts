@@ -67,7 +67,7 @@ export function findLatestProposedPlan(
   return toLatestProposedPlanState(latestPlan);
 }
 
-export function findSidebarProposedPlan(input: {
+export function findPlanCardProposedPlan(input: {
   threads: ReadonlyArray<Pick<Thread, "id" | "proposedPlans">>;
   latestTurn: Pick<OrchestrationLatestTurn, "turnId" | "sourceProposedPlan"> | null;
   latestTurnSettled: boolean;

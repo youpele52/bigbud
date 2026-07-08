@@ -1,6 +1,6 @@
 import { ProviderInteractionMode, RuntimeMode } from "@bigbud/contracts";
 import { memo, type ReactNode } from "react";
-import { EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { EllipsisIcon, ListMusicIcon, ListTodoIcon } from "lucide-react";
 import { Button } from "../../ui/button";
 import {
   Menu,
@@ -13,14 +13,14 @@ import {
 } from "../../ui/menu";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
-  activePlan: boolean;
   interactionMode: ProviderInteractionMode;
-  planSidebarOpen: boolean;
-  planSidebarLabel: string;
+  planCardOpen: boolean;
+  planCardLabel: string;
   runtimeMode: RuntimeMode;
   traitsMenuContent?: ReactNode;
+  onOpenOrchestra: () => void;
   onToggleInteractionMode: () => void;
-  onTogglePlanSidebar: () => void;
+  onTogglePlanCard: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
   return (
@@ -56,6 +56,11 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="plan">Plan</MenuRadioItem>
         </MenuRadioGroup>
         <MenuDivider />
+        <MenuItem onClick={props.onOpenOrchestra}>
+          <ListMusicIcon className="size-4 shrink-0" />
+          Orchestrate
+        </MenuItem>
+        <MenuDivider />
         <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Access</div>
         <MenuRadioGroup
           value={props.runtimeMode}
@@ -68,17 +73,13 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
           <MenuRadioItem value="full-access">Full access</MenuRadioItem>
         </MenuRadioGroup>
-        {props.activePlan ? (
-          <>
-            <MenuDivider />
-            <MenuItem onClick={props.onTogglePlanSidebar}>
-              <ListTodoIcon className="size-4 shrink-0" />
-              {props.planSidebarOpen
-                ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
-                : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`}
-            </MenuItem>
-          </>
-        ) : null}
+        <MenuDivider />
+        <MenuItem onClick={props.onTogglePlanCard}>
+          <ListTodoIcon className="size-4 shrink-0" />
+          {props.planCardOpen
+            ? `Hide ${props.planCardLabel.toLowerCase()}`
+            : `Show ${props.planCardLabel.toLowerCase()}`}
+        </MenuItem>
       </MenuPopup>
     </Menu>
   );

@@ -36,6 +36,7 @@ const layer = it.layer(
         keybindingsConfigPath: "/tmp/bigbud-test/keybindings.json",
         settingsPath: "/tmp/bigbud-test/settings.json",
         notesDir: "/tmp/bigbud-test/notes",
+        kanbanDir: "/tmp/bigbud-test/kanban",
         worktreesDir: "/tmp/bigbud-test/worktrees",
         attachmentsDir: "/tmp/bigbud-test/attachments",
         logsDir: "/tmp/bigbud-test/logs",

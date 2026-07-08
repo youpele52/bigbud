@@ -11,7 +11,7 @@ import { makeManagedServerProvider } from "../../makeManagedServerProvider";
 import { CopilotProvider } from "../../Services/Copilot/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ProviderAdapterProcessError } from "../../Errors";
-import { makeNodeWrapperCliPath } from "./Adapter";
+import { makeCliRuntimeConnection, makeNodeWrapperCliPath } from "./Adapter.types";
 
 const PROVIDER = "copilot" as const;
 const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
@@ -112,14 +112,15 @@ const DEFAULT_BINARY_PATH = "copilot";
 
 function makeClient(binaryPath: string) {
   const useCustomBinary = binaryPath !== DEFAULT_BINARY_PATH;
-  // When running in Electron, use a shell wrapper as cliPath so the copilot
-  // CLI is spawned via the real `node` binary rather than the Electron binary.
+  // When running in Electron, use a shell wrapper as the runtime connection
+  // path so the copilot CLI is spawned via the real `node` binary rather than
+  // the Electron binary.
   // See makeNodeWrapperCliPath() in CopilotAdapter.ts for full explanation.
   const resolvedCliPath = useCustomBinary ? binaryPath : makeNodeWrapperCliPath();
+  const connection = makeCliRuntimeConnection(resolvedCliPath);
   return new CopilotClient({
-    ...(resolvedCliPath !== undefined ? { cliPath: resolvedCliPath } : {}),
+    ...(connection ? { connection } : {}),
     logLevel: "error",
-    autoStart: true,
   });
 }
 

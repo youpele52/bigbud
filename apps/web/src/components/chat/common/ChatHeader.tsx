@@ -29,15 +29,18 @@ interface ChatHeaderProps {
   preferredScriptId: string | null;
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
-  gitCwd: string | null;
   executionTargetId?: string | undefined;
   sidebarToggleShortcutLabel: string | null;
   rightPanelToggleShortcutLabel: string | null;
   rightPanelOpen: boolean;
+  planCardLabel: string;
+  planCardOpen: boolean;
+  onOpenOrchestra: () => void;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
+  onTogglePlanCard: () => void;
   onToggleRightPanel: () => void;
 }
 
@@ -50,15 +53,18 @@ export const ChatHeader = memo(function ChatHeader({
   preferredScriptId,
   keybindings,
   availableEditors,
-  gitCwd,
   executionTargetId,
   sidebarToggleShortcutLabel,
   rightPanelToggleShortcutLabel,
   rightPanelOpen,
+  planCardLabel,
+  planCardOpen,
+  onOpenOrchestra,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
+  onTogglePlanCard,
   onToggleRightPanel,
 }: ChatHeaderProps) {
   const isThreadRunning = useIsThreadRunning(activeThreadId);
@@ -110,11 +116,15 @@ export const ChatHeader = memo(function ChatHeader({
               openInCwd={openInCwd}
             />
           )}
-          {activeProjectName && gitCwd && (
+          {openInCwd && (
             <GitActionsControl
-              gitCwd={gitCwd}
+              gitCwd={openInCwd}
               executionTargetId={executionTargetId}
               activeThreadId={activeThreadId}
+              onOpenOrchestra={onOpenOrchestra}
+              planCardLabel={planCardLabel}
+              planCardOpen={planCardOpen}
+              onTogglePlanCard={onTogglePlanCard}
             />
           )}
           <Tooltip>

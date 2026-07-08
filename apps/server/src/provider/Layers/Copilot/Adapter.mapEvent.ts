@@ -10,6 +10,11 @@ import { type EventId, type ProviderRuntimeEvent, TurnId } from "@bigbud/contrac
 import { type SessionEvent } from "@github/copilot-sdk";
 import { Effect } from "effect";
 
+import {
+  buildBigbudPlanTrackingFingerprint,
+  isBigbudPlanTrackingToolName,
+  normalizeBigbudPlanTrackingPayload,
+} from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import { type ActiveCopilotSession, eventBase, normalizeUsage } from "./Adapter.types.ts";
 
 /** Dependencies threaded into mapEvent as plain values. */
@@ -210,6 +215,31 @@ export const mapEvent = (
         ];
       case "tool.execution_start": {
         const toolName = event.data.toolName ?? "";
+        if (isBigbudPlanTrackingToolName(toolName)) {
+          const payload = normalizeBigbudPlanTrackingPayload(event.data.arguments);
+          if (!turnId || !payload) {
+            return [];
+          }
+          const fingerprint = buildBigbudPlanTrackingFingerprint(turnId, payload);
+          if (session.lastPlanFingerprint === fingerprint) {
+            return [];
+          }
+          session.planTrackingToolCallIds.add(event.data.toolCallId);
+          session.lastPlanFingerprint = fingerprint;
+          return [
+            {
+              ...eventBase({
+                eventId: stamp.eventId,
+                createdAt: event.timestamp,
+                threadId: session.threadId,
+                turnId,
+                raw,
+              }),
+              type: "turn.plan.updated",
+              payload,
+            },
+          ];
+        }
         const isBrowserTool = /browser|navigate|screenshot|web_search|websearch/i.test(toolName);
         return [
           {
@@ -233,6 +263,10 @@ export const mapEvent = (
         ];
       }
       case "tool.execution_complete":
+        if (session.planTrackingToolCallIds.has(event.data.toolCallId)) {
+          session.planTrackingToolCallIds.delete(event.data.toolCallId);
+          return [];
+        }
         return [
           {
             ...eventBase({

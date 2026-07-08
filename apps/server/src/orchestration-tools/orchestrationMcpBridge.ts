@@ -56,8 +56,13 @@ export interface OpencodeOrchestrationBridgeConfig {
   readonly config: {
     readonly type: "local";
     readonly command: Array<string>;
+    readonly cwd?: string;
+    readonly enabled: true;
+    readonly timeout: number;
   };
 }
+
+export const OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS = 10_000;
 
 function quoteTomlString(value: string): string {
   return JSON.stringify(value);
@@ -132,13 +137,18 @@ export function buildClaudeOrchestrationBridgeConfig(
 }
 
 export function buildOpencodeOrchestrationBridgeConfig(
-  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath">,
+  bridge: Pick<ThreadOrchestrationBridge, "serverName" | "serverPath"> & {
+    readonly bridgeDir?: string;
+  },
 ): OpencodeOrchestrationBridgeConfig {
   return {
     name: bridge.serverName,
     config: {
       type: "local",
       command: [process.execPath, bridge.serverPath],
+      ...(bridge.bridgeDir ? { cwd: bridge.bridgeDir } : {}),
+      enabled: true,
+      timeout: OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS,
     },
   };
 }

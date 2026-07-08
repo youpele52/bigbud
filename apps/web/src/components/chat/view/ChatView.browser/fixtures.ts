@@ -102,6 +102,10 @@ function isoAt(offsetSeconds: number): string {
 export function createBaseServerConfig(): ServerConfig {
   return {
     cwd: "/repo/project",
+    storage: {
+      notesDir: "/repo/project/.t3/notes",
+      kanbanDir: "/repo/project/.t3/kanban",
+    },
     keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
     keybindings: [],
     issues: [],
@@ -247,6 +251,8 @@ export function createSnapshotForTargetUser(options: {
         id: THREAD_ID,
         projectId: PROJECT_ID,
         title: "Browser test thread",
+        elevatorSummary: "Browser test thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: { provider: "codex", model: "gpt-5" },
         interactionMode: "default",
         runtimeMode: "full-access",
@@ -303,6 +309,8 @@ export function addThreadToSnapshot(
         id: threadId,
         projectId: PROJECT_ID,
         title: "New thread",
+        elevatorSummary: "New thread",
+        elevatorSummaryMessageCount: 0,
         modelSelection: { provider: "codex", model: "gpt-5" },
         interactionMode: "default",
         runtimeMode: "full-access",

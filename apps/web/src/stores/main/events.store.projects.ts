@@ -152,6 +152,8 @@ function mapProjectThread(event: Extract<OrchestrationEvent, { type: "thread.cre
     id: event.payload.threadId,
     projectId: event.payload.projectId,
     title: event.payload.title,
+    elevatorSummary: event.payload.title,
+    elevatorSummaryMessageCount: 0,
     providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId,
     executionTargetId: event.payload.executionTargetId,

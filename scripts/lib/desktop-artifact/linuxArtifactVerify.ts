@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { lstatSync, readlinkSync } from "node:fs";
 import { get as httpGet } from "node:http";
 import { homedir } from "node:os";
 
@@ -8,6 +7,8 @@ import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 
+import { assertBundledSkillsDirectory } from "./bundledSkills.ts";
+import { assertLinuxBackendModulesLink } from "./linuxArtifactVerify.backendModules.ts";
 import { BuildScriptError, commandOutputOptions, runCommand } from "./shared.ts";
 import { assertLinuxElectronRuntimeFiles } from "./linuxRuntimeFiles.ts";
 
@@ -101,34 +102,11 @@ export const verifyLinuxUnpackedArtifact = Effect.fn("verifyLinuxUnpackedArtifac
     "Linux unpacked artifact verification failed",
   );
   yield* assertLinuxBackendModulesLink(unpackedDir, "Linux unpacked artifact verification failed");
+  yield* assertBundledSkillsDirectory(
+    `${unpackedDir}/resources/server/bundled-skills`,
+    "Linux unpacked artifact verification failed",
+  );
   yield* Effect.log("[desktop-artifact] Unpacked Linux artifact verification passed.");
-});
-
-const assertLinuxBackendModulesLink = Effect.fn("assertLinuxBackendModulesLink")(function* (
-  appRoot: string,
-  errorPrefix: string,
-) {
-  const path = yield* Path.Path;
-  const nodeModulesPath = path.join(appRoot, "resources", "server", "node_modules");
-
-  yield* Effect.try({
-    try: () => {
-      const stat = lstatSync(nodeModulesPath);
-      if (!stat.isSymbolicLink()) {
-        throw new Error(`${nodeModulesPath} is not a symlink.`);
-      }
-
-      const target = readlinkSync(nodeModulesPath);
-      if (target !== "_modules") {
-        throw new Error(`${nodeModulesPath} points to ${target}, expected _modules.`);
-      }
-    },
-    catch: (cause) =>
-      new BuildScriptError({
-        message: `${errorPrefix}: backend node_modules symlink missing or invalid at ${nodeModulesPath}.`,
-        cause,
-      }),
-  });
 });
 
 /**
@@ -147,6 +125,10 @@ export const verifyLinuxAppImageArtifact = Effect.fn("verifyLinuxAppImageArtifac
 
   yield* assertLinuxElectronRuntimeFiles(extractedRoot, "AppImage artifact verification failed");
   yield* assertLinuxBackendModulesLink(extractedRoot, "AppImage artifact verification failed");
+  yield* assertBundledSkillsDirectory(
+    `${extractedRoot}/resources/server/bundled-skills`,
+    "AppImage artifact verification failed",
+  );
 
   yield* Effect.log("[desktop-artifact] AppImage artifact verification passed.");
 });

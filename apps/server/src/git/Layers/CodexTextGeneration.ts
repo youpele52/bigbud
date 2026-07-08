@@ -6,6 +6,7 @@ import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/share
 
 import { ServerConfig } from "../../startup/config.ts";
 import {
+  type ThreadElevatorSummaryGenerationResult,
   type ThreadTitleGenerationResult,
   type TextGenerationShape,
   TextGeneration,
@@ -14,9 +15,11 @@ import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
   buildPrContentPrompt,
+  buildThreadElevatorSummaryPrompt,
   buildThreadTitlePrompt,
 } from "../Prompts.ts";
 import {
+  sanitizeElevatorSummary,
   normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
@@ -85,6 +88,7 @@ const makeCodexTextGeneration = Effect.gen(function* () {
         [
           "exec",
           "--ephemeral",
+          "--skip-git-repo-check",
           "-s",
           "read-only",
           "--model",
@@ -329,11 +333,46 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     } satisfies ThreadTitleGenerationResult;
   });
 
+  const generateThreadElevatorSummary: TextGenerationShape["generateThreadElevatorSummary"] =
+    Effect.fn("CodexTextGeneration.generateThreadElevatorSummary")(function* (input) {
+      const { imagePaths } = yield* materializeImageAttachments(
+        path,
+        serverConfig,
+        fileSystem,
+        input.attachments,
+      );
+      const { prompt, outputSchema } = buildThreadElevatorSummaryPrompt({
+        transcript: input.transcript,
+        attachments: input.attachments,
+      });
+
+      if (input.modelSelection.provider !== "codex") {
+        return yield* new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: "Invalid model selection.",
+        });
+      }
+
+      const generated = yield* runCodexJson({
+        operation: "generateThreadElevatorSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        imagePaths,
+        modelSelection: input.modelSelection,
+      });
+
+      return {
+        summary: sanitizeElevatorSummary(generated.summary),
+      } satisfies ThreadElevatorSummaryGenerationResult;
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    generateThreadElevatorSummary,
   } satisfies TextGenerationShape;
 });
 

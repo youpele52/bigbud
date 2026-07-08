@@ -244,6 +244,15 @@ export async function createHarness(input?: {
       }),
     ),
   );
+  const generateThreadElevatorSummary = vi.fn<TextGenerationShape["generateThreadElevatorSummary"]>(
+    () =>
+      Effect.fail(
+        new TextGenerationError({
+          operation: "generateThreadElevatorSummary",
+          detail: "disabled in test harness",
+        }),
+      ),
+  );
   const browserClose = vi.fn<BrowserManagerShape["close"]>(() =>
     input?.browserCloseFailure
       ? Effect.fail(
@@ -349,6 +358,7 @@ export async function createHarness(input?: {
       Layer.mock(TextGeneration, {
         generateBranchName,
         generateThreadTitle,
+        generateThreadElevatorSummary,
       }),
     ),
     Layer.provideMerge(Layer.succeed(BrowserManager, browserService)),
@@ -413,6 +423,7 @@ export async function createHarness(input?: {
     refreshLocalStatus,
     generateBranchName,
     generateThreadTitle,
+    generateThreadElevatorSummary,
     browserClose,
     terminalClose,
     stateDir,

@@ -29,6 +29,7 @@ const IGNORED_DIRECTORIES = new Set([
   "dist-electron",
   "node_modules",
   "coverage",
+  "release",
 ]);
 
 function isTestFile(path: string): boolean {

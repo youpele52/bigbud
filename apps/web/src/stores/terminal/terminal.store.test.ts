@@ -39,6 +39,7 @@ function makeTerminalEvent(
         snapshot: {
           threadId: THREAD_ID,
           terminalId: "default",
+          dropPathMode: "posix",
           cwd: "/tmp/workspace",
           worktreePath: null,
           status: "running",
@@ -59,6 +60,7 @@ function makeStartedTerminalEvent(terminalId: string): TerminalEvent {
     snapshot: {
       threadId: THREAD_ID,
       terminalId,
+      dropPathMode: "posix",
       cwd: "/tmp/worktree",
       worktreePath: "/tmp/worktree",
       status: "running",
@@ -77,6 +79,7 @@ describe("terminalStateStore actions", () => {
     useTerminalStateStore.setState({
       terminalStateByThreadId: {},
       panelTerminalStateByThreadId: {},
+      terminalLabelOverridesByThreadId: {},
       terminalLaunchContextByThreadId: {},
       terminalEventEntriesByKey: {},
       terminalEventLastIdsByKey: {},
@@ -259,6 +262,21 @@ describe("terminalStateStore actions", () => {
     expect(terminalState.terminalGroups).toEqual([
       { id: "group-default", terminalIds: ["default", "terminal-2"] },
     ]);
+  });
+
+  it("stores and clears custom terminal label overrides per thread", () => {
+    const store = useTerminalStateStore.getState();
+    store.setTerminalLabelOverride(THREAD_ID, "default", "infra shell");
+
+    expect(useTerminalStateStore.getState().terminalLabelOverridesByThreadId[THREAD_ID]).toEqual({
+      default: "infra shell",
+    });
+
+    store.clearTerminalLabelOverride(THREAD_ID, "default");
+
+    expect(useTerminalStateStore.getState().terminalLabelOverridesByThreadId[THREAD_ID]).toBe(
+      undefined,
+    );
   });
 
   it("buffers terminal events outside persisted terminal UI state", () => {

@@ -183,7 +183,8 @@ function findButtonByText(text: string): HTMLButtonElement | null {
 }
 
 function findMenuTrigger(): HTMLButtonElement | null {
-  return (document.querySelector('[aria-label="Git actions"]') ?? null) as HTMLButtonElement | null;
+  return (document.querySelector('[aria-label="Quick actions"]') ??
+    null) as HTMLButtonElement | null;
 }
 
 function findMenuItemByText(text: string): HTMLElement | null {
@@ -200,7 +201,11 @@ function Harness() {
       <button type="button" onClick={() => setActiveThreadId(THREAD_B)}>
         Switch thread
       </button>
-      <GitActionsControl gitCwd={GIT_CWD} activeThreadId={activeThreadId} />
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={activeThreadId}
+        onOpenOrchestra={vi.fn()}
+      />
     </>
   );
 }
@@ -223,11 +228,18 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
     try {
       const menuTrigger = findMenuTrigger();
-      expect(menuTrigger, "Unable to find Git actions menu trigger").toBeTruthy();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
       if (!(menuTrigger instanceof HTMLButtonElement)) {
-        throw new Error("Unable to find Git actions menu trigger");
+        throw new Error("Unable to find Quick actions menu trigger");
       }
       menuTrigger.click();
+
+      const gitMenuItem = findMenuItemByText("Git");
+      expect(gitMenuItem, 'Unable to find "Git" menu item').toBeTruthy();
+      if (!gitMenuItem) {
+        throw new Error('Unable to find "Git" menu item');
+      }
+      gitMenuItem.click();
 
       const pushMenuItem = findMenuItemByText("Push");
       expect(pushMenuItem, 'Unable to find "Push" menu item').toBeTruthy();
@@ -323,6 +335,89 @@ describe("GitActionsControl thread-scoped progress toast", () => {
 
       expect(setDraftThreadContextSpy).not.toHaveBeenCalled();
       expect(setThreadBranchSpy).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("shows orchestrate in the quick actions menu below git", async () => {
+    const onOpenOrchestra = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={THREAD_A}
+        onOpenOrchestra={onOpenOrchestra}
+      />,
+      {
+        container: host,
+      },
+    );
+
+    try {
+      const menuTrigger = findMenuTrigger();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error("Unable to find Quick actions menu trigger");
+      }
+      menuTrigger.click();
+
+      const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+      const gitMenuItem = findMenuItemByText("Git");
+      const orchestrateMenuItem = findMenuItemByText("Orchestrate");
+
+      expect(gitMenuItem, 'Unable to find "Git" menu item').toBeTruthy();
+      expect(orchestrateMenuItem, 'Unable to find "Orchestrate" menu item').toBeTruthy();
+      expect(menuItems.indexOf(gitMenuItem!)).toBeLessThan(menuItems.indexOf(orchestrateMenuItem!));
+
+      orchestrateMenuItem?.click();
+      expect(onOpenOrchestra).toHaveBeenCalledOnce();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("shows the plan toggle in quick actions below orchestrate", async () => {
+    const onTogglePlanCard = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const screen = await render(
+      <GitActionsControl
+        gitCwd={GIT_CWD}
+        activeThreadId={THREAD_A}
+        onOpenOrchestra={vi.fn()}
+        planCardLabel="Tasks"
+        planCardOpen={false}
+        onTogglePlanCard={onTogglePlanCard}
+      />,
+      {
+        container: host,
+      },
+    );
+
+    try {
+      const menuTrigger = findMenuTrigger();
+      expect(menuTrigger, "Unable to find Quick actions menu trigger").toBeTruthy();
+      if (!(menuTrigger instanceof HTMLButtonElement)) {
+        throw new Error("Unable to find Quick actions menu trigger");
+      }
+      menuTrigger.click();
+
+      const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+      const orchestrateMenuItem = findMenuItemByText("Orchestrate");
+      const togglePlanCardMenuItem = findMenuItemByText("Show tasks");
+
+      expect(orchestrateMenuItem, 'Unable to find "Orchestrate" menu item').toBeTruthy();
+      expect(togglePlanCardMenuItem, 'Unable to find "Show tasks" menu item').toBeTruthy();
+      expect(menuItems.indexOf(orchestrateMenuItem!)).toBeLessThan(
+        menuItems.indexOf(togglePlanCardMenuItem!),
+      );
+
+      togglePlanCardMenuItem?.click();
+      expect(onTogglePlanCard).toHaveBeenCalledOnce();
     } finally {
       await screen.unmount();
       host.remove();

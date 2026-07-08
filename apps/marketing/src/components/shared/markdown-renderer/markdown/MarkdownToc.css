@@ -7,9 +7,30 @@
   position: sticky;
   top: 5.85rem;
   width: 100%;
-  max-height: calc(100vh - 7rem);
+  max-height: 50dvh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fg-dim) 58%, transparent) transparent;
   padding-left: clamp(1.25rem, 2vw, 2rem);
+}
+
+.md-toc--desktop::-webkit-scrollbar {
+  width: 0.6rem;
+}
+
+.md-toc--desktop::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.md-toc--desktop::-webkit-scrollbar-thumb {
+  border: 0.14rem solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--fg-dim) 58%, transparent);
+}
+
+.md-toc--desktop::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--fg) 72%, transparent);
 }
 
 .md-toc--mobile {
