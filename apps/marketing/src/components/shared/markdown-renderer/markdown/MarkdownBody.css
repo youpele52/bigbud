@@ -2,6 +2,7 @@
   min-width: 0;
   padding-right: clamp(2.25rem, 4vw, 4rem);
   --md-content-max-width: 58rem;
+  --md-media-max-height: 32.625rem;
 }
 
 .md-body--content:empty {
@@ -152,10 +153,31 @@
   object-fit: cover;
 }
 
+.md-image-frame {
+  display: inline-flex;
+  max-width: min(100%, var(--md-content-max-width));
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.md-image--framed {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(var(--md-media-max-height) - 1.5rem);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
 .md-embed {
   position: relative;
   width: 100%;
   max-width: var(--md-content-max-width);
+  max-height: var(--md-media-max-height);
   margin: 1.5rem 0 3rem;
   border: 1px solid var(--border);
   border-radius: 1rem;

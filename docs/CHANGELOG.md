@@ -6,7 +6,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Plans
 
-- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans.
+- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans. ![Floating Plan card showing current steps and task progress](https://bigbud.app/content/plan-card.png)
+
 - Added plan-card actions for copying a proposed plan, downloading it as Markdown, or saving it straight into the current workspace.
 - Mapped OpenCode native `todo.updated` events into bigbud's shared plan-update flow so task progress stays in sync for OpenCode and KiloCode sessions too.
 - Added **Show/Hide Tasks** access to both the composer controls menu and the header quick-actions menu, so the floating Tasks/Plan card is reachable from either surface even before a plan is active.
@@ -22,7 +23,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Localized **Usage** chart tooltip dates and month labels so activity reads naturally in your own locale instead of falling back to raw timestamp-style formatting.
 - Updated the Usage overview cards to reuse provider and model icon patterns already used elsewhere in the app, including a safe fallback icon when a provider is unknown.
+- Tightened Usage summary bucketing so the **All** range groups activity by UTC month and ignores invalid activity timestamps before they can skew the chart.
 - Renamed the Usage breakdown view toggles from **Bars** and **Pie** to **Ranking** and **Share** for clearer at-a-glance comparison.
+
+### Sidebar
+
+- Fixed sidebar swipe-reveal handling for project and thread rows by using native non-passive wheel listeners, keeping the gesture reliable without passive-listener warnings.
 
 ## v0.1.651 (7 July, 2026)
 
@@ -32,6 +38,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Orchestra can run players **together** or **in sequence**. Sequential runs use handoff between child threads so each next player receives a clean summary from the previous one instead of a raw transcript dump.
 - Orchestra runs now create a fresh parent score thread automatically, so you no longer need to start a normal chat first. Child thread titles are prefixed with the score name so related runs are easy to spot in the sidebar.
 - Orchestra keeps the setup dialog aligned with the actual launch state, so once child threads are created the run moves forward cleanly instead of inviting duplicate retries.
+
+<iframe src="https://www.youtube-nocookie.com/embed/xuj5rBaKPVQ" title="bigbud: Orchestra"></iframe>
 
 ### Usage
 
@@ -76,8 +84,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Desktop
 
+- Cut duplicate desktop runtime payloads from the build pipeline, reducing the packaged app size from about **1.5GB** to about **750MB** while keeping runtime artifacts leaner.
 - Unified the macOS open and closed desktop app icons so packaged and running states now stay visually consistent.
-- Cut duplicate desktop runtime payloads from the build pipeline to shrink the app package and keep the runtime artifacts leaner.
 - Fixed desktop packaging so bundled native skills are included in generated artifacts.
 
 ### Maintenance

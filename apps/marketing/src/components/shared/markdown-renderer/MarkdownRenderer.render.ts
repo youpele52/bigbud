@@ -80,7 +80,18 @@ function renderImage(rawAlt: string, rawSrc: string): string {
     return "";
   }
 
-  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} onerror="this.outerHTML='<div class=\\'md-media-fallback\\'>${renderMediaFallbackSvg("image")}<span>Image failed to load</span></div>'" />`;
+  return `<img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image")} />`;
+}
+
+function renderBlockImage(rawAlt: string, rawSrc: string): string {
+  const src = rawSrc.trim();
+  const alt = rawAlt.trim();
+
+  if (!isSafeImageSrc(src)) {
+    return "";
+  }
+
+  return `<div class="md-image-frame"><img src="${escapeAttribute(src)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async"${classAttr("md-image md-image--framed")} /></div>`;
 }
 
 function renderVideo(raw: string): string {
@@ -410,7 +421,7 @@ export function renderMarkdown(markdown: string): RenderedMarkdown {
 
     const image = parseImageLine(trimmed);
     if (image) {
-      sections.push({ html: renderImage(image.alt, image.src) });
+      sections.push({ html: renderBlockImage(image.alt, image.src) });
       continue;
     }
 

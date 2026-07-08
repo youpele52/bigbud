@@ -8,6 +8,10 @@
   padding: clamp(3.2rem, 7vw, 6rem) 2.25rem clamp(4rem, 8vw, 5.5rem);
 }
 
+.changelog-page .md-embed {
+  max-width: 40rem;
+}
+
 .changelog-page::before {
   content: "";
   position: absolute;
