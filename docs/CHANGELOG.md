@@ -6,7 +6,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Plans
 
-- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans. ![Floating Plan card showing current steps and task progress](https://bigbud.app/content/plan-card.png)
+- Replaced the old plan sidebar with a floating **Plan** card that stays closer to the active conversation while still showing current steps and proposed plans. ![Floating Plan card showing current steps and task progress](https://assets.bigbud.app/content/plan-card.png)
 
 - Added plan-card actions for copying a proposed plan, downloading it as Markdown, or saving it straight into the current workspace.
 - Mapped OpenCode native `todo.updated` events into bigbud's shared plan-update flow so task progress stays in sync for OpenCode and KiloCode sessions too.
