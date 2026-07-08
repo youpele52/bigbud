@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createCopilotThreadOrchestrationTools } from "./copilotThreadOrchestrationTools.ts";
 import { COMPUTER_USE_TOOL_DESCRIPTION } from "./orchestrationComputerUseTool.shared.ts";
+import {
+  BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
+  BIGBUD_PLAN_TRACKING_TOOL_NAME,
+} from "./threadPlanTrackingTool.shared.ts";
 
 const INVOCATION = {} as ToolInvocation;
 
@@ -18,11 +22,15 @@ describe("createCopilotThreadOrchestrationTools", () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       "rename_thread",
       "archive_thread",
+      BIGBUD_PLAN_TRACKING_TOOL_NAME,
       "computer_use",
       "get_thread_status",
     ]);
     expect(tools.find((tool) => tool.name === "computer_use")?.description).toBe(
       COMPUTER_USE_TOOL_DESCRIPTION,
+    );
+    expect(tools.find((tool) => tool.name === BIGBUD_PLAN_TRACKING_TOOL_NAME)?.description).toBe(
+      BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
     );
   });
 

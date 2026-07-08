@@ -156,6 +156,7 @@ describe("PiAdapter methods", () => {
       currentAssistantMessageId: undefined,
       currentToolOutputById: new Map(),
       currentToolInfoById: new Map(),
+      lastPlanFingerprint: undefined,
     };
     const methods = makePiAdapterMethods({
       attachmentsDir: "/tmp",
@@ -223,6 +224,7 @@ describe("PiAdapter methods", () => {
       currentAssistantMessageId: undefined,
       currentToolOutputById: new Map(),
       currentToolInfoById: new Map(),
+      lastPlanFingerprint: undefined,
     };
     const methods = makePiAdapterMethods({
       attachmentsDir: "/tmp",

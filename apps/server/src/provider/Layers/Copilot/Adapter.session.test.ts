@@ -143,6 +143,11 @@ describe("CopilotAdapter remote workspace sessions", () => {
       );
       assert.equal(createdConfig.systemMessage?.content?.includes("remote workspace mode"), true);
       assert.equal(createdConfig.systemMessage?.content?.includes("/srv/project"), true);
+      assert.equal(createdConfig.systemMessage?.content?.includes("update_plan"), true);
+      assert.equal(
+        createdConfig.systemMessage?.content?.includes("Do not wait until the end of the turn."),
+        true,
+      );
       assert.equal(
         createdConfig.tools?.some((tool) => tool.name === "bash"),
         true,

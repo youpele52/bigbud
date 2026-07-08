@@ -10,6 +10,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added plan-card actions for copying a proposed plan, downloading it as Markdown, or saving it straight into the current workspace.
 - Mapped OpenCode native `todo.updated` events into bigbud's shared plan-update flow so task progress stays in sync for OpenCode and KiloCode sessions too.
 - Added **Show/Hide Tasks** access to both the composer controls menu and the header quick-actions menu, so the floating Tasks/Plan card is reachable from either surface even before a plan is active.
+- Expanded floating Tasks/Plan tracking to **all providers** with a hybrid runtime model: providers with native plan/todo events keep using them, while Pi and Copilot now fall back to a shared `update_plan` tool that feeds the same canonical plan-update flow.
+- Tightened provider task-tracking instructions so agents call `update_plan` earlier and keep the floating Tasks card in sync throughout multi-step work instead of waiting until the end of a turn.
 
 ### Desktop
 

@@ -14,6 +14,12 @@ import {
   COMPUTER_USE_TOOL_DESCRIPTION,
   COPILOT_COMPUTER_USE_PARAMETERS,
 } from "./orchestrationComputerUseTool.shared.ts";
+import {
+  BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
+  BIGBUD_PLAN_TRACKING_TOOL_NAME,
+  BIGBUD_PLAN_TRACKING_TOOL_PARAMETERS,
+  BIGBUD_PLAN_TRACKING_TOOL_SUCCESS_MESSAGE,
+} from "./threadPlanTrackingTool.shared.ts";
 
 function successResult(message: string): ToolResultObject {
   return {
@@ -79,6 +85,12 @@ export function createCopilotThreadOrchestrationTools(input: {
           return failureResult(message);
         }
       },
+    },
+    {
+      name: BIGBUD_PLAN_TRACKING_TOOL_NAME,
+      description: BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
+      parameters: BIGBUD_PLAN_TRACKING_TOOL_PARAMETERS,
+      handler: async () => successResult(BIGBUD_PLAN_TRACKING_TOOL_SUCCESS_MESSAGE),
     },
     {
       name: "computer_use",

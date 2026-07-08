@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import { isBigbudPlanTrackingToolName } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import type {
   ActivePiSession,
   PiEmitEvents,
@@ -23,6 +24,7 @@ import {
 } from "./Adapter.utils.ts";
 import {
   emitWithTurnAppend,
+  handlePlanToolExecutionStart,
   handleExtensionUiRequest,
   handleToolExecutionEnd,
   handleToolExecutionStart,
@@ -244,6 +246,15 @@ export function makeHandleStdoutEvent(deps: {
         return;
       }
       case "tool_execution_start":
+        if (isBigbudPlanTrackingToolName(message.toolName)) {
+          return yield* handlePlanToolExecutionStart({
+            emit: deps.emit,
+            session,
+            stamp,
+            raw,
+            message,
+          });
+        }
         return yield* handleToolExecutionStart({
           emit: deps.emit,
           session,
@@ -252,6 +263,9 @@ export function makeHandleStdoutEvent(deps: {
           message,
         });
       case "tool_execution_update":
+        if (isBigbudPlanTrackingToolName(message.toolName)) {
+          return;
+        }
         return yield* handleToolExecutionUpdate({
           emit: deps.emit,
           session,
@@ -260,6 +274,9 @@ export function makeHandleStdoutEvent(deps: {
           message,
         });
       case "tool_execution_end":
+        if (isBigbudPlanTrackingToolName(message.toolName)) {
+          return;
+        }
         return yield* handleToolExecutionEnd({
           emit: deps.emit,
           session,

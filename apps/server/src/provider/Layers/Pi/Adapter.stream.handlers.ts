@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import {
+  buildBigbudPlanTrackingFingerprint,
+  normalizeBigbudPlanTrackingPayload,
+} from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import type { ActivePiSession, PiEmitEvents } from "./Adapter.types.ts";
 import {
   classifyToolItemType,
@@ -78,6 +82,48 @@ export const handleToolExecutionStart = Effect.fn("handleToolExecutionStart")(fu
     ],
   });
 });
+
+export const handlePlanToolExecutionStart = Effect.fn("handlePlanToolExecutionStart")(
+  function* (deps: {
+    readonly emit: PiEmitEvents;
+    readonly session: ActivePiSession;
+    readonly stamp: { eventId: EventId; createdAt: string };
+    readonly raw: NonNullable<ProviderRuntimeEvent["raw"]>;
+    readonly message: {
+      readonly args?: Record<string, unknown>;
+    };
+  }) {
+    const turnId = deps.session.activeTurnId;
+    const payload = normalizeBigbudPlanTrackingPayload(deps.message.args);
+    if (!turnId || !payload) {
+      return;
+    }
+
+    const fingerprint = buildBigbudPlanTrackingFingerprint(turnId, payload);
+    if (deps.session.lastPlanFingerprint === fingerprint) {
+      return;
+    }
+    deps.session.lastPlanFingerprint = fingerprint;
+
+    yield* emitWithTurnAppend({
+      emit: deps.emit,
+      session: deps.session,
+      events: [
+        {
+          ...eventBase({
+            eventId: deps.stamp.eventId,
+            createdAt: deps.stamp.createdAt,
+            threadId: deps.session.threadId,
+            turnId,
+            raw: deps.raw,
+          }),
+          type: "turn.plan.updated",
+          payload,
+        },
+      ],
+    });
+  },
+);
 
 function extractToolResultText(partialResult: unknown): string | undefined {
   if (typeof partialResult === "string") {

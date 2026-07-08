@@ -18,6 +18,8 @@ describe("prependThreadContextToProviderInput", () => {
 
     expect(result).toContain("Current thread context:");
     expect(result).toContain("Thread ID: thread-abc");
+    expect(result).toContain("When the `update_plan` tool is available");
+    expect(result).toContain("Do not wait until the end of the turn.");
     expect(result).toContain("whose name ends with `rename_thread`");
     expect(result).toContain('call the `computer_use` tool with `surface: "desktop"`');
     expect(result).toContain('call `computer_use` with `surface: "browser"`');

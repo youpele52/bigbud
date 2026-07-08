@@ -166,6 +166,7 @@ export function makePiAdapterMethods(deps: {
       currentAssistantMessageId: undefined,
       currentToolOutputById: new Map(),
       currentToolInfoById: new Map(),
+      lastPlanFingerprint: undefined,
     };
 
     const onExit = () => {
@@ -260,6 +261,7 @@ export function makePiAdapterMethods(deps: {
     }
 
     const turnId = TurnId.makeUnsafe(`pi-turn-${randomUUID()}`);
+    session.lastPlanFingerprint = undefined;
     const queuedWhileRunning = session.activeTurnId !== undefined;
     if (queuedWhileRunning) {
       session.queuedTurnIds.push(turnId);

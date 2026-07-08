@@ -208,6 +208,7 @@ describe("PiAdapter stream integration — live text projection", () => {
       currentAssistantMessageId: undefined,
       currentToolOutputById: new Map(),
       currentToolInfoById: new Map(),
+      lastPlanFingerprint: undefined,
     };
     sessions.set(session.threadId, session);
 

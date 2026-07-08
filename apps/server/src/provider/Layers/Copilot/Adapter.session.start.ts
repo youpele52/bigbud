@@ -278,6 +278,8 @@ export const makeStartSession =
         activeTurnId: undefined,
         activeMessageId: undefined,
         lastUsage: undefined,
+        planTrackingToolCallIds: new Set(),
+        lastPlanFingerprint: undefined,
         get stopped() {
           return stoppedRef.stopped;
         },

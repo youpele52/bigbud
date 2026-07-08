@@ -87,11 +87,13 @@ export interface ActiveCopilotSession {
   activeTurnId: TurnId | undefined;
   activeMessageId: string | undefined;
   lastUsage: ThreadTokenUsageSnapshot | undefined;
+  planTrackingToolCallIds: Set<string>;
   /**
    * Set to `true` by `stopSessionRecord` so that any in-flight auto-approve
    * timers can bail out early instead of calling into a torn-down session.
    */
   stopped: boolean;
+  lastPlanFingerprint: string | undefined;
 }
 
 export interface CopilotAdapterLiveOptions {

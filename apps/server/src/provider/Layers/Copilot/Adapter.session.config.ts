@@ -10,6 +10,7 @@ import { type SessionConfig } from "@github/copilot-sdk";
 import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
 import { Effect } from "effect";
 
+import { BIGBUD_PLAN_TRACKING_TOOL_INSTRUCTION } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import type { PendingApprovalRequest, PendingUserInputRequest } from "./Adapter.types.ts";
 import {
   USER_INPUT_QUESTION_ID,
@@ -59,6 +60,7 @@ export function buildSessionConfig(input: {
         "You have access to a Chromium browser in this environment. " +
         "Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. " +
         "Prefer codebase inspection first when the task is local-only. " +
+        `${BIGBUD_PLAN_TRACKING_TOOL_INSTRUCTION} ` +
         "Summarize what was verified, including URL and important observations. " +
         "Avoid unnecessary browser use when terminal or file tools are sufficient." +
         (systemMessage?.content ? ` ${systemMessage.content}` : ""),

@@ -94,6 +94,7 @@ export interface ActivePiSession {
       title: string;
     }
   >;
+  lastPlanFingerprint: string | undefined;
 }
 
 export interface PiAdapterLiveOptions {
