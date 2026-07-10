@@ -118,6 +118,8 @@ export interface SidebarState {
   renderedFavorites: SidebarRenderedThreadEntry[];
   areFavouritesExpanded: boolean;
   setAreFavouritesExpanded: (expanded: boolean) => void;
+  showAllFavourites: boolean;
+  setShowAllFavourites: (showAll: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;

@@ -25,7 +25,8 @@ __screenshots__/
 docs/ideas/
 docs/handoff/
 build-certs/
-apps/server/userdata/
+# Local server state can contain per-thread authorization tokens.
+/apps/server/userdata/
 # Bundled native skills ship with the app; ignore other local runtime state.
 .bigbud/*
 !.bigbud/skills/

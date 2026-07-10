@@ -20,6 +20,8 @@ export interface BuildSidebarStateResultInput {
   renderedFavorites: SidebarRenderedThreadEntry[];
   favouritesExpanded: boolean;
   setFavouritesExpanded: (expanded: boolean) => void;
+  showAllFavourites: boolean;
+  setShowAllFavourites: (showAll: boolean) => void;
   areChatsExpanded: boolean;
   setAreChatsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
@@ -54,6 +56,8 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     renderedFavorites: input.renderedFavorites,
     areFavouritesExpanded: input.favouritesExpanded,
     setAreFavouritesExpanded: input.setFavouritesExpanded,
+    showAllFavourites: input.showAllFavourites,
+    setShowAllFavourites: input.setShowAllFavourites,
     areChatsExpanded: input.areChatsExpanded,
     setAreChatsExpanded: input.setAreChatsExpanded,
     showAllChats: input.showAllChats,

@@ -1,14 +1,25 @@
 import { ChevronRightIcon, PinIcon } from "lucide-react";
 import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarThreadRow } from "./SidebarThreadRow";
-import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuSub } from "../ui/sidebar";
+import {
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from "../ui/sidebar";
 import { Spinner } from "../ui/spinner";
 import type { SharedProjectItemProps, SidebarRenderedThreadEntry } from "./Sidebar.types";
+
+export const PINNED_THREAD_INITIAL_VISIBLE_COUNT = 4;
 
 interface SidebarFavoritesSectionProps {
   renderedFavorites: SidebarRenderedThreadEntry[];
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
+  showAll: boolean;
+  onShowAllChange: (showAll: boolean) => void;
   sharedProjectItemProps: SharedProjectItemProps;
   bootstrapComplete: boolean;
 }
@@ -17,9 +28,17 @@ export function SidebarFavoritesSection({
   renderedFavorites,
   isExpanded,
   onExpandedChange,
+  showAll,
+  onShowAllChange,
   sharedProjectItemProps,
   bootstrapComplete,
 }: SidebarFavoritesSectionProps) {
+  const hasMoreFavorites = renderedFavorites.length > PINNED_THREAD_INITIAL_VISIBLE_COUNT;
+  const visibleFavorites = showAll
+    ? renderedFavorites
+    : renderedFavorites.slice(0, PINNED_THREAD_INITIAL_VISIBLE_COUNT);
+  const hiddenCount = renderedFavorites.length - PINNED_THREAD_INITIAL_VISIBLE_COUNT;
+
   return (
     <SidebarGroup className="px-2 py-2">
       {!bootstrapComplete ? (
@@ -61,39 +80,57 @@ export function SidebarFavoritesSection({
                   <span>No pinned threads yet</span>
                 </div>
               ) : (
-                renderedFavorites.map((entry) => (
-                  <SidebarThreadRow
-                    key={`favorite-${entry.threadId}`}
-                    threadId={entry.threadId}
-                    orderedProjectThreadIds={entry.orderedThreadIds}
-                    routeThreadId={sharedProjectItemProps.routeThreadId}
-                    selectedThreadIds={sharedProjectItemProps.selectedThreadIds}
-                    showThreadJumpHints={false}
-                    jumpLabel={null}
-                    renamingThreadId={sharedProjectItemProps.renamingThreadId}
-                    renamingTitle={sharedProjectItemProps.renamingTitle}
-                    setRenamingTitle={sharedProjectItemProps.setRenamingTitle}
-                    onRenamingInputMount={sharedProjectItemProps.onRenamingInputMount}
-                    hasRenameCommitted={sharedProjectItemProps.hasRenameCommitted}
-                    markRenameCommitted={sharedProjectItemProps.markRenameCommitted}
-                    handleThreadClick={sharedProjectItemProps.handleThreadClick}
-                    navigateToThread={sharedProjectItemProps.navigateToThread}
-                    handleMultiSelectContextMenu={
-                      sharedProjectItemProps.handleMultiSelectContextMenu
-                    }
-                    handleThreadContextMenu={sharedProjectItemProps.handleThreadContextMenu}
-                    clearSelection={sharedProjectItemProps.clearSelection}
-                    commitRename={sharedProjectItemProps.commitRename}
-                    cancelRename={sharedProjectItemProps.cancelRename}
-                    branchThread={sharedProjectItemProps.branchThread}
-                    requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
-                    openPrLink={sharedProjectItemProps.openPrLink}
-                    pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}
-                    favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
-                    automationThreadIds={sharedProjectItemProps.automationThreadIds}
-                    toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
-                  />
-                ))
+                <>
+                  {visibleFavorites.map((entry) => (
+                    <SidebarThreadRow
+                      key={`favorite-${entry.threadId}`}
+                      threadId={entry.threadId}
+                      orderedProjectThreadIds={entry.orderedThreadIds}
+                      routeThreadId={sharedProjectItemProps.routeThreadId}
+                      selectedThreadIds={sharedProjectItemProps.selectedThreadIds}
+                      showThreadJumpHints={false}
+                      jumpLabel={null}
+                      renamingThreadId={sharedProjectItemProps.renamingThreadId}
+                      renamingTitle={sharedProjectItemProps.renamingTitle}
+                      setRenamingTitle={sharedProjectItemProps.setRenamingTitle}
+                      onRenamingInputMount={sharedProjectItemProps.onRenamingInputMount}
+                      hasRenameCommitted={sharedProjectItemProps.hasRenameCommitted}
+                      markRenameCommitted={sharedProjectItemProps.markRenameCommitted}
+                      handleThreadClick={sharedProjectItemProps.handleThreadClick}
+                      navigateToThread={sharedProjectItemProps.navigateToThread}
+                      handleMultiSelectContextMenu={
+                        sharedProjectItemProps.handleMultiSelectContextMenu
+                      }
+                      handleThreadContextMenu={sharedProjectItemProps.handleThreadContextMenu}
+                      clearSelection={sharedProjectItemProps.clearSelection}
+                      commitRename={sharedProjectItemProps.commitRename}
+                      cancelRename={sharedProjectItemProps.cancelRename}
+                      branchThread={sharedProjectItemProps.branchThread}
+                      requestThreadDelete={sharedProjectItemProps.requestThreadDelete}
+                      openPrLink={sharedProjectItemProps.openPrLink}
+                      pr={sharedProjectItemProps.prByThreadId.get(entry.threadId) ?? null}
+                      favoriteThreadIds={sharedProjectItemProps.favoriteThreadIds}
+                      automationThreadIds={sharedProjectItemProps.automationThreadIds}
+                      toggleFavoriteThread={sharedProjectItemProps.toggleFavoriteThread}
+                    />
+                  ))}
+
+                  {hasMoreFavorites ? (
+                    <SidebarMenuSubItem className="w-full">
+                      <SidebarMenuSubButton
+                        render={<button type="button" />}
+                        data-thread-selection-safe
+                        size="sm"
+                        className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                        onClick={() => onShowAllChange(!showAll)}
+                      >
+                        <span className="flex min-w-0 flex-1 items-center gap-2">
+                          <span>{showAll ? "Show less" : `See more (${hiddenCount})`}</span>
+                        </span>
+                      </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                  ) : null}
+                </>
               )}
             </SidebarMenuSub>
           ) : null}

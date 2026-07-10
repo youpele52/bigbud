@@ -63,6 +63,8 @@ export default function Sidebar() {
               renderedFavorites={s.renderedFavorites}
               isExpanded={s.areFavouritesExpanded}
               onExpandedChange={s.setAreFavouritesExpanded}
+              showAll={s.showAllFavourites}
+              onShowAllChange={s.setShowAllFavourites}
               sharedProjectItemProps={s.sharedProjectItemProps}
               bootstrapComplete={s.bootstrapComplete}
             />

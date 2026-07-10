@@ -113,6 +113,32 @@ function parseCronExpression(expression: string): {
   };
 }
 
+function getMaxDayOfMonth(month: number): number {
+  if (month === 2) {
+    return 29;
+  }
+  if (month === 4 || month === 6 || month === 9 || month === 11) {
+    return 30;
+  }
+  return 31;
+}
+
+function assertPossibleDayOfMonth(
+  expression: string,
+  fields: ReturnType<typeof parseCronExpression>,
+): void {
+  for (const month of fields.month.values) {
+    const maxDayOfMonth = getMaxDayOfMonth(month);
+    for (const dayOfMonth of fields.dayOfMonth.values) {
+      if (dayOfMonth <= maxDayOfMonth) {
+        return;
+      }
+    }
+  }
+
+  throw new CronParseError(`Cron expression has no possible day-of-month: ${expression}`);
+}
+
 const dateTimePartsFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function getDateTimeFormatter(timeZone: string): Intl.DateTimeFormat {
@@ -171,6 +197,7 @@ const MAX_ITERATIONS = 4 * 366 * 24 * 60; // ~4 years of minutes
 
 export function getNextCronTime(expression: string, after: Date, timeZone = "UTC"): Date {
   const fields = parseCronExpression(expression);
+  assertPossibleDayOfMonth(expression, fields);
   try {
     getDateTimeFormatter(timeZone);
   } catch (error) {
