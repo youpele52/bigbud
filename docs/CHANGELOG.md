@@ -2,6 +2,26 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.653 (10 July, 2026)
+
+### Plans
+
+- Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
+
+### Sidebar
+
+- Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
+
+### Scheduler
+
+- Fixed cron validation for impossible month/day combinations so invalid schedules fail immediately instead of exhausting the scheduler search window.
+
+### Marketing
+
+- Constrained changelog and docs images so release-note screenshots and embedded media stay inside the reading column instead of stretching the page.
+- Hardened the marketing download-stats refresh so GitHub rate limits fall back to cached data instead of breaking the site build.
+- Tightened the docs **Using bigbud** section with shorter feature summaries and moved Orchestra to the top for quicker discovery.
+
 ## v0.1.652 (8 July, 2026)
 
 ### Plans
