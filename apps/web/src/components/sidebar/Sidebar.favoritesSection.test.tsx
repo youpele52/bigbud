@@ -26,6 +26,20 @@ vi.mock("../ui/sidebar", () => ({
   SidebarMenuSub: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
   ),
+  SidebarMenuSubButton: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <button className={className}>{children}</button>,
+  SidebarMenuSubItem: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <div className={className}>{children}</div>,
 }));
 
 vi.mock("../ui/spinner", () => ({
@@ -90,10 +104,12 @@ function buildSharedProjectItemProps(): SharedProjectItemProps {
 function renderFavoritesSection({
   renderedFavorites = [],
   isExpanded = true,
+  showAll = false,
   bootstrapComplete = true,
 }: {
   renderedFavorites?: SidebarRenderedThreadEntry[];
   isExpanded?: boolean;
+  showAll?: boolean;
   bootstrapComplete?: boolean;
 } = {}) {
   return renderToStaticMarkup(
@@ -101,6 +117,8 @@ function renderFavoritesSection({
       renderedFavorites={renderedFavorites}
       isExpanded={isExpanded}
       onExpandedChange={vi.fn()}
+      showAll={showAll}
+      onShowAllChange={vi.fn()}
       sharedProjectItemProps={buildSharedProjectItemProps()}
       bootstrapComplete={bootstrapComplete}
     />,
@@ -138,6 +156,46 @@ describe("SidebarFavoritesSection", () => {
     expect(html).toContain("thread:thread-1");
     expect(html).toContain("thread:thread-2");
     expect(html).not.toContain("No pinned threads yet");
+  });
+
+  it("shows a see more row when pinned threads exceed the preview count", () => {
+    const orderedThreadIds = [
+      ThreadId.makeUnsafe("thread-1"),
+      ThreadId.makeUnsafe("thread-2"),
+      ThreadId.makeUnsafe("thread-3"),
+      ThreadId.makeUnsafe("thread-4"),
+      ThreadId.makeUnsafe("thread-5"),
+    ] as const;
+    const renderedFavorites = orderedThreadIds.map((threadId) => ({
+      threadId,
+      orderedThreadIds,
+    }));
+
+    const html = renderFavoritesSection({ renderedFavorites });
+
+    expect(html).toContain("thread:thread-1");
+    expect(html).toContain("thread:thread-4");
+    expect(html).not.toContain("thread:thread-5");
+    expect(html).toContain("See more (1)");
+  });
+
+  it("shows all pinned threads and a show less row when expanded", () => {
+    const orderedThreadIds = [
+      ThreadId.makeUnsafe("thread-1"),
+      ThreadId.makeUnsafe("thread-2"),
+      ThreadId.makeUnsafe("thread-3"),
+      ThreadId.makeUnsafe("thread-4"),
+      ThreadId.makeUnsafe("thread-5"),
+    ] as const;
+    const renderedFavorites = orderedThreadIds.map((threadId) => ({
+      threadId,
+      orderedThreadIds,
+    }));
+
+    const html = renderFavoritesSection({ renderedFavorites, showAll: true });
+
+    expect(html).toContain("thread:thread-5");
+    expect(html).toContain("Show less");
   });
 
   it("shows a loading spinner before bootstrap completes", () => {
