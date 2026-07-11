@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createCopilotThreadOrchestrationTools } from "./copilotThreadOrchestrationTools.ts";
 import { COMPUTER_USE_TOOL_DESCRIPTION } from "./orchestrationComputerUseTool.shared.ts";
+import { BROWSER_TOOL_DESCRIPTION } from "./orchestrationBrowserTool.shared.ts";
 import {
   BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
   BIGBUD_PLAN_TRACKING_TOOL_NAME,
@@ -16,6 +17,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse: async () => ({ surface: "desktop", action: "list_apps", summary: "ok" }),
     });
 
@@ -23,11 +25,15 @@ describe("createCopilotThreadOrchestrationTools", () => {
       "rename_thread",
       "archive_thread",
       BIGBUD_PLAN_TRACKING_TOOL_NAME,
+      "browser",
       "computer_use",
       "get_thread_status",
     ]);
     expect(tools.find((tool) => tool.name === "computer_use")?.description).toBe(
       COMPUTER_USE_TOOL_DESCRIPTION,
+    );
+    expect(tools.find((tool) => tool.name === "browser")?.description).toBe(
+      BROWSER_TOOL_DESCRIPTION,
     );
     expect(tools.find((tool) => tool.name === BIGBUD_PLAN_TRACKING_TOOL_NAME)?.description).toBe(
       BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
@@ -45,6 +51,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse,
     });
 
@@ -64,6 +71,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse: async () => ({}),
     });
 

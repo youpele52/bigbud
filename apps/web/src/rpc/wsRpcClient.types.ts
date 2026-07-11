@@ -63,6 +63,10 @@ import {
   type TeachListProjectsInput,
   type TeachListProjectsResult,
   type ThinkingActivityDeltaEvent,
+  type VisibleBrowserCommandResult,
+  type VisibleBrowserLeaseRevokeInput,
+  type VisibleBrowserLeaseSnapshot,
+  type VisibleBrowserRendererId,
   WS_METHODS,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
@@ -107,6 +111,18 @@ export interface WsRpcClient {
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
     readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>;
+  };
+  readonly browser: {
+    readonly completeCommand: (input: VisibleBrowserCommandResult) => Promise<void>;
+    readonly revokeLease: (input: VisibleBrowserLeaseRevokeInput) => Promise<void>;
+    readonly getLeases: (input: {
+      readonly rendererId: VisibleBrowserRendererId;
+    }) => Promise<ReadonlyArray<VisibleBrowserLeaseSnapshot>>;
+    readonly onCommand: (
+      rendererId: VisibleBrowserRendererId,
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeVisibleBrowserCommands>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
   };
   readonly projects: {
     readonly listDirectory: RpcUnaryMethod<typeof WS_METHODS.projectsListDirectory>;

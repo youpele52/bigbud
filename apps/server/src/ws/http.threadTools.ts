@@ -1,7 +1,7 @@
 import { Data, Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
-import { ComputerUseAction, ThreadId } from "@bigbud/contracts";
+import { BrowserAction, ComputerUseAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
 import {
@@ -12,12 +12,14 @@ import { getThreadOrchestrationToolDispatcher } from "../orchestration-tools/Thr
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
+const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 const ThreadToolRequest = Schema.Struct({
-  action: Schema.Literals(["rename", "archive", "get_status", "computer_use"]),
+  action: Schema.Literals(["rename", "archive", "get_status", "computer_use", "browser"]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   computerUseAction: Schema.optional(Schema.Unknown),
+  browserAction: Schema.optional(Schema.Unknown),
 });
 
 class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{
@@ -152,6 +154,24 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
               }),
           ),
         );
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
+
+    if (body.action === "browser") {
+      const browserAction = yield* Effect.try({
+        try: () => decodeBrowserAction(body.browserAction),
+        catch: () =>
+          new ThreadToolRequestError({ status: 400, message: "Invalid browser action." }),
+      });
+      const result = yield* dispatcher.browser({ threadId, action: browserAction }).pipe(
+        Effect.mapError(
+          (error) =>
+            new ThreadToolRequestError({
+              status: 400,
+              message: error instanceof Error ? error.message : "Browser action failed.",
+            }),
+        ),
+      );
       return yield* HttpServerResponse.json({ ok: true, result });
     }
 

@@ -3,6 +3,7 @@ import { Effect, Exit, Scope } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
+import { prepareAcpThreadOrchestrationBridge } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import {
   type DevinAdapterLiveOptions,
   type DevinEventStamp,
@@ -96,11 +97,28 @@ export function makeStartSessionEffect(
     });
     const devinSettings = yield* deps.getDevinSettings(input.threadId);
     const resumeSessionId = parseDevinResume(input.resumeCursor)?.sessionId;
+    const orchestration = yield* Effect.tryPromise({
+      try: () =>
+        prepareAcpThreadOrchestrationBridge({
+          stateDir: deps.serverConfig.stateDir,
+          threadId: input.threadId,
+          host: deps.serverConfig.host,
+          port: deps.serverConfig.port,
+        }),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: input.threadId,
+          detail: "Failed to prepare Devin thread orchestration bridge.",
+          cause,
+        }),
+    });
     const acp = yield* makeDevinAcpRuntime({
       devinSettings,
       childProcessSpawner: deps.childProcessSpawner,
       cwd,
       ...(resumeSessionId ? { resumeSessionId } : {}),
+      mcpServers: orchestration.mcpServers,
       clientInfo: { name: "bigbud", version: "0.0.0" },
       ...acpNativeLoggers,
     }).pipe(
@@ -114,6 +132,7 @@ export function makeStartSessionEffect(
             cause,
           }),
       ),
+      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
     );
 
     const started = yield* Effect.gen(function* () {
@@ -181,6 +200,7 @@ export function makeStartSessionEffect(
       Effect.mapError((error) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, "session/start", error),
       ),
+      Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)),
     );
 
     yield* applyRequestedSessionConfiguration({
@@ -190,7 +210,7 @@ export function makeStartSessionEffect(
       modelSelection: devinModelSelection,
       mapError: ({ cause, method }) =>
         mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
-    });
+    }).pipe(Effect.onError(() => Effect.promise(orchestration.bridge.cleanup)));
 
     const now = yield* deps.nowIso;
     const session = {
@@ -213,6 +233,7 @@ export function makeStartSessionEffect(
       session,
       scope: sessionScope,
       acp,
+      orchestrationBridgeCleanup: orchestration.bridge.cleanup,
       notificationFiber: undefined,
       pendingApprovals,
       pendingUserInputs,

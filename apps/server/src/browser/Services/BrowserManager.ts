@@ -94,6 +94,19 @@ export interface BrowserManagerShape {
   ) => Effect.Effect<BrowserContextInfo, BrowserManagerError>;
 
   /**
+   * Get the current page's visible text for agent inspection.
+   */
+  readonly getPageText: (threadId: ThreadId) => Effect.Effect<string, BrowserManagerError>;
+
+  readonly goBack: (threadId: ThreadId) => Effect.Effect<BrowserContextInfo, BrowserManagerError>;
+
+  readonly goForward: (
+    threadId: ThreadId,
+  ) => Effect.Effect<BrowserContextInfo, BrowserManagerError>;
+
+  readonly reload: (threadId: ThreadId) => Effect.Effect<BrowserContextInfo, BrowserManagerError>;
+
+  /**
    * Close the browser context for the given thread.
    */
   readonly close: (threadId: ThreadId) => Effect.Effect<void, BrowserManagerError>;

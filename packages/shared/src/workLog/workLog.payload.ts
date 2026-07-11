@@ -14,6 +14,7 @@ export interface WorkLogPayloadDetails {
   readonly rawCommand?: string;
   readonly changedFiles?: ReadonlyArray<string>;
   readonly toolTitle?: string;
+  readonly toolAction?: string;
   readonly itemType?: ToolLifecycleItemType;
   readonly requestKind?: "browser" | "command" | "file-read" | "file-change";
   readonly attachmentUrl?: string;
@@ -25,6 +26,7 @@ export function extractWorkLogPayloadDetails(
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const toolAction = extractToolAction(payload);
   const detail =
     typeof payload?.detail === "string" ? stripTrailingExitCode(payload.detail).output : null;
   const itemType = extractWorkLogItemType(payload);
@@ -37,6 +39,7 @@ export function extractWorkLogPayloadDetails(
     ...(commandPreview.rawCommand ? { rawCommand: commandPreview.rawCommand } : {}),
     ...(changedFiles.length > 0 ? { changedFiles } : {}),
     ...(title ? { toolTitle: title } : {}),
+    ...(toolAction ? { toolAction } : {}),
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(attachmentUrl ? { attachmentUrl } : {}),
@@ -235,7 +238,15 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
 }
 
 function extractToolTitle(payload: Record<string, unknown> | null): string | null {
-  return asTrimmedString(payload?.title);
+  const title = asTrimmedString(payload?.title);
+  const toolName = asTrimmedString(asRecord(payload?.data)?.toolName);
+  return toolName === "mcp__bigbud_orchestration__browser" ? toolName : title;
+}
+
+function extractToolAction(payload: Record<string, unknown> | null): string | null {
+  const data = asRecord(payload?.data);
+  const input = asRecord(data?.input);
+  return asTrimmedString(data?.action) ?? asTrimmedString(input?.action);
 }
 
 function stripTrailingExitCode(value: string): {

@@ -30,6 +30,10 @@ describe("ComputerUseLive", () => {
       keyPress: () => Effect.die("unexpected browser key"),
       wait: () => Effect.die("unexpected browser wait"),
       getPageInfo: () => Effect.die("unexpected browser page info"),
+      getPageText: () => Effect.die("unexpected browser page text"),
+      goBack: () => Effect.die("unexpected browser back"),
+      goForward: () => Effect.die("unexpected browser forward"),
+      reload: () => Effect.die("unexpected browser reload"),
       close: () => Effect.void,
       closeAll: () => Effect.void,
     };
@@ -78,6 +82,10 @@ describe("ComputerUseLive", () => {
           url: "https://example.com",
           title: "Example",
         }),
+      getPageText: () => Effect.die("unexpected browser page text"),
+      goBack: () => Effect.die("unexpected browser back"),
+      goForward: () => Effect.die("unexpected browser forward"),
+      reload: () => Effect.die("unexpected browser reload"),
       close: () => Effect.void,
       closeAll: () => Effect.void,
     };

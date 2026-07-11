@@ -115,6 +115,23 @@ export function TaskCompletionNotifications() {
       return;
     }
 
+    const previousActivityIds = new Set(
+      previousThreads.flatMap((thread) => thread.activities.map((activity) => activity.id)),
+    );
+    for (const thread of threads) {
+      for (const activity of thread.activities) {
+        if (activity.kind !== "learning.memory.updated" || previousActivityIds.has(activity.id)) {
+          continue;
+        }
+        toastManager.add({
+          type: "success",
+          title: "Memory updated",
+          description: "bigbud saved new persistent memory from this conversation.",
+          data: { threadId: thread.id, hideOnActiveThread: false },
+        });
+      }
+    }
+
     const candidates = collectCompletedThreadCandidates(previousThreads, threads);
     if (candidates.length === 0) {
       return;

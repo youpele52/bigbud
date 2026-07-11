@@ -306,6 +306,10 @@ export async function createHarness(input?: {
     keyPress: () => unsupported(),
     wait: () => unsupported(),
     getPageInfo: () => unsupported(),
+    getPageText: () => unsupported(),
+    goBack: () => unsupported(),
+    goForward: () => unsupported(),
+    reload: () => unsupported(),
     close: browserClose,
     closeAll: () => Effect.void,
   };

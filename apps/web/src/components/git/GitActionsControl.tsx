@@ -41,6 +41,7 @@ import { useEffect } from "react";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
+  isProjectThread?: boolean;
   executionTargetId?: string | undefined;
   activeThreadId: ThreadId | null;
   onOpenOrchestra?: (() => void) | undefined;
@@ -60,6 +61,7 @@ interface PendingDefaultBranchAction {
 
 export default function GitActionsControl({
   gitCwd,
+  isProjectThread = true,
   executionTargetId,
   activeThreadId,
   onOpenOrchestra,
@@ -93,6 +95,7 @@ export default function GitActionsControl({
   const isRepo = gitStatus?.isRepo ?? true;
   const hasOriginRemote = gitStatus?.hasOriginRemote ?? false;
   const gitStatusForActions = gitStatus;
+  const showGit = isProjectThread || gitStatus?.isRepo === true;
   const isSelectingDraftWorktreeBase =
     !activeServerThread &&
     activeDraftThread?.envMode === "worktree" &&
@@ -362,12 +365,11 @@ export default function GitActionsControl({
     setIsEditingFiles(false);
   };
 
-  if (!gitCwd) return null;
-
   return (
     <>
       <GitActionsControlActions
         gitCwd={gitCwd}
+        showGit={showGit}
         queryClient={queryClient}
         isRepo={isRepo}
         isInitPending={initMutation.isPending}

@@ -4,6 +4,13 @@ export function describePendingApproval(approval: PendingApproval): {
   summary: string;
   description: string;
 } {
+  if (approval.requestId.startsWith("learning-skill:")) {
+    return {
+      summary: "Skill improvement suggested",
+      description:
+        "bigbud has proposed a targeted patch to a provider-owned skill. The skill remains unchanged unless you approve it.",
+    };
+  }
   const suffix = approval.autoApproveAfterMs
     ? " It will auto-approve shortly because this thread is in full-access mode."
     : "";

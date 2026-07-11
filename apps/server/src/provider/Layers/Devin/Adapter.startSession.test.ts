@@ -29,7 +29,7 @@ vi.mock("../../acp/DevinAcpSupport.ts", async (importOriginal) => {
 const THREAD_ID = ThreadId.makeUnsafe("thread-devin-orchestration");
 
 describe("DevinAdapter startSession orchestration wiring", () => {
-  it.effect("starts ACP sessions without injecting thread orchestration MCP", () =>
+  it.effect("starts ACP sessions with the thread orchestration MCP", () =>
     Effect.gen(function* () {
       capturedAcpInputs.length = 0;
       const sessions = new Map<ThreadId, DevinSessionContext>();
@@ -53,10 +53,16 @@ describe("DevinAdapter startSession orchestration wiring", () => {
         Effect.flatMap(() =>
           Effect.sync(() => {
             const acpInput = capturedAcpInputs.at(-1);
-            assert.equal(acpInput?.mcpServers, undefined);
+            assert.deepStrictEqual(
+              acpInput?.mcpServers?.map((server) => server.name),
+              ["bigbud_orchestration"],
+            );
           }),
         ),
         Effect.scoped,
+      );
+      yield* Effect.promise(
+        () => sessions.get(THREAD_ID)?.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
       );
       yield* Effect.ignore(Scope.close(notificationScope, Exit.void));
     }),

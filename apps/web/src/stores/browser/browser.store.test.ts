@@ -32,4 +32,78 @@ describe("browser.store", () => {
     useBrowserPanelStore.getState().setTabUrl("browser:1", "https://example.com");
     expect(useBrowserPanelStore.getState()).toBe(stateBeforeUrl);
   });
+
+  it("keeps an agent lease while browser metadata changes and releases it explicitly", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1", "https://example.com");
+    useBrowserPanelStore.getState().setAgentLease("browser:1", {
+      leaseId: "lease:1",
+      threadId: "thread:1",
+      turnId: "turn:1",
+    });
+    useBrowserPanelStore.getState().setTabTitle("browser:1", "Example");
+    useBrowserPanelStore.getState().setTabUrl("browser:1", "https://www.iana.org");
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]).toMatchObject({
+      agentLease: { leaseId: "lease:1", threadId: "thread:1", turnId: "turn:1" },
+    });
+
+    useBrowserPanelStore.getState().clearAgentLease("browser:1");
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.agentLease).toBeUndefined();
+  });
+
+  it("does not release a newer lease when an older release arrives late", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1");
+    useBrowserPanelStore.getState().setAgentLease("browser:1", {
+      leaseId: "lease:2",
+      threadId: "thread:1",
+      turnId: "turn:2",
+    });
+
+    useBrowserPanelStore.getState().clearAgentLease("browser:1", "lease:1");
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.agentLease).toMatchObject({
+      leaseId: "lease:2",
+    });
+  });
+
+  it("reconciles stale renderer ownership with the server lease snapshot", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1");
+    useBrowserPanelStore.getState().setAgentLease("browser:1", {
+      leaseId: "lease:stale",
+      threadId: "thread:1",
+      turnId: "turn:1",
+    });
+
+    useBrowserPanelStore.getState().reconcileAgentLeases([]);
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]).toMatchObject({
+      agentHandoff: { leaseId: "lease:stale" },
+    });
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.agentLease).toBeUndefined();
+  });
+
+  it("restores a server-owned lease after reconnect", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1");
+
+    useBrowserPanelStore
+      .getState()
+      .reconcileAgentLeases([
+        { leaseId: "lease:1", tabId: "browser:1", threadId: "thread:1", turnId: "turn:1" },
+      ]);
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.agentLease).toEqual({
+      leaseId: "lease:1",
+      threadId: "thread:1",
+      turnId: "turn:1",
+    });
+  });
+
+  it("preserves agent-tab provenance while browser metadata changes", () => {
+    useBrowserPanelStore.getState().ensureTab("browser:1", "https://example.com");
+    useBrowserPanelStore.getState().markTabOpenedByAgent("browser:1");
+    useBrowserPanelStore.getState().setTabTitle("browser:1", "Example");
+
+    expect(useBrowserPanelStore.getState().tabsById["browser:1"]?.openedByAgent).toBe(true);
+  });
 });

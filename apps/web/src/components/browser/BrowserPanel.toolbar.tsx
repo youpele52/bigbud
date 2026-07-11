@@ -33,6 +33,7 @@ export interface BrowserToolbarProps {
   pageMetadata: BrowserPageMetadata;
   historyUrls: string[];
   annotationDisabled?: boolean;
+  agentControlled?: boolean;
 }
 
 function getBrowserFallbackLabel(inputUrl: string): string {
@@ -61,6 +62,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   pageMetadata,
   historyUrls,
   annotationDisabled = false,
+  agentControlled = false,
 }: BrowserToolbarProps) {
   const [urlFocused, setUrlFocused] = useState(false);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(-1);
@@ -120,7 +122,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                 size="xs"
                 className="shrink-0 px-1.5"
                 onClick={onGoBack}
-                disabled={!canGoBack}
+                disabled={!canGoBack || agentControlled}
                 aria-label="Go back"
               >
                 <ArrowLeftIcon className="size-4" />
@@ -137,7 +139,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                 size="xs"
                 className="shrink-0 px-1.5"
                 onClick={onGoForward}
-                disabled={!canGoForward}
+                disabled={!canGoForward || agentControlled}
                 aria-label="Go forward"
               >
                 <ArrowRightIcon className="size-4" />
@@ -154,6 +156,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                 size="xs"
                 className="shrink-0 px-1.5"
                 onClick={onReload}
+                disabled={agentControlled}
                 aria-label="Reload"
               >
                 <RotateCwIcon className="size-4" />
@@ -174,7 +177,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                     "bg-secondary text-info-foreground hover:text-info-foreground",
                 )}
                 onClick={onAnnotate}
-                disabled={annotationDisabled}
+                disabled={annotationDisabled || agentControlled}
                 aria-label="Annotate browser page"
                 data-pressed={annotationActive ? "true" : undefined}
               >
@@ -205,6 +208,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
             setUrlFocused(false);
             setSelectedHistoryIndex(-1);
           }}
+          disabled={agentControlled}
           className={cn(
             "h-8 w-full min-w-0 rounded-lg border border-input bg-background pl-3 pr-10 font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45 dark:bg-input/32",
             !urlFocused && "text-transparent caret-transparent placeholder:text-transparent",
@@ -234,6 +238,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
                 size="xs"
                 className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 px-0"
                 onClick={onOpenInExternalBrowser}
+                disabled={agentControlled}
                 aria-label="Open in default browser"
               >
                 <ArrowUpRightIcon className="size-4" />

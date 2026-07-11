@@ -62,6 +62,12 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
       registerListener(terminalEventListeners, listener),
     ),
   },
+  browser: {
+    completeCommand: vi.fn(),
+    revokeLease: vi.fn(),
+    getLeases: vi.fn(),
+    onCommand: vi.fn(),
+  },
   projects: {
     listDirectory: vi.fn(),
     onDirectoryChange: vi.fn((_, listener: (event: ProjectDirectoryWatchEvent) => void) =>

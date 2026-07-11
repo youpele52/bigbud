@@ -1,3 +1,5 @@
+import type { BrowserAction, BrowserResult } from "@bigbud/contracts";
+
 export interface BrowserViewportRef {
   goBack(): void;
   goForward(): void;
@@ -6,6 +8,7 @@ export interface BrowserViewportRef {
   openDevTools(): void;
   startAnnotation(): Promise<import("./BrowserPanel.annotation").BrowserAnnotationResult | null>;
   cancelAnnotation(): Promise<void>;
+  executeAgentAction(action: BrowserAction): Promise<BrowserResult>;
 }
 
 export interface BrowserPageMetadata {

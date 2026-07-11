@@ -112,4 +112,14 @@ describe("ChatHeader", () => {
 
     expect(markup).toContain('aria-label="Quick actions"');
   });
+
+  it("renders chat quick actions without a directory and omits Git", () => {
+    const markup = renderHeader({
+      activeProjectName: "Chats",
+      isProjectThread: false,
+      openInCwd: null,
+    });
+
+    expect(markup).toContain('aria-label="Quick actions"');
+  });
 });

@@ -106,6 +106,9 @@ export const makeProcessSessionHandlers = ({
   const processApprovalResponseRequested = Effect.fn("processApprovalResponseRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.approval-response-requested" }>,
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
+    if (event.payload.requestId.startsWith("learning-skill:")) {
+      return;
+    }
     const thread = yield* resolveThread(event.payload.threadId);
     if (!thread) {
       return;

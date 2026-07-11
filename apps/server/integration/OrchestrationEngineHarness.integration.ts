@@ -40,6 +40,7 @@ import { OrchestrationReactor } from "../src/orchestration/Services/Orchestratio
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SchedulerReactor } from "../src/orchestration/Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../src/orchestration/Services/ThreadWatchReactor.ts";
+import { LearningReactor } from "../src/orchestration/Services/LearningReactor.ts";
 import {
   RuntimeReceiptBus,
   type OrchestrationRuntimeReceipt,
@@ -217,6 +218,11 @@ export const makeOrchestrationIntegrationHarness = (
       wait: () => Effect.die(new Error("Unexpected browser wait in integration harness")),
       getPageInfo: () =>
         Effect.die(new Error("Unexpected browser page info in integration harness")),
+      getPageText: () =>
+        Effect.die(new Error("Unexpected browser page text in integration harness")),
+      goBack: () => Effect.die(new Error("Unexpected browser back in integration harness")),
+      goForward: () => Effect.die(new Error("Unexpected browser forward in integration harness")),
+      reload: () => Effect.die(new Error("Unexpected browser reload in integration harness")),
       close: () => Effect.void,
       closeAll: () => Effect.void,
     });
@@ -236,12 +242,16 @@ export const makeOrchestrationIntegrationHarness = (
     const threadWatchReactorLayer = Layer.succeed(ThreadWatchReactor, {
       start: () => Effect.void,
     });
+    const learningReactorLayer = Layer.succeed(LearningReactor, {
+      start: () => Effect.void,
+    });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
       Layer.provideMerge(checkpointReactorLayer),
       Layer.provideMerge(schedulerReactorLayer),
       Layer.provideMerge(threadWatchReactorLayer),
+      Layer.provideMerge(learningReactorLayer),
     );
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),

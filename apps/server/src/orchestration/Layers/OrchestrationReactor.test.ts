@@ -7,6 +7,7 @@ import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeInge
 import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
+import { LearningReactor } from "../Services/LearningReactor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
 describe("OrchestrationReactor", () => {
@@ -68,6 +69,14 @@ describe("OrchestrationReactor", () => {
             },
           }),
         ),
+        Layer.provideMerge(
+          Layer.succeed(LearningReactor, {
+            start: () => {
+              started.push("learning-reactor");
+              return Effect.void;
+            },
+          }),
+        ),
       ),
     );
 
@@ -81,6 +90,7 @@ describe("OrchestrationReactor", () => {
       "checkpoint-reactor",
       "scheduler-reactor",
       "thread-watch-reactor",
+      "learning-reactor",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));

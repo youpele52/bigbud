@@ -6,7 +6,7 @@
  *
  * @module BrowserManagerLive
  */
-import type { ThreadId } from "@bigbud/contracts";
+import { BROWSER_PAGE_TEXT_MAX_CHARS, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer } from "effect";
 
 import {
@@ -177,6 +177,58 @@ function makeBrowserManager(): BrowserManagerShape {
       return { threadId, url: pageUrl, title };
     });
 
+  const getPageText: BrowserManagerShape["getPageText"] = (threadId) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      const text = yield* Effect.tryPromise({
+        try: () => record.page.locator("body").innerText(),
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to read browser page text.", cause }),
+      });
+      return text.slice(0, BROWSER_PAGE_TEXT_MAX_CHARS);
+    });
+
+  const currentPageInfo = (threadId: ThreadId, record: ThreadBrowserContext) =>
+    Effect.gen(function* () {
+      const title = yield* Effect.tryPromise({
+        try: () => record.page.title(),
+        catch: () => "",
+      }).pipe(Effect.catch(() => Effect.succeed("")));
+      return { threadId, url: record.page.url(), title };
+    });
+
+  const goBack: BrowserManagerShape["goBack"] = (threadId) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: () => record.page.goBack({ waitUntil: "domcontentloaded" }),
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to go back in browser.", cause }),
+      });
+      return yield* currentPageInfo(threadId, record);
+    });
+
+  const goForward: BrowserManagerShape["goForward"] = (threadId) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: () => record.page.goForward({ waitUntil: "domcontentloaded" }),
+        catch: (cause) =>
+          new BrowserManagerError({ message: "Failed to go forward in browser.", cause }),
+      });
+      return yield* currentPageInfo(threadId, record);
+    });
+
+  const reload: BrowserManagerShape["reload"] = (threadId) =>
+    Effect.gen(function* () {
+      const record = yield* getContext(threadId);
+      yield* Effect.tryPromise({
+        try: () => record.page.reload({ waitUntil: "domcontentloaded" }),
+        catch: (cause) => new BrowserManagerError({ message: "Failed to reload browser.", cause }),
+      });
+      return yield* currentPageInfo(threadId, record);
+    });
+
   const close: BrowserManagerShape["close"] = (threadId) =>
     Effect.gen(function* () {
       const record = contexts.get(threadId);
@@ -216,6 +268,10 @@ function makeBrowserManager(): BrowserManagerShape {
     keyPress,
     wait,
     getPageInfo,
+    getPageText,
+    goBack,
+    goForward,
+    reload,
     close,
     closeAll,
   };

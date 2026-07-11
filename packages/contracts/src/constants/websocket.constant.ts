@@ -104,6 +104,10 @@ export const WS_METHODS = {
   subscribeTerminalEvents: "subscribeTerminalEvents",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
+  subscribeVisibleBrowserCommands: "subscribeVisibleBrowserCommands",
+  completeVisibleBrowserCommand: "completeVisibleBrowserCommand",
+  revokeVisibleBrowserLease: "revokeVisibleBrowserLease",
+  getVisibleBrowserLeases: "getVisibleBrowserLeases",
 } as const;
 
 /**

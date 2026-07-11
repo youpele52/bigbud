@@ -31,6 +31,10 @@ describe("codexThreadDynamicTools", () => {
           namespace: "bigbud_orchestration",
           name: "computer_use",
         }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "browser",
+        }),
       ]),
     );
   });
@@ -72,6 +76,10 @@ describe("codexThreadDynamicTools", () => {
           summary: "Captured the current page.",
         });
       },
+      browser: (input) => {
+        calls.push({ kind: "browser", ...input });
+        return Effect.succeed({ action: "capture", summary: "Captured the in-app browser." });
+      },
     };
 
     setThreadOrchestrationToolDispatcher(dispatcher);
@@ -104,6 +112,12 @@ describe("codexThreadDynamicTools", () => {
         }),
       );
 
+      await handler({
+        namespace: "bigbud_orchestration",
+        tool: "browser",
+        arguments: { action: "capture" },
+      });
+
       expect(calls).toEqual([
         {
           kind: "rename",
@@ -114,6 +128,11 @@ describe("codexThreadDynamicTools", () => {
           kind: "status",
           callerThreadId: threadId,
           threadId: ThreadId.makeUnsafe("thread-other"),
+        },
+        {
+          kind: "browser",
+          threadId,
+          action: { action: "capture" },
         },
       ]);
     } finally {

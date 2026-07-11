@@ -272,7 +272,7 @@ describe("ProviderCommandReactor", () => {
     );
     expect(sendInput?.input).toContain("When the `update_plan` tool is available");
     expect(sendInput?.input).toContain("Do not wait until the end of the turn.");
-    expect(sendInput?.input).toContain("computer_use");
+    expect(sendInput?.input).toContain("Use the `browser` tool for bigbud's built-in");
     expect(sendInput?.input).toContain("You must not delete threads.");
     expect(sendInput?.input).toContain("hello reactor");
   });
