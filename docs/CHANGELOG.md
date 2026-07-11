@@ -2,15 +2,22 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.653 (10 July, 2026)
+## v0.1.653 (11 July, 2026)
 
-### Plans
+### In-App Browser
 
-- Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
+- Agents can now use bigbud's built-in browser to visit pages, read content, take screenshots, click, type, scroll, and move between pages — whether you want to watch them work or let them browse in the background.
+- A blue cursor shows when an agent is controlling a tab. When the work is done, the page stays open for you, control returns automatically, and a short message lets you know the tab is yours again.
+- You can close a tab at any time. If an agent is still using it, bigbud asks for confirmation first; you can also tell an agent to close selected tabs, even when they were opened or controlled by another agent.
+- Up to five browser tabs can be open at once. When all five are in use, the agent shows which tabs are open and asks which one you want to close instead of removing one without permission.
 
 ### Sidebar
 
 - Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
+
+### Plans
+
+- Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
 
 ### Scheduler
 
@@ -21,13 +28,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Constrained changelog and docs images so release-note screenshots and embedded media stay inside the reading column instead of stretching the page.
 - Hardened the marketing download-stats refresh so GitHub rate limits fall back to cached data instead of breaking the site build.
 - Tightened the docs **Using bigbud** section with shorter feature summaries and moved Orchestra to the top for quicker discovery.
-
-### In-App Browser
-
-- Agents can now use bigbud's built-in browser to visit pages, read content, take screenshots, click, type, scroll, and move between pages — whether you want to watch them work or let them browse in the background.
-- A blue cursor shows when an agent is controlling a tab. When the work is done, the page stays open for you, control returns automatically, and a short message lets you know the tab is yours again.
-- You can close a tab at any time. If an agent is still using it, bigbud asks for confirmation first; you can also tell an agent to close selected tabs, even when they were opened or controlled by another agent.
-- Up to five browser tabs can be open at once. When all five are in use, the agent shows which tabs are open and asks which one you want to close instead of removing one without permission.
 
 ## v0.1.652 (8 July, 2026)
 
