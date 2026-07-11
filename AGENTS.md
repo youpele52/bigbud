@@ -101,6 +101,7 @@ Key server files:
 - Effect service implementations are named `*Live` (e.g. `GitManagerLive`); services without suffix (e.g. `GitManager`). Both live in `Layers/` subdirectories.
 - Complex server modules are split by concern with dot-notation: `FooAdapter.ts`, `FooAdapter.session.ts`, `FooAdapter.stream.ts`, `FooAdapter.stream.mapEvent.ts`, etc.
 - New packages must use explicit subpath exports only — no barrel index.
+- The project name is always lowercase: **bigbud** (not bigBud, BigBud, or BigBud). This applies to all conversation, documentation, and code unless explicitly permitted by the user.
 
 ## UI Conventions
 
