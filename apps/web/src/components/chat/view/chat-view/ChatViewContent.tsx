@@ -1,4 +1,4 @@
-import { type MessageId } from "@bigbud/contracts";
+import { isBuiltInChatsProject, type MessageId } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
@@ -25,6 +25,7 @@ import { useRightPanelTabsStore } from "../../../../stores/rightPanel/rightPanel
 import { useThreadActions } from "../../../../hooks/useThreadActions";
 import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
+import { useDefaultChatCwd } from "../../../../rpc/serverState";
 
 import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -93,10 +94,16 @@ export function ChatViewContent({
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
     : undefined;
+  const defaultChatCwd = useDefaultChatCwd();
+  const isChatThread = Boolean(base.activeProject && isBuiltInChatsProject(base.activeProject.id));
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
-  const workspaceRoot = base.activeThread?.worktreePath ?? base.activeProject?.cwd ?? undefined;
+  const workspaceRoot =
+    base.activeThread?.worktreePath ??
+    base.activeProject?.cwd ??
+    (isChatThread ? defaultChatCwd : undefined) ??
+    undefined;
 
   // Auto-open the floating plan card when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
@@ -196,6 +203,7 @@ export function ChatViewContent({
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
+          isProjectThread={Boolean(base.activeProject) && !isChatThread}
           openInCwd={workspaceRoot ?? null}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}

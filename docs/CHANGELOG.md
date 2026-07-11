@@ -19,6 +19,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
 
+### Quick Actions
+
+- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** now remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
+
 ### Scheduler
 
 - Fixed cron validation for impossible month/day combinations so invalid schedules fail immediately instead of exhausting the scheduler search window.
