@@ -1,11 +1,14 @@
 import type { Tool, ToolResultObject } from "@github/copilot-sdk";
 import {
+  BrowserAction,
+  type BrowserAction as BrowserActionType,
   ComputerUseAction,
   type ComputerUseAction as ComputerUseActionType,
 } from "@bigbud/contracts";
 import { Schema } from "effect";
 
 import {
+  BROWSER_TOOL_DESCRIPTION,
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
@@ -14,6 +17,7 @@ import {
   COMPUTER_USE_TOOL_DESCRIPTION,
   COPILOT_COMPUTER_USE_PARAMETERS,
 } from "./orchestrationComputerUseTool.shared.ts";
+import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
 import {
   BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
   BIGBUD_PLAN_TRACKING_TOOL_NAME,
@@ -43,8 +47,10 @@ export function createCopilotThreadOrchestrationTools(input: {
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
   readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
+  readonly browser: (action: BrowserActionType) => Promise<Record<string, unknown>>;
 }): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
   const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
+  const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
   return [
     {
       name: "rename_thread",
@@ -91,6 +97,21 @@ export function createCopilotThreadOrchestrationTools(input: {
       description: BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
       parameters: BIGBUD_PLAN_TRACKING_TOOL_PARAMETERS,
       handler: async () => successResult(BIGBUD_PLAN_TRACKING_TOOL_SUCCESS_MESSAGE),
+    },
+    {
+      name: "browser",
+      description: BROWSER_TOOL_DESCRIPTION,
+      parameters: BROWSER_TOOL_PARAMETERS,
+      handler: async (args) => {
+        try {
+          const action = decodeBrowserAction(args);
+          const result = await input.browser(action);
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Browser action failed.";
+          return failureResult(message);
+        }
+      },
     },
     {
       name: "computer_use",

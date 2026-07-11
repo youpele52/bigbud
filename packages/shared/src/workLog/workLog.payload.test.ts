@@ -29,6 +29,37 @@ describe("extractWorkLogPayloadDetails", () => {
     });
   });
 
+  it("extracts browser actions from provider tool input", () => {
+    expect(
+      extractWorkLogPayloadDetails({
+        itemType: "dynamic_tool_call",
+        title: "bigbud_orchestration_thread-1_browser",
+        data: { input: { action: "navigate" } },
+      }),
+    ).toEqual({
+      itemType: "dynamic_tool_call",
+      toolTitle: "bigbud_orchestration_thread-1_browser",
+      toolAction: "navigate",
+    });
+  });
+
+  it("uses the browser MCP tool name over a provider's generic title", () => {
+    expect(
+      extractWorkLogPayloadDetails({
+        itemType: "mcp_tool_call",
+        title: "MCP tool call",
+        data: {
+          toolName: "mcp__bigbud_orchestration__browser",
+          input: { action: "capture" },
+        },
+      }),
+    ).toEqual({
+      itemType: "mcp_tool_call",
+      toolTitle: "mcp__bigbud_orchestration__browser",
+      toolAction: "capture",
+    });
+  });
+
   it("extracts attachmentUrl from computer-use tool data", () => {
     expect(
       extractWorkLogPayloadDetails({

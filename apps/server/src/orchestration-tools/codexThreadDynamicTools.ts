@@ -1,4 +1,10 @@
-import { ComputerUseAction, ThreadId, type ComputerUseResult } from "@bigbud/contracts";
+import {
+  BrowserAction,
+  ComputerUseAction,
+  ThreadId,
+  type BrowserResult,
+  type ComputerUseResult,
+} from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 
 import type {
@@ -10,21 +16,24 @@ import type { ThreadOrchestrationToolDispatcherShape } from "./ThreadOrchestrati
 import { getThreadOrchestrationToolDispatcher } from "./ThreadOrchestrationToolDispatcher.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
+  BROWSER_TOOL_DESCRIPTION,
   COMPUTER_USE_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { COPILOT_COMPUTER_USE_PARAMETERS } from "./orchestrationComputerUseTool.shared.ts";
+import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
 
 const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
+const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 function inputText(text: string): CodexDynamicToolCallResult["contentItems"][number] {
   return { type: "inputText", text };
 }
 
 function inputImage(
-  result: ComputerUseResult,
+  result: Pick<ComputerUseResult | BrowserResult, "screenshot">,
 ): CodexDynamicToolCallResult["contentItems"][number] | null {
   const screenshot = result.screenshot;
   if (!screenshot?.mimeType || !screenshot.dataBase64) {
@@ -46,6 +55,12 @@ function requireDispatcher(): ThreadOrchestrationToolDispatcherShape {
 
 export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<CodexDynamicToolSpec> {
   return [
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "browser",
+      description: BROWSER_TOOL_DESCRIPTION,
+      inputSchema: BROWSER_TOOL_PARAMETERS,
+    },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "rename_thread",
@@ -145,6 +160,17 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
       case "computer_use": {
         const action = decodeComputerUseAction(args);
         const result = await Effect.runPromise(dispatcher.computerUse({ threadId, action }));
+        return {
+          contentItems: [
+            inputText(JSON.stringify(result, null, 2)),
+            ...[inputImage(result)].flatMap((item) => (item ? [item] : [])),
+          ],
+          success: true,
+        };
+      }
+      case "browser": {
+        const action = decodeBrowserAction(args);
+        const result = await Effect.runPromise(dispatcher.browser({ threadId, action }));
         return {
           contentItems: [
             inputText(JSON.stringify(result, null, 2)),

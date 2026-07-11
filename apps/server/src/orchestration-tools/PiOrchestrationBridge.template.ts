@@ -1,4 +1,5 @@
 import { renderPiComputerUseToolSource } from "./orchestrationComputerUseTool.shared.ts";
+import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
@@ -101,12 +102,15 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "",
     renderPiComputerUseToolSource(),
     "",
+    renderPiBrowserToolSource(),
+    "",
     "export default function bigbudOrchestrationBridge(pi) {",
     "  pi.registerTool(renameThreadTool);",
     "  pi.registerTool(archiveThreadTool);",
     "  pi.registerTool(getThreadStatusTool);",
     "  pi.registerTool(updatePlanTool);",
     "  pi.registerTool(computerUseTool);",
+    "  pi.registerTool(browserTool);",
     "}",
     "",
   ].join("\n");

@@ -90,9 +90,16 @@ import {
   WsSubscribeTerminalEventsRpc,
   WsSubscribeThinkingActivityDeltasRpc,
 } from "./rpc.stream";
+import {
+  WsCompleteVisibleBrowserCommandRpc,
+  WsGetVisibleBrowserLeasesRpc,
+  WsRevokeVisibleBrowserLeaseRpc,
+  WsSubscribeVisibleBrowserCommandsRpc,
+} from "./rpc.browser";
 
 export { WS_METHODS };
 export * from "./rpc.automation";
+export * from "./rpc.browser";
 export * from "./rpc.core";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
@@ -175,6 +182,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeTerminalEventsRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
+  WsSubscribeVisibleBrowserCommandsRpc,
+  WsCompleteVisibleBrowserCommandRpc,
+  WsRevokeVisibleBrowserLeaseRpc,
+  WsGetVisibleBrowserLeasesRpc,
   WsOrchestrationGetSnapshotRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,

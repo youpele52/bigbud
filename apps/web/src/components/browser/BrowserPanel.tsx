@@ -19,10 +19,18 @@ import {
 } from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
+import { waitForVisibleBrowserNavigation } from "./BrowserPanel.agentNavigation";
+import {
+  executeBrowserTabActionWhenReady,
+  registerBrowserTabAgentHandler,
+} from "./browserAgentControl";
 import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
 import { planDesktopBrowserReload } from "./BrowserPanel.menuAction";
+import { reloadBrowserViewport } from "./BrowserPanel.reload";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
+import { BrowserAgentCursor } from "./BrowserPanel.agentCursor";
+import { BrowserAgentStatus } from "./BrowserPanel.agentStatus";
 
 interface BrowserPanelProps {
   activeThreadId?: ThreadId | null;
@@ -37,6 +45,9 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
 }: BrowserPanelProps) {
   const open = useBrowserPanelStore((state) => state.open);
   const url = useBrowserPanelStore((state) => state.tabsById[tabId]?.url ?? "");
+  const agentLease = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentLease);
+  const agentCursor = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentCursor);
+  const agentHandoff = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentHandoff);
   const ensureTab = useBrowserPanelStore((state) => state.ensureTab);
   const setTabTitle = useBrowserPanelStore((state) => state.setTabTitle);
   const setTabUrl = useBrowserPanelStore((state) => state.setTabUrl);
@@ -66,18 +77,44 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     ensureTab(tabId, url);
   }, [ensureTab, tabId, url]);
 
+  useEffect(
+    () =>
+      registerBrowserTabAgentHandler(tabId, {
+        execute: async (action) => {
+          if (action.action === "navigate") {
+            setInputUrl(action.url);
+            setTabUrl(tabId, action.url);
+            setBrowserHistory(recordBrowserHistoryUrl(action.url));
+            const pageResult = await waitForVisibleBrowserNavigation({
+              url: action.url,
+              viewportRef,
+            });
+            return {
+              ...pageResult,
+              action: action.action,
+              summary: `Navigated visible browser to ${action.url}.`,
+            };
+          }
+          return executeBrowserTabActionWhenReady(() => {
+            const viewport = viewportRef.current;
+            if (!viewport) {
+              throw new Error("The visible browser tab is not ready.");
+            }
+            return viewport.executeAgentAction(action);
+          });
+        },
+      }),
+    [setTabUrl, tabId],
+  );
+
   useEffect(() => {
     setTabTitle(tabId, pageMetadata.title.trim());
   }, [pageMetadata.title, setTabTitle, tabId]);
 
-  const reloadViewport = useCallback((mode: "normal" | "ignoring-cache") => {
-    if (mode === "ignoring-cache") {
-      viewportRef.current?.reloadIgnoringCache();
-      return;
-    }
-
-    viewportRef.current?.reload();
-  }, []);
+  const reloadViewport = useCallback(
+    (mode: "normal" | "ignoring-cache") => reloadBrowserViewport(viewportRef, mode),
+    [],
+  );
 
   const handleNavigate = useCallback(() => {
     let nextUrl = inputUrl.trim();
@@ -131,13 +168,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
 
     window.open(externalUrl, "_blank", "noopener,noreferrer");
   }, [url]);
-
-  const handleLoadFail = useCallback(
-    (info: { errorCode: number; errorDescription: string; validatedURL: string }) => {
-      setLoadError(info.errorDescription);
-    },
-    [],
-  );
 
   const handleAnnotate = useCallback(async () => {
     if (annotationActive) {
@@ -273,6 +303,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     },
     viewportRef,
   );
+  const isAgentControlled = agentLease !== undefined;
 
   return (
     <>
@@ -294,13 +325,22 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         pageMetadata={pageMetadata}
         historyUrls={browserHistory}
         annotationDisabled={!isElectron || !url.trim()}
+        agentControlled={isAgentControlled}
       />
+      <BrowserAgentStatus tabId={tabId} controlled={isAgentControlled} handoff={agentHandoff} />
       {loadError && (
         <div className="shrink-0 border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {loadError}
         </div>
       )}
-      <div className="relative min-h-0 flex-1">
+      <div
+        className={
+          isAgentControlled
+            ? "pointer-events-none relative min-h-0 flex-1"
+            : "relative min-h-0 flex-1"
+        }
+      >
+        {isAgentControlled ? <BrowserAgentCursor cursor={agentCursor} /> : null}
         {!url.trim() ? (
           <div className="flex h-full items-center justify-center">
             <BigbudLogo className="h-8 text-muted-foreground/30" />
@@ -321,7 +361,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
                   setLoadError(null);
                 }
               }}
-              onLoadFail={handleLoadFail}
+              onLoadFail={({ errorDescription }) => setLoadError(errorDescription)}
               onPageMetadataChange={setPageMetadata}
               onContextMenu={
                 isElectron

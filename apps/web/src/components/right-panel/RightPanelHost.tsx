@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { cn } from "~/lib/utils";
 import { BrowserPanelContent } from "../browser/BrowserPanel";
+import { BrowserAgentControlBridge } from "../browser/BrowserAgentControlBridge";
+import { BrowserCloseConfirmation } from "../browser/BrowserCloseConfirmation";
 import DiffPanel from "../diff/DiffPanel";
 import { DiffWorkerPoolProvider } from "../diff/DiffWorkerPoolProvider";
 import { FilesPanelContent } from "../files/FilesPanel";
@@ -68,6 +70,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
       onResizePointerDown={onResizePointerDown}
       resizeAriaLabel="Resize right panel"
     >
+      <BrowserAgentControlBridge />
+      <BrowserCloseConfirmation />
       <RightPanelTabs
         browserShortcutLabel={browserShortcutLabel}
         diffShortcutLabel={diffShortcutLabel}

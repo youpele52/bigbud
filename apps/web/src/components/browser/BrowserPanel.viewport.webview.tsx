@@ -32,6 +32,7 @@ import {
   waitForPdfAnnotationSelection,
   type PendingPdfAnnotation,
 } from "./BrowserPanel.viewport.webview.annotation";
+import { executeWebviewAgentAction } from "./BrowserPanel.viewport.webview.agent";
 
 export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function BrowserWebviewViewport(
@@ -70,6 +71,13 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         ),
       openDevTools: () =>
         runIfReady(webviewRef.current, readyRef.current, (webview) => webview.openDevTools()),
+      executeAgentAction: async (action) => {
+        const webview = webviewRef.current;
+        if (!webview || !readyRef.current) {
+          throw new Error("The visible browser tab is not ready.");
+        }
+        return executeWebviewAgentAction(webview, action);
+      },
       cancelAnnotation: async () => {
         const webview = webviewRef.current;
         if (!webview || !annotationActiveRef.current) return;

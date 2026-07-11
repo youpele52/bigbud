@@ -9,6 +9,7 @@ import {
   useRightPanelTabsStore,
 } from "../rightPanel/rightPanelTabs.store";
 import { useBrowserPanelStore } from "./browser.store";
+import { useBrowserCloseConfirmationStore } from "./browserCloseConfirmation.store";
 
 export function openBrowserPanel(input: { url?: string } = {}) {
   const nextUrl = input.url?.trim();
@@ -90,6 +91,10 @@ export function closeBrowserPanel() {
   const browserTabIds = tabState.openTabs.filter((tabId) =>
     isRightPanelTabOfKind(tabId, "browser"),
   );
+  if (browserTabIds.some((tabId) => useBrowserPanelStore.getState().tabsById[tabId]?.agentLease)) {
+    useBrowserCloseConfirmationStore.getState().request(browserTabIds);
+    return;
+  }
 
   useRightPanelTabsStore.getState().closeTab("browser");
   requestRightPanel(useRightPanelTabsStore.getState().activeKind);
@@ -98,6 +103,20 @@ export function closeBrowserPanel() {
 }
 
 export function closeBrowserTab(tabId: RightPanelTabId) {
+  if (useBrowserPanelStore.getState().tabsById[tabId]?.agentLease) {
+    useBrowserCloseConfirmationStore.getState().request([tabId]);
+    return;
+  }
+  closeBrowserTabImmediately(tabId);
+}
+
+export function closeBrowserTabsAfterRevocation(tabIds: ReadonlyArray<RightPanelTabId>) {
+  for (const tabId of tabIds) {
+    closeBrowserTabImmediately(tabId);
+  }
+}
+
+function closeBrowserTabImmediately(tabId: RightPanelTabId) {
   const browserCount = countRightPanelTabsByKind(
     useRightPanelTabsStore.getState().openTabs,
     "browser",

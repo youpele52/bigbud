@@ -1,4 +1,10 @@
-import type { ComputerUseAction, ComputerUseResult, ThreadId } from "@bigbud/contracts";
+import type {
+  BrowserAction,
+  BrowserResult,
+  ComputerUseAction,
+  ComputerUseResult,
+  ThreadId,
+} from "@bigbud/contracts";
 import type { Effect } from "effect";
 
 import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
@@ -19,6 +25,10 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
   }) => Effect.Effect<ComputerUseResult, Error>;
+  readonly browser: (input: {
+    readonly threadId: ThreadId;
+    readonly action: BrowserAction;
+  }) => Effect.Effect<BrowserResult, Error>;
 }
 
 let dispatcher: ThreadOrchestrationToolDispatcherShape | null = null;

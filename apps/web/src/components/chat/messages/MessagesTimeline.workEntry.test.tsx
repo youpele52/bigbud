@@ -1,9 +1,48 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
+import { SimpleWorkEntryRow, toolWorkEntryHeading } from "./MessagesTimeline.workEntry";
 
 describe("SimpleWorkEntryRow", () => {
+  it("uses action-specific copy for thread-scoped browser tools", () => {
+    expect(
+      toolWorkEntryHeading({
+        id: "work-entry-browser",
+        createdAt: "2026-05-15T18:00:00.000Z",
+        label: "Tool",
+        tone: "tool",
+        toolTitle: "bigbud_orchestration_thread-1_browser",
+        toolAction: "navigate",
+      }),
+    ).toBe("Navigating browser");
+  });
+
+  it("uses action-specific copy for MCP-qualified browser tools", () => {
+    expect(
+      toolWorkEntryHeading({
+        id: "work-entry-mcp-browser",
+        createdAt: "2026-05-15T18:00:00.000Z",
+        label: "MCP tool call",
+        tone: "tool",
+        toolTitle: "mcp__bigbud_orchestration__browser",
+        toolAction: "capture",
+      }),
+    ).toBe("Captured browser");
+  });
+
+  it("labels page-text browser inspection", () => {
+    expect(
+      toolWorkEntryHeading({
+        id: "work-entry-browser-page-text",
+        createdAt: "2026-05-15T18:00:00.000Z",
+        label: "Tool",
+        tone: "tool",
+        toolTitle: "browser",
+        toolAction: "get_page_text",
+      }),
+    ).toBe("Reading page text");
+  });
+
   it("renders the copy action beneath the work log content on the left", () => {
     const markup = renderToStaticMarkup(
       <SimpleWorkEntryRow

@@ -217,6 +217,11 @@ export const makeOrchestrationIntegrationHarness = (
       wait: () => Effect.die(new Error("Unexpected browser wait in integration harness")),
       getPageInfo: () =>
         Effect.die(new Error("Unexpected browser page info in integration harness")),
+      getPageText: () =>
+        Effect.die(new Error("Unexpected browser page text in integration harness")),
+      goBack: () => Effect.die(new Error("Unexpected browser back in integration harness")),
+      goForward: () => Effect.die(new Error("Unexpected browser forward in integration harness")),
+      reload: () => Effect.die(new Error("Unexpected browser reload in integration harness")),
       close: () => Effect.void,
       closeAll: () => Effect.void,
     });

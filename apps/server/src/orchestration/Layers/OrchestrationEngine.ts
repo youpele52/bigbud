@@ -47,6 +47,7 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
+import { browserViaOrchestration } from "../../orchestration-tools/ThreadBrowserTools.ts";
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
@@ -55,6 +56,13 @@ import {
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
+import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
+import { BrowserManagerLive } from "../../browser/Layers/BrowserManager.ts";
+import {
+  setVisibleBrowserControl,
+  VisibleBrowserControl,
+} from "../../browser/Services/VisibleBrowserControl.ts";
+import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
@@ -94,6 +102,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const computerUse = yield* ComputerUse;
+  const browser = yield* BrowserManager;
+  const visibleBrowser = yield* VisibleBrowserControl;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
@@ -207,6 +217,18 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           );
 
         readModel = committedCommand.nextReadModel;
+        if (aggregateRef.aggregateKind === "thread") {
+          const thread = readModel.threads.find(
+            (candidate) => candidate.id === aggregateRef.aggregateId,
+          );
+          if (thread) {
+            yield* visibleBrowser.reconcileThread({
+              threadId: thread.id,
+              activeTurnId: thread.session?.activeTurnId ?? null,
+              isRunning: thread.session?.status === "running",
+            });
+          }
+        }
         for (const [index, event] of committedCommand.committedEvents.entries()) {
           yield* PubSub.publish(eventPubSub, event);
           if (index === 0) {
@@ -367,11 +389,40 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           actionTimeoutMs: settings.computerUseActionTimeoutMs,
         });
       }),
+    browser: (input) =>
+      Effect.gen(function* () {
+        const requestedTarget = input.action.target ?? "auto";
+        if (requestedTarget === "visible" || (requestedTarget === "auto" && input.action.tabId)) {
+          const thread = readModel.threads.find((candidate) => candidate.id === input.threadId);
+          const turnId =
+            thread?.session?.status === "running"
+              ? (thread.session.activeTurnId ??
+                (thread.latestTurn?.state === "running" ? thread.latestTurn.turnId : null))
+              : null;
+          if (!turnId) {
+            return yield* Effect.fail(
+              new Error("The visible browser requires an active agent turn."),
+            );
+          }
+          return yield* visibleBrowser.execute({
+            threadId: input.threadId,
+            turnId,
+            action: input.action,
+          });
+        }
+        return yield* browserViaOrchestration({
+          browser,
+          threadId: input.threadId,
+          action: input.action,
+        });
+      }),
   });
+  setVisibleBrowserControl(visibleBrowser);
 
   yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
       setThreadOrchestrationToolDispatcher(null);
+      setVisibleBrowserControl(null);
       yield* computerUse.dispose;
     }),
   );
@@ -382,4 +433,4 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 export const OrchestrationEngineLive = Layer.effect(
   OrchestrationEngineService,
   makeOrchestrationEngine,
-);
+).pipe(Layer.provide(BrowserManagerLive), Layer.provide(VisibleBrowserControlLive));

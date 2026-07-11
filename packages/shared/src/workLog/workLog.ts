@@ -24,6 +24,7 @@ export interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolAction?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: "browser" | "command" | "file-read" | "file-change";
   attachmentUrl?: string;

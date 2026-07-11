@@ -9,7 +9,7 @@ describe("prependThreadContextToProviderInput", () => {
     threadTitle: "Computer use thread",
   };
 
-  it("tells desktop agents to use computer_use for native and browser automation", () => {
+  it("tells desktop agents to use computer_use for native automation and browser for bigbud", () => {
     const result = prependThreadContextToProviderInput({
       ...baseInput,
       computerUseEnabled: true,
@@ -22,7 +22,7 @@ describe("prependThreadContextToProviderInput", () => {
     expect(result).toContain("Do not wait until the end of the turn.");
     expect(result).toContain("whose name ends with `rename_thread`");
     expect(result).toContain('call the `computer_use` tool with `surface: "desktop"`');
-    expect(result).toContain('call `computer_use` with `surface: "browser"`');
+    expect(result).toContain("Use the `browser` tool for bigbud's built-in visible or background");
     expect(result).toContain(
       "Use `check_permissions` or `doctor` first if desktop automation fails.",
     );
@@ -49,7 +49,7 @@ describe("prependThreadContextToProviderInput", () => {
 
     expect(result).toContain("Desktop computer use is disabled in Bigbud settings");
     expect(result).toContain(
-      'Browser automation via `computer_use` with `surface: "browser"` may still work',
+      "Use the `browser` tool for bigbud's built-in visible or background browser",
     );
     expect(result).not.toContain("Use `check_permissions` or `doctor` first");
   });
