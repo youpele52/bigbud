@@ -79,6 +79,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     ) {
       const attachmentSideEffects: AttachmentSideEffects = {
         deletedThreadIds: new Set<string>(),
+        deletedProjectMemoryIds: new Set<string>(),
         prunedThreadRelativePaths: new Map<string, Set<string>>(),
       };
 

@@ -18,7 +18,7 @@ export function makeProjectsProjector(
 
   const apply = Effect.fn("applyProjectsProjection")(function* (
     event: OrchestrationEvent,
-    _attachmentSideEffects: AttachmentSideEffects,
+    attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
       case "project.created":
@@ -118,6 +118,7 @@ export function makeProjectsProjector(
           deletedAt: event.payload.deletedAt,
           updatedAt: event.payload.deletedAt,
         });
+        attachmentSideEffects.deletedProjectMemoryIds.add(event.payload.projectId);
         return;
       }
 

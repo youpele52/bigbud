@@ -40,6 +40,7 @@ import { OrchestrationReactor } from "../src/orchestration/Services/Orchestratio
 import { ProjectionSnapshotQuery } from "../src/orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SchedulerReactor } from "../src/orchestration/Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../src/orchestration/Services/ThreadWatchReactor.ts";
+import { LearningReactor } from "../src/orchestration/Services/LearningReactor.ts";
 import {
   RuntimeReceiptBus,
   type OrchestrationRuntimeReceipt,
@@ -241,12 +242,16 @@ export const makeOrchestrationIntegrationHarness = (
     const threadWatchReactorLayer = Layer.succeed(ThreadWatchReactor, {
       start: () => Effect.void,
     });
+    const learningReactorLayer = Layer.succeed(LearningReactor, {
+      start: () => Effect.void,
+    });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
       Layer.provideMerge(checkpointReactorLayer),
       Layer.provideMerge(schedulerReactorLayer),
       Layer.provideMerge(threadWatchReactorLayer),
+      Layer.provideMerge(learningReactorLayer),
     );
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),

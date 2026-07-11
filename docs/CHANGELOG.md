@@ -4,6 +4,13 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.1.653 (11 July, 2026)
 
+### Memory & Self-Improvement
+
+- Added automatic background learning that helps bigbud become more useful over time without slowing down the active conversation. After a successful turn, the provider and latest model used for that work can preserve confirmed preferences, durable knowledge, and project-specific context for future chats.
+- Personal preferences, reusable global knowledge, and project knowledge stay separated in local Markdown memory, so future agents receive the right context without mixing one project's conventions into another. Project memory is removed automatically when its project is deleted.
+- Skills you own in Codex, OpenCode, Claude, and other providers can now receive targeted improvement suggestions when they are explicitly used. bigbud shows the exact patch and changes nothing unless you approve it; rejected, stale, unsafe, and whole-file changes are never applied, while bigbud's native skills always remain untouched.
+- Memory updates and skill suggestions survive server restarts, include clear in-app notifications, and work across supported providers, desktop platforms, and the mobile companion.
+
 ### In-App Browser
 
 - Agents can now use bigbud's built-in browser to visit pages, read content, take screenshots, click, type, scroll, and move between pages — whether you want to watch them work or let them browse in the background.

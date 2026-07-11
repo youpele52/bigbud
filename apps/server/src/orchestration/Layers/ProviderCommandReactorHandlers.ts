@@ -13,7 +13,7 @@ import {
   type TurnId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
-import { Cache, Cause, Duration, Effect, FileSystem, Option, Scope } from "effect";
+import { Cache, Cause, Duration, Effect, FileSystem, Option, Path, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -51,6 +51,7 @@ import {
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import { resolveMemoryDocumentPath } from "../../learning/Layers/MemoryStore.ts";
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -85,6 +86,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig;
   const workspacePaths = yield* WorkspacePaths;
   const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const threadWatchRepository = yield* ProjectionThreadWatchRepository;
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
@@ -198,6 +200,25 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         Effect.map(resolveDefaultChatCwd),
         Effect.catch(() => Effect.succeed(resolveDefaultChatCwd(DEFAULT_SERVER_SETTINGS))),
       ),
+    readMemoryContext: (projectId) =>
+      Effect.gen(function* () {
+        const scopes = ["user", "global", "project"] as const;
+        const documents = yield* Effect.forEach(scopes, (scope) => {
+          const documentPath = resolveMemoryDocumentPath({
+            path,
+            stateDir: serverConfig.stateDir,
+            scope,
+            projectId: scope === "project" ? projectId : null,
+          });
+          return documentPath
+            ? fileSystem.readFileString(documentPath).pipe(Effect.orElseSucceed(() => ""))
+            : Effect.succeed("");
+        });
+        return documents
+          .filter((document) => document.trim().length > 0)
+          .join("\n\n")
+          .slice(0, 12_000);
+      }),
   });
 
   const processTurnStartRequested = Effect.fn("processTurnStartRequested")(function* (
