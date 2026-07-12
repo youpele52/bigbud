@@ -53,6 +53,7 @@ describe("orchestration projector — thread lifecycle", () => {
           provider: "codex",
           model: "gpt-5-codex",
         },
+        purpose: "standard",
         runtimeMode: "full-access",
         interactionMode: "default",
         branch: null,
