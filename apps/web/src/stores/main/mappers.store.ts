@@ -196,6 +196,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
     executionTargetId: thread.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     ...(thread.parentThread ? { parentThread: thread.parentThread } : {}),
     title: thread.title,
+    purpose: thread.purpose ?? "standard",
     elevatorSummary: thread.elevatorSummary,
     elevatorSummaryMessageCount: thread.elevatorSummaryMessageCount,
     modelSelection: normalizeModelSlug(thread.modelSelection),

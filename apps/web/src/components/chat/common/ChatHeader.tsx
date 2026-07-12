@@ -37,6 +37,8 @@ interface ChatHeaderProps {
   planCardLabel: string;
   planCardOpen: boolean;
   onOpenOrchestra: () => void;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -62,6 +64,8 @@ export const ChatHeader = memo(function ChatHeader({
   planCardLabel,
   planCardOpen,
   onOpenOrchestra,
+  onOpenSideChat,
+  sideChatDisabled,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -128,6 +132,8 @@ export const ChatHeader = memo(function ChatHeader({
             executionTargetId={executionTargetId}
             activeThreadId={activeThreadId}
             onOpenOrchestra={onOpenOrchestra}
+            onOpenSideChat={onOpenSideChat}
+            sideChatDisabled={sideChatDisabled}
             planCardLabel={planCardLabel}
             planCardOpen={planCardOpen}
             onTogglePlanCard={onTogglePlanCard}

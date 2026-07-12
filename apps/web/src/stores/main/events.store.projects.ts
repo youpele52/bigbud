@@ -94,6 +94,9 @@ export function applyProjectEvent(
       const threads = existing
         ? state.threads.map((thread) => (thread.id === nextThread.id ? nextThread : thread))
         : [...state.threads, nextThread];
+      if (nextThread.purpose === "side-chat") {
+        return { ...state, threads };
+      }
       const nextSummary = buildSidebarThreadSummary(nextThread);
       const previousSummary = state.sidebarThreadsById[nextThread.id];
       const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
@@ -152,6 +155,7 @@ function mapProjectThread(event: Extract<OrchestrationEvent, { type: "thread.cre
     id: event.payload.threadId,
     projectId: event.payload.projectId,
     title: event.payload.title,
+    purpose: event.payload.purpose ?? "standard",
     elevatorSummary: event.payload.title,
     elevatorSummaryMessageCount: 0,
     providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId,

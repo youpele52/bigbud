@@ -30,6 +30,9 @@ export type ElevatorSummary = typeof ElevatorSummary.Type;
 export const OrchestrationMessageRole = Schema.Literals(["user", "assistant", "system"]);
 export type OrchestrationMessageRole = typeof OrchestrationMessageRole.Type;
 
+export const OrchestrationThreadPurpose = Schema.Literals(["standard", "side-chat"]);
+export type OrchestrationThreadPurpose = typeof OrchestrationThreadPurpose.Type;
+
 export const OrchestrationMessageReply = Schema.Struct({
   messageId: MessageId,
   role: OrchestrationMessageRole,
@@ -174,6 +177,7 @@ export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  purpose: Schema.optional(OrchestrationThreadPurpose),
   elevatorSummary: Schema.NullOr(ElevatorSummary).pipe(Schema.withDecodingDefault(() => null)),
   elevatorSummaryMessageCount: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 0)),
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),

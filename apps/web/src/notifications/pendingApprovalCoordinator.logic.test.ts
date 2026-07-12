@@ -37,6 +37,7 @@ function makeThread(overrides: {
   id: string;
   projectId?: string;
   title?: string;
+  purpose?: Thread["purpose"];
   worktreePath?: string | null;
   activities?: OrchestrationThreadActivity[];
 }): Thread {
@@ -45,6 +46,7 @@ function makeThread(overrides: {
     codexThreadId: null,
     projectId: ProjectId.makeUnsafe(overrides.projectId ?? "project-1"),
     title: overrides.title ?? overrides.id,
+    ...(overrides.purpose ? { purpose: overrides.purpose } : {}),
     modelSelection: { provider: "codex", model: "gpt-5-codex" },
     runtimeMode: "approval-required",
     interactionMode: "default",
@@ -74,6 +76,27 @@ function makeProject(overrides: { id: string; name?: string; cwd?: string | null
 }
 
 describe("collectGlobalPendingApprovalCandidate", () => {
+  it("ignores Sidecar approvals", () => {
+    const candidate = collectGlobalPendingApprovalCandidate(
+      [
+        makeThread({
+          id: "sidecar",
+          purpose: "side-chat",
+          activities: [
+            makeActivity({
+              kind: "approval.requested",
+              tone: "approval",
+              payload: { requestId: "sidecar-approval", requestKind: "command" },
+            }),
+          ],
+        }),
+      ],
+      [makeProject({ id: "project-1" })],
+    );
+
+    expect(candidate).toBeNull();
+  });
+
   it("returns null when no threads have pending approvals", () => {
     expect(
       collectGlobalPendingApprovalCandidate(

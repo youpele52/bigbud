@@ -6,6 +6,7 @@ import { toastManager } from "../components/ui/toast";
 import { useSettings } from "../hooks/useSettings";
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
+import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
@@ -119,6 +120,9 @@ export function TaskCompletionNotifications() {
       previousThreads.flatMap((thread) => thread.activities.map((activity) => activity.id)),
     );
     for (const thread of threads) {
+      if (!isVisibleThread(thread)) {
+        continue;
+      }
       for (const activity of thread.activities) {
         if (activity.kind !== "learning.memory.updated" || previousActivityIds.has(activity.id)) {
           continue;

@@ -4,6 +4,7 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationProposedPlanId,
   OrchestrationSessionStatus,
+  OrchestrationThreadPurpose,
   OrchestrationThreadActivity,
   ProjectScript as ContractProjectScript,
   ThreadId,
@@ -159,6 +160,7 @@ export interface Thread {
     title: string;
   };
   title: string;
+  purpose?: OrchestrationThreadPurpose;
   elevatorSummary?: string | null;
   elevatorSummaryMessageCount?: number;
   modelSelection: ModelSelection;

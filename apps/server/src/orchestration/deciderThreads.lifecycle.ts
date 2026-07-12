@@ -104,6 +104,7 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           threadId: command.threadId,
           projectId: command.projectId,
           title: command.title,
+          purpose: command.purpose ?? "standard",
           ...executionTargets,
           modelSelection: command.modelSelection,
           runtimeMode: command.runtimeMode,

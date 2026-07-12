@@ -14,7 +14,7 @@ type NavigateToThread = (input: {
 
 type NavigableThread = Pick<
   Thread,
-  "id" | "createdAt" | "updatedAt" | "archivedAt" | "deletingAt"
+  "id" | "createdAt" | "updatedAt" | "archivedAt" | "deletingAt" | "purpose"
 > &
   SidebarThreadSortInput;
 

@@ -38,6 +38,7 @@ interface ChatViewInteractionsInput {
   timeline: ChatViewTimelineState;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
   runtime: ChatViewRuntimeState;
+  enableKeybindings?: boolean | undefined;
 }
 
 export function useChatViewInteractions({
@@ -48,6 +49,7 @@ export function useChatViewInteractions({
   timeline,
   transformPromptForSend,
   runtime,
+  enableKeybindings = true,
 }: ChatViewInteractionsInput) {
   const { closeExpandedImage, navigateExpandedImage } = useChatViewExpandedImage(base);
 
@@ -222,6 +224,7 @@ export function useChatViewInteractions({
   });
 
   useChatKeybindings({
+    enabled: enableKeybindings,
     activeThreadId: base.activeThreadId,
     activeProject: base.activeProject,
     terminalState: base.terminalState,

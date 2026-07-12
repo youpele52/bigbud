@@ -27,6 +27,7 @@ import {
   OrchestrationMessage,
   ParentThreadReference,
   SourceProposedPlanReference,
+  OrchestrationThreadPurpose,
 } from "./orchestration.thread";
 
 export const ProjectCreateCommand = Schema.Struct({
@@ -67,6 +68,7 @@ const ThreadCreateCommand = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
+  purpose: Schema.optional(OrchestrationThreadPurpose),
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),

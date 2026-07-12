@@ -1,8 +1,9 @@
 import { ThreadId } from "@bigbud/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockNavigate = vi.fn();
+const routeState = vi.hoisted(() => ({ purpose: "standard" as "standard" | "side-chat" }));
 const threadId = ThreadId.makeUnsafe("thread-1");
 
 vi.mock("@tanstack/react-router", () => ({
@@ -36,12 +37,12 @@ vi.mock("../stores/main", () => ({
   useStore: (
     selector: (state: {
       bootstrapComplete: boolean;
-      threads: Array<{ id: ThreadId; title: string }>;
+      threads: Array<{ id: ThreadId; title: string; purpose: "standard" | "side-chat" }>;
     }) => unknown,
   ) =>
     selector({
       bootstrapComplete: true,
-      threads: [{ id: threadId, title: "Thread" }],
+      threads: [{ id: threadId, purpose: routeState.purpose, title: "Thread" }],
     }),
 }));
 
@@ -67,11 +68,23 @@ vi.mock("../stores/rightPanel/rightPanelTabs.store", () => ({
 import { ChatThreadRouteView } from "./_chat.$threadId";
 
 describe("/_chat/$threadId route", () => {
+  beforeEach(() => {
+    routeState.purpose = "standard";
+  });
+
   it("keeps rendering chat content only when diff route search is open", () => {
     const markup = renderToStaticMarkup(<ChatThreadRouteView />);
 
     expect(markup).toContain('data-testid="sidebar-inset"');
     expect(markup).toContain('data-testid="chat-view"');
     expect(markup).not.toContain("Loading checkpoint diff...");
+  });
+
+  it("does not render Sidecar as a full-page thread", () => {
+    routeState.purpose = "side-chat";
+
+    const markup = renderToStaticMarkup(<ChatThreadRouteView />);
+
+    expect(markup).not.toContain('data-testid="chat-view"');
   });
 });

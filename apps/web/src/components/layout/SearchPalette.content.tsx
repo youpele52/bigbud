@@ -8,6 +8,7 @@ import { useShallow } from "zustand/react/shallow";
 import { cn } from "~/lib/utils";
 import { projectSearchFileContentsQueryOptions } from "~/lib/projectReactQuery";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
+import { isVisibleThread } from "~/logic/thread/threadVisibility.logic";
 import { useDefaultChatCwd } from "~/rpc/serverState";
 import { useProjectById, useStore, useThreadById } from "../../stores/main";
 import { openPathFromChat } from "../../stores/files/filesPanel.open";
@@ -48,7 +49,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const setOpen = useSearchStore((store) => store.setSearchOpen);
   const requestMessageFocus = useSearchStore((store) => store.requestMessageFocus);
   const projects = useStore(useShallow((store) => store.projects));
-  const threads = useStore(useShallow((store) => store.threads));
+  const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
   const activeThread = useThreadById(activeThreadId);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);

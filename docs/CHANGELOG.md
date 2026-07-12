@@ -2,14 +2,18 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.653 (12 July, 2026)
+## v0.1.653 (13 July, 2026)
 
-### Memory & Self-Improvement
+### Sidecar
 
-- Added automatic background learning that helps bigbud become more useful over time without slowing down the active conversation. After a successful turn, the provider and latest model used for that work can preserve confirmed preferences, durable knowledge, and project-specific context for future chats.
-- Personal preferences, reusable global knowledge, and project knowledge stay separated in local Markdown memory, so future agents receive the right context without mixing one project's conventions into another. Project memory is removed automatically when its project is deleted.
-- Skills you own in Codex, OpenCode, Claude, and other providers can now receive targeted improvement suggestions when they are explicitly used. bigbud shows the exact patch and changes nothing unless you approve it; rejected, stale, unsafe, and whole-file changes are never applied, while bigbud's native skills always remain untouched.
-- Memory updates and skill suggestions survive server restarts, include clear in-app notifications, and work across supported providers, desktop platforms, and the mobile companion.
+- Added **Sidecar**, a temporary second chat that floats above the main composer so you can explore an idea, ask a follow-up question, or keep a separate line of investigation open without leaving the thread you are currently working in.
+- Open Sidecar from the **Quick actions** menu or the compact composer menu. It becomes available as soon as the current chat has been created, and its separate conversation is kept out of the normal thread list so it does not compete with your real work.
+- Sidecar uses the same message rendering as the main chat, including assistant Markdown, code, attachments, timestamps, and live work presentation. Its composer uses the compact orchestration-style layout, giving the panel a focused writing area while leaving the main composer untouched.
+- The panel opens on the right side of the chat, defaults to roughly two-thirds of the available chat height, can be resized, and stays within the chat column so it remains useful beside the conversation rather than taking over the page.
+- Minimize Sidecar to keep its conversation and draft available while reclaiming the screen. Close it when you are finished and the temporary conversation is permanently cleaned up, including its provider session and resources.
+- The Sidecar header shows the same live activity dots and working status used by the main chat, so you can tell at a glance when its agent is responding or compacting context.
+- Added **Add chat as context** so the complete Sidecar conversation can be placed into the active thread's composer as a normal thread-reference attachment. The attachment is displayed with the same composer chips as other context, and selecting a live Sidecar reference brings the panel back instead of opening it as a full-page chat.
+- Sidecar conversations remain private to the floating panel: they are omitted from the sidebar, search, command palette, archived-thread views, project recents, completion notifications, approval notifications, and mobile thread lists. Direct navigation cannot accidentally turn one into a normal full-page thread.
 
 ### In-App Browser
 
@@ -18,11 +22,26 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - You can close a tab at any time. If an agent is still using it, bigbud asks for confirmation first; you can also tell an agent to close selected tabs, even when they were opened or controlled by another agent.
 - Up to five browser tabs can be open at once. When all five are in use, the agent shows which tabs are open and asks which one you want to close instead of removing one without permission.
 
-### Sidebar
+### Memory & Self-Improvement
+
+- Added automatic background learning that helps bigbud become more useful over time without slowing down the active conversation. After a successful turn, the provider and latest model used for that work can preserve confirmed preferences, durable knowledge, and project-specific context for future chats.
+- Personal preferences, reusable global knowledge, and project knowledge stay separated in local Markdown memory, so future agents receive the right context without mixing one project's conventions into another. Project memory is removed automatically when its project is deleted.
+- Skills you own in Codex, OpenCode, Claude, and other providers can now receive targeted improvement suggestions when they are explicitly used. bigbud shows the exact patch and changes nothing unless you approve it; rejected, stale, unsafe, and whole-file changes are never applied, while bigbud's native skills always remain untouched.
+- Memory updates and skill suggestions survive server restarts, include clear in-app notifications, and work across supported providers, desktop platforms, and the mobile companion.
+
+### Quick Actions & Composer
+
+- Added **Sidecar** immediately before **Orchestrate** in both quick-action entry points, with clear availability rules so the action is offered only after a chat exists and is ready to host a temporary conversation.
+- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
+- Extended the shared composer surface so embedded chat experiences can reuse the normal provider, model, attachment, approval, and prompt behaviors without registering duplicate global keybindings or terminal effects.
+- Composer image attachments now have a dedicated persistence path that keeps drafts consistent while files are being read, switching threads, or rendering an embedded conversation.
+
+### Sidebar & Thread Navigation
 
 - Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
 - Added a footer **Help** button with a question-mark menu for getting started, what's new, keyboard shortcuts, tutorials, and the bigbud X account, all opening in the in-app browser.
 - Refined the sidebar update pill into a dedicated download-progress state, with a reusable progress bar, a cleaner hidden-by-default action state, and a small development preview mode for testing the downloading flow.
+- Kept temporary Sidecar conversations out of thread navigation, search, archives, recents, global activity notifications, and mobile synchronization while preserving their live provider-backed state for the floating panel.
 
 ### Desktop
 
@@ -31,10 +50,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Plans
 
 - Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
-
-### Quick Actions
-
-- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** now remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
 
 ### Scheduler
 
@@ -45,6 +60,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Constrained changelog and docs images so release-note screenshots and embedded media stay inside the reading column instead of stretching the page.
 - Hardened the marketing download-stats refresh so GitHub rate limits fall back to cached data instead of breaking the site build.
 - Tightened the docs **Using bigbud** section with shorter feature summaries and moved Orchestra to the top for quicker discovery.
+
+### Validation
+
+- Verified the release with the repository formatter, linter, typecheck, and full Vitest test workflow.
 
 ## v0.1.652 (8 July, 2026)
 

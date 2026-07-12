@@ -77,6 +77,7 @@ export function projectThreadCreated(
         id: payload.threadId,
         projectId: payload.projectId,
         title: payload.title,
+        purpose: payload.purpose ?? "standard",
         elevatorSummary: payload.title,
         elevatorSummaryMessageCount: 0,
         providerRuntimeExecutionTargetId:

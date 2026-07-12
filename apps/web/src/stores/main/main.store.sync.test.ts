@@ -123,6 +123,18 @@ describe("store read model sync", () => {
     expect(next.threads[0]?.archivedAt).toBe(archivedAt);
   });
 
+  it("keeps Sidecar threads out of normal sidebar indexes", () => {
+    const initialState = makeState(makeThread());
+    const sideChat = makeReadModelThread({ purpose: "side-chat" });
+
+    const next = syncServerReadModel(initialState, makeReadModel(sideChat));
+
+    expect(next.threads).toHaveLength(1);
+    expect(next.threads[0]?.purpose).toBe("side-chat");
+    expect(next.sidebarThreadsById[sideChat.id]).toBeUndefined();
+    expect(next.threadIdsByProjectId[sideChat.projectId]).toBeUndefined();
+  });
+
   it("replaces projects using snapshot order during recovery", () => {
     const project1 = ProjectId.makeUnsafe("project-1");
     const project2 = ProjectId.makeUnsafe("project-2");

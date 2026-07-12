@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useShallow } from "zustand/react/shallow";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -23,6 +24,7 @@ import { startSidebarAddProjectFlow } from "../sidebar/SidebarAddProjectBridge";
 import { sortThreadsForSidebar, truncateThreadName } from "../sidebar/Sidebar.sort.logic";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useSettings } from "../../hooks/useSettings";
+import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 import { useStore } from "../../stores/main";
 import type { Project } from "../../models/types";
 
@@ -34,7 +36,7 @@ export default function BranchToolbarProjectMenu({ activeProject }: BranchToolba
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
   const projects = useStore((store) => store.projects);
-  const threads = useStore((store) => store.threads);
+  const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
   const appSettings = useSettings();
   const threadSortOrder = appSettings.sidebarThreadSortOrder;
 

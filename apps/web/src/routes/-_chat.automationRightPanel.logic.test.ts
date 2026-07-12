@@ -67,6 +67,31 @@ describe("resolveMostRecentThreadId", () => {
 
     expect(threadId).toBe(ThreadId.makeUnsafe("thread-active"));
   });
+
+  it("ignores Sidecar threads", () => {
+    const threadId = resolveMostRecentThreadId(
+      [
+        {
+          id: ThreadId.makeUnsafe("sidecar"),
+          purpose: "side-chat" as const,
+          createdAt: "2026-03-09T12:00:00.000Z",
+          updatedAt: "2026-03-09T12:00:00.000Z",
+          archivedAt: null,
+          deletingAt: null,
+        },
+        {
+          id: ThreadId.makeUnsafe("thread-active"),
+          createdAt: "2026-03-09T10:00:00.000Z",
+          updatedAt: "2026-03-09T10:00:00.000Z",
+          archivedAt: null,
+          deletingAt: null,
+        },
+      ],
+      "updated_at",
+    );
+
+    expect(threadId).toBe(ThreadId.makeUnsafe("thread-active"));
+  });
 });
 
 describe("navigateToMostRecentThread", () => {
