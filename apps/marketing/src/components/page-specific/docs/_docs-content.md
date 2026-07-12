@@ -95,6 +95,20 @@ Use Orchestra when you want several AI agents to tackle different parts of the s
 
 <iframe src="https://www.youtube-nocookie.com/embed/xuj5rBaKPVQ" title="bigbud: Orchestra"></iframe>
 
+### Sidecar: keep a second conversation close
+
+Open **Sidecar** from Quick actions when you need to explore an idea, ask a follow-up, or investigate something without leaving the thread you are working in. It floats above the composer, can be minimized while you work, and can be added back to the main chat as context when its findings matter.
+
+![Sidecar floating above a main chat](https://assets.bigbud.app/content/sidecar.png)
+
+### Keep tasks in view
+
+Use the floating **Tasks** card to follow an agent's plan and its current progress without moving away from the conversation. Open it from Quick actions whenever you want to see what is underway, what comes next, or a proposed plan waiting for your review.
+
+### Research without leaving your workspace
+
+Open the **Browser** from the right side panel to keep a website beside your chat, files, notes, and terminal. You can read and work in the page yourself, or ask an agent to research it and bring the useful result back into the conversation.
+
 ### Writing notes like a Pro
 
 Use notes to keep project context, drafts, and working memory close to your chats without jumping into a separate writing app.
@@ -122,6 +136,14 @@ Use the reader outline to jump through long conversations by user turn, keep you
 ### Multi-agent orchestration with Orchestra
 
 Orchestra coordinates multiple AI agents on one task, letting each player focus on a distinct role and run in parallel or as a sequenced handoff. Use it when a project benefits from different perspectives, specialized expertise, or a clear pass from one agent to the next; see the [Orchestra guide in Using bigbud](#orchestra) for the full workflow.
+
+### Memory & Self-Improvement
+
+bigbud can preserve useful preferences, confirmed knowledge, and project-specific context after successful work, so future conversations start with less repetition. Your personal, shared, and project memory stay separate, and any suggested improvement to a provider skill is shown as a patch for you to approve before it changes anything.
+
+### Usage: understand where your tokens go
+
+Open **Usage** from the sidebar to see token activity across providers and models. Review totals, trends, token mix, and the providers or models you use most, with plain-language explanations that make the numbers easier to interpret.
 
 ### Computer use: your agent, your extra hands
 
