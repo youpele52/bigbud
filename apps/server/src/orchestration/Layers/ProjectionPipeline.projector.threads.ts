@@ -60,6 +60,7 @@ export function makeThreadsProjector(
           threadId: event.payload.threadId,
           projectId: event.payload.projectId,
           title: event.payload.title,
+          purpose: event.payload.purpose ?? "standard",
           elevatorSummary: event.payload.title,
           elevatorSummaryMessageCount: 0,
           providerRuntimeExecutionTargetId:

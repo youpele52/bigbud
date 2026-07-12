@@ -175,7 +175,9 @@ function toSidebarThreadSortInput(thread: OrchestrationThread) {
 }
 
 function activeThreads(snapshot: OrchestrationReadModel): ReadonlyArray<OrchestrationThread> {
-  return snapshot.threads.filter((thread) => thread.archivedAt === null);
+  return snapshot.threads.filter(
+    (thread) => thread.archivedAt === null && thread.purpose !== "side-chat",
+  );
 }
 
 export function sortThreadsForMobile(

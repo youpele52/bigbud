@@ -7,6 +7,8 @@ import type {
 } from "../../../models/types/app.types";
 import { resolveMarkdownFileLinkTarget } from "../../../utils/markdown";
 import { cn } from "~/lib/utils";
+import { useStore } from "~/stores/main";
+import { useSideChatStore } from "~/stores/sideChat";
 import {
   ChatFileTargetContextMenu,
   useChatFileTargetContextMenu,
@@ -32,6 +34,13 @@ export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThr
           className="flex min-w-0 max-w-[180px] cursor-pointer items-center gap-1.5 rounded-md border border-border/50 bg-background/40 px-1.5 py-1 text-left transition-colors hover:bg-background/60"
           title={`Open thread: ${thread.title}`}
           onClick={() => {
+            const targetThread = useStore
+              .getState()
+              .threads.find((entry) => entry.id === thread.threadId);
+            if (targetThread?.purpose === "side-chat" && targetThread.deletingAt == null) {
+              useSideChatStore.getState().show(targetThread.id);
+              return;
+            }
             void navigate({ to: "/$threadId", params: { threadId: thread.threadId } });
           }}
         >

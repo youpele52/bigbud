@@ -57,6 +57,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           thread_id,
           project_id,
           title,
+          purpose,
           model_selection_json,
           runtime_mode,
           interaction_mode,
@@ -70,9 +71,26 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
         VALUES
           (
+            'thread-sidecar',
+            'project-active',
+            'Sidecar',
+            'side-chat',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'default',
+            NULL,
+            NULL,
+            NULL,
+            '2026-03-01T00:00:04.000Z',
+            '2026-03-01T00:00:04.000Z',
+            NULL,
+            NULL
+          ),
+          (
             'thread-first',
             'project-active',
             'First Thread',
+            'standard',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -88,6 +106,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             'thread-second',
             'project-active',
             'Second Thread',
+            'standard',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -103,6 +122,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             'thread-deleted',
             'project-active',
             'Deleted Thread',
+            'standard',
             '{"provider":"codex","model":"gpt-5-codex"}',
             'full-access',
             'default',
@@ -119,7 +139,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         const counts = yield* snapshotQuery.getCounts();
         assert.deepEqual(counts, {
           projectCount: 2,
-          threadCount: 3,
+          threadCount: 4,
         });
 
         const project = yield* snapshotQuery.getActiveProjectByWorkspaceRoot("/tmp/workspace");

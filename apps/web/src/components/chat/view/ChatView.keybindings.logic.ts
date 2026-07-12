@@ -12,6 +12,7 @@ interface TerminalState {
 }
 
 export interface UseChatKeybindingsInput {
+  enabled?: boolean;
   activeThreadId: string | null;
   activeProject: Project | null | undefined;
   terminalState: TerminalState;
@@ -28,6 +29,7 @@ export interface UseChatKeybindingsInput {
 
 /** Registers global keydown handler for all ChatView keyboard shortcuts. */
 export function useChatKeybindings({
+  enabled = true,
   activeThreadId,
   activeProject,
   terminalState,
@@ -42,6 +44,9 @@ export function useChatKeybindings({
   runProjectScript,
 }: UseChatKeybindingsInput): void {
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     const handler = (event: globalThis.KeyboardEvent) => {
       if (!activeThreadId || event.defaultPrevented) return;
       const shortcutContext = {
@@ -122,6 +127,7 @@ export function useChatKeybindings({
     return () => window.removeEventListener("keydown", handler, { capture: true });
   }, [
     activeProject,
+    enabled,
     terminalState.terminalOpen,
     terminalState.activeTerminalId,
     activeThreadId,

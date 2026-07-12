@@ -19,6 +19,7 @@ import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { resolveNewChatOptions } from "../../hooks/useHandleNewThread";
 import { useSettings } from "../../hooks/useSettings";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useDefaultChatCwd, useServerKeybindings } from "../../rpc/serverState";
 import { useProjectById, useStore } from "../../stores/main";
@@ -79,7 +80,7 @@ export function CommandPaletteDialogContent() {
   const { activeDraftThread, activeThread, defaultProjectId, handleNewThread } =
     useHandleNewThread();
   const projects = useStore(useShallow((store) => store.projects));
-  const threads = useStore(useShallow((store) => store.threads));
+  const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);
   const defaultChatCwd = useDefaultChatCwd();

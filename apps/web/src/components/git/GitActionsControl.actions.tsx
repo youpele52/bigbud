@@ -8,6 +8,7 @@ import {
   HistoryIcon,
   ListMusicIcon,
   ListTodoIcon,
+  MessageSquareShare,
   Rows3Icon,
   Settings2Icon,
   Trash2Icon,
@@ -44,6 +45,8 @@ export interface GitActionsControlActionProps {
   gitStatusError: Error | null;
   gitActionMenuItems: ReadonlyArray<GitActionMenuItem>;
   onOpenOrchestra?: (() => void) | undefined;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   planCardLabel?: string | undefined;
   planCardOpen?: boolean | undefined;
   onMenuItemSelect: (item: GitActionMenuItem) => void;
@@ -165,6 +168,12 @@ export function GitActionsControlActions(props: GitActionsControlActionProps) {
         {props.onOpenOrchestra ? (
           <>
             {props.showGit && <MenuSeparator />}
+            {props.onOpenSideChat ? (
+              <MenuItem disabled={props.sideChatDisabled} onClick={props.onOpenSideChat}>
+                <MessageSquareShare aria-hidden="true" className="size-4" />
+                Sidecar
+              </MenuItem>
+            ) : null}
             <MenuItem onClick={props.onOpenOrchestra}>
               <ListMusicIcon aria-hidden="true" className="size-4" />
               Orchestrate

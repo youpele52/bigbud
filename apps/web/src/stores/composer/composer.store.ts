@@ -32,6 +32,7 @@ export {
   type LegacyV2StoreFields,
   type LegacyV2ThreadDraftFields,
   type ProjectDraftThread,
+  type RemovedComposerThreadReferenceFiles,
 } from "./types.store";
 
 export {

@@ -1,5 +1,6 @@
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import type { Thread } from "../../models/types";
+import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 
 type SidebarProject = {
   id: string;
@@ -67,19 +68,26 @@ export function sortThreadsForSidebar<
 }
 
 export function resolveMostRecentThreadId<
-  T extends Pick<Thread, "id" | "createdAt" | "updatedAt" | "archivedAt" | "deletingAt"> &
+  T extends Pick<
+    Thread,
+    "id" | "createdAt" | "updatedAt" | "archivedAt" | "deletingAt" | "purpose"
+  > &
     SidebarThreadSortInput,
 >(threads: readonly T[], sortOrder: SidebarThreadSortOrder): T["id"] | null {
   return (
     sortThreadsForSidebar(
-      threads.filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
+      threads.filter(
+        (thread) =>
+          isVisibleThread(thread) && thread.archivedAt === null && thread.deletingAt === null,
+      ),
       sortOrder,
     )[0]?.id ?? null
   );
 }
 
 export function getFallbackThreadIdAfterDelete<
-  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & SidebarThreadSortInput,
+  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt" | "purpose"> &
+    SidebarThreadSortInput,
 >(input: {
   threads: readonly T[];
   deletedThreadId: T["id"];
@@ -96,6 +104,7 @@ export function getFallbackThreadIdAfterDelete<
     sortThreadsForSidebar(
       threads.filter(
         (thread) =>
+          isVisibleThread(thread) &&
           thread.projectId === deletedThread.projectId &&
           thread.id !== deletedThreadId &&
           !deletedThreadIds?.has(thread.id),

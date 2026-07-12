@@ -1,4 +1,4 @@
-import { type ThreadId } from "@bigbud/contracts";
+import { ThreadId } from "@bigbud/contracts";
 import type { StoreApi } from "zustand";
 import {
   composerImageDedupKey,
@@ -13,6 +13,7 @@ import {
   type ComposerImageAttachment,
   type ComposerThreadDraftState,
   type PersistedComposerImageAttachment,
+  type RemovedComposerThreadReferenceFiles,
 } from "./types.store";
 import { isBrowserAnnotationAttachment } from "./types.annotation.store";
 
@@ -178,6 +179,40 @@ export function createComposerAttachmentActions(
         }
         return { draftsByThreadId: nextDraftsByThreadId };
       });
+    },
+    removeThreadReferenceFiles: (referencedThreadId: ThreadId) => {
+      const removedReferences: RemovedComposerThreadReferenceFiles[] = [];
+      set((state) => {
+        const nextDraftsByThreadId = { ...state.draftsByThreadId };
+        for (const [threadId, draft] of Object.entries(state.draftsByThreadId)) {
+          const removedFiles = draft.files.filter(
+            (file) =>
+              file.attachmentMode === "thread-reference" && file.threadId === referencedThreadId,
+          );
+          if (removedFiles.length === 0) {
+            continue;
+          }
+          removedReferences.push({
+            draftThreadId: ThreadId.makeUnsafe(threadId),
+            files: removedFiles,
+          });
+          const removedFileIds = new Set(removedFiles.map((file) => file.id));
+          const nextDraft: ComposerThreadDraftState = {
+            ...draft,
+            files: draft.files.filter((file) => !removedFileIds.has(file.id)),
+            persistedFileAttachments: draft.persistedFileAttachments.filter(
+              (file) => !removedFileIds.has(file.id),
+            ),
+          };
+          if (shouldRemoveDraft(nextDraft)) {
+            delete nextDraftsByThreadId[threadId as ThreadId];
+          } else {
+            nextDraftsByThreadId[threadId as ThreadId] = nextDraft;
+          }
+        }
+        return removedReferences.length > 0 ? { draftsByThreadId: nextDraftsByThreadId } : state;
+      });
+      return removedReferences;
     },
     setFileWatchForCompletion: (
       threadId: ThreadId,

@@ -15,6 +15,7 @@ export const LearningJob = Schema.Struct({
   provider: ProviderKind,
   model: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
+  memoryUserMessageCount: Schema.NullOr(Schema.Number),
   state: LearningJobState,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -31,6 +32,11 @@ export const SetLearningJobStateInput = Schema.Struct({
 });
 export type SetLearningJobStateInput = typeof SetLearningJobStateInput.Type;
 
+export const GetLatestMemoryUserMessageCountInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type GetLatestMemoryUserMessageCountInput = typeof GetLatestMemoryUserMessageCountInput.Type;
+
 export interface LearningJobRepositoryShape {
   readonly createIfAbsent: (
     input: CreateLearningJobInput,
@@ -39,6 +45,9 @@ export interface LearningJobRepositoryShape {
     ReadonlyArray<LearningJob>,
     PersistenceSqlError | PersistenceDecodeError
   >;
+  readonly getLatestMemoryUserMessageCount: (
+    input: GetLatestMemoryUserMessageCountInput,
+  ) => Effect.Effect<number | null, PersistenceSqlError | PersistenceDecodeError>;
   readonly setState: (
     input: SetLearningJobStateInput,
   ) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;

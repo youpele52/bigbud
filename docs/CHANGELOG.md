@@ -2,7 +2,7 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.1.653 (12 July, 2026)
+## v0.1.653 (13 July, 2026)
 
 ### Memory & Self-Improvement
 
@@ -18,17 +18,34 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - You can close a tab at any time. If an agent is still using it, bigbud asks for confirmation first; you can also tell an agent to close selected tabs, even when they were opened or controlled by another agent.
 - Up to five browser tabs can be open at once. When all five are in use, the agent shows which tabs are open and asks which one you want to close instead of removing one without permission.
 
-### Sidebar
+### Sidecar
+
+- Added **Sidecar**, a temporary second chat opened from **Quick actions** or the compact composer menu. It floats above the main composer, uses the familiar chat rendering and compact orchestration-style composer, and can be resized within the chat column. ![Sidecar floating above a main chat](https://assets.bigbud.app/content/sidecar.png)
+- Sidecar is ephemeral: minimize it to reclaim the screen and revisit the conversation later, or close it when you are finished to remove it permanently. Its live activity dots and working status make it easy to monitor without taking over the active conversation.
+- Use **Add chat as context** to place the Sidecar transcript into the active thread as a normal context attachment; selecting that attachment restores the floating Sidecar instead of opening a full-page thread.
+- Sidecar stays private to the floating panel, outside the sidebar, search, archives, recents, notifications, mobile thread lists, and direct full-page navigation.
+
+### Quick Actions & Composer
+
+- Added **Sidecar** immediately before **Orchestrate** in both quick-action entry points, with clear availability rules so the action is offered only after a chat exists and is ready to host a temporary conversation.
+- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
+- Extended the shared composer surface so embedded chat experiences can reuse the normal provider, model, attachment, approval, and prompt behaviors without registering duplicate global keybindings or terminal effects.
+- Composer image attachments now have a dedicated persistence path that keeps drafts consistent while files are being read, switching threads, or rendering an embedded conversation.
+
+### Sidebar & Thread Navigation
 
 - Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
+- Added a footer **Help** button with a question-mark menu for getting started, what's new, keyboard shortcuts, tutorials, and the bigbud X account, all opening in the in-app browser.
+- Refined the sidebar update pill into a dedicated download-progress state, with a reusable progress bar, a cleaner hidden-by-default action state, and a small development preview mode for testing the downloading flow.
+- Kept temporary Sidecar conversations out of thread navigation, search, archives, recents, global activity notifications, and mobile synchronization while preserving their live provider-backed state for the floating panel.
+
+### Desktop
+
+- Kept the desktop development window in sync with the sidebar update preview state so the downloading UI can be exercised locally without waiting for a real update download.
 
 ### Plans
 
 - Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
-
-### Quick Actions
-
-- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** now remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
 
 ### Scheduler
 
@@ -39,6 +56,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Constrained changelog and docs images so release-note screenshots and embedded media stay inside the reading column instead of stretching the page.
 - Hardened the marketing download-stats refresh so GitHub rate limits fall back to cached data instead of breaking the site build.
 - Tightened the docs **Using bigbud** section with shorter feature summaries and moved Orchestra to the top for quicker discovery.
+
+### Validation
+
+- Verified the release with the repository formatter, linter, typecheck, and full Vitest test workflow.
 
 ## v0.1.652 (8 July, 2026)
 

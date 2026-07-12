@@ -136,6 +136,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         threadId: ThreadId.makeUnsafe("thread-null-options"),
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Null options thread",
+        purpose: "standard",
         elevatorSummary: "Null options thread",
         elevatorSummaryMessageCount: 0,
         providerRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,

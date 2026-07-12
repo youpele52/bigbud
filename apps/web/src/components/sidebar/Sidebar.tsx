@@ -14,6 +14,7 @@ import {
 } from "../ui/sidebar";
 import { SettingsIcon } from "lucide-react";
 import { SidebarUpdatePill } from "./SidebarUpdatePill";
+import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import { SidebarAppHeader } from "./SidebarHeader";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
@@ -132,18 +133,21 @@ export default function Sidebar() {
           <SidebarSeparator />
           <SidebarFooter className="p-2">
             <SidebarUpdatePill />
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  size="sm"
-                  className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                  onClick={() => void navigate({ to: "/settings" })}
-                >
-                  <SettingsIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                  <span className="text-xs">Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+            <div className="flex items-center gap-1">
+              <SidebarMenu className="min-w-0 flex-1">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="sm"
+                    className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
+                    onClick={() => void navigate({ to: "/settings" })}
+                  >
+                    <SettingsIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                    <span className="text-xs">Settings</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+              <SidebarHelpMenu />
+            </div>
           </SidebarFooter>
 
           <AlertDialog

@@ -6,6 +6,7 @@ import ChatView from "../components/chat/view/ChatView";
 import { useComposerDraftStore } from "../stores/composer";
 import { closeDiffRouteSearch, type DiffRouteSearch, parseDiffRouteSearch } from "../utils/diff";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
 import { useStore } from "../stores/main";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { registerDiffPanelCloseAction } from "../stores/rightPanel/rightPanel.coordinator";
@@ -17,15 +18,14 @@ export function ChatThreadRouteView() {
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
-  const threadTitle = useStore(
-    (store) => store.threads.find((thread) => thread.id === threadId)?.title ?? "New thread",
-  );
+  const routeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
+  const threadTitle =
+    routeThread && isVisibleThread(routeThread) ? routeThread.title : "New thread";
   const search = Route.useSearch();
-  const threadExists = useStore((store) => store.threads.some((thread) => thread.id === threadId));
   const draftThreadExists = useComposerDraftStore((store) =>
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
-  const routeThreadExists = threadExists || draftThreadExists;
+  const routeThreadExists = routeThread ? isVisibleThread(routeThread) : draftThreadExists;
   const diffOpen = search.diff === "1";
   usePageTitle(threadTitle);
 

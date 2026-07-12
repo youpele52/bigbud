@@ -21,18 +21,58 @@ import {
   shouldToastDesktopUpdateActionResult,
 } from "../layout/desktopUpdate.logic";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import {
+  Progress,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressTrack,
+  ProgressValue,
+} from "../ui/progress";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+
+const DOWNLOAD_PREVIEW_QUERY_PARAM = "previewUpdate";
+
+const downloadPreviewState = {
+  enabled: true,
+  status: "downloading" as const,
+  currentVersion: "0.0.0",
+  platform: "darwin" as const,
+  hostArch: "arm64" as const,
+  appArch: "arm64" as const,
+  runningUnderArm64Translation: false,
+  isCodeSigned: true,
+  availableVersion: "0.18.0",
+  downloadedVersion: null,
+  downloadPercent: 53,
+  checkedAt: null,
+  message: null,
+  errorContext: null,
+  canRetry: false,
+};
+
+function isDownloadingPreviewEnabled(): boolean {
+  return (
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get(DOWNLOAD_PREVIEW_QUERY_PARAM) === "downloading"
+  );
+}
 
 export function SidebarUpdatePill() {
   const queryClient = useQueryClient();
-  const state = useDesktopUpdateState().data ?? null;
+  const isDownloadingPreview = isDownloadingPreviewEnabled();
+  const queriedState = useDesktopUpdateState().data ?? null;
+  const state = isDownloadingPreview ? downloadPreviewState : queriedState;
   const [dismissed, setDismissed] = useState(false);
 
   const visible =
-    isElectron && !import.meta.env.DEV && shouldShowDesktopUpdateButton(state) && !dismissed;
+    (isDownloadingPreview || (isElectron && !import.meta.env.DEV)) &&
+    shouldShowDesktopUpdateButton(state) &&
+    !dismissed;
   const tooltip = state ? getDesktopUpdateButtonTooltip(state) : "Update available";
   const disabled = isDesktopUpdateButtonDisabled(state);
   const action = state ? resolveDesktopUpdateButtonAction(state) : "none";
+  const downloadPercent = Math.round(Math.min(100, Math.max(0, state?.downloadPercent ?? 0)));
 
   const showArm64Warning = isElectron && shouldShowArm64IntelBuildWarning(state);
   const arm64Description =
@@ -113,62 +153,75 @@ export function SidebarUpdatePill() {
         </Alert>
       )}
       {visible && (
-        <div
-          className={`group/update relative flex h-7 w-full items-center rounded-lg bg-primary/15 text-xs font-medium text-primary ${
-            disabled ? " cursor-not-allowed opacity-60" : ""
-          }`}
-        >
-          <div className="pointer-events-none absolute inset-0 rounded-lg transition-colors group-has-[button.update-main:hover]/update:bg-primary/22" />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={tooltip}
-                  aria-disabled={disabled || undefined}
-                  disabled={disabled}
-                  className="update-main relative flex h-full flex-1 items-center gap-2 px-2 enabled:cursor-pointer"
-                  onClick={handleAction}
-                >
-                  {action === "install" ? (
-                    <>
-                      <RotateCwIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                      <span>Restart to update</span>
-                      {unsignedBlocked && (
-                        <InfoIcon
-                          className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} text-primary/70`}
+        <div className="group/update relative w-full text-xs">
+          {state?.status === "downloading" ? (
+            <Progress
+              aria-label="Downloading update"
+              aria-valuetext={`Download progress: ${downloadPercent}%`}
+              value={state.downloadPercent}
+              className="gap-1.5 px-2 py-1"
+            >
+              <div className="flex items-center gap-2">
+                <DownloadIcon
+                  className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} animate-breathe text-info`}
+                />
+                <ProgressLabel className="text-muted-foreground transition-colors group-hover/update:text-foreground group-focus-within/update:text-foreground">
+                  Downloading update
+                </ProgressLabel>
+                <ProgressValue className="ml-auto transition-colors group-hover/update:text-foreground group-focus-within/update:text-foreground">
+                  {(_, value) => (value === null ? "…" : `${Math.round(value)}%`)}
+                </ProgressValue>
+              </div>
+              <ProgressTrack>
+                <ProgressIndicator className="bg-info" />
+              </ProgressTrack>
+            </Progress>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={tooltip}
+                    aria-disabled={disabled || undefined}
+                    disabled={disabled}
+                    className="flex h-7 w-full items-center gap-2 px-2 text-muted-foreground enabled:cursor-pointer enabled:hover:text-foreground enabled:focus-visible:text-foreground enabled:active:text-foreground"
+                    onClick={handleAction}
+                  >
+                    {action === "install" ? (
+                      <>
+                        <RotateCwIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                        <span>Restart to update</span>
+                        {unsignedBlocked && (
+                          <InfoIcon
+                            className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} text-primary/70`}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <DownloadIcon
+                          className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} animate-breathe text-info`}
                         />
-                      )}
-                    </>
-                  ) : state?.status === "downloading" ? (
-                    <>
-                      <DownloadIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                      <span>
-                        Downloading
-                        {typeof state.downloadPercent === "number"
-                          ? ` (${Math.floor(state.downloadPercent)}%)`
-                          : "…"}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <DownloadIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                      <span>Update available</span>
-                    </>
-                  )}
-                </button>
-              }
-            />
-            <TooltipPopup side="top">{tooltip}</TooltipPopup>
-          </Tooltip>
-          {action === "download" && (
+                        <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover/update:max-w-28 group-hover/update:opacity-100 focus-visible:max-w-28 focus-visible:opacity-100">
+                          Update available
+                        </span>
+                      </>
+                    )}
+                  </button>
+                }
+              />
+              <TooltipPopup side="top">{tooltip}</TooltipPopup>
+            </Tooltip>
+          )}
+          {action === "download" && state?.status !== "downloading" && (
             <Tooltip>
               <TooltipTrigger
                 render={
                   <button
                     type="button"
                     aria-label="Dismiss update"
-                    className="mr-1 inline-flex size-5 items-center justify-center rounded-md text-primary/60 transition-colors hover:text-primary"
+                    className="absolute top-1 right-0 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/65 opacity-0 transition-[color,opacity] hover:text-foreground group-hover/update:opacity-100 focus-visible:opacity-100"
                     onClick={() => setDismissed(true)}
                   >
                     <XIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
