@@ -119,6 +119,10 @@ Use the reader outline to jump through long conversations by user turn, keep you
 
 ## Advanced Features
 
+### Multi-agent orchestration with Orchestra
+
+Orchestra coordinates multiple AI agents on one task, letting each player focus on a distinct role and run in parallel or as a sequenced handoff. Use it when a project benefits from different perspectives, specialized expertise, or a clear pass from one agent to the next; see the [Orchestra guide in Using bigbud](#orchestra) for the full workflow.
+
 ### Computer use: your agent, your extra hands
 
 Your AI can now reach beyond the chat and work with your applications, your browser, and your desktop — clicking what you'd click, typing where you'd type, seeing what you see. Navigate a page, fill a form, write an email, book an appointment, check your calendar, open an app, grab a screenshot, run a diagnostic. All inside your session, all on your terms. Safety and security are built into the feature from the ground up — sensitive inputs are blocked before reaching the driver, and you control the limits in **Settings → AI → Computer use**.

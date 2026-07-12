@@ -21,6 +21,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Sidebar
 
 - Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
+- Added a footer **Help** button with a question-mark menu for getting started, what's new, keyboard shortcuts, tutorials, and the bigbud X account, all opening in the in-app browser.
+- Refined the sidebar update pill into a dedicated download-progress state, with a reusable progress bar, a cleaner hidden-by-default action state, and a small development preview mode for testing the downloading flow.
+
+### Desktop
+
+- Kept the desktop development window in sync with the sidebar update preview state so the downloading UI can be exercised locally without waiting for a real update download.
 
 ### Plans
 
