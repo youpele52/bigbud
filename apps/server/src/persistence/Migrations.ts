@@ -51,6 +51,7 @@ import Migration0035 from "./Migrations/035_AutomationRunOccurrences.ts";
 import Migration0036 from "./Migrations/036_AutomationRunTerminalEventId.ts";
 import Migration0037 from "./Migrations/037_ProjectionThreadWatches.ts";
 import Migration0038 from "./Migrations/038_ProjectionThreadsElevatorSummary.ts";
+import Migration0041 from "./Migrations/041_LearningJobMemoryUserMessageCount.ts";
 import Migration0039 from "./Migrations/039_LearningJobs.ts";
 import Migration0040 from "./Migrations/040_SkillChangeProposals.ts";
 
@@ -103,6 +104,7 @@ export const migrationEntries = [
   [36, "AutomationRunTerminalEventId", Migration0036],
   [37, "ProjectionThreadWatches", Migration0037],
   [38, "ProjectionThreadsElevatorSummary", Migration0038],
+  [41, "LearningJobMemoryUserMessageCount", Migration0041],
   [39, "LearningJobs", Migration0039],
   [40, "SkillChangeProposals", Migration0040],
 ] as const;

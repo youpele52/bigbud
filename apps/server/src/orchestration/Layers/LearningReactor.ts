@@ -16,7 +16,18 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
-import { resolveLearningModelSelection } from "./LearningReactor.logic.ts";
+import {
+  countFinalizedUserMessages,
+  resolveLearningModelSelection,
+  shouldScheduleMemoryReview,
+} from "./LearningReactor.logic.ts";
+
+function resolveSkillName(sourceUserMessage: string): string | null {
+  return (
+    /(?:@skill::?|\/skills?\s+)([^\s@]+)/i.exec(sourceUserMessage)?.[1]?.trim().toLowerCase() ??
+    null
+  );
+}
 
 const makeLearningReactor = Effect.gen(function* () {
   const providerService = yield* ProviderService;
@@ -33,10 +44,7 @@ const makeLearningReactor = Effect.gen(function* () {
 
   const resolveSkillContext = (sourceUserMessage: string, provider: ProviderKind) =>
     Effect.gen(function* () {
-      const name = /(?:@skill::?|\/skills?\s+)([^\s@]+)/i
-        .exec(sourceUserMessage)?.[1]
-        ?.trim()
-        .toLowerCase();
+      const name = resolveSkillName(sourceUserMessage);
       if (!name) return null;
       const catalog = yield* discovery.getCatalog;
       const target = catalog.skills.find(
@@ -127,6 +135,7 @@ const makeLearningReactor = Effect.gen(function* () {
       turnId: job.turnId,
       modelSelection: job.modelSelection,
       sourceUserMessage,
+      memoryReviewEnabled: job.memoryUserMessageCount !== null,
       ...(skill ? { skillContext: skill.context } : {}),
     });
     const completedAt = new Date().toISOString();
@@ -253,6 +262,21 @@ const makeLearningReactor = Effect.gen(function* () {
           const model = turnModels.get(key) ?? thread?.modelSelection.model;
           turnModels.delete(key);
           if (!thread || !model) return;
+          const sourceUserMessage = thread.messages.find(
+            (message) => message.turnId === turnId && message.role === "user",
+          )?.text;
+          const userMessageCount = countFinalizedUserMessages(thread.messages);
+          const latestMemoryUserMessageCount = yield* learningJobs.getLatestMemoryUserMessageCount({
+            threadId: thread.id,
+          });
+          const memoryUserMessageCount = shouldScheduleMemoryReview({
+            userMessageCount,
+            latestMemoryUserMessageCount,
+          })
+            ? userMessageCount
+            : null;
+          if (memoryUserMessageCount === null && !sourceUserMessage?.trim()) return;
+          if (memoryUserMessageCount === null && !resolveSkillName(sourceUserMessage ?? "")) return;
 
           const job = {
             jobId: `learning:${event.threadId}:${event.turnId}`,
@@ -265,6 +289,7 @@ const makeLearningReactor = Effect.gen(function* () {
               model,
               selected: thread.modelSelection,
             }),
+            memoryUserMessageCount,
             state: "queued",
             createdAt: event.createdAt,
             updatedAt: event.createdAt,
