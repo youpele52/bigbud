@@ -1,6 +1,6 @@
 import { ProviderInteractionMode, RuntimeMode } from "@bigbud/contracts";
 import { memo, type ReactNode } from "react";
-import { EllipsisIcon, ListMusicIcon, ListTodoIcon } from "lucide-react";
+import { EllipsisIcon, ListMusicIcon, ListTodoIcon, MessageSquareShare } from "lucide-react";
 import { Button } from "../../ui/button";
 import {
   Menu,
@@ -19,6 +19,8 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   runtimeMode: RuntimeMode;
   traitsMenuContent?: ReactNode;
   onOpenOrchestra: () => void;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   onToggleInteractionMode: () => void;
   onTogglePlanCard: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
@@ -56,6 +58,12 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <MenuRadioItem value="plan">Plan</MenuRadioItem>
         </MenuRadioGroup>
         <MenuDivider />
+        {props.onOpenSideChat ? (
+          <MenuItem disabled={props.sideChatDisabled} onClick={props.onOpenSideChat}>
+            <MessageSquareShare className="size-4 shrink-0" />
+            Sidecar
+          </MenuItem>
+        ) : null}
         <MenuItem onClick={props.onOpenOrchestra}>
           <ListMusicIcon className="size-4 shrink-0" />
           Orchestrate

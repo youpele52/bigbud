@@ -30,6 +30,9 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
         iframe.src = url;
       },
       openDevTools: () => undefined,
+      executeAgentAction: async () => {
+        throw new Error("Visible browser automation requires the bigbud desktop app.");
+      },
       startAnnotation: async () => null,
       cancelAnnotation: async () => undefined,
     }));

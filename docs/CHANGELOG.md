@@ -2,6 +2,65 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.653 (13 July, 2026)
+
+### Memory & Self-Improvement
+
+- Added automatic background learning that helps bigbud become more useful over time without slowing down the active conversation. After a successful turn, the provider and latest model used for that work can preserve confirmed preferences, durable knowledge, and project-specific context for future chats.
+- Personal preferences, reusable global knowledge, and project knowledge stay separated in local Markdown memory, so future agents receive the right context without mixing one project's conventions into another. Project memory is removed automatically when its project is deleted.
+- Skills you own in Codex, OpenCode, Claude, and other providers can now receive targeted improvement suggestions when they are explicitly used. bigbud shows the exact patch and changes nothing unless you approve it; rejected, stale, unsafe, and whole-file changes are never applied, while bigbud's native skills always remain untouched.
+- Memory updates and skill suggestions survive server restarts, include clear in-app notifications, and work across supported providers, desktop platforms, and the mobile companion.
+
+### In-App Browser
+
+- Agents can now use bigbud's built-in browser to visit pages, read content, take screenshots, click, type, scroll, and move between pages — whether you want to watch them work or let them browse in the background.
+- A blue cursor shows when an agent is controlling a tab. When the work is done, the page stays open for you, control returns automatically, and a short message lets you know the tab is yours again.
+- You can close a tab at any time. If an agent is still using it, bigbud asks for confirmation first; you can also tell an agent to close selected tabs, even when they were opened or controlled by another agent.
+- Up to five browser tabs can be open at once. When all five are in use, the agent shows which tabs are open and asks which one you want to close instead of removing one without permission.
+
+### Sidecar
+
+- Added **Sidecar**, a temporary second chat opened from **Quick actions** or the compact composer menu. It floats above the main composer, uses the familiar chat rendering and compact orchestration-style composer, and can be resized within the chat column. ![Sidecar floating above a main chat](https://assets.bigbud.app/content/sidecar.png)
+- Sidecar is ephemeral: minimize it to reclaim the screen and revisit the conversation later, or close it when you are finished to remove it permanently. Its live activity dots and working status make it easy to monitor without taking over the active conversation.
+- Use **Add chat as context** to place the Sidecar transcript into the active thread as a normal context attachment; selecting that attachment restores the floating Sidecar instead of opening a full-page thread.
+- Sidecar stays private to the floating panel, outside the sidebar, search, archives, recents, notifications, mobile thread lists, and direct full-page navigation.
+
+### Quick Actions & Composer
+
+- Added **Sidecar** immediately before **Orchestrate** in both quick-action entry points, with clear availability rules so the action is offered only after a chat exists and is ready to host a temporary conversation.
+- Made **Quick actions** available in every chat thread, even when it has no project directory. **Orchestrate** and **Show/Hide Tasks** remain available independently of Git, while the Git submenu appears for chats only when their active folder is a Git repository.
+- Extended the shared composer surface so embedded chat experiences can reuse the normal provider, model, attachment, approval, and prompt behaviors without registering duplicate global keybindings or terminal effects.
+- Composer image attachments now have a dedicated persistence path that keeps drafts consistent while files are being read, switching threads, or rendering an embedded conversation.
+
+### Sidebar & Thread Navigation
+
+- Added a compact pinned-thread preview with a **See more / Show less** control so the fifth pinned thread stays reachable without raising the existing five-pin limit.
+- Added a footer **Help** button with a question-mark menu for getting started, what's new, keyboard shortcuts, tutorials, and the bigbud X account, all opening in the in-app browser.
+- Refined the sidebar update pill into a dedicated download-progress state, with a reusable progress bar, a cleaner hidden-by-default action state, and a small development preview mode for testing the downloading flow.
+- Kept temporary Sidecar conversations out of thread navigation, search, archives, recents, global activity notifications, and mobile synchronization while preserving their live provider-backed state for the floating panel.
+
+### Desktop
+
+- Kept the desktop development window in sync with the sidebar update preview state so the downloading UI can be exercised locally without waiting for a real update download.
+
+### Plans
+
+- Refined the floating Tasks card so overflow stays inside the card with stable scrollbar space, and tightened the header and body typography to better match the chat work-log presentation.
+
+### Scheduler
+
+- Fixed cron validation for impossible month/day combinations so invalid schedules fail immediately instead of exhausting the scheduler search window.
+
+### Marketing
+
+- Constrained changelog and docs images so release-note screenshots and embedded media stay inside the reading column instead of stretching the page.
+- Hardened the marketing download-stats refresh so GitHub rate limits fall back to cached data instead of breaking the site build.
+- Tightened the docs **Using bigbud** section with shorter feature summaries and moved Orchestra to the top for quicker discovery.
+
+### Validation
+
+- Verified the release with the repository formatter, linter, typecheck, and full Vitest test workflow.
+
 ## v0.1.652 (8 July, 2026)
 
 ### Plans
@@ -21,10 +80,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Usage
 
-- Localized **Usage** chart tooltip dates and month labels so activity reads naturally in your own locale instead of falling back to raw timestamp-style formatting.
-- Updated the Usage overview cards to reuse provider and model icon patterns already used elsewhere in the app, including a safe fallback icon when a provider is unknown.
-- Tightened Usage summary bucketing so the **All** range groups activity by UTC month and ignores invalid activity timestamps before they can skew the chart.
-- Renamed the Usage breakdown view toggles from **Bars** and **Pie** to **Ranking** and **Share** for clearer at-a-glance comparison.
+- Added **Usage** insights that help you understand where tokens go across every provider and model in bigbud — totals, trends, token mix, and plain-language explainers for cached, input, output, and reasoning tokens, all from activity stored locally on this device. ![Usage breakdown view with Ranking and Share toggles](https://assets.bigbud.app/content/Screenshot%202026-07-08%20at%2022.46.04.png)
+
+- Compare providers and models with **Ranking** and **Share** breakdown views, plus matching icons on overview cards so the dashboard reads like the rest of the app.
+- Chart tooltips and month labels follow your locale, and the **All** range groups activity by UTC month while filtering invalid timestamps before they can skew long-range totals.
 
 ### Sidebar
 

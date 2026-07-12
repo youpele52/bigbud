@@ -18,9 +18,7 @@ import { formatTimestamp } from "../../../utils/timestamp";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
-import { ScrollArea } from "../../ui/scroll-area";
 import { toastManager } from "../../ui/toast";
-import { sidebarSectionLabelTextClassName } from "../../sidebar/SidebarSectionLabel";
 import ChatMarkdown from "../common/ChatMarkdown";
 
 function stepStatusIcon(status: string): ReactNode {
@@ -126,9 +124,9 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
       <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-3">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
-            <span className={sidebarSectionLabelTextClassName}>{label}</span>
+            <span className="text-sm font-medium text-foreground/92">{label}</span>
             {cardTimestamp ? (
-              <span className="truncate text-xs text-muted-foreground/55">
+              <span className="truncate text-sm text-muted-foreground/55">
                 {formatTimestamp(cardTimestamp, timestampFormat)}
               </span>
             ) : null}
@@ -175,15 +173,15 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-4">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 pr-2 [scrollbar-gutter:stable] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/28">
+        <div className="space-y-4 pr-2">
           {activePlan?.explanation ? (
-            <p className="text-sm leading-6 text-muted-foreground/78">{activePlan.explanation}</p>
+            <p className="text-[13px] leading-5 text-foreground/80">{activePlan.explanation}</p>
           ) : null}
 
           {activePlan && activePlan.steps.length > 0 ? (
             <div className="space-y-1.5">
-              <p className={cn(sidebarSectionLabelTextClassName, "mb-2")}>Steps</p>
+              <p className="mb-2 text-sm font-medium text-foreground/90">Steps</p>
               {activePlan.steps.map((step) => (
                 <div
                   key={`${step.status}:${step.step}`}
@@ -201,7 +199,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
                   {stepStatusIcon(step.status)}
                   <p
                     className={cn(
-                      "text-sm leading-snug",
+                      "text-[13px] leading-5",
                       step.status === "completed"
                         ? "text-muted-foreground/52 line-through decoration-muted-foreground/20"
                         : step.status === "inProgress"
@@ -230,7 +228,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
                 )}
                 <span
                   className={cn(
-                    sidebarSectionLabelTextClassName,
+                    "text-sm font-medium text-foreground/90",
                     "truncate group-hover:text-muted-foreground/60",
                   )}
                 >
@@ -258,7 +256,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
             </div>
           ) : null}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 });

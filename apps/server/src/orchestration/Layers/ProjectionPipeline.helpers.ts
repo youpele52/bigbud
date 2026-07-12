@@ -15,6 +15,7 @@ import { type ProjectionThreadMessage } from "../../persistence/Services/Project
 import { type ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { type ProjectionTurn } from "../../persistence/Services/ProjectionTurns.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { resolveProjectMemoryDirectoryPath } from "../../learning/Layers/MemoryStore.ts";
 import {
   attachmentRelativePath,
   parseAttachmentIdFromRelativePath,
@@ -40,6 +41,7 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
 
 export interface AttachmentSideEffects {
   readonly deletedThreadIds: Set<string>;
+  readonly deletedProjectMemoryIds: Set<string>;
   readonly prunedThreadRelativePaths: Map<string, Set<string>>;
 }
 
@@ -321,6 +323,22 @@ export const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(fu
     sideEffects.prunedThreadRelativePaths.entries(),
     ([threadId, keptThreadRelativePaths]) =>
       pruneThreadAttachments(threadId, keptThreadRelativePaths),
+    { concurrency: 1 },
+  );
+
+  yield* Effect.forEach(
+    sideEffects.deletedProjectMemoryIds,
+    (projectId) => {
+      const projectMemoryDirectory = resolveProjectMemoryDirectoryPath({
+        path,
+        stateDir: serverConfig.stateDir,
+        projectId,
+      });
+      if (!projectMemoryDirectory) {
+        return Effect.logWarning("skipping memory cleanup for unsafe project id", { projectId });
+      }
+      return fileSystem.remove(projectMemoryDirectory, { recursive: true, force: true });
+    },
     { concurrency: 1 },
   );
 });

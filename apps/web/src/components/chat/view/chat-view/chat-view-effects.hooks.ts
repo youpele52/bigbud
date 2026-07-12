@@ -1,30 +1,34 @@
 import { useEffect, useRef } from "react";
 
-import { type PersistedComposerImageAttachment } from "~/stores/composer";
-import { useComposerDraftStore } from "~/stores/composer";
-
-import { readFileAsDataUrl, revokeUserMessagePreviewUrls } from "../ChatView.logic";
+import { revokeUserMessagePreviewUrls } from "../ChatView.logic";
 
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
+import { usePersistComposerImageAttachments } from "./chat-view-effects.attachments.hooks";
 
 interface ChatViewEffectsInput {
   base: ChatViewBaseState;
   composer: ChatViewComposerDerivedState;
+  embedded?: boolean | undefined;
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
 }
 
-export function useChatViewEffects({ base, composer, thread, runtime }: ChatViewEffectsInput) {
+export function useChatViewEffects({
+  base,
+  composer,
+  embedded = false,
+  thread,
+  runtime,
+}: ChatViewEffectsInput) {
   const {
     activeProjectCwd,
     activeThread,
     activeThreadId,
     activeThreadWorktreePath,
     clampCollapsedComposerCursor,
-    clearComposerDraftPersistedAttachments,
     collapseExpandedComposerCursor,
     composerImages,
     composerImagesRef,
@@ -55,7 +59,6 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     setTerminalLaunchContext,
     storeClearTerminalLaunchContext,
     storeServerTerminalLaunchContext,
-    syncComposerDraftPersistedAttachments,
     terminalOpenByThreadRef,
     terminalState,
     threadId,
@@ -75,6 +78,8 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     requestId: string | null;
     questionId: string | null;
   } | null>(null);
+
+  usePersistComposerImageAttachments(base);
 
   useEffect(() => {
     const nextCustomAnswer = activePendingProgress?.customAnswer;
@@ -155,6 +160,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
   }, [activeThread?.id, setIsRevertingCheckpoint]);
 
   useEffect(() => {
+    if (embedded) return;
     if (!activeThread?.id || terminalState.terminalOpen) return;
     const frame = window.requestAnimationFrame(() => {
       focusComposer();
@@ -162,7 +168,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, terminalState.terminalOpen]);
+  }, [activeThread?.id, embedded, focusComposer, terminalState.terminalOpen]);
 
   useEffect(() => {
     composerImagesRef.current = composerImages;
@@ -215,63 +221,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      if (composerImages.length === 0) {
-        clearComposerDraftPersistedAttachments(threadId);
-        return;
-      }
-      const getPersistedAttachmentsForThread = () =>
-        useComposerDraftStore.getState().draftsByThreadId[threadId]?.persistedAttachments ?? [];
-
-      try {
-        const currentPersistedAttachments = getPersistedAttachmentsForThread();
-        const existingPersistedById = new Map(
-          currentPersistedAttachments.map((attachment) => [attachment.id, attachment]),
-        );
-        const stagedAttachmentById = new Map<string, PersistedComposerImageAttachment>();
-        await Promise.all(
-          composerImages.map(async (image) => {
-            try {
-              const dataUrl = await readFileAsDataUrl(image.file);
-              stagedAttachmentById.set(image.id, {
-                id: image.id,
-                name: image.name,
-                mimeType: image.mimeType,
-                sizeBytes: image.sizeBytes,
-                dataUrl,
-              });
-            } catch {
-              const existingPersisted = existingPersistedById.get(image.id);
-              if (existingPersisted) {
-                stagedAttachmentById.set(image.id, existingPersisted);
-              }
-            }
-          }),
-        );
-        if (cancelled) return;
-        syncComposerDraftPersistedAttachments(threadId, Array.from(stagedAttachmentById.values()));
-      } catch {
-        const currentImageIds = new Set(composerImages.map((image) => image.id));
-        const fallbackPersistedAttachments = getPersistedAttachmentsForThread();
-        if (cancelled) return;
-        syncComposerDraftPersistedAttachments(
-          threadId,
-          fallbackPersistedAttachments.filter((attachment) => currentImageIds.has(attachment.id)),
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    clearComposerDraftPersistedAttachments,
-    composerImages,
-    syncComposerDraftPersistedAttachments,
-    threadId,
-  ]);
-
-  useEffect(() => {
+    if (embedded) return;
     if (!activeThreadId) {
       setTerminalLaunchContext(null);
       storeClearTerminalLaunchContext(threadId);
@@ -281,9 +231,16 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
       if (!current) return current;
       return current.threadId === activeThreadId ? current : null;
     });
-  }, [activeThreadId, setTerminalLaunchContext, storeClearTerminalLaunchContext, threadId]);
+  }, [
+    activeThreadId,
+    embedded,
+    setTerminalLaunchContext,
+    storeClearTerminalLaunchContext,
+    threadId,
+  ]);
 
   useEffect(() => {
+    if (embedded) return;
     if (!activeThreadId || !activeProjectCwd) return;
     setTerminalLaunchContext((current) => {
       if (!current || current.threadId !== activeThreadId) {
@@ -299,12 +256,14 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     activeProjectCwd,
     activeThreadId,
     activeThreadWorktreePath,
+    embedded,
     gitCwd,
     setTerminalLaunchContext,
     storeClearTerminalLaunchContext,
   ]);
 
   useEffect(() => {
+    if (embedded) return;
     if (!activeThreadId || !activeProjectCwd || !storeServerTerminalLaunchContext) {
       return;
     }
@@ -318,12 +277,14 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     activeProjectCwd,
     activeThreadId,
     activeThreadWorktreePath,
+    embedded,
     gitCwd,
     storeClearTerminalLaunchContext,
     storeServerTerminalLaunchContext,
   ]);
 
   useEffect(() => {
+    if (embedded) return;
     if (terminalState.terminalOpen) return;
     if (activeThreadId) {
       storeClearTerminalLaunchContext(activeThreadId);
@@ -331,6 +292,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     setTerminalLaunchContext((current) => (current?.threadId === activeThreadId ? null : current));
   }, [
     activeThreadId,
+    embedded,
     setTerminalLaunchContext,
     storeClearTerminalLaunchContext,
     terminalState.terminalOpen,
@@ -347,6 +309,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
   }, [thread.isWorking, setNowTick]);
 
   useEffect(() => {
+    if (embedded) return;
     if (!activeThreadId) return;
     const previous = terminalOpenByThreadRef.current[activeThreadId] ?? false;
     const current = Boolean(terminalState.terminalOpen);
@@ -378,6 +341,7 @@ export function useChatViewEffects({ base, composer, thread, runtime }: ChatView
     terminalOpenByThreadRef.current[activeThreadId] = current;
   }, [
     activeThreadId,
+    embedded,
     focusComposer,
     setTerminalFocusRequestId,
     terminalOpenByThreadRef,

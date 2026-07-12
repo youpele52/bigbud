@@ -289,16 +289,16 @@ export function updateThreadState(
   threadId: ThreadId,
   updater: (thread: Thread) => Thread,
 ): AppState {
-  let updatedThread: Thread | null = null;
   const threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
-    if (nextThread !== thread) {
-      updatedThread = nextThread;
-    }
     return nextThread;
   });
-  if (threads === state.threads || updatedThread === null) {
+  const updatedThread = threads.find((thread) => thread.id === threadId);
+  if (threads === state.threads || !updatedThread) {
     return state;
+  }
+  if (updatedThread.purpose === "side-chat") {
+    return { ...state, threads };
   }
 
   const nextSummary = buildSidebarThreadSummary(updatedThread);
@@ -386,8 +386,9 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     .filter((project) => project.deletedAt === null)
     .map(mapProject);
   const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
-  const sidebarThreadsById = buildSidebarThreadsById(threads);
-  const threadIdsByProjectId = buildThreadIdsByProjectId(threads);
+  const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
+  const sidebarThreadsById = buildSidebarThreadsById(visibleThreads);
+  const threadIdsByProjectId = buildThreadIdsByProjectId(visibleThreads);
   return {
     ...state,
     projects,

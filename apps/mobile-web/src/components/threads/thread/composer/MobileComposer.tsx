@@ -87,6 +87,7 @@ export function MobileComposer({
 }: MobileComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isApprovalMode = pendingApproval !== null;
+  const isLearningSkillProposal = pendingApproval?.requestId.startsWith("learning-skill:") ?? false;
   const isUserInputMode = pendingUserInput !== null;
   const userInputProgress =
     pendingUserInput && isUserInputMode
@@ -166,7 +167,11 @@ export function MobileComposer({
               <p className="text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
                 Pending approval
               </p>
-              <p className="mt-1 text-sm text-foreground">{pendingApproval.requestKind}</p>
+              <p className="mt-1 text-sm text-foreground">
+                {isLearningSkillProposal
+                  ? "Skill improvement suggested"
+                  : pendingApproval.requestKind}
+              </p>
             </div>
           ) : null}
 
@@ -227,14 +232,14 @@ export function MobileComposer({
                   size="sm"
                   variant="outline"
                 >
-                  Deny
+                  {isLearningSkillProposal ? "Reject patch" : "Deny"}
                 </Button>
                 <Button
                   disabled={disabled}
                   onClick={() => onRespondToApproval(pendingApproval.requestId, "accept")}
                   size="sm"
                 >
-                  Approve
+                  {isLearningSkillProposal ? "Approve patch" : "Approve"}
                 </Button>
               </div>
             ) : (

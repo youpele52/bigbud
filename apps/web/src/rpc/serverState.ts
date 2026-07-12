@@ -324,6 +324,15 @@ export function useServerObservability(): ServerConfig["observability"] | null {
 
 export function useDefaultChatCwd(): string | null {
   const welcome = useAtomValue(welcomeAtom);
+  const serverConfig = useAtomValue(serverConfigAtom);
+  const configuredCwd = serverConfig?.settings.defaultChatCwd;
+
+  // The lifecycle welcome payload is resolved by the server, including `~` expansion.
+  // Settings updates from the folder picker are absolute and should take effect immediately.
+  if (configuredCwd && !configuredCwd.startsWith("~")) {
+    return configuredCwd;
+  }
+
   return welcome?.defaultChatCwd ?? null;
 }
 

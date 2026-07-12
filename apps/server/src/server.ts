@@ -82,6 +82,10 @@ import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNot
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
 import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/ProjectionThreadWatches";
+import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
+import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
+import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
+import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 
 const PtyAdapterLive = Layer.unwrap(
@@ -133,7 +137,7 @@ const PlatformServicesLive = Layer.unwrap(
 );
 
 const ReactorLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(OrchestrationReactorLive),
+  Layer.provideMerge(OrchestrationReactorLive.pipe(Layer.provide(LearningReactorLive))),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
@@ -247,6 +251,9 @@ const ProjectionPersistenceLayerLive = Layer.mergeAll(
   NotesPersistenceLayerLive,
   ThreadProjectionPersistenceLayerLive,
   ProjectionThreadWatchRepositoryLive,
+  LearningJobRepositoryLive,
+  SkillChangeProposalRepositoryLive,
+  MemoryStoreLive,
 );
 
 const GitLayerLive = Layer.empty.pipe(

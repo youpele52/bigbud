@@ -26,6 +26,8 @@ interface ComposerFooterLeadingProps {
   runtimeMode: RuntimeMode;
   providerTraitsMenuContent: ReactNode;
   onOpenOrchestra: () => void;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   onProviderModelSelect: (provider: ProviderKind, model: string, subProviderID?: string) => void;
   onProviderUnlock: () => void;
   onToggleInteractionMode: () => void;
@@ -49,6 +51,8 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
       runtimeMode,
       providerTraitsMenuContent,
       onOpenOrchestra,
+      onOpenSideChat,
+      sideChatDisabled,
       onProviderModelSelect,
       onProviderUnlock,
       onToggleInteractionMode,
@@ -86,6 +90,8 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
           runtimeMode={runtimeMode}
           traitsMenuContent={providerTraitsMenuContent}
           onOpenOrchestra={onOpenOrchestra}
+          onOpenSideChat={onOpenSideChat}
+          sideChatDisabled={sideChatDisabled}
           onToggleInteractionMode={onToggleInteractionMode}
           onTogglePlanCard={onTogglePlanCard}
           onRuntimeModeChange={onRuntimeModeChange}

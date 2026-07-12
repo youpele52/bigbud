@@ -26,6 +26,7 @@ function makeThread(): OrchestrationThread {
     id: threadId,
     projectId,
     title: "Thread",
+    purpose: "standard",
     elevatorSummary: "Thread",
     elevatorSummaryMessageCount: 0,
     modelSelection: { provider: "codex", model: "gpt-5.4" },

@@ -151,6 +151,7 @@ function mapThreadRow(
     id: row.threadId,
     projectId: row.projectId,
     title: row.title,
+    purpose: row.purpose,
     elevatorSummary: row.elevatorSummary,
     elevatorSummaryMessageCount: row.elevatorSummaryMessageCount,
     providerRuntimeExecutionTargetId:

@@ -1,4 +1,5 @@
 import type { Thread } from "../models/types";
+import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
 import {
   derivePendingApprovals,
   derivePendingUserInputs,
@@ -64,6 +65,9 @@ export function collectCompletedThreadCandidates(
   const candidates: CompletedThreadCandidate[] = [];
 
   for (const next of nextThreads) {
+    if (!isVisibleThread(next)) {
+      continue;
+    }
     const nextTurn = next.latestTurn;
     if (!nextTurn?.completedAt) {
       continue;

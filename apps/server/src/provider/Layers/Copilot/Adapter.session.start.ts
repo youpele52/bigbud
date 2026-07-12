@@ -205,6 +205,12 @@ export const makeStartSession =
               })
               .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
           ),
+        browser: (action) =>
+          Effect.runPromise(
+            dispatcher
+              .browser({ threadId: input.threadId, action })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

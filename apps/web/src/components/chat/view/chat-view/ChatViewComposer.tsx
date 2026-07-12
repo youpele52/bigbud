@@ -32,22 +32,26 @@ import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hook
 interface ChatViewComposerProps {
   base: ChatViewBaseState;
   className?: string;
+  compact?: boolean | undefined;
   composer: ChatViewComposerDerivedState;
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
   interactions: ChatViewInteractionsState;
   onOpenOrchestra: () => void;
+  onOpenSideChat?: (() => void) | undefined;
   onOpenReplySource: (messageId: MessageId) => void;
 }
 
 export function ChatViewComposer({
   base,
   className,
+  compact = false,
   composer,
   thread,
   runtime,
   interactions,
   onOpenOrchestra,
+  onOpenSideChat,
   onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
@@ -116,12 +120,16 @@ export function ChatViewComposer({
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
-          <ChatViewComposerHeader thread={thread} interactions={interactions} />
+          {!compact && <ChatViewComposerHeader thread={thread} interactions={interactions} />}
 
           <div
             className={cn(
               "relative px-3 pb-2 sm:px-4",
-              thread.hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
+              compact
+                ? "pt-2 pb-1.5"
+                : thread.hasComposerHeader
+                  ? "pt-2.5 sm:pt-3"
+                  : "pt-3.5 sm:pt-4",
             )}
           >
             <ChatViewComposerMenuLayer
@@ -208,6 +216,7 @@ export function ChatViewComposer({
                           : "Ask anything, @tag files/folders, or use / to show available commands"
               }
               disabled={base.isConnecting || thread.isComposerApprovalState}
+              {...(compact ? { className: "min-h-9 max-h-20 leading-5" } : {})}
             />
           </div>
 
@@ -230,7 +239,9 @@ export function ChatViewComposer({
                 runtime.scrollBehavior.isComposerFooterCompact ? "true" : "false"
               }
               className={cn(
-                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
+                compact
+                  ? "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2"
+                  : "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
                 runtime.scrollBehavior.isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
               )}
             >
@@ -250,6 +261,8 @@ export function ChatViewComposer({
                 runtimeMode={base.runtimeMode}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
                 onOpenOrchestra={onOpenOrchestra}
+                onOpenSideChat={onOpenSideChat}
+                sideChatDisabled={!base.isServerThread}
                 onProviderModelSelect={interactions.onProviderModelSelect}
                 onProviderUnlock={() => base.setProviderUnlocked(true)}
                 onToggleInteractionMode={runtime.toggleInteractionMode}

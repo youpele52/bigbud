@@ -60,6 +60,11 @@ export interface ComposerFileAttachment extends ChatFileAttachment {
   watchForCompletion?: boolean;
 }
 
+export interface RemovedComposerThreadReferenceFiles {
+  draftThreadId: ThreadId;
+  files: ComposerFileAttachment[];
+}
+
 export const PersistedComposerFileAttachment = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -281,6 +286,9 @@ export interface ComposerDraftStoreState {
   addFile: (threadId: ThreadId, file: ComposerFileAttachment) => void;
   addFiles: (threadId: ThreadId, files: ComposerFileAttachment[]) => void;
   removeFile: (threadId: ThreadId, fileId: string) => void;
+  removeThreadReferenceFiles: (
+    referencedThreadId: ThreadId,
+  ) => RemovedComposerThreadReferenceFiles[];
   setFileWatchForCompletion: (
     threadId: ThreadId,
     fileId: string,

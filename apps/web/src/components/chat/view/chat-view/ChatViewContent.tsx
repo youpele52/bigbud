@@ -1,6 +1,6 @@
-import { type MessageId } from "@bigbud/contracts";
+import { isBuiltInChatsProject } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
@@ -8,41 +8,31 @@ import { ChatHeader } from "../../common/ChatHeader";
 import { ExpandedImageOverlay } from "../../common/ExpandedImageOverlay";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ScrollToBottomPill } from "../../common/ScrollToBottomPill";
-import { deriveUserTurnAnchorsFromThreadMessages } from "../../scroller/chatScroll.timelineRows";
 import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { WorkingIndicator } from "../../common/WorkingIndicator";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
 import { PullRequestThreadDialog } from "../../plan/PullRequestThreadDialog";
-import { OrchestraDialog } from "../../orchestra/OrchestraDialog";
+import { openSideChat } from "../../side-chat/sideChat.actions";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
 import { PersistentThreadTerminalDrawer } from "../ChatView.terminalDrawer";
 import BranchToolbar from "../../../git/BranchToolbar";
-import { useSearchStore } from "../../../../stores/ui";
 import { useRightPanelTabsStore } from "../../../../stores/rightPanel/rightPanelTabs.store";
 import { useThreadActions } from "../../../../hooks/useThreadActions";
-import { deriveDisplayedUserMessageState } from "../../../../lib/terminalContext";
 import { resolveWorkspaceExecutionTargetId } from "../../../../lib/providerExecutionTargets";
+import { useDefaultChatCwd } from "../../../../rpc/serverState";
 
-import { ChatViewComposer } from "./ChatViewComposer";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import { type ChatViewInteractionsState } from "./chat-view-interactions.hooks";
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { type ChatViewTimelineState } from "./chat-view-timeline.hooks";
-
-const REPLY_PREVIEW_MAX_CHARS = 240;
-
-function truncateReplyPreview(text: string): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= REPLY_PREVIEW_MAX_CHARS) {
-    return normalized;
-  }
-  return `${normalized.slice(0, REPLY_PREVIEW_MAX_CHARS - 3).trimEnd()}...`;
-}
+import { useChatViewContentHandlers } from "./ChatViewContent.handlers";
+import { ChatViewOrchestraDialog } from "./ChatViewOrchestraDialog";
+import { ChatViewMainComposer } from "./ChatViewMainComposer";
 
 interface ChatViewContentProps {
   base: ChatViewBaseState;
@@ -62,11 +52,16 @@ export function ChatViewContent({
   interactions,
 }: ChatViewContentProps) {
   const { branchThread } = useThreadActions();
-  const searchFocusRequest = useSearchStore((state) => state.focusRequest);
-  const clearSearchFocusRequest = useSearchStore((state) => state.clearFocusRequest);
   const rightPanelOpen = useRightPanelTabsStore((state) => state.rightPanelOpen);
-  const [focusMessageId, setFocusMessageId] = useState<MessageId | null>(null);
   const [orchestraOpen, setOrchestraOpen] = useState(false);
+  const {
+    focusMessageId,
+    handleClosePlanCard,
+    handleJumpToTurn,
+    handleOpenReplySource,
+    handleReplyToMessage,
+    userTurnAnchors,
+  } = useChatViewContentHandlers({ base, runtime, thread });
 
   const handoffAvailable = base.isServerThread;
   const compactAvailable = composer.supportsCompact;
@@ -93,10 +88,16 @@ export function ChatViewContent({
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
     : undefined;
+  const defaultChatCwd = useDefaultChatCwd();
+  const isChatThread = Boolean(base.activeProject && isBuiltInChatsProject(base.activeProject.id));
 
   // Prefer the active worktree path so proposed-plan saves land in the right
   // directory when a thread is running in a worktree rather than project root.
-  const workspaceRoot = base.activeThread?.worktreePath ?? base.activeProject?.cwd ?? undefined;
+  const workspaceRoot =
+    base.activeThread?.worktreePath ??
+    base.activeProject?.cwd ??
+    (isChatThread ? defaultChatCwd : undefined) ??
+    undefined;
 
   // Auto-open the floating plan card when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
@@ -118,84 +119,17 @@ export function ChatViewContent({
     setPlanCardOpen,
   ]);
 
-  const handleReplyToMessage = useCallback(
-    (messageId: MessageId) => {
-      const message = base.activeThread?.messages.find((entry) => entry.id === messageId);
-      if (!message) {
-        return;
-      }
-      base.setComposerReplyTarget(base.activeThread!.id, {
-        messageId: message.id,
-        role: message.role,
-        createdAt: message.createdAt,
-        excerpt: truncateReplyPreview(
-          message.role === "user"
-            ? deriveDisplayedUserMessageState(message.text).copyText || "(empty message)"
-            : message.text || "(empty message)",
-        ),
-      });
-      runtime.scheduleComposerFocus();
-    },
-    [base, runtime],
-  );
-
-  const handleOpenReplySource = useCallback(
-    (messageId: MessageId) => {
-      runtime.scrollBehavior.scrollToMessage(messageId, {
-        align: "center",
-        behavior: "smooth",
-      });
-      setFocusMessageId(null);
-      window.requestAnimationFrame(() => {
-        setFocusMessageId(messageId);
-      });
-    },
-    [runtime.scrollBehavior],
-  );
-
-  const userTurnAnchors = useMemo(
-    () => deriveUserTurnAnchorsFromThreadMessages(base.activeThread?.messages ?? []),
-    [base.activeThread?.messages],
-  );
-
-  const handleJumpToTurn = useCallback(
-    (messageId: MessageId) => {
-      const didScroll = runtime.scrollBehavior.scrollToMessage(messageId, {
-        align: "start",
-        behavior: "smooth",
-      });
-      if (!didScroll) {
-        handleOpenReplySource(messageId);
-      }
-    },
-    [handleOpenReplySource, runtime.scrollBehavior],
-  );
-
-  useEffect(() => {
-    if (!searchFocusRequest) {
-      return;
-    }
-    if (searchFocusRequest.threadId !== base.activeThread?.id) {
-      return;
-    }
-
-    handleOpenReplySource(searchFocusRequest.messageId);
-    clearSearchFocusRequest(searchFocusRequest.requestId);
-  }, [base.activeThread?.id, clearSearchFocusRequest, handleOpenReplySource, searchFocusRequest]);
-
-  const handleClosePlanCard = useCallback(() => {
-    base.setPlanCardOpen(false);
-    base.planCardDismissedForTurnRef.current =
-      thread.activePlan?.turnId ?? thread.cardProposedPlan?.turnId ?? "__dismissed__";
-  }, [base, thread.activePlan?.turnId, thread.cardProposedPlan?.turnId]);
-
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
+    <div
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background"
+      data-chat-view-root
+    >
       <ContentPanelHeader>
         <ChatHeader
           activeThreadId={base.activeThread!.id}
           activeThreadTitle={base.activeThread!.title}
           activeProjectName={base.activeProject?.name}
+          isProjectThread={Boolean(base.activeProject) && !isChatThread}
           openInCwd={workspaceRoot ?? null}
           activeProjectScripts={base.activeProject?.scripts}
           preferredScriptId={interactions.preferredScriptId}
@@ -208,6 +142,10 @@ export function ChatViewContent({
           planCardLabel={thread.planCardLabel}
           planCardOpen={base.planCardOpen}
           onOpenOrchestra={() => setOrchestraOpen(true)}
+          onOpenSideChat={() => {
+            void openSideChat(base.activeThread!);
+          }}
+          sideChatDisabled={!base.isServerThread}
           onRunProjectScript={(script) => {
             void runtime.terminalActions.runProjectScript(script);
           }}
@@ -382,17 +320,15 @@ export function ChatViewContent({
             ) : null}
           </div>
 
-          <div className="px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">
-            <ChatViewComposer
-              base={base}
-              composer={composer}
-              thread={thread}
-              runtime={runtime}
-              interactions={interactions}
-              onOpenOrchestra={() => setOrchestraOpen(true)}
-              onOpenReplySource={handleOpenReplySource}
-            />
-          </div>
+          <ChatViewMainComposer
+            base={base}
+            composer={composer}
+            thread={thread}
+            runtime={runtime}
+            interactions={interactions}
+            onOpenOrchestra={() => setOrchestraOpen(true)}
+            onOpenReplySource={handleOpenReplySource}
+          />
 
           <BranchToolbar
             threadId={base.activeThread!.id}
@@ -452,18 +388,10 @@ export function ChatViewContent({
         />
       ) : null}
 
-      <OrchestraDialog
-        activeProject={base.activeProject}
-        activeThread={base.activeThread}
-        defaultModelSelection={composer.selectedModelSelection}
-        discoveredAgents={composer.discoveredAgents}
-        discoveredSkills={composer.discoveredSkills}
-        modelOptionsByProvider={composer.modelOptionsByProvider}
+      <ChatViewOrchestraDialog
+        base={base}
+        composer={composer}
         open={orchestraOpen}
-        providers={composer.providerStatuses}
-        prompt={base.prompt}
-        resolvedTheme={base.resolvedTheme}
-        runtimeMode={base.runtimeMode}
         onOpenChange={setOrchestraOpen}
       />
     </div>

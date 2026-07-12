@@ -114,6 +114,7 @@ describe("CopilotAdapter remote workspace sessions", () => {
             summary: "Captured the current page at about:blank.",
             page: { url: "about:blank", title: "" },
           }),
+        browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
       });
 
       const adapter = yield* CopilotAdapter;
@@ -226,6 +227,7 @@ describe("CopilotAdapter remote workspace sessions", () => {
               summary: "Captured the current page at about:blank.",
               page: { url: "about:blank", title: "" },
             }),
+          browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
 
         const adapter = yield* CopilotAdapter;

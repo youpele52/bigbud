@@ -125,9 +125,58 @@ function capitalizePhrase(value: string): string {
   return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
 }
 
+function browserToolHeading(toolTitle: string, action: string | undefined): string | null {
+  if (
+    toolTitle !== "browser" &&
+    !/^bigbud_orchestration(?:_[\w-]+)?_browser$/.test(toolTitle) &&
+    toolTitle !== "mcp__bigbud_orchestration__browser"
+  ) {
+    return null;
+  }
+
+  switch (action) {
+    case "capture":
+      return "Captured browser";
+    case "navigate":
+      return "Navigating browser";
+    case "click":
+      return "Clicking browser";
+    case "drag":
+      return "Dragging in browser";
+    case "scroll":
+      return "Scrolling browser";
+    case "type":
+      return "Typing in browser";
+    case "key":
+      return "Pressing key in browser";
+    case "wait":
+      return "Waiting for browser";
+    case "get_page_info":
+      return "Reading page information";
+    case "get_page_text":
+      return "Reading page text";
+    case "go_back":
+      return "Going back in browser";
+    case "go_forward":
+      return "Going forward in browser";
+    case "reload":
+      return "Reloading browser";
+    case "release_tab":
+      return "Releasing browser tab";
+    case "close_tab":
+      return "Closing browser tab";
+    default:
+      return "Browser";
+  }
+}
+
 export function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   if (!workEntry.toolTitle) {
     return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
+  }
+  const browserHeading = browserToolHeading(workEntry.toolTitle, workEntry.toolAction);
+  if (browserHeading) {
+    return browserHeading;
   }
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }

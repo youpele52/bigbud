@@ -8,6 +8,10 @@ import {
 } from "../stores/composer";
 import { useStore } from "../stores/main";
 import { collectActiveTerminalThreadIds } from "../lib/terminalStateCleanup";
+import {
+  applySideChatLifecycleEvents,
+  reconcileSideChatSnapshot,
+} from "../components/chat/side-chat/sideChat.actions";
 import { providerQueryKeys } from "../lib/providerReactQuery";
 import { projectQueryKeys } from "../lib/projectReactQuery";
 import type { readNativeApi } from "../rpc/nativeApi";
@@ -54,6 +58,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
 
   const reconcileSnapshotDerivedState = () => {
     const threads = useStore.getState().threads;
+    reconcileSideChatSnapshot(threads);
     const projects = useStore.getState().projects;
     input.syncProjects(projects.map((project) => ({ id: project.id, cwd: project.cwd })));
     input.syncThreads(
@@ -113,6 +118,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
 
     input.applyOrchestrationEvents(uiEvents);
+    applySideChatLifecycleEvents(nextEvents);
     input.reconcileThinkingActivities(uiEvents);
     if (needsProjectUiSync) {
       const projects = useStore.getState().projects;

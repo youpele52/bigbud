@@ -29,6 +29,30 @@ function makeThread(overrides?: Partial<Thread>): Thread {
 }
 
 describe("collectCompletedThreadCandidates", () => {
+  it("ignores Sidecar completions", () => {
+    const previous = makeThread({ purpose: "side-chat" });
+    const next = makeThread({
+      purpose: "side-chat",
+      latestTurn: {
+        turnId: "turn-sidecar" as never,
+        state: "completed",
+        requestedAt: "2026-06-17T18:00:00.000Z",
+        startedAt: "2026-06-17T18:00:00.000Z",
+        completedAt: "2026-06-17T18:00:05.000Z",
+        assistantMessageId: null,
+      },
+      session: {
+        provider: "codex",
+        status: "ready",
+        createdAt: "2026-06-17T18:00:00.000Z",
+        updatedAt: "2026-06-17T18:00:05.000Z",
+        orchestrationStatus: "ready",
+      },
+    });
+
+    expect(collectCompletedThreadCandidates([previous], [next])).toEqual([]);
+  });
+
   it("does not emit when the assistant message arrives before the session has actually settled", () => {
     const previous = makeThread({
       latestTurn: {

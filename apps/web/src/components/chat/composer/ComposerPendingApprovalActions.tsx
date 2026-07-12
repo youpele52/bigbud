@@ -20,6 +20,7 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
   sessionApprovalLabel,
   onRespondToApproval,
 }: ComposerPendingApprovalActionsProps) {
+  const isLearningSkillProposal = requestId.startsWith("learning-skill:");
   return (
     <>
       <Button
@@ -29,16 +30,18 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
         onClick={() => void onRespondToApproval(requestId, "decline")}
         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
       >
-        Decline
+        {isLearningSkillProposal ? "Reject patch" : "Decline"}
       </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={isResponding}
-        onClick={() => void onRespondToApproval(requestId, "cancel")}
-      >
-        Cancel turn
-      </Button>
+      {!isLearningSkillProposal ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={isResponding}
+          onClick={() => void onRespondToApproval(requestId, "cancel")}
+        >
+          Cancel turn
+        </Button>
+      ) : null}
       {sessionApprovalAvailable !== false ? (
         <Button
           size="sm"
@@ -55,7 +58,7 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "accept")}
       >
-        Approve once
+        {isLearningSkillProposal ? "Approve patch" : "Approve once"}
       </Button>
     </>
   );

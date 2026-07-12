@@ -6,6 +6,7 @@ import { toastManager } from "../components/ui/toast";
 import { useSettings } from "../hooks/useSettings";
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
+import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
@@ -113,6 +114,26 @@ export function TaskCompletionNotifications() {
     // from pre-existing completed threads.
     if (previousThreads.length === 0 && threads.length > 0) {
       return;
+    }
+
+    const previousActivityIds = new Set(
+      previousThreads.flatMap((thread) => thread.activities.map((activity) => activity.id)),
+    );
+    for (const thread of threads) {
+      if (!isVisibleThread(thread)) {
+        continue;
+      }
+      for (const activity of thread.activities) {
+        if (activity.kind !== "learning.memory.updated" || previousActivityIds.has(activity.id)) {
+          continue;
+        }
+        toastManager.add({
+          type: "success",
+          title: "Memory updated",
+          description: "bigbud saved new persistent memory from this conversation.",
+          data: { threadId: thread.id, hideOnActiveThread: false },
+        });
+      }
     }
 
     const candidates = collectCompletedThreadCandidates(previousThreads, threads);

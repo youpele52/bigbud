@@ -1,4 +1,5 @@
 import { derivePendingApprovals, type PendingApproval } from "../logic/session";
+import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
 import type { Project, Thread } from "../models/types";
 
 export interface PendingApprovalCoordinatorCandidate {
@@ -19,6 +20,9 @@ export function collectGlobalPendingApprovalCandidate(
   let pendingCount = 0;
 
   for (const thread of threads) {
+    if (!isVisibleThread(thread)) {
+      continue;
+    }
     const pendingApprovals = derivePendingApprovals(thread.activities);
     pendingCount += pendingApprovals.length;
 

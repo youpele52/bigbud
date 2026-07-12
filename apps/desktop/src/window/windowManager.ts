@@ -36,6 +36,16 @@ function getWindowMaterial(window: BrowserWindow): DesktopWindowMaterial {
   return windowMaterials.get(window) ?? DEFAULT_WINDOW_MATERIAL;
 }
 
+function getDevelopmentWindowUrl(devServerUrl: string): string {
+  if (process.env.BIGBUD_DESKTOP_UPDATE_PREVIEW !== "downloading") {
+    return devServerUrl;
+  }
+
+  const url = new URL(devServerUrl);
+  url.searchParams.set("previewUpdate", "downloading");
+  return url.toString();
+}
+
 export function applyWindowMaterial(
   window: BrowserWindow,
   windowMaterial: DesktopWindowMaterial,
@@ -217,7 +227,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   });
 
   if (deps.isDevelopment) {
-    void window.loadURL(process.env.VITE_DEV_SERVER_URL as string);
+    void window.loadURL(getDevelopmentWindowUrl(process.env.VITE_DEV_SERVER_URL as string));
     window.webContents.openDevTools({ mode: "detach" });
   } else {
     void window.loadURL(`${deps.desktopScheme}://app/index.html`);

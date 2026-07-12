@@ -1,9 +1,11 @@
 import { ArchiveIcon, ArchiveX } from "lucide-react";
 import { isBuiltInChatsProject, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useSettings } from "../../hooks/useSettings";
 import { useStore } from "../../stores/main";
 import { useThreadActions } from "../../hooks/useThreadActions";
+import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
@@ -17,7 +19,7 @@ import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
 export function ArchivedThreadsPanel() {
   const appSettings = useSettings();
   const projects = useStore((store) => store.projects);
-  const threads = useStore((store) => store.threads);
+  const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
   const { unarchiveThread, deleteThread } = useThreadActions();
   const [pendingDeleteConfirmation, setPendingDeleteConfirmation] = useState<{
     threadId: ThreadId;

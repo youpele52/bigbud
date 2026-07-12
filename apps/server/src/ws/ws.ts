@@ -12,6 +12,7 @@ import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
+import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -20,6 +21,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     return WsRpcGroup.of({
       ...makeWsRpcAutomationHandlers(context),
       ...makeWsRpcOrchestrationServerHandlers(context),
+      ...makeWsRpcBrowserHandlers(),
       ...makeWsRpcKanbanHandlers(context),
       ...makeWsRpcNotesHandlers(context),
       ...makeWsRpcTeachHandlers(context),

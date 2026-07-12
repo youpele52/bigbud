@@ -9,7 +9,11 @@ import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { TraitsMenuContent } from "../provider/TraitsPicker";
 import { useComposerDraftStore } from "../../../stores/composer";
 
-async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: string }) {
+async function mountMenu(props?: {
+  modelSelection?: ModelSelection;
+  prompt?: string;
+  showSideChat?: boolean;
+}) {
   const threadId = ThreadId.makeUnsafe("thread-compact-menu");
   const provider = props?.modelSelection?.provider ?? "claudeAgent";
   const draftsByThreadId = {} as ReturnType<
@@ -48,6 +52,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   const host = document.createElement("div");
   document.body.append(host);
   const onPromptChange = vi.fn();
+  const onOpenSideChat = vi.fn();
   const providerOptions = props?.modelSelection?.options;
   const models =
     provider === "claudeAgent"
@@ -136,6 +141,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
       }
       onToggleInteractionMode={vi.fn()}
       onOpenOrchestra={vi.fn()}
+      {...(props?.showSideChat ? { onOpenSideChat } : {})}
       onTogglePlanCard={vi.fn()}
       onRuntimeModeChange={vi.fn()}
     />,
@@ -150,6 +156,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
   return {
     [Symbol.asyncDispose]: cleanup,
     cleanup,
+    onOpenSideChat,
   };
 }
 
@@ -187,6 +194,20 @@ describe("CompactComposerControlsMenu", () => {
     await vi.waitFor(() => {
       expect(document.body.textContent ?? "").toContain("Show plan");
     });
+  });
+
+  it("places Sidecar before Orchestrate when it is available", async () => {
+    await using menu = await mountMenu({ showSideChat: true });
+
+    await page.getByLabelText("More composer controls").click();
+
+    await vi.waitFor(() => {
+      const text = document.body.textContent ?? "";
+      expect(text.indexOf("Sidecar")).toBeLessThan(text.indexOf("Orchestrate"));
+    });
+
+    await page.getByText("Sidecar", { exact: true }).click();
+    expect(menu.onOpenSideChat).toHaveBeenCalledOnce();
   });
 
   it("hides fast mode controls for non-Opus Claude models", async () => {

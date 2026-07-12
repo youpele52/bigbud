@@ -14,15 +14,22 @@ import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   COMPUTER_USE_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  BROWSER_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
   renderThreadOrchestrationConfigLiteral,
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
+import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
 
 export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  "  {",
+  '    name: "browser",',
+  `    description: ${JSON.stringify(BROWSER_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(BROWSER_TOOL_PARAMETERS)},`,
+  "  },",
   "  {",
   '    name: "rename_thread",',
   `    description: ${JSON.stringify(RENAME_THREAD_TOOL_DESCRIPTION)},`,

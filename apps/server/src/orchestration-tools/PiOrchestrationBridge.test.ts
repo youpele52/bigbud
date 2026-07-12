@@ -22,6 +22,11 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain('name: "get_thread_status"');
     expect(source).toContain('name: "update_plan"');
     expect(source).toContain('name: "computer_use"');
+    expect(source).toContain('name: "browser"');
+    expect(source).toContain('Type.Literal("get_page_text")');
+    expect(source).not.toContain(
+      'action: Type.String({ description: "In-app browser action name" })',
+    );
     expect(source).toContain("/api/internal/thread-tools");
     expect(source).toContain("token-1");
   });

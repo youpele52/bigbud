@@ -115,12 +115,34 @@
   .md-toc--mobile {
     display: block;
     position: static;
-    max-height: none;
-    overflow: visible;
+    max-height: 33.333dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--fg-dim) 58%, transparent) transparent;
     margin: 2rem 0 0;
     border: 1px solid var(--border);
     border-radius: 1rem;
     background: var(--background);
     padding: 1rem;
+  }
+
+  .md-toc--mobile::-webkit-scrollbar {
+    width: 0.45rem;
+  }
+
+  .md-toc--mobile::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .md-toc--mobile::-webkit-scrollbar-thumb {
+    border: 0.12rem solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: color-mix(in srgb, var(--fg-dim) 58%, transparent);
+  }
+
+  .md-toc--mobile::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--fg) 72%, transparent);
   }
 }

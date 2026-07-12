@@ -84,6 +84,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           thread_id AS "threadId",
           project_id AS "projectId",
           title,
+          purpose,
           COALESCE(elevator_summary, title) AS "elevatorSummary",
           elevator_summary_message_count AS "elevatorSummaryMessageCount",
           provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
@@ -294,6 +295,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           thread_id AS "threadId"
         FROM projection_threads
         WHERE project_id = ${projectId}
+          AND purpose = 'standard'
           AND deleted_at IS NULL
         ORDER BY created_at ASC, thread_id ASC
         LIMIT 1

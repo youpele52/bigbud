@@ -9,11 +9,10 @@ import {
   resolveLiveThreadBranchUpdate,
 } from "./GitActionsControl.logic";
 import { GitActionsControlActions } from "./GitActionsControl.actions";
-import { CommitDialog } from "./GitActionsControl.commitDialog";
-import { DefaultBranchDialog } from "./GitActionsControl.defaultBranchDialog";
+import { GitActionsControlDialogs } from "./GitActionsControl.dialogs";
+import { useChangedFileEditor } from "./GitActionsControl.editor";
 import { useGitActionRunner } from "./GitActionsControl.runner";
 import { toastManager } from "~/components/ui/toast";
-import { openInPreferredEditor } from "../../models/editor";
 import {
   gitDiscardChangesMutationOptions,
   gitFetchMutationOptions,
@@ -22,18 +21,6 @@ import {
   gitPullMutationOptions,
   gitStatusQueryOptions,
 } from "~/lib/gitReactQuery";
-import { resolvePathLinkTarget } from "../../utils/terminal";
-import { Button } from "~/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import { readNativeApi } from "../../rpc/nativeApi";
 import { openGitPanelToView } from "~/stores/git/gitPanel.coordinator";
 import { useComposerDraftStore } from "../../stores/composer";
 import { useStore } from "../../stores/main";
@@ -41,9 +28,12 @@ import { useEffect } from "react";
 
 interface GitActionsControlProps {
   gitCwd: string | null;
+  isProjectThread?: boolean;
   executionTargetId?: string | undefined;
   activeThreadId: ThreadId | null;
   onOpenOrchestra?: (() => void) | undefined;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   planCardLabel?: string | undefined;
   planCardOpen?: boolean | undefined;
   onTogglePlanCard?: (() => void) | undefined;
@@ -60,9 +50,12 @@ interface PendingDefaultBranchAction {
 
 export default function GitActionsControl({
   gitCwd,
+  isProjectThread = true,
   executionTargetId,
   activeThreadId,
   onOpenOrchestra,
+  onOpenSideChat,
+  sideChatDisabled,
   planCardLabel,
   planCardOpen,
   onTogglePlanCard,
@@ -93,6 +86,7 @@ export default function GitActionsControl({
   const isRepo = gitStatus?.isRepo ?? true;
   const hasOriginRemote = gitStatus?.hasOriginRemote ?? false;
   const gitStatusForActions = gitStatus;
+  const showGit = isProjectThread || gitStatus?.isRepo === true;
   const isSelectingDraftWorktreeBase =
     !activeServerThread &&
     activeDraftThread?.envMode === "worktree" &&
@@ -331,29 +325,7 @@ export default function GitActionsControl({
     [initMutation, runPull, runFetch, runGitActionWithToast],
   );
 
-  const openChangedFileInEditor = useCallback(
-    (filePath: string) => {
-      const api = readNativeApi();
-      if (!api || !gitCwd) {
-        toastManager.add({
-          type: "error",
-          title: "Editor opening is unavailable.",
-          data: threadToastData,
-        });
-        return;
-      }
-      const target = resolvePathLinkTarget(filePath, gitCwd);
-      void openInPreferredEditor(api, target).catch((error) => {
-        toastManager.add({
-          type: "error",
-          title: "Unable to open file",
-          description: error instanceof Error ? error.message : "An error occurred.",
-          data: threadToastData,
-        });
-      });
-    },
-    [gitCwd, threadToastData],
-  );
+  const openChangedFileInEditor = useChangedFileEditor({ gitCwd, threadToastData });
 
   const resetCommitDialog = () => {
     setIsCommitDialogOpen(false);
@@ -362,12 +334,11 @@ export default function GitActionsControl({
     setIsEditingFiles(false);
   };
 
-  if (!gitCwd) return null;
-
   return (
     <>
       <GitActionsControlActions
         gitCwd={gitCwd}
+        showGit={showGit}
         queryClient={queryClient}
         isRepo={isRepo}
         isInitPending={initMutation.isPending}
@@ -377,71 +348,52 @@ export default function GitActionsControl({
         gitStatusError={gitStatusError}
         gitActionMenuItems={gitActionMenuItems}
         onOpenOrchestra={onOpenOrchestra}
+        onOpenSideChat={onOpenSideChat}
+        sideChatDisabled={sideChatDisabled}
         planCardLabel={planCardLabel}
         planCardOpen={planCardOpen}
         onMenuItemSelect={handleMenuItemSelect}
         onTogglePlanCard={onTogglePlanCard}
       />
 
-      <CommitDialog
-        open={isCommitDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) resetCommitDialog();
+      <GitActionsControlDialogs
+        commitDialog={{
+          open: isCommitDialogOpen,
+          onOpenChange: (open) => {
+            if (!open) resetCommitDialog();
+          },
+          gitStatus: gitStatusForActions,
+          isDefaultBranch,
+          dialogCommitMessage,
+          onCommitMessageChange: setDialogCommitMessage,
+          excludedFiles,
+          onExcludedFilesChange: setExcludedFiles,
+          isEditingFiles,
+          onEditingFilesChange: setIsEditingFiles,
+          onCancel: resetCommitDialog,
+          onCommitOnNewBranch: runDialogActionOnNewBranch,
+          onCommit: runDialogAction,
+          onOpenChangedFileInEditor: openChangedFileInEditor,
         }}
-        gitStatus={gitStatusForActions}
-        isDefaultBranch={isDefaultBranch}
-        dialogCommitMessage={dialogCommitMessage}
-        onCommitMessageChange={setDialogCommitMessage}
-        excludedFiles={excludedFiles}
-        onExcludedFilesChange={setExcludedFiles}
-        isEditingFiles={isEditingFiles}
-        onEditingFilesChange={setIsEditingFiles}
-        onCancel={resetCommitDialog}
-        onCommitOnNewBranch={runDialogActionOnNewBranch}
-        onCommit={runDialogAction}
-        onOpenChangedFileInEditor={openChangedFileInEditor}
-      />
-
-      <DefaultBranchDialog
-        open={pendingDefaultBranchAction !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingDefaultBranchAction(null);
+        defaultBranchDialog={{
+          open: pendingDefaultBranchAction !== null,
+          onOpenChange: (open) => {
+            if (!open) setPendingDefaultBranchAction(null);
+          },
+          copy: pendingDefaultBranchActionCopy,
+          onAbort: () => setPendingDefaultBranchAction(null),
+          onContinueOnDefaultBranch: continuePendingDefaultBranchAction,
+          onCheckoutFeatureBranch: checkoutFeatureBranchAndContinuePendingAction,
         }}
-        copy={pendingDefaultBranchActionCopy}
-        onAbort={() => setPendingDefaultBranchAction(null)}
-        onContinueOnDefaultBranch={continuePendingDefaultBranchAction}
-        onCheckoutFeatureBranch={checkoutFeatureBranchAndContinuePendingAction}
+        discard={{
+          open: isDiscardConfirmOpen,
+          onOpenChange: setIsDiscardConfirmOpen,
+          onDiscard: () => {
+            setIsDiscardConfirmOpen(false);
+            runDiscard();
+          },
+        }}
       />
-
-      <Dialog open={isDiscardConfirmOpen} onOpenChange={setIsDiscardConfirmOpen}>
-        <DialogPopup>
-          <DialogHeader>
-            <DialogTitle>Discard all changes?</DialogTitle>
-            <DialogDescription>
-              This will reset the working tree to the last commit. All uncommitted changes will be
-              permanently lost. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogPanel>
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setIsDiscardConfirmOpen(false);
-                  runDiscard();
-                }}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                Discard changes
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setIsDiscardConfirmOpen(false)}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </DialogPanel>
-        </DialogPopup>
-      </Dialog>
     </>
   );
 }

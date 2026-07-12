@@ -24,6 +24,7 @@ interface ChatHeaderProps {
   activeThreadId: ThreadId;
   activeThreadTitle: string;
   activeProjectName: string | undefined;
+  isProjectThread?: boolean;
   openInCwd: string | null;
   activeProjectScripts: ProjectScript[] | undefined;
   preferredScriptId: string | null;
@@ -36,6 +37,8 @@ interface ChatHeaderProps {
   planCardLabel: string;
   planCardOpen: boolean;
   onOpenOrchestra: () => void;
+  onOpenSideChat?: (() => void) | undefined;
+  sideChatDisabled?: boolean | undefined;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -48,6 +51,7 @@ export const ChatHeader = memo(function ChatHeader({
   activeThreadId,
   activeThreadTitle,
   activeProjectName,
+  isProjectThread,
   openInCwd,
   activeProjectScripts,
   preferredScriptId,
@@ -60,6 +64,8 @@ export const ChatHeader = memo(function ChatHeader({
   planCardLabel,
   planCardOpen,
   onOpenOrchestra,
+  onOpenSideChat,
+  sideChatDisabled,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
@@ -71,6 +77,7 @@ export const ChatHeader = memo(function ChatHeader({
   const isThreadCompacting = useIsThreadCompacting(activeThreadId);
   const { open: sidebarOpen, toggleSidebar } = useSidebar();
   const activityTone = isThreadCompacting ? "compacting" : isThreadRunning ? "running" : null;
+  const resolvedIsProjectThread = isProjectThread ?? Boolean(activeProjectName);
 
   return (
     <ContentPanelHeaderBar
@@ -98,35 +105,39 @@ export const ChatHeader = memo(function ChatHeader({
       }
       actions={
         <>
-          {activeProjectScripts && activeProjectScripts.length > 0 && openInCwd && (
-            <ProjectScriptsControl
-              scripts={activeProjectScripts}
-              keybindings={keybindings}
-              preferredScriptId={preferredScriptId}
-              onRunScript={onRunProjectScript}
-              onAddScript={onAddProjectScript}
-              onUpdateScript={onUpdateProjectScript}
-              onDeleteScript={onDeleteProjectScript}
-            />
-          )}
-          {activeProjectName && openInCwd && (
+          {resolvedIsProjectThread &&
+            activeProjectScripts &&
+            activeProjectScripts.length > 0 &&
+            openInCwd && (
+              <ProjectScriptsControl
+                scripts={activeProjectScripts}
+                keybindings={keybindings}
+                preferredScriptId={preferredScriptId}
+                onRunScript={onRunProjectScript}
+                onAddScript={onAddProjectScript}
+                onUpdateScript={onUpdateProjectScript}
+                onDeleteScript={onDeleteProjectScript}
+              />
+            )}
+          {resolvedIsProjectThread && openInCwd && (
             <OpenInPicker
               keybindings={keybindings}
               availableEditors={availableEditors}
               openInCwd={openInCwd}
             />
           )}
-          {openInCwd && (
-            <GitActionsControl
-              gitCwd={openInCwd}
-              executionTargetId={executionTargetId}
-              activeThreadId={activeThreadId}
-              onOpenOrchestra={onOpenOrchestra}
-              planCardLabel={planCardLabel}
-              planCardOpen={planCardOpen}
-              onTogglePlanCard={onTogglePlanCard}
-            />
-          )}
+          <GitActionsControl
+            gitCwd={openInCwd}
+            isProjectThread={resolvedIsProjectThread}
+            executionTargetId={executionTargetId}
+            activeThreadId={activeThreadId}
+            onOpenOrchestra={onOpenOrchestra}
+            onOpenSideChat={onOpenSideChat}
+            sideChatDisabled={sideChatDisabled}
+            planCardLabel={planCardLabel}
+            planCardOpen={planCardOpen}
+            onTogglePlanCard={onTogglePlanCard}
+          />
           <Tooltip>
             <TooltipTrigger
               render={

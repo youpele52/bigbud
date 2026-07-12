@@ -28,16 +28,16 @@ export function prependThreadContextToProviderInput(input: {
     input.computerUseEnabled === false
       ? [
           "Desktop computer use is disabled in Bigbud settings, so native app automation (Calendar, Reminders, screen control, etc.) is unavailable.",
-          'Browser automation via `computer_use` with `surface: "browser"` may still work when the browser panel is available.',
+          "Use the `browser` tool for bigbud's built-in visible or background browser; it does not require desktop automation.",
         ]
       : input.serverMode === "web"
         ? [
             'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`. Desktop automation requires the Bigbud desktop app.',
-            'For in-app browser automation, call `computer_use` with `surface: "browser"`.',
+            "Use the `browser` tool for bigbud's built-in visible or background browser.",
           ]
         : [
             'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`.',
-            'For in-app browser automation, call `computer_use` with `surface: "browser"`.',
+            "Use the `browser` tool for bigbud's built-in visible or background browser.",
             "Use `check_permissions` or `doctor` first if desktop automation fails.",
           ];
 

@@ -67,6 +67,7 @@ describe("thread orchestration tools route", () => {
               updatedAt: new Date().toISOString(),
             }),
           computerUse,
+          browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
 
         yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
@@ -143,6 +144,7 @@ describe("thread orchestration tools route", () => {
               action: "capture",
               summary: "Unused",
             }),
+          browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
 
         yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
@@ -211,6 +213,7 @@ describe("thread orchestration tools route", () => {
               action: "capture",
               summary: "Unused",
             }),
+          browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
 
         yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
@@ -286,6 +289,7 @@ describe("thread orchestration tools route", () => {
               action: "capture",
               summary: "Unused",
             }),
+          browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
 
         yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });

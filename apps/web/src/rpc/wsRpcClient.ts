@@ -83,6 +83,20 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
           options,
         ),
     },
+    browser: {
+      completeCommand: (input) =>
+        transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),
+      revokeLease: (input) =>
+        transport.request((client) => client[WS_METHODS.revokeVisibleBrowserLease](input)),
+      getLeases: (input) =>
+        transport.request((client) => client[WS_METHODS.getVisibleBrowserLeases](input)),
+      onCommand: (rendererId, listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeVisibleBrowserCommands]({ rendererId }),
+          listener,
+          options,
+        ),
+    },
     projects: {
       listDirectory: (input) =>
         transport.request((client) => client[WS_METHODS.projectsListDirectory](input)),

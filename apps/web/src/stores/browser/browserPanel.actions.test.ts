@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  closeBrowserTab,
   closeBrowserPanel,
   openBrowserPanel,
   openNewBrowserTab,
   toggleBrowserPanel,
 } from "./browserPanel.actions";
 import { useBrowserPanelStore } from "./browser.store";
+import { useBrowserCloseConfirmationStore } from "./browserCloseConfirmation.store";
 import { useFilesPanelStore } from "../files/filesPanel.store";
 import { getRequestedRightPanel, requestRightPanel } from "../rightPanel/rightPanel.coordinator";
 import {
@@ -18,6 +20,7 @@ import {
 describe("browserPanel.actions", () => {
   afterEach(() => {
     useBrowserPanelStore.setState({ open: false, tabsById: {} });
+    useBrowserCloseConfirmationStore.getState().dismiss();
     useFilesPanelStore.setState({ open: false });
     useRightPanelTabsStore.setState({
       activeKind: null,
@@ -114,6 +117,22 @@ describe("browserPanel.actions", () => {
       tabsById: {},
     });
     expect(getRequestedRightPanel()).toBeNull();
+  });
+
+  it("asks before closing an agent-controlled browser tab", () => {
+    openBrowserPanel({ url: "https://example.com" });
+    const tabId = Object.keys(useBrowserPanelStore.getState().tabsById)[0] as `browser:${string}`;
+    useBrowserPanelStore.getState().setAgentLease(tabId, {
+      leaseId: "lease:1",
+      threadId: "thread:1",
+      turnId: "turn:1",
+    });
+
+    closeBrowserTab(tabId);
+
+    expect(useRightPanelTabsStore.getState().openTabs).toContain(tabId);
+    expect(useBrowserPanelStore.getState().tabsById[tabId]?.agentLease).toBeDefined();
+    expect(useBrowserCloseConfirmationStore.getState().tabIds).toEqual([tabId]);
   });
 
   it("opens a new browser tab without mutating the current browser tab", () => {

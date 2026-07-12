@@ -281,6 +281,7 @@ export function useSidebarState(): SidebarState {
   cancelThreadRenameRef.current = threadActions.cancelRename;
 
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
+  const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
 
   const { favoriteThreadIds, renderedFavorites, renderedChats, visibleChatThreadIdsForJumpHints } =
@@ -366,6 +367,8 @@ export function useSidebarState(): SidebarState {
     renderedFavorites,
     favouritesExpanded,
     setFavouritesExpanded,
+    showAllFavourites,
+    setShowAllFavourites,
     areChatsExpanded,
     setAreChatsExpanded,
     showAllChats,

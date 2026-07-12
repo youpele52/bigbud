@@ -1,5 +1,5 @@
 import { type MessageId, type ThreadId } from "@bigbud/contracts";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 
 import { useComposerDraftStore, useComposerThreadDraft } from "~/stores/composer";
 
@@ -12,8 +12,18 @@ import { useChatViewThreadDerivedState } from "./chat-view/chat-view-thread-deri
 import { useChatViewTimelineState } from "./chat-view/chat-view-timeline.hooks";
 import { ChatViewComposer } from "./chat-view/ChatViewComposer";
 
+export interface ThreadComposerSurfaceContext {
+  base: ReturnType<typeof useChatViewBaseState>;
+  composer: ReturnType<typeof useChatViewComposerDerivedState>;
+  interactions: ReturnType<typeof useChatViewInteractions>;
+  runtime: ReturnType<typeof useChatViewRuntime>;
+  thread: ReturnType<typeof useChatViewThreadDerivedState>;
+  timeline: ReturnType<typeof useChatViewTimelineState>;
+}
+
 export function ThreadComposerSurface({
   className,
+  children,
   onOptimisticUserMessage,
   seedPrompt,
   threadId,
@@ -24,6 +34,7 @@ export function ThreadComposerSurface({
   readonly seedPrompt?: string | undefined;
   readonly threadId: ThreadId;
   readonly transformPromptForSend?: ((prompt: string) => string) | undefined;
+  readonly children?: ((context: ThreadComposerSurfaceContext) => ReactNode) | undefined;
 }) {
   const setPrompt = useComposerDraftStore((store) => store.setPrompt);
   const draft = useComposerThreadDraft(threadId);
@@ -46,9 +57,10 @@ export function ThreadComposerSurface({
     runtime,
     onOptimisticUserMessage,
     transformPromptForSend,
+    enableKeybindings: false,
   });
 
-  useChatViewEffects({ base, composer, thread, runtime });
+  useChatViewEffects({ base, composer, embedded: true, thread, runtime });
 
   useEffect(() => {
     if (seededRef.current || !seedPrompt || draft.prompt.trim().length > 0) {
@@ -60,6 +72,10 @@ export function ThreadComposerSurface({
 
   if (!base.activeThread) {
     return null;
+  }
+
+  if (children) {
+    return children({ base, composer, interactions, runtime, thread, timeline });
   }
 
   return (
