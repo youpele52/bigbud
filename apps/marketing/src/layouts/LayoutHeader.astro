@@ -13,10 +13,44 @@ import "./LayoutHeader.css";
       <a href={GETTING_STARTED_PATH} class="nav-link">docs</a>
       <a href="/changelog" class="nav-link">changelog</a>
     </div>
-    <button class="nav-hamburger" aria-label="Toggle menu" data-hamburger>
-      <span class="hamburger-line"></span>
-      <span class="hamburger-line"></span>
-      <span class="hamburger-line"></span>
+    <button
+      aria-expanded="false"
+      aria-label="Open menu"
+      class="nav-menu-button"
+      data-hamburger
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        class="nav-menu-icon nav-menu-icon-open"
+        fill="none"
+        height="16"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="16"
+      >
+        <rect height="18" rx="2" width="18" x="3" y="3" />
+        <path d="M15 3v18" />
+      </svg>
+      <svg
+        aria-hidden="true"
+        class="nav-menu-icon nav-menu-icon-close"
+        fill="none"
+        height="16"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="16"
+      >
+        <rect height="18" rx="2" width="18" x="3" y="3" />
+        <path d="M15 3v18" />
+        <path d="m8 9 3 3-3 3" />
+      </svg>
     </button>
   </nav>
 </header>
@@ -40,6 +74,8 @@ import "./LayoutHeader.css";
       const isOpen = drawer.classList.toggle("open");
       overlay.classList.toggle("open");
       hamburger.classList.toggle("open");
+      hamburger.setAttribute("aria-expanded", String(isOpen));
+      hamburger.setAttribute("aria-label", isOpen ? "Close menu" : "Open menu");
       drawer.hidden = false;
       overlay.hidden = false;
       document.body.style.overflow = isOpen ? "hidden" : "";

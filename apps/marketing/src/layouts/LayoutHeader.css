@@ -48,45 +48,45 @@
   color: var(--fg);
 }
 
-/* Hamburger button */
-.nav-hamburger {
+/* Menu button */
+.nav-menu-button {
   display: none;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
   background: none;
+  border-radius: 9999px;
+  color: var(--fg);
   cursor: pointer;
   position: relative;
   z-index: 110;
+  transition: background 0.2s ease;
 }
 
-.hamburger-line {
-  display: block;
-  width: 18px;
-  height: 2px;
-  background: var(--fg-muted);
-  border-radius: 1px;
-  transition:
-    transform 0.3s ease,
-    opacity 0.3s ease;
-  transform-origin: center;
+.nav-menu-button:hover {
+  background: var(--secondary);
 }
 
-.nav-hamburger.open .hamburger-line:nth-child(1) {
-  transform: translateY(6px) rotate(45deg);
+.nav-menu-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  transition: opacity 0.15s ease;
 }
 
-.nav-hamburger.open .hamburger-line:nth-child(2) {
+.nav-menu-icon-close {
   opacity: 0;
 }
 
-.nav-hamburger.open .hamburger-line:nth-child(3) {
-  transform: translateY(-6px) rotate(-45deg);
+.nav-menu-button.open .nav-menu-icon-open {
+  opacity: 0;
+}
+
+.nav-menu-button.open .nav-menu-icon-close {
+  opacity: 1;
 }
 
 /* Overlay */
@@ -162,7 +162,7 @@
     display: none;
   }
 
-  .nav-hamburger {
+  .nav-menu-button {
     display: flex;
   }
 }
