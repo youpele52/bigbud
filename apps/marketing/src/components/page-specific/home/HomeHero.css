@@ -388,10 +388,6 @@
   text-wrap: pretty;
 }
 
-.hero-community-actions {
-  margin-top: 1.5rem;
-}
-
 @keyframes hero-pulse-slow {
   0%,
   100% {
