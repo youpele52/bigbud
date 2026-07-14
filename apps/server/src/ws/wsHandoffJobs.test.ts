@@ -49,6 +49,7 @@ function makeProjectionSnapshotQueryLayer(threadId?: ThreadId) {
     getSnapshot: () => Effect.succeed(makeSnapshot(threadId)),
     getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
     getUsageEntries: () => Effect.succeed([]),
+    getUsageHistoryStatus: () => Effect.succeed("ready"),
     getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
     getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
     getThreadCheckpointContext: () => Effect.succeed(Option.none()),

@@ -96,6 +96,7 @@ describe("OrchestrationEngine", () => {
           getSnapshot: () => Effect.succeed(projectionSnapshot),
           getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
           getUsageEntries: () => Effect.succeed([]),
+          getUsageHistoryStatus: () => Effect.succeed("ready"),
           getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
@@ -104,6 +105,7 @@ describe("OrchestrationEngine", () => {
       Layer.provide(
         Layer.succeed(OrchestrationProjectionPipeline, {
           bootstrap: Effect.void,
+          backfillUsageContributions: Effect.void,
           projectEvent: () => Effect.void,
         } satisfies OrchestrationProjectionPipelineShape),
       ),

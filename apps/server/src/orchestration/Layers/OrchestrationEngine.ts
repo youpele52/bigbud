@@ -323,6 +323,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   const worker = Effect.forever(Queue.take(commandQueue).pipe(Effect.flatMap(processEnvelope)));
   yield* Effect.forkScoped(worker);
+  yield* Effect.forkScoped(
+    projectionPipeline.backfillUsageContributions.pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("usage contribution backfill failed", {
+          cause: Cause.pretty(cause),
+        }),
+      ),
+    ),
+  );
   yield* Effect.logDebug("orchestration engine started").pipe(
     Effect.annotateLogs({ sequence: readModel.snapshotSequence }),
   );

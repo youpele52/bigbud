@@ -41,6 +41,7 @@ import {
   ORCHESTRATION_PROJECTOR_NAMES,
 } from "./ProjectionPipeline.helpers.ts";
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
+import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
 
@@ -155,8 +156,14 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       ),
     );
 
+    const backfillUsageContributions: OrchestrationProjectionPipelineShape["backfillUsageContributions"] =
+      runUsageContributionBackfill({
+        repository: projectionThreadActivityRepository,
+      });
+
     return {
       bootstrap,
+      backfillUsageContributions,
       projectEvent,
     } satisfies OrchestrationProjectionPipelineShape;
   },

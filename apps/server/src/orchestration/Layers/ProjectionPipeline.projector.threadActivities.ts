@@ -12,6 +12,7 @@ import {
   retainProjectionActivitiesAfterRevert,
 } from "./ProjectionPipeline.helpers.ts";
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
+import { usageContributionFromActivity } from "./ProjectionPipeline.projector.threadActivities.usage.ts";
 
 export function makeThreadActivitiesProjector(
   deps: Pick<ProjectorDeps, "projectionThreadActivityRepository" | "projectionTurnRepository">,
@@ -37,6 +38,15 @@ export function makeThreadActivitiesProjector(
             : {}),
           createdAt: event.payload.activity.createdAt,
         });
+        {
+          const contribution = usageContributionFromActivity({
+            threadId: event.payload.threadId,
+            activity: event.payload.activity,
+          });
+          if (contribution) {
+            yield* projectionThreadActivityRepository.upsertUsageContribution(contribution);
+          }
+        }
         return;
 
       case "thread.reverted": {
