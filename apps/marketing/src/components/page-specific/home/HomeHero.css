@@ -135,9 +135,9 @@
 }
 
 .tagline-aside {
-  margin-top: 0.85rem;
+  margin-top: 2rem;
   max-width: 32rem;
-  color: color-mix(in srgb, var(--fg-dim) 72%, transparent);
+  color: var(--fg-dim);
   font-size: clamp(0.84rem, 0.85vw, 0.95rem);
   line-height: 1.4;
   letter-spacing: -0.01em;
@@ -435,7 +435,7 @@
 
 .advanced-title {
   margin: 0;
-  font-size: clamp(2.1rem, 4.1vw, 3.25rem);
+  font-size: clamp(2.2rem, 4.4vw, 3.5rem);
   font-weight: 400;
   letter-spacing: -0.05em;
   line-height: 1.05;
@@ -450,7 +450,7 @@
   padding: 0;
   overflow: hidden;
   color: var(--fg-dim);
-  font-size: clamp(0.92rem, 1vw, 1rem);
+  font-size: clamp(1.05rem, 1.2vw, 1.2rem);
   line-height: 1.45;
   list-style: none;
   visibility: hidden;

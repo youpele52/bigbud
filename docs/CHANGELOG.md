@@ -2,6 +2,25 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.1.654 (15 July, 2026)
+
+### Usage
+
+- Rebuilt Usage accounting around canonical, persisted token-consumption contributions for Codex, Claude, Copilot, OpenCode/KiloCode, and Pi. Provider, model, and interaction mode are captured when usage occurs, keeping historical attribution correct even after a thread's settings change and avoiding cumulative-token overcounting.
+- Usage contributions now update transactionally, resist stale replay writes, retain consumption through reverts, and rebuild historical data in resumable background batches rather than delaying startup.
+- Usage summaries now read directly from the focused projection instead of a full orchestration snapshot, recover cleanly when a session is replaced, and show background-indexing progress. Providers without reliable data, including Cursor and Devin, are explicitly marked unavailable rather than estimated.
+
+### Reliability & Maintenance
+
+- Made Orchestra wait for the specific assigned turn to start and settle, with predictable handling for failed, interrupted, stopped, and missing sessions.
+- Added a daily cleanup job for temporary handoff Markdown documents older than seven days, leaving unrelated files alone and tolerating missing folders and recoverable file-system failures.
+- Matched the floating Tasks card's native scrolling, stable scrollbar gutter, and overscroll behavior to Sidecar for a more consistent compact-panel experience.
+
+### Marketing & Documentation
+
+- Modernized the marketing site for Astro 7, including the current Tailwind/Vite integration, a scrollable mobile documentation table of contents, richer llms.txt content, docs sitemap coverage, and Organization/WebPage structured data.
+- Refined the homepage into a clearer product story with introductory visuals, provider and workflow showcases, direct documentation handoff, advanced-workflow coverage, and motion-safe fallbacks. The latest polish makes existing subscriptions and API-key flexibility easier to find and strengthens the advanced-workflow call to action.
+
 ## v0.1.653 (13 July, 2026)
 
 ### Memory & Self-Improvement
