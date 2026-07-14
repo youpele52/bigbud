@@ -14,6 +14,7 @@ import {
   makeGetFirstActiveThreadIdByProjectId,
   makeGetThreadCheckpointContext,
 } from "./ProjectionSnapshotQueryAssembly.ts";
+import { makeGetUsageEntries } from "./ProjectionSnapshotQuery.usage.ts";
 
 // Re-export for backward compat (used in tests / other modules)
 export { toPersistenceSqlOrDecodeError } from "./ProjectionSnapshotQueryAssembly.ts";
@@ -35,6 +36,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
   return {
     getSnapshot,
     getCounts: makeGetCounts(queries),
+    getUsageEntries: makeGetUsageEntries(sql),
     getActiveProjectByWorkspaceRoot: makeGetActiveProjectByWorkspaceRoot(queries),
     getFirstActiveThreadIdByProjectId: makeGetFirstActiveThreadIdByProjectId(queries),
     getThreadCheckpointContext: makeGetThreadCheckpointContext(queries),

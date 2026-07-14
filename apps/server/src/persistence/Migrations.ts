@@ -55,6 +55,7 @@ import Migration0039 from "./Migrations/039_LearningJobs.ts";
 import Migration0040 from "./Migrations/040_SkillChangeProposals.ts";
 import Migration0041 from "./Migrations/041_LearningJobMemoryUserMessageCount.ts";
 import Migration0042 from "./Migrations/042_ProjectionThreadsPurpose.ts";
+import Migration0043 from "./Migrations/043_ProjectionThreadActivityUsageIndex.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -109,6 +110,7 @@ export const migrationEntries = [
   [40, "SkillChangeProposals", Migration0040],
   [41, "LearningJobMemoryUserMessageCount", Migration0041],
   [42, "ProjectionThreadsPurpose", Migration0042],
+  [43, "ProjectionThreadActivityUsageIndex", Migration0043],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>
