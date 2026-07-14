@@ -6,6 +6,7 @@ import {
   buildBreadcrumbSchema,
   buildOrganizationSchema,
   buildSoftwareApplicationSchema,
+  buildWebPageSchema,
   buildWebsiteSchema,
 } from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
@@ -16,6 +17,7 @@ const structuredData = [
   buildOrganizationSchema({ pageUrl, siteUrl }),
   buildWebsiteSchema({ pageUrl, siteUrl }),
   buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+  buildWebPageSchema({ pageUrl, siteUrl }, DOWNLOAD_METADATA.title, DOWNLOAD_METADATA.description),
   buildBreadcrumbSchema(pageUrl, "Download", siteUrl),
 ];
 ---

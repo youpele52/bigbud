@@ -16,8 +16,13 @@ const showcaseFeatures = [
     {
         title: "Everything you're working on, in one place.",
         description:
-            "Move between projects, chats, and ideas without losing the thread.",
-        image: "/screenshots/one-workspace.webp",
+            "Move between projects, chats, ideas, and plans without losing your train of thought.",
+        images: [
+            "/screenshots/one-workspace.webp",
+            "https://assets.bigbud.app/content/sidecar.png",
+            "https://assets.bigbud.app/content/kanban.png",
+            "https://assets.bigbud.app/content/notes.png",
+        ],
     },
     {
         title: "Look things up without breaking focus.",
@@ -26,6 +31,7 @@ const showcaseFeatures = [
         images: [
             "/screenshots/research-slide-1.webp",
             "/screenshots/research-slide-2.webp",
+            "https://assets.bigbud.app/content/right%20sidebar.png",
         ],
     },
     {
@@ -52,6 +58,13 @@ const showcaseFeatures = [
     },
 ] as const;
 
+const advancedWorkflows = [
+    "When the work leaves the chat, let your agent step into your apps and across your desktop to carry it through.",
+    "When a task needs more hands, coordinate a team of agents.",
+    "When it can wait, schedule it for later—or set it to run on a regular rhythm.",
+    "And when you're away, stay connected to your desktop.",
+] as const;
+
 const providerDrops = [
     { icon: "/provider-icons/claude.svg" },
     { icon: "/provider-icons/codex.svg" },
@@ -64,7 +77,36 @@ const providerDrops = [
 ] as const;
 ---
 
+<script is:inline>
+    const root = document.documentElement;
+    const homeIntroStorageKey = "bigbud.homeIntroSeen";
+    let hasSeenHomeIntro = false;
+
+    try {
+        hasSeenHomeIntro = window.sessionStorage.getItem(homeIntroStorageKey) === "true";
+
+        if (!hasSeenHomeIntro) {
+            window.sessionStorage.setItem(homeIntroStorageKey, "true");
+        }
+    } catch {
+        // Keep the intro available when session storage is blocked.
+    }
+
+    if (!hasSeenHomeIntro && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        root.dataset.homeIntro = "playing";
+        root.dataset.homeIntroStart = String(performance.now());
+
+        window.setTimeout(() => {
+            if (root.dataset.homeIntro === "playing") {
+                root.dataset.homeIntro = "complete";
+            }
+        }, 1750);
+    }
+</script>
+
 <div class="hero-stack">
+    <canvas id="home-intro" class="home-intro" aria-hidden="true"></canvas>
+
     <section class="hero-copy" aria-label="Introduction">
         <div class="hero-copy-body">
             <div class="hero-brand">
@@ -92,7 +134,7 @@ const providerDrops = [
                 without losing where you left off.
             </p>
             <p class="tagline-copy">
-                Made for work that changes shape as you go.
+                A workspace for the way knowledge work actually happens.
             </p>
 
             <div class="hero-actions">
@@ -163,7 +205,12 @@ const providerDrops = [
                                     class="feature-showcase-visual feature-showcase-slider"
                                     data-animate="dissolve"
                                 >
-                                    <div class="slider-track">
+                                    <div
+                                        class:list={[
+                                            "slider-track",
+                                            `slider-track--${feature.images.length}`,
+                                        ]}
+                                    >
                                         {feature.images.map((src) => (
                                             <img
                                                 src={src}
@@ -205,6 +252,33 @@ const providerDrops = [
                         </div>
                     ))
                 }
+                <div
+                    class="feature-showcase feature-showcase--advanced"
+                    data-animate="advanced"
+                >
+                    <div class="feature-showcase-content">
+                        <h3 class="advanced-title">Take the work further.</h3>
+                        <ul class="advanced-workflows-list">
+                            {advancedWorkflows.map((workflow, index) => (
+                                <li
+                                    style={`--workflow-index: ${index}; --workflow-offset: ${index + 1}rem`}
+                                >
+                                    {workflow}
+                                </li>
+                            ))}
+                            <li
+                                style={`--workflow-index: ${advancedWorkflows.length}; --workflow-offset: ${advancedWorkflows.length + 1}rem`}
+                            >
+                                <a
+                                    href={`${GETTING_STARTED_PATH}#advanced-features`}
+                                    class="advanced-workflows-link"
+                                >
+                                    See what&apos;s possible <span aria-hidden="true">→</span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -349,6 +423,19 @@ const providerDrops = [
         for (const el of visuals) {
             observer.observe(el);
         }
+    }
+
+    const advancedWorkflow = document.querySelector("[data-animate='advanced']");
+    if (advancedWorkflow && "IntersectionObserver" in window) {
+        const advancedWorkflowObserver = new IntersectionObserver(
+            ([entry]) => {
+                entry.target.classList.toggle("is-visible", entry.isIntersecting);
+            },
+            { threshold: 0.55 },
+        );
+        advancedWorkflowObserver.observe(advancedWorkflow);
+    } else {
+        advancedWorkflow?.classList.add("is-visible");
     }
 </script>
 
