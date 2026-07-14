@@ -360,15 +360,21 @@ describe("ClaudeAdapterLive", () => {
       const usageEvent = runtimeEvents.find((event) => event.type === "thread.token-usage.updated");
       assert.equal(usageEvent?.type, "thread.token-usage.updated");
       if (usageEvent?.type === "thread.token-usage.updated") {
-        assert.deepEqual(usageEvent.payload, {
-          usage: {
-            usedTokens: 24542,
-            lastUsedTokens: 24542,
-            inputTokens: 23863,
-            outputTokens: 679,
-            maxTokens: 200000,
-          },
+        assert.deepEqual(usageEvent.payload.usage, {
+          usedTokens: 24542,
+          lastUsedTokens: 24542,
+          inputTokens: 23863,
+          outputTokens: 679,
+          maxTokens: 200000,
         });
+        assert.equal(usageEvent.payload.accounting?.scope, "turn");
+        assert.equal(typeof usageEvent.payload.accounting?.scopeId, "string");
+        assert.equal(usageEvent.payload.accounting?.processedTokens, 24542);
+        assert.equal(usageEvent.payload.accounting?.inputTokens, 23863);
+        assert.equal(usageEvent.payload.accounting?.cachedInputTokens, 0);
+        assert.equal(usageEvent.payload.accounting?.outputTokens, 679);
+        assert.equal(usageEvent.payload.accounting?.reasoningOutputTokens, 0);
+        assert.equal(usageEvent.payload.accounting?.finalized, true);
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

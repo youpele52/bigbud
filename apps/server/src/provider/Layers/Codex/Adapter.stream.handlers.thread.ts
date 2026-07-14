@@ -6,6 +6,7 @@ import { type ProviderEvent, type ProviderRuntimeEvent, type ThreadId } from "@b
 import { asString, asObject } from "./Adapter.types.ts";
 import { runtimeEventBase } from "./Adapter.stream.base.ts";
 import { normalizeCodexTokenUsage, toThreadState } from "./Adapter.stream.utils.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 // ---------------------------------------------------------------------------
 // Thread events
@@ -81,11 +82,20 @@ export function handleThreadTokenUsageUpdated(
   if (!normalizedUsage) {
     return [];
   }
+  const accounting = makeTokenUsageAccounting({
+    scope: "turn",
+    scopeId: event.turnId,
+    usage: normalizedUsage,
+    processedTokens: normalizedUsage.lastUsedTokens ?? normalizedUsage.usedTokens,
+  });
   return [
     {
       type: "thread.token-usage.updated",
       ...runtimeEventBase(event, canonicalThreadId),
-      payload: { usage: normalizedUsage },
+      payload: {
+        usage: normalizedUsage,
+        ...(accounting ? { accounting } : {}),
+      },
     },
   ];
 }

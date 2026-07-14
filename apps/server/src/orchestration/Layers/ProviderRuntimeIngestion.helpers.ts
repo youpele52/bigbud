@@ -10,6 +10,9 @@ import {
   TurnId,
   type OrchestrationThreadActivity,
   type ProviderRuntimeEvent,
+  type ProviderKind,
+  type ProviderInteractionMode,
+  type ThreadTokenUsageAccounting,
   type ThreadTokenUsageSnapshot,
 } from "@bigbud/contracts";
 
@@ -82,13 +85,42 @@ export function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, threadId: s
   return `plan:${threadId}:event:${event.eventId}`;
 }
 
+type ContextWindowActivityPayload = ThreadTokenUsageSnapshot & {
+  readonly accounting?: ThreadTokenUsageAccounting & {
+    readonly provider: ProviderKind;
+    readonly model: string;
+    readonly interactionMode: ProviderInteractionMode;
+  };
+};
+
+export interface UsageActivityAttribution {
+  readonly model: string;
+  readonly interactionMode: ProviderInteractionMode;
+}
+
 export function buildContextWindowActivityPayload(
   event: ProviderRuntimeEvent,
-): ThreadTokenUsageSnapshot | undefined {
-  if (event.type !== "thread.token-usage.updated" || event.payload.usage.usedTokens <= 0) {
+  attribution?: UsageActivityAttribution,
+): ContextWindowActivityPayload | undefined {
+  if (
+    event.type !== "thread.token-usage.updated" ||
+    (event.payload.usage.usedTokens <= 0 && (event.payload.accounting?.processedTokens ?? 0) <= 0)
+  ) {
     return undefined;
   }
-  return event.payload.usage;
+  return {
+    ...event.payload.usage,
+    ...(event.payload.accounting && attribution
+      ? {
+          accounting: {
+            ...event.payload.accounting,
+            provider: event.provider,
+            model: attribution.model,
+            interactionMode: attribution.interactionMode,
+          },
+        }
+      : {}),
+  };
 }
 
 export function normalizeRuntimeTurnState(
@@ -146,12 +178,14 @@ export function requestKindFromCanonicalRequestType(
 
 export function runtimeEventToActivities(
   event: ProviderRuntimeEvent,
+  usageAttribution?: UsageActivityAttribution,
 ): ReadonlyArray<OrchestrationThreadActivity> {
   return runtimeEventToActivitiesFromHelpers(event, {
     toTurnId,
     toApprovalRequestId,
     truncateDetail,
     requestKindFromCanonicalRequestType,
-    buildContextWindowActivityPayload,
+    buildContextWindowActivityPayload: (runtimeEvent) =>
+      buildContextWindowActivityPayload(runtimeEvent, usageAttribution),
   });
 }

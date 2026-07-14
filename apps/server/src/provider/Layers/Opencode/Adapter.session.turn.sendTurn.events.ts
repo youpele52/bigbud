@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { TurnMethodDeps } from "./Adapter.session.ts";
 import type { PromptResultInfo, PromptResultPart } from "./Adapter.session.prompt.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 export function toPromptTurnEvents(input: {
   readonly record: ActiveOpencodeSession;
@@ -42,12 +43,20 @@ export function toPromptTurnEvents(input: {
           ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
           ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
         };
+        const accounting = makeTokenUsageAccounting({
+          scope: "item",
+          scopeId: promptInfo.id,
+          usage,
+        });
         record.lastUsage = usage;
         events.push(
           yield* syntheticEventFn(
             threadId,
             "thread.token-usage.updated",
-            { usage },
+            {
+              usage,
+              ...(accounting ? { accounting } : {}),
+            },
             {
               turnId,
               itemId: promptInfo.id,

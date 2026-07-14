@@ -248,6 +248,16 @@ taskLayer("CodexAdapterLive task events", (it) => {
         lastReasoningOutputTokens: 0,
         compactsAutomatically: true,
       });
+      assert.deepEqual(firstEvent.value.payload.accounting, {
+        scope: "turn",
+        scopeId: "turn-1",
+        processedTokens: 126,
+        inputTokens: 120,
+        cachedInputTokens: 0,
+        outputTokens: 6,
+        reasoningOutputTokens: 0,
+        finalized: true,
+      });
     }),
   );
 

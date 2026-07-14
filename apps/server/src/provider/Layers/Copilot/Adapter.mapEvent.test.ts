@@ -136,6 +136,36 @@ describe("CopilotAdapter.mapEvent", () => {
     });
   });
 
+  it("maps assistant usage to canonical turn accounting", async () => {
+    const events = await Effect.runPromise(
+      mapEvent(makeDeps(), makeSession(), {
+        type: "assistant.usage",
+        id: "sdk-usage-1",
+        parentId: null,
+        timestamp: "2026-05-14T00:00:02.000Z",
+        data: {
+          inputTokens: 100,
+          outputTokens: 20,
+          cacheReadTokens: 30,
+        },
+      } as SessionEvent),
+    );
+
+    expect(events[0]).toMatchObject({
+      type: "thread.token-usage.updated",
+      payload: {
+        accounting: {
+          scope: "turn",
+          scopeId: "turn-1",
+          processedTokens: 150,
+          inputTokens: 100,
+          cachedInputTokens: 30,
+          outputTokens: 20,
+        },
+      },
+    });
+  });
+
   it("maps abort to turn.aborted with the active turnId (not undefined)", async () => {
     const events = await Effect.runPromise(
       mapEvent(makeDeps(), makeSession(), {
