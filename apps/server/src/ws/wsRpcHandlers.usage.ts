@@ -1,6 +1,5 @@
 import { Effect, Schema } from "effect";
 import {
-  type OrchestrationThreadActivity,
   ServerGetUsageSummaryInput,
   ServerUsageError,
   type ServerUsageRange,
@@ -48,50 +47,9 @@ function toUsageError(cause: unknown, message: string) {
       });
 }
 
-function getNumericField(payload: Record<string, unknown>, key: string) {
-  const value = payload[key];
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
-}
-
 function parseValidDate(value: string) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function toUsageEntry(
-  activity: OrchestrationThreadActivity,
-  provider: string,
-  model: string,
-  interactionMode: string,
-): UsageEntry | null {
-  if (activity.kind !== "context-window.updated" || typeof activity.payload !== "object") {
-    return null;
-  }
-
-  const payload = activity.payload as Record<string, unknown>;
-  const usedTokens = getNumericField(payload, "usedTokens");
-  if (usedTokens <= 0) {
-    return null;
-  }
-
-  const createdAt = parseValidDate(activity.createdAt);
-  if (!createdAt) {
-    return null;
-  }
-
-  return {
-    createdAt: createdAt.toISOString(),
-    createdAtMs: createdAt.getTime(),
-    provider,
-    model,
-    interactionMode,
-    usedTokens,
-    inputTokens: getNumericField(payload, "inputTokens"),
-    cachedInputTokens: getNumericField(payload, "cachedInputTokens"),
-    outputTokens: getNumericField(payload, "outputTokens"),
-    reasoningOutputTokens: getNumericField(payload, "reasoningOutputTokens"),
-    turnCount: 1,
-  };
 }
 
 function getRangeStart(range: ServerUsageRange, now: Date): Date | null {
@@ -232,26 +190,23 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverGetUsageSummary,
         Effect.gen(function* () {
-          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot();
           const rangeStart = getRangeStart(input.range, new Date());
-          const entries: UsageEntry[] = [];
-
-          for (const thread of snapshot.threads) {
-            const provider = thread.modelSelection.provider;
-            const model = thread.modelSelection.model;
-            const interactionMode = thread.interactionMode;
-
-            for (const activity of thread.activities) {
-              const entry = toUsageEntry(activity, provider, model, interactionMode);
-              if (!entry) {
-                continue;
-              }
-              if (rangeStart && entry.createdAtMs < rangeStart.getTime()) {
-                continue;
-              }
-              entries.push(entry);
-            }
-          }
+          const rows = yield* context.projectionSnapshotQuery.getUsageEntries(
+            rangeStart?.toISOString() ?? null,
+          );
+          const entries: UsageEntry[] = rows.flatMap((row) => {
+            const createdAt = parseValidDate(row.createdAt);
+            return createdAt
+              ? [
+                  {
+                    ...row,
+                    createdAt: createdAt.toISOString(),
+                    createdAtMs: createdAt.getTime(),
+                    turnCount: 1,
+                  },
+                ]
+              : [];
+          });
 
           return buildUsageSummary(entries, input.range);
         }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),

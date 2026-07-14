@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 
 import { type ServerUsageRange, type ServerUsageSummaryResult } from "@bigbud/contracts";
 
 import { usePageTitle } from "~/hooks/usePageTitle";
+import { retryTransportRecoveryOperation } from "~/logic/orchestration/transport-retry.logic";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { useServerProviders } from "~/rpc/serverState";
 import { formatHumanReadableDate } from "~/utils/timestamp";
@@ -50,13 +51,21 @@ export function UsagePage() {
       return;
     }
 
+    let active = true;
     setLoading(true);
-    void api.server
-      .getUsageSummary({ range })
+    void retryTransportRecoveryOperation(() => api.server.getUsageSummary({ range }), {
+      maxRetries: 2,
+      shouldAbort: () => !active,
+    })
       .then((nextSummary) => {
-        setSummary(nextSummary);
+        if (active) {
+          setSummary(nextSummary);
+        }
       })
       .catch((error) => {
+        if (!active) {
+          return;
+        }
         toastManager.add({
           type: "error",
           title: "Failed to load usage",
@@ -65,8 +74,14 @@ export function UsagePage() {
         setSummary(null);
       })
       .finally(() => {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, [api, range]);
 
   const headerActions = (
