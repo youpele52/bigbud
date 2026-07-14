@@ -19,6 +19,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { StandaloneChatPageHeader } from "../standalone/StandaloneChatPageHeader";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { UsageBreakdownCard, type UsageBreakdownView } from "./UsageBreakdownCard";
+import { UsageDataStatus } from "./UsageDataStatus";
 import { formatCompactNumber } from "./UsagePage.format";
 import { applyUsageDisplayLabels } from "./UsagePage.labels";
 import { UsageTokenMixCard } from "./UsageTokenMixCard";
@@ -123,6 +124,7 @@ export function UsagePage() {
           <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-4 px-4 py-6 sm:px-6">
             {displaySummary ? (
               <>
+                <UsageDataStatus summary={displaySummary} />
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <UsageStatCard
                     icon={SigmaIcon}

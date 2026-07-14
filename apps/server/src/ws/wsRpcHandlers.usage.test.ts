@@ -10,12 +10,16 @@ function makeContext(entries: ReadonlyArray<ProjectionUsageEntry>): WsRpcContext
     ...({} as WsRpcContext),
     projectionSnapshotQuery: {
       getUsageEntries: () => Effect.succeed(entries),
+      getUsageHistoryStatus: () => Effect.succeed("ready"),
     } as unknown as WsRpcContext["projectionSnapshotQuery"],
   };
 }
 
 function makeEntries(createdAtValues: ReadonlyArray<string>): ReadonlyArray<ProjectionUsageEntry> {
   return createdAtValues.map((createdAt, index) => ({
+    contributionId: `codex:thread-1:turn:turn-${index}`,
+    threadId: "thread-1",
+    turnId: `turn-${index}`,
     createdAt,
     provider: "codex",
     model: "gpt-5.5",
@@ -62,6 +66,28 @@ describe("wsRpcHandlers.usage", () => {
 
     expect(summary.buckets.map((bucket) => bucket.bucketStart)).toEqual(
       [toHourBucketStart(first), toHourBucketStart(second)].toSorted(),
+    );
+  });
+
+  it("sums item contributions while counting their turn once", async () => {
+    const createdAt = new Date().toISOString();
+    const [entry] = makeEntries([createdAt]);
+    if (!entry) throw new Error("Expected usage entry");
+    const handlers = makeWsRpcUsageHandlers(
+      makeContext([
+        { ...entry, contributionId: "opencode:thread-1:item:item-1", usedTokens: 100 },
+        { ...entry, contributionId: "opencode:thread-1:item:item-2", usedTokens: 200 },
+      ]),
+    );
+
+    const summary = await Effect.runPromise(handlers["server.getUsageSummary"]({ range: "24h" }));
+
+    expect(summary.totals).toEqual(expect.objectContaining({ usedTokens: 300, turnCount: 1 }));
+    expect(summary.providerCoverage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: "cursor", status: "unavailable" }),
+        expect.objectContaining({ provider: "devin", status: "unavailable" }),
+      ]),
     );
   });
 });

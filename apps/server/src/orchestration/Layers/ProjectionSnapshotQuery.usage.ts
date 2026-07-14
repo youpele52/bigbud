@@ -14,6 +14,9 @@ const ProjectionUsageQueryInput = Schema.Struct({
 });
 
 const ProjectionUsageEntryRow = Schema.Struct({
+  contributionId: Schema.String,
+  threadId: Schema.String,
+  turnId: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
   provider: Schema.String,
   model: Schema.String,
@@ -24,6 +27,8 @@ const ProjectionUsageEntryRow = Schema.Struct({
   outputTokens: Schema.Number,
   reasoningOutputTokens: Schema.Number,
 });
+
+const ProjectionUsageBackfillStateRow = Schema.Struct({ completed: Schema.Number });
 
 function toUsageQueryError(cause: unknown) {
   return Schema.isSchemaError(cause)
@@ -39,41 +44,20 @@ export function makeGetUsageEntries(
     Result: ProjectionUsageEntryRow,
     execute: () => sql`
       SELECT
-        activity.created_at AS "createdAt",
-        COALESCE(json_extract(thread.model_selection_json, '$.provider'), 'unknown') AS provider,
-        COALESCE(json_extract(thread.model_selection_json, '$.model'), 'unknown') AS model,
-        thread.interaction_mode AS "interactionMode",
-        CAST(json_extract(activity.payload_json, '$.usedTokens') AS INTEGER) AS "usedTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.inputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.inputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.inputTokens') AS INTEGER)
-          ELSE 0
-        END AS "inputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.cachedInputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.cachedInputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.cachedInputTokens') AS INTEGER)
-          ELSE 0
-        END AS "cachedInputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.outputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.outputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.outputTokens') AS INTEGER)
-          ELSE 0
-        END AS "outputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.reasoningOutputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.reasoningOutputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.reasoningOutputTokens') AS INTEGER)
-          ELSE 0
-        END AS "reasoningOutputTokens"
-      FROM projection_thread_activities AS activity
-      INNER JOIN projection_threads AS thread ON thread.thread_id = activity.thread_id
-      WHERE activity.kind = 'context-window.updated'
-        AND json_type(activity.payload_json, '$.usedTokens') IN ('integer', 'real')
-        AND CAST(json_extract(activity.payload_json, '$.usedTokens') AS INTEGER) > 0
-      ORDER BY activity.created_at ASC, activity.activity_id ASC
+        contribution.contribution_id AS "contributionId",
+        contribution.thread_id AS "threadId",
+        contribution.turn_id AS "turnId",
+        contribution.occurred_at AS "createdAt",
+        contribution.provider,
+        contribution.model,
+        contribution.interaction_mode AS "interactionMode",
+        contribution.used_tokens AS "usedTokens",
+        contribution.input_tokens AS "inputTokens",
+        contribution.cached_input_tokens AS "cachedInputTokens",
+        contribution.output_tokens AS "outputTokens",
+        contribution.reasoning_output_tokens AS "reasoningOutputTokens"
+      FROM projection_usage_contributions AS contribution
+      ORDER BY contribution.occurred_at ASC, contribution.contribution_id ASC
     `,
   });
 
@@ -82,42 +66,21 @@ export function makeGetUsageEntries(
     Result: ProjectionUsageEntryRow,
     execute: ({ rangeStart }) => sql`
       SELECT
-        activity.created_at AS "createdAt",
-        COALESCE(json_extract(thread.model_selection_json, '$.provider'), 'unknown') AS provider,
-        COALESCE(json_extract(thread.model_selection_json, '$.model'), 'unknown') AS model,
-        thread.interaction_mode AS "interactionMode",
-        CAST(json_extract(activity.payload_json, '$.usedTokens') AS INTEGER) AS "usedTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.inputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.inputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.inputTokens') AS INTEGER)
-          ELSE 0
-        END AS "inputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.cachedInputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.cachedInputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.cachedInputTokens') AS INTEGER)
-          ELSE 0
-        END AS "cachedInputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.outputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.outputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.outputTokens') AS INTEGER)
-          ELSE 0
-        END AS "outputTokens",
-        CASE
-          WHEN json_type(activity.payload_json, '$.reasoningOutputTokens') IN ('integer', 'real')
-            AND json_extract(activity.payload_json, '$.reasoningOutputTokens') > 0
-          THEN CAST(json_extract(activity.payload_json, '$.reasoningOutputTokens') AS INTEGER)
-          ELSE 0
-        END AS "reasoningOutputTokens"
-      FROM projection_thread_activities AS activity
-      INNER JOIN projection_threads AS thread ON thread.thread_id = activity.thread_id
-      WHERE activity.kind = 'context-window.updated'
-        AND activity.created_at >= ${rangeStart}
-        AND json_type(activity.payload_json, '$.usedTokens') IN ('integer', 'real')
-        AND CAST(json_extract(activity.payload_json, '$.usedTokens') AS INTEGER) > 0
-      ORDER BY activity.created_at ASC, activity.activity_id ASC
+        contribution.contribution_id AS "contributionId",
+        contribution.thread_id AS "threadId",
+        contribution.turn_id AS "turnId",
+        contribution.occurred_at AS "createdAt",
+        contribution.provider,
+        contribution.model,
+        contribution.interaction_mode AS "interactionMode",
+        contribution.used_tokens AS "usedTokens",
+        contribution.input_tokens AS "inputTokens",
+        contribution.cached_input_tokens AS "cachedInputTokens",
+        contribution.output_tokens AS "outputTokens",
+        contribution.reasoning_output_tokens AS "reasoningOutputTokens"
+      FROM projection_usage_contributions AS contribution
+      WHERE contribution.occurred_at >= ${rangeStart}
+      ORDER BY contribution.occurred_at ASC, contribution.contribution_id ASC
     `,
   });
 
@@ -125,5 +88,25 @@ export function makeGetUsageEntries(
     (rangeStart === null ? listAllUsageRows(undefined) : listRangedUsageRows({ rangeStart })).pipe(
       Effect.mapError(toUsageQueryError),
       Effect.map((rows): ReadonlyArray<ProjectionUsageEntry> => rows),
+    );
+}
+
+export function makeGetUsageHistoryStatus(
+  sql: SqlClient.SqlClient,
+): ProjectionSnapshotQueryShape["getUsageHistoryStatus"] {
+  const getState = SqlSchema.findOne({
+    Request: Schema.Void,
+    Result: ProjectionUsageBackfillStateRow,
+    execute: () => sql`
+      SELECT completed
+      FROM projection_usage_backfill_state
+      WHERE id = 1
+    `,
+  });
+
+  return () =>
+    getState(undefined).pipe(
+      Effect.map((row) => (row.completed === 1 ? "ready" : "building")),
+      Effect.mapError(toUsageQueryError),
     );
 }

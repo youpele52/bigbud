@@ -166,7 +166,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const snapshotQuery = yield* ProjectionSnapshotQuery;
       const sql = yield* SqlClient.SqlClient;
 
-      yield* sql`DELETE FROM projection_thread_activities`;
+      yield* sql`DELETE FROM projection_usage_contributions`;
       yield* sql`DELETE FROM projection_threads`;
       yield* sql`DELETE FROM projection_projects`;
 
@@ -191,40 +191,40 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         )
       `;
       yield* sql`
-        INSERT INTO projection_thread_activities (
-          activity_id, thread_id, turn_id, tone, kind, summary, payload_json, sequence, created_at
+        INSERT INTO projection_usage_contributions (
+          contribution_id, activity_id, thread_id, turn_id, provider, model, interaction_mode,
+          occurred_at,
+          used_tokens, input_tokens, cached_input_tokens, output_tokens,
+          reasoning_output_tokens, finalized, source_sequence, updated_at
         ) VALUES
           (
-            'usage-old', 'usage-thread', NULL, 'info', 'context-window.updated', 'Old usage',
-            '{"usedTokens":50}', 1, '2026-03-01T00:00:00.000Z'
+            'codex:usage-thread:turn:old', 'usage-old', 'usage-thread', 'old',
+            'codex', 'gpt-5-old', 'plan', '2026-03-01T00:00:00.000Z', 50, 50, 0, 0, 0, 1, 1,
+            '2026-03-01T00:00:00.000Z'
           ),
           (
-            'usage-current', 'usage-thread', NULL, 'info', 'context-window.updated', 'Usage',
-            '{"usedTokens":100,"inputTokens":60,"cachedInputTokens":20,"outputTokens":30,"reasoningOutputTokens":10}',
-            2, '2026-03-02T00:00:00.000Z'
+            'codex:usage-thread:turn:current', 'usage-current', 'usage-thread', 'current',
+            'codex', 'gpt-5-current', 'plan', '2026-03-02T00:00:00.000Z', 100, 60, 20, 30, 10, 1, 2,
+            '2026-03-02T00:00:00.000Z'
           ),
           (
-            'not-usage', 'usage-thread', NULL, 'info', 'tool.completed', 'Tool',
-            '{}', 3, '2026-03-02T00:00:01.000Z'
-          ),
-          (
-            'usage-string', 'usage-thread', NULL, 'info', 'context-window.updated', 'Invalid usage',
-            '{"usedTokens":"200"}', 4, '2026-03-02T00:00:02.000Z'
-          ),
-          (
-            'usage-normalized', 'usage-thread', NULL, 'info', 'context-window.updated', 'Normalized usage',
-            '{"usedTokens":200.9,"inputTokens":-10,"cachedInputTokens":"20","outputTokens":2.9,"reasoningOutputTokens":null}',
-            5, '2026-03-02T00:00:03.000Z'
+            'opencode:usage-thread:item:message-1', 'usage-item', 'usage-thread', 'current',
+            'opencode', 'claude-sonnet', 'plan', '2026-03-02T00:00:03.000Z', 200, 0, 0, 2, 0, 1, 5,
+            '2026-03-02T00:00:03.000Z'
           )
       `;
 
       const entries = yield* snapshotQuery.getUsageEntries("2026-03-02T00:00:00.000Z");
+      assert.equal(yield* snapshotQuery.getUsageHistoryStatus(), "building");
 
       assert.deepEqual(entries, [
         {
+          contributionId: "codex:usage-thread:turn:current",
+          threadId: "usage-thread",
+          turnId: "current",
           createdAt: "2026-03-02T00:00:00.000Z",
           provider: "codex",
-          model: "gpt-5-codex",
+          model: "gpt-5-current",
           interactionMode: "plan",
           usedTokens: 100,
           inputTokens: 60,
@@ -233,9 +233,12 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           reasoningOutputTokens: 10,
         },
         {
+          contributionId: "opencode:usage-thread:item:message-1",
+          threadId: "usage-thread",
+          turnId: "current",
           createdAt: "2026-03-02T00:00:03.000Z",
-          provider: "codex",
-          model: "gpt-5-codex",
+          provider: "opencode",
+          model: "claude-sonnet",
           interactionMode: "plan",
           usedTokens: 200,
           inputTokens: 0,
@@ -253,30 +256,27 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
 
       const queryPlan = (yield* sql`
         EXPLAIN QUERY PLAN
-        SELECT activity_id
-        FROM projection_thread_activities
-        WHERE kind = 'context-window.updated'
-          AND created_at >= '2026-03-02T00:00:00.000Z'
+        SELECT contribution_id
+        FROM projection_usage_contributions
+        WHERE occurred_at >= '2026-03-02T00:00:00.000Z'
       `) as ReadonlyArray<{ detail: string }>;
       assert.ok(
         queryPlan.some(
           (row) =>
-            row.detail.includes("idx_projection_thread_activities_kind_created") &&
-            row.detail.includes("created_at>"),
+            row.detail.includes("idx_projection_usage_contributions_occurred") &&
+            row.detail.includes("occurred_at>"),
         ),
       );
 
       const allTimeQueryPlan = (yield* sql`
         EXPLAIN QUERY PLAN
-        SELECT activity_id
-        FROM projection_thread_activities
-        WHERE kind = 'context-window.updated'
+        SELECT contribution_id
+        FROM projection_usage_contributions
+        ORDER BY occurred_at ASC
       `) as ReadonlyArray<{ detail: string }>;
       assert.ok(
-        allTimeQueryPlan.some(
-          (row) =>
-            row.detail.includes("idx_projection_thread_activities_kind_created") &&
-            row.detail.includes("kind=?"),
+        allTimeQueryPlan.some((row) =>
+          row.detail.includes("idx_projection_usage_contributions_occurred"),
         ),
       );
     }),

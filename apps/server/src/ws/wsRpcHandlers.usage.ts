@@ -8,6 +8,7 @@ import {
 } from "@bigbud/contracts";
 
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
+import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 
 type UsageAccumulator = {
@@ -20,6 +21,10 @@ type UsageAccumulator = {
 };
 
 type UsageEntry = UsageAccumulator & {
+  contributionId: string;
+  threadId: string;
+  turnId: string | null;
+  turnKey: string;
   createdAt: string;
   createdAtMs: number;
   provider: string;
@@ -27,16 +32,9 @@ type UsageEntry = UsageAccumulator & {
   interactionMode: string;
 };
 
-function emptyUsageAccumulator(): UsageAccumulator {
-  return {
-    usedTokens: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-    turnCount: 0,
-  };
-}
+type UsageGroup = Omit<UsageAccumulator, "turnCount"> & {
+  turnKeys: Set<string>;
+};
 
 function toUsageError(cause: unknown, message: string) {
   return Schema.is(ServerUsageError)(cause)
@@ -77,13 +75,35 @@ function getBucketStart(isoDate: string, range: ServerUsageRange) {
   return date.toISOString();
 }
 
-function addUsage(target: UsageAccumulator, entry: UsageAccumulator) {
+function emptyUsageGroup(): UsageGroup {
+  return {
+    usedTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+    turnKeys: new Set<string>(),
+  };
+}
+
+function addUsage(target: UsageGroup, entry: UsageEntry) {
   target.usedTokens += entry.usedTokens;
   target.inputTokens += entry.inputTokens;
   target.cachedInputTokens += entry.cachedInputTokens;
   target.outputTokens += entry.outputTokens;
   target.reasoningOutputTokens += entry.reasoningOutputTokens;
-  target.turnCount += entry.turnCount;
+  target.turnKeys.add(entry.turnKey);
+}
+
+function completeUsageGroup(group: UsageGroup): UsageAccumulator {
+  return {
+    usedTokens: group.usedTokens,
+    inputTokens: group.inputTokens,
+    cachedInputTokens: group.cachedInputTokens,
+    outputTokens: group.outputTokens,
+    reasoningOutputTokens: group.reasoningOutputTokens,
+    turnCount: group.turnKeys.size,
+  };
 }
 
 function sortBreakdownEntries<T extends { usedTokens: number; label: string }>(entries: T[]) {
@@ -113,67 +133,65 @@ function computeStreakDays(entries: ReadonlyArray<UsageEntry>) {
 function buildUsageSummary(
   entries: ReadonlyArray<UsageEntry>,
   range: ServerUsageRange,
+  historyStatus: ServerUsageSummaryResult["historyStatus"],
 ): ServerUsageSummaryResult {
-  const totals = emptyUsageAccumulator();
-  const bucketMap = new Map<string, UsageAccumulator>();
-  const providerMap = new Map<string, UsageAccumulator>();
-  const modelMap = new Map<string, UsageAccumulator>();
-  const modeMap = new Map<string, number>();
+  const totals = emptyUsageGroup();
+  const bucketMap = new Map<string, UsageGroup>();
+  const providerMap = new Map<string, UsageGroup>();
+  const modelMap = new Map<string, UsageGroup>();
+  const modeMap = new Map<string, Set<string>>();
 
   for (const entry of entries) {
     addUsage(totals, entry);
 
     const bucketStart = getBucketStart(entry.createdAt, range);
-    const bucket = bucketMap.get(bucketStart) ?? emptyUsageAccumulator();
+    const bucket = bucketMap.get(bucketStart) ?? emptyUsageGroup();
     addUsage(bucket, entry);
     bucketMap.set(bucketStart, bucket);
 
-    const provider = providerMap.get(entry.provider) ?? emptyUsageAccumulator();
+    const provider = providerMap.get(entry.provider) ?? emptyUsageGroup();
     addUsage(provider, entry);
     providerMap.set(entry.provider, provider);
 
-    const model = modelMap.get(entry.model) ?? emptyUsageAccumulator();
+    const model = modelMap.get(entry.model) ?? emptyUsageGroup();
     addUsage(model, entry);
     modelMap.set(entry.model, model);
 
-    modeMap.set(entry.interactionMode, (modeMap.get(entry.interactionMode) ?? 0) + 1);
+    const modeTurns = modeMap.get(entry.interactionMode) ?? new Set<string>();
+    modeTurns.add(entry.turnKey);
+    modeMap.set(entry.interactionMode, modeTurns);
   }
 
   const providers = sortBreakdownEntries(
-    Array.from(providerMap.entries(), ([label, usage]) => ({
+    Array.from(providerMap.entries(), ([label, group]) => ({
       id: label,
       label,
-      usedTokens: usage.usedTokens,
-      turnCount: usage.turnCount,
+      ...completeUsageGroup(group),
     })),
   );
   const models = sortBreakdownEntries(
-    Array.from(modelMap.entries(), ([label, usage]) => ({
+    Array.from(modelMap.entries(), ([label, group]) => ({
       id: label,
       label,
-      usedTokens: usage.usedTokens,
-      turnCount: usage.turnCount,
+      ...completeUsageGroup(group),
     })),
   );
-  const buckets = Array.from(bucketMap.entries(), ([bucketStart, usage]) => ({
+  const buckets = Array.from(bucketMap.entries(), ([bucketStart, group]) => ({
     bucketStart,
-    usedTokens: usage.usedTokens,
-    inputTokens: usage.inputTokens,
-    cachedInputTokens: usage.cachedInputTokens,
-    outputTokens: usage.outputTokens,
-    reasoningOutputTokens: usage.reasoningOutputTokens,
-    turnCount: usage.turnCount,
+    ...completeUsageGroup(group),
   })).toSorted((left, right) => left.bucketStart.localeCompare(right.bucketStart));
 
   const favoriteMode =
     Array.from(modeMap.entries()).toSorted(
-      (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+      (left, right) => right[1].size - left[1].size || left[0].localeCompare(right[0]),
     )[0]?.[0] ?? null;
 
   return {
     range,
     generatedAt: new Date().toISOString(),
-    totals,
+    historyStatus,
+    providerCoverage: usageProviderCoverage(),
+    totals: completeUsageGroup(totals),
     buckets,
     providers,
     models,
@@ -191,9 +209,10 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
         WS_METHODS.serverGetUsageSummary,
         Effect.gen(function* () {
           const rangeStart = getRangeStart(input.range, new Date());
-          const rows = yield* context.projectionSnapshotQuery.getUsageEntries(
-            rangeStart?.toISOString() ?? null,
-          );
+          const [rows, historyStatus] = yield* Effect.all([
+            context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
+            context.projectionSnapshotQuery.getUsageHistoryStatus(),
+          ]);
           const entries: UsageEntry[] = rows.flatMap((row) => {
             const createdAt = parseValidDate(row.createdAt);
             return createdAt
@@ -202,13 +221,14 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
                     ...row,
                     createdAt: createdAt.toISOString(),
                     createdAtMs: createdAt.getTime(),
+                    turnKey: `${row.threadId}:${row.turnId ?? row.contributionId}`,
                     turnCount: 1,
                   },
                 ]
               : [];
           });
 
-          return buildUsageSummary(entries, input.range);
+          return buildUsageSummary(entries, input.range, historyStatus);
         }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
         { "rpc.aggregate": "server" },
       ),

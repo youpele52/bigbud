@@ -26,6 +26,9 @@ export interface ProjectionSnapshotCounts {
 }
 
 export interface ProjectionUsageEntry {
+  readonly contributionId: string;
+  readonly threadId: string;
+  readonly turnId: string | null;
   readonly createdAt: string;
   readonly provider: string;
   readonly model: string;
@@ -36,6 +39,8 @@ export interface ProjectionUsageEntry {
   readonly outputTokens: number;
   readonly reasoningOutputTokens: number;
 }
+
+export type ProjectionUsageHistoryStatus = "building" | "ready";
 
 export interface ProjectionThreadCheckpointContext {
   readonly threadId: ThreadId;
@@ -69,6 +74,11 @@ export interface ProjectionSnapshotQueryShape {
   readonly getUsageEntries: (
     rangeStart: string | null,
   ) => Effect.Effect<ReadonlyArray<ProjectionUsageEntry>, ProjectionRepositoryError>;
+
+  readonly getUsageHistoryStatus: () => Effect.Effect<
+    ProjectionUsageHistoryStatus,
+    ProjectionRepositoryError
+  >;
 
   /**
    * Read the active project for an exact workspace root match.
