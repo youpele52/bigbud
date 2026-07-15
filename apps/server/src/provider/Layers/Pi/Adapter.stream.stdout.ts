@@ -32,6 +32,7 @@ import {
   handleTurnEnd,
 } from "./Adapter.stream.handlers.ts";
 import { handleRuntimeStatusEvent } from "./Adapter.stream.stdout.runtimeEvents.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 export function makeHandleStdoutEvent(deps: {
   readonly emit: PiEmitEvents;
@@ -189,6 +190,11 @@ export function makeHandleStdoutEvent(deps: {
           const detail = extractTextContent(message.message);
           const events: ProviderRuntimeEvent[] = [];
           if (usage) {
+            const accounting = makeTokenUsageAccounting({
+              scope: "item",
+              scopeId: itemId,
+              usage,
+            });
             events.push({
               ...eventBase({
                 eventId: EventId.makeUnsafe(randomUUID()),
@@ -199,7 +205,10 @@ export function makeHandleStdoutEvent(deps: {
                 raw,
               }),
               type: "thread.token-usage.updated",
-              payload: { usage },
+              payload: {
+                usage,
+                ...(accounting ? { accounting } : {}),
+              },
             });
           }
 

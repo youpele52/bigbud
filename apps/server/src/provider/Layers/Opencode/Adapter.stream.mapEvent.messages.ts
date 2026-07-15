@@ -8,6 +8,7 @@ import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase, normalizeString } from "./Adapter.stream.utils.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 type MapEventContext = {
   readonly stamp: { readonly eventId: EventId; readonly createdAt: string };
@@ -205,6 +206,11 @@ export function mapMessageUpdated(
         ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
         ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
       };
+      const accounting = makeTokenUsageAccounting({
+        scope: "item",
+        scopeId: assistantMsg.id,
+        usage,
+      });
       session.lastUsage = usage;
 
       return [
@@ -219,7 +225,10 @@ export function mapMessageUpdated(
             raw: context.raw,
           }),
           type: "thread.token-usage.updated",
-          payload: { usage },
+          payload: {
+            usage,
+            ...(accounting ? { accounting } : {}),
+          },
         },
       ];
     }

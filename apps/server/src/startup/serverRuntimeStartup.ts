@@ -1,4 +1,15 @@
-import { Data, Deferred, Effect, Exit, Layer, Queue, Ref, Scope, ServiceMap } from "effect";
+import {
+  Data,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Queue,
+  Ref,
+  Schedule,
+  Scope,
+  ServiceMap,
+} from "effect";
 
 import { ServerConfig } from "./config";
 import { Keybindings } from "../keybindings/keybindings";
@@ -9,6 +20,7 @@ import { ServerSettingsService } from "../ws/serverSettings";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
 import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
+import { cleanupHandoffDocumentFiles } from "../ws/wsHandoffDocument.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -163,6 +175,14 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
             cause: error.cause,
           }),
         ),
+        Effect.forkScoped,
+      ),
+    );
+
+    yield* Effect.logDebug("startup phase: starting handoff document cleanup");
+    yield* runStartupPhase(
+      "handoff.cleanup.start",
+      Effect.repeat(cleanupHandoffDocumentFiles(), Schedule.fixed("24 hours")).pipe(
         Effect.forkScoped,
       ),
     );

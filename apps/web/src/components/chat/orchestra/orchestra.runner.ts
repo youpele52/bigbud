@@ -3,13 +3,15 @@ import {
   type ProviderInteractionMode,
   type RuntimeMode,
   type ThreadId,
+  type TurnId,
 } from "@bigbud/contracts";
 import { truncate } from "@bigbud/shared/String";
 import { buildExplicitExecutionTargets } from "~/lib/providerExecutionTargets";
 import { generateHandoffDocument, HandoffError, buildHandoffSeedMessage } from "~/lib/handoff";
 import { newCommandId, newMessageId, newThreadId } from "~/lib/utils";
+import { isLatestTurnSettled } from "~/logic/session";
 import { readNativeApi } from "~/rpc/nativeApi";
-import { selectIsThreadRunning, selectThreadById, useStore } from "~/stores/main";
+import { selectThreadById, useStore } from "~/stores/main";
 import { waitForStartedServerThread } from "../view/ChatView.threadWait.logic";
 import { resolveOrchestraScoreName } from "./orchestra.naming";
 
@@ -76,6 +78,7 @@ export async function waitForThreadCompletion(
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;
+    let expectedTurnId: TurnId | null = null;
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | null = null;
 
     const finish = (callback: () => void) => {
@@ -98,18 +101,35 @@ export async function waitForThreadCompletion(
         return;
       }
       const sessionStatus = thread.session?.orchestrationStatus ?? null;
-      const latestTurnState = thread.latestTurn?.state ?? null;
-      if (selectIsThreadRunning(threadId)(state)) {
+      if (sessionStatus === "error") {
+        finish(() => reject(new Error("Thread session failed before assignment completion.")));
         return;
       }
-      if (
-        sessionStatus === "ready" ||
-        sessionStatus === "stopped" ||
-        sessionStatus === "error" ||
-        latestTurnState === "completed" ||
-        latestTurnState === "error" ||
-        latestTurnState === "interrupted"
-      ) {
+
+      const latestTurn = thread.latestTurn;
+      if (expectedTurnId === null) {
+        if (latestTurn === null || latestTurn.startedAt === null) {
+          if (sessionStatus === "stopped") {
+            finish(() => reject(new Error("Thread stopped before the assignment turn started.")));
+          }
+          return;
+        }
+        expectedTurnId = latestTurn.turnId;
+      }
+
+      if (latestTurn === null || latestTurn.turnId !== expectedTurnId) {
+        finish(() => reject(new Error("Thread advanced before the assignment turn completed.")));
+        return;
+      }
+      if (latestTurn.state === "error" || latestTurn.state === "interrupted") {
+        finish(() => reject(new Error(`Assignment turn ${latestTurn.state}.`)));
+        return;
+      }
+      if (sessionStatus === "stopped" && latestTurn.state !== "completed") {
+        finish(() => reject(new Error("Thread stopped before assignment completion.")));
+        return;
+      }
+      if (latestTurn.state === "completed" && isLatestTurnSettled(latestTurn, thread.session)) {
         finish(() => resolve());
       }
     };

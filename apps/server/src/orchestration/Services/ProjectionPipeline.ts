@@ -23,6 +23,9 @@ export interface OrchestrationProjectionPipelineShape {
    */
   readonly bootstrap: Effect.Effect<void, ProjectionRepositoryError>;
 
+  /** Backfill historical canonical usage in bounded, resumable batches. */
+  readonly backfillUsageContributions: Effect.Effect<void, ProjectionRepositoryError>;
+
   /**
    * Project a single orchestration event into projection repositories.
    *

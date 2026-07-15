@@ -376,7 +376,10 @@ export function makeRuntimeEventProcessor(
       yield* handleTurnDiffUpdated({ event, thread, now });
     }
 
-    const activities = runtimeEventToActivities(event);
+    const activities = runtimeEventToActivities(event, {
+      model: thread.modelSelection.model,
+      interactionMode: thread.interactionMode,
+    });
     yield* appendActivities({ event, threadId: thread.id, activities });
   });
 }

@@ -26,6 +26,7 @@ import {
 } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 
 export interface TurnHandlerDeps {
@@ -317,6 +318,14 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
 
     if (usageSnapshot) {
       const usageStamp = yield* makeEventStamp();
+      const accounting =
+        accumulatedSnapshot && turnState.turnId
+          ? makeTokenUsageAccounting({
+              scope: "turn",
+              scopeId: turnState.turnId,
+              usage: accumulatedSnapshot,
+            })
+          : undefined;
       yield* offerRuntimeEvent({
         type: "thread.token-usage.updated",
         eventId: usageStamp.eventId,
@@ -326,6 +335,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
         turnId: turnState.turnId,
         payload: {
           usage: usageSnapshot,
+          ...(accounting ? { accounting } : {}),
         },
         providerRefs: nativeProviderRefs(context),
       });

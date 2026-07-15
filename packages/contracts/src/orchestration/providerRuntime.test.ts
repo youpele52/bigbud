@@ -154,6 +154,16 @@ describe("ProviderRuntimeEvent", () => {
           toolUses: 25,
           durationMs: 43567,
         },
+        accounting: {
+          scope: "turn",
+          scopeId: "turn-1",
+          processedTokens: 31251,
+          inputTokens: 30000,
+          cachedInputTokens: 1000,
+          outputTokens: 251,
+          reasoningOutputTokens: 0,
+          finalized: true,
+        },
       },
     });
 
@@ -163,5 +173,6 @@ describe("ProviderRuntimeEvent", () => {
     }
     expect(parsed.payload.usage.maxTokens).toBe(200000);
     expect(parsed.payload.usage.usedTokens).toBe(31251);
+    expect(parsed.payload.accounting?.scopeId).toBe("turn-1");
   });
 });

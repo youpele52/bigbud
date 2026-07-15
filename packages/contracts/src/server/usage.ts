@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ProviderKind } from "../orchestration/orchestration.provider";
 
 export const ServerUsageRange = Schema.Literals(["24h", "7d", "30d", "all"]);
 export type ServerUsageRange = typeof ServerUsageRange.Type;
@@ -39,9 +40,18 @@ export const ServerUsageBreakdownEntry = Schema.Struct({
 });
 export type ServerUsageBreakdownEntry = typeof ServerUsageBreakdownEntry.Type;
 
+export const ServerUsageProviderCoverage = Schema.Struct({
+  provider: ProviderKind,
+  status: Schema.Literals(["available", "unavailable"]),
+  reason: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ServerUsageProviderCoverage = typeof ServerUsageProviderCoverage.Type;
+
 export const ServerUsageSummaryResult = Schema.Struct({
   range: ServerUsageRange,
   generatedAt: IsoDateTime,
+  historyStatus: Schema.Literals(["building", "ready"]),
+  providerCoverage: Schema.Array(ServerUsageProviderCoverage),
   totals: ServerUsageTotals,
   buckets: Schema.Array(ServerUsageBucket),
   providers: Schema.Array(ServerUsageBreakdownEntry),

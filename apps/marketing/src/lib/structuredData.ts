@@ -1,4 +1,4 @@
-import { APP_NAME, GITHUB_REPO_URL, X_PROFILE_URL } from "../constants/app";
+import { APP_NAME, GITHUB_REPO_URL, X_PROFILE_URL, YOUTUBE_CHANNEL_URL } from "../constants/app";
 
 interface SiteContext {
   pageUrl: string;
@@ -12,7 +12,7 @@ export function buildOrganizationSchema({ siteUrl }: SiteContext) {
     name: APP_NAME,
     url: siteUrl,
     logo: `${siteUrl}/brand/icon.png`,
-    sameAs: [X_PROFILE_URL, GITHUB_REPO_URL],
+    sameAs: [X_PROFILE_URL, YOUTUBE_CHANNEL_URL, GITHUB_REPO_URL],
   };
 }
 
@@ -77,5 +77,29 @@ export function buildBreadcrumbSchema(pageUrl: string, pageName: string, siteUrl
         item: pageUrl,
       },
     ],
+  };
+}
+
+export function buildWebPageSchema(
+  { pageUrl, siteUrl }: SiteContext,
+  name: string,
+  description: string,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name,
+    url: pageUrl,
+    description,
+    inLanguage: "en",
+    isPartOf: {
+      "@type": "WebSite",
+      name: APP_NAME,
+      url: siteUrl,
+    },
+    about: {
+      "@type": "SoftwareApplication",
+      name: APP_NAME,
+    },
   };
 }

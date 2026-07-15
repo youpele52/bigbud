@@ -16,6 +16,7 @@ import {
   normalizeBigbudPlanTrackingPayload,
 } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
 import { type ActiveCopilotSession, eventBase, normalizeUsage } from "./Adapter.types.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 /** Dependencies threaded into mapEvent as plain values. */
 export interface MapEventDeps {
@@ -138,7 +139,13 @@ export const mapEvent = (
             },
           },
         ];
-      case "assistant.usage":
+      case "assistant.usage": {
+        const usage = normalizeUsage(event);
+        const accounting = makeTokenUsageAccounting({
+          scope: "turn",
+          scopeId: turnId,
+          usage,
+        });
         return [
           {
             ...eventBase({
@@ -149,9 +156,13 @@ export const mapEvent = (
               raw,
             }),
             type: "thread.token-usage.updated",
-            payload: { usage: normalizeUsage(event) },
+            payload: {
+              usage,
+              ...(accounting ? { accounting } : {}),
+            },
           },
         ];
+      }
       case "session.idle": {
         const readyEventId = yield* deps.nextEventId;
         return [

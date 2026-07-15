@@ -23,6 +23,7 @@ describe("ProviderRuntimeIngestion", () => {
       provider: "codex",
       createdAt: now,
       threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-1"),
       payload: {
         usage: {
           usedTokens: 1075,
@@ -38,6 +39,16 @@ describe("ProviderRuntimeIngestion", () => {
           lastOutputTokens: 50,
           lastReasoningOutputTokens: 25,
           compactsAutomatically: true,
+        },
+        accounting: {
+          scope: "turn",
+          scopeId: "turn-1",
+          processedTokens: 1075,
+          inputTokens: 1000,
+          cachedInputTokens: 500,
+          outputTokens: 50,
+          reasoningOutputTokens: 25,
+          finalized: true,
         },
       },
     });
@@ -62,6 +73,14 @@ describe("ProviderRuntimeIngestion", () => {
       reasoningOutputTokens: 25,
       lastUsedTokens: 1075,
       compactsAutomatically: true,
+      accounting: {
+        provider: "codex",
+        model: "gpt-5-codex",
+        interactionMode: "default",
+        scope: "turn",
+        scopeId: "turn-1",
+        processedTokens: 1075,
+      },
     });
   });
 
