@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from 
 import { type ServerUsageRange, type ServerUsageSummaryResult } from "@bigbud/contracts";
 
 import { usePageTitle } from "~/hooks/usePageTitle";
+import { retryTransportRecoveryOperation } from "~/logic/orchestration/transport-retry.logic";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { useServerProviders } from "~/rpc/serverState";
 import { formatHumanReadableDate } from "~/utils/timestamp";
@@ -18,6 +19,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { StandaloneChatPageHeader } from "../standalone/StandaloneChatPageHeader";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { UsageBreakdownCard, type UsageBreakdownView } from "./UsageBreakdownCard";
+import { UsageDataStatus } from "./UsageDataStatus";
 import { formatCompactNumber } from "./UsagePage.format";
 import { applyUsageDisplayLabels } from "./UsagePage.labels";
 import { UsageTokenMixCard } from "./UsageTokenMixCard";
@@ -50,13 +52,21 @@ export function UsagePage() {
       return;
     }
 
+    let active = true;
     setLoading(true);
-    void api.server
-      .getUsageSummary({ range })
+    void retryTransportRecoveryOperation(() => api.server.getUsageSummary({ range }), {
+      maxRetries: 2,
+      shouldAbort: () => !active,
+    })
       .then((nextSummary) => {
-        setSummary(nextSummary);
+        if (active) {
+          setSummary(nextSummary);
+        }
       })
       .catch((error) => {
+        if (!active) {
+          return;
+        }
         toastManager.add({
           type: "error",
           title: "Failed to load usage",
@@ -65,8 +75,14 @@ export function UsagePage() {
         setSummary(null);
       })
       .finally(() => {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      active = false;
+    };
   }, [api, range]);
 
   const headerActions = (
@@ -108,6 +124,7 @@ export function UsagePage() {
           <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-4 px-4 py-6 sm:px-6">
             {displaySummary ? (
               <>
+                <UsageDataStatus summary={displaySummary} />
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <UsageStatCard
                     icon={SigmaIcon}

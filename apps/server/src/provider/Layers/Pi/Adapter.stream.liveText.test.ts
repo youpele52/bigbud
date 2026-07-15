@@ -248,6 +248,7 @@ describe("PiAdapter stream integration — live text projection", () => {
         message: {
           role: "assistant",
           content: [{ type: "text", text: "Hello Pi" }],
+          usage: { input: 20, output: 5, cacheRead: 2, totalTokens: 27 },
         },
       }),
     );
@@ -264,5 +265,18 @@ describe("PiAdapter stream integration — live text projection", () => {
     expect(finalMessage?.streaming).toBe(false);
     expect(finalMessage?.text).toBe("Hello Pi");
     expect(provider.emittedEvents.map((event) => event.type)).toContain("item.completed");
+    expect(
+      provider.emittedEvents.find((event) => event.type === "thread.token-usage.updated"),
+    ).toMatchObject({
+      payload: {
+        accounting: {
+          scope: "item",
+          processedTokens: 27,
+          inputTokens: 20,
+          cachedInputTokens: 2,
+          outputTokens: 5,
+        },
+      },
+    });
   });
 });

@@ -5,6 +5,7 @@ import { HOME_METADATA } from "../constants/seo";
 import {
   buildOrganizationSchema,
   buildSoftwareApplicationSchema,
+  buildWebPageSchema,
   buildWebsiteSchema,
 } from "../lib/structuredData";
 import Layout from "../layouts/Layout.astro";
@@ -15,6 +16,7 @@ const structuredData = [
   buildOrganizationSchema({ pageUrl, siteUrl }),
   buildWebsiteSchema({ pageUrl, siteUrl }),
   buildSoftwareApplicationSchema({ pageUrl, siteUrl }),
+  buildWebPageSchema({ pageUrl, siteUrl }, HOME_METADATA.title, HOME_METADATA.description),
 ];
 ---
 

@@ -25,6 +25,28 @@ describe("retryTransportRecoveryOperation", () => {
     expect(sleep).toHaveBeenCalledOnce();
   });
 
+  it("retries RPC requests interrupted when a transport session is replaced", async () => {
+    let attempts = 0;
+    const sleep = vi.fn(async () => undefined);
+
+    await expect(
+      retryTransportRecoveryOperation(
+        async () => {
+          attempts += 1;
+          if (attempts === 1) {
+            throw new Error("All fibers interrupted without error");
+          }
+
+          return "ok";
+        },
+        { maxRetries: 2, sleep },
+      ),
+    ).resolves.toBe("ok");
+
+    expect(attempts).toBe(2);
+    expect(sleep).toHaveBeenCalledOnce();
+  });
+
   it("does not retry non-transport failures", async () => {
     let attempts = 0;
 

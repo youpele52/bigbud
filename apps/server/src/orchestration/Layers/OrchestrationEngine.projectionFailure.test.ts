@@ -37,6 +37,7 @@ describe("OrchestrationEngine", () => {
     let shouldFailRequestedProjection = true;
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
+      backfillUsageContributions: Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailRequestedProjection &&
@@ -184,6 +185,7 @@ describe("OrchestrationEngine", () => {
     let shouldFailProjection = true;
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
+      backfillUsageContributions: Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailProjection &&

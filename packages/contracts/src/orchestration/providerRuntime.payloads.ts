@@ -76,8 +76,24 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
+export const ThreadTokenUsageAccountingScope = Schema.Literals(["turn", "item", "task"]);
+export type ThreadTokenUsageAccountingScope = typeof ThreadTokenUsageAccountingScope.Type;
+
+export const ThreadTokenUsageAccounting = Schema.Struct({
+  scope: ThreadTokenUsageAccountingScope,
+  scopeId: TrimmedNonEmptyStringSchema,
+  processedTokens: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  cachedInputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  reasoningOutputTokens: NonNegativeInt,
+  finalized: Schema.Boolean,
+});
+export type ThreadTokenUsageAccounting = typeof ThreadTokenUsageAccounting.Type;
+
 export const ThreadTokenUsageUpdatedPayload = Schema.Struct({
   usage: ThreadTokenUsageSnapshot,
+  accounting: Schema.optional(ThreadTokenUsageAccounting),
 });
 export type ThreadTokenUsageUpdatedPayload = typeof ThreadTokenUsageUpdatedPayload.Type;
 

@@ -153,6 +153,11 @@ it.effect("maps prompt responses into canonical OpenCode runtime events", () => 
         usage: {
           usedTokens: 25,
         },
+        accounting: {
+          scope: "item",
+          processedTokens: 25,
+          finalized: true,
+        },
       },
     });
     expect(emitted.find((event) => event.type === "item.completed")).toMatchObject({

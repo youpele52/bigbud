@@ -10,6 +10,7 @@ import {
   EventId,
   IsoDateTime,
   NonNegativeInt,
+  ProviderInteractionMode,
   OrchestrationThreadActivityTone,
   ThreadId,
   TurnId,
@@ -31,6 +32,54 @@ export const ProjectionThreadActivity = Schema.Struct({
   createdAt: IsoDateTime,
 });
 export type ProjectionThreadActivity = typeof ProjectionThreadActivity.Type;
+
+export const ProjectionUsageContribution = Schema.Struct({
+  contributionId: Schema.String,
+  activityId: EventId,
+  threadId: ThreadId,
+  turnId: Schema.NullOr(TurnId),
+  provider: Schema.String,
+  model: Schema.String,
+  interactionMode: ProviderInteractionMode,
+  occurredAt: IsoDateTime,
+  usedTokens: NonNegativeInt,
+  inputTokens: NonNegativeInt,
+  cachedInputTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  reasoningOutputTokens: NonNegativeInt,
+  finalized: Schema.Boolean,
+  sourceSequence: Schema.NullOr(NonNegativeInt),
+  updatedAt: IsoDateTime,
+});
+export type ProjectionUsageContribution = typeof ProjectionUsageContribution.Type;
+
+export const ProjectionUsageBackfillState = Schema.Struct({
+  lastActivityId: Schema.String,
+  completed: Schema.Boolean,
+  updatedAt: IsoDateTime,
+});
+export type ProjectionUsageBackfillState = typeof ProjectionUsageBackfillState.Type;
+
+export const ProjectionUsageBackfillRow = Schema.Struct({
+  activityId: EventId,
+  kind: Schema.String,
+  threadId: ThreadId,
+  turnId: Schema.NullOr(TurnId),
+  payload: Schema.Unknown,
+  sequence: Schema.optional(NonNegativeInt),
+  createdAt: IsoDateTime,
+  provider: Schema.String,
+  model: Schema.String,
+  interactionMode: ProviderInteractionMode,
+});
+export type ProjectionUsageBackfillRow = typeof ProjectionUsageBackfillRow.Type;
+
+export const ListProjectionUsageBackfillBatchInput = Schema.Struct({
+  afterActivityId: Schema.String,
+  limit: NonNegativeInt,
+});
+export type ListProjectionUsageBackfillBatchInput =
+  typeof ListProjectionUsageBackfillBatchInput.Type;
 
 export const ListProjectionThreadActivitiesInput = Schema.Struct({
   threadId: ThreadId,
@@ -71,6 +120,26 @@ export interface ProjectionThreadActivityRepositoryShape {
    */
   readonly deleteByThreadId: (
     input: DeleteProjectionThreadActivitiesInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /**
+   * Insert or replace a projected usage contribution row.
+   */
+  readonly upsertUsageContribution: (
+    row: ProjectionUsageContribution,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  readonly getUsageBackfillState: () => Effect.Effect<
+    ProjectionUsageBackfillState,
+    ProjectionRepositoryError
+  >;
+
+  readonly listUsageBackfillBatch: (
+    input: ListProjectionUsageBackfillBatchInput,
+  ) => Effect.Effect<ReadonlyArray<ProjectionUsageBackfillRow>, ProjectionRepositoryError>;
+
+  readonly advanceUsageBackfillState: (
+    state: ProjectionUsageBackfillState,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

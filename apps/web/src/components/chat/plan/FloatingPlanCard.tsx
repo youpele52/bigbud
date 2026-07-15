@@ -173,8 +173,8 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 pr-2 [scrollbar-gutter:stable] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/20 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/28">
-        <div className="space-y-4 pr-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 [scrollbar-gutter:stable]">
+        <div className="space-y-4">
           {activePlan?.explanation ? (
             <p className="text-[13px] leading-5 text-foreground/80">{activePlan.explanation}</p>
           ) : null}

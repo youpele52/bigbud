@@ -5,6 +5,7 @@ const TRANSPORT_ERROR_PATTERNS = [
   /\bSocketOpenError\b/i,
   new RegExp(`Unable to connect to the ${APP_SERVER_NAME} WebSocket\\.`, "i"),
   /\bping timeout\b/i,
+  /\bAll fibers interrupted without error\b/i,
 ] as const;
 
 export function isTransportConnectionErrorMessage(message: string | null | undefined): boolean {

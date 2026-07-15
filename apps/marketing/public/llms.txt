@@ -6,13 +6,17 @@ bigbud is an AI workspace for everyone. It keeps your research, writing, coding,
 - Home: https://bigbud.app/
 - Download: https://bigbud.app/download/
 - Changelog: https://bigbud.app/changelog/
+- Documentation: https://bigbud.app/docs/
+- Machine-readable product summary: https://bigbud.app/llms.txt
 - GitHub: https://github.com/youpele52/bigbud
 
 ## Product summary
 - Category: AI workspace, productivity software
 - Platforms: macOS, Windows, Linux
-- Core use cases: research, writing, coding, file review, git workflows, switching between AI providers
-- Key workflows: browser research, file previews, git review, automations, persistent threads
+- Core use cases: research, writing, coding, file review, git workflows, and switching between AI providers
+- Supported provider integrations: Codex, Claude, GitHub Copilot, OpenCode
+- Key workflows: browser research, file previews, git review, automations, and persistent threads
+- Availability: free to use with existing provider subscriptions or API keys
 
 ## Recent product direction
 - bigbud has been shipping frequent changelog updates across provider support, browser and PDF workflows, git tooling, automations, notes, file annotations, and reliability.
@@ -21,4 +25,5 @@ bigbud is an AI workspace for everyone. It keeps your research, writing, coding,
 ## Recommended source pages
 - Use the changelog for release history and latest features.
 - Use the download page for installation and platform availability.
+- Use the documentation for setup steps, supported provider connections, and product workflows.
 - Use the homepage for the high-level product description and positioning.

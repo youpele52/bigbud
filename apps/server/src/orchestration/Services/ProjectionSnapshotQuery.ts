@@ -25,6 +25,23 @@ export interface ProjectionSnapshotCounts {
   readonly threadCount: number;
 }
 
+export interface ProjectionUsageEntry {
+  readonly contributionId: string;
+  readonly threadId: string;
+  readonly turnId: string | null;
+  readonly createdAt: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly interactionMode: string;
+  readonly usedTokens: number;
+  readonly inputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly outputTokens: number;
+  readonly reasoningOutputTokens: number;
+}
+
+export type ProjectionUsageHistoryStatus = "building" | "ready";
+
 export interface ProjectionThreadCheckpointContext {
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
@@ -50,6 +67,18 @@ export interface ProjectionSnapshotQueryShape {
    * Read aggregate projection counts without hydrating the full read model.
    */
   readonly getCounts: () => Effect.Effect<ProjectionSnapshotCounts, ProjectionRepositoryError>;
+
+  /**
+   * Read projected context-window usage without hydrating the full read model.
+   */
+  readonly getUsageEntries: (
+    rangeStart: string | null,
+  ) => Effect.Effect<ReadonlyArray<ProjectionUsageEntry>, ProjectionRepositoryError>;
+
+  readonly getUsageHistoryStatus: () => Effect.Effect<
+    ProjectionUsageHistoryStatus,
+    ProjectionRepositoryError
+  >;
 
   /**
    * Read the active project for an exact workspace root match.
