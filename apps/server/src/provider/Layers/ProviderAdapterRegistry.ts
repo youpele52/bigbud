@@ -7,7 +7,7 @@
  *
  * @module ProviderAdapterRegistryLive
  */
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 
 import { ProviderUnsupportedError, type ProviderAdapterError } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
@@ -23,6 +23,8 @@ import { DevinAdapter } from "../Services/Devin/Adapter.ts";
 import { KilocodeAdapter } from "../Services/Kilocode/Adapter.ts";
 import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../Services/Pi/Adapter.ts";
+import { CliProxyAdapter } from "../Services/CliProxy/Adapter.ts";
+import { isCliProxyExperimentEnabled } from "./CliProxy/config.ts";
 
 export interface ProviderAdapterRegistryLiveOptions {
   readonly adapters?: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>;
@@ -31,6 +33,7 @@ export interface ProviderAdapterRegistryLiveOptions {
 const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(function* (
   options?: ProviderAdapterRegistryLiveOptions,
 ) {
+  const cliProxyAdapter = yield* Effect.serviceOption(CliProxyAdapter);
   const adapters =
     options?.adapters !== undefined
       ? options.adapters
@@ -43,6 +46,9 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
           yield* KilocodeAdapter,
           yield* OpencodeAdapter,
           yield* PiAdapter,
+          ...(isCliProxyExperimentEnabled() && Option.isSome(cliProxyAdapter)
+            ? [cliProxyAdapter.value]
+            : []),
         ];
   const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
 

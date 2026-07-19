@@ -19,7 +19,12 @@ const RecentModelsList = Schema.Array(RecentModelUsage);
 function sanitizeEntry(entry: RecentModelUsage): RecentModelUsage {
   // Strip subProviderID for providers that don't support it.
   // This fixes legacy localStorage data that may have stored it.
-  if (entry.provider !== "opencode" && entry.provider !== "kilocode" && entry.provider !== "pi") {
+  if (
+    entry.provider !== "opencode" &&
+    entry.provider !== "kilocode" &&
+    entry.provider !== "pi" &&
+    entry.provider !== "cliProxy"
+  ) {
     const { subProviderID: _discarded, ...rest } = entry;
     return rest;
   }
@@ -66,7 +71,10 @@ export function recordModelUsage(
   subProviderID?: string,
 ): void {
   const supportsSubProvider =
-    provider === "opencode" || provider === "kilocode" || provider === "pi";
+    provider === "opencode" ||
+    provider === "kilocode" ||
+    provider === "pi" ||
+    provider === "cliProxy";
   const normalizedSubProviderID = supportsSubProvider ? (subProviderID ?? undefined) : undefined;
   const existing = readAll();
   const filtered = existing.filter(

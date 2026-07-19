@@ -152,6 +152,14 @@ export const ClaudeSettings = Schema.Struct({
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
+/** Inert UI shape only; CLIProxy runtime configuration is environment-only. */
+export const CliProxySettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  binaryPath: makeBinaryPathSetting("claude"),
+  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+});
+export type CliProxySettings = typeof CliProxySettings.Type;
+
 export const CopilotSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("copilot"),
@@ -227,6 +235,7 @@ export const ServerSettings = Schema.Struct({
   providers: Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    cliProxy: CliProxySettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -326,6 +335,12 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(ClaudeModelOptionsPatch),
   }),
   Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("cliProxy")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(ClaudeModelOptionsPatch),
+    subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+  }),
+  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("copilot")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(CopilotModelOptionsPatch),
@@ -365,6 +380,12 @@ const CodexSettingsPatch = Schema.Struct({
 });
 
 const ClaudeSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  binaryPath: Schema.optionalKey(Schema.String),
+  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+
+const CliProxySettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
@@ -435,6 +456,7 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
+      cliProxy: Schema.optionalKey(CliProxySettingsPatch),
       copilot: Schema.optionalKey(CopilotSettingsPatch),
       kilocode: Schema.optionalKey(KilocodeSettingsPatch),
       opencode: Schema.optionalKey(OpencodeSettingsPatch),

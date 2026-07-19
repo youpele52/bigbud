@@ -7,6 +7,7 @@ import type {
   Options as ClaudeQueryOptions,
   PermissionMode,
   PermissionUpdate,
+  SettingSource,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -136,4 +137,14 @@ export interface ClaudeAdapterLiveOptions {
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+  /**
+   * Private harness override used by isolated integrations. Native Claude never
+   * supplies this and therefore retains its existing process environment.
+   */
+  readonly privateHarness?: {
+    readonly binaryPath: string;
+    readonly environment: () => Readonly<Record<string, string>>;
+    readonly settingSources: ReadonlyArray<SettingSource>;
+    readonly resolveModel: (model: string) => string;
+  };
 }

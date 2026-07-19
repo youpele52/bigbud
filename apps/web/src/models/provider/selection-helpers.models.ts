@@ -13,6 +13,10 @@ export function getProviderModelOptions(
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["claudeAgent"] | undefined;
 export function getProviderModelOptions(
+  provider: "cliProxy",
+  options: ProviderModelOptions | null | undefined,
+): ProviderModelOptions["cliProxy"] | undefined;
+export function getProviderModelOptions(
   provider: "copilot",
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["copilot"] | undefined;
@@ -45,6 +49,8 @@ export function getProviderModelOptions(
       return options?.codex;
     case "claudeAgent":
       return options?.claudeAgent;
+    case "cliProxy":
+      return options?.cliProxy;
     case "copilot":
       return options?.copilot;
     case "opencode":
@@ -106,6 +112,10 @@ export function createModelSelection(
     case "claudeAgent": {
       const claudeOptions = options as ProviderModelOptions["claudeAgent"] | undefined;
       return claudeOptions ? { provider, model, options: claudeOptions } : { provider, model };
+    }
+    case "cliProxy": {
+      const cliProxyOptions = options as ProviderModelOptions["cliProxy"] | undefined;
+      return cliProxyOptions ? { provider, model, options: cliProxyOptions } : { provider, model };
     }
     case "copilot": {
       const copilotOptions = options as ProviderModelOptions["copilot"] | undefined;

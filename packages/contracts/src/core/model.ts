@@ -36,6 +36,10 @@ export const ClaudeModelOptions = Schema.Struct({
 });
 export type ClaudeModelOptions = typeof ClaudeModelOptions.Type;
 
+/** CLIProxy uses the private Claude Code harness and supports its safe subset. */
+export const CliProxyModelOptions = ClaudeModelOptions;
+export type CliProxyModelOptions = typeof CliProxyModelOptions.Type;
+
 export const CopilotModelOptions = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
 });
@@ -85,6 +89,7 @@ export type DevinModelOptions = typeof DevinModelOptions.Type;
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
+  cliProxy: Schema.optional(CliProxyModelOptions),
   copilot: Schema.optional(CopilotModelOptions),
   kilocode: Schema.optional(KilocodeModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),

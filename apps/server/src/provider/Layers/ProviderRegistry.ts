@@ -27,6 +27,8 @@ import { DevinProvider } from "../Services/Devin/Provider";
 import { KilocodeProvider } from "../Services/Kilocode/Provider";
 import { OpencodeProvider } from "../Services/Opencode/Provider";
 import { PiProvider } from "../Services/Pi/Provider";
+import { CliProxyProvider } from "../Services/CliProxy/Provider";
+import { isCliProxyExperimentEnabled } from "./CliProxy/config";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 import type { ServerProviderShape } from "../Services/ServerProvider";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
@@ -68,6 +70,7 @@ const makeProviderRegistryLayer = Layer.effect(
     const kilocodeProvider = yield* KilocodeProvider;
     const opencodeProvider = yield* OpencodeProvider;
     const piProvider = yield* PiProvider;
+    const cliProxyProvider = yield* Effect.serviceOption(CliProxyProvider);
     const registrations: ReadonlyArray<ProviderRegistration> = [
       { provider: "codex", service: codexProvider },
       { provider: "claudeAgent", service: claudeProvider },
@@ -77,6 +80,9 @@ const makeProviderRegistryLayer = Layer.effect(
       { provider: "kilocode", service: kilocodeProvider },
       { provider: "opencode", service: opencodeProvider },
       { provider: "pi", service: piProvider },
+      ...(isCliProxyExperimentEnabled() && Option.isSome(cliProxyProvider)
+        ? [{ provider: "cliProxy" as const, service: cliProxyProvider.value }]
+        : []),
     ];
     const changesPubSub = yield* Effect.acquireRelease(
       PubSub.unbounded<ReadonlyArray<ServerProvider>>(),

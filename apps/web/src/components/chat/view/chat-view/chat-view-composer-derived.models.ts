@@ -118,6 +118,7 @@ export function useComposerProviderState(
       codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
       claudeAgent:
         providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
+      cliProxy: providerStatuses.find((provider) => provider.provider === "cliProxy")?.models ?? [],
       copilot: providerStatuses.find((provider) => provider.provider === "copilot")?.models ?? [],
       opencode: providerStatuses.find((provider) => provider.provider === "opencode")?.models ?? [],
       kilocode: providerStatuses.find((provider) => provider.provider === "kilocode")?.models ?? [],

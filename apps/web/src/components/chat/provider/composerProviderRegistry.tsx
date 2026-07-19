@@ -67,17 +67,19 @@ function getProviderStateFromCapabilities(
       ? modelOptions?.codex
       : provider === "claudeAgent"
         ? modelOptions?.claudeAgent
-        : provider === "cursor"
-          ? modelOptions?.cursor
-          : provider === "devin"
-            ? modelOptions?.devin
-            : provider === "opencode"
-              ? modelOptions?.opencode
-              : provider === "kilocode"
-                ? modelOptions?.kilocode
-                : provider === "pi"
-                  ? modelOptions?.pi
-                  : modelOptions?.copilot;
+        : provider === "cliProxy"
+          ? modelOptions?.cliProxy
+          : provider === "cursor"
+            ? modelOptions?.cursor
+            : provider === "devin"
+              ? modelOptions?.devin
+              : provider === "opencode"
+                ? modelOptions?.opencode
+                : provider === "kilocode"
+                  ? modelOptions?.kilocode
+                  : provider === "pi"
+                    ? modelOptions?.pi
+                    : modelOptions?.copilot;
   const rawEffort = providerOptions
     ? "effort" in providerOptions
       ? providerOptions.effort
@@ -97,6 +99,8 @@ function getProviderStateFromCapabilities(
       caps,
       modelOptions?.claudeAgent,
     );
+  } else if (provider === "cliProxy") {
+    normalizedOptions = normalizeClaudeModelOptionsWithCapabilities(caps, modelOptions?.cliProxy);
   } else if (provider === "cursor") {
     normalizedOptions = normalizeCursorModelOptionsWithCapabilities(caps, modelOptions?.cursor);
   } else if (provider === "devin") {
@@ -127,7 +131,7 @@ function getProviderStateFromCapabilities(
   };
 }
 
-const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
+const composerProviderRegistry: Partial<Record<ProviderKind, ProviderRegistryEntry>> = {
   codex: {
     getState: (input) => getProviderStateFromCapabilities(input),
     renderTraitsMenuContent: ({
@@ -386,8 +390,15 @@ const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
   },
 };
 
+// CLIProxy intentionally exposes the conservative Claude-harness traits only.
+composerProviderRegistry.cliProxy = composerProviderRegistry.claudeAgent!;
+
+function getComposerProviderRegistryEntry(provider: ProviderKind): ProviderRegistryEntry {
+  return composerProviderRegistry[provider] ?? composerProviderRegistry.claudeAgent!;
+}
+
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
-  return composerProviderRegistry[input.provider].getState(input);
+  return getComposerProviderRegistryEntry(input.provider).getState(input);
 }
 
 export function renderProviderTraitsMenuContent(input: {
@@ -399,7 +410,7 @@ export function renderProviderTraitsMenuContent(input: {
   prompt: string;
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
-  return composerProviderRegistry[input.provider].renderTraitsMenuContent({
+  return getComposerProviderRegistryEntry(input.provider).renderTraitsMenuContent({
     threadId: input.threadId,
     model: input.model,
     models: input.models,
@@ -418,7 +429,7 @@ export function renderProviderTraitsPicker(input: {
   prompt: string;
   onPromptChange: (prompt: string) => void;
 }): ReactNode {
-  return composerProviderRegistry[input.provider].renderTraitsPicker({
+  return getComposerProviderRegistryEntry(input.provider).renderTraitsPicker({
     threadId: input.threadId,
     model: input.model,
     models: input.models,

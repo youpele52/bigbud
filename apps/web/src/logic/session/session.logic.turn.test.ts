@@ -196,6 +196,7 @@ describe("PROVIDER_OPTIONS", () => {
     const devin = PROVIDER_OPTIONS.find((option) => option.value === "devin");
     expect(PROVIDER_OPTIONS).toEqual([
       { value: "claudeAgent", label: "Claude", available: true },
+      { value: "cliProxy", label: "CLIProxy (experimental)", available: true },
       { value: "codex", label: "Codex", available: true },
       { value: "copilot", label: "Copilot", available: true },
       { value: "cursor", label: "Cursor", available: true },

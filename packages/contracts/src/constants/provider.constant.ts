@@ -15,6 +15,7 @@ export const PROVIDER_KINDS = [
   "pi",
   "cursor",
   "devin",
+  "cliProxy",
 ] as const;
 
 export const PROVIDER_DISPLAY_NAMES = {
@@ -26,6 +27,7 @@ export const PROVIDER_DISPLAY_NAMES = {
   pi: "Pi",
   cursor: "Cursor",
   devin: "Devin",
+  cliProxy: "CLIProxy (experimental)",
   bigbud: "bigbud",
 } as const;
 

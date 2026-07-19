@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   ClaudeModelOptions,
+  CliProxyModelOptions,
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
@@ -49,6 +50,14 @@ export const ClaudeModelSelection = Schema.Struct({
   options: Schema.optionalKey(ClaudeModelOptions),
 });
 export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
+
+export const CliProxyModelSelection = Schema.Struct({
+  provider: Schema.Literal("cliProxy"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(CliProxyModelOptions),
+  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type CliProxyModelSelection = typeof CliProxyModelSelection.Type;
 
 export const CopilotModelSelection = Schema.Struct({
   provider: Schema.Literal("copilot"),
@@ -101,6 +110,7 @@ export type DevinModelSelection = typeof DevinModelSelection.Type;
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
+  CliProxyModelSelection,
   CopilotModelSelection,
   KilocodeModelSelection,
   OpencodeModelSelection,

@@ -28,6 +28,18 @@ describe("recordModelUsage", () => {
     expect(result[0]!.subProviderID).toBe("anthropic");
   });
 
+  it("keeps CLIProxy source IDs distinct for the same model", () => {
+    recordModelUsage("cliProxy", "gpt-5", "codex");
+    recordModelUsage("cliProxy", "gpt-5", "claude");
+
+    expect(getRecentlyUsedModels("cliProxy")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ model: "gpt-5", subProviderID: "claude" }),
+        expect.objectContaining({ model: "gpt-5", subProviderID: "codex" }),
+      ]),
+    );
+  });
+
   it("deduplicates by moving existing entry to top", () => {
     recordModelUsage("codex", "gpt-5");
     recordModelUsage("codex", "gpt-4o");

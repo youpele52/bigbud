@@ -30,6 +30,39 @@ function normalizeProviderOptionsCandidate(value: unknown): Record<string, unkno
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
+function normalizeClaudeCompatibleOptions(
+  candidate: Record<string, unknown> | null,
+): ProviderModelOptions["claudeAgent"] | undefined {
+  const thinking =
+    candidate?.thinking === true ? true : candidate?.thinking === false ? false : undefined;
+  const effort: ClaudeCodeEffort | undefined =
+    candidate?.effort === "low" ||
+    candidate?.effort === "medium" ||
+    candidate?.effort === "high" ||
+    candidate?.effort === "max" ||
+    candidate?.effort === "ultrathink"
+      ? candidate.effort
+      : undefined;
+  const fastMode =
+    candidate?.fastMode === true ? true : candidate?.fastMode === false ? false : undefined;
+  const contextWindow =
+    typeof candidate?.contextWindow === "string" && candidate.contextWindow.length > 0
+      ? candidate.contextWindow
+      : undefined;
+
+  return thinking !== undefined ||
+    effort !== undefined ||
+    fastMode !== undefined ||
+    contextWindow !== undefined
+    ? {
+        ...(thinking !== undefined ? { thinking } : {}),
+        ...(effort !== undefined ? { effort } : {}),
+        ...(fastMode !== undefined ? { fastMode } : {}),
+        ...(contextWindow !== undefined ? { contextWindow } : {}),
+      }
+    : undefined;
+}
+
 export function normalizeProviderModelOptions(
   value: unknown,
   provider?: ProviderKind | null,
@@ -37,7 +70,12 @@ export function normalizeProviderModelOptions(
 ): ProviderModelOptions | null {
   const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
   const codexCandidate = normalizeProviderOptionsCandidate(candidate?.codex);
-  const claudeCandidate = normalizeProviderOptionsCandidate(candidate?.claudeAgent);
+  const claude = normalizeClaudeCompatibleOptions(
+    normalizeProviderOptionsCandidate(candidate?.claudeAgent),
+  );
+  const cliProxy = normalizeClaudeCompatibleOptions(
+    normalizeProviderOptionsCandidate(candidate?.cliProxy),
+  );
 
   const codexReasoningEffort: CodexReasoningEffort | undefined =
     codexCandidate?.reasoningEffort === "low" ||
@@ -66,43 +104,6 @@ export function normalizeProviderModelOptions(
       ? {
           ...(codexReasoningEffort !== undefined ? { reasoningEffort: codexReasoningEffort } : {}),
           ...(codexFastMode !== undefined ? { fastMode: codexFastMode } : {}),
-        }
-      : undefined;
-
-  const claudeThinking =
-    claudeCandidate?.thinking === true
-      ? true
-      : claudeCandidate?.thinking === false
-        ? false
-        : undefined;
-  const claudeEffort: ClaudeCodeEffort | undefined =
-    claudeCandidate?.effort === "low" ||
-    claudeCandidate?.effort === "medium" ||
-    claudeCandidate?.effort === "high" ||
-    claudeCandidate?.effort === "max" ||
-    claudeCandidate?.effort === "ultrathink"
-      ? claudeCandidate.effort
-      : undefined;
-  const claudeFastMode =
-    claudeCandidate?.fastMode === true
-      ? true
-      : claudeCandidate?.fastMode === false
-        ? false
-        : undefined;
-  const claudeContextWindow =
-    typeof claudeCandidate?.contextWindow === "string" && claudeCandidate.contextWindow.length > 0
-      ? claudeCandidate.contextWindow
-      : undefined;
-  const claude =
-    claudeThinking !== undefined ||
-    claudeEffort !== undefined ||
-    claudeFastMode !== undefined ||
-    claudeContextWindow !== undefined
-      ? {
-          ...(claudeThinking !== undefined ? { thinking: claudeThinking } : {}),
-          ...(claudeEffort !== undefined ? { effort: claudeEffort } : {}),
-          ...(claudeFastMode !== undefined ? { fastMode: claudeFastMode } : {}),
-          ...(claudeContextWindow !== undefined ? { contextWindow: claudeContextWindow } : {}),
         }
       : undefined;
 
@@ -188,12 +189,13 @@ export function normalizeProviderModelOptions(
         }
       : undefined;
 
-  if (!codex && !claude && !copilot && !opencode && !kilocode && !pi && !cursor) {
+  if (!codex && !claude && !cliProxy && !copilot && !opencode && !kilocode && !pi && !cursor) {
     return null;
   }
   return {
     ...(codex ? { codex } : {}),
     ...(claude ? { claudeAgent: claude } : {}),
+    ...(cliProxy ? { cliProxy } : {}),
     ...(copilot ? { copilot } : {}),
     ...(opencode ? { opencode } : {}),
     ...(kilocode ? { kilocode } : {}),
@@ -238,20 +240,25 @@ export function normalizeModelSelection(
       ? modelOptions?.codex
       : provider === "claudeAgent"
         ? modelOptions?.claudeAgent
-        : provider === "opencode"
-          ? modelOptions?.opencode
-          : provider === "kilocode"
-            ? modelOptions?.kilocode
-            : provider === "pi"
-              ? modelOptions?.pi
-              : provider === "cursor"
-                ? modelOptions?.cursor
-                : provider === "devin"
-                  ? modelOptions?.devin
-                  : modelOptions?.copilot;
+        : provider === "cliProxy"
+          ? modelOptions?.cliProxy
+          : provider === "opencode"
+            ? modelOptions?.opencode
+            : provider === "kilocode"
+              ? modelOptions?.kilocode
+              : provider === "pi"
+                ? modelOptions?.pi
+                : provider === "cursor"
+                  ? modelOptions?.cursor
+                  : provider === "devin"
+                    ? modelOptions?.devin
+                    : modelOptions?.copilot;
   const baseSelection = createModelSelection(provider, model, options);
   const rawSubProviderID = candidate?.subProviderID;
-  return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
+  return (provider === "opencode" ||
+    provider === "kilocode" ||
+    provider === "pi" ||
+    provider === "cliProxy") &&
     typeof rawSubProviderID === "string" &&
     rawSubProviderID.length > 0
     ? ({ ...baseSelection, subProviderID: rawSubProviderID } as ModelSelection)

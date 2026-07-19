@@ -12,6 +12,7 @@
  */
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  DEFAULT_PROVIDER_KIND,
   DEFAULT_SERVER_SETTINGS,
   type ModelSelection,
   PROVIDER_KINDS,
@@ -99,6 +100,15 @@ const ServerSettingsJson = fromLenientJson(ServerSettings);
  */
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const selection = settings.textGenerationModelSelection;
+  if (selection.provider === "cliProxy") {
+    return {
+      ...settings,
+      textGenerationModelSelection: {
+        provider: DEFAULT_PROVIDER_KIND,
+        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[DEFAULT_PROVIDER_KIND],
+      },
+    };
+  }
   if (settings.providers[selection.provider].enabled) {
     return settings;
   }

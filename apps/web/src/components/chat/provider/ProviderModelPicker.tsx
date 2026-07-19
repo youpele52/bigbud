@@ -255,36 +255,41 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 const isLoadingModels =
                   props.providers !== undefined &&
                   props.modelOptionsByProvider[option.value].length === 0 &&
-                  (!liveProvider || liveProvider.status === "warning");
+                  liveProvider?.status === "warning";
                 const unavailableMessage =
-                  liveProvider && !liveProvider.enabled
-                    ? "Provider is disabled"
-                    : liveProvider && !liveProvider.installed
-                      ? "Provider is not installed"
-                      : liveProvider?.auth.status === "unauthenticated"
-                        ? "Provider login required"
-                        : liveProvider?.status === "error"
-                          ? (liveProvider.message ?? "Provider unavailable")
-                          : undefined;
+                  option.value === "cliProxy" && !liveProvider
+                    ? "CLIProxy is disabled. Set BIGBUD_EXPERIMENTAL_CLIPROXY=1 and restart bigbud."
+                    : liveProvider && !liveProvider.enabled
+                      ? "Provider is disabled"
+                      : liveProvider && !liveProvider.installed
+                        ? "Provider is not installed"
+                        : liveProvider?.auth.status === "unauthenticated"
+                          ? "Provider login required"
+                          : liveProvider?.status === "error"
+                            ? (liveProvider.message ?? "Provider unavailable")
+                            : undefined;
                 const isUnavailable =
-                  liveProvider !== undefined &&
-                  (!liveProvider.enabled ||
-                    !liveProvider.installed ||
-                    liveProvider.auth.status === "unauthenticated" ||
-                    liveProvider.status === "error");
+                  (option.value === "cliProxy" && !liveProvider) ||
+                  (liveProvider !== undefined &&
+                    (!liveProvider.enabled ||
+                      !liveProvider.installed ||
+                      liveProvider.auth.status === "unauthenticated" ||
+                      liveProvider.status === "error"));
                 if (isUnavailable) {
-                  const unavailableLabel = !liveProvider.enabled
+                  const unavailableLabel = !liveProvider
                     ? "Disabled"
-                    : !liveProvider.installed
-                      ? "Not installed"
-                      : liveProvider.auth.status === "unauthenticated"
-                        ? "Login required"
-                        : "Unavailable";
+                    : !liveProvider.enabled
+                      ? "Disabled"
+                      : !liveProvider.installed
+                        ? "Not installed"
+                        : liveProvider.auth.status === "unauthenticated"
+                          ? "Login required"
+                          : "Unavailable";
                   return (
                     <MenuItem
                       key={option.value}
                       disabled
-                      title={liveProvider.message ?? unavailableLabel}
+                      title={unavailableMessage ?? liveProvider?.message ?? unavailableLabel}
                     >
                       <OptionIcon
                         aria-hidden="true"

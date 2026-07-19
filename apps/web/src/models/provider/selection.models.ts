@@ -50,6 +50,14 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
     placeholder: "your-claude-model-slug",
     example: "claude-sonnet-5-0",
   },
+  cliProxy: {
+    provider: "cliProxy",
+    title: "CLIProxy (experimental)",
+    description:
+      "CLIProxy models are discovered from the local proxy and cannot be added manually.",
+    placeholder: "not supported",
+    example: "not supported",
+  },
   copilot: {
     provider: "copilot",
     title: "Copilot",
@@ -94,9 +102,9 @@ const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConf
   },
 };
 
-export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG).toSorted(
-  (a, b) => a.title.localeCompare(b.title),
-);
+export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG)
+  .filter((config) => config.provider !== "cliProxy")
+  .toSorted((a, b) => a.title.localeCompare(b.title));
 
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
@@ -149,7 +157,8 @@ export function getAppModelOptions(
       .map((model) => model.slug),
   );
 
-  const customModels = settings.providers[provider].customModels;
+  // CLIProxy is environment-only and never accepts persisted custom models.
+  const customModels = provider === "cliProxy" ? [] : settings.providers[provider].customModels;
   for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, provider)) {
     if (seen.has(slug)) {
       continue;
@@ -223,6 +232,12 @@ export function getCustomModelOptionsByProvider(
       "claudeAgent",
       selectedProvider === "claudeAgent" ? selectedModel : undefined,
     ),
+    cliProxy: getAppModelOptions(
+      settings,
+      providers,
+      "cliProxy",
+      selectedProvider === "cliProxy" ? selectedModel : undefined,
+    ),
     copilot: getAppModelOptions(
       settings,
       providers,
@@ -288,7 +303,10 @@ export function resolveAppModelSelectionState(
 
   if (provider === selection.provider) {
     const baseSelection = createModelSelection(provider, model, modelOptionsForDispatch);
-    return (provider === "opencode" || provider === "kilocode" || provider === "pi") &&
+    return (provider === "opencode" ||
+      provider === "kilocode" ||
+      provider === "pi" ||
+      provider === "cliProxy") &&
       "subProviderID" in selection &&
       selection.subProviderID
       ? cloneModelSelection(baseSelection, {

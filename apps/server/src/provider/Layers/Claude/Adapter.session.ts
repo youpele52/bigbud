@@ -84,6 +84,12 @@ export interface SessionStartDeps {
   readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
   readonly nowIso: Effect.Effect<string>;
   readonly streamHandlers: StreamHandlers;
+  readonly privateHarness?: {
+    readonly binaryPath: string;
+    readonly environment: () => Readonly<Record<string, string>>;
+    readonly settingSources: ReadonlyArray<import("@anthropic-ai/claude-agent-sdk").SettingSource>;
+    readonly resolveModel: (model: string) => string;
+  };
 }
 
 /** Log a raw SDK message to the native event log if enabled. */
@@ -139,6 +145,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     offerRuntimeEvent,
     nowIso,
     streamHandlers,
+    privateHarness,
   } = deps;
 
   const logNativeSdkMessage = makeLogNativeSdkMessage(deps);
@@ -198,19 +205,20 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       runtimeMode: input.runtimeMode,
     });
 
-    const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.claudeAgent),
-      Effect.mapError(
-        (error) =>
-          new ProviderAdapterProcessError({
-            provider: PROVIDER,
-            threadId: input.threadId,
-            detail: error.message,
-            cause: error,
-          }),
-      ),
-    );
-    const claudeBinaryPath = claudeSettings.binaryPath;
+    const claudeBinaryPath = privateHarness
+      ? privateHarness.binaryPath
+      : yield* serverSettingsService.getSettings.pipe(
+          Effect.map((settings) => settings.providers.claudeAgent.binaryPath),
+          Effect.mapError(
+            (error) =>
+              new ProviderAdapterProcessError({
+                provider: PROVIDER,
+                threadId: input.threadId,
+                detail: error.message,
+                cause: error,
+              }),
+          ),
+        );
     const executionContext = resolveProviderExecutionContext({
       providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
       workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -260,7 +268,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const caps = getClaudeModelCapabilities(modelSelection?.model);
-    const apiModelId = modelSelection ? resolveApiModelId(modelSelection) : undefined;
+    const apiModelId = modelSelection
+      ? (privateHarness?.resolveModel(modelSelection.model) ?? resolveApiModelId(modelSelection))
+      : undefined;
     const effort = (resolveEffort(caps, modelSelection?.options?.effort) ??
       null) as ClaudeCodeEffort | null;
     const fastMode = modelSelection?.options?.fastMode === true && caps.supportsFastMode;
@@ -281,7 +291,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ...(runtimeCwd ? { cwd: runtimeCwd } : {}),
       ...(apiModelId ? { model: apiModelId } : {}),
       pathToClaudeCodeExecutable: claudeBinaryPath,
-      settingSources: [...CLAUDE_SETTING_SOURCES],
+      settingSources: privateHarness?.settingSources ?? [...CLAUDE_SETTING_SOURCES],
       ...(effectiveEffort ? { effort: effectiveEffort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
       ...(Object.keys(settings).length > 0 ? { settings } : {}),
@@ -298,7 +308,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ],
       includePartialMessages: true,
       canUseTool,
-      env: process.env,
+      env: privateHarness?.environment() ?? process.env,
       ...(runtimeCwd && !remoteWorkspaceBridge ? { additionalDirectories: [runtimeCwd] } : {}),
     } as ClaudeQueryOptions;
 

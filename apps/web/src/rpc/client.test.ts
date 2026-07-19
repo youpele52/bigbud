@@ -126,6 +126,7 @@ describe("WsRpcAtomClient", () => {
         model: "gpt-5.4",
       },
       providers: {
+        ...DEFAULT_SERVER_SETTINGS.providers,
         codex: {
           ...DEFAULT_SERVER_SETTINGS.providers.codex,
           homePath: "/tmp/codex-home",
@@ -134,12 +135,6 @@ describe("WsRpcAtomClient", () => {
           ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
           enabled: false,
         },
-        copilot: DEFAULT_SERVER_SETTINGS.providers.copilot,
-        cursor: DEFAULT_SERVER_SETTINGS.providers.cursor,
-        devin: DEFAULT_SERVER_SETTINGS.providers.devin,
-        kilocode: DEFAULT_SERVER_SETTINGS.providers.kilocode,
-        opencode: DEFAULT_SERVER_SETTINGS.providers.opencode,
-        pi: DEFAULT_SERVER_SETTINGS.providers.pi,
       },
     };
     const requestPromise = runRpc((client) => client(WS_METHODS.serverGetSettings, {}));
@@ -182,6 +177,7 @@ describe("WsRpcAtomClient", () => {
         model: "gpt-5.4",
       },
       providers: {
+        ...DEFAULT_SERVER_SETTINGS.providers,
         codex: {
           ...DEFAULT_SERVER_SETTINGS.providers.codex,
           homePath: "/tmp/codex-home",
@@ -190,12 +186,6 @@ describe("WsRpcAtomClient", () => {
           ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
           enabled: false,
         },
-        copilot: DEFAULT_SERVER_SETTINGS.providers.copilot,
-        cursor: DEFAULT_SERVER_SETTINGS.providers.cursor,
-        devin: DEFAULT_SERVER_SETTINGS.providers.devin,
-        kilocode: DEFAULT_SERVER_SETTINGS.providers.kilocode,
-        opencode: DEFAULT_SERVER_SETTINGS.providers.opencode,
-        pi: DEFAULT_SERVER_SETTINGS.providers.pi,
       },
     };
     const registry = AtomRegistry.make();

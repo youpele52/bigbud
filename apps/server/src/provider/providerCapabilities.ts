@@ -16,6 +16,12 @@ const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
     toolInjectionMode: "mcp",
     needsBuiltinsDisabled: true,
   },
+  cliProxy: {
+    supportsRemoteProviderRuntime: false,
+    supportsLocalRuntimeRemoteWorkspace: false,
+    toolInjectionMode: "mcp",
+    needsBuiltinsDisabled: true,
+  },
   codex: {
     supportsRemoteProviderRuntime: true,
     supportsLocalRuntimeRemoteWorkspace: true,

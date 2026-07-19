@@ -39,6 +39,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
   pi: "claude-sonnet-4.6",
   cursor: "claude-sonnet-4-5",
   devin: "default",
+  cliProxy: "default",
 } as const;
 
 /**
@@ -56,6 +57,8 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   pi: "claude-haiku-4.5",
   cursor: "claude-haiku-4-5",
   devin: "default",
+  // CLIProxy is intentionally excluded from text generation at runtime.
+  cliProxy: "default",
 } as const;
 
 /**
@@ -92,6 +95,7 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
     "claude-haiku-4-5": "haiku",
     "claude-haiku-4-5-20251001": "haiku",
   },
+  cliProxy: {},
   copilot: {
     "gpt-5.5": "gpt-5",
     "gpt-5.4": "gpt-5",

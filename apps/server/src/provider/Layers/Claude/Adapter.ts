@@ -46,7 +46,7 @@ import { toRequestError } from "./Adapter.utils.ts";
 
 export type { ClaudeAdapterLiveOptions };
 
-const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
+export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   options?: ClaudeAdapterLiveOptions,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -89,6 +89,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     serverConfig,
     serverSettingsService,
     nativeEventLogger,
+    ...(options?.privateHarness ? { privateHarness: options.privateHarness } : {}),
     createQuery,
     sessions,
     makeEventStamp,

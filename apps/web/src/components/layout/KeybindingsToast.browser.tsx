@@ -81,6 +81,7 @@ function createBaseServerConfig(): ServerConfig {
       providers: {
         codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
         claudeAgent: { enabled: true, binaryPath: "", customModels: [] },
+        cliProxy: { enabled: false, binaryPath: "claude", customModels: [] },
         copilot: { enabled: true, binaryPath: "", customModels: [] },
         opencode: { enabled: true, binaryPath: "", customModels: [] },
         kilocode: { enabled: true, binaryPath: "", customModels: [] },

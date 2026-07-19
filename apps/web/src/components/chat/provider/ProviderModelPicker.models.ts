@@ -23,6 +23,7 @@ export function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[numb
 export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
   codex: OpenAI,
   claudeAgent: ClaudeAI,
+  cliProxy: ClaudeAI,
   copilot: CopilotIcon,
   opencode: OpenCodeIcon,
   kilocode: KilocodeIcon,
@@ -70,7 +71,12 @@ export function modelOptionValue(option: ModelOption): string {
 }
 
 export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "kilocode" || provider === "pi";
+  return (
+    provider === "opencode" ||
+    provider === "kilocode" ||
+    provider === "pi" ||
+    provider === "cliProxy"
+  );
 }
 
 export function visibleModelOptionsForPicker(

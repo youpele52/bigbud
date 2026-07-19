@@ -3,6 +3,7 @@ import { PROVIDER_KINDS, type ProviderKind } from "@bigbud/contracts";
 const PROVIDER_USAGE_ACCOUNTING_SUPPORT = {
   codex: true,
   claudeAgent: true,
+  cliProxy: false,
   copilot: true,
   kilocode: true,
   opencode: true,

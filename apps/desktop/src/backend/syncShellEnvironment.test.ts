@@ -18,7 +18,17 @@ describe("syncShellEnvironment", () => {
       readEnvironment,
     });
 
-    expect(readEnvironment).toHaveBeenCalledWith("/bin/zsh", ["PATH", "SSH_AUTH_SOCK"]);
+    expect(readEnvironment).toHaveBeenCalledWith(
+      "/bin/zsh",
+      expect.arrayContaining([
+        "PATH",
+        "SSH_AUTH_SOCK",
+        "BIGBUD_EXPERIMENTAL_CLIPROXY",
+        "BIGBUD_CLIPROXY_BASE_URL",
+        "BIGBUD_CLIPROXY_API_KEY",
+        "BIGBUD_CLIPROXY_MANAGEMENT_KEY",
+      ]),
+    );
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin");
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/secretive.sock");
   });
@@ -41,6 +51,33 @@ describe("syncShellEnvironment", () => {
 
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin");
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/inherited.sock");
+  });
+
+  it("hydrates missing CLIProxy configuration without replacing inherited values", () => {
+    const env: NodeJS.ProcessEnv = {
+      SHELL: "/bin/zsh",
+      PATH: "/usr/bin",
+      BIGBUD_CLIPROXY_API_KEY: "inherited-api-key",
+    };
+    const readEnvironment = vi.fn(() => ({
+      PATH: "/opt/homebrew/bin:/usr/bin",
+      BIGBUD_EXPERIMENTAL_CLIPROXY: "1",
+      BIGBUD_CLIPROXY_BASE_URL: "http://localhost:8317",
+      BIGBUD_CLIPROXY_API_KEY: "shell-api-key",
+      BIGBUD_CLIPROXY_MANAGEMENT_KEY: "management-key",
+    }));
+
+    syncShellEnvironment(env, {
+      platform: "darwin",
+      readEnvironment,
+    });
+
+    expect(env).toMatchObject({
+      BIGBUD_EXPERIMENTAL_CLIPROXY: "1",
+      BIGBUD_CLIPROXY_BASE_URL: "http://localhost:8317",
+      BIGBUD_CLIPROXY_API_KEY: "inherited-api-key",
+      BIGBUD_CLIPROXY_MANAGEMENT_KEY: "management-key",
+    });
   });
 
   it("preserves inherited values when the login shell omits them", () => {
@@ -77,7 +114,17 @@ describe("syncShellEnvironment", () => {
       readEnvironment,
     });
 
-    expect(readEnvironment).toHaveBeenCalledWith("/bin/zsh", ["PATH", "SSH_AUTH_SOCK"]);
+    expect(readEnvironment).toHaveBeenCalledWith(
+      "/bin/zsh",
+      expect.arrayContaining([
+        "PATH",
+        "SSH_AUTH_SOCK",
+        "BIGBUD_EXPERIMENTAL_CLIPROXY",
+        "BIGBUD_CLIPROXY_BASE_URL",
+        "BIGBUD_CLIPROXY_API_KEY",
+        "BIGBUD_CLIPROXY_MANAGEMENT_KEY",
+      ]),
+    );
     expect(env.PATH).toBe("/home/linuxbrew/.linuxbrew/bin:/usr/bin");
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/secretive.sock");
   });
@@ -118,7 +165,17 @@ describe("syncShellEnvironment", () => {
       readEnvironment,
     });
 
-    expect(readEnvironment).toHaveBeenCalledWith("/bin/zsh", ["PATH", "SSH_AUTH_SOCK"]);
+    expect(readEnvironment).toHaveBeenCalledWith(
+      "/bin/zsh",
+      expect.arrayContaining([
+        "PATH",
+        "SSH_AUTH_SOCK",
+        "BIGBUD_EXPERIMENTAL_CLIPROXY",
+        "BIGBUD_CLIPROXY_BASE_URL",
+        "BIGBUD_CLIPROXY_API_KEY",
+        "BIGBUD_CLIPROXY_MANAGEMENT_KEY",
+      ]),
+    );
     expect(env.PATH).toBe("/home/linuxbrew/.linuxbrew/bin:/usr/bin");
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/secretive.sock");
   });

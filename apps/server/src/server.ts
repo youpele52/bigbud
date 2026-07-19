@@ -36,6 +36,9 @@ import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
 import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
 import { makeOpencodeAdapterLive } from "./provider/Layers/Opencode/Adapter";
 import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
+import { CliProxyAdapterLive } from "./provider/Layers/CliProxy/Adapter";
+import { CliProxyProviderLive } from "./provider/Layers/CliProxy/Provider";
+import { isCliProxyExperimentEnabled } from "./provider/Layers/CliProxy/config";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
 import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
@@ -241,6 +244,14 @@ const ProviderLayerLive = Layer.unwrap(
   }),
 );
 
+const ExperimentalCliProxyLayer = Layer.unwrap(
+  Effect.sync(() =>
+    isCliProxyExperimentEnabled()
+      ? Layer.mergeAll(CliProxyAdapterLive, CliProxyProviderLive)
+      : Layer.empty,
+  ),
+);
+
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
@@ -286,11 +297,11 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
-  Layer.provideMerge(ProviderLayerLive),
+  Layer.provideMerge(ProviderLayerLive.pipe(Layer.provideMerge(ExperimentalCliProxyLayer))),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
-  Layer.provideMerge(ProviderRegistryLive),
+  Layer.provideMerge(ProviderRegistryLive.pipe(Layer.provideMerge(ExperimentalCliProxyLayer))),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive))),

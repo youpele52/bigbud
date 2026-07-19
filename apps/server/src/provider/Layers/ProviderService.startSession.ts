@@ -126,7 +126,10 @@ export function makeStartSessionInternal(input: {
         ),
       );
       const providerSettings = settings.providers[startInput.provider];
-      if (!providerSettings?.enabled) {
+      // CLIProxy is an environment-only experiment; its adapter validates the
+      // feature flag and local proxy configuration. Remove this exception with
+      // the experiment rather than persisting proxy credentials in settings.
+      if (startInput.provider !== "cliProxy" && !providerSettings?.enabled) {
         return yield* toValidationError(
           "ProviderService.startSession",
           `Provider '${startInput.provider}' is disabled in bigbud settings.`,

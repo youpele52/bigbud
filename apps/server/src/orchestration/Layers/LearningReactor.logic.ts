@@ -30,6 +30,8 @@ export function resolveLearningModelSelection(input: {
       return { provider: "codex", model: input.model };
     case "claudeAgent":
       return { provider: "claudeAgent", model: input.model };
+    case "cliProxy":
+      return { provider: "cliProxy", model: input.model };
     case "copilot":
       return { provider: "copilot", model: input.model };
     case "kilocode":

@@ -45,6 +45,7 @@ export const PROVIDER_OPTIONS: Array<{
   available: boolean;
 }> = [
   { value: "claudeAgent", label: "Claude", available: true },
+  { value: "cliProxy", label: "CLIProxy (experimental)", available: true },
   { value: "codex", label: "Codex", available: true },
   { value: "copilot", label: "Copilot", available: true },
   { value: "cursor", label: "Cursor", available: true },

@@ -149,6 +149,7 @@ export function createInitialOpenProviderDetails(settings: typeof DEFAULT_UNIFIE
         DEFAULT_UNIFIED_SETTINGS.providers.claudeAgent.binaryPath ||
       settings.providers.claudeAgent.customModels.length > 0,
     ),
+    cliProxy: false,
     copilot: Boolean(
       settings.providers.copilot.binaryPath !==
         DEFAULT_UNIFIED_SETTINGS.providers.copilot.binaryPath ||
@@ -184,6 +185,7 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
   return {
     codex: "",
     claudeAgent: "",
+    cliProxy: "",
     copilot: "",
     opencode: "",
     kilocode: "",

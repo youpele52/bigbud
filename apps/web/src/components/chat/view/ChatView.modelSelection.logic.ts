@@ -5,7 +5,12 @@ import { useStore } from "../../../stores/main";
 import type { Thread } from "../../../models/types";
 
 export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "kilocode" || provider === "pi";
+  return (
+    provider === "opencode" ||
+    provider === "kilocode" ||
+    provider === "pi" ||
+    provider === "cliProxy"
+  );
 }
 
 export function getModelSelectionSubProviderID(
@@ -13,7 +18,8 @@ export function getModelSelectionSubProviderID(
 ): string | null {
   return (selection?.provider === "opencode" ||
     selection?.provider === "kilocode" ||
-    selection?.provider === "pi") &&
+    selection?.provider === "pi" ||
+    selection?.provider === "cliProxy") &&
     typeof selection.subProviderID === "string"
     ? selection.subProviderID
     : null;

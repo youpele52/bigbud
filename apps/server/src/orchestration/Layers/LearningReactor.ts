@@ -265,6 +265,8 @@ const makeLearningReactor = Effect.gen(function* () {
           const sourceUserMessage = thread.messages.find(
             (message) => message.turnId === turnId && message.role === "user",
           )?.text;
+          // CLIProxy is intentionally interactive-only while its protocol compatibility is experimental.
+          if (event.provider === "cliProxy") return;
           const userMessageCount = countFinalizedUserMessages(thread.messages);
           const latestMemoryUserMessageCount = yield* learningJobs.getLatestMemoryUserMessageCount({
             threadId: thread.id,
