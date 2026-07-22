@@ -1,15 +1,15 @@
-import { useLocalStorage } from "./useLocalStorage";
+import { useMemo } from "react";
 import {
-  RecentModelUsage,
-  type RecentModelUsage as RecentModelUsageType,
+  normalizeRecentlyUsedModels,
+  RecentModelsRawList,
+  type RecentModelUsage,
 } from "../models/recentlyUsedModels";
-import * as Schema from "effect/Schema";
+import { useLocalStorage } from "./useLocalStorage";
 
 const STORAGE_KEY = "bigbud:recently-used-models:v1";
-const EMPTY: RecentModelUsageType[] = [];
-const RecentModelsList = Schema.Array(RecentModelUsage);
+const EMPTY: unknown[] = [];
 
-export function useRecentlyUsedModels(): readonly RecentModelUsageType[] {
-  const [value] = useLocalStorage(STORAGE_KEY, EMPTY, RecentModelsList);
-  return value;
+export function useRecentlyUsedModels(): readonly RecentModelUsage[] {
+  const [value] = useLocalStorage(STORAGE_KEY, EMPTY, RecentModelsRawList);
+  return useMemo(() => normalizeRecentlyUsedModels(value).entries, [value]);
 }

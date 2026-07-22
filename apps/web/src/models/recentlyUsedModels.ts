@@ -14,9 +14,10 @@ export const RecentModelUsage = Schema.Struct({
 });
 export type RecentModelUsage = typeof RecentModelUsage.Type;
 
+export const RecentModelsRawList = Schema.Array(Schema.Unknown);
 const RecentModelsList = Schema.Array(RecentModelUsage);
 
-function sanitizeEntry(entry: RecentModelUsage): RecentModelUsage {
+export function sanitizeRecentModelUsage(entry: RecentModelUsage): RecentModelUsage {
   // Strip subProviderID for providers that don't support it.
   // This fixes legacy localStorage data that may have stored it.
   if (entry.provider !== "opencode" && entry.provider !== "kilocode" && entry.provider !== "pi") {
@@ -26,16 +27,36 @@ function sanitizeEntry(entry: RecentModelUsage): RecentModelUsage {
   return entry;
 }
 
-function readAll(): RecentModelUsage[] {
-  const result = getLocalStorageItem(STORAGE_KEY, RecentModelsList);
-  if (!result) return [];
-  const sanitized = result.map(sanitizeEntry);
-  // If any entries were stripped, persist the cleaned version.
-  const needsWrite = sanitized.some((entry, i) => entry !== result[i]);
-  if (needsWrite) {
-    writeAll(sanitized);
+export function normalizeRecentlyUsedModels(entries: ReadonlyArray<unknown>): {
+  readonly entries: RecentModelUsage[];
+  readonly changed: boolean;
+} {
+  let changed = false;
+  const normalized: RecentModelUsage[] = [];
+
+  for (const entry of entries) {
+    if (!Schema.is(RecentModelUsage)(entry)) {
+      changed = true;
+      continue;
+    }
+    const sanitized = sanitizeRecentModelUsage(entry);
+    if (sanitized !== entry) {
+      changed = true;
+    }
+    normalized.push(sanitized);
   }
-  return sanitized;
+
+  return { entries: normalized, changed };
+}
+
+function readAll(): RecentModelUsage[] {
+  const result = getLocalStorageItem(STORAGE_KEY, RecentModelsRawList);
+  if (!result) return [];
+  const normalized = normalizeRecentlyUsedModels(result);
+  if (normalized.changed) {
+    writeAll(normalized.entries);
+  }
+  return normalized.entries;
 }
 
 function writeAll(list: RecentModelUsage[]): void {
