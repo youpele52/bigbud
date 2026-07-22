@@ -8,7 +8,6 @@ import {
 } from "@bigbud/contracts";
 import {
   CopilotClient,
-  type CopilotClientOptions,
   type ResumeSessionConfig,
   type SessionConfig,
   type SessionEvent,
@@ -29,14 +28,12 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
 import { createCopilotRemoteWorkspaceBridge } from "./CopilotRemoteWorkspaceBridge.ts";
 import {
-  DEFAULT_BINARY_PATH,
   PROVIDER,
   type ActiveCopilotSession,
   type CopilotAdapterLiveOptions,
   type PendingApprovalRequest,
   type PendingUserInputRequest,
-  makeCliRuntimeConnection,
-  makeNodeWrapperCliPath,
+  makeCopilotClientOptions,
   toMessage,
 } from "./Adapter.types.ts";
 
@@ -124,7 +121,6 @@ export const makeStartSession =
         Effect.map((settings) => settings.providers.copilot),
         Effect.orDie,
       );
-      const useCustomBinary = copilotSettings.binaryPath !== DEFAULT_BINARY_PATH;
       const executionContext = resolveProviderExecutionContext({
         providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
         workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -153,21 +149,16 @@ export const makeStartSession =
                 }),
             })
           : undefined;
-      const resolvedCliPath = useCustomBinary
-        ? copilotSettings.binaryPath
-        : makeNodeWrapperCliPath();
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
       const sessionWorkingDirectory =
         remoteWorkspaceBridge?.clientSessionFsConfig.initialCwd ?? input.cwd;
-      const connection = makeCliRuntimeConnection(resolvedCliPath);
-      const clientOptions: CopilotClientOptions = {
-        ...(connection ? { connection } : {}),
+      const clientOptions = makeCopilotClientOptions({
+        binaryPath: copilotSettings.binaryPath,
         ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
         ...(remoteWorkspaceBridge?.clientSessionFsConfig
           ? { sessionFs: remoteWorkspaceBridge.clientSessionFsConfig }
           : {}),
-        logLevel: "error",
-      };
+      });
       const client =
         deps.options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
       const pendingApprovals = new Map<string, PendingApprovalRequest>();

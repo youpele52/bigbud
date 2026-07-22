@@ -1,67 +1,115 @@
-import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
 
 import {
   RuntimeConnection,
+  type CopilotClientOptions,
   type RuntimeConnection as CopilotRuntimeConnection,
+  type SessionFsConfig,
 } from "@github/copilot-sdk";
 
-function resolveCopilotCliPath(): string | undefined {
-  try {
-    const req = createRequire(import.meta.url);
-    const sdkMain = req.resolve("@github/copilot-sdk");
-    const sdkMainDir = dirname(sdkMain);
-    for (const githubDir of [join(sdkMainDir, "..", "..", ".."), join(sdkMainDir, "..", "..")]) {
-      const candidate = join(githubDir, "copilot", "index.js");
-      if (existsSync(candidate)) return candidate;
+const DEFAULT_BINARY_PATH = "copilot";
+
+export interface CopilotRuntimeInvocation {
+  readonly path: string;
+  readonly args: ReadonlyArray<string>;
+  readonly source: "configured" | "bundled-native";
+}
+
+interface RuntimePlatform {
+  readonly arch: string;
+  readonly platform: NodeJS.Platform;
+  readonly isMusl: boolean;
+}
+
+function isLinuxMusl(): boolean {
+  const report = process.report?.getReport() as
+    | { readonly header?: { readonly glibcVersionRuntime?: string } }
+    | undefined;
+  return process.platform === "linux" && !report?.header?.glibcVersionRuntime;
+}
+
+export function copilotNativePackageName(input: RuntimePlatform): string | undefined {
+  switch (input.platform) {
+    case "darwin":
+      return input.arch === "arm64" || input.arch === "x64"
+        ? `@github/copilot-darwin-${input.arch}`
+        : undefined;
+    case "win32":
+      return input.arch === "arm64" || input.arch === "x64"
+        ? `@github/copilot-win32-${input.arch}`
+        : undefined;
+    case "linux": {
+      if (input.arch !== "arm64" && input.arch !== "x64") return undefined;
+      return `@github/copilot-linux${input.isMusl ? "musl" : ""}-${input.arch}`;
     }
-  } catch {
-    // fall through
+    default:
+      return undefined;
   }
+}
+
+export function resolveCopilotRuntimeInvocation(
+  binaryPath: string,
+  input: {
+    readonly isElectron?: boolean;
+    readonly platform?: NodeJS.Platform;
+    readonly arch?: string;
+    readonly isMusl?: boolean;
+    readonly resolve?: (id: string) => string;
+  } = {},
+): CopilotRuntimeInvocation | undefined {
+  if (binaryPath !== DEFAULT_BINARY_PATH) {
+    return { path: binaryPath, args: [], source: "configured" };
+  }
+
+  if (input.isElectron ?? "electron" in process.versions) {
+    const packageName = copilotNativePackageName({
+      platform: input.platform ?? process.platform,
+      arch: input.arch ?? process.arch,
+      isMusl: input.isMusl ?? isLinuxMusl(),
+    });
+    if (!packageName) {
+      throw new Error(
+        `No bundled Copilot runtime is available for ${input.platform ?? process.platform}/${input.arch ?? process.arch}`,
+      );
+    }
+
+    try {
+      const require = createRequire(import.meta.url);
+      const resolve =
+        input.resolve ?? createRequire(require.resolve("@github/copilot-sdk")).resolve;
+      return {
+        path: resolve(packageName),
+        args: [],
+        source: "bundled-native",
+      };
+    } catch (cause) {
+      throw new Error(`Unable to resolve the bundled Copilot runtime package ${packageName}`, {
+        cause,
+      });
+    }
+  }
+
   return undefined;
 }
 
-function buildNodeWrapper(input: {
-  readonly cliPath: string;
-  readonly nodeExecutablePath: string;
-  readonly platform: NodeJS.Platform;
-}): { readonly wrapperPath: string; readonly content: string } {
-  const id = randomUUID();
+export function makeCliRuntimeConnection(
+  invocation: CopilotRuntimeInvocation | undefined,
+): CopilotRuntimeConnection | undefined {
+  return invocation === undefined
+    ? undefined
+    : RuntimeConnection.forStdio({ path: invocation.path, args: invocation.args });
+}
 
-  if (input.platform === "win32") {
-    return {
-      wrapperPath: join(tmpdir(), `copilot-node-wrapper-${id}.cmd`),
-      content: `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${input.nodeExecutablePath}" "${input.cliPath}" %*\r\n`,
-    };
-  }
-
+export function makeCopilotClientOptions(input: {
+  readonly binaryPath: string;
+  readonly workingDirectory?: string;
+  readonly sessionFs?: SessionFsConfig;
+}): CopilotClientOptions {
+  const connection = makeCliRuntimeConnection(resolveCopilotRuntimeInvocation(input.binaryPath));
   return {
-    wrapperPath: join(tmpdir(), `copilot-node-wrapper-${id}.sh`),
-    content: `#!/bin/sh\nexport ELECTRON_RUN_AS_NODE=1\nexec "${input.nodeExecutablePath}" "${input.cliPath}" "$@"\n`,
+    ...(connection ? { connection } : {}),
+    ...(input.workingDirectory ? { workingDirectory: input.workingDirectory } : {}),
+    ...(input.sessionFs ? { sessionFs: input.sessionFs } : {}),
+    logLevel: "error",
   };
 }
-
-export function makeNodeWrapperCliPath(): string | undefined {
-  if (!("electron" in process.versions)) return undefined;
-  const cliPath = resolveCopilotCliPath();
-  if (!cliPath) return undefined;
-  const wrapper = buildNodeWrapper({
-    cliPath,
-    nodeExecutablePath: process.execPath,
-    platform: process.platform,
-  });
-  writeFileSync(wrapper.wrapperPath, wrapper.content, "utf8");
-  chmodSync(wrapper.wrapperPath, 0o755);
-  return wrapper.wrapperPath;
-}
-
-export function makeCliRuntimeConnection(
-  cliPath: string | undefined,
-): CopilotRuntimeConnection | undefined {
-  return cliPath === undefined ? undefined : RuntimeConnection.forStdio({ path: cliPath });
-}
-
-export { buildNodeWrapper };

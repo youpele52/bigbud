@@ -200,7 +200,11 @@ export function eventBase(input: {
   };
 }
 
-export { makeCliRuntimeConnection, makeNodeWrapperCliPath } from "./Adapter.types.cli.ts";
+export {
+  makeCliRuntimeConnection,
+  makeCopilotClientOptions,
+  resolveCopilotRuntimeInvocation,
+} from "./Adapter.types.cli.ts";
 export {
   approvalDecisionToPermissionResult,
   getCopilotSessionApprovalMetadata,
