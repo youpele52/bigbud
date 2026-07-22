@@ -67,6 +67,45 @@ describe("checkComputerUsePermissions", () => {
     });
   });
 
+  it("coalesces concurrent prompt requests and allows a later retry", async () => {
+    let resolveFirstCall: (value: unknown) => void;
+    mockedCallCuaDriverTool.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstCall = resolve;
+        }),
+    );
+
+    const first = checkComputerUsePermissions({ binaryPath: "/tmp/cua-driver", prompt: true });
+    const second = checkComputerUsePermissions({ binaryPath: "/tmp/cua-driver", prompt: true });
+
+    expect(mockedCallCuaDriverTool).toHaveBeenCalledTimes(1);
+    resolveFirstCall!({
+      structuredContent: {
+        permissions: [{ name: "accessibility", granted: true }],
+      },
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      {
+        runtimeAvailable: true,
+        granted: true,
+        message: null,
+        permissions: [{ name: "accessibility", granted: true }],
+      },
+      {
+        runtimeAvailable: true,
+        granted: true,
+        message: null,
+        permissions: [{ name: "accessibility", granted: true }],
+      },
+    ]);
+
+    mockedCallCuaDriverTool.mockResolvedValueOnce({ structuredContent: { permissions: [] } });
+    await checkComputerUsePermissions({ binaryPath: "/tmp/cua-driver", prompt: true });
+    expect(mockedCallCuaDriverTool).toHaveBeenCalledTimes(2);
+  });
+
   it("reports partial grants as not fully granted", async () => {
     mockedCallCuaDriverTool.mockResolvedValue({
       structuredContent: {

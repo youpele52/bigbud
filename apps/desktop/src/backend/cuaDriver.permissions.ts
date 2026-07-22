@@ -51,7 +51,9 @@ function allGranted(permissions: ReadonlyArray<DesktopComputerUsePermissionItem>
   return permissions.length > 0 && permissions.every((permission) => permission.granted);
 }
 
-export async function checkComputerUsePermissions(input: {
+let promptingPermissions: Promise<DesktopComputerUsePermissionsStatus> | undefined;
+
+async function requestComputerUsePermissions(input: {
   readonly binaryPath: string;
   readonly prompt: boolean;
 }): Promise<DesktopComputerUsePermissionsStatus> {
@@ -77,6 +79,27 @@ export async function checkComputerUsePermissions(input: {
       permissions: [],
     };
   }
+}
+
+export function checkComputerUsePermissions(input: {
+  readonly binaryPath: string;
+  readonly prompt: boolean;
+}): Promise<DesktopComputerUsePermissionsStatus> {
+  if (!input.prompt) {
+    return requestComputerUsePermissions(input);
+  }
+  if (promptingPermissions) {
+    return promptingPermissions;
+  }
+
+  const request = requestComputerUsePermissions(input);
+  promptingPermissions = request;
+  void request.finally(() => {
+    if (promptingPermissions === request) {
+      promptingPermissions = undefined;
+    }
+  });
+  return request;
 }
 
 export function missingComputerUsePermissionsStatus(
