@@ -103,6 +103,16 @@ describe("computerUseViaOrchestration", () => {
     expect(dispatched.filter((command) => command.type === "thread.activity.append")).toHaveLength(
       2,
     );
+    const activityData = dispatched.flatMap((command) =>
+      command.type === "thread.activity.append" &&
+      command.activity.payload &&
+      typeof command.activity.payload === "object"
+        ? [(command.activity.payload as { data: Record<string, unknown> }).data]
+        : [],
+    );
+    expect(activityData[0]?.operationId).toBeTruthy();
+    expect(activityData[1]?.operationId).toBe(activityData[0]?.operationId);
+    expect(activityData[1]?.executionStatus).toBe("succeeded");
   });
 
   it("blocks mutating actions unless the thread is in full-access mode", async () => {

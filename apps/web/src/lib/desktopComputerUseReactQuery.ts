@@ -41,6 +41,8 @@ export function desktopComputerUsePermissionsQueryOptions() {
       return bridge.getComputerUsePermissionsStatus();
     },
     staleTime: 5_000,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });
 }
 

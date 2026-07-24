@@ -2,6 +2,13 @@ import * as FS from "node:fs";
 import * as Path from "node:path";
 
 import { app } from "electron";
+import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
+import {
+  CUA_DRIVER_POLICY_SHA256,
+  CUA_DRIVER_POLICY_VERSION,
+  CUA_DRIVER_POLICY_YAML,
+} from "@bigbud/shared/cua-driver/policy";
+import { CUA_DRIVER_VERSION } from "@bigbud/shared/cua-driver/release";
 import type {
   DesktopComputerUseInstallResult,
   DesktopComputerUsePermissionsStatus,
@@ -14,6 +21,12 @@ import {
   missingComputerUsePermissionsStatus,
 } from "./cuaDriver.permissions";
 import { installManagedComputerUseRuntime } from "./cuaDriver.install";
+import { validateCuaDriverPolicy } from "./cuaDriver.manifest";
+import {
+  getCuaDriverDaemonEnvironment,
+  getCuaDriverDaemonStatus,
+  refreshCuaDriverDaemonHealth,
+} from "./cuaDriver.daemon";
 import { binaryName, resolveManagedPaths } from "./cuaDriver.paths";
 import { runCommand } from "./cuaDriver.process";
 
@@ -44,6 +57,62 @@ function resolveBundledBinaryPath(): string | null {
   }
 
   return null;
+}
+
+function resolveBundledPolicyPath(): string | null {
+  if (!app.isPackaged) return null;
+  const policyPath = Path.join(
+    process.resourcesPath,
+    "server",
+    "cua-driver",
+    "policy",
+    "bigbud.yaml",
+  );
+  try {
+    validateCuaDriverPolicy(policyPath);
+    return policyPath;
+  } catch {
+    return null;
+  }
+}
+
+function ensureCanonicalPolicy(policyPath: string): string {
+  try {
+    validateCuaDriverPolicy(policyPath);
+    return policyPath;
+  } catch {
+    FS.mkdirSync(Path.dirname(policyPath), { recursive: true });
+    const temporaryPath = `${policyPath}.${process.pid}.tmp`;
+    FS.writeFileSync(temporaryPath, CUA_DRIVER_POLICY_YAML, { encoding: "utf8", mode: 0o600 });
+    FS.renameSync(temporaryPath, policyPath);
+    validateCuaDriverPolicy(policyPath);
+    return policyPath;
+  }
+}
+
+interface ResolvedComputerUseRuntime {
+  readonly source: DesktopComputerUseRuntimeSource;
+  readonly binaryPath: string | null;
+  readonly policyPath: string | null;
+}
+
+function readActivatedRuntime(pointerPath: string): ResolvedComputerUseRuntime | null {
+  try {
+    const active = JSON.parse(FS.readFileSync(pointerPath, "utf8")) as Record<string, unknown>;
+    if (
+      typeof active.binaryPath !== "string" ||
+      typeof active.policyPath !== "string" ||
+      active.policyVersion !== CUA_DRIVER_POLICY_VERSION ||
+      active.policySha256 !== CUA_DRIVER_POLICY_SHA256 ||
+      !FS.existsSync(active.binaryPath)
+    ) {
+      return null;
+    }
+    validateCuaDriverPolicy(active.policyPath);
+    return { source: "managed", binaryPath: active.binaryPath, policyPath: active.policyPath };
+  } catch {
+    return null;
+  }
 }
 
 function resolveSystemBinaryPath(): string | null {
@@ -90,31 +159,45 @@ function resolveSystemBinaryPath(): string | null {
   return null;
 }
 
-function resolveBinary(baseDir: string): {
-  source: DesktopComputerUseRuntimeSource;
-  binaryPath: string | null;
-} {
+export function resolveComputerUseRuntime(baseDir: string): ResolvedComputerUseRuntime {
   const bundledBinaryPath = resolveBundledBinaryPath();
-  if (bundledBinaryPath) {
-    return { source: "bundled", binaryPath: bundledBinaryPath };
+  const bundledPolicyPath = resolveBundledPolicyPath();
+  if (bundledBinaryPath && bundledPolicyPath) {
+    return { source: "bundled", binaryPath: bundledBinaryPath, policyPath: bundledPolicyPath };
   }
 
-  const managedBinaryPath = resolveManagedPaths(baseDir).binaryPath;
-  if (FS.existsSync(managedBinaryPath)) {
-    return { source: "managed", binaryPath: managedBinaryPath };
+  const managedPaths = resolveManagedPaths(baseDir);
+  const activated = readActivatedRuntime(managedPaths.activePath);
+  if (activated) return activated;
+  const previous = readActivatedRuntime(managedPaths.previousPath);
+  if (previous) return previous;
+  if (FS.existsSync(managedPaths.legacyBinaryPath)) {
+    return {
+      source: "managed",
+      binaryPath: managedPaths.legacyBinaryPath,
+      policyPath: ensureCanonicalPolicy(managedPaths.policyPath),
+    };
   }
 
   const systemBinaryPath = resolveSystemBinaryPath();
   if (systemBinaryPath) {
-    return { source: "system", binaryPath: systemBinaryPath };
+    return {
+      source: "system",
+      binaryPath: systemBinaryPath,
+      policyPath: ensureCanonicalPolicy(managedPaths.policyPath),
+    };
   }
 
-  return { source: "missing", binaryPath: null };
+  return { source: "missing", binaryPath: null, policyPath: null };
 }
 
 async function readVersion(binaryPath: string): Promise<string | null> {
   try {
-    const result = await runCommand(binaryPath, ["--version"]);
+    const result = await runCommand(
+      binaryPath,
+      ["--version"],
+      makeCuaDriverChildEnvironment(process.env),
+    );
     const output = [result.stdout, result.stderr].filter(Boolean).join(" ").trim();
     return output.length > 0 ? output : null;
   } catch {
@@ -123,11 +206,30 @@ async function readVersion(binaryPath: string): Promise<string | null> {
 }
 
 function missingStatus(): DesktopComputerUseRuntimeStatus {
+  const daemon = getCuaDriverDaemonStatus();
+  const platformSupported =
+    (process.platform === "darwin" ||
+      process.platform === "linux" ||
+      process.platform === "win32") &&
+    (process.arch === "arm64" || process.arch === "x64");
   return {
     available: false,
+    ready: false,
+    repairRequired: platformSupported,
+    state: platformSupported ? "missing" : "unavailable",
     source: "missing",
     binaryPath: null,
     version: null,
+    expectedVersion: CUA_DRIVER_VERSION,
+    manifestSchema: null,
+    policyVersion: null,
+    policySha256: null,
+    daemonState: daemon.state,
+    platform: process.platform,
+    architecture: process.arch,
+    platformHealth: platformSupported ? "degraded" : "unsupported",
+    healthSummary: daemon.healthSummary,
+    lastError: daemon.lastError,
     message: "Computer Use runtime is not installed yet.",
     diagnostics: null,
   };
@@ -136,32 +238,67 @@ function missingStatus(): DesktopComputerUseRuntimeStatus {
 export async function getComputerUseRuntimeStatus(
   baseDir: string,
 ): Promise<DesktopComputerUseRuntimeStatus> {
-  const runtime = resolveBinary(baseDir);
+  const runtime = resolveComputerUseRuntime(baseDir);
   if (!runtime.binaryPath || runtime.source === "missing") {
     return missingStatus();
   }
 
+  const version = await readVersion(runtime.binaryPath);
+  const daemon = getCuaDriverDaemonStatus();
+  const versionMatches = version?.includes(CUA_DRIVER_VERSION) === true;
+  const runtimeValidated = versionMatches && runtime.policyPath !== null;
+  const ready =
+    daemon.state === "ready" && daemon.binaryPath === runtime.binaryPath && runtimeValidated;
+  const repairRequired =
+    !runtimeValidated ||
+    daemon.state === "stopped" ||
+    (daemon.state === "degraded" && daemon.repairRequired);
   return {
     available: true,
+    ready,
+    repairRequired,
+    state: ready
+      ? "ready"
+      : !versionMatches
+        ? "incompatible"
+        : daemon.state === "starting" || daemon.state === "restarting"
+          ? "starting"
+          : daemon.state === "degraded"
+            ? "degraded"
+            : "installed-unvalidated",
     source: runtime.source,
     binaryPath: runtime.binaryPath,
-    version: await readVersion(runtime.binaryPath),
-    message: null,
+    version,
+    expectedVersion: CUA_DRIVER_VERSION,
+    manifestSchema: "1",
+    policyVersion: runtime.policyPath ? CUA_DRIVER_POLICY_VERSION : null,
+    policySha256: runtime.policyPath ? CUA_DRIVER_POLICY_SHA256 : null,
+    daemonState: daemon.state,
+    platform: process.platform,
+    architecture: process.arch,
+    platformHealth: daemon.healthSummary === "ok" ? "ready" : "degraded",
+    healthSummary: daemon.healthSummary,
+    lastError: daemon.lastError,
+    message: versionMatches ? null : `Expected cua-driver ${CUA_DRIVER_VERSION}.`,
     diagnostics: null,
   };
 }
 
 export function resolveComputerUseRuntimeEnv(baseDir: string): NodeJS.ProcessEnv {
-  const runtime = resolveBinary(baseDir);
+  const runtime = resolveComputerUseRuntime(baseDir);
   if (!runtime.binaryPath || runtime.source === "missing") {
     return {};
   }
 
-  return { BIGBUD_CUA_DRIVER_PATH: runtime.binaryPath };
+  return {
+    BIGBUD_CUA_DRIVER_PATH: runtime.binaryPath,
+    ...(runtime.policyPath ? { CUA_DRIVER_POLICY_FILE: runtime.policyPath } : {}),
+  };
 }
 
 export async function installComputerUseRuntime(
   baseDir: string,
+  hostBundleId: string,
 ): Promise<DesktopComputerUseInstallResult> {
   const currentStatus = await getComputerUseRuntimeStatus(baseDir);
   if (currentStatus.available && currentStatus.source === "bundled") {
@@ -173,59 +310,89 @@ export async function installComputerUseRuntime(
   return installManagedComputerUseRuntime({
     baseDir,
     getStatus: () => getComputerUseRuntimeStatus(baseDir),
+    hostBundleId,
   });
 }
 
 export async function runComputerUseDoctor(
   baseDir: string,
 ): Promise<DesktopComputerUseRuntimeStatus> {
-  const runtime = resolveBinary(baseDir);
+  const runtime = resolveComputerUseRuntime(baseDir);
   if (!runtime.binaryPath || runtime.source === "missing") {
     return missingStatus();
   }
 
-  const result = await runCommand(runtime.binaryPath, ["doctor"]);
+  const health = await refreshCuaDriverDaemonHealth();
+  const status = await getComputerUseRuntimeStatus(baseDir);
   return {
-    available: true,
-    source: runtime.source,
-    binaryPath: runtime.binaryPath,
-    version: await readVersion(runtime.binaryPath),
+    ...status,
     message:
-      result.code === 0
-        ? "Computer Use diagnostics completed."
-        : "Computer Use diagnostics reported issues.",
-    diagnostics: [result.stdout, result.stderr].filter(Boolean).join("\n\n") || null,
+      health.overall === "ok"
+        ? "Computer Use health checks passed."
+        : `Computer Use health is ${health.overall}.`,
+    diagnostics: health.diagnostics,
   };
+}
+
+function unreadyComputerUsePermissionsStatus(
+  status: DesktopComputerUseRuntimeStatus,
+): DesktopComputerUsePermissionsStatus {
+  return missingComputerUsePermissionsStatus(
+    `Computer Use runtime is ${status.state}. Repair the runtime before checking desktop permissions.`,
+  );
 }
 
 export async function getComputerUsePermissionsStatus(
   baseDir: string,
 ): Promise<DesktopComputerUsePermissionsStatus> {
-  const runtime = resolveBinary(baseDir);
+  const status = await getComputerUseRuntimeStatus(baseDir);
+  if (status.repairRequired) {
+    return unreadyComputerUsePermissionsStatus(status);
+  }
+  const runtime = resolveComputerUseRuntime(baseDir);
   if (!runtime.binaryPath || runtime.source === "missing") {
     return missingComputerUsePermissionsStatus(
       "Install the Computer Use runtime before checking desktop permissions.",
     );
   }
 
+  const environment = getCuaDriverDaemonEnvironment();
+  if (!environment) {
+    return missingComputerUsePermissionsStatus(
+      "The embedded Computer Use daemon is not available yet.",
+    );
+  }
   return checkComputerUsePermissions({
     binaryPath: runtime.binaryPath,
-    prompt: false,
+    environment,
   });
 }
 
 export async function requestComputerUsePermissions(
   baseDir: string,
 ): Promise<DesktopComputerUsePermissionsStatus> {
-  const runtime = resolveBinary(baseDir);
+  const status = await getComputerUseRuntimeStatus(baseDir);
+  if (status.repairRequired) {
+    return unreadyComputerUsePermissionsStatus(status);
+  }
+  const runtime = resolveComputerUseRuntime(baseDir);
   if (!runtime.binaryPath || runtime.source === "missing") {
     return missingComputerUsePermissionsStatus(
       "Install the Computer Use runtime before requesting desktop permissions.",
     );
   }
 
+  // macOS presents independent TCC dialogs for each capability. We deliberately
+  // do not trigger them here: the desktop UI links users to the relevant System
+  // Settings panes, then rechecks the host-owned grants without a prompt cascade.
+  const environment = getCuaDriverDaemonEnvironment();
+  if (!environment) {
+    return missingComputerUsePermissionsStatus(
+      "The embedded Computer Use daemon is not available yet.",
+    );
+  }
   return checkComputerUsePermissions({
     binaryPath: runtime.binaryPath,
-    prompt: true,
+    environment,
   });
 }

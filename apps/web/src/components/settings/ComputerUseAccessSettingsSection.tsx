@@ -1,9 +1,9 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import {
   BotIcon,
   CheckIcon,
   ExternalLinkIcon,
-  RotateCcwIcon,
+  InfoIcon,
   ShieldAlertIcon,
   XIcon,
 } from "lucide-react";
@@ -52,9 +52,23 @@ function formatPermissionLabel(name: string): string {
       return "Accessibility";
     case "screen_recording":
       return "Screen Recording";
+    case "screen_recording_capturable":
+      return "Screen contents capturable";
     default:
       return name.replaceAll("_", " ");
   }
+}
+
+export function formatComputerUsePermissionMessage(message: string): string {
+  const parts = message
+    .split(/(?=✅|❌|ℹ️)/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const informationalParts = parts.filter((part) => part.startsWith("ℹ️"));
+
+  return (informationalParts.length > 0 ? informationalParts : parts)
+    .map((part) => part.replace(/^(?:✅|❌|ℹ️)\s*/u, ""))
+    .join("\n");
 }
 
 function PermissionStatusGrid({
@@ -71,7 +85,7 @@ function PermissionStatusGrid({
   }
 
   return (
-    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {permissions.map((permission) => (
         <div
           key={permission.name}
@@ -101,8 +115,6 @@ export function ComputerUseAccessSettingsSection() {
   const permissionsQuery = useDesktopComputerUsePermissions({ enabled: isDesktop });
   const status = statusQuery.data ?? null;
   const permissions = permissionsQuery.data ?? null;
-  const [isResetting, setIsResetting] = useState(false);
-
   const installMutation = useMutation({
     mutationFn: async () => {
       const bridge = window.desktopBridge;
@@ -140,8 +152,8 @@ export function ComputerUseAccessSettingsSection() {
     onSuccess: (nextStatus) => {
       setDesktopComputerUseStatusQueryData(queryClient, nextStatus);
       toastManager.add({
-        type: nextStatus.diagnostics ? "success" : "error",
-        title: "Computer Use diagnostics completed",
+        type: nextStatus.ready ? "success" : nextStatus.repairRequired ? "error" : "warning",
+        title: "Computer Use health check completed",
         description: nextStatus.message ?? undefined,
       });
     },
@@ -197,15 +209,6 @@ export function ComputerUseAccessSettingsSection() {
     }
   }, []);
 
-  const handleResetPrompt = useCallback(() => {
-    setIsResetting(true);
-    updateSettings({
-      hasSeenComputerUsePrompt: false,
-      computerUseEnabled: false,
-    });
-    setIsResetting(false);
-  }, [updateSettings]);
-
   const handleComputerUseEnabledChange = useCallback(
     (checked: boolean) => {
       if (!checked) {
@@ -251,18 +254,11 @@ export function ComputerUseAccessSettingsSection() {
         title={getComputerUsePermissionsTitle(platform)}
         description={getComputerUsePermissionsDescription(platform)}
         status={
-          permissionsQuery.isLoading ? (
-            "Checking permission status."
-          ) : permissions ? (
-            <div className="space-y-2">
-              <PermissionStatusGrid permissions={permissions.permissions} />
-              {permissions.message ? (
-                <p className="text-xs text-muted-foreground">{permissions.message}</p>
-              ) : null}
-            </div>
-          ) : (
-            "Permission status unavailable."
-          )
+          permissionsQuery.isLoading
+            ? "Checking permission status."
+            : !permissions
+              ? "Permission status unavailable."
+              : undefined
         }
         control={
           <Button
@@ -275,10 +271,52 @@ export function ComputerUseAccessSettingsSection() {
             }
             onClick={() => requestPermissionsMutation.mutate()}
           >
-            Request access
+            Check access
           </Button>
         }
-      />
+      >
+        {permissions ? (
+          <div className="mt-3 space-y-3">
+            <PermissionStatusGrid permissions={permissions.permissions} />
+
+            {!permissions.granted &&
+            (permissions.message || permissions.pendingHostAccessibilityApproval) ? (
+              <div className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">
+                <InfoIcon className="mt-0.5 size-3 shrink-0" />
+                <div className="space-y-1">
+                  {permissions.message ? (
+                    <p className="whitespace-pre-line">
+                      {formatComputerUsePermissionMessage(permissions.message)}
+                    </p>
+                  ) : null}
+                  {permissions.pendingHostAccessibilityApproval ? (
+                    <p>Waiting for Accessibility approval for the current bigbud desktop app.</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {permissions.source?.attribution || permissions.source?.hostBundleId ? (
+              <dl className="space-y-1 border-t border-border/60 pt-3 text-xs">
+                {permissions.source.attribution ? (
+                  <div className="flex gap-1.5">
+                    <dt className="text-muted-foreground">Permission attribution:</dt>
+                    <dd className="text-foreground">{permissions.source.attribution}</dd>
+                  </div>
+                ) : null}
+                {permissions.source.hostBundleId ? (
+                  <div className="flex min-w-0 gap-1.5">
+                    <dt className="shrink-0 text-muted-foreground">Host bundle:</dt>
+                    <dd className="break-all font-mono text-[11px] text-foreground">
+                      {permissions.source.hostBundleId}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+          </div>
+        ) : null}
+      </SettingsRow>
 
       <SettingsRow
         title="Runtime"
@@ -287,7 +325,23 @@ export function ComputerUseAccessSettingsSection() {
           status ? (
             <div className="space-y-1">
               <div>{formatStatusLabel(status.source)}</div>
-              {status.version ? <div>{status.version}</div> : null}
+              <div>
+                Daemon: {status.daemonState}. Platform: {status.platform}/{status.architecture} (
+                {status.platformHealth}).
+              </div>
+              <div>
+                Runtime: {status.version ?? "unknown"}; expected {status.expectedVersion}.
+              </div>
+              <div>
+                State: {status.state}. Health: {status.healthSummary ?? "not checked"}. Repair:{" "}
+                {status.repairRequired ? "required" : "not required"}. Manifest:{" "}
+                {status.manifestSchema ?? "unknown"}.
+              </div>
+              <div>
+                Policy: {status.policyVersion ?? "missing"}
+                {status.policySha256 ? ` (${status.policySha256.slice(0, 12)}…)` : ""}.
+              </div>
+              {status.lastError ? <div>Last error: {status.lastError}</div> : null}
               {status.message ? <div>{status.message}</div> : null}
             </div>
           ) : statusQuery.isLoading ? (
@@ -304,7 +358,7 @@ export function ComputerUseAccessSettingsSection() {
               disabled={doctorMutation.isPending || installMutation.isPending}
               onClick={() => doctorMutation.mutate()}
             >
-              Doctor
+              Check health
             </Button>
             <Button
               size="xs"
@@ -314,23 +368,6 @@ export function ComputerUseAccessSettingsSection() {
               {status?.available ? "Repair" : "Install"}
             </Button>
           </>
-        }
-      />
-
-      <SettingsRow
-        title="Reset prompt"
-        description="Show the first-run Computer Use permission dialog again."
-        control={
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs"
-            disabled={isResetting}
-            onClick={handleResetPrompt}
-          >
-            <RotateCcwIcon className="size-3" />
-            Reset
-          </Button>
         }
       />
 

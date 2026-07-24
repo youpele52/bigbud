@@ -40,6 +40,9 @@ describe("ComputerUseLive", () => {
     const driver: CuaDriverShape = {
       callTool,
       runDoctor: () => Effect.succeed("ok"),
+      resetProxy: Effect.void,
+      resetAfterUncertainAction: () => Effect.void,
+      withExclusiveAccess: (effect) => effect,
       dispose: Effect.void,
     };
 
@@ -56,7 +59,10 @@ describe("ComputerUseLive", () => {
     );
 
     expect(browserLaunch).not.toHaveBeenCalled();
-    expect(callTool).toHaveBeenCalledWith("list_apps", {});
+    expect(callTool).toHaveBeenCalledWith(
+      "list_apps",
+      expect.objectContaining({ session: expect.stringMatching(/^bigbud-/) }),
+    );
     expect(result.action).toBe("list_apps");
   });
 
@@ -92,6 +98,9 @@ describe("ComputerUseLive", () => {
     const driver: CuaDriverShape = {
       callTool,
       runDoctor: () => Effect.succeed("ok"),
+      resetProxy: Effect.void,
+      resetAfterUncertainAction: () => Effect.void,
+      withExclusiveAccess: (effect) => effect,
       dispose: Effect.void,
     };
 

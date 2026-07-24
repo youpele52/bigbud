@@ -1,0 +1,323 @@
+{
+  "version": "cua-driver 0.9.1",
+  "manifest": {
+    "binary_path": "<TEMP_DIR>/extract/cua-driver-rs-0.9.1-darwin-universal/cua-driver",
+    "binary_version": "0.9.1",
+    "mcp_invocation": {
+      "args": ["mcp"],
+      "command": "<TEMP_DIR>/extract/cua-driver-rs-0.9.1-darwin-universal/cua-driver"
+    },
+    "schema_version": "1",
+    "subcommands": [
+      {
+        "args": [
+          {
+            "description": "Override the required daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          },
+          {
+            "description": "Select the Claude Code computer-use compat tool surface.",
+            "name": "--claude-code-computer-use-compat",
+            "type": "flag"
+          },
+          {
+            "description": "Require a daemon spawned by the embedding host instead of auto-launching the standalone app.",
+            "name": "--embedded",
+            "type": "flag"
+          },
+          {
+            "description": "Advisory host bundle id label echoed in check_permissions output.",
+            "name": "--host-bundle-id",
+            "type": "string"
+          }
+        ],
+        "description": "Run the MCP stdio proxy backed by the required Cua Driver daemon (the default invocation).",
+        "name": "mcp"
+      },
+      {
+        "args": [
+          {
+            "description": "Override the listen socket path.",
+            "name": "--socket",
+            "type": "string"
+          },
+          {
+            "description": "Skip the macOS TCC first-launch gate.",
+            "name": "--no-permissions-gate",
+            "type": "flag"
+          },
+          {
+            "description": "Forwarded by the MCP proxy when the client asked for the compat surface.",
+            "name": "--claude-code-computer-use-compat",
+            "type": "flag"
+          },
+          {
+            "description": "Run embedded inside a host app: inherit the host's TCC grants, never prompt or relaunch. Also CUA_DRIVER_EMBEDDED=1.",
+            "name": "--embedded",
+            "type": "flag"
+          },
+          {
+            "description": "Advisory host bundle id label echoed in check_permissions output.",
+            "name": "--host-bundle-id",
+            "type": "string"
+          }
+        ],
+        "description": "Run the long-lived daemon — backs the proxy/auto-relaunch path on macOS and the autostart Session 1+ daemon on Windows.",
+        "name": "serve"
+      },
+      {
+        "args": [
+          {
+            "description": "Override the daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          }
+        ],
+        "description": "Stop a running daemon by sending it a shutdown request.",
+        "name": "stop"
+      },
+      {
+        "args": [
+          {
+            "description": "Override the daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          }
+        ],
+        "description": "Report daemon status (running / not / unhealthy).",
+        "name": "status"
+      },
+      {
+        "args": [],
+        "description": "Print the canonical tool name + one-line summary for every registered MCP tool.",
+        "name": "list-tools"
+      },
+      {
+        "args": [
+          {
+            "description": "Tool name.",
+            "name": "tool",
+            "type": "positional-string"
+          }
+        ],
+        "description": "Print a single tool's full description + JSON input schema.",
+        "name": "describe"
+      },
+      {
+        "args": [
+          {
+            "description": "Tool name.",
+            "name": "tool",
+            "type": "positional-string"
+          },
+          {
+            "description": "Tool input JSON (or read from stdin).",
+            "name": "json-args",
+            "type": "positional-json"
+          },
+          {
+            "description": "Write image content to this path instead of emitting base64.",
+            "name": "--screenshot-out-file",
+            "type": "string"
+          },
+          {
+            "description": "Override the required daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          }
+        ],
+        "description": "Invoke a single tool through the required running daemon.",
+        "name": "call"
+      },
+      {
+        "args": [
+          {
+            "description": "One of: claude, codex, cursor, hermes, antigravity, openclaw, opencode, pi, qwen, droid, zcode. Omit for the generic snippet.",
+            "name": "--client",
+            "type": "string"
+          }
+        ],
+        "description": "Print the MCP server config snippet or a client-specific install command.",
+        "name": "mcp-config"
+      },
+      {
+        "args": [
+          {
+            "description": "Pretty-print the JSON.",
+            "name": "--pretty",
+            "type": "flag"
+          }
+        ],
+        "description": "Emit this machine-readable description of the CLI surface.",
+        "name": "manifest"
+      },
+      {
+        "args": [
+          {
+            "description": "One of: start, stop, status, render. Default: status.",
+            "name": "subcommand",
+            "type": "positional-string"
+          },
+          {
+            "description": "Override the daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          }
+        ],
+        "description": "Recording sub-API: start | stop | status | render.",
+        "name": "recording"
+      },
+      {
+        "args": [
+          {
+            "description": "Pretty-print.",
+            "name": "--pretty",
+            "type": "flag"
+          },
+          {
+            "description": "Output type.",
+            "name": "--type",
+            "type": "string"
+          }
+        ],
+        "description": "Dump every registered tool's docs as one document (markdown by default, JSON with --type json).",
+        "name": "dump-docs"
+      },
+      {
+        "args": [
+          {
+            "description": "Apply the update.",
+            "name": "--apply",
+            "type": "flag"
+          },
+          {
+            "description": "Emit the structured check payload.",
+            "name": "--json",
+            "type": "flag"
+          }
+        ],
+        "description": "Check GitHub for a newer release; with --apply, download and install via the canonical installer.",
+        "name": "update"
+      },
+      {
+        "args": [
+          {
+            "description": "Emit the structured check payload.",
+            "name": "--json",
+            "type": "flag"
+          },
+          {
+            "description": "Force a fresh GitHub round-trip.",
+            "name": "--no-cache",
+            "type": "flag"
+          }
+        ],
+        "description": "Read-only release-check verb (mirror of the check_for_update MCP tool).",
+        "name": "check-update"
+      },
+      {
+        "args": [
+          {
+            "description": "Machine-readable doctor report.",
+            "name": "--json",
+            "type": "flag"
+          }
+        ],
+        "description": "Self-diagnose probes for runtime prerequisites (permissions, accessibility, capture, etc.).",
+        "name": "doctor"
+      },
+      {
+        "args": [],
+        "description": "Emit a developer-focused diagnostic dump suitable for bug reports.",
+        "name": "diagnose"
+      },
+      {
+        "args": [
+          {
+            "description": "status | grant",
+            "name": "subcommand",
+            "type": "positional-string"
+          },
+          {
+            "description": "Machine-readable payload.",
+            "name": "--json",
+            "type": "flag"
+          }
+        ],
+        "description": "Inspect / raise TCC permission grants (macOS).",
+        "name": "permissions"
+      },
+      {
+        "args": [
+          {
+            "description": "show | get | set | reset",
+            "name": "subcommand",
+            "type": "positional-string"
+          },
+          {
+            "description": "Config key (for get/set).",
+            "name": "key",
+            "type": "positional-string"
+          },
+          {
+            "description": "Config value (for set).",
+            "name": "value",
+            "type": "positional-string"
+          },
+          {
+            "description": "Override the daemon socket path.",
+            "name": "--socket",
+            "type": "string"
+          }
+        ],
+        "description": "Read / write the persistent driver config.",
+        "name": "config"
+      },
+      {
+        "args": [
+          {
+            "description": "enable | disable | status | reset-id | inspect",
+            "name": "subcommand",
+            "type": "positional-string"
+          },
+          {
+            "description": "Fixed event name for inspect.",
+            "name": "event",
+            "type": "positional-string"
+          },
+          {
+            "description": "Emit machine-readable status or inspection output.",
+            "name": "--json",
+            "type": "flag"
+          }
+        ],
+        "description": "Inspect or change content-free telemetry and its pseudonymous installation identity.",
+        "name": "telemetry"
+      },
+      {
+        "args": [
+          {
+            "description": "enable | disable | status | kick",
+            "name": "subcommand",
+            "type": "positional-string"
+          }
+        ],
+        "description": "Platform-native auto-start so `cua-driver serve` comes up on every logon.",
+        "name": "autostart"
+      },
+      {
+        "args": [
+          {
+            "description": "install | update | uninstall | status | path. Default: status.",
+            "name": "subcommand",
+            "type": "positional-string"
+          }
+        ],
+        "description": "Manage the cua-driver agent skill pack (install / update / uninstall / status / path).",
+        "name": "skills"
+      }
+    ]
+  },
+  "artifactSha256": "5dad46515b14dab9d97bd8365a02f42edc09fb7a5b431254af9fef0a1306bfac"
+}

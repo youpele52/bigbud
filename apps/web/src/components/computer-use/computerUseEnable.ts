@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import type { DesktopComputerUseRuntimeStatus } from "@bigbud/contracts";
 import type { UnifiedSettings } from "@bigbud/contracts/settings";
 import {
   desktopComputerUseQueryKeys,
@@ -17,10 +18,13 @@ interface EnableComputerUseOptions {
   readonly closePrompt?: () => void;
 }
 
+export function needsComputerUseRuntimeRepair(status: DesktopComputerUseRuntimeStatus): boolean {
+  return status.repairRequired;
+}
+
 export function enableComputerUseInBackground(options: EnableComputerUseOptions): void {
   options.updateSettings({
     computerUseEnabled: true,
-    hasSeenComputerUsePrompt: true,
   });
   options.closePrompt?.();
   void ensureComputerUseReady(options);
@@ -28,6 +32,7 @@ export function enableComputerUseInBackground(options: EnableComputerUseOptions)
 
 async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions): Promise<void> {
   const bridge = window.desktopBridge;
+  let refreshPermissions = true;
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   if (!bridge) {
     return;
@@ -37,7 +42,7 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
     let runtimeStatus = await bridge.getComputerUseRuntimeStatus();
     setDesktopComputerUseStatusQueryData(queryClient, runtimeStatus);
 
-    if (!runtimeStatus.available) {
+    if (needsComputerUseRuntimeRepair(runtimeStatus)) {
       toastManager.add({
         type: "info",
         title: "Setting up Computer Use",
@@ -59,7 +64,20 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
       }
     }
 
+    if (!runtimeStatus.ready && runtimeStatus.state !== "degraded") {
+      toastManager.add({
+        type: "error",
+        title: "Computer Use runtime is not ready",
+        description:
+          runtimeStatus.lastError ??
+          runtimeStatus.message ??
+          "The desktop automation daemon is not ready.",
+      });
+      return;
+    }
+
     const permissions = await bridge.requestComputerUsePermissions();
+    refreshPermissions = !permissions.pendingHostAccessibilityApproval;
     setDesktopComputerUsePermissionsQueryData(queryClient, permissions);
 
     if (permissions.granted) {
@@ -84,6 +102,8 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
     });
   } finally {
     void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.status() });
-    void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.permissions() });
+    if (refreshPermissions) {
+      void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.permissions() });
+    }
   }
 }

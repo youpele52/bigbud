@@ -131,6 +131,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     RUN_COMPUTER_USE_DOCTOR_CHANNEL,
     getComputerUseRuntimeStatus: deps.getComputerUseRuntimeStatus,
     getComputerUsePermissionsStatus: deps.getComputerUsePermissionsStatus,
+    requestHostAccessibilityPermission: deps.requestHostAccessibilityPermission,
     requestComputerUsePermissions: deps.requestComputerUsePermissions,
     installComputerUseRuntime: deps.installComputerUseRuntime,
     runComputerUseDoctor: deps.runComputerUseDoctor,

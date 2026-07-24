@@ -17,13 +17,11 @@ import { useUpdateSettings } from "../../hooks/useSettings";
 interface FileAccessPermissionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFinished?: () => void;
 }
 
 export function FileAccessPermissionDialog({
   open,
   onOpenChange,
-  onFinished,
 }: FileAccessPermissionDialogProps) {
   const { updateSettings } = useUpdateSettings();
   const [selectedLevel, setSelectedLevel] = useState<"unrestricted" | "common-folders">(
@@ -40,15 +38,13 @@ export function FileAccessPermissionDialog({
     });
 
     setIsRequesting(false);
-    onFinished?.();
     onOpenChange(false);
-  }, [onFinished, onOpenChange, selectedLevel, updateSettings]);
+  }, [onOpenChange, selectedLevel, updateSettings]);
 
   const handleDismiss = useCallback(() => {
     updateSettings({ hasSeenFileAccessPrompt: true });
-    onFinished?.();
     onOpenChange(false);
-  }, [onFinished, onOpenChange, updateSettings]);
+  }, [onOpenChange, updateSettings]);
 
   return (
     <Dialog

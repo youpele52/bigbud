@@ -1,0 +1,54 @@
+{
+  "startSession": {
+    "content": [
+      {
+        "text": "✅ Session 'bigbud-contract-session' is active with capture_scope='auto'.",
+        "type": "text"
+      }
+    ],
+    "isError": false,
+    "structuredContent": {
+      "active": true,
+      "capture_scope": "auto",
+      "desktop_unlocked": false,
+      "effective_scope": "window",
+      "escalation_detail": null,
+      "escalation_reason": null,
+      "revived": false,
+      "session": "bigbud-contract-session"
+    }
+  },
+  "sessionState": {
+    "content": [
+      {
+        "text": "Session 'bigbud-contract-session' uses capture_scope='auto' (effective_scope='window').",
+        "type": "text"
+      }
+    ],
+    "isError": false,
+    "structuredContent": {
+      "capture_scope": "auto",
+      "desktop_unlocked": false,
+      "effective_scope": "window",
+      "escalation_detail": null,
+      "escalation_reason": null,
+      "session": "bigbud-contract-session"
+    }
+  },
+  "endSession": {
+    "content": [
+      {
+        "text": "✅ Session 'bigbud-contract-session' ended.",
+        "type": "text"
+      }
+    ],
+    "isError": false,
+    "structuredContent": {
+      "active": false,
+      "session": "bigbud-contract-session"
+    }
+  },
+  "denied": {
+    "jsonRpcError": "{\"code\":-32603,\"message\":\"Permission denied: tool 'kill_app' is explicitly denied\"}"
+  }
+}

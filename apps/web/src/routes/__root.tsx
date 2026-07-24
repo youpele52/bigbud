@@ -4,7 +4,7 @@ import {
   createRootRouteWithContext,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME } from "../config/branding";
 import { CommandPalette } from "../components/layout/CommandPalette";
@@ -24,18 +24,13 @@ import { useStore } from "../stores/main";
 import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
-import { ComputerUsePermissionDialog } from "../components/computer-use/ComputerUsePermissionDialog";
+import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
 import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
-import {
-  shouldChainComputerUsePrompt,
-  shouldShowComputerUsePrompt,
-  shouldShowFileAccessPrompt,
-} from "./-__root.permissionPrompts";
+import { shouldShowFileAccessPrompt } from "./-__root.permissionPrompts";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
-const PERMISSION_DIALOG_CHAIN_DELAY_MS = 300;
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
@@ -55,8 +50,6 @@ function RootRouteView() {
   useWindowMaterial();
   const serverConfig = useServerConfig();
   const [showFileAccessDialog, setShowFileAccessDialog] = useState(false);
-  const [showComputerUseDialog, setShowComputerUseDialog] = useState(false);
-  const isDesktop = Boolean(readNativeApi());
   const hasLoadedServerConfig = serverConfig !== null;
 
   useEffect(() => {
@@ -73,47 +66,6 @@ function RootRouteView() {
       return () => clearTimeout(timer);
     }
   }, [bootstrapComplete, hasLoadedServerConfig, settings.hasSeenFileAccessPrompt]);
-
-  useEffect(() => {
-    if (
-      shouldShowComputerUsePrompt({
-        bootstrapComplete,
-        hasLoadedServerConfig,
-        hasSeenFileAccessPrompt: settings.hasSeenFileAccessPrompt,
-        hasSeenComputerUsePrompt: settings.hasSeenComputerUsePrompt,
-        isDesktop,
-        showFileAccessDialog,
-      })
-    ) {
-      const timer = setTimeout(() => {
-        setShowComputerUseDialog(true);
-      }, PERMISSION_DIALOG_CHAIN_DELAY_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    bootstrapComplete,
-    hasLoadedServerConfig,
-    isDesktop,
-    settings.hasSeenComputerUsePrompt,
-    settings.hasSeenFileAccessPrompt,
-    showFileAccessDialog,
-  ]);
-
-  const handleFileAccessFinished = useCallback(() => {
-    if (
-      !shouldChainComputerUsePrompt({
-        hasLoadedServerConfig,
-        hasSeenComputerUsePrompt: settings.hasSeenComputerUsePrompt,
-        isDesktop,
-      })
-    ) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      setShowComputerUseDialog(true);
-    }, PERMISSION_DIALOG_CHAIN_DELAY_MS);
-  }, [hasLoadedServerConfig, isDesktop, settings.hasSeenComputerUsePrompt]);
 
   useEffect(() => {
     if (!bootstrapComplete) {
@@ -171,12 +123,8 @@ function RootRouteView() {
               <FileAccessPermissionDialog
                 open={showFileAccessDialog}
                 onOpenChange={setShowFileAccessDialog}
-                onFinished={handleFileAccessFinished}
               />
-              <ComputerUsePermissionDialog
-                open={showComputerUseDialog}
-                onOpenChange={setShowComputerUseDialog}
-              />
+              {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
             </>
           ) : (
             <StartupSplash />

@@ -1,17 +1,18 @@
-import { ATTACHMENTS_ROUTE_PREFIX } from "../attachments/attachmentPaths.ts";
-import { createAttachmentId, resolveAttachmentPath } from "../attachments/attachmentStore.ts";
-import type { ComputerUseAction, ComputerUseResult, ThreadId } from "@bigbud/contracts";
-import { CommandId, EventId } from "@bigbud/contracts";
+import type { ComputerUseAction, ThreadId } from "@bigbud/contracts";
 import {
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
   DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
 } from "@bigbud/contracts/settings";
-import { Effect, Option, type FileSystem, type Path } from "effect";
+import { Cause, Effect, Exit, Option, type FileSystem, type Path } from "effect";
 
 import type { ComputerUseShape } from "../computer-use/Services/ComputerUse.ts";
 import { isDesktopSurfaceAction } from "../computer-use/Layers/ComputerUse.ts";
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
 import { type OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  appendComputerUseActivity,
+  persistComputerUseScreenshot,
+} from "./ThreadComputerUseTools.activity.ts";
 
 const COMPUTER_USE_TOOL_TITLE = "computer_use";
 
@@ -145,80 +146,6 @@ function hasComputerUseCheckInExpired(input: {
   );
 }
 
-const appendToolActivity = (input: {
-  readonly orchestrationEngine: OrchestrationEngineShape;
-  readonly threadId: ThreadId;
-  readonly createdAt: string;
-  readonly kind: "tool.started" | "tool.completed";
-  readonly summary: string;
-  readonly detail: string;
-  readonly data: Record<string, unknown>;
-}) =>
-  input.orchestrationEngine
-    .dispatch({
-      type: "thread.activity.append",
-      commandId: CommandId.makeUnsafe(`computer-use:${crypto.randomUUID()}`),
-      threadId: input.threadId,
-      activity: {
-        id: EventId.makeUnsafe(crypto.randomUUID()),
-        tone: "tool",
-        kind: input.kind,
-        summary: input.summary,
-        payload: {
-          itemType: "mcp_tool_call",
-          title: "computer_use",
-          detail: input.detail,
-          data: input.data,
-        },
-        turnId: null,
-        createdAt: input.createdAt,
-      },
-      createdAt: input.createdAt,
-    })
-    .pipe(Effect.asVoid);
-
-const persistScreenshot = (input: {
-  readonly attachmentsDir: string;
-  readonly fileSystem: FileSystem.FileSystem;
-  readonly path: Path.Path;
-  readonly threadId: ThreadId;
-  readonly result: ComputerUseResult;
-}) =>
-  Effect.gen(function* () {
-    if (!input.result.screenshot) {
-      return input.result;
-    }
-    const bytes = Uint8Array.from(Buffer.from(input.result.screenshot.dataBase64, "base64"));
-    const attachmentId = createAttachmentId(input.threadId);
-    if (!attachmentId) {
-      return input.result;
-    }
-    const attachment = {
-      type: "image" as const,
-      id: attachmentId,
-      name: "computer-use.png",
-      mimeType: input.result.screenshot.mimeType,
-      sizeBytes: bytes.byteLength,
-    };
-    const attachmentPath = resolveAttachmentPath({
-      attachmentsDir: input.attachmentsDir,
-      attachment,
-    });
-    if (!attachmentPath) {
-      return input.result;
-    }
-    yield* input.fileSystem.makeDirectory(input.path.dirname(attachmentPath), { recursive: true });
-    yield* input.fileSystem.writeFile(attachmentPath, bytes);
-    return {
-      ...input.result,
-      screenshot: {
-        ...input.result.screenshot,
-        attachmentId,
-        attachmentUrl: `${ATTACHMENTS_ROUTE_PREFIX}/${encodeURIComponent(attachmentId)}`,
-      },
-    } satisfies ComputerUseResult;
-  });
-
 export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestration")(
   function* (input: {
     readonly attachmentsDir: string;
@@ -284,8 +211,28 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     }
 
     const createdAt = new Date().toISOString();
-    yield* appendToolActivity({
+    const operationId = crypto.randomUUID();
+    let terminalRecorded = false;
+    let timedOut = false;
+    const appendTerminalActivity = (inputActivity: {
+      readonly summary: string;
+      readonly detail: string;
+      readonly data: Record<string, unknown>;
+    }) => {
+      if (terminalRecorded) return Effect.void;
+      terminalRecorded = true;
+      return appendComputerUseActivity({
+        orchestrationEngine: input.orchestrationEngine,
+        operationId,
+        threadId: input.threadId,
+        createdAt: new Date().toISOString(),
+        kind: "tool.completed",
+        ...inputActivity,
+      });
+    };
+    yield* appendComputerUseActivity({
       orchestrationEngine: input.orchestrationEngine,
+      operationId,
       threadId: input.threadId,
       createdAt,
       kind: "tool.started",
@@ -295,44 +242,68 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     });
 
     const actionTimeoutMs = input.actionTimeoutMs ?? DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS;
-    const executed = yield* input.computerUse.execute(input.threadId, input.action).pipe(
-      Effect.timeoutOption(actionTimeoutMs),
-      Effect.flatMap((result) =>
-        Option.match(result, {
-          onNone: () =>
-            Effect.fail(
-              new Error(
-                `Computer-use action timed out after ${Math.round(actionTimeoutMs / 1_000)} seconds.`,
-              ),
-            ),
-          onSome: (value) => Effect.succeed(value),
-        }),
-      ),
+    const operation = Effect.gen(function* () {
+      const executed = yield* input.computerUse.execute(input.threadId, input.action).pipe(
+        Effect.timeoutOption(actionTimeoutMs),
+        Effect.flatMap((result) =>
+          Option.match(result, {
+            onNone: () =>
+              (() => {
+                timedOut = true;
+                return Effect.fail(
+                  new Error(
+                    `Computer-use action timed out after ${Math.round(actionTimeoutMs / 1_000)} seconds.`,
+                  ),
+                );
+              })(),
+            onSome: (value) => Effect.succeed(value),
+          }),
+        ),
+      );
+      const persistedResult = yield* persistComputerUseScreenshot({
+        attachmentsDir: input.attachmentsDir,
+        fileSystem: input.fileSystem,
+        path: input.path,
+        threadId: input.threadId,
+        result: executed,
+      });
+      const result = {
+        ...persistedResult,
+        executionStatus: "succeeded" as const,
+      };
+
+      yield* appendTerminalActivity({
+        summary: "Computer use completed",
+        detail: result.summary,
+        data: {
+          executionStatus: "succeeded",
+          action: input.action,
+          result,
+          ...(result.screenshot?.attachmentUrl
+            ? { attachmentUrl: result.screenshot.attachmentUrl }
+            : {}),
+        },
+      });
+      return result;
+    });
+
+    return yield* operation.pipe(
+      Effect.onExit((exit) => {
+        if (Exit.isSuccess(exit)) return Effect.void;
+        const cancelled = Cause.hasInterrupts(exit.cause);
+        const message =
+          Cause.prettyErrors(exit.cause)[0]?.message ??
+          (cancelled ? "Computer-use action was cancelled." : "Computer-use action failed.");
+        const executionStatus = cancelled ? "cancelled" : timedOut ? "timed_out" : "failed";
+        return appendTerminalActivity({
+          summary: cancelled ? "Computer use cancelled" : "Computer use failed",
+          detail: message,
+          data: {
+            executionStatus,
+            action: input.action,
+          },
+        });
+      }),
     );
-    const result = yield* persistScreenshot({
-      attachmentsDir: input.attachmentsDir,
-      fileSystem: input.fileSystem,
-      path: input.path,
-      threadId: input.threadId,
-      result: executed,
-    });
-
-    yield* appendToolActivity({
-      orchestrationEngine: input.orchestrationEngine,
-      threadId: input.threadId,
-      createdAt: new Date().toISOString(),
-      kind: "tool.completed",
-      summary: "Computer use completed",
-      detail: result.summary,
-      data: {
-        action: input.action,
-        result,
-        ...(result.screenshot?.attachmentUrl
-          ? { attachmentUrl: result.screenshot.attachmentUrl }
-          : {}),
-      },
-    });
-
-    return result;
   },
 );
