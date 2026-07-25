@@ -277,6 +277,7 @@ function makeWindow(): BrowserWindow {
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
     desktopDir: __dirname,
+    menuActionChannel: MENU_ACTION_CHANNEL,
     spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
     resolveIconPath,
     getSafeExternalUrl,

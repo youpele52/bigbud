@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { planDesktopBrowserReload } from "./BrowserPanel.menuAction";
+import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 
 describe("planDesktopBrowserReload", () => {
   it("ignores unrelated menu actions", () => {
@@ -53,5 +53,41 @@ describe("planDesktopBrowserReload", () => {
       reloadMode: "ignoring-cache",
       shouldActivateBrowser: true,
     });
+  });
+});
+
+describe("planDesktopBrowserContextMenu", () => {
+  it("toggles only for a visible browser with a URL", () => {
+    expect(
+      planDesktopBrowserContextMenu({
+        action: "toggle-browser-context-menu",
+        browserVisible: true,
+        hasUrl: true,
+      }),
+    ).toBe("toggle");
+    expect(
+      planDesktopBrowserContextMenu({
+        action: "toggle-browser-context-menu",
+        browserVisible: false,
+        hasUrl: true,
+      }),
+    ).toBeNull();
+    expect(
+      planDesktopBrowserContextMenu({
+        action: "toggle-browser-context-menu",
+        browserVisible: true,
+        hasUrl: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("closes from guest browser input", () => {
+    expect(
+      planDesktopBrowserContextMenu({
+        action: "close-browser-context-menu",
+        browserVisible: true,
+        hasUrl: true,
+      }),
+    ).toBe("close");
   });
 });

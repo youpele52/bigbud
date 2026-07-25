@@ -19,13 +19,14 @@ import {
 } from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
 import { BrowserContextMenu, type ContextMenuItem } from "./BrowserPanel.contextMenu";
+import { useBrowserContextMenu } from "./BrowserPanel.contextMenu.hook";
 import { waitForVisibleBrowserNavigation } from "./BrowserPanel.agentNavigation";
 import {
   executeBrowserTabActionWhenReady,
   registerBrowserTabAgentHandler,
 } from "./browserAgentControl";
 import { getBrowserHistory, recordBrowserHistoryUrl } from "./BrowserPanel.history";
-import { planDesktopBrowserReload } from "./BrowserPanel.menuAction";
+import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { reloadBrowserViewport } from "./BrowserPanel.reload";
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
@@ -64,11 +65,9 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   });
   const [annotationActive, setAnnotationActive] = useState(false);
   const [browserHistory, setBrowserHistory] = useState(() => getBrowserHistory());
-  const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number }>({
-    open: false,
-    x: 0,
-    y: 0,
-  });
+  const contextMenu = useBrowserContextMenu(visible && Boolean(url.trim()));
+  const closeContextMenu = contextMenu.close;
+  const toggleContextMenuCentered = contextMenu.toggleCentered;
   const [queuedDesktopReload, setQueuedDesktopReload] = useState<
     "normal" | "ignoring-cache" | null
   >(null);
@@ -265,6 +264,20 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     }
 
     const unsubscribe = onMenuAction((action) => {
+      const contextMenuCommand = planDesktopBrowserContextMenu({
+        action,
+        browserVisible: visible,
+        hasUrl: Boolean(url.trim()),
+      });
+      if (contextMenuCommand) {
+        if (contextMenuCommand === "toggle") {
+          toggleContextMenuCentered();
+        } else {
+          closeContextMenu();
+        }
+        return;
+      }
+
       const reloadPlan = planDesktopBrowserReload({
         action,
         browserOpen: open,
@@ -285,7 +298,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     return () => {
       unsubscribe?.();
     };
-  }, [open, reloadViewport, visible]);
+  }, [closeContextMenu, open, reloadViewport, toggleContextMenuCentered, url, visible]);
 
   useEffect(() => {
     if (!queuedDesktopReload) {
@@ -334,6 +347,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         </div>
       )}
       <div
+        ref={contextMenu.boundaryRef}
         className={
           isAgentControlled
             ? "pointer-events-none relative min-h-0 flex-1"
@@ -363,23 +377,12 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
               }}
               onLoadFail={({ errorDescription }) => setLoadError(errorDescription)}
               onPageMetadataChange={setPageMetadata}
-              onContextMenu={
-                isElectron
-                  ? ({
-                      x,
-                      y,
-                    }: Parameters<NonNullable<BrowserViewportProps["onContextMenu"]>>[0]) => {
-                      setContextMenu({ open: true, x, y });
-                    }
-                  : undefined
-              }
+              onContextMenu={isElectron ? contextMenu.openAtHostPoint : undefined}
             />
             <BrowserContextMenu
-              open={contextMenu.open}
-              x={contextMenu.x}
-              y={contextMenu.y}
+              anchor={contextMenu.anchor}
               items={contextMenuItems}
-              onClose={() => setContextMenu((prev) => ({ ...prev, open: false }))}
+              onClose={contextMenu.close}
             />
           </>
         )}

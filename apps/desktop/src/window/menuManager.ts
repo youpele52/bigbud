@@ -239,6 +239,12 @@ export function configureApplicationMenu(deps: MenuManagerDeps): void {
       label: "View",
       submenu: [
         {
+          label: "Browser Context Menu",
+          accelerator: "Shift+CmdOrCtrl+C",
+          click: () => dispatchMenuAction(deps, "toggle-browser-context-menu"),
+        },
+        { type: "separator" },
+        {
           label: "Reload Browser",
           accelerator: "CmdOrCtrl+R",
           click: () => dispatchMenuAction(deps, "reload-browser"),

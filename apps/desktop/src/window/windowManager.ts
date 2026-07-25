@@ -92,6 +92,7 @@ export interface CreateWindowDeps {
   readonly desktopScheme: string;
   readonly isDevelopment: boolean;
   readonly desktopDir: string;
+  readonly menuActionChannel: string;
   readonly spellcheckEnabled: boolean;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly getSafeExternalUrl: (url: unknown) => string | null;
@@ -204,6 +205,14 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     );
 
     Menu.buildFromTemplate(menuTemplate).popup({ window });
+  });
+
+  window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
+    guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
+      if (input.type === "mouseDown" && input.button === "left") {
+        window.webContents.send(deps.menuActionChannel, "close-browser-context-menu");
+      }
+    });
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {

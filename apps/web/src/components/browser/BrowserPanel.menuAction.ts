@@ -35,3 +35,16 @@ export function planDesktopBrowserReload({
     shouldActivateBrowser: !browserVisible,
   };
 }
+
+export type DesktopBrowserContextMenuCommand = "close" | "toggle";
+
+export function planDesktopBrowserContextMenu(input: {
+  action: string;
+  browserVisible: boolean;
+  hasUrl: boolean;
+}): DesktopBrowserContextMenuCommand | null {
+  if (!input.browserVisible || !input.hasUrl) return null;
+  if (input.action === "toggle-browser-context-menu") return "toggle";
+  if (input.action === "close-browser-context-menu") return "close";
+  return null;
+}
