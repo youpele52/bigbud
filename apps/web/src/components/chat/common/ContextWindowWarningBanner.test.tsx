@@ -36,6 +36,7 @@ function makeProps(
   overrides: Partial<React.ComponentProps<typeof ContextWindowWarningBanner>> = {},
 ) {
   return {
+    threadId: "thread-1",
     usage: BASE_USAGE,
     handoffAvailable: true,
     compactAvailable: true,

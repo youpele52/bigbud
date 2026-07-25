@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { EventId, type OrchestrationThreadActivity, TurnId } from "@bigbud/contracts";
 
-import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
+import {
+  deriveLatestContextWindowSnapshot,
+  formatContextWindowTokens,
+  getContextWindowWarningRearmTokens,
+} from "./contextWindow";
 
 function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
   return {
@@ -49,6 +53,10 @@ describe("contextWindow", () => {
     expect(formatContextWindowTokens(1400)).toBe("1.4k");
     expect(formatContextWindowTokens(14_000)).toBe("14k");
     expect(formatContextWindowTokens(258_000)).toBe("258k");
+  });
+
+  it("re-arms dismissed warnings after 25% of the threshold", () => {
+    expect(getContextWindowWarningRearmTokens(120_000)).toBe(150_000);
   });
 
   it("includes total processed tokens when available", () => {

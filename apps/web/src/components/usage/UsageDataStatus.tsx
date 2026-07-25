@@ -1,9 +1,15 @@
-import { InfoIcon, TriangleAlertIcon } from "lucide-react";
+import { InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { PROVIDER_DISPLAY_NAMES, type ServerUsageSummaryResult } from "@bigbud/contracts";
+import { useState } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
+
+let unavailableUsageWarningDismissed = false;
 
 export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSummaryResult }) {
+  const [isUnavailableWarningDismissed, setIsUnavailableWarningDismissed] = useState(
+    () => unavailableUsageWarningDismissed,
+  );
   const unavailableProviders = summary.providerCoverage.filter(
     (coverage) => coverage.status === "unavailable",
   );
@@ -23,7 +29,7 @@ export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSumm
           </AlertDescription>
         </Alert>
       ) : null}
-      {unavailableProviders.length > 0 ? (
+      {unavailableProviders.length > 0 && !isUnavailableWarningDismissed ? (
         <Alert variant="warning">
           <TriangleAlertIcon />
           <AlertTitle>Usage unavailable for some providers</AlertTitle>
@@ -33,6 +39,19 @@ export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSumm
               .join(", ")}{" "}
             do not expose reliable token usage, so their totals are not estimated.
           </AlertDescription>
+          <AlertAction>
+            <button
+              type="button"
+              aria-label="Dismiss usage availability warning"
+              className="inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning"
+              onClick={() => {
+                unavailableUsageWarningDismissed = true;
+                setIsUnavailableWarningDismissed(true);
+              }}
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </AlertAction>
         </Alert>
       ) : null}
     </div>

@@ -159,6 +159,7 @@ export function ChatViewContent({
 
       <ProviderStatusBanner status={composer.activeProviderStatus} />
       <ContextWindowWarningBanner
+        threadId={base.activeThread!.id}
         usage={thread.activeContextWindow}
         handoffAvailable={handoffAvailable}
         compactAvailable={compactAvailable}
