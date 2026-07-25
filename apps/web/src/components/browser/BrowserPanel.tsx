@@ -8,7 +8,7 @@ import { normalizeAnnotationComment } from "~/stores/composer/types.annotation.s
 import type { RightPanelTabId } from "~/stores/rightPanel/rightPanelTabs.store";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
-import { closeBrowserTab } from "../../stores/browser/browserPanel.actions";
+import { closeBrowserTab, openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
 import { dataUrlToFile } from "./BrowserPanel.annotation";
 import { cropBrowserAnnotationImage } from "./BrowserPanel.annotation.image";
 import {
@@ -309,13 +309,15 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     setQueuedDesktopReload(null);
   }, [queuedDesktopReload, reloadViewport]);
 
-  const contextMenuItems: ContextMenuItem[] = createBrowserContextMenuItems(
-    {
-      canGoBack,
-      canGoForward,
-    },
+  const contextMenuItems: ContextMenuItem[] = createBrowserContextMenuItems({
+    canGoBack,
+    canGoForward,
+    context: contextMenu.context,
+    currentUrl: url,
+    activeThreadId,
     viewportRef,
-  );
+    onOpenNewTab: (nextUrl) => openNewBrowserTab({ url: nextUrl }),
+  });
   const isAgentControlled = agentLease !== undefined;
 
   return (

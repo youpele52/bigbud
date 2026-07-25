@@ -6,6 +6,13 @@ export interface BrowserViewportRef {
   reload(): void;
   reloadIgnoringCache(): void;
   openDevTools(): void;
+  inspectElement(x: number, y: number): void;
+  undo(): void;
+  redo(): void;
+  cut(): void;
+  copy(): void;
+  paste(): void;
+  selectAll(): void;
   startAnnotation(): Promise<import("./BrowserPanel.annotation").BrowserAnnotationResult | null>;
   cancelAnnotation(): Promise<void>;
   executeAgentAction(action: BrowserAction): Promise<BrowserResult>;
@@ -30,10 +37,27 @@ export interface BrowserViewportProps {
     | ((event: {
         x: number;
         y: number;
+        pageURL?: string | undefined;
         linkURL?: string | undefined;
+        linkText?: string | undefined;
+        srcURL?: string | undefined;
+        mediaType?: string | undefined;
+        hasImageContents?: boolean | undefined;
         selectionText?: string | undefined;
+        isEditable?: boolean | undefined;
+        suggestedFilename?: string | undefined;
+        editFlags?: BrowserEditFlags | undefined;
       }) => void)
     | undefined;
+}
+
+export interface BrowserEditFlags {
+  canUndo: boolean;
+  canRedo: boolean;
+  canCut: boolean;
+  canCopy: boolean;
+  canPaste: boolean;
+  canSelectAll: boolean;
 }
 
 export type ElectronWebview = HTMLElement & {
@@ -42,6 +66,13 @@ export type ElectronWebview = HTMLElement & {
   reload(): void;
   reloadIgnoringCache(): void;
   openDevTools(): void;
+  inspectElement(x: number, y: number): void;
+  undo(): void;
+  redo(): void;
+  cut(): void;
+  copy(): void;
+  paste(): void;
+  selectAll(): void;
   canGoBack(): boolean;
   canGoForward(): boolean;
   getURL(): string;
@@ -58,8 +89,16 @@ export type ContextMenuEvent = Event & {
   params: {
     x: number;
     y: number;
+    pageURL?: string;
     linkURL?: string;
+    linkText?: string;
+    srcURL?: string;
+    mediaType?: string;
+    hasImageContents?: boolean;
     selectionText?: string;
+    isEditable?: boolean;
+    suggestedFilename?: string;
+    editFlags?: BrowserEditFlags;
   };
 };
 export type FailLoadEvent = Event & {

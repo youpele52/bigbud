@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { BrowserViewportProps } from "./BrowserPanel.viewport.types";
 
 export type BrowserContextMenuAnchor =
   | { readonly kind: "center" }
   | { readonly kind: "point"; readonly x: number; readonly y: number };
+
+export type BrowserContextMenuContext = NonNullable<
+  Parameters<NonNullable<BrowserViewportProps["onContextMenu"]>>[0]
+>;
 
 export function browserContextMenuAnchorFromHostPoint(
   bounds: Pick<DOMRect, "left" | "top">,
@@ -24,13 +29,18 @@ export function toggleCenteredBrowserContextMenuAnchor(
 export function useBrowserContextMenu(available: boolean) {
   const boundaryRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState<BrowserContextMenuAnchor | null>(null);
+  const [context, setContext] = useState<BrowserContextMenuContext | null>(null);
 
-  const close = useCallback(() => setAnchor(null), []);
+  const close = useCallback(() => {
+    setAnchor(null);
+    setContext(null);
+  }, []);
   const toggleCentered = useCallback(() => setAnchor(toggleCenteredBrowserContextMenuAnchor), []);
-  const openAtHostPoint = useCallback((point: { x: number; y: number }) => {
+  const openAtHostPoint = useCallback((point: BrowserContextMenuContext) => {
     const bounds = boundaryRef.current?.getBoundingClientRect();
     if (bounds) {
       setAnchor(browserContextMenuAnchorFromHostPoint(bounds, point));
+      setContext(point);
     }
   }, []);
 
@@ -38,5 +48,5 @@ export function useBrowserContextMenu(available: boolean) {
     if (!available) close();
   }, [available, close]);
 
-  return { anchor, boundaryRef, close, openAtHostPoint, toggleCentered };
+  return { anchor, boundaryRef, close, context, openAtHostPoint, toggleCentered };
 }

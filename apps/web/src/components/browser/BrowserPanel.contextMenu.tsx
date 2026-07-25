@@ -23,6 +23,7 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
   onClose,
 }: BrowserContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const open = anchor !== null;
 
   useLayoutEffect(() => {
@@ -52,6 +53,10 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
 
   useEffect(() => {
     if (!open) return;
+    itemRefs.current = [];
+    const focusFrame = requestAnimationFrame(() => {
+      menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    });
     const onPointerDown = (e: PointerEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) {
         onClose();
@@ -65,6 +70,7 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
     window.addEventListener("pointerdown", onPointerDown, { capture: true });
     window.addEventListener("keydown", onKeyDown);
     return () => {
+      cancelAnimationFrame(focusFrame);
       window.removeEventListener("pointerdown", onPointerDown, { capture: true });
       window.removeEventListener("keydown", onKeyDown);
     };
@@ -75,21 +81,42 @@ export const BrowserContextMenu = memo(function BrowserContextMenu({
   return (
     <div
       ref={menuRef}
-      className="pointer-events-auto absolute z-[60] min-w-[10rem] overflow-hidden rounded-lg border border-border bg-card text-foreground shadow-lg"
+      className="pointer-events-auto absolute z-[60] max-h-[calc(100%-0.5rem)] min-w-[12rem] overflow-y-auto rounded-sm border border-border bg-card p-1 text-foreground shadow-lg"
       style={{ left: 0, top: 0 }}
+      tabIndex={-1}
       role="menu"
+      onKeyDown={(event) => {
+        const enabledItems = itemRefs.current.filter(
+          (item): item is HTMLButtonElement => item !== null && !item.disabled,
+        );
+        if (enabledItems.length === 0) return;
+        const currentIndex = enabledItems.indexOf(document.activeElement as HTMLButtonElement);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          const nextIndex = (currentIndex + direction + enabledItems.length) % enabledItems.length;
+          enabledItems[nextIndex]?.focus();
+        } else if (event.key === "Home" || event.key === "End") {
+          event.preventDefault();
+          const nextIndex = event.key === "Home" ? 0 : enabledItems.length - 1;
+          enabledItems[nextIndex]?.focus();
+        }
+      }}
     >
-      {items.map((item) =>
+      {items.map((item, index) =>
         item.separator ? (
           <div key={item.id} className="my-1 h-px bg-border" />
         ) : (
           <button
             key={item.id}
+            ref={(element) => {
+              itemRefs.current[index] = element;
+            }}
             role="menuitem"
             type="button"
             disabled={item.disabled}
             className={cn(
-              "flex w-full items-center px-3 py-2 text-left text-sm transition-colors",
+              "flex w-full items-center rounded-sm px-2 py-1.5 text-left text-xs transition-colors focus-visible:bg-accent focus-visible:outline-none",
               item.disabled
                 ? "cursor-not-allowed text-muted-foreground/50"
                 : "hover:bg-accent hover:text-accent-foreground",

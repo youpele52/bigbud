@@ -71,6 +71,15 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         ),
       openDevTools: () =>
         runIfReady(webviewRef.current, readyRef.current, (webview) => webview.openDevTools()),
+      inspectElement: (x, y) =>
+        runIfReady(webviewRef.current, readyRef.current, (webview) => webview.inspectElement(x, y)),
+      undo: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.undo()),
+      redo: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.redo()),
+      cut: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.cut()),
+      copy: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.copy()),
+      paste: () => runIfReady(webviewRef.current, readyRef.current, (webview) => webview.paste()),
+      selectAll: () =>
+        runIfReady(webviewRef.current, readyRef.current, (webview) => webview.selectAll()),
       executeAgentAction: async (action) => {
         const webview = webviewRef.current;
         if (!webview || !readyRef.current) {
@@ -261,8 +270,16 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
           onContextMenuRef.current?.({
             x: params.x,
             y: params.y,
+            pageURL: params.pageURL,
             linkURL: params.linkURL,
+            linkText: params.linkText,
+            srcURL: params.srcURL,
+            mediaType: params.mediaType,
+            hasImageContents: params.hasImageContents,
             selectionText: params.selectionText,
+            isEditable: params.isEditable,
+            suggestedFilename: params.suggestedFilename,
+            editFlags: params.editFlags,
           });
         } catch {
           // Ignore transient callback errors during context menu.
