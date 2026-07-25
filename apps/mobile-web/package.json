@@ -15,7 +15,7 @@
     "@base-ui/react": "^1.2.0",
     "@bigbud/contracts": "workspace:*",
     "@bigbud/shared": "workspace:*",
-    "@pierre/diffs": "^1.1.0-beta.16",
+    "@pierre/diffs": "^1.2.12",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-router": "^1.160.2",
     "class-variance-authority": "^0.7.1",
