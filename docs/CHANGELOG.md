@@ -2,6 +2,48 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.0 (27 July, 2026)
+
+### More Reliable Agent Workflows
+
+- Updated the Claude provider for Agent SDK 0.3.219 with more reliable streaming, approvals, user-input handling, task tracking, MCP integration, recovery, interruption, resume, and capability reporting, so conversations are less likely to lose progress or need a restart.
+- Added durable orchestration task projections so task progress survives restarts, stays ordered when events arrive late, and remains available in historical thread views, making multi-step work easier to follow.
+- Expanded provider-neutral runtime accounting and orchestration tools across Codex, Claude, Copilot, OpenCode, and Pi, including safer MCP bridges, pinned-thread controls, bounded diagnostics, and richer activity reporting for more predictable multi-agent sessions.
+- Agents can now pin or unpin threads when you ask, and list all pinned threads across projects, making important conversations easier to find without leaving the active chat.
+- Added Git-backed path checkpoints so files and folders can be captured and restored from the workspace, giving you a safer way to undo changes without affecting an active thread.
+- Fixed Copilot startup under Electron by resolving the bundled platform-native runtime instead of launching the JavaScript wrapper, so Copilot can start reliably in the desktop app while still honoring custom binary paths.
+- Isolated Cursor discovery probes in a temporary workspace so searches do not enter protected home-directory application data or repeatedly trigger macOS privacy prompts.
+
+### Safer, More Dependable Computer Use
+
+- Updated the CUA driver to the 0.9.1 desktop lifecycle with managed runtime activation, policy validation, daemon startup and recovery, health checks, cleanup, diagnostics, MCP tool validation, and reset handling after uncertain actions, so computer-use sessions recover more safely when something goes wrong.
+- Improved computer-use permission handling with host-bundle attribution, clearer startup repair guidance, Settings status, and coalesced concurrent permission requests, so setup is easier to understand and duplicate native dialogs are avoided.
+- Added runtime verification coverage for the bundled computer-use components, helping keep desktop control dependable across supported platforms.
+
+### A More Useful In-App Browser
+
+- Added structured navigation error pages with failure details and responsive reload and back actions, so a failed page gives you a clear way to recover instead of leaving a blank browser panel.
+- Expanded browser context menus with safe actions for selected text, links, images, editable fields, external opening, web search, sending content to chat, and developer inspection, reducing the need to switch tools for common actions.
+- Added reliable context-menu dismissal, viewport-aware positioning, keyboard navigation, and Cmd/Ctrl+Shift+C toggling, making browser actions easier to access and control.
+- Added guarded certificate-exception handling for desktop browser tabs. Invalid certificates remain rejected by default; an exception requires explicit confirmation, applies to one navigation on the exact guest tab, expires after 60 seconds, and cannot be approved for agent-controlled tabs.
+
+### Clearer Usage and Fewer Interruptions
+
+- Repaired databases that recorded the previous usage migration before its schema was complete, preserving existing contributions so Usage data remains available after an update.
+- Restored context-window warning rearming at 125% of the configured threshold and made unavailable-provider Usage warnings dismissible for the current session, reducing confusing or repeated notices.
+- Normalized recently used model storage so invalid, stale, and legacy provider records are discarded without losing valid models, keeping model pickers cleaner and more dependable.
+- Updated Pierre diffs to stable 1.2.12 and improved desktop packaged logging and workflow integration for a smoother editing and troubleshooting experience.
+
+### Faster Right-Panel Access
+
+- Updated the right-panel launcher with a compact three-column tool grid, larger icons, clearer labels, and hover tooltips that show descriptions and shortcuts, so Browser, Files, Notes, Kanban, Terminal, Git, and Diff are easier to scan and open. ![Updated right-panel launcher](https://assets.bigbud.app/content/HOK1lZrWMAIbRIb.png)
+
+### Clearer Release Channels and Downloads
+
+- Added approved Beta, Preview, and Nightly release channels with consistent identity across desktop, web, marketing, installers, artifact names, and download links, so you can tell which build you are using before downloading or installing it.
+- Stable releases remain plain bigbud, while release validation rejects unsupported prerelease suffixes and desktop updates stay on the stable update track for every channel, reducing the chance of receiving an unexpected build.
+- Updated release and distribution documentation, refreshed marketing download metrics, and improved download selection for approved prerelease assets, making it easier to find the right download.
+
 ## v0.1.654 (15 July, 2026)
 
 ### Usage
