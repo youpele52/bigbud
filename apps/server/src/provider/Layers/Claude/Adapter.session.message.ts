@@ -1,4 +1,5 @@
 import type { ProviderSendTurnInput } from "@bigbud/contracts";
+import type { ClaudeSdkUserContent } from "./Adapter.utils.message.ts";
 import { Effect, type FileSystem } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
@@ -11,7 +12,7 @@ import {
   buildClaudeImageContentBlock,
   buildPromptText,
   buildUserMessage,
-  SUPPORTED_CLAUDE_IMAGE_MIME_TYPES,
+  isClaudeImageMimeType,
   toMessage,
 } from "./Adapter.utils.ts";
 
@@ -24,12 +25,12 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
   const { fileSystem, serverConfig } = deps;
   return Effect.fn("buildUserMessageEffect")(function* (input: ProviderSendTurnInput) {
     const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-    const sdkContent: Array<Record<string, unknown>> = [];
+    const sdkContent: Array<ClaudeSdkUserContent[number]> = [];
 
     for (const attachment of input.attachments ?? []) {
       if (attachment.type === "path") continue;
       if (attachment.type === "image") {
-        if (!SUPPORTED_CLAUDE_IMAGE_MIME_TYPES.has(attachment.mimeType)) {
+        if (!isClaudeImageMimeType(attachment.mimeType)) {
           return yield* new ProviderAdapterValidationError({
             provider: "claudeAgent",
             operation: "turn/start",
@@ -87,6 +88,14 @@ export const makeBuildUserMessageEffect = (deps: BuildUserMessageDeps) => {
           }),
         );
         continue;
+      }
+
+      if (attachment.mimeType !== "application/pdf") {
+        return yield* new ProviderAdapterValidationError({
+          provider: "claudeAgent",
+          operation: "turn/start",
+          issue: `Unsupported Claude document attachment type '${attachment.mimeType}'.`,
+        });
       }
 
       const attachmentPath = resolveAttachmentPath({

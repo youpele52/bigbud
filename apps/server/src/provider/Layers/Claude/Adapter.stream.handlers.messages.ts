@@ -7,12 +7,16 @@ import {
   asRuntimeItemId,
   extractExitPlanModePlan,
   nativeProviderRefs,
+  tryParseJsonRecord,
   toolResultBlocksFromUserMessage,
   toolResultStreamKind,
 } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
+import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
+import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
+import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 
 interface MessageSpecificHandlerDeps {
@@ -37,9 +41,14 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       return;
     }
 
+    if (message.uuid) {
+      context.queuedUserMessageIds.delete(message.uuid);
+    }
+
     if (context.turnState) {
       context.turnState.items.push(message.message);
     }
+    const userToolResult = decodeClaudeUserToolResult(message);
 
     for (const toolResult of toolResultBlocksFromUserMessage(message)) {
       const toolEntry = Array.from(context.inFlightTools.entries()).find(
@@ -54,7 +63,10 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       const toolData = {
         toolName: tool.toolName,
         input: tool.input,
-        result: toolResult.block,
+        result: {
+          isError: toolResult.isError,
+          hasStructuredResult: userToolResult.hasStructuredResult,
+        },
       };
 
       const updatedStamp = yield* makeEventStamp();
@@ -74,11 +86,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
           data: toolData,
         },
         providerRefs: nativeProviderRefs(context, { providerItemId: tool.itemId }),
-        raw: {
-          source: "claude.sdk.message",
-          method: "claude/user",
-          payload: message,
-        },
+        raw: claudeSdkRuntimeRaw(message, "claude/user"),
       });
 
       const streamKind = toolResultStreamKind(tool.itemType);
@@ -97,11 +105,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
             delta: toolResult.text,
           },
           providerRefs: nativeProviderRefs(context, { providerItemId: tool.itemId }),
-          raw: {
-            source: "claude.sdk.message",
-            method: "claude/user",
-            payload: message,
-          },
+          raw: claudeSdkRuntimeRaw(message, "claude/user"),
         });
       }
 
@@ -122,12 +126,22 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
           data: toolData,
         },
         providerRefs: nativeProviderRefs(context, { providerItemId: tool.itemId }),
-        raw: {
-          source: "claude.sdk.message",
-          method: "claude/user",
-          payload: message,
-        },
+        raw: claudeSdkRuntimeRaw(message, "claude/user"),
       });
+
+      const result = tryParseJsonRecord(toolResult.text);
+      if (result) {
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: tool.itemId,
+          toolName: tool.toolName,
+          input: result,
+          ...(tool.toolName === "TaskList" ? { authoritativeSnapshot: true } : {}),
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
+      }
 
       context.inFlightTools.delete(index);
     }
@@ -138,6 +152,38 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
     message: SDKMessage,
   ) {
     if (message.type !== "assistant") {
+      return;
+    }
+
+    if (message.parent_tool_use_id) {
+      const summary = Array.isArray(message.message?.content)
+        ? message.message.content
+            .flatMap((block) => {
+              const text = asRecord(block)?.text;
+              return typeof text === "string" && text.length > 0 ? [text] : [];
+            })
+            .join("\n")
+        : "";
+      if (summary.length > 0) {
+        const stamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          type: "tool.progress",
+          eventId: stamp.eventId,
+          provider: PROVIDER,
+          createdAt: stamp.createdAt,
+          threadId: context.session.threadId,
+          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+          payload: {
+            toolUseId: message.parent_tool_use_id,
+            ...(message.subagent_type ? { toolName: message.subagent_type } : {}),
+            summary,
+          },
+          providerRefs: nativeProviderRefs(context, {
+            providerItemId: message.parent_tool_use_id,
+          }),
+          raw: claudeSdkRuntimeRaw(message, "claude/assistant/subagent"),
+        });
+      }
       return;
     }
 
@@ -186,13 +232,8 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         if (!block || typeof block !== "object") {
           continue;
         }
-        const toolUse = block as {
-          type?: unknown;
-          id?: unknown;
-          name?: unknown;
-          input?: unknown;
-        };
-        if (toolUse.type !== "tool_use" || toolUse.name !== "ExitPlanMode") {
+        const toolUse = asRecord(block);
+        if (toolUse?.type !== "tool_use" || toolUse.name !== "ExitPlanMode") {
           continue;
         }
         const planMarkdown = extractExitPlanModePlan(toolUse.input);
@@ -204,7 +245,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
           toolUseId: typeof toolUse.id === "string" ? toolUse.id : undefined,
           rawSource: "claude.sdk.message",
           rawMethod: "claude/assistant",
-          rawPayload: message,
+          rawPayload: claudeSdkDiagnostic(message),
         });
       }
     }

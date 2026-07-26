@@ -12,12 +12,9 @@ import { Cause, Deferred, Effect, Exit, Fiber, Queue, Stream } from "effect";
 
 import { ProviderAdapterProcessError } from "../../Errors.ts";
 import {
-  asCanonicalTurnId,
-  asRuntimeRequestId,
   interruptionMessageFromClaudeCause,
   isClaudeInterruptedCause,
   messageFromClaudeStreamCause,
-  nativeProviderRefs,
   toError,
 } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
@@ -65,25 +62,16 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
 
     context.stopped = true;
 
-    for (const [requestId, pending] of context.pendingApprovals) {
+    for (const pending of context.pendingApprovals.values()) {
       yield* Deferred.succeed(pending.decision, "cancel");
-      const stamp = yield* makeEventStamp();
-      yield* offerRuntimeEvent({
-        type: "request.resolved",
-        eventId: stamp.eventId,
-        provider: PROVIDER,
-        createdAt: stamp.createdAt,
-        threadId: context.session.threadId,
-        ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-        requestId: asRuntimeRequestId(requestId),
-        payload: {
-          requestType: pending.requestType,
-          decision: "cancel",
-        },
-        providerRefs: nativeProviderRefs(context),
-      });
     }
     context.pendingApprovals.clear();
+
+    for (const pending of context.pendingUserInputs.values()) {
+      pending.cancelled = true;
+      yield* Deferred.succeed(pending.answers, {});
+    }
+    context.pendingUserInputs.clear();
 
     if (context.turnState) {
       yield* turn.completeTurn(context, "interrupted", "Session stopped.");
@@ -175,6 +163,16 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
         }
       } else {
         const message = messageFromClaudeStreamCause(exit.cause, "Claude runtime stream failed.");
+        const recovery = context.recoverStream;
+        if (recovery) {
+          const recovered = yield* Effect.matchEffect(recovery(), {
+            onFailure: () => Effect.succeed(false),
+            onSuccess: () => Effect.succeed(true),
+          });
+          if (recovered) {
+            return;
+          }
+        }
         yield* turn.emitRuntimeError(context, message, Cause.pretty(exit.cause));
         yield* turn.completeTurn(context, "failed", message);
       }

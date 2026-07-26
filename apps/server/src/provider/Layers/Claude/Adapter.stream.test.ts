@@ -342,19 +342,16 @@ describe("ClaudeAdapterLive", () => {
       const toolResultUpdated = runtimeEvents.find(
         (event) =>
           event.type === "item.updated" &&
-          (event.payload.data as { result?: { tool_use_id?: string } } | undefined)?.result
-            ?.tool_use_id === "tool-grep-1",
+          (event.payload.data as { result?: { isError?: boolean } } | undefined)?.result
+            ?.isError === false,
       );
       assert.equal(toolResultUpdated?.type, "item.updated");
       if (toolResultUpdated?.type === "item.updated") {
-        assert.equal(
-          (
-            toolResultUpdated.payload.data as {
-              result?: { content?: string };
-            }
-          ).result?.content,
-          "src/example.ts:1:foo",
-        );
+        assert.deepEqual(toolResultUpdated.payload.data, {
+          toolName: "Grep",
+          input: { pattern: "foo", path: "src" },
+          result: { isError: false, hasStructuredResult: false },
+        });
       }
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

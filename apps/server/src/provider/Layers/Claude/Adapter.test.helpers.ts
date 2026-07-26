@@ -1,7 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type {
   Options as ClaudeQueryOptions,
-  PermissionMode,
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -11,21 +10,84 @@ import { Layer } from "effect";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeClaudeAdapterLive, type ClaudeAdapterLiveOptions } from "./Adapter.ts";
+import type {
+  ClaudeInitializationResult,
+  ClaudeInterruptReceipt,
+  ClaudeMcpPermissionModeOverrideResult,
+  ClaudeMcpServerStatuses,
+  ClaudeMcpSetServersResult,
+  ClaudeQueryControlSurface,
+  ClaudeQueryRuntime,
+  ClaudeRewindFilesResult,
+} from "./Adapter.sdk.ts";
 
-export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
+export class FakeClaudeQuery implements ClaudeQueryRuntime {
   private readonly queue: Array<SDKMessage> = [];
   private readonly waiters: Array<{
     readonly resolve: (value: IteratorResult<SDKMessage>) => void;
     readonly reject: (reason: unknown) => void;
   }> = [];
+  private readonly controlFailures = new Map<keyof ClaudeQueryControlSurface, unknown>();
   private done = false;
   private failure: unknown | undefined;
+  private initializationResponse: ClaudeInitializationResult | undefined;
+
+  public interruptResult: ClaudeInterruptReceipt = undefined;
+  public mcpServerStatusesResult: ClaudeMcpServerStatuses = [
+    { name: "bigbud_orchestration", status: "connected" },
+    { name: "bigbud_remote_workspace", status: "connected" },
+  ];
+  public mcpPermissionModeOverrideResult: ClaudeMcpPermissionModeOverrideResult = {};
+  public rewindFilesResult: ClaudeRewindFilesResult = {
+    canRewind: false,
+    error: "Fake Claude query rewind response was not configured.",
+  };
+  public setMcpServersResult: ClaudeMcpSetServersResult = {
+    added: [],
+    removed: [],
+    errors: {},
+  };
 
   public readonly interruptCalls: Array<void> = [];
+  public readonly initializationResultCalls: Array<void> = [];
+  public readonly reinitializeCalls: Array<void> = [];
+  public readonly mcpServerStatusCalls: Array<void> = [];
+  public readonly setMcpPermissionModeOverrideCalls: Array<{
+    serverName: string;
+    mode: Parameters<ClaudeQueryRuntime["setMcpPermissionModeOverride"]>[1];
+  }> = [];
+  public readonly reconnectMcpServerCalls: Array<string> = [];
+  public readonly toggleMcpServerCalls: Array<{ serverName: string; enabled: boolean }> = [];
+  public readonly setMcpServersCalls: Array<Parameters<ClaudeQueryRuntime["setMcpServers"]>[0]> =
+    [];
+  public readonly rewindFilesCalls: Array<{
+    userMessageId: string;
+    options?: Parameters<ClaudeQueryRuntime["rewindFiles"]>[1];
+  }> = [];
   public readonly setModelCalls: Array<string | undefined> = [];
   public readonly setPermissionModeCalls: Array<string> = [];
-  public readonly setMaxThinkingTokensCalls: Array<number | null> = [];
+  public readonly setMaxThinkingTokensCalls: Array<
+    Parameters<ClaudeQueryRuntime["setMaxThinkingTokens"]>
+  > = [];
   public closeCalls = 0;
+  public reopenOnReinitialize = false;
+
+  setInitializationResponse(response: ClaudeInitializationResult): void {
+    this.initializationResponse = response;
+  }
+
+  failControl(name: keyof ClaudeQueryControlSurface, cause: unknown): void {
+    this.controlFailures.set(name, cause);
+  }
+
+  private throwControlFailure(name: keyof ClaudeQueryControlSurface): void {
+    if (!this.controlFailures.has(name)) {
+      return;
+    }
+    const cause = this.controlFailures.get(name);
+    this.controlFailures.delete(name);
+    throw cause;
+  }
 
   emit(message: SDKMessage): void {
     if (this.done) {
@@ -37,6 +99,11 @@ export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
       return;
     }
     this.queue.push(message);
+  }
+
+  /** Test-only malformed-wire seam; production query streams remain SDK-typed. */
+  emitUnchecked(message: unknown): void {
+    this.emit(message as SDKMessage);
   }
 
   fail(cause: unknown): void {
@@ -61,25 +128,94 @@ export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
     }
   }
 
-  readonly interrupt = async (): Promise<void> => {
+  readonly interrupt: ClaudeQueryRuntime["interrupt"] = async () => {
     this.interruptCalls.push(undefined);
+    this.throwControlFailure("interrupt");
+    return this.interruptResult;
   };
 
-  readonly setModel = async (model?: string): Promise<void> => {
+  readonly initializationResult: ClaudeQueryRuntime["initializationResult"] = async () => {
+    this.initializationResultCalls.push(undefined);
+    this.throwControlFailure("initializationResult");
+    if (!this.initializationResponse) {
+      throw new Error("Fake Claude query initialization response was not configured.");
+    }
+    return this.initializationResponse;
+  };
+
+  readonly reinitialize: ClaudeQueryRuntime["reinitialize"] = async () => {
+    this.reinitializeCalls.push(undefined);
+    this.throwControlFailure("reinitialize");
+    if (this.reopenOnReinitialize) {
+      this.done = false;
+      this.failure = undefined;
+    }
+    if (!this.initializationResponse) {
+      throw new Error("Fake Claude query reinitialization response was not configured.");
+    }
+    return this.initializationResponse;
+  };
+
+  readonly mcpServerStatus: ClaudeQueryRuntime["mcpServerStatus"] = async () => {
+    this.mcpServerStatusCalls.push(undefined);
+    this.throwControlFailure("mcpServerStatus");
+    return this.mcpServerStatusesResult;
+  };
+
+  readonly setMcpPermissionModeOverride: ClaudeQueryRuntime["setMcpPermissionModeOverride"] =
+    async (serverName, mode) => {
+      this.setMcpPermissionModeOverrideCalls.push({ serverName, mode });
+      this.throwControlFailure("setMcpPermissionModeOverride");
+      return this.mcpPermissionModeOverrideResult;
+    };
+
+  readonly reconnectMcpServer: ClaudeQueryRuntime["reconnectMcpServer"] = async (serverName) => {
+    this.reconnectMcpServerCalls.push(serverName);
+    this.throwControlFailure("reconnectMcpServer");
+  };
+
+  readonly toggleMcpServer: ClaudeQueryRuntime["toggleMcpServer"] = async (serverName, enabled) => {
+    this.toggleMcpServerCalls.push({ serverName, enabled });
+    this.throwControlFailure("toggleMcpServer");
+  };
+
+  readonly setMcpServers: ClaudeQueryRuntime["setMcpServers"] = async (servers) => {
+    this.setMcpServersCalls.push(servers);
+    this.throwControlFailure("setMcpServers");
+    return this.setMcpServersResult;
+  };
+
+  readonly rewindFiles: ClaudeQueryRuntime["rewindFiles"] = async (userMessageId, options) => {
+    this.rewindFilesCalls.push({ userMessageId, ...(options ? { options } : {}) });
+    this.throwControlFailure("rewindFiles");
+    return this.rewindFilesResult;
+  };
+
+  readonly setModel: ClaudeQueryRuntime["setModel"] = async (model) => {
     this.setModelCalls.push(model);
+    this.throwControlFailure("setModel");
   };
 
-  readonly setPermissionMode = async (mode: PermissionMode): Promise<void> => {
+  readonly setPermissionMode: ClaudeQueryRuntime["setPermissionMode"] = async (mode) => {
     this.setPermissionModeCalls.push(mode);
+    this.throwControlFailure("setPermissionMode");
   };
 
-  readonly setMaxThinkingTokens = async (maxThinkingTokens: number | null): Promise<void> => {
-    this.setMaxThinkingTokensCalls.push(maxThinkingTokens);
+  readonly setMaxThinkingTokens: ClaudeQueryRuntime["setMaxThinkingTokens"] = async (
+    maxThinkingTokens,
+    thinkingDisplay,
+  ) => {
+    this.setMaxThinkingTokensCalls.push([maxThinkingTokens, thinkingDisplay]);
+    this.throwControlFailure("setMaxThinkingTokens");
   };
 
-  readonly close = (): void => {
+  readonly close: ClaudeQueryRuntime["close"] = () => {
     this.closeCalls += 1;
-    this.finish();
+    try {
+      this.throwControlFailure("close");
+    } finally {
+      this.finish();
+    }
   };
 
   [Symbol.asyncIterator](): AsyncIterator<SDKMessage> {

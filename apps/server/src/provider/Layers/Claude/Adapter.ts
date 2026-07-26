@@ -33,6 +33,10 @@ import {
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type {
+  PendingApprovalLedgerEntry,
+  PendingUserInputLedgerEntry,
+} from "./Adapter.requestLedger.ts";
+import type {
   ClaudeAdapterLiveOptions,
   ClaudeQueryRuntime,
   ClaudeSessionContext,
@@ -43,6 +47,8 @@ import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { makeStartSession } from "./Adapter.session.ts";
 import { toRequestError } from "./Adapter.utils.ts";
+import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
+import { makeClaudeControlOperations } from "./Adapter.controls.ts";
 
 export type { ClaudeAdapterLiveOptions };
 
@@ -64,7 +70,7 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     ((input: {
       readonly prompt: AsyncIterable<SDKUserMessage>;
       readonly options: ClaudeQueryOptions;
-    }) => query({ prompt: input.prompt, options: input.options }) as ClaudeQueryRuntime);
+    }): ClaudeQueryRuntime => query({ prompt: input.prompt, options: input.options }));
 
   const sessions = new Map<ThreadId, ClaudeSessionContext>();
   const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
@@ -99,24 +105,6 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
   const buildUserMessageEffect = makeBuildUserMessageEffect({ fileSystem, serverConfig });
 
-  const snapshotThread = Effect.fn("snapshotThread")(function* (context: ClaudeSessionContext) {
-    const threadId = context.session.threadId;
-    if (!threadId) {
-      return yield* new ProviderAdapterValidationError({
-        provider: PROVIDER,
-        operation: "readThread",
-        issue: "Session thread id is not initialized yet.",
-      });
-    }
-    return {
-      threadId,
-      turns: context.turns.map((turn) => ({
-        id: turn.id,
-        items: [...turn.items],
-      })),
-    };
-  });
-
   const requireSession = (
     threadId: ThreadId,
   ): Effect.Effect<ClaudeSessionContext, ProviderAdapterError> => {
@@ -145,6 +133,14 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
 
+    if (context.pendingApprovals.size > 0 || context.pendingUserInputs.size > 0) {
+      return yield* new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation: "sendTurn",
+        issue: "Resolve or cancel the pending approval or user-input request first.",
+      });
+    }
+
     if (context.turnState) {
       // Auto-close a stale synthetic turn (from background agent responses
       // between user prompts) to prevent blocking the user's next turn.
@@ -170,16 +166,18 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     // "plan" maps directly to the SDK's "plan" permission mode;
     // "default" restores the session's original permission mode.
     // When interactionMode is absent we leave the current mode unchanged.
-    if (input.interactionMode === "plan") {
+    const requestedPermissionMode =
+      input.interactionMode === "plan"
+        ? "plan"
+        : input.interactionMode === "default"
+          ? (context.basePermissionMode ?? "default")
+          : undefined;
+    if (requestedPermissionMode && context.effectivePermissionMode !== requestedPermissionMode) {
       yield* Effect.tryPromise({
-        try: () => context.query.setPermissionMode("plan"),
+        try: () => context.query.setPermissionMode(requestedPermissionMode),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
       });
-    } else if (input.interactionMode === "default") {
-      yield* Effect.tryPromise({
-        try: () => context.query.setPermissionMode(context.basePermissionMode ?? "default"),
-        catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
-      });
+      context.effectivePermissionMode = requestedPermissionMode;
     }
 
     const turnId = TurnId.makeUnsafe(yield* Random.nextUUIDv4);
@@ -216,6 +214,10 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     const message = yield* buildUserMessageEffect(input as ProviderSendTurnInput);
 
+    if (message.uuid) {
+      rememberBoundedIdentity(context.queuedUserMessageIds, message.uuid, 500);
+    }
+
     yield* Queue.offer(context.promptQueue, {
       type: "message",
       message,
@@ -230,38 +232,24 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     };
   });
 
-  const interruptTurn: ClaudeAdapterShape["interruptTurn"] = Effect.fn("interruptTurn")(
-    function* (threadId, _turnId) {
-      const context = yield* requireSession(threadId);
-      yield* Effect.tryPromise({
-        try: () => context.query.interrupt(),
-        catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
-      });
-    },
-  );
-
-  const readThread: ClaudeAdapterShape["readThread"] = Effect.fn("readThread")(
-    function* (threadId) {
-      const context = yield* requireSession(threadId);
-      return yield* snapshotThread(context);
-    },
-  );
-
-  const rollbackThread: ClaudeAdapterShape["rollbackThread"] = Effect.fn("rollbackThread")(
-    function* (threadId, numTurns) {
-      const context = yield* requireSession(threadId);
-      const nextLength = Math.max(0, context.turns.length - numTurns);
-      context.turns.splice(nextLength);
-      yield* streamHandlers.updateResumeCursor(context);
-      return yield* snapshotThread(context);
-    },
-  );
+  const { interruptTurn, mcp, readThread, rollbackThread } = makeClaudeControlOperations({
+    requireSession,
+  });
 
   const respondToRequest: ClaudeAdapterShape["respondToRequest"] = Effect.fn("respondToRequest")(
     function* (threadId, requestId, decision) {
       const context = yield* requireSession(threadId);
       const pending = context.pendingApprovals.get(requestId);
       if (!pending) {
+        const resolved = context.resolvedApprovals.get(requestId);
+        if (resolved === decision) return;
+        if (resolved !== undefined) {
+          return yield* new ProviderAdapterRequestError({
+            provider: PROVIDER,
+            method: "item/requestApproval/decision",
+            detail: `Approval request ${requestId} was already resolved with a different decision.`,
+          });
+        }
         return yield* new ProviderAdapterRequestError({
           provider: PROVIDER,
           method: "item/requestApproval/decision",
@@ -269,7 +257,21 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         });
       }
 
+      const ledgerEntry = context.requestLedger.get(requestId);
+      if (ledgerEntry?.kind === "approval" && ledgerEntry.state === "pending") {
+        (ledgerEntry as PendingApprovalLedgerEntry).uiDecision = decision;
+      }
+
       context.pendingApprovals.delete(requestId);
+      context.resolvedApprovals.set(requestId, decision);
+      context.resolvedApprovalSuggestions.set(requestId, pending.suggestions ?? []);
+      while (context.resolvedApprovals.size > 500) {
+        const oldest = context.resolvedApprovals.keys().next().value;
+        if (oldest === undefined) break;
+        context.resolvedApprovals.delete(oldest);
+        context.resolvedApprovalSuggestions.delete(oldest);
+        context.appliedSessionPermissionRequests.delete(oldest);
+      }
       yield* Deferred.succeed(pending.decision, decision);
     },
   );
@@ -280,6 +282,15 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const context = yield* requireSession(threadId);
     const pending = context.pendingUserInputs.get(requestId);
     if (!pending) {
+      const resolved = context.resolvedUserInputs.get(requestId);
+      if (resolved && JSON.stringify(resolved) === JSON.stringify(answers)) return;
+      if (resolved) {
+        return yield* new ProviderAdapterRequestError({
+          provider: PROVIDER,
+          method: "item/tool/respondToUserInput",
+          detail: `User-input request ${requestId} was already resolved with different answers.`,
+        });
+      }
       return yield* new ProviderAdapterRequestError({
         provider: PROVIDER,
         method: "item/tool/respondToUserInput",
@@ -287,7 +298,18 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       });
     }
 
+    const ledgerEntry = context.requestLedger.get(requestId);
+    if (ledgerEntry?.kind === "user-input" && ledgerEntry.state === "pending") {
+      (ledgerEntry as PendingUserInputLedgerEntry).uiAnswers = answers;
+    }
+
     context.pendingUserInputs.delete(requestId);
+    context.resolvedUserInputs.set(requestId, answers);
+    while (context.resolvedUserInputs.size > 500) {
+      const oldest = context.resolvedUserInputs.keys().next().value;
+      if (oldest === undefined) break;
+      context.resolvedUserInputs.delete(oldest);
+    }
     yield* Deferred.succeed(pending.answers, answers);
   });
 
@@ -334,7 +356,11 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      sessionRecovery: "resume-restart",
+      conversationRewind: "unsupported",
+      conversationFork: "unsupported",
     },
+    mcp,
     startSession,
     sendTurn,
     interruptTurn,

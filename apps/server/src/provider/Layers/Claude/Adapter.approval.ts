@@ -6,19 +6,21 @@
  *
  * @module ClaudeAdapter.approval
  */
-import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  PermissionResult,
+  PermissionUpdate,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
   DEFAULT_RUNTIME_MODE,
   EventId,
   type ProviderApprovalDecision,
   type ProviderRuntimeEvent,
-  type ProviderUserInputAnswers,
   type RuntimeMode,
-  type UserInputQuestion,
 } from "@bigbud/contracts";
 import { FULL_ACCESS_AUTO_APPROVE_AFTER_MS } from "@bigbud/shared/approvals";
-import { Deferred, Effect, Fiber, Random, Ref } from "effect";
+import { Deferred, Effect, Fiber, Ref } from "effect";
 
 import {
   asCanonicalTurnId,
@@ -30,7 +32,16 @@ import {
 } from "./Adapter.utils.ts";
 import type { ClaudeSessionContext, PendingApproval, PendingUserInput } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
+import { decodeClaudePermissionCallback } from "./Adapter.sdk.messages.ts";
+import { claudeSdkPermissionRuntimeRaw } from "./Adapter.sdk.projections.ts";
+import {
+  trimRequestLedger,
+  type ClaudeRequestLedger,
+  type PendingApprovalLedgerEntry,
+  type ResolvedApprovalLedgerEntry,
+} from "./Adapter.requestLedger.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
+import { makeUserInputHandlers } from "./Adapter.approval.userInput.ts";
 
 export interface ApprovalHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{
@@ -44,6 +55,9 @@ export interface ApprovalHandlerDeps {
   readonly contextRef: Ref.Ref<ClaudeSessionContext | undefined>;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
+  readonly resolvedApprovals: Map<ApprovalRequestId, ProviderApprovalDecision>;
+  readonly resolvedApprovalSuggestions: Map<ApprovalRequestId, ReadonlyArray<PermissionUpdate>>;
+  readonly requestLedger: ClaudeRequestLedger;
   readonly runtimeMode: RuntimeMode | undefined;
 }
 
@@ -56,122 +70,38 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     emitProposedPlanCompleted,
     contextRef,
     pendingApprovals,
-    pendingUserInputs,
+    resolvedApprovals,
+    resolvedApprovalSuggestions,
+    requestLedger,
     runtimeMode,
   } = deps;
+  const { handleAskUserQuestion, onElicitation } = makeUserInputHandlers(deps);
 
-  /**
-   * Handle AskUserQuestion tool calls by emitting a `user-input.requested`
-   * runtime event and waiting for the user to respond via `respondToUserInput`.
-   */
-  const handleAskUserQuestion = Effect.fn("handleAskUserQuestion")(function* (
+  const resultForDecision = (
     context: ClaudeSessionContext,
-    toolInput: Record<string, unknown>,
-    callbackOptions: { readonly signal: AbortSignal; readonly toolUseID?: string },
-  ) {
-    const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
-
-    // Parse questions from the SDK's AskUserQuestion input. Claude SDK >= 2.1.121
-    // looks up returned answers by full question text, so the UI draft key must match.
-    const rawQuestions = Array.isArray(toolInput.questions) ? toolInput.questions : [];
-    const questions: Array<UserInputQuestion> = rawQuestions.map(
-      (q: Record<string, unknown>, idx: number) => ({
-        id: typeof q.question === "string" && q.question.length > 0 ? q.question : `q-${idx}`,
-        header: typeof q.header === "string" ? q.header : `Question ${idx + 1}`,
-        question: typeof q.question === "string" ? q.question : "",
-        options: Array.isArray(q.options)
-          ? q.options.map((opt: Record<string, unknown>) => ({
-              label: typeof opt.label === "string" ? opt.label : "",
-              description: typeof opt.description === "string" ? opt.description : "",
-            }))
-          : [],
-        multiSelect: typeof q.multiSelect === "boolean" ? q.multiSelect : false,
-      }),
-    );
-
-    const answersDeferred = yield* Deferred.make<ProviderUserInputAnswers>();
-    let aborted = false;
-    const pendingInput: PendingUserInput = {
-      questions,
-      answers: answersDeferred,
-    };
-
-    // Emit user-input.requested so the UI can present the questions.
-    const requestedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
-      type: "user-input.requested",
-      eventId: requestedStamp.eventId,
-      provider: PROVIDER,
-      createdAt: requestedStamp.createdAt,
-      threadId: context.session.threadId,
-      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-      requestId: asRuntimeRequestId(requestId),
-      payload: { questions },
-      providerRefs: nativeProviderRefs(context, {
-        providerItemId: callbackOptions.toolUseID,
-      }),
-      raw: {
-        source: "claude.sdk.permission",
-        method: "canUseTool/AskUserQuestion",
-        payload: { toolName: "AskUserQuestion", input: toolInput },
-      },
-    });
-
-    pendingUserInputs.set(requestId, pendingInput);
-
-    // Handle abort (e.g. turn interrupted while waiting for user input).
-    const onAbort = () => {
-      if (!pendingUserInputs.has(requestId)) {
-        return;
+    requestId: ApprovalRequestId,
+    toolInput: Parameters<CanUseTool>[1],
+    decision: ProviderApprovalDecision,
+    suggestions?: ReadonlyArray<PermissionUpdate>,
+  ): PermissionResult => {
+    if (decision === "accept" || decision === "acceptForSession") {
+      const applySessionPermissions =
+        decision === "acceptForSession" && !context.appliedSessionPermissionRequests.has(requestId);
+      if (applySessionPermissions) {
+        context.appliedSessionPermissionRequests.add(requestId);
       }
-      aborted = true;
-      pendingUserInputs.delete(requestId);
-      runFork(Deferred.succeed(answersDeferred, {} as ProviderUserInputAnswers));
-    };
-    callbackOptions.signal.addEventListener("abort", onAbort, { once: true });
-
-    // Block until the user provides answers.
-    const answers = yield* Deferred.await(answersDeferred);
-    pendingUserInputs.delete(requestId);
-
-    // Emit user-input.resolved so the UI knows the interaction completed.
-    const resolvedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent({
-      type: "user-input.resolved",
-      eventId: resolvedStamp.eventId,
-      provider: PROVIDER,
-      createdAt: resolvedStamp.createdAt,
-      threadId: context.session.threadId,
-      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-      requestId: asRuntimeRequestId(requestId),
-      payload: { answers },
-      providerRefs: nativeProviderRefs(context, {
-        providerItemId: callbackOptions.toolUseID,
-      }),
-      raw: {
-        source: "claude.sdk.permission",
-        method: "canUseTool/AskUserQuestion/resolved",
-        payload: { answers },
-      },
-    });
-
-    if (aborted) {
       return {
-        behavior: "deny",
-        message: "User cancelled tool execution.",
+        behavior: "allow",
+        updatedInput: toolInput,
+        ...(applySessionPermissions && suggestions ? { updatedPermissions: [...suggestions] } : {}),
       } satisfies PermissionResult;
     }
-
-    // Return the answers to the SDK in the expected format:
-    // { questions: [...], answers: { questionText: selectedLabel } }
     return {
-      behavior: "allow",
-      updatedInput: {
-        questions: toolInput.questions,
-        answers,
-      },
+      behavior: "deny",
+      message:
+        decision === "cancel" ? "User cancelled tool execution." : "User declined tool execution.",
     } satisfies PermissionResult;
-  });
+  };
 
   const canUseToolEffect = Effect.fn("canUseTool")(function* (
     toolName: Parameters<CanUseTool>[0],
@@ -179,10 +109,11 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     callbackOptions: Parameters<CanUseTool>[2],
   ) {
     const context = yield* Ref.get(contextRef);
-    if (!context) {
+    const callback = decodeClaudePermissionCallback(callbackOptions);
+    if (!context || !callback) {
       return {
         behavior: "deny",
-        message: "Claude session context is unavailable.",
+        message: "Claude session context or callback correlation is unavailable.",
       } satisfies PermissionResult;
     }
 
@@ -219,7 +150,32 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
     const autoApproveAfterMs =
       resolvedRuntimeMode === "full-access" ? FULL_ACCESS_AUTO_APPROVE_AFTER_MS : undefined;
 
-    const requestId = ApprovalRequestId.makeUnsafe(yield* Random.nextUUIDv4);
+    const requestId = ApprovalRequestId.makeUnsafe(callbackOptions.requestId);
+    const ledgerEntry = requestLedger.get(requestId);
+    if (ledgerEntry?.kind === "approval" && ledgerEntry.state === "resolved") {
+      if (ledgerEntry.result) return ledgerEntry.result;
+    }
+    const existingApproval = pendingApprovals.get(requestId);
+    if (existingApproval) {
+      const decision = yield* Deferred.await(existingApproval.decision);
+      return resultForDecision(
+        context,
+        requestId,
+        toolInput,
+        decision,
+        existingApproval.suggestions,
+      );
+    }
+    const resolvedDecision = resolvedApprovals.get(requestId);
+    if (resolvedDecision !== undefined) {
+      return resultForDecision(
+        context,
+        requestId,
+        toolInput,
+        resolvedDecision,
+        resolvedApprovalSuggestions.get(requestId),
+      );
+    }
     const requestType = classifyRequestType(toolName);
     const detail = summarizeToolRequest(toolName, toolInput);
     const decisionDeferred = yield* Deferred.make<ProviderApprovalDecision>();
@@ -243,26 +199,43 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
         requestType,
         detail,
         ...(autoApproveAfterMs !== undefined ? { autoApproveAfterMs } : {}),
+        ...(callbackOptions.suggestions?.length
+          ? {
+              sessionApprovalAvailable: true,
+              sessionApprovalLabel: "Allow for this session",
+            }
+          : {}),
         args: {
           toolName,
           input: toolInput,
-          ...(callbackOptions.toolUseID ? { toolUseId: callbackOptions.toolUseID } : {}),
+          toolUseId: callback.toolUseId,
+          ...(callback.agentId ? { agentId: callback.agentId } : {}),
         },
       },
       providerRefs: nativeProviderRefs(context, {
-        providerItemId: callbackOptions.toolUseID,
+        providerItemId: callback.toolUseId,
+        providerRequestId: callback.requestId,
+        ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
       }),
-      raw: {
-        source: "claude.sdk.permission",
-        method: "canUseTool/request",
-        payload: {
-          toolName,
-          input: toolInput,
-        },
-      },
+      raw: claudeSdkPermissionRuntimeRaw("canUseTool/request"),
     });
 
     pendingApprovals.set(requestId, pendingApproval);
+    const pendingLedgerEntry: PendingApprovalLedgerEntry = {
+      kind: "approval",
+      state: "pending",
+      requestId,
+      createdAt: requestedStamp.createdAt,
+      requestType,
+      ...(detail ? { detail } : {}),
+      ...(callbackOptions.suggestions ? { suggestions: callbackOptions.suggestions } : {}),
+      decision: decisionDeferred,
+      providerRequestId: callback.requestId,
+      ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
+      providerItemId: callback.toolUseId,
+    };
+    requestLedger.set(requestId, pendingLedgerEntry);
+    trimRequestLedger(requestLedger);
 
     if (autoApproveAfterMs !== undefined) {
       runFork(
@@ -291,6 +264,8 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
 
     const decision = yield* Deferred.await(decisionDeferred);
     pendingApprovals.delete(requestId);
+    resolvedApprovals.set(requestId, decision);
+    resolvedApprovalSuggestions.set(requestId, pendingApproval.suggestions ?? []);
 
     const resolvedStamp = yield* makeEventStamp();
     yield* offerRuntimeEvent({
@@ -306,36 +281,50 @@ export const makeApprovalHandlers = (deps: ApprovalHandlerDeps) => {
         decision,
       },
       providerRefs: nativeProviderRefs(context, {
-        providerItemId: callbackOptions.toolUseID,
+        providerItemId: callback.toolUseId,
+        providerRequestId: callback.requestId,
+        ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
       }),
-      raw: {
-        source: "claude.sdk.permission",
-        method: "canUseTool/decision",
-        payload: {
-          decision,
-        },
-      },
+      raw: claudeSdkPermissionRuntimeRaw("canUseTool/decision"),
     });
 
-    if (decision === "accept" || decision === "acceptForSession") {
-      return {
-        behavior: "allow",
-        updatedInput: toolInput,
-        ...(decision === "acceptForSession" && pendingApproval.suggestions
-          ? { updatedPermissions: [...pendingApproval.suggestions] }
-          : {}),
-      } satisfies PermissionResult;
-    }
-
-    return {
-      behavior: "deny",
-      message:
-        decision === "cancel" ? "User cancelled tool execution." : "User declined tool execution.",
-    } satisfies PermissionResult;
+    const result = resultForDecision(
+      context,
+      requestId,
+      toolInput,
+      decision,
+      pendingApproval.suggestions,
+    );
+    const replayResult: PermissionResult =
+      result.behavior === "allow"
+        ? {
+            behavior: "allow",
+            ...(result.updatedInput ? { updatedInput: result.updatedInput } : {}),
+          }
+        : result;
+    const resolvedEntry: ResolvedApprovalLedgerEntry = {
+      kind: "approval",
+      state: "resolved",
+      requestId,
+      createdAt: requestedStamp.createdAt,
+      resolvedAt: resolvedStamp.createdAt,
+      requestType,
+      detail,
+      decision,
+      suggestions: pendingApproval.suggestions ?? [],
+      result: replayResult,
+      sessionPermissionApplied: context.appliedSessionPermissionRequests.has(requestId),
+      providerRequestId: callback.requestId,
+      ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
+      providerItemId: callback.toolUseId,
+    };
+    requestLedger.set(requestId, resolvedEntry);
+    trimRequestLedger(requestLedger);
+    return result;
   });
 
   const canUseTool: CanUseTool = (toolName, toolInput, callbackOptions) =>
     runPromise(canUseToolEffect(toolName, toolInput, callbackOptions));
 
-  return { canUseTool };
+  return { canUseTool, onElicitation };
 };

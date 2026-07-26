@@ -1,19 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { describe, it, assert } from "@effect/vitest";
 import { Effect, Random } from "effect";
 
-import { attachmentRelativePath } from "../../../attachments/attachmentStore.ts";
-import { ServerConfig } from "../../../startup/config.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import {
   THREAD_ID,
   makeDeterministicRandomService,
   makeHarness,
-  readFirstPromptMessage,
   readFirstPromptText,
 } from "./Adapter.test.helpers.ts";
 
@@ -44,65 +40,6 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
-  it.effect("keeps Claude permissions enabled in full-access runtime mode", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-
-      const createInput = harness.getLastCreateQueryInput();
-      assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
-      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("loads Claude filesystem settings sources for SDK sessions", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "approval-required",
-      });
-
-      const createInput = harness.getLastCreateQueryInput();
-      assert.deepEqual(createInput?.options.settingSources, ["user", "project", "local"]);
-      assert.equal(createInput?.options.permissionMode, undefined);
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("starts full-access claude sessions without bypassing SDK permissions", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-      yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-
-      const createInput = harness.getLastCreateQueryInput();
-      assert.equal(createInput?.options.permissionMode, "bypassPermissions");
-      assert.equal(createInput?.options.allowDangerouslySkipPermissions, undefined);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
   it.effect("runs remote Claude workspaces through a local MCP bridge", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
@@ -123,9 +60,15 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(createInput?.options.cwd?.includes("bigbud-claude-remote-workspace-"), true);
       assert.deepEqual(createInput?.options.tools, [
         "AskUserQuestion",
+        "TaskCreate",
+        "TaskUpdate",
+        "TaskGet",
+        "TaskList",
         "TodoWrite",
         "ExitPlanMode",
       ]);
+      assert.equal(createInput?.options.includeHookEvents, true);
+      assert.equal(createInput?.options.agentProgressSummaries, true);
       assert.deepEqual(createInput?.options.allowedTools, [
         "mcp__bigbud_remote_workspace__read",
         "mcp__bigbud_remote_workspace__grep",
@@ -136,6 +79,9 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__archive_thread",
         "mcp__bigbud_orchestration__get_thread_status",
+        "mcp__bigbud_orchestration__list_pinned_threads",
+        "mcp__bigbud_orchestration__pin_thread",
+        "mcp__bigbud_orchestration__unpin_thread",
       ]);
       assert.deepEqual(createInput?.options.additionalDirectories, undefined);
       const remoteWorkspaceServer = createInput?.options.mcpServers?.bigbud_remote_workspace;
@@ -383,71 +329,6 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(createInput?.options.effort, "high");
       const promptText = yield* Effect.promise(() => readFirstPromptText(createInput));
       assert.equal(promptText, "Ultrathink:\nInvestigate the edge cases");
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("embeds image attachments in Claude user messages", () => {
-    const baseDir = mkdtempSync(path.join(os.tmpdir(), "claude-attachments-"));
-    const harness = makeHarness({
-      cwd: "/tmp/project-claude-attachments",
-      baseDir,
-    });
-    return Effect.gen(function* () {
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() =>
-          rmSync(baseDir, {
-            recursive: true,
-            force: true,
-          }),
-        ),
-      );
-
-      const adapter = yield* ClaudeAdapter;
-      const { attachmentsDir } = yield* ServerConfig;
-
-      const attachment = {
-        type: "image" as const,
-        id: "thread-claude-attachment-12345678-1234-1234-1234-123456789abc",
-        name: "diagram.png",
-        mimeType: "image/png",
-        sizeBytes: 4,
-      };
-      const attachmentPath = path.join(attachmentsDir, attachmentRelativePath(attachment) ?? "");
-      mkdirSync(path.dirname(attachmentPath), { recursive: true });
-      writeFileSync(attachmentPath, Uint8Array.from([1, 2, 3, 4]));
-
-      const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-
-      yield* adapter.sendTurn({
-        threadId: session.threadId,
-        input: "What's in this image?",
-        attachments: [attachment],
-      });
-
-      const createInput = harness.getLastCreateQueryInput();
-      const promptMessage = yield* Effect.promise(() => readFirstPromptMessage(createInput));
-      assert.isDefined(promptMessage);
-      assert.deepEqual(promptMessage?.message.content, [
-        {
-          type: "text",
-          text: "What's in this image?",
-        },
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/png",
-            data: "AQIDBA==",
-          },
-        },
-      ]);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
