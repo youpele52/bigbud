@@ -5,6 +5,7 @@ import * as Path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 
 import type { RotatingFileSink } from "@bigbud/shared/logging";
+import { releaseChannelLabel, resolveReleaseChannel } from "@bigbud/shared/releaseChannel";
 import {
   clearUpdatePollTimer,
   checkForUpdates,
@@ -116,7 +117,12 @@ const DESKTOP_SCHEME = "bigbud";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 const CUA_DRIVER_HOST_BUNDLE_ID = resolveCuaDriverHostBundleId(app.isPackaged);
-const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Beta)";
+const releaseChannel = resolveReleaseChannel(app.getVersion());
+const APP_DISPLAY_NAME = isDevelopment
+  ? "bigbud (Dev)"
+  : releaseChannel
+    ? `bigbud (${releaseChannelLabel(releaseChannel)})`
+    : "bigbud";
 const APP_USER_MODEL_ID = "ai.bigbud.desktop";
 const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "bigbud-dev.desktop" : "bigbud.desktop";
 const LINUX_WM_CLASS = isDevelopment ? "bigbud-dev" : "bigbud";

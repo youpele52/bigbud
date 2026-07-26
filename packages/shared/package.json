@@ -80,6 +80,10 @@
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"
     },
+    "./releaseChannel": {
+      "types": "./src/releaseChannel.ts",
+      "import": "./src/releaseChannel.ts"
+    },
     "./cua-driver/release": {
       "types": "./src/cua-driver/release.ts",
       "import": "./src/cua-driver/release.ts"

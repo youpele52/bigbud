@@ -2,6 +2,27 @@ import { GITHUB_RELEASES_URL, GITHUB_REPO_SLUG } from "../constants/app";
 
 export const RELEASES_URL = GITHUB_RELEASES_URL;
 
+export const RELEASE_CHANNELS = ["beta", "preview", "nightly"] as const;
+
+export type ReleaseChannel = (typeof RELEASE_CHANNELS)[number];
+
+const RELEASE_CHANNEL_LABELS: Record<ReleaseChannel, string> = {
+  beta: "Beta",
+  preview: "Preview",
+  nightly: "Nightly",
+};
+
+const PRERELEASE_VERSION_PATTERN = /^v?\d+\.\d+\.\d+-(?<channel>[a-z]+)(?:[.-][0-9a-z.-]+)?$/i;
+
+export function resolveReleaseChannel(version: string): ReleaseChannel | null {
+  const channel = PRERELEASE_VERSION_PATTERN.exec(version.trim())?.groups?.channel?.toLowerCase();
+  return RELEASE_CHANNELS.find((candidate) => candidate === channel) ?? null;
+}
+
+export function releaseChannelLabel(channel: ReleaseChannel): string {
+  return RELEASE_CHANNEL_LABELS[channel];
+}
+
 const LATEST_RELEASE_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases/latest`;
 const RELEASES_API_URL = `https://api.github.com/repos/${GITHUB_REPO_SLUG}/releases`;
 
@@ -73,7 +94,14 @@ function pickLatestPrerelease(value: unknown): Release | null {
   }
 
   const releases = value.filter(isRelease).filter((release) => !release.draft);
-  return releases.find((release) => release.prerelease && release.assets.length > 0) ?? null;
+  return (
+    releases.find(
+      (release) =>
+        release.prerelease &&
+        release.assets.length > 0 &&
+        resolveReleaseChannel(release.tag_name) !== null,
+    ) ?? null
+  );
 }
 
 export async function fetchLatestPrerelease(): Promise<Release | null> {

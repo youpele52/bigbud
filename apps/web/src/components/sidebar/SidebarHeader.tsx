@@ -18,8 +18,8 @@ function SidebarWordmark() {
               to="/"
             >
               <BigbudLogo />
-              {/* Only show the stage badge in the desktop Electron app — Distinguishes local dev ("dev") from released builds ("beta"). The web version has no badge. */}
-              {isElectron && (
+              {/* Only show the stage badge in the desktop Electron app. The web version has no badge. */}
+              {isElectron && APP_STAGE_LABEL && (
                 <span className="rounded-full bg-muted/50 px-1.5 py-0.5 text-[8px] font-medium tracking-[0.18em] text-muted-foreground/60">
                   {APP_STAGE_LABEL.toLowerCase()}
                 </span>

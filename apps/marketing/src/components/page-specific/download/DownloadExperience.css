@@ -74,14 +74,14 @@
   animation: fade-in 0.9s ease-out 0.22s forwards;
 }
 
-.download-beta-links {
+.download-prerelease-links {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
   margin-top: 0.6rem;
 }
 
-.download-beta-link {
+.download-prerelease-link {
   font-size: 0.78rem;
   color: var(--fg-muted);
   text-decoration: underline;
@@ -92,7 +92,7 @@
     text-decoration-color 0.3s ease;
 }
 
-.download-beta-link:hover {
+.download-prerelease-link:hover {
   color: var(--fg);
   text-decoration-color: var(--fg);
 }
