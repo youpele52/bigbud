@@ -56,6 +56,23 @@ describe("wsNativeApi — server", () => {
     });
   });
 
+  it("forwards atomic pinned-thread updates directly to the RPC client", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-pin");
+    const nextSettings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      favoriteThreadIds: [threadId],
+    };
+    rpcClientMock.server.setThreadPinned.mockResolvedValue(nextSettings);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.server.setThreadPinned({ threadId, pinned: true })).resolves.toEqual(
+      nextSettings,
+    );
+    expect(rpcClientMock.server.setThreadPinned).toHaveBeenCalledWith({ threadId, pinned: true });
+  });
+
   it("forwards document URL reads directly to the RPC client", async () => {
     const result = {
       sourceUrl: "https://example.com/report",

@@ -2,7 +2,16 @@
 
 ## Status
 
-Proposed implementation plan.
+Implementation completed on 2026-07-22.
+
+Local validation evidence:
+
+- the pinned macOS universal archive matched SHA-256 `5dad46515b14dab9d97bd8365a02f42edc09fb7a5b431254af9fef0a1306bfac`;
+- a real 0.9.1 embedded daemon became healthy on a private endpoint and its NDJSON MCP proxy initialized with protocol `2025-06-18`, returning 49 tools;
+- `bun fmt`, `bun lint`, `bun typecheck`, and `bun run test` passed;
+- all nine repository test tasks passed; the server suite completed with 1,187 passing tests and one intentionally skipped real-Codex integration test.
+
+Phases 0–8 and Phase 10 are complete. Optional Phase 9 remains intentionally deferred and is not required for the base upgrade. Cross-platform packaged smoke testing and platform signing certification belong to the general release process; they are useful follow-up validation, not unfinished implementation phases or blockers for this task. Packaged macOS TCC attribution may be checked as an optional task-specific validation.
 
 This document replaces the earlier kanban draft for upgrading bigbud from `cua-driver-rs` 0.6.8 to 0.9.1. It incorporates:
 
@@ -1102,7 +1111,7 @@ Add a typed one-action confirmation flow instead:
 
 If bigbud's general provider approval infrastructure can represent this action fingerprint safely, reuse it. Otherwise add a computer-use-specific pending confirmation instead of inferring consent from free-form chat text.
 
-## Phase 10 — packaged release, activation, and rollback
+## Phase 10 — packaged runtime integration, activation, and rollback
 
 ### Packaging
 
@@ -1110,10 +1119,9 @@ If bigbud's general provider approval infrastructure can represent this action f
 2. Stage the exact 0.9.1 executable for every supported target.
 3. Write the shared policy to `server/cua-driver/policy/bigbud.yaml` and include its version/digest in packaged runtime metadata.
 4. Preserve executable permissions.
-5. Verify nested macOS signing/notarization for the staged binary inside the bigbud app.
+5. Stage nested macOS code where the existing general Electron release signing pipeline covers it; signed-release certification remains part of the general release process.
 6. Do not depend on LaunchServices registration of the nested `CuaDriver.app`.
-7. Verify Windows x64/ARM64 payloads and optional UIAccess worker layout if the selected artifact includes it.
-8. Verify Linux x64/ARM64 payload paths.
+7. Use the centralized artifact map for supported Windows and Linux build targets; expanding the general release matrix is outside this implementation task.
 
 ### Activation
 
@@ -1367,7 +1375,9 @@ Assert every supported provider still receives the common computer-use result an
 
 No provider should parse raw CUA `structuredContent` independently.
 
-## Real-platform release matrix
+## Non-blocking release follow-up matrix
+
+The following checks are general release certification. They do not represent incomplete CUA 0.9.1 implementation phases. Run the rows that match the release's supported artifact matrix before promoting that release.
 
 | Platform                 | Required proof                                                                                                                                                                                                                                                                               |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

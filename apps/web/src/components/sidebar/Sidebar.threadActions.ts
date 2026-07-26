@@ -1,11 +1,11 @@
 import { useCallback, type MouseEvent } from "react";
-import { FAVORITE_THREAD_LIMIT, type ThreadId } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import { isMacPlatform } from "../../lib/utils";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useUpdateSettings } from "../../hooks/useSettings";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { applySettingsUpdated } from "../../rpc/serverState";
 import { toastManager } from "../ui/toast";
 import { useSidebarThreadDeleteActions } from "./Sidebar.threadActions.delete";
 import { useSidebarThreadClipboardActions } from "./Sidebar.threadActions.clipboard";
@@ -27,7 +27,6 @@ export function useSidebarThreadActions({
   navigateToThreadRoute,
   cancelProjectRename,
 }: SidebarThreadActionsInput): SidebarThreadActionsOutput {
-  const { updateSettings } = useUpdateSettings();
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
@@ -85,27 +84,28 @@ export function useSidebarThreadActions({
   const toggleFavoriteThread = useCallback(
     async (threadId: ThreadId) => {
       const favoriteThreadIds = appSettings.favoriteThreadIds;
-      if (favoriteThreadIds.includes(threadId)) {
-        updateSettings({
-          favoriteThreadIds: favoriteThreadIds.filter((favoriteId) => favoriteId !== threadId),
-        });
-        return;
-      }
+      const pinned = !favoriteThreadIds.includes(threadId);
 
-      if (favoriteThreadIds.length >= FAVORITE_THREAD_LIMIT) {
+      const api = readNativeApi();
+      if (!api) return;
+      try {
+        const settings = await api.server.setThreadPinned({ threadId, pinned });
+        applySettingsUpdated(settings);
+      } catch (error) {
+        const description = error instanceof Error ? error.message : "An error occurred.";
+        const limitReached = pinned && description.includes("pin up to");
         toastManager.add({
-          type: "warning",
-          title: "Pinned limit reached",
-          description: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+          type: limitReached ? "warning" : "error",
+          title: limitReached
+            ? "Pinned limit reached"
+            : pinned
+              ? "Failed to pin thread"
+              : "Failed to unpin thread",
+          description,
         });
-        return;
       }
-
-      updateSettings({
-        favoriteThreadIds: [threadId, ...favoriteThreadIds],
-      });
     },
-    [appSettings.favoriteThreadIds, updateSettings],
+    [appSettings.favoriteThreadIds],
   );
 
   const handleBranchThread = useCallback(

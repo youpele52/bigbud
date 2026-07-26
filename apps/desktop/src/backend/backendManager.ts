@@ -11,6 +11,7 @@ import {
   resolveBackendCwd,
   resolveBackendEntry,
   resolveBackendLauncherPath,
+  resolveBackendNodeExecutable,
   resolvePackagedBundledAgentsDir,
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
@@ -212,6 +213,7 @@ export async function startBackend(): Promise<void> {
   const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
   const packagedBundledAgentsDir = resolvePackagedBundledAgentsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
+  const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
   // Ensure _modules → node_modules link exists for ESM resolution of
   // external native packages (e.g. @github/copilot-sdk, node-pty).
   ensureBackendModulesPath();
@@ -240,6 +242,7 @@ export async function startBackend(): Promise<void> {
           ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
           : {}),
         ...computerUseRuntimeEnv,
+        BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
         ELECTRON_RUN_AS_NODE: "1",
       },
       _deps.backendMaxOldSpaceMb,

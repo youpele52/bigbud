@@ -230,7 +230,7 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     latestTurnSettled &&
     hasActionableProposedPlan(activeProposedPlan);
 
-  // Show "Tasks" when the floating card is displaying TodoWrite-driven step tracking
+  // Show "Tasks" when the floating card is displaying provider task tracking
   // (no proposed plan markdown, not in plan-drafting mode). Show "Plan" when
   // there is a proposed plan or the thread is in plan interaction mode.
   const planCardLabel = cardProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";

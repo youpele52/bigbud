@@ -248,3 +248,61 @@ describe("findPlanCardProposedPlan", () => {
     ).toBe("# Latest");
   });
 });
+
+describe("modern Claude task traces", () => {
+  it("renders the same local and remote TaskCreate to TaskList sequence", () => {
+    const turnId = TurnId.makeUnsafe("turn-modern-tasks");
+    const trace = [
+      makeActivity({
+        id: "task-create",
+        turnId,
+        kind: "turn.plan.updated",
+        createdAt: "2026-07-25T00:00:01.000Z",
+        payload: { plan: [{ step: "Inspect files", status: "pending" }] },
+      }),
+      makeActivity({
+        id: "task-update",
+        turnId,
+        kind: "turn.plan.updated",
+        createdAt: "2026-07-25T00:00:02.000Z",
+        payload: { plan: [{ step: "Inspect files", status: "inProgress" }] },
+      }),
+      makeActivity({
+        id: "task-list",
+        turnId,
+        kind: "turn.plan.updated",
+        createdAt: "2026-07-25T00:00:03.000Z",
+        payload: { plan: [{ step: "Inspect files", status: "completed" }] },
+      }),
+    ];
+    const local = deriveActivePlanState(trace, turnId);
+    const remote = deriveActivePlanState(
+      trace.map((activity) => ({ ...activity })),
+      turnId,
+    );
+    expect(remote).toEqual(local);
+    expect(local?.steps).toEqual([{ step: "Inspect files", status: "completed" }]);
+  });
+
+  it("clears the shared card when TaskList emits an empty replacement", () => {
+    const turnId = TurnId.makeUnsafe("turn-empty-task-list");
+    const active = makeActivity({
+      id: "task-active",
+      turnId,
+      kind: "turn.plan.updated",
+      createdAt: "2026-07-25T00:00:01.000Z",
+      payload: { plan: [{ step: "Background work", status: "inProgress" }] },
+    });
+    const cleared = makeActivity({
+      id: "task-empty",
+      turnId,
+      kind: "turn.plan.updated",
+      createdAt: "2026-07-25T00:00:02.000Z",
+      payload: { plan: [] },
+    });
+    expect(deriveActivePlanState([active], turnId)?.steps).toEqual([
+      { step: "Background work", status: "inProgress" },
+    ]);
+    expect(deriveActivePlanState([active, cleared], turnId)).toBeNull();
+  });
+});

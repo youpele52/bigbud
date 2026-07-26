@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 import { FileTargetContextMenu } from "./FileTargetContextMenu";
+import type { ThreadId } from "@bigbud/contracts";
 
 type ContextMenuTarget = {
   path: string;
@@ -34,6 +35,7 @@ export function FilesPanelContextMenu(props: {
   workspaceRoot: string | undefined;
   contextMenuState: ContextMenuTarget | null;
   onClose: () => void;
+  threadId?: ThreadId | null | undefined;
 }) {
   return (
     <FileTargetContextMenu
@@ -44,6 +46,7 @@ export function FilesPanelContextMenu(props: {
         props.contextMenuState ? { x: props.contextMenuState.x, y: props.contextMenuState.y } : null
       }
       onClose={props.onClose}
+      threadId={props.threadId}
     />
   );
 }

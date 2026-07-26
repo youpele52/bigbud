@@ -186,6 +186,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
       updateSettings: (patch) =>
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),
+      setThreadPinned: (input) =>
+        transport.request((client) => client[WS_METHODS.serverSetThreadPinned](input)),
       readDocumentUrl: (input) =>
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>

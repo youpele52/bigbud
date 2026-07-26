@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { openPathInPreferredApp } from "../../models/editor";
+import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
+import type { ThreadId } from "@bigbud/contracts";
 import {
   canOpenDirectoryInFilesPanel,
   canOpenPathInBrowserPanel,
@@ -13,6 +15,8 @@ import {
 } from "../../stores/files/filesPanel.open";
 import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { createSharedFileActionItems, type SharedFileActionId } from "./FileActionsMenu.shared";
+import { dispatchPathCheckpointAction } from "./pathCheckpoint.action";
+import { toastManager } from "../ui/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +37,7 @@ interface FileTargetContextMenuProps {
   kind: MenuTargetKind | null;
   position: ContextMenuPosition | null;
   onClose: () => void;
+  threadId?: ThreadId | null | undefined;
 }
 
 function createVirtualAnchor(position: ContextMenuPosition) {
@@ -57,6 +62,7 @@ export function FileTargetContextMenu({
   kind,
   position,
   onClose,
+  threadId,
 }: FileTargetContextMenuProps) {
   const [open, setOpen] = useState(false);
 
@@ -139,6 +145,29 @@ export function FileTargetContextMenu({
     },
     [kind, menuOptions.relativePath, targetPath],
   );
+  const handlePathCheckpoint = useCallback(
+    async (operation: "capture" | "restore") => {
+      if (!threadId || !menuOptions.relativePath) return;
+      const api = readNativeApi();
+      if (!api) return;
+      try {
+        await dispatchPathCheckpointAction({
+          operation,
+          commandId: newCommandId(),
+          threadId,
+          path: menuOptions.relativePath,
+          api,
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: `Unable to ${operation} path checkpoint`,
+          description: error instanceof Error ? error.message : "The request could not be sent.",
+        });
+      }
+    },
+    [menuOptions.relativePath, threadId],
+  );
   const sharedActions = useMemo(
     () =>
       createSharedFileActionItems({
@@ -184,6 +213,19 @@ export function FileTargetContextMenu({
               {item.label}
             </DropdownMenuItem>
           ))}
+          {threadId && menuOptions.relativePath ? (
+            <>
+              <DropdownMenuItem onClick={() => void handlePathCheckpoint("capture")}>
+                Capture path checkpoint
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => void handlePathCheckpoint("restore")}
+              >
+                Restore path checkpoint
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       ) : null}
     </DropdownMenu>

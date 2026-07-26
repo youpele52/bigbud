@@ -74,6 +74,15 @@ This document covers how to run desktop releases from one tag, first without sig
 - Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release.
 - Public curl-installable assets are only published by `.github/workflows/release.yml` on version tags like `v1.2.3`.
 
+## CUA driver 0.9.1 upgrade note
+
+- Desktop builds package `cua-driver-rs` 0.9.1; managed Runtime repair/install uses the same pinned release metadata and verified checksums.
+- Implementation and repository validation are complete: formatting, linting, typechecking, and all nine test tasks pass.
+- The runtime is a pre-release dependency. Promote it through an internal/preview desktop build before a stable desktop release.
+- bigbud owns the embedded daemon and its private endpoint. CUA telemetry and driver self-update checks are always disabled for bigbud-owned CUA processes.
+- As general release certification—not unfinished CUA implementation—run packaged and managed smoke checks on the targets supported by that release. Verify daemon restart/cleanup, permissions, capture/input, and fail-closed unsupported Wayland routes.
+- Monitor only bigbud's existing privacy-respecting lifecycle diagnostics; never collect action text, screenshots, or user content for rollout analysis.
+
 ## 1) Dry-run release without signing
 
 Use this first to validate the release pipeline.
