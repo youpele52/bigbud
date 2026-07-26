@@ -20,6 +20,8 @@ import {
 import { Effect, Layer, PubSub, Stream } from "effect";
 
 import {
+  claudeModernizationEventsTotal,
+  claudeRuntimeMetricAttributes,
   increment,
   providerMetricAttributes,
   providerRuntimeEventsTotal,
@@ -85,11 +87,19 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const providers = yield* registry.listProviders();
   const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
-  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    increment(providerRuntimeEventsTotal, {
-      provider: event.provider,
-      eventType: event.type,
-    }).pipe(Effect.andThen(publishRuntimeEvent(event)));
+  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> => {
+    const claudeAttributes = claudeRuntimeMetricAttributes(event);
+    return Effect.all(
+      [
+        increment(providerRuntimeEventsTotal, {
+          provider: event.provider,
+          eventType: event.type,
+        }),
+        ...(claudeAttributes ? [increment(claudeModernizationEventsTotal, claudeAttributes)] : []),
+      ],
+      { discard: true },
+    ).pipe(Effect.andThen(publishRuntimeEvent(event)));
+  };
 
   yield* Effect.forEach(adapters, (adapter) =>
     Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped),

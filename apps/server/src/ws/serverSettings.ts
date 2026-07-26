@@ -13,11 +13,13 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
+  FAVORITE_THREAD_LIMIT,
   type ModelSelection,
   PROVIDER_KINDS,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  type ThreadId,
 } from "@bigbud/contracts";
 import {
   Cache,
@@ -58,6 +60,12 @@ export interface ServerSettingsShape {
     patch: ServerSettingsPatch,
   ) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
+  /** Atomically pin or unpin a thread and persist the resulting settings. */
+  readonly setThreadPinned: (input: {
+    readonly threadId: ThreadId;
+    readonly pinned: boolean;
+  }) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
   /** Stream of settings change events. */
   readonly streamChanges: Stream.Stream<ServerSettings>;
 }
@@ -83,6 +91,25 @@ export class ServerSettingsService extends ServiceMap.Service<
               Effect.map((currentSettings) => deepMerge(currentSettings, patch)),
               Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
             ),
+          setThreadPinned: ({ threadId, pinned }) =>
+            Effect.gen(function* () {
+              const currentSettings = yield* Ref.get(currentSettingsRef);
+              const withoutThread = currentSettings.favoriteThreadIds.filter(
+                (favoriteId) => favoriteId !== threadId,
+              );
+              if (pinned && withoutThread.length >= FAVORITE_THREAD_LIMIT) {
+                return yield* new ServerSettingsError({
+                  settingsPath: "<memory>",
+                  detail: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+                });
+              }
+              const nextSettings = {
+                ...currentSettings,
+                favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
+              };
+              yield* Ref.set(currentSettingsRef, nextSettings);
+              return nextSettings;
+            }),
           streamChanges: Stream.empty,
         } satisfies ServerSettingsShape;
       }),
@@ -251,6 +278,14 @@ const makeServerSettings = Effect.gen(function* () {
     );
   };
 
+  const persistSettings = (settings: ServerSettings) =>
+    Effect.gen(function* () {
+      yield* writeSettingsAtomically(settings);
+      yield* Cache.set(settingsCache, cacheKey, settings);
+      yield* emitChange(settings);
+      return resolveTextGenerationProvider(settings);
+    });
+
   const revalidateAndEmit = writeSemaphore.withPermits(1)(
     Effect.gen(function* () {
       yield* Cache.invalidate(settingsCache, cacheKey);
@@ -337,10 +372,27 @@ const makeServerSettings = Effect.gen(function* () {
                 }),
             ),
           );
-          yield* writeSettingsAtomically(next);
-          yield* Cache.set(settingsCache, cacheKey, next);
-          yield* emitChange(next);
-          return resolveTextGenerationProvider(next);
+          return yield* persistSettings(next);
+        }),
+      ),
+    setThreadPinned: ({ threadId, pinned }) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          const withoutThread = current.favoriteThreadIds.filter(
+            (favoriteId) => favoriteId !== threadId,
+          );
+          if (pinned && withoutThread.length >= FAVORITE_THREAD_LIMIT) {
+            return yield* new ServerSettingsError({
+              settingsPath,
+              detail: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+            });
+          }
+          const next = {
+            ...current,
+            favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
+          };
+          return yield* persistSettings(next);
         }),
       ),
     get streamChanges() {

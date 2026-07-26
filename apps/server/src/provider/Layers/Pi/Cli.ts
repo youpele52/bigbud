@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 
 export const DEFAULT_PI_BINARY_PATH = "pi";
 
@@ -36,7 +37,7 @@ function resolveNodeCommand(): string {
     return "node";
   }
 
-  return process.execPath;
+  return resolveNodeExecutable();
 }
 
 export function resolvePiInvocation(binaryPath: string): PiInvocation {

@@ -87,6 +87,7 @@ import {
   ServerRevokeMobileRemoteSessionInput,
 } from "./mobile";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
+import { ServerSetThreadPinnedInput } from "./pinnedThreads";
 import { WS_METHODS } from "../constants/websocket.constant";
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -132,6 +133,12 @@ export const WsServerGetSettingsRpc = Rpc.make(WS_METHODS.serverGetSettings, {
 
 export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
+  success: ServerSettings,
+  error: ServerSettingsError,
+});
+
+export const WsServerSetThreadPinnedRpc = Rpc.make(WS_METHODS.serverSetThreadPinned, {
+  payload: ServerSetThreadPinnedInput,
   success: ServerSettings,
   error: ServerSettingsError,
 });

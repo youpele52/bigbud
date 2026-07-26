@@ -19,6 +19,7 @@ export const AUTO_ACCEPT_EDITS_RULES: PermissionRuleset = [
 
 export const FULL_ACCESS_RULES: PermissionRuleset = [
   { permission: "*", pattern: "*", action: "allow" },
+  { permission: "external_directory", pattern: "*", action: "ask" },
 ];
 
 function makeEmptyAsyncIterable<T>(): AsyncIterable<T> {

@@ -19,7 +19,10 @@ import {
   BROWSER_TOOL_DESCRIPTION,
   COMPUTER_USE_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+  PIN_THREAD_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { COPILOT_COMPUTER_USE_PARAMETERS } from "./orchestrationComputerUseTool.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
@@ -100,6 +103,43 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "list_pinned_threads",
+      description: LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "pin_thread",
+      description: PIN_THREAD_TOOL_DESCRIPTION,
+      inputSchema: {
+        type: "object",
+        properties: {
+          threadId: { type: "string", description: "Thread ID to pin" },
+        },
+        required: ["threadId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "unpin_thread",
+      description: UNPIN_THREAD_TOOL_DESCRIPTION,
+      inputSchema: {
+        type: "object",
+        properties: {
+          threadId: { type: "string", description: "Thread ID to unpin" },
+        },
+        required: ["threadId"],
+        additionalProperties: false,
+      },
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "computer_use",
       description: COMPUTER_USE_TOOL_DESCRIPTION,
       inputSchema: COPILOT_COMPUTER_USE_PARAMETERS,
@@ -154,6 +194,34 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         );
         return {
           contentItems: [inputText(JSON.stringify(status, null, 2))],
+          success: true,
+        };
+      }
+      case "list_pinned_threads": {
+        const result = await Effect.runPromise(dispatcher.listPinned({ callerThreadId: threadId }));
+        return {
+          contentItems: [inputText(JSON.stringify(result, null, 2))],
+          success: true,
+        };
+      }
+      case "pin_thread":
+      case "unpin_thread": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const targetThreadId =
+          typeof argRecord?.threadId === "string" ? argRecord.threadId.trim() : "";
+        if (targetThreadId.length === 0) {
+          throw new Error("Thread ID is required.");
+        }
+        const result = await Effect.runPromise(
+          dispatcher.setPinned({
+            callerThreadId: threadId,
+            threadId: ThreadId.makeUnsafe(targetThreadId),
+            pinned: tool === "pin_thread",
+          }),
+        );
+        return {
+          contentItems: [inputText(JSON.stringify(result, null, 2))],
           success: true,
         };
       }

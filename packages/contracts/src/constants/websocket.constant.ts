@@ -77,6 +77,7 @@ export const WS_METHODS = {
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverSetThreadPinned: "server.setThreadPinned",
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",

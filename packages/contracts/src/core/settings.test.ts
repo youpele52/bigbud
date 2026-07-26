@@ -17,6 +17,7 @@ import {
   DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD,
   DEFAULT_SERVER_SETTINGS,
   ServerSettings,
+  ServerSettingsPatch,
 } from "./settings";
 
 const decodeClientSettings = Schema.decodeUnknownEffect(ClientSettingsSchema);
@@ -53,6 +54,17 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
   test("defaults desktop computer use to disabled until the user opts in", () => {
     expect(DEFAULT_SERVER_SETTINGS.computerUseEnabled).toBe(false);
     expect(DEFAULT_SERVER_SETTINGS.hasSeenComputerUsePrompt).toBe(false);
+  });
+
+  test("keeps shipped Claude paths enabled and preview features disabled", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout).toEqual({
+      modernTaskExposure: true,
+      boundedHookProgress: true,
+      forwardedSubagentText: false,
+      mcpControls: true,
+      fileCheckpointRewind: false,
+      nativeFork: false,
+    });
   });
 
   test("defaults computer use limits", () => {
@@ -141,3 +153,28 @@ it.effect("rejects out-of-range computer use limits", () =>
     assert.strictEqual(result._tag, "Failure");
   }),
 );
+
+test("decodes a narrow Claude rollout settings patch", () => {
+  const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
+  expect(
+    decodePatch({
+      providers: {
+        claudeAgent: {
+          rollout: {
+            modernTaskExposure: true,
+            boundedHookProgress: true,
+          },
+        },
+      },
+    }),
+  ).toEqual({
+    providers: {
+      claudeAgent: {
+        rollout: {
+          modernTaskExposure: true,
+          boundedHookProgress: true,
+        },
+      },
+    },
+  });
+});

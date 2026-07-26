@@ -3,6 +3,7 @@ import type {
   ServerProvider,
   ServerProviderAuth,
   ServerProviderModel,
+  ServerProviderModelDiscovery,
   ServerProviderSkill,
   ServerProviderSlashCommand,
   ServerProviderState,
@@ -135,6 +136,7 @@ export function buildServerProvider(input: {
   enabled: boolean;
   checkedAt: string;
   models: ReadonlyArray<ServerProviderModel>;
+  modelDiscovery?: ServerProviderModelDiscovery;
   slashCommands?: ReadonlyArray<ServerProviderSlashCommand>;
   skills?: ReadonlyArray<ServerProviderSkill>;
   probe: ProviderProbeResult;
@@ -149,6 +151,7 @@ export function buildServerProvider(input: {
     checkedAt: input.checkedAt,
     ...(input.probe.message ? { message: input.probe.message } : {}),
     models: input.models,
+    ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
   };

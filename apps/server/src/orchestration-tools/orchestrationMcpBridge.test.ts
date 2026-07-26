@@ -66,6 +66,11 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
     expect(source).toContain("get_thread_status");
+    expect(source).toContain("list_pinned_threads");
+    expect(source).toContain("pin_thread");
+    expect(source).toContain("unpin_thread");
+    expect(source).toContain("Only use this when the user explicitly asks to pin a thread.");
+    expect(source).toContain("Only use this when the user explicitly asks to unpin a thread.");
     expect(source).toContain("token-1");
     expect(source).toContain("action: 'get_status'");
   });
@@ -138,6 +143,9 @@ describe("orchestrationMcpBridge", () => {
             expect.objectContaining({ name: "rename_thread" }),
             expect.objectContaining({ name: "browser" }),
             expect.objectContaining({ name: "computer_use" }),
+            expect.objectContaining({ name: "list_pinned_threads" }),
+            expect.objectContaining({ name: "pin_thread" }),
+            expect.objectContaining({ name: "unpin_thread" }),
           ]),
         },
       });
@@ -178,6 +186,9 @@ describe("orchestrationMcpBridge", () => {
         "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__get_thread_status",
+        "mcp__bigbud_orchestration__list_pinned_threads",
+        "mcp__bigbud_orchestration__pin_thread",
+        "mcp__bigbud_orchestration__unpin_thread",
       ]),
     );
     expect((merged.mcpServers as Record<string, unknown>)["bigbud_orchestration"]).toBeDefined();

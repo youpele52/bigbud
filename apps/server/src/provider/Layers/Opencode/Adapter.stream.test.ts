@@ -55,6 +55,21 @@ function makePermissionAskedEvent(session: ActiveOpencodeSession): OpencodeEvent
   } as OpencodeEvent;
 }
 
+function makeExternalDirectoryPermissionEvent(session: ActiveOpencodeSession): OpencodeEvent {
+  return {
+    id: "sdk-permission-asked-external",
+    type: "permission.asked",
+    properties: {
+      id: "perm-external",
+      sessionID: session.opencodeSessionId,
+      permission: "external_directory",
+      patterns: ["/Users/example/Library/**"],
+      always: [],
+      metadata: {},
+    },
+  } as OpencodeEvent;
+}
+
 it.effect(
   "suppresses OpenCode permission popups in full-access and auto-approves immediately",
   () => {
@@ -115,6 +130,38 @@ it.effect("still emits OpenCode permission requests outside full-access", () => 
     );
 
     yield* handleEvent(session, makePermissionAskedEvent(session));
+
+    assert.equal(emitted.length, 1);
+    assert.equal(emitted[0]?.type, "request.opened");
+    assert.deepStrictEqual(scheduled, []);
+  });
+});
+
+it.effect("requires explicit approval for external directories in full-access mode", () => {
+  const session = makeSession("full-access");
+  let emitted: ReadonlyArray<ProviderRuntimeEvent> = [];
+  const scheduled: string[] = [];
+
+  return Effect.gen(function* () {
+    const handleEvent = makeHandleEvent(
+      Effect.succeed(EventId.makeUnsafe("evt-next")),
+      () =>
+        Effect.succeed({
+          eventId: EventId.makeUnsafe("evt-external"),
+          createdAt: CREATED_AT,
+        }),
+      undefined,
+      (events) =>
+        Effect.sync(() => {
+          emitted = events;
+        }),
+      (_session, requestId) => {
+        scheduled.push(requestId);
+      },
+      "opencode",
+    );
+
+    yield* handleEvent(session, makeExternalDirectoryPermissionEvent(session));
 
     assert.equal(emitted.length, 1);
     assert.equal(emitted[0]?.type, "request.opened");

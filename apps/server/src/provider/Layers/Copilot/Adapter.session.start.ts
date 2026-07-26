@@ -187,6 +187,22 @@ export const makeStartSession =
               })
               .pipe(Effect.map((status) => status as unknown as Record<string, unknown>)),
           ),
+        listPinnedThreads: () =>
+          Effect.runPromise(
+            dispatcher
+              .listPinned({ callerThreadId: input.threadId })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
+        setThreadPinned: (targetThreadId, pinned) =>
+          Effect.runPromise(
+            dispatcher
+              .setPinned({
+                callerThreadId: input.threadId,
+                threadId: ThreadId.makeUnsafe(targetThreadId),
+                pinned,
+              })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
         computerUse: (action) =>
           Effect.runPromise(
             dispatcher

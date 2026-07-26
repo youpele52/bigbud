@@ -15,7 +15,16 @@ const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 const ThreadToolRequest = Schema.Struct({
-  action: Schema.Literals(["rename", "archive", "get_status", "computer_use", "browser"]),
+  action: Schema.Literals([
+    "rename",
+    "archive",
+    "get_status",
+    "list_pinned",
+    "pin",
+    "unpin",
+    "computer_use",
+    "browser",
+  ]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
   computerUseAction: Schema.optional(Schema.Unknown),
@@ -80,6 +89,46 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       });
     }
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
+
+    if (body.action === "list_pinned") {
+      const result = yield* dispatcher.listPinned({ callerThreadId: threadId }).pipe(
+        Effect.mapError(
+          (error) =>
+            new ThreadToolRequestError({
+              status: 400,
+              message: error instanceof Error ? error.message : "Failed to list pinned threads.",
+            }),
+        ),
+      );
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
+
+    if (body.action === "pin" || body.action === "unpin") {
+      const targetThreadId = body.threadId?.trim() ?? "";
+      if (targetThreadId.length === 0) {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: "Thread ID is required.",
+        });
+      }
+      const result = yield* dispatcher
+        .setPinned({
+          callerThreadId: threadId,
+          threadId: ThreadId.makeUnsafe(targetThreadId),
+          pinned: body.action === "pin",
+        })
+        .pipe(
+          Effect.mapError((error) => {
+            const message =
+              error instanceof Error ? error.message : "Failed to update pinned thread.";
+            return new ThreadToolRequestError({
+              status: message.includes("not found") ? 404 : 400,
+              message,
+            });
+          }),
+        );
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
 
     if (body.action === "rename") {
       if (body.threadId === undefined || body.threadId !== authRecord.threadId) {

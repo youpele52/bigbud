@@ -1,5 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { DEFAULT_SERVER_SETTINGS, ServerSettingsPatch } from "@bigbud/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  FAVORITE_THREAD_LIMIT,
+  ServerSettingsPatch,
+  ThreadId,
+} from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { ServerConfig } from "../startup/config";
@@ -92,6 +97,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         enabled: true,
         binaryPath: "/usr/local/bin/claude",
         customModels: ["claude-custom"],
+        rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
       });
       assert.deepEqual(next.textGenerationModelSelection, {
         provider: "codex",
@@ -167,6 +173,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         enabled: true,
         binaryPath: "/opt/homebrew/bin/claude",
         customModels: [],
+        rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
@@ -240,6 +247,67 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           },
         },
       });
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("atomically preserves concurrent thread pins", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const firstThreadId = ThreadId.makeUnsafe("thread-pin-first");
+      const secondThreadId = ThreadId.makeUnsafe("thread-pin-second");
+
+      yield* Effect.all(
+        [
+          serverSettings.setThreadPinned({ threadId: firstThreadId, pinned: true }),
+          serverSettings.setThreadPinned({ threadId: secondThreadId, pinned: true }),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      const settings = yield* serverSettings.getSettings;
+      assert.equal(settings.favoriteThreadIds.length, 2);
+      assert.isTrue(settings.favoriteThreadIds.includes(firstThreadId));
+      assert.isTrue(settings.favoriteThreadIds.includes(secondThreadId));
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("keeps pinning idempotent and moves a repinned thread first", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const firstThreadId = ThreadId.makeUnsafe("thread-pin-first");
+      const secondThreadId = ThreadId.makeUnsafe("thread-pin-second");
+
+      yield* serverSettings.setThreadPinned({ threadId: firstThreadId, pinned: true });
+      yield* serverSettings.setThreadPinned({ threadId: secondThreadId, pinned: true });
+      const settings = yield* serverSettings.setThreadPinned({
+        threadId: firstThreadId,
+        pinned: true,
+      });
+
+      assert.deepEqual(settings.favoriteThreadIds, [firstThreadId, secondThreadId]);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("enforces the global pinned-thread limit", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      for (let index = 0; index < FAVORITE_THREAD_LIMIT; index += 1) {
+        yield* serverSettings.setThreadPinned({
+          threadId: ThreadId.makeUnsafe(`thread-pin-${index}`),
+          pinned: true,
+        });
+      }
+
+      const exit = yield* Effect.exit(
+        serverSettings.setThreadPinned({
+          threadId: ThreadId.makeUnsafe("thread-pin-over-limit"),
+          pinned: true,
+        }),
+      );
+
+      assert.equal(exit._tag, "Failure");
+      const settings = yield* serverSettings.getSettings;
+      assert.equal(settings.favoriteThreadIds.length, FAVORITE_THREAD_LIMIT);
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 });

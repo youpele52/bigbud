@@ -64,6 +64,10 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./providerRuntime": {
+      "types": "./src/providerRuntime.ts",
+      "import": "./src/providerRuntime.ts"
+    },
     "./workLog": {
       "types": "./src/workLog.ts",
       "import": "./src/workLog.ts"

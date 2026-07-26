@@ -53,6 +53,17 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         context.serverSettings.updateSettings(input.patch),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverSetThreadPinned]: (input: {
+      readonly threadId: Parameters<
+        WsRpcContext["serverSettings"]["setThreadPinned"]
+      >[0]["threadId"];
+      readonly pinned: boolean;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.serverSetThreadPinned,
+        context.serverSettings.setThreadPinned(input),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverReadDocumentUrl]: (input: { readonly url: string }) =>
       observeRpcEffect(
         WS_METHODS.serverReadDocumentUrl,

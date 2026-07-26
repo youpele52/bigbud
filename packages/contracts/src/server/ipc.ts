@@ -113,6 +113,7 @@ import type {
   ServerUpdateAutomationInput,
 } from "./automation";
 import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
+import type { ServerSetThreadPinnedInput } from "./pinnedThreads";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -219,7 +220,6 @@ export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertific
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
-  /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
@@ -349,6 +349,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSettings>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,

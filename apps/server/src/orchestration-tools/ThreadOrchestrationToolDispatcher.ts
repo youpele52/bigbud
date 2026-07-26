@@ -8,6 +8,10 @@ import type {
 import type { Effect } from "effect";
 
 import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
+import type {
+  listPinnedThreadsViaOrchestration,
+  setThreadPinnedViaOrchestration,
+} from "./ThreadOrchestrationTools.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
   readonly rename: (input: {
@@ -21,6 +25,14 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
   }) => Effect.Effect<ThreadWorkflowStatusSnapshot, Error>;
+  readonly listPinned: (input: {
+    readonly callerThreadId: ThreadId;
+  }) => ReturnType<typeof listPinnedThreadsViaOrchestration>;
+  readonly setPinned: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly threadId: ThreadId;
+    readonly pinned: boolean;
+  }) => ReturnType<typeof setThreadPinnedViaOrchestration>;
   readonly computerUse: (input: {
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;

@@ -66,6 +66,9 @@ describe("thread orchestration tools route", () => {
               lastAssistantExcerpt: null,
               updatedAt: new Date().toISOString(),
             }),
+          listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
+          setPinned: ({ threadId, pinned }) =>
+            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
           computerUse,
           browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
@@ -138,6 +141,9 @@ describe("thread orchestration tools route", () => {
               lastAssistantExcerpt: null,
               updatedAt: new Date().toISOString(),
             }),
+          listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
+          setPinned: ({ threadId, pinned }) =>
+            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,
@@ -207,6 +213,9 @@ describe("thread orchestration tools route", () => {
           rename: () => Effect.succeed({ title: "Renamed" }),
           archive: () => Effect.succeed({ archived: true as const }),
           getStatus,
+          listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
+          setPinned: ({ threadId, pinned }) =>
+            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,
@@ -283,6 +292,9 @@ describe("thread orchestration tools route", () => {
               lastAssistantExcerpt: null,
               updatedAt: new Date().toISOString(),
             }),
+          listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
+          setPinned: ({ threadId, pinned }) =>
+            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,

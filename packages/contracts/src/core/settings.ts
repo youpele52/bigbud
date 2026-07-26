@@ -145,10 +145,21 @@ export const CodexSettings = Schema.Struct({
 });
 export type CodexSettings = typeof CodexSettings.Type;
 
+export const ClaudeRolloutSettings = Schema.Struct({
+  modernTaskExposure: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  boundedHookProgress: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  forwardedSubagentText: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  mcpControls: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  fileCheckpointRewind: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  nativeFork: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+});
+export type ClaudeRolloutSettings = typeof ClaudeRolloutSettings.Type;
+
 export const ClaudeSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("claude"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  rollout: ClaudeRolloutSettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
@@ -364,10 +375,20 @@ const CodexSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const ClaudeRolloutSettingsPatch = Schema.Struct({
+  modernTaskExposure: Schema.optionalKey(Schema.Boolean),
+  boundedHookProgress: Schema.optionalKey(Schema.Boolean),
+  forwardedSubagentText: Schema.optionalKey(Schema.Boolean),
+  mcpControls: Schema.optionalKey(Schema.Boolean),
+  fileCheckpointRewind: Schema.optionalKey(Schema.Boolean),
+  nativeFork: Schema.optionalKey(Schema.Boolean),
+});
+
 const ClaudeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  rollout: Schema.optionalKey(ClaudeRolloutSettingsPatch),
 });
 
 const CopilotSettingsPatch = Schema.Struct({

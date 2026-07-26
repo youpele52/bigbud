@@ -11,7 +11,10 @@ import {
   BROWSER_TOOL_DESCRIPTION,
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+  PIN_THREAD_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import {
   COMPUTER_USE_TOOL_DESCRIPTION,
@@ -46,6 +49,8 @@ export function createCopilotThreadOrchestrationTools(input: {
   readonly renameThread: (title: string) => Promise<{ readonly title: string }>;
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
+  readonly listPinnedThreads: () => Promise<Record<string, unknown>>;
+  readonly setThreadPinned: (threadId: string, pinned: boolean) => Promise<Record<string, unknown>>;
   readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
   readonly browser: (action: BrowserActionType) => Promise<Record<string, unknown>>;
 }): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
@@ -88,6 +93,67 @@ export function createCopilotThreadOrchestrationTools(input: {
           return successResult("Archived the current thread.");
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to archive thread.";
+          return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "list_pinned_threads",
+      description: LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      handler: async () => {
+        try {
+          const result = await input.listPinnedThreads();
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to list pinned threads.";
+          return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "pin_thread",
+      description: PIN_THREAD_TOOL_DESCRIPTION,
+      parameters: {
+        type: "object",
+        properties: {
+          threadId: { type: "string", description: "Thread ID to pin" },
+        },
+        required: ["threadId"],
+        additionalProperties: false,
+      },
+      handler: async ({ threadId }) => {
+        try {
+          const result = await input.setThreadPinned(threadId ?? "", true);
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to pin thread.";
+          return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "unpin_thread",
+      description: UNPIN_THREAD_TOOL_DESCRIPTION,
+      parameters: {
+        type: "object",
+        properties: {
+          threadId: { type: "string", description: "Thread ID to unpin" },
+        },
+        required: ["threadId"],
+        additionalProperties: false,
+      },
+      handler: async ({ threadId }) => {
+        try {
+          const result = await input.setThreadPinned(threadId ?? "", false);
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to unpin thread.";
           return failureResult(message);
         }
       },

@@ -17,6 +17,8 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      listPinnedThreads: async () => ({ count: 0, threads: [] }),
+      setThreadPinned: async (threadId, pinned) => ({ threadId, pinned }),
       browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse: async () => ({ surface: "desktop", action: "list_apps", summary: "ok" }),
     });
@@ -24,6 +26,9 @@ describe("createCopilotThreadOrchestrationTools", () => {
     expect(tools.map((tool) => tool.name)).toEqual([
       "rename_thread",
       "archive_thread",
+      "list_pinned_threads",
+      "pin_thread",
+      "unpin_thread",
       BIGBUD_PLAN_TRACKING_TOOL_NAME,
       "browser",
       "computer_use",
@@ -38,6 +43,12 @@ describe("createCopilotThreadOrchestrationTools", () => {
     expect(tools.find((tool) => tool.name === BIGBUD_PLAN_TRACKING_TOOL_NAME)?.description).toBe(
       BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
     );
+    expect(tools.find((tool) => tool.name === "pin_thread")?.description).toContain(
+      "Only use this when the user explicitly asks to pin a thread.",
+    );
+    expect(tools.find((tool) => tool.name === "unpin_thread")?.description).toContain(
+      "Only use this when the user explicitly asks to unpin a thread.",
+    );
   });
 
   it("forwards decoded computer_use actions to the dispatcher", async () => {
@@ -51,6 +62,8 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      listPinnedThreads: async () => ({ count: 0, threads: [] }),
+      setThreadPinned: async (threadId, pinned) => ({ threadId, pinned }),
       browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse,
     });
@@ -71,6 +84,8 @@ describe("createCopilotThreadOrchestrationTools", () => {
       renameThread: async () => ({ title: "Renamed" }),
       archiveThread: async () => undefined,
       getThreadStatus: async () => ({ workflowStatus: "idle" }),
+      listPinnedThreads: async () => ({ count: 0, threads: [] }),
+      setThreadPinned: async (threadId, pinned) => ({ threadId, pinned }),
       browser: async () => ({ action: "capture", summary: "Captured." }),
       computerUse: async () => ({}),
     });

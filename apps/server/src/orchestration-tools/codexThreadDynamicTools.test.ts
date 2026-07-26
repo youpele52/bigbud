@@ -29,6 +29,24 @@ describe("codexThreadDynamicTools", () => {
         }),
         expect.objectContaining({
           namespace: "bigbud_orchestration",
+          name: "list_pinned_threads",
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "pin_thread",
+          description: expect.stringContaining(
+            "Only use this when the user explicitly asks to pin a thread.",
+          ),
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "unpin_thread",
+          description: expect.stringContaining(
+            "Only use this when the user explicitly asks to unpin a thread.",
+          ),
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
           name: "computer_use",
         }),
         expect.objectContaining({
@@ -66,6 +84,20 @@ describe("codexThreadDynamicTools", () => {
           hasActionableProposedPlan: false,
           lastAssistantExcerpt: null,
           updatedAt: new Date().toISOString(),
+        });
+      },
+      listPinned: (input) => {
+        calls.push({ kind: "list_pinned", ...input });
+        return Effect.succeed({ count: 1, limit: 5, remaining: 4, threads: [] });
+      },
+      setPinned: (input) => {
+        calls.push({ kind: "set_pinned", ...input });
+        return Effect.succeed({
+          threadId: input.threadId,
+          pinned: input.pinned,
+          count: input.pinned ? 1 : 0,
+          limit: 5,
+          remaining: input.pinned ? 4 : 5,
         });
       },
       computerUse: (input) => {
@@ -114,6 +146,18 @@ describe("codexThreadDynamicTools", () => {
 
       await handler({
         namespace: "bigbud_orchestration",
+        tool: "list_pinned_threads",
+        arguments: {},
+      });
+
+      await handler({
+        namespace: "bigbud_orchestration",
+        tool: "pin_thread",
+        arguments: { threadId: "thread-pinned" },
+      });
+
+      await handler({
+        namespace: "bigbud_orchestration",
         tool: "browser",
         arguments: { action: "capture" },
       });
@@ -128,6 +172,16 @@ describe("codexThreadDynamicTools", () => {
           kind: "status",
           callerThreadId: threadId,
           threadId: ThreadId.makeUnsafe("thread-other"),
+        },
+        {
+          kind: "list_pinned",
+          callerThreadId: threadId,
+        },
+        {
+          kind: "set_pinned",
+          callerThreadId: threadId,
+          threadId: ThreadId.makeUnsafe("thread-pinned"),
+          pinned: true,
         },
         {
           kind: "browser",

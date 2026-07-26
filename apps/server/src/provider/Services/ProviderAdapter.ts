@@ -13,6 +13,7 @@ import type {
   ProviderKind,
   ProviderUserInputAnswers,
   ProviderRuntimeEvent,
+  McpServerStatusEntry,
   ProviderSendTurnInput,
   ProviderSession,
   ProviderSessionStartInput,
@@ -23,13 +24,38 @@ import type {
 import type { Effect } from "effect";
 import type { Stream } from "effect";
 
+export interface ProviderMcpOperations<TError> {
+  readonly refresh: (
+    threadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<McpServerStatusEntry>, TError>;
+  readonly reconnect: (threadId: ThreadId, serverName: string) => Effect.Effect<void, TError>;
+  readonly toggle: (
+    threadId: ThreadId,
+    serverName: string,
+    enabled: boolean,
+  ) => Effect.Effect<void, TError>;
+  readonly replace: (
+    threadId: ThreadId,
+    servers: Readonly<Record<string, unknown>>,
+  ) => Effect.Effect<void, TError>;
+}
+
 export type ProviderSessionModelSwitchMode = "in-session" | "restart-session" | "unsupported";
+export type ProviderSessionRecoveryMode = "reinitialize" | "resume-restart" | "unsupported";
+export type ProviderConversationRewindMode = "transcript-and-files" | "files-only" | "unsupported";
+export type ProviderConversationForkMode = "native" | "resume-copy" | "unsupported";
 
 export interface ProviderAdapterCapabilities {
   /**
    * Declares whether changing the model on an existing session is supported.
    */
   readonly sessionModelSwitch: ProviderSessionModelSwitchMode;
+  /** Declares how a broken transport can recover without duplicating a session. */
+  readonly sessionRecovery?: ProviderSessionRecoveryMode;
+  /** Declares whether conversation rewind affects transcript state, files, or neither. */
+  readonly conversationRewind?: ProviderConversationRewindMode;
+  /** Declares whether the provider can create an isolated conversation fork. */
+  readonly conversationFork?: ProviderConversationForkMode;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -48,6 +74,8 @@ export interface ProviderAdapterShape<TError> {
    */
   readonly provider: ProviderKind;
   readonly capabilities: ProviderAdapterCapabilities;
+  /** Provider-neutral MCP controls; omitted when the provider cannot support them. */
+  readonly mcp?: ProviderMcpOperations<TError>;
 
   /**
    * Start a provider-backed session.
