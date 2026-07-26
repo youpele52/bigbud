@@ -84,7 +84,25 @@ describe("Computer Use startup repair notices", () => {
     ).toEqual({
       type: "warning",
       title: "Desktop permissions needed",
-      description: "Accessibility is not granted.",
+      description: "Accessibility: not granted.",
+    });
+  });
+
+  it("lists every missing permission without platform diagnostics", () => {
+    expect(
+      getComputerUseStartupPermissionsNotice({
+        ...grantedPermissions,
+        granted: false,
+        message: "❌ Accessibility: NOT granted. ✅ Screen Recording: granted. ℹ️ Embedded mode.",
+        permissions: [
+          { name: "accessibility", granted: false },
+          { name: "screen_recording", granted: false },
+        ],
+      }),
+    ).toEqual({
+      type: "warning",
+      title: "Desktop permissions needed",
+      description: "Accessibility: not granted.\nScreen Recording: not granted.",
     });
   });
 

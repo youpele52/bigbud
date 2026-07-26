@@ -9,6 +9,19 @@ export interface ComputerUseStartupRepairNotice {
   readonly type: "error" | "warning";
 }
 
+function formatPermissionName(name: string): string {
+  switch (name) {
+    case "accessibility":
+      return "Accessibility";
+    case "screen_recording":
+      return "Screen Recording";
+    case "screen_recording_capturable":
+      return "Screen contents capturable";
+    default:
+      return name.replaceAll("_", " ");
+  }
+}
+
 export function getComputerUseStartupRuntimeNotice(
   status: DesktopComputerUseRuntimeStatus,
 ): ComputerUseStartupRepairNotice | null {
@@ -34,10 +47,14 @@ export function getComputerUseStartupPermissionsNotice(
         "bigbud could not check desktop permissions. Open Settings to repair Computer Use.",
     };
   }
+
+  const missingPermissions = status.permissions.filter((permission) => !permission.granted);
   return {
     type: "warning",
     title: "Desktop permissions needed",
     description:
-      status.message ?? "Approve the required desktop permissions to finish enabling Computer Use.",
+      missingPermissions
+        .map((permission) => `${formatPermissionName(permission.name)}: not granted.`)
+        .join("\n") || "Approve the required desktop permissions to finish enabling Computer Use.",
   };
 }
