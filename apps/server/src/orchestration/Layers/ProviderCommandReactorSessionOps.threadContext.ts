@@ -49,8 +49,11 @@ export function prependThreadContextToProviderInput(input: {
     "To rename the current thread, call the `rename_thread` tool with the new title.",
     "To archive the current thread, call the `archive_thread` tool.",
     "To check whether another thread's agent is still active, call `get_thread_status` with that thread's ID.",
+    "To list pinned threads globally across all projects, call the read-only `list_pinned_threads` tool.",
+    "To pin a thread, call `pin_thread` with that thread's ID. Only use this when the user explicitly asks to pin a thread.",
+    "To unpin a thread, call `unpin_thread` with that thread's ID. Only use this when the user explicitly asks to unpin a thread.",
     BIGBUD_PLAN_TRACKING_TOOL_INSTRUCTION,
-    "If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with `rename_thread`, `archive_thread`, or `get_thread_status` for this current thread.",
+    "If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with `rename_thread`, `archive_thread`, `get_thread_status`, `list_pinned_threads`, `pin_thread`, or `unpin_thread`.",
     ...computerUseLines,
     "You must not delete threads.",
   ].join("\n");

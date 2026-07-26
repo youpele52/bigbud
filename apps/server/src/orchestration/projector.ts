@@ -42,6 +42,7 @@ import {
   retainThreadMessagesAfterRevert,
   retainThreadProposedPlansAfterRevert,
 } from "./projectorThreadState.ts";
+import { projectThreadTaskEvent } from "./projectorTasks.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -389,6 +390,10 @@ export function projectEvent(
           };
         }),
       );
+
+    case "thread.task-upserted":
+    case "thread.task-removed":
+      return projectThreadTaskEvent(nextBase, event);
 
     default:
       return Effect.succeed(nextBase);

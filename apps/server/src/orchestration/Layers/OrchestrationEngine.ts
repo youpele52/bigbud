@@ -51,7 +51,9 @@ import { browserViaOrchestration } from "../../orchestration-tools/ThreadBrowser
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
+  listPinnedThreadsViaOrchestration as listPinnedThreadsViaThreadTools,
   renameThreadViaOrchestration as renameThreadViaThreadTools,
+  setThreadPinnedViaOrchestration as setThreadPinnedViaThreadTools,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
@@ -378,6 +380,20 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         orchestrationEngine: engine,
         callerThreadId: input.callerThreadId,
         threadId: input.threadId,
+      }),
+    listPinned: (input) =>
+      listPinnedThreadsViaThreadTools({
+        orchestrationEngine: engine,
+        serverSettings: serverSettingsService,
+        callerThreadId: input.callerThreadId,
+      }),
+    setPinned: (input) =>
+      setThreadPinnedViaThreadTools({
+        orchestrationEngine: engine,
+        serverSettings: serverSettingsService,
+        callerThreadId: input.callerThreadId,
+        threadId: input.threadId,
+        pinned: input.pinned,
       }),
     computerUse: (input) =>
       Effect.gen(function* () {

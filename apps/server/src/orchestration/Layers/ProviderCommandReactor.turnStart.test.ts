@@ -271,6 +271,13 @@ describe("ProviderCommandReactor", () => {
       "To archive the current thread, call the `archive_thread` tool.",
     );
     expect(sendInput?.input).toContain("When the `update_plan` tool is available");
+    expect(sendInput?.input).toContain("list pinned threads globally across all projects");
+    expect(sendInput?.input).toContain(
+      "Only use this when the user explicitly asks to pin a thread.",
+    );
+    expect(sendInput?.input).toContain(
+      "Only use this when the user explicitly asks to unpin a thread.",
+    );
     expect(sendInput?.input).toContain("Do not wait until the end of the turn.");
     expect(sendInput?.input).toContain("Use the `browser` tool for bigbud's built-in");
     expect(sendInput?.input).toContain("You must not delete threads.");

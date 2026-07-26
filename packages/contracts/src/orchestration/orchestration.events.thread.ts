@@ -7,6 +7,7 @@ import {
   MessageId,
   NonNegativeInt,
   ProjectId,
+  RuntimeTaskId,
   ThreadId,
   TrimmedNonEmptyString,
   TurnId,
@@ -29,6 +30,9 @@ import {
   OrchestrationMessageRole,
   OrchestrationProposedPlan,
   OrchestrationSession,
+  OrchestrationTask,
+  OrchestrationTaskFreshness,
+  OrchestrationTaskSource,
   OrchestrationThreadPurpose,
   OrchestrationThreadActivity,
   ParentThreadReference,
@@ -171,6 +175,18 @@ export const ThreadCheckpointRevertRequestedPayload = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+export const ThreadPathCheckpointCaptureRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+export const ThreadPathCheckpointRestoreRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
 export const ThreadRevertedPayload = Schema.Struct({
   threadId: ThreadId,
   turnCount: NonNegativeInt,
@@ -205,4 +221,17 @@ export const ThreadTurnDiffCompletedPayload = Schema.Struct({
 export const ThreadActivityAppendedPayload = Schema.Struct({
   threadId: ThreadId,
   activity: OrchestrationThreadActivity,
+});
+
+export const ThreadTaskUpsertedPayload = Schema.Struct({
+  threadId: ThreadId,
+  task: OrchestrationTask,
+});
+
+export const ThreadTaskRemovedPayload = Schema.Struct({
+  threadId: ThreadId,
+  taskId: RuntimeTaskId,
+  source: OrchestrationTaskSource,
+  freshness: OrchestrationTaskFreshness,
+  replacement: Schema.optional(Schema.Literals(["snapshot", "explicit"])),
 });

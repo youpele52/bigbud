@@ -2,6 +2,7 @@ import { Encoding } from "effect";
 import { CheckpointRef, ProjectId, type ThreadId } from "@bigbud/contracts";
 
 export const CHECKPOINT_REFS_PREFIX = "refs/bigbud/checkpoints";
+export const PATH_CHECKPOINT_REFS_PREFIX = "refs/bigbud/path-checkpoints";
 export const LEGACY_CHECKPOINT_REFS_PREFIX = "refs/t3/checkpoints";
 export const CHECKPOINT_COMMIT_MESSAGE_PREFIX = "bigbud checkpoint";
 
@@ -17,6 +18,25 @@ function checkpointRefForThreadTurnWithPrefix(
 
 export function checkpointRefForThreadTurn(threadId: ThreadId, turnCount: number): CheckpointRef {
   return checkpointRefForThreadTurnWithPrefix(threadId, turnCount, CHECKPOINT_REFS_PREFIX);
+}
+
+export function pathCheckpointRefForThreadPath(
+  threadId: ThreadId,
+  workspacePath: string,
+): CheckpointRef {
+  return CheckpointRef.makeUnsafe(
+    `${PATH_CHECKPOINT_REFS_PREFIX}/${Encoding.encodeBase64Url(threadId)}/${Encoding.encodeBase64Url(workspacePath)}`,
+  );
+}
+
+/** Validates a portable, workspace-relative Git pathspec target. */
+export function isValidWorkspaceRelativePath(workspacePath: string): boolean {
+  if (workspacePath.length === 0 || workspacePath === ".") return false;
+  if (workspacePath.startsWith("/") || /^[A-Za-z]:[\\/]/.test(workspacePath)) return false;
+  const segments = workspacePath.replaceAll("\\", "/").split("/");
+  return segments.every(
+    (segment) => segment.length > 0 && segment !== "." && segment !== ".." && segment !== ".git",
+  );
 }
 
 export function legacyCheckpointRefForThreadTurn(

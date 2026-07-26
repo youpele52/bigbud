@@ -18,7 +18,11 @@ import { GitCommandError } from "@bigbud/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
 import { CheckpointRef } from "@bigbud/contracts";
-import { CHECKPOINT_COMMIT_MESSAGE_PREFIX, checkpointRefCandidates } from "../Utils.ts";
+import {
+  CHECKPOINT_COMMIT_MESSAGE_PREFIX,
+  checkpointRefCandidates,
+  isValidWorkspaceRelativePath,
+} from "../Utils.ts";
 
 const makeCheckpointStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -181,6 +185,90 @@ const makeCheckpointStore = Effect.gen(function* () {
     );
   });
 
+  const capturePathCheckpoint: CheckpointStoreShape["capturePathCheckpoint"] = Effect.fn(
+    "capturePathCheckpoint",
+  )(function* (input) {
+    const operation = "CheckpointStore.capturePathCheckpoint";
+    if (!isValidWorkspaceRelativePath(input.path)) {
+      return yield* new CheckpointInvariantError({
+        operation,
+        detail: "Path must be relative, contain no traversal, and must not include .git.",
+      });
+    }
+    yield* Effect.acquireUseRelease(
+      fs.makeTempDirectory({ prefix: "bigbud-path-checkpoint-" }),
+      Effect.fn("capturePathCheckpoint.withTempDirectory")(function* (tempDir) {
+        const commitEnv: NodeJS.ProcessEnv = {
+          ...process.env,
+          GIT_INDEX_FILE: path.join(tempDir, `index-${randomUUID()}`),
+          GIT_AUTHOR_NAME: "bigbud",
+          GIT_AUTHOR_EMAIL: "bigbud@users.noreply.github.com",
+          GIT_COMMITTER_NAME: "bigbud",
+          GIT_COMMITTER_EMAIL: "bigbud@users.noreply.github.com",
+        };
+        if (yield* hasHeadCommit(input.cwd)) {
+          yield* git.execute({
+            operation,
+            cwd: input.cwd,
+            args: ["read-tree", "HEAD"],
+            env: commitEnv,
+          });
+        }
+        const pathspec = `:(literal)${input.path}`;
+        yield* git.execute({
+          operation,
+          cwd: input.cwd,
+          args: ["add", "-A", "--", pathspec],
+          env: commitEnv,
+        });
+        const treeOid = (yield* git.execute({
+          operation,
+          cwd: input.cwd,
+          args: ["write-tree"],
+          env: commitEnv,
+        })).stdout.trim();
+        if (!treeOid)
+          return yield* new GitCommandError({
+            operation,
+            command: "git write-tree",
+            cwd: input.cwd,
+            detail: "git write-tree returned an empty tree oid.",
+          });
+        const message = `${CHECKPOINT_COMMIT_MESSAGE_PREFIX} path=${input.path} ref=${input.checkpointRef}`;
+        const commitOid = (yield* git.execute({
+          operation,
+          cwd: input.cwd,
+          args: ["commit-tree", treeOid, "-m", message],
+          env: commitEnv,
+        })).stdout.trim();
+        if (!commitOid)
+          return yield* new GitCommandError({
+            operation,
+            command: "git commit-tree",
+            cwd: input.cwd,
+            detail: "git commit-tree returned an empty commit oid.",
+          });
+        yield* git.execute({
+          operation,
+          cwd: input.cwd,
+          args: ["update-ref", input.checkpointRef, commitOid],
+        });
+      }),
+      (tempDir) => fs.remove(tempDir, { recursive: true }),
+    ).pipe(
+      Effect.catchTags({
+        PlatformError: (cause) =>
+          Effect.fail(
+            new CheckpointInvariantError({
+              operation,
+              detail: "Failed to capture path checkpoint.",
+              cause,
+            }),
+          ),
+      }),
+    );
+  });
+
   const hasCheckpointRef: CheckpointStoreShape["hasCheckpointRef"] = (input) =>
     resolveCheckpointCommit(input.cwd, input.checkpointRef).pipe(
       Effect.map((commit) => commit !== null),
@@ -221,6 +309,31 @@ const makeCheckpointStore = Effect.gen(function* () {
       });
     }
 
+    return true;
+  });
+
+  const restorePathCheckpoint: CheckpointStoreShape["restorePathCheckpoint"] = Effect.fn(
+    "restorePathCheckpoint",
+  )(function* (input) {
+    const operation = "CheckpointStore.restorePathCheckpoint";
+    if (!isValidWorkspaceRelativePath(input.path)) {
+      return yield* new CheckpointInvariantError({
+        operation,
+        detail: "Path must be relative, contain no traversal, and must not include .git.",
+      });
+    }
+    const commitOid = yield* resolveCheckpointCommit(input.cwd, input.checkpointRef);
+    if (!commitOid) return false;
+    const pathspec = `:(literal)${input.path}`;
+    yield* git.execute({
+      operation,
+      cwd: input.cwd,
+      args: ["restore", "--source", commitOid, "--worktree", "--staged", "--", pathspec],
+    });
+    yield* git.execute({ operation, cwd: input.cwd, args: ["clean", "-fd", "--", pathspec] });
+    if (yield* hasHeadCommit(input.cwd)) {
+      yield* git.execute({ operation, cwd: input.cwd, args: ["reset", "--quiet", "--", pathspec] });
+    }
     return true;
   });
 
@@ -278,8 +391,10 @@ const makeCheckpointStore = Effect.gen(function* () {
   return {
     isGitRepository,
     captureCheckpoint,
+    capturePathCheckpoint,
     hasCheckpointRef,
     restoreCheckpoint,
+    restorePathCheckpoint,
     diffCheckpoints,
     deleteCheckpointRefs,
   } satisfies CheckpointStoreShape;

@@ -10,7 +10,9 @@ import {
   RequestResolvedPayload,
   TaskCompletedPayload,
   TaskProgressPayload,
+  TaskRemovedPayload,
   TaskStartedPayload,
+  TaskUpdatedPayload,
   ToolProgressPayload,
   ToolSummaryPayload,
   TurnAbortedPayload,
@@ -153,6 +155,20 @@ export const ProviderRuntimeTaskCompletedEvent = Schema.Struct({
   payload: TaskCompletedPayload,
 });
 export type ProviderRuntimeTaskCompletedEvent = typeof ProviderRuntimeTaskCompletedEvent.Type;
+
+export const ProviderRuntimeTaskUpdatedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: Schema.Literal("task.updated"),
+  payload: TaskUpdatedPayload,
+});
+export type ProviderRuntimeTaskUpdatedEvent = typeof ProviderRuntimeTaskUpdatedEvent.Type;
+
+export const ProviderRuntimeTaskRemovedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: Schema.Literal("task.removed"),
+  payload: TaskRemovedPayload,
+});
+export type ProviderRuntimeTaskRemovedEvent = typeof ProviderRuntimeTaskRemovedEvent.Type;
 
 export const ProviderRuntimeHookStartedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,

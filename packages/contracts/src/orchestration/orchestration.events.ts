@@ -23,6 +23,8 @@ import {
   ThreadApprovalResponseRequestedPayload,
   ThreadArchivedPayload,
   ThreadCheckpointRevertRequestedPayload,
+  ThreadPathCheckpointCaptureRequestedPayload,
+  ThreadPathCheckpointRestoreRequestedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadDeletionFailedPayload,
@@ -36,6 +38,8 @@ import {
   ThreadSessionSetPayload,
   ThreadSessionStopRequestedPayload,
   ThreadShellRunRequestedPayload,
+  ThreadTaskRemovedPayload,
+  ThreadTaskUpsertedPayload,
   ThreadTurnDiffCompletedPayload,
   ThreadTurnInterruptRequestedPayload,
   ThreadTurnStartRequestedPayload,
@@ -68,6 +72,8 @@ export {
   ThreadSessionSetPayload,
   ThreadSessionStopRequestedPayload,
   ThreadShellRunRequestedPayload,
+  ThreadTaskRemovedPayload,
+  ThreadTaskUpsertedPayload,
   ThreadTurnDiffCompletedPayload,
   ThreadTurnInterruptRequestedPayload,
   ThreadTurnStartRequestedPayload,
@@ -97,12 +103,16 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.approval-response-requested",
   "thread.user-input-response-requested",
   "thread.checkpoint-revert-requested",
+  "thread.path-checkpoint-capture-requested",
+  "thread.path-checkpoint-restore-requested",
   "thread.reverted",
   "thread.session-stop-requested",
   "thread.session-set",
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "thread.task-upserted",
+  "thread.task-removed",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -237,6 +247,16 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.path-checkpoint-capture-requested"),
+    payload: ThreadPathCheckpointCaptureRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.path-checkpoint-restore-requested"),
+    payload: ThreadPathCheckpointRestoreRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.reverted"),
     payload: ThreadRevertedPayload,
   }),
@@ -264,6 +284,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.activity-appended"),
     payload: ThreadActivityAppendedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.task-upserted"),
+    payload: ThreadTaskUpsertedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.task-removed"),
+    payload: ThreadTaskRemovedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

@@ -15,6 +15,7 @@ import { type ProjectionThreadRepositoryShape } from "../../persistence/Services
 import { type ProjectionThreadMessageRepositoryShape } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { type ProjectionThreadProposedPlanRepositoryShape } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { type ProjectionThreadActivityRepositoryShape } from "../../persistence/Services/ProjectionThreadActivities.ts";
+import { type ProjectionThreadTaskRepositoryShape } from "../../persistence/Services/ProjectionThreadTasks.ts";
 import { type ProjectionThreadSessionRepositoryShape } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { type ProjectionTurnRepositoryShape } from "../../persistence/Services/ProjectionTurns.ts";
 import { type ProjectionPendingApprovalRepositoryShape } from "../../persistence/Services/ProjectionPendingApprovals.ts";
@@ -27,6 +28,7 @@ import { makeThreadsProjector } from "./ProjectionPipeline.projector.threads.ts"
 import { makeThreadMessagesProjector } from "./ProjectionPipeline.projector.threadMessages.ts";
 import { makeThreadProposedPlansProjector } from "./ProjectionPipeline.projector.threadProposedPlans.ts";
 import { makeThreadActivitiesProjector } from "./ProjectionPipeline.projector.threadActivities.ts";
+import { makeThreadTasksProjector } from "./ProjectionPipeline.projector.tasks.ts";
 import { makeThreadSessionsProjector } from "./ProjectionPipeline.projector.threadSessions.ts";
 import { makeThreadTurnsProjector } from "./ProjectionPipeline.projector.threadTurns.ts";
 import { makePendingApprovalsProjector } from "./ProjectionPipeline.projector.pendingApprovals.ts";
@@ -47,6 +49,7 @@ export interface ProjectorDeps {
   readonly projectionThreadMessageRepository: ProjectionThreadMessageRepositoryShape;
   readonly projectionThreadProposedPlanRepository: ProjectionThreadProposedPlanRepositoryShape;
   readonly projectionThreadActivityRepository: ProjectionThreadActivityRepositoryShape;
+  readonly projectionThreadTaskRepository: ProjectionThreadTaskRepositoryShape;
   readonly projectionThreadSessionRepository: ProjectionThreadSessionRepositoryShape;
   readonly projectionTurnRepository: ProjectionTurnRepositoryShape;
   readonly projectionPendingApprovalRepository: ProjectionPendingApprovalRepositoryShape;
@@ -59,6 +62,7 @@ export function makeProjectors(deps: ProjectorDeps): ReadonlyArray<ProjectorDefi
     makeThreadMessagesProjector(deps),
     makeThreadProposedPlansProjector(deps),
     makeThreadActivitiesProjector(deps),
+    makeThreadTasksProjector(deps),
     makeThreadSessionsProjector(deps),
     makeThreadTurnsProjector(deps),
     { name: ORCHESTRATION_PROJECTOR_NAMES.checkpoints, apply: () => Effect.void },

@@ -1,5 +1,6 @@
 import { createRemoteWorkspaceMcpBridge } from "../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../workspace-target/workspaceTarget.ts";
+import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 
 const CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 
@@ -38,7 +39,7 @@ export async function createCodexRemoteWorkspaceBridge(
       "-c",
       "app.default_tools_enabled=false",
       "-c",
-      `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.command=${quoteTomlString(process.execPath)}`,
+      `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.command=${quoteTomlString(resolveNodeExecutable())}`,
       "-c",
       `mcp_servers.${CODEX_REMOTE_WORKSPACE_MCP_SERVER_NAME}.args=${quoteTomlStringArray([bridge.serverPath])}`,
       "-c",

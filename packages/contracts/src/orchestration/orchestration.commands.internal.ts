@@ -6,6 +6,7 @@ import {
   MessageId,
   NonNegativeInt,
   ProjectId,
+  RuntimeTaskId,
   ThreadId,
   TurnId,
 } from "../core/baseSchemas";
@@ -14,6 +15,9 @@ import {
   OrchestrationCheckpointStatus,
   OrchestrationProposedPlan,
   OrchestrationSession,
+  OrchestrationTask,
+  OrchestrationTaskFreshness,
+  OrchestrationTaskSource,
   OrchestrationThreadActivity,
 } from "./orchestration.thread";
 
@@ -112,6 +116,25 @@ const ThreadActivityAppendCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadTaskUpsertCommand = Schema.Struct({
+  type: Schema.Literal("thread.task.upsert"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  task: OrchestrationTask,
+  createdAt: IsoDateTime,
+});
+
+const ThreadTaskRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.task.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: RuntimeTaskId,
+  source: OrchestrationTaskSource,
+  freshness: OrchestrationTaskFreshness,
+  replacement: Schema.optional(Schema.Literals(["snapshot", "explicit"])),
+  createdAt: IsoDateTime,
+});
+
 const ThreadRevertCompleteCommand = Schema.Struct({
   type: Schema.Literal("thread.revert.complete"),
   commandId: CommandId,
@@ -132,6 +155,8 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadProposedPlanUpsertCommand,
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
+  ThreadTaskUpsertCommand,
+  ThreadTaskRemoveCommand,
   ThreadRevertCompleteCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

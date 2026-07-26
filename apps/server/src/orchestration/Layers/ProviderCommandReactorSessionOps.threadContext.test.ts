@@ -21,6 +21,9 @@ describe("prependThreadContextToProviderInput", () => {
     expect(result).toContain("When the `update_plan` tool is available");
     expect(result).toContain("Do not wait until the end of the turn.");
     expect(result).toContain("whose name ends with `rename_thread`");
+    expect(result).toContain("list pinned threads globally across all projects");
+    expect(result).toContain("Only use this when the user explicitly asks to pin a thread.");
+    expect(result).toContain("Only use this when the user explicitly asks to unpin a thread.");
     expect(result).toContain('call the `computer_use` tool with `surface: "desktop"`');
     expect(result).toContain("Use the `browser` tool for bigbud's built-in visible or background");
     expect(result).toContain(
