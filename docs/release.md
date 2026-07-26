@@ -13,9 +13,11 @@ This document covers how to run desktop releases from one tag, first without sig
   - Linux `x64` .deb
   - Windows `x64` NSIS installer
 - Publishes one GitHub Release with all produced files.
-  - Versions with a suffix after `X.Y.Z` (for example `1.2.3-beta.1`) are published as GitHub prereleases.
+  - Versions with an approved channel suffix after `X.Y.Z` (for example `1.2.3-beta.1`, `1.2.3-preview.1`, or `1.2.3-nightly.20260726`) are published as GitHub prereleases.
+  - Stable releases have no suffix; unsupported prerelease channel names fail preflight.
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
 - Includes Electron auto-update metadata (for example `latest*.yml` and `*.blockmap`) in release assets.
+- Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
 - Signing is optional and auto-detected per platform from secrets.
 
 ## Desktop auto-update notes
@@ -89,8 +91,8 @@ Use this first to validate the release pipeline.
 
 1. Confirm no signing secrets are required for this test.
 2. Create a test tag:
-   - `git tag v0.0.0-test.1`
-   - `git push origin v0.0.0-test.1`
+   - `git tag v0.0.0-beta.1`
+   - `git push origin v0.0.0-beta.1`
 3. Wait for `.github/workflows/release.yml` to finish.
 4. Verify the GitHub Release contains all platform artifacts.
 5. Download each artifact and sanity-check installation on each OS.
