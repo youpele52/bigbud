@@ -50,6 +50,7 @@ export const SPINNER_VERBS = [
   "Crunching",
   "Crystallizing",
   "Cultivating",
+  "Decolonizing",
   "Deciphering",
   "Deliberating",
   "Determining",
