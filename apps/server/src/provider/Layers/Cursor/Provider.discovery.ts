@@ -1,4 +1,6 @@
+import * as nodeFs from "node:fs";
 import * as nodeOs from "node:os";
+import * as nodePath from "node:path";
 
 import type { CursorSettings, ModelCapabilities, ServerProviderModel } from "@bigbud/contracts";
 import { Cause, Effect, Layer } from "effect";
@@ -24,7 +26,12 @@ import {
 const makeCursorAcpProbeRuntime = (cursorSettings: CursorSettings) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const probeCwd = nodeOs.homedir();
+    const probeCwd = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), "bigbud-cursor-provider-probe-")),
+      ),
+      (directory) => Effect.sync(() => nodeFs.rmSync(directory, { recursive: true, force: true })),
+    );
     const acpContext = yield* Layer.build(
       AcpSessionRuntime.layer({
         spawn: buildCursorAcpSpawnInput(cursorSettings, probeCwd),
