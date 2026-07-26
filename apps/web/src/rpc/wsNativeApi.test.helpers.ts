@@ -300,6 +300,8 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
     getFilePath: () => "",
     pickFolder: async () => null,
     confirm: async () => true,
+    onCertificateChallenge: () => () => undefined,
+    resolveCertificateChallenge: async () => false,
     setTheme: async () => undefined,
     setWindowMaterial: async () => undefined,
     showContextMenu: async () => null,

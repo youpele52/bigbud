@@ -3,6 +3,7 @@ import * as Path from "node:path";
 import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
+import { certificateChallengeManager } from "./certificateChallengeManager";
 
 const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
 const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
@@ -208,6 +209,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   });
 
   window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
+    certificateChallengeManager.attachGuest(window.webContents, guestWebContents);
     guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
       if (input.type === "mouseDown" && input.button === "left") {
         window.webContents.send(deps.menuActionChannel, "close-browser-context-menu");
@@ -243,6 +245,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   }
 
   window.on("closed", () => {
+    certificateChallengeManager.closeHost(window.webContents);
     deps.onWindowClosed(window);
   });
 

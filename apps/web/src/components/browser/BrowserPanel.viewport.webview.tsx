@@ -24,6 +24,7 @@ import {
   isWebviewReady,
   normalizeBrowserUrl,
   readAnnotationTheme,
+  runIfReady,
 } from "./BrowserPanel.viewport.webview.utils";
 import {
   captureBrowserAnnotation,
@@ -33,10 +34,21 @@ import {
   type PendingPdfAnnotation,
 } from "./BrowserPanel.viewport.webview.annotation";
 import { executeWebviewAgentAction } from "./BrowserPanel.viewport.webview.agent";
+import { makeWebviewCertificateChallengeController } from "./BrowserPanel.certificateChallenge.webview";
 
 export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
   function BrowserWebviewViewport(
-    { url, onUrlChange, onNavigationStateChange, onLoadFail, onPageMetadataChange, onContextMenu },
+    {
+      url,
+      onUrlChange,
+      onNavigationStateChange,
+      onLoadStart,
+      onLoadSuccess,
+      onLoadFail,
+      onCertificateChallengeChange,
+      onPageMetadataChange,
+      onContextMenu,
+    },
     ref,
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -45,8 +57,12 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     const onUrlChangeRef = useRef(onUrlChange);
     const onNavigationStateChangeRef = useRef(onNavigationStateChange);
     const onLoadFailRef = useRef(onLoadFail);
+    const onCertificateChallengeChangeRef = useRef(onCertificateChallengeChange);
+    const onLoadStartRef = useRef(onLoadStart);
+    const onLoadSuccessRef = useRef(onLoadSuccess);
     const onPageMetadataChangeRef = useRef(onPageMetadataChange);
     const onContextMenuRef = useRef(onContextMenu);
+    const failedLoadRef = useRef(false);
     const pageMetadataRef = useRef<BrowserPageMetadata>({ title: "", faviconUrl: null });
     const annotationActiveRef = useRef(false);
     const pendingPdfAnnotationRef = useRef<PendingPdfAnnotation | null>(null);
@@ -57,6 +73,9 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     onUrlChangeRef.current = onUrlChange;
     onNavigationStateChangeRef.current = onNavigationStateChange;
     onLoadFailRef.current = onLoadFail;
+    onCertificateChallengeChangeRef.current = onCertificateChallengeChange;
+    onLoadStartRef.current = onLoadStart;
+    onLoadSuccessRef.current = onLoadSuccess;
     onPageMetadataChangeRef.current = onPageMetadataChange;
     onContextMenuRef.current = onContextMenu;
 
@@ -164,6 +183,12 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
       webviewRef.current = webview;
       containerRef.current.appendChild(webview);
+      const certificateChallengeController = makeWebviewCertificateChallengeController({
+        bridge: window.desktopBridge,
+        webview,
+        onChallenge: (challenge) => onCertificateChallengeChangeRef.current?.(challenge),
+        onFailure: (failure) => onLoadFailRef.current?.(failure),
+      });
 
       const updateNavState = () => {
         const current = webviewRef.current;
@@ -251,6 +276,7 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
 
       const handleFailLoad = (event: FailLoadEvent) => {
         if (event.isMainFrame && event.errorCode !== -3) {
+          failedLoadRef.current = true;
           try {
             onLoadFailRef.current?.({
               errorCode: event.errorCode,
@@ -261,6 +287,16 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
             // Ignore transient callback errors.
           }
         }
+      };
+
+      const handleLoadStart = () => {
+        certificateChallengeController.rejectPending();
+        failedLoadRef.current = false;
+        onLoadStartRef.current?.();
+      };
+      const handleLoadSuccess = () => {
+        if (failedLoadRef.current) return;
+        onLoadSuccessRef.current?.();
       };
 
       const handleContextMenu = (event: ContextMenuEvent) => {
@@ -294,9 +330,12 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
       webview.addEventListener("page-title-updated", handlePageTitle as EventListener);
       webview.addEventListener("page-favicon-updated", handlePageFavicon as EventListener);
       webview.addEventListener("did-fail-load", handleFailLoad as EventListener);
+      webview.addEventListener("did-start-loading", handleLoadStart);
+      webview.addEventListener("did-finish-load", handleLoadSuccess);
       webview.addEventListener("context-menu", handleContextMenu as EventListener);
 
       return () => {
+        certificateChallengeController.unsubscribe();
         webview.removeEventListener("did-navigate", handleNavigate as EventListener);
         webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
         webview.removeEventListener("dom-ready", updateNavState);
@@ -305,6 +344,8 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
         webview.removeEventListener("page-title-updated", handlePageTitle as EventListener);
         webview.removeEventListener("page-favicon-updated", handlePageFavicon as EventListener);
         webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);
+        webview.removeEventListener("did-start-loading", handleLoadStart);
+        webview.removeEventListener("did-finish-load", handleLoadSuccess);
         webview.removeEventListener("context-menu", handleContextMenu as EventListener);
         annotationActiveRef.current = false;
         pendingPdfAnnotationRef.current?.resolve({ cancelled: true });
@@ -350,16 +391,3 @@ export const BrowserWebviewViewport = forwardRef<BrowserViewportRef, BrowserView
     );
   },
 );
-
-function runIfReady(
-  webview: ElectronWebview | null,
-  ready: boolean,
-  action: (webview: ElectronWebview) => void,
-) {
-  if (!webview || !ready) return;
-  try {
-    action(webview);
-  } catch {
-    // Ignore transient webview errors.
-  }
-}

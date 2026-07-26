@@ -1,11 +1,10 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import type { ThreadId } from "@bigbud/contracts";
+import type { DesktopCertificateChallenge } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 
 import { randomUUID } from "~/lib/utils";
 import { isElectron } from "~/config/env";
 import { useComposerDraftStore } from "~/stores/composer";
 import { normalizeAnnotationComment } from "~/stores/composer/types.annotation.store";
-import type { RightPanelTabId } from "~/stores/rightPanel/rightPanelTabs.store";
 import { toastManager } from "../ui/toast";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { closeBrowserTab, openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
@@ -14,7 +13,6 @@ import { cropBrowserAnnotationImage } from "./BrowserPanel.annotation.image";
 import {
   BrowserViewport,
   type BrowserPageMetadata,
-  type BrowserViewportProps,
   type BrowserViewportRef,
 } from "./BrowserPanel.viewport";
 import { BrowserToolbar } from "./BrowserPanel.toolbar";
@@ -32,12 +30,9 @@ import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 import { BrowserAgentCursor } from "./BrowserPanel.agentCursor";
 import { BrowserAgentStatus } from "./BrowserPanel.agentStatus";
-
-interface BrowserPanelProps {
-  activeThreadId?: ThreadId | null;
-  tabId?: RightPanelTabId;
-  visible?: boolean;
-}
+import type { BrowserLoadFailure } from "./BrowserPanel.navigationError";
+import { BrowserPanelNavigationErrorPage } from "./BrowserPanel.navigationErrorPage";
+import type { BrowserPanelProps } from "./BrowserPanel.types";
 
 export const BrowserPanelContent = memo(function BrowserPanelContent({
   activeThreadId,
@@ -58,7 +53,9 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const viewportRef = useRef<BrowserViewportRef>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<BrowserLoadFailure | null>(null);
+  const [certificateChallenge, setCertificateChallenge] =
+    useState<DesktopCertificateChallenge | null>(null);
   const [pageMetadata, setPageMetadata] = useState<BrowserPageMetadata>({
     title: "",
     faviconUrl: null,
@@ -122,6 +119,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
       nextUrl = `https://${nextUrl}`;
     }
     setInputUrl(nextUrl);
+    setLoadError(null);
     setTabUrl(tabId, nextUrl);
     setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
   }, [inputUrl, setTabUrl, tabId]);
@@ -129,6 +127,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const handleSelectHistoryUrl = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
+      setLoadError(null);
       setTabUrl(tabId, nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
@@ -142,6 +141,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const handleUrlChange = useCallback(
     (nextUrl: string) => {
       setInputUrl(nextUrl);
+      setLoadError(null);
       setTabUrl(tabId, nextUrl);
       setBrowserHistory(recordBrowserHistoryUrl(nextUrl));
     },
@@ -319,7 +319,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     onOpenNewTab: (nextUrl) => openNewBrowserTab({ url: nextUrl }),
   });
   const isAgentControlled = agentLease !== undefined;
-
   return (
     <>
       <BrowserToolbar
@@ -343,11 +342,6 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         agentControlled={isAgentControlled}
       />
       <BrowserAgentStatus tabId={tabId} controlled={isAgentControlled} handoff={agentHandoff} />
-      {loadError && (
-        <div className="shrink-0 border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          {loadError}
-        </div>
-      )}
       <div
         ref={contextMenu.boundaryRef}
         className={
@@ -367,19 +361,23 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
               ref={viewportRef}
               url={url}
               onUrlChange={handleUrlChange}
-              onNavigationStateChange={({
-                canGoBack: back,
-                canGoForward: forward,
-              }: Parameters<NonNullable<BrowserViewportProps["onNavigationStateChange"]>>[0]) => {
+              onNavigationStateChange={({ canGoBack: back, canGoForward: forward }) => {
                 setCanGoBack(back);
                 setCanGoForward(forward);
-                if (back || forward) {
-                  setLoadError(null);
-                }
               }}
-              onLoadFail={({ errorDescription }) => setLoadError(errorDescription)}
+              onLoadStart={() => setLoadError(null)}
+              onLoadSuccess={() => setLoadError(null)}
+              onLoadFail={setLoadError}
+              onCertificateChallengeChange={setCertificateChallenge}
               onPageMetadataChange={setPageMetadata}
               onContextMenu={isElectron ? contextMenu.openAtHostPoint : undefined}
+            />
+            <BrowserPanelNavigationErrorPage
+              failure={loadError}
+              certificateChallenge={certificateChallenge}
+              agentControlled={isAgentControlled}
+              onReload={() => viewportRef.current?.reload()}
+              onGoBack={canGoBack ? () => viewportRef.current?.goBack() : undefined}
             />
             <BrowserContextMenu
               anchor={contextMenu.anchor}

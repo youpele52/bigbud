@@ -1,15 +1,24 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import type { BrowserViewportProps, BrowserViewportRef } from "./BrowserPanel.viewport.types";
+import { BrowserPanelErrorPage } from "./BrowserPanel.errorPage";
+import { iframeNavigationError } from "./BrowserPanel.navigationError";
 
 export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewportProps>(
-  function BrowserIframeViewport({ url, onUrlChange, onLoadFail, onPageMetadataChange }, ref) {
+  function BrowserIframeViewport(
+    { url, onUrlChange, onLoadStart, onLoadSuccess, onLoadFail, onPageMetadataChange },
+    ref,
+  ) {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const onUrlChangeRef = useRef(onUrlChange);
+    const onLoadStartRef = useRef(onLoadStart);
+    const onLoadSuccessRef = useRef(onLoadSuccess);
     const onLoadFailRef = useRef(onLoadFail);
     const [errorUrl, setErrorUrl] = useState<string | null>(null);
 
     onUrlChangeRef.current = onUrlChange;
+    onLoadStartRef.current = onLoadStart;
+    onLoadSuccessRef.current = onLoadSuccess;
     onLoadFailRef.current = onLoadFail;
 
     useImperativeHandle(ref, () => ({
@@ -51,11 +60,14 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
       if (currentSrc !== url) {
         iframe.setAttribute("src", url);
         setErrorUrl(null);
+        onLoadStartRef.current?.();
         onPageMetadataChange?.({ title: "", faviconUrl: null });
       }
     }, [onPageMetadataChange, url]);
 
     const handleLoad = () => {
+      setErrorUrl(null);
+      onLoadSuccessRef.current?.();
       try {
         onUrlChangeRef.current?.(url);
       } catch {
@@ -88,14 +100,12 @@ export const BrowserIframeViewport = forwardRef<BrowserViewportRef, BrowserViewp
           onError={handleError}
         />
         {errorUrl && (
-          <div className="absolute inset-0 flex items-center justify-center bg-card/90 p-6 text-center">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">This site could not be loaded</p>
-              <p className="text-xs text-muted-foreground">
-                Some websites block embedding in frames. Try opening it in your default browser.
-              </p>
-            </div>
-          </div>
+          <BrowserPanelErrorPage
+            content={iframeNavigationError}
+            onReload={() => {
+              iframeRef.current?.contentWindow?.location.reload();
+            }}
+          />
         )}
       </>
     );

@@ -125,6 +125,8 @@ describe("windowManager context menu", () => {
     const window = createWindowUnderTest();
     const guestHandlers = new Map<string, (...args: any[]) => void>();
     const guestWebContents = {
+      id: 2,
+      once: vi.fn(),
       on: vi.fn((event: string, handler: (...args: any[]) => void) => {
         guestHandlers.set(event, handler);
       }),

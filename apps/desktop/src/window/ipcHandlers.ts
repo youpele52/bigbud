@@ -23,6 +23,7 @@ import {
   type ComputerUseIpcHandlerDeps,
 } from "./ipcHandlers.computerUse";
 import { applyWindowMaterial, getSafeWindowMaterial } from "./windowManager";
+import { registerCertificateChallengeHandlers } from "./ipcHandlers.certificateChallenge";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -136,6 +137,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     installComputerUseRuntime: deps.installComputerUseRuntime,
     runComputerUseDoctor: deps.runComputerUseDoctor,
   });
+  registerCertificateChallengeHandlers();
 
   ipcMain.removeHandler(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL);
   ipcMain.handle(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL, () =>

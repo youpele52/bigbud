@@ -1,4 +1,6 @@
 import type { BrowserAction, BrowserResult } from "@bigbud/contracts";
+import type { DesktopCertificateChallenge } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
+import type { BrowserLoadFailure } from "./BrowserPanel.navigationError";
 
 export interface BrowserViewportRef {
   goBack(): void;
@@ -29,8 +31,11 @@ export interface BrowserViewportProps {
   onNavigationStateChange?:
     | ((state: { canGoBack: boolean; canGoForward: boolean }) => void)
     | undefined;
-  onLoadFail?:
-    | ((info: { errorCode: number; errorDescription: string; validatedURL: string }) => void)
+  onLoadStart?: (() => void) | undefined;
+  onLoadSuccess?: (() => void) | undefined;
+  onLoadFail?: ((info: BrowserLoadFailure) => void) | undefined;
+  onCertificateChallengeChange?:
+    | ((challenge: DesktopCertificateChallenge | null) => void)
     | undefined;
   onPageMetadataChange?: ((metadata: BrowserPageMetadata) => void) | undefined;
   onContextMenu?:

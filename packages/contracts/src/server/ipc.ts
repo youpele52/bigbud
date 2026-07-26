@@ -65,6 +65,7 @@ import type {
   NotesUpdateInput,
 } from "./notes";
 import type { TeachListProjectsInput, TeachListProjectsResult } from "./teach";
+import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -212,7 +213,7 @@ export interface DesktopTailscaleRemoteAccessStatus {
   error: string | null;
 }
 
-export interface DesktopBridge extends DesktopComputerUseBridge {
+export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
