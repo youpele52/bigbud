@@ -38,6 +38,13 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Updated the right-panel launcher with a compact three-column tool grid, larger icons, clearer labels, and hover tooltips that show descriptions and shortcuts, so Browser, Files, Notes, Kanban, Terminal, Git, and Diff are easier to scan and open. ![Updated right-panel launcher](https://assets.bigbud.app/content/HOK1lZrWMAIbRIb.png)
 
+### Branch Management
+
+- Rebuilt the branch picker around the provider/model menu pattern, with searchable branch rows that open natural side submenus for checkout, copying, renaming, deletion, and hosted branch links without mixing combobox and menu semantics.
+- Added safe local branch rename and delete operations across the Git service, WebSocket contracts, and web client. Rename uses a persistent dialog, while deletion always confirms and protects the current, default, worktree-bound, remote, and unmerged branches.
+- Added direct `View on GitHub` and `View on GitLab` actions for supported public remotes, including HTTPS, SSH, SCP-style, nested GitLab groups, upstream tracking, and safely encoded branch refs.
+- Improved startup Computer Use notices so missing desktop permissions are listed by name and users receive actionable repair guidance instead of an incomplete or opaque status message.
+
 ### Clearer Release Channels and Downloads
 
 - Added approved Beta, Preview, and Nightly release channels with consistent identity across desktop, web, marketing, installers, artifact names, and download links, so you can tell which build you are using before downloading or installing it.

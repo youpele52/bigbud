@@ -114,6 +114,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     createWorktree: vi.fn(),
     removeWorktree: vi.fn(),
     createBranch: vi.fn(),
+    renameBranch: vi.fn(),
+    deleteBranch: vi.fn(),
     checkout: vi.fn(),
     init: vi.fn(),
     resolvePullRequest: vi.fn(),

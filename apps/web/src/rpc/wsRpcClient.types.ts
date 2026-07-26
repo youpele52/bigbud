@@ -186,6 +186,8 @@ export interface WsRpcClient {
     readonly createWorktree: RpcUnaryMethod<typeof WS_METHODS.gitCreateWorktree>;
     readonly removeWorktree: RpcUnaryMethod<typeof WS_METHODS.gitRemoveWorktree>;
     readonly createBranch: RpcUnaryMethod<typeof WS_METHODS.gitCreateBranch>;
+    readonly renameBranch: RpcUnaryMethod<typeof WS_METHODS.gitRenameBranch>;
+    readonly deleteBranch: RpcUnaryMethod<typeof WS_METHODS.gitDeleteBranch>;
     readonly checkout: RpcUnaryMethod<typeof WS_METHODS.gitCheckout>;
     readonly init: RpcUnaryMethod<typeof WS_METHODS.gitInit>;
     readonly fetch: RpcUnaryMethod<typeof WS_METHODS.gitFetch>;

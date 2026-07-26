@@ -20,6 +20,11 @@ export const GitCreateBranchResult = Schema.Struct({
 });
 export type GitCreateBranchResult = typeof GitCreateBranchResult.Type;
 
+export const GitRenameBranchResult = Schema.Struct({
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchResult = typeof GitRenameBranchResult.Type;
+
 const GitStatusLocalShape = {
   isRepo: Schema.Boolean,
   hostingProvider: Schema.optional(GitHostingProvider),

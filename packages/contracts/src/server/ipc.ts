@@ -3,6 +3,9 @@ import type {
   GitCheckoutResult,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
+  GitDeleteBranchInput,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
   GitPreparePullRequestThreadInput,
@@ -314,6 +317,8 @@ export interface NativeApi {
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;
+    renameBranch: (input: GitRenameBranchInput) => Promise<GitRenameBranchResult>;
+    deleteBranch: (input: GitDeleteBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<GitCheckoutResult>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;

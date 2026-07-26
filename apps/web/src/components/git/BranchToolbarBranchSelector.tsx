@@ -1,7 +1,15 @@
 import type { GitBranch } from "@bigbud/contracts";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, GitBranchIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import {
   gitBranchSearchInfiniteQueryOptions,
@@ -14,22 +22,15 @@ import { EnvMode } from "./BranchToolbar.logic";
 import {
   deriveBranchSelectorState,
   deriveSelectedBranchName,
+  getBranchStatusText,
   getBranchTriggerLabel,
   resolveBranchSelectionTarget,
   toBranchActionErrorMessage,
 } from "./BranchToolbarBranchSelector.helpers";
-import { renderBranchPickerItem } from "./BranchToolbarBranchSelector.render";
+import { BranchToolbarBranchActionDialogs } from "./BranchToolbarBranchActions.dialogs";
+import { BranchToolbarBranchSelectorPopup } from "./BranchToolbarBranchSelector.render";
 import { Button } from "../ui/button";
-import {
-  Combobox,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxList,
-  ComboboxPopup,
-  ComboboxStatus,
-  ComboboxTrigger,
-} from "../ui/combobox";
-import { Searchbar } from "../ui/Searchbar";
+import { Menu, MenuTrigger } from "../ui/menu";
 import { toastManager } from "../ui/toast";
 
 interface BranchToolbarBranchSelectorProps {
@@ -60,6 +61,9 @@ export function BranchToolbarBranchSelector({
   const queryClient = useQueryClient();
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
+  const [renameBranchTarget, setRenameBranchTarget] = useState<GitBranch | null>(null);
+  const [deleteBranchTarget, setDeleteBranchTarget] = useState<GitBranch | null>(null);
+  const branchSearchInputRef = useRef<HTMLInputElement>(null);
 
   const branchStatusQuery = useQuery(gitStatusQueryOptions(branchCwd, executionTargetId));
   const trimmedBranchQuery = branchQuery.trim();
@@ -101,7 +105,6 @@ export function BranchToolbarBranchSelector({
     checkoutPullRequestItemValue,
     createBranchItemValue,
     filteredBranchPickerItems,
-    branchPickerItems,
   } = useMemo(
     () =>
       deriveBranchSelectorState({
@@ -131,13 +134,13 @@ export function BranchToolbarBranchSelector({
   );
   const [isBranchActionPending, startBranchActionTransition] = useTransition();
   const totalBranchCount = branchesSearchData?.pages[0]?.totalCount ?? 0;
-  const branchStatusText = isBranchesSearchPending
-    ? "Loading branches..."
-    : isFetchingNextPage
-      ? "Loading more branches..."
-      : hasNextPage
-        ? `Showing ${branches.length} of ${totalBranchCount} branches`
-        : null;
+  const branchStatusText = getBranchStatusText({
+    isPending: isBranchesSearchPending,
+    isFetchingNextPage,
+    hasNextPage,
+    visibleCount: branches.length,
+    totalCount: totalBranchCount,
+  });
 
   const runBranchAction = (action: () => Promise<void>) => {
     startBranchActionTransition(async () => {
@@ -150,7 +153,6 @@ export function BranchToolbarBranchSelector({
     const api = readNativeApi();
     if (!api || !branchCwd || isBranchActionPending) return;
 
-    // In new-worktree mode, selecting a branch sets the base branch.
     if (isSelectingWorktreeBase) {
       onSetThreadBranch(branch.name, null);
       setIsBranchMenuOpen(false);
@@ -164,7 +166,6 @@ export function BranchToolbarBranchSelector({
       branch,
     });
 
-    // If the branch already lives in a worktree, point the thread there.
     if (selectionTarget.reuseExistingWorktree) {
       onSetThreadBranch(branch.name, selectionTarget.nextWorktreePath);
       setIsBranchMenuOpen(false);
@@ -259,31 +260,38 @@ export function BranchToolbarBranchSelector({
     });
   };
 
-  const handleValueChange = (itemValue: string | null) => {
-    if (!itemValue) {
-      return;
+  const renameBranch = async (branch: GitBranch, newName: string) => {
+    const api = readNativeApi();
+    if (!api || !branchCwd) return;
+    const result = await api.git.renameBranch({
+      cwd: branchCwd,
+      ...(executionTargetId ? { executionTargetId } : {}),
+      oldBranch: branch.name,
+      newBranch: newName,
+    });
+    await invalidateGitQueries(queryClient);
+    if (branch.current || activeThreadBranch === branch.name) {
+      onSetThreadBranch(result.branch, activeWorktreePath);
     }
-    if (checkoutPullRequestItemValue && itemValue === checkoutPullRequestItemValue) {
-      if (!prReference || !onCheckoutPullRequestRequest) {
-        return;
-      }
-      setIsBranchMenuOpen(false);
-      setBranchQuery("");
-      onComposerFocusRequest?.();
-      onCheckoutPullRequestRequest(prReference);
-      return;
-    }
-    if (createBranchItemValue && itemValue === createBranchItemValue) {
-      createBranch(trimmedBranchQuery);
-      return;
-    }
+  };
 
-    const branch = branchByName.get(itemValue);
-    if (!branch) {
-      return;
-    }
+  const deleteBranch = async (branch: GitBranch) => {
+    const api = readNativeApi();
+    if (!api || !branchCwd) return;
+    await api.git.deleteBranch({
+      cwd: branchCwd,
+      ...(executionTargetId ? { executionTargetId } : {}),
+      branch: branch.name,
+    });
+    await invalidateGitQueries(queryClient);
+  };
 
-    selectBranch(branch);
+  const checkoutPullRequest = () => {
+    if (!prReference || !onCheckoutPullRequestRequest) return;
+    setIsBranchMenuOpen(false);
+    setBranchQuery("");
+    onComposerFocusRequest?.();
+    onCheckoutPullRequestRequest(prReference);
   };
 
   useEffect(() => {
@@ -311,6 +319,7 @@ export function BranchToolbarBranchSelector({
         setBranchQuery("");
         return;
       }
+      queueMicrotask(() => branchSearchInputRef.current?.focus());
       void queryClient.invalidateQueries({
         queryKey: gitQueryKeys.branches(branchCwd, executionTargetId),
       });
@@ -325,61 +334,46 @@ export function BranchToolbarBranchSelector({
   });
 
   return (
-    <Combobox
-      items={branchPickerItems}
-      filteredItems={filteredBranchPickerItems}
-      autoHighlight
-      onOpenChange={handleOpenChange}
-      onValueChange={handleValueChange}
-      open={isBranchMenuOpen}
-      value={resolvedActiveBranch}
-    >
-      <ComboboxTrigger
-        render={<Button variant="ghost" size="xs" />}
-        className="text-muted-foreground/70 hover:text-foreground/80"
-        disabled={(isBranchesSearchPending && branches.length === 0) || isBranchActionPending}
-      >
-        <GitBranchIcon className="size-3" />
-        <span className="max-w-[240px] truncate">{triggerLabel}</span>
-        <ChevronDownIcon className="size-3" />
-      </ComboboxTrigger>
-      <ComboboxPopup align="end" side="top" className="w-80">
-        <Searchbar
-          showSearchIcon={false}
-          canClear={branchQuery.length > 0}
-          onClear={() => setBranchQuery("")}
+    <>
+      <Menu open={isBranchMenuOpen} onOpenChange={handleOpenChange}>
+        <MenuTrigger
+          render={<Button variant="ghost" size="xs" />}
+          className="text-muted-foreground/70 hover:text-foreground/80"
+          disabled={(isBranchesSearchPending && branches.length === 0) || isBranchActionPending}
         >
-          <ComboboxInput
-            className="rounded-none border-transparent! bg-transparent! shadow-none before:hidden has-focus-within:ring-0 has-focus-visible:ring-0 [&_input]:bg-transparent [&_input]:px-0 [&_input]:py-0.5 [&_input]:font-sans [&_input]:text-xs [&_input]:tracking-tight [&_input]:placeholder:text-xs [&_input]:placeholder:tracking-tight [&_input]:placeholder:text-muted-foreground/50"
-            inputClassName="ring-0"
-            onKeyDown={(event) => {
-              event.stopPropagation();
-            }}
-            placeholder="Search branches"
-            showTrigger={false}
-            size="sm"
-            value={branchQuery}
-            onChange={(event) => setBranchQuery(event.target.value)}
-          />
-        </Searchbar>
-        <ComboboxEmpty>No branches found.</ComboboxEmpty>
-
-        <ComboboxList className="max-h-56">
-          {filteredBranchPickerItems.map((itemValue, index) =>
-            renderBranchPickerItem({
-              itemValue,
-              index,
-              checkoutPullRequestItemValue,
-              createBranchItemValue,
-              prReference,
-              trimmedBranchQuery,
-              branchByName,
-              activeProjectCwd,
-            }),
-          )}
-        </ComboboxList>
-        {branchStatusText ? <ComboboxStatus>{branchStatusText}</ComboboxStatus> : null}
-      </ComboboxPopup>
-    </Combobox>
+          <GitBranchIcon className="size-3" />
+          <span className="max-w-[240px] truncate">{triggerLabel}</span>
+          <ChevronDownIcon className="size-3" />
+        </MenuTrigger>
+        <BranchToolbarBranchSelectorPopup
+          inputRef={branchSearchInputRef}
+          query={branchQuery}
+          branchStatusText={branchStatusText}
+          itemValues={filteredBranchPickerItems}
+          checkoutPullRequestItemValue={checkoutPullRequestItemValue}
+          createBranchItemValue={createBranchItemValue}
+          prReference={prReference}
+          trimmedBranchQuery={trimmedBranchQuery}
+          branchByName={branchByName}
+          activeProjectCwd={activeProjectCwd}
+          isSelectingWorktreeBase={isSelectingWorktreeBase}
+          actionPending={isBranchActionPending}
+          onQueryChange={setBranchQuery}
+          onSelect={selectBranch}
+          onCheckoutPullRequest={checkoutPullRequest}
+          onCreateBranch={() => createBranch(trimmedBranchQuery)}
+          onRenameRequest={(branch) => setRenameBranchTarget(branch)}
+          onDeleteRequest={(branch) => setDeleteBranchTarget(branch)}
+        />
+      </Menu>
+      <BranchToolbarBranchActionDialogs
+        renameBranch={renameBranchTarget}
+        deleteBranch={deleteBranchTarget}
+        onRenameOpenChange={(open) => !open && setRenameBranchTarget(null)}
+        onDeleteOpenChange={(open) => !open && setDeleteBranchTarget(null)}
+        onRename={renameBranch}
+        onDelete={deleteBranch}
+      />
+    </>
   );
 }

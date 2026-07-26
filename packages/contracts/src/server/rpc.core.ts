@@ -10,6 +10,9 @@ import {
   GitExecutionTargetError,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
+  GitDeleteBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitDiscardChangesInput,
@@ -286,6 +289,17 @@ export const WsGitRemoveWorktreeRpc = Rpc.make(WS_METHODS.gitRemoveWorktree, {
 export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
   payload: GitCreateBranchInput,
   success: GitCreateBranchResult,
+  error: GitServiceError,
+});
+
+export const WsGitRenameBranchRpc = Rpc.make(WS_METHODS.gitRenameBranch, {
+  payload: GitRenameBranchInput,
+  success: GitRenameBranchResult,
+  error: GitServiceError,
+});
+
+export const WsGitDeleteBranchRpc = Rpc.make(WS_METHODS.gitDeleteBranch, {
+  payload: GitDeleteBranchInput,
   error: GitServiceError,
 });
 

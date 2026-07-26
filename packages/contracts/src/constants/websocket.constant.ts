@@ -53,6 +53,8 @@ export const WS_METHODS = {
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",
+  gitRenameBranch: "git.renameBranch",
+  gitDeleteBranch: "git.deleteBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitFetch: "git.fetch",

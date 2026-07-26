@@ -90,5 +90,37 @@ it.layer(TestLayer)("git integration", (it) => {
         expect(didFailRemoteNames).toBe(true);
       }),
     );
+
+    it.effect("keeps listing branches when remote fetch URL lookup fails", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* git(tmp, ["remote", "add", "origin", "https://github.com/acme/project.git"]);
+
+        const liveGitCore = yield* GitCore;
+        let didFailRemoteFetchUrls = false;
+        const core = yield* makeIsolatedGitCore((input) => {
+          if (input.args.join(" ") === "remote -v") {
+            didFailRemoteFetchUrls = true;
+            return Effect.fail(
+              new GitCommandError({
+                operation: "git.test.listBranchesRemoteFetchUrls",
+                command: `git ${input.args.join(" ")}`,
+                cwd: input.cwd,
+                detail: "remote unavailable",
+              }),
+            );
+          }
+          return liveGitCore.execute(input);
+        });
+
+        const result = yield* core.listBranches({ cwd: tmp });
+
+        expect(result.isRepo).toBe(true);
+        expect(result.branches.length).toBeGreaterThan(0);
+        expect(result.branches.every((branch) => branch.webLink === undefined)).toBe(true);
+        expect(didFailRemoteFetchUrls).toBe(true);
+      }),
+    );
   });
 });

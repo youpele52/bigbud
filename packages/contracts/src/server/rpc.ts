@@ -38,6 +38,8 @@ import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
   WsGitCheckoutRpc,
   WsGitCreateBranchRpc,
+  WsGitRenameBranchRpc,
+  WsGitDeleteBranchRpc,
   WsGitCreateWorktreeRpc,
   WsGitDiscardChangesRpc,
   WsGitFetchRpc,
@@ -169,6 +171,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,
   WsGitCreateBranchRpc,
+  WsGitRenameBranchRpc,
+  WsGitDeleteBranchRpc,
   WsGitCheckoutRpc,
   WsGitInitRpc,
   WsGitFetchRpc,
