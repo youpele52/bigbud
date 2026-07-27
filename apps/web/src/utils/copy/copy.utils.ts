@@ -140,7 +140,6 @@ export const SPINNER_VERBS = [
   "Pollinating",
   "Pondering",
   "Pontificating",
-  "Pouncing",
   "Precipitating",
   "Predigitating",
   "Processing",
