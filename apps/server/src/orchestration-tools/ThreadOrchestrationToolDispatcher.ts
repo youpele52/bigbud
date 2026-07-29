@@ -4,13 +4,17 @@ import type {
   ComputerUseAction,
   ComputerUseResult,
   ThreadId,
+  MessageId,
+  ProjectId,
 } from "@bigbud/contracts";
 import type { Effect } from "effect";
 
 import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
+import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type {
   listPinnedThreadsViaOrchestration,
   setThreadPinnedViaOrchestration,
+  createThreadViaOrchestration,
 } from "./ThreadOrchestrationTools.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
@@ -24,6 +28,7 @@ export interface ThreadOrchestrationToolDispatcherShape {
   readonly getStatus: (input: {
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
+    readonly threadDelegationRepository?: ThreadDelegationRepositoryShape;
   }) => Effect.Effect<ThreadWorkflowStatusSnapshot, Error>;
   readonly listPinned: (input: {
     readonly callerThreadId: ThreadId;
@@ -41,6 +46,15 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly threadId: ThreadId;
     readonly action: BrowserAction;
   }) => Effect.Effect<BrowserResult, Error>;
+  readonly createThread?: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly sourceMessageId: MessageId;
+    readonly invocationId: string;
+    readonly title: string;
+    readonly task: string;
+    readonly projectId?: ProjectId;
+    readonly watchForCompletion: boolean;
+  }) => ReturnType<typeof createThreadViaOrchestration>;
 }
 
 let dispatcher: ThreadOrchestrationToolDispatcherShape | null = null;

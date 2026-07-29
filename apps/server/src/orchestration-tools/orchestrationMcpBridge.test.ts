@@ -65,6 +65,14 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("computer_use");
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
+    expect(source).toContain("create_thread");
+    expect(source).toContain("maxLength: 200");
+    expect(source).toContain("maxLength: 32000");
+    expect(source).toContain("invocationId: `mcp:${String(requestId)}`");
+    expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
+    expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
+    expect(source).not.toContain('name: "invocationId"');
+    expect(source).not.toContain('name: "sourceMessageId"');
     expect(source).toContain("get_thread_status");
     expect(source).toContain("list_pinned_threads");
     expect(source).toContain("pin_thread");
@@ -141,6 +149,7 @@ describe("orchestrationMcpBridge", () => {
         result: {
           tools: expect.arrayContaining([
             expect.objectContaining({ name: "rename_thread" }),
+            expect.objectContaining({ name: "create_thread" }),
             expect.objectContaining({ name: "browser" }),
             expect.objectContaining({ name: "computer_use" }),
             expect.objectContaining({ name: "list_pinned_threads" }),

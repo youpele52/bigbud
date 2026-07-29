@@ -8,6 +8,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Updated the Claude provider for Agent SDK 0.3.219 with more reliable streaming, approvals, user-input handling, task tracking, MCP integration, recovery, interruption, resume, and capability reporting, so conversations are less likely to lose progress or need a restart.
 - Added durable orchestration task projections so task progress survives restarts, stays ordered when events arrive late, and remains available in historical thread views, making multi-step work easier to follow.
+- Added standalone agent threads that can work on self-contained tasks in the current or another authorized project, remain visible as normal threads, and optionally be monitored until completion without opening another editor.
 - Expanded provider-neutral runtime accounting and orchestration tools across Codex, Claude, Copilot, OpenCode, and Pi, including safer MCP bridges, pinned-thread controls, bounded diagnostics, and richer activity reporting for more predictable multi-agent sessions.
 - Agents can now pin or unpin threads when you ask, and list all pinned threads across projects, making important conversations easier to find without leaving the active chat.
 - Added Git-backed path checkpoints so files and folders can be captured and restored from the workspace, giving you a safer way to undo changes without affecting an active thread.

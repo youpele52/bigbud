@@ -12,6 +12,7 @@ import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
 import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
+import { MessagesTimelineDelegatedProvenance } from "./MessagesTimeline.delegatedProvenance";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
@@ -152,11 +153,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
               file.sourcePath.length > 0,
           );
           const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
-          const terminalContexts = displayedUserMessage.contexts;
-          const annotations = displayedUserMessage.annotations;
-          const readDocument = displayedUserMessage.readDocument;
-          const canRevertAgentWork = revertTurnCountByUserMessageId.has(row.message.id);
-          const replyTarget = row.message.replyTo;
           return (
             <div
               className="group flex flex-col items-end gap-1"
@@ -169,11 +165,11 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   focusedMessageId === row.message.id ? "border-primary/70 bg-secondary/85" : "",
                 )}
               >
-                {replyTarget ? (
+                {row.message.replyTo ? (
                   <div className="mb-2">
                     <MessageReplyPreview
-                      replyTarget={replyTarget}
-                      onClick={() => onOpenReplySource(replyTarget.messageId)}
+                      replyTarget={row.message.replyTo}
+                      onClick={() => onOpenReplySource(row.message.replyTo!.messageId)}
                       className="bg-background/30"
                     />
                   </div>
@@ -245,20 +241,21 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   markdownCwd={markdownCwd}
                   resolvedTheme={resolvedTheme}
                 />
-                {readDocument && (
+                {displayedUserMessage.readDocument && (
                   <div className="mb-2 rounded-lg border border-border/50 bg-background/35 px-3 py-2">
                     <div className="space-y-1 text-xs text-muted-foreground/70">
                       <div className="font-medium text-foreground/85">
-                        {readDocument.title ?? "Read document"}
+                        {displayedUserMessage.readDocument.title ?? "Read document"}
                       </div>
                       <div className="break-all">
                         <span className="text-muted-foreground/55">Source:</span>{" "}
-                        {readDocument.sourceUrl}
+                        {displayedUserMessage.readDocument.sourceUrl}
                       </div>
-                      {readDocument.resolvedUrl !== readDocument.sourceUrl ? (
+                      {displayedUserMessage.readDocument.resolvedUrl !==
+                      displayedUserMessage.readDocument.sourceUrl ? (
                         <div className="break-all">
                           <span className="text-muted-foreground/55">Resolved:</span>{" "}
-                          {readDocument.resolvedUrl}
+                          {displayedUserMessage.readDocument.resolvedUrl}
                         </div>
                       ) : null}
                     </div>
@@ -268,17 +265,20 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                         Extracted contents
                       </summary>
                       <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
-                        {readDocument.text}
+                        {displayedUserMessage.readDocument.text}
                       </pre>
                     </details>
                   </div>
                 )}
-                <MessagesTimelineAnnotations annotations={annotations} />
+                <MessagesTimelineAnnotations annotations={displayedUserMessage.annotations} />
+                <MessagesTimelineDelegatedProvenance
+                  provenance={displayedUserMessage.delegatedThreadProvenance}
+                />
                 {(displayedUserMessage.visibleText.trim().length > 0 ||
-                  terminalContexts.length > 0) && (
+                  displayedUserMessage.contexts.length > 0) && (
                   <UserMessageBody
                     text={displayedUserMessage.visibleText}
-                    terminalContexts={terminalContexts}
+                    terminalContexts={displayedUserMessage.contexts}
                     cwd={markdownCwd}
                   />
                 )}
@@ -296,7 +296,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                 {onBranchThread ? (
                   <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
                 ) : null}
-                {canRevertAgentWork && (
+                {revertTurnCountByUserMessageId.has(row.message.id) && (
                   <Button
                     type="button"
                     size="xs"

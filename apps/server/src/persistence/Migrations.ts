@@ -60,6 +60,9 @@ import Migration0044 from "./Migrations/044_ProjectionUsageContributions.ts";
 import Migration0045 from "./Migrations/045_RepairProjectionUsageContributions.ts";
 import Migration0046 from "./Migrations/046_ProjectionThreadTasks.ts";
 import Migration0047 from "./Migrations/047_ProviderSelectionQuarantine.ts";
+import Migration0048 from "./Migrations/048_ThreadDelegations.ts";
+import Migration0049 from "./Migrations/049_ProjectionThreadsParentProject.ts";
+import Migration0050 from "./Migrations/050_ProjectionThreadWatchesUniqueActive.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -119,6 +122,9 @@ export const migrationEntries = [
   [45, "RepairProjectionUsageContributions", Migration0045],
   [46, "ProjectionThreadTasks", Migration0046],
   [47, "ProviderSelectionQuarantine", Migration0047],
+  [48, "ThreadDelegations", Migration0048],
+  [49, "ProjectionThreadsParentProject", Migration0049],
+  [50, "ProjectionThreadWatchesUniqueActive", Migration0050],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

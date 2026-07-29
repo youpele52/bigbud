@@ -97,4 +97,73 @@ describe("OrchestrationEngine", () => {
 
     await system.dispose();
   });
+
+  it("allows a thread to reference an existing parent in another project", async () => {
+    const system = await createOrchestrationSystem();
+    const { engine } = system;
+    const createdAt = now();
+
+    for (const [projectId, threadId] of [
+      ["project-parent", "thread-parent"],
+      ["project-child", "thread-child"],
+    ] as const) {
+      await system.run(
+        engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe(`cmd-${projectId}`),
+          projectId: asProjectId(projectId),
+          title: projectId,
+          workspaceRoot: `/tmp/${projectId}`,
+          defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+          createdAt,
+        }),
+      );
+      if (projectId === "project-parent") {
+        await system.run(
+          engine.dispatch({
+            type: "thread.create",
+            commandId: CommandId.makeUnsafe("cmd-thread-parent"),
+            threadId: ThreadId.makeUnsafe(threadId),
+            projectId: asProjectId(projectId),
+            title: "parent",
+            modelSelection: { provider: "codex", model: "gpt-5-codex" },
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            runtimeMode: "approval-required",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+          }),
+        );
+      }
+    }
+
+    await system.run(
+      engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-thread-child"),
+        threadId: ThreadId.makeUnsafe("thread-child"),
+        projectId: asProjectId("project-child"),
+        title: "child",
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-parent"),
+          title: "parent",
+          projectId: asProjectId("project-parent"),
+        },
+        createdAt,
+      }),
+    );
+
+    const readModel = await system.run(engine.getReadModel());
+    expect(readModel.threads.find((thread) => thread.id === "thread-child")?.parentThread).toEqual({
+      threadId: "thread-parent",
+      title: "parent",
+      projectId: "project-parent",
+    });
+    await system.dispose();
+  });
 });

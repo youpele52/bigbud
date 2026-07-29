@@ -32,6 +32,15 @@ export const ReplaceActiveThreadWatchesInput = Schema.Struct({
 });
 export type ReplaceActiveThreadWatchesInput = typeof ReplaceActiveThreadWatchesInput.Type;
 
+export const AddActiveThreadWatchInput = Schema.Struct({
+  watcherThreadId: ThreadId,
+  watchedThreadId: ThreadId,
+  watchedThreadTitle: TrimmedNonEmptyString,
+  sourceMessageId: MessageId,
+  createdAt: IsoDateTime,
+});
+export type AddActiveThreadWatchInput = typeof AddActiveThreadWatchInput.Type;
+
 export const ListActiveThreadWatchesByWatchedThreadInput = Schema.Struct({
   watchedThreadId: ThreadId,
 });
@@ -60,6 +69,9 @@ export type CancelActiveThreadWatchesForWatcherInput =
   typeof CancelActiveThreadWatchesForWatcherInput.Type;
 
 export interface ProjectionThreadWatchRepositoryShape {
+  readonly addActiveWatch: (
+    input: AddActiveThreadWatchInput,
+  ) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;
   readonly replaceActiveWatchesForMessage: (
     input: ReplaceActiveThreadWatchesInput,
   ) => Effect.Effect<void, PersistenceSqlError | PersistenceDecodeError>;

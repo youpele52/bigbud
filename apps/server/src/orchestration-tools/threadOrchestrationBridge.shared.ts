@@ -24,6 +24,9 @@ export const RENAME_THREAD_TOOL_DESCRIPTION = "Rename the current BigBud thread.
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 
+export const CREATE_THREAD_TOOL_DESCRIPTION =
+  "Create a standalone bigbud thread in a project and optionally watch it for completion.";
+
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
 

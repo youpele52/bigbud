@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BrowserAction,
   ComputerUseAction,
+  MessageId,
+  ProjectId,
   ThreadId,
   type BrowserResult,
   type ComputerUseResult,
@@ -18,6 +22,7 @@ import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
   COMPUTER_USE_TOOL_DESCRIPTION,
+  CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
@@ -90,6 +95,25 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "create_thread",
+      description: CREATE_THREAD_TOOL_DESCRIPTION,
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Title for the new standalone bigbud thread" },
+          task: { type: "string", description: "Task for the new standalone bigbud thread" },
+          projectId: { type: "string", description: "Optional target project ID" },
+          watchForCompletion: {
+            type: "boolean",
+            description: "Whether to watch the child thread for completion",
+          },
+        },
+        required: ["title", "task"],
+        additionalProperties: false,
+      },
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "get_thread_status",
       description: GET_THREAD_STATUS_TOOL_DESCRIPTION,
       inputSchema: {
@@ -149,8 +173,15 @@ export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<Code
 
 export function createCodexThreadOrchestrationDynamicToolHandler(
   threadId: ThreadId,
+  sourceMessageId: MessageId = MessageId.makeUnsafe(randomUUID()),
 ): CodexDynamicToolCallHandler {
-  return async ({ namespace, tool, arguments: args }) => {
+  return async ({
+    namespace,
+    tool,
+    arguments: args,
+    requestId,
+    sourceMessageId: requestSource,
+  }) => {
     if (namespace !== BIGBUD_ORCHESTRATION_NAMESPACE) {
       throw new Error(`Unsupported dynamic tool namespace: ${namespace ?? "<none>"}`);
     }
@@ -175,6 +206,37 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         await Effect.runPromise(dispatcher.archive({ threadId }));
         return {
           contentItems: [inputText("Archived the current thread.")],
+          success: true,
+        };
+      }
+      case "create_thread": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const title = typeof argRecord?.title === "string" ? argRecord.title.trim() : "";
+        const task = typeof argRecord?.task === "string" ? argRecord.task.trim() : "";
+        if (title.length === 0) {
+          throw new Error("Thread title cannot be empty.");
+        }
+        if (task.length === 0) {
+          throw new Error("Thread task cannot be empty.");
+        }
+        const projectId =
+          typeof argRecord?.projectId === "string" ? argRecord.projectId.trim() : "";
+        const result = await Effect.runPromise(
+          dispatcher.createThread
+            ? dispatcher.createThread({
+                callerThreadId: threadId,
+                sourceMessageId: MessageId.makeUnsafe(requestSource ?? sourceMessageId),
+                invocationId: String(requestId),
+                title,
+                task,
+                ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
+                watchForCompletion: argRecord?.watchForCompletion === true,
+              })
+            : Effect.fail(new Error("Thread creation is not ready.")),
+        );
+        return {
+          contentItems: [inputText(JSON.stringify(result, null, 2))],
           success: true,
         };
       }

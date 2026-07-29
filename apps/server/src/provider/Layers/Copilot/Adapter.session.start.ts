@@ -1,5 +1,7 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
+  MessageId,
+  ProjectId,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
   type ProviderSession,
@@ -218,6 +220,25 @@ export const makeStartSession =
               .browser({ threadId: input.threadId, action })
               .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
           ),
+        createThread: ({
+          invocationId,
+          sourceMessageId,
+          title,
+          task,
+          projectId,
+          watchForCompletion,
+        }) =>
+          Effect.runPromise(
+            dispatcher.createThread?.({
+              callerThreadId: input.threadId,
+              sourceMessageId: MessageId.makeUnsafe(sourceMessageId),
+              invocationId,
+              title,
+              task,
+              ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
+              watchForCompletion,
+            }) ?? Effect.fail(new Error("Thread creation is not ready.")),
+          ).then((result) => result as unknown as Record<string, unknown>),
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

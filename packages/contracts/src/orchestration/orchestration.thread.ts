@@ -78,6 +78,8 @@ export type SourceProposedPlanReference = typeof SourceProposedPlanReference.Typ
 export const ParentThreadReference = Schema.Struct({
   threadId: ThreadId,
   title: TrimmedNonEmptyString,
+  // Optional while decoding legacy local projections; new references include it.
+  projectId: Schema.optional(ProjectId),
 });
 export type ParentThreadReference = typeof ParentThreadReference.Type;
 

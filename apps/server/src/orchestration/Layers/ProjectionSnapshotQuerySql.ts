@@ -98,8 +98,12 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",

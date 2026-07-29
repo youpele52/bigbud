@@ -110,6 +110,7 @@ it.effect("decodes thread.created parent thread metadata when present", () =>
       parentThread: {
         threadId: "thread-1",
         title: "Parent thread",
+        projectId: "project-1",
       },
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -118,6 +119,7 @@ it.effect("decodes thread.created parent thread metadata when present", () =>
     assert.deepStrictEqual(parsed.parentThread, {
       threadId: "thread-1",
       title: "Parent thread",
+      projectId: "project-1",
     });
     assert.strictEqual(
       parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,

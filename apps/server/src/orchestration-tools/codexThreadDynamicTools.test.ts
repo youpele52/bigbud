@@ -1,4 +1,4 @@
-import { ThreadId } from "@bigbud/contracts";
+import { MessageId, ThreadId, TurnId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
@@ -22,6 +22,13 @@ describe("codexThreadDynamicTools", () => {
         expect.objectContaining({
           namespace: "bigbud_orchestration",
           name: "archive_thread",
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "create_thread",
+          inputSchema: expect.objectContaining({
+            required: ["title", "task"],
+          }),
         }),
         expect.objectContaining({
           namespace: "bigbud_orchestration",
@@ -112,6 +119,19 @@ describe("codexThreadDynamicTools", () => {
         calls.push({ kind: "browser", ...input });
         return Effect.succeed({ action: "capture", summary: "Captured the in-app browser." });
       },
+      createThread: (input) => {
+        calls.push({ kind: "create_thread", ...input });
+        return Effect.succeed({
+          accepted: true as const,
+          replayed: false as const,
+          childThreadId: ThreadId.makeUnsafe("child"),
+          childTurnId: TurnId.makeUnsafe("child-turn"),
+          createSequence: 1,
+          turnSequence: 2,
+          watchForCompletion: input.watchForCompletion,
+          observedStatus: null,
+        });
+      },
     };
 
     setThreadOrchestrationToolDispatcher(dispatcher);
@@ -120,9 +140,27 @@ describe("codexThreadDynamicTools", () => {
       const threadId = ThreadId.makeUnsafe("thread-codex-dynamic");
       const handler = createCodexThreadOrchestrationDynamicToolHandler(threadId);
 
+      const createResult = await handler({
+        namespace: "bigbud_orchestration",
+        tool: "create_thread",
+        requestId: 17,
+        sourceMessageId: "source-message",
+        arguments: { title: "Side chat", task: "Investigate this", watchForCompletion: true },
+      });
+      expect(createResult).toEqual({
+        contentItems: [
+          {
+            type: "inputText",
+            text: expect.stringContaining('"accepted": true'),
+          },
+        ],
+        success: true,
+      });
+
       const renameResult = await handler({
         namespace: "bigbud_orchestration",
         tool: "rename_thread",
+        requestId: 18,
         arguments: { title: "Renamed" },
       });
       expect(renameResult.success).toBe(true);
@@ -134,6 +172,7 @@ describe("codexThreadDynamicTools", () => {
       const statusResult = await handler({
         namespace: "bigbud_orchestration",
         tool: "get_thread_status",
+        requestId: 19,
         arguments: { threadId: "thread-other" },
       });
       expect(statusResult.success).toBe(true);
@@ -147,22 +186,34 @@ describe("codexThreadDynamicTools", () => {
       await handler({
         namespace: "bigbud_orchestration",
         tool: "list_pinned_threads",
+        requestId: 20,
         arguments: {},
       });
 
       await handler({
         namespace: "bigbud_orchestration",
         tool: "pin_thread",
+        requestId: 21,
         arguments: { threadId: "thread-pinned" },
       });
 
       await handler({
         namespace: "bigbud_orchestration",
         tool: "browser",
+        requestId: 22,
         arguments: { action: "capture" },
       });
 
       expect(calls).toEqual([
+        {
+          kind: "create_thread",
+          callerThreadId: threadId,
+          sourceMessageId: MessageId.makeUnsafe("source-message"),
+          invocationId: "17",
+          title: "Side chat",
+          task: "Investigate this",
+          watchForCompletion: true,
+        },
         {
           kind: "rename",
           threadId,

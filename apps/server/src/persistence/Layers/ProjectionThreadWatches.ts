@@ -134,6 +134,40 @@ const makeProjectionThreadWatchRepository = Effect.gen(function* () {
       }
     });
 
+  const addActiveWatch: ProjectionThreadWatchRepositoryShape["addActiveWatch"] = Effect.fn(
+    "ProjectionThreadWatchRepository.addActiveWatch",
+  )(function* (input) {
+    yield* sql`
+      INSERT INTO projection_thread_watches (
+        watch_id,
+        watcher_thread_id,
+        watched_thread_id,
+        watched_thread_title,
+        source_message_id,
+        status,
+        created_at,
+        triggered_at
+      )
+      SELECT
+        ${crypto.randomUUID()},
+        ${input.watcherThreadId},
+        ${input.watchedThreadId},
+        ${input.watchedThreadTitle},
+        ${input.sourceMessageId},
+        'active',
+        ${input.createdAt},
+        NULL
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM projection_thread_watches
+        WHERE watcher_thread_id = ${input.watcherThreadId}
+          AND source_message_id = ${input.sourceMessageId}
+          AND watched_thread_id = ${input.watchedThreadId}
+          AND status = 'active'
+      )
+    `.pipe(Effect.mapError(toPersistenceSqlError("addActiveWatch")));
+  });
+
   const markGroupTriggered: ProjectionThreadWatchRepositoryShape["markGroupTriggered"] = Effect.fn(
     "ProjectionThreadWatchRepository.markGroupTriggered",
   )(function* (input) {
@@ -159,6 +193,7 @@ const makeProjectionThreadWatchRepository = Effect.gen(function* () {
     });
 
   return {
+    addActiveWatch,
     replaceActiveWatchesForMessage,
     listActiveByWatchedThread: (input) =>
       listActiveByWatchedThread(input).pipe(

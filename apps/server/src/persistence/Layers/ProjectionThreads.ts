@@ -70,8 +70,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode,
           branch,
           worktree_path,
-          parent_thread_id,
-          parent_thread_title,
+           parent_thread_id,
+           parent_thread_title,
+           parent_thread_project_id,
           latest_turn_id,
           created_at,
           updated_at,
@@ -94,8 +95,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.interactionMode},
           ${row.branch},
           ${row.worktreePath},
-          ${row.parentThread?.threadId ?? null},
-          ${row.parentThread?.title ?? null},
+           ${row.parentThread?.threadId ?? null},
+           ${row.parentThread?.title ?? null},
+           ${row.parentThread?.projectId ?? row.projectId},
           ${row.latestTurnId},
           ${row.createdAt},
           ${row.updatedAt},
@@ -118,8 +120,9 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode = excluded.interaction_mode,
           branch = excluded.branch,
           worktree_path = excluded.worktree_path,
-          parent_thread_id = excluded.parent_thread_id,
-          parent_thread_title = excluded.parent_thread_title,
+           parent_thread_id = excluded.parent_thread_id,
+           parent_thread_title = excluded.parent_thread_title,
+           parent_thread_project_id = excluded.parent_thread_project_id,
           latest_turn_id = excluded.latest_turn_id,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
@@ -150,8 +153,12 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
@@ -185,8 +192,12 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",

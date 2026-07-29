@@ -54,6 +54,7 @@ import {
   listPinnedThreadsViaOrchestration as listPinnedThreadsViaThreadTools,
   renameThreadViaOrchestration as renameThreadViaThreadTools,
   setThreadPinnedViaOrchestration as setThreadPinnedViaThreadTools,
+  createThreadViaOrchestration,
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
@@ -68,6 +69,10 @@ import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserCo
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
+import { ThreadDelegationRepository } from "../../persistence/Services/ThreadDelegations.ts";
+import { ThreadDelegationRepositoryLive } from "../../persistence/Layers/ThreadDelegations.ts";
+import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { ProjectionThreadWatchRepositoryLive } from "../../persistence/Layers/ProjectionThreadWatches.ts";
 
 interface CommandEnvelope {
   command: OrchestrationCommand;
@@ -110,6 +115,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const path = yield* Path.Path;
   const serverConfig = yield* ServerConfig;
   const serverSettingsService = yield* ServerSettingsService;
+  const threadDelegationRepository = yield* ThreadDelegationRepository;
+  const threadWatchRepository = yield* ProjectionThreadWatchRepository;
 
   let readModel = createEmptyReadModel(new Date().toISOString());
 
@@ -378,6 +385,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     getStatus: (input) =>
       getThreadStatusViaThreadTools({
         orchestrationEngine: engine,
+        threadDelegationRepository: input.threadDelegationRepository ?? threadDelegationRepository,
         callerThreadId: input.callerThreadId,
         threadId: input.threadId,
       }),
@@ -441,6 +449,19 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           action: input.action,
         });
       }),
+    createThread: (input) =>
+      createThreadViaOrchestration({
+        orchestrationEngine: engine,
+        threadDelegationRepository,
+        projectionThreadWatchRepository: threadWatchRepository,
+        callerThreadId: input.callerThreadId,
+        sourceMessageId: input.sourceMessageId,
+        invocationId: input.invocationId,
+        title: input.title,
+        task: input.task,
+        ...(input.projectId !== undefined ? { projectId: input.projectId } : {}),
+        watchForCompletion: input.watchForCompletion,
+      }),
   });
   setVisibleBrowserControl(visibleBrowser);
 
@@ -458,4 +479,9 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 export const OrchestrationEngineLive = Layer.effect(
   OrchestrationEngineService,
   makeOrchestrationEngine,
-).pipe(Layer.provide(BrowserManagerLive), Layer.provide(VisibleBrowserControlLive));
+).pipe(
+  Layer.provide(BrowserManagerLive),
+  Layer.provide(VisibleBrowserControlLive),
+  Layer.provide(ThreadDelegationRepositoryLive),
+  Layer.provide(ProjectionThreadWatchRepositoryLive),
+);

@@ -188,6 +188,49 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     }),
   );
 
+  it.effect("round-trips a cross-project parent thread reference", () =>
+    Effect.gen(function* () {
+      const threads = yield* ProjectionThreadRepository;
+
+      yield* threads.upsert({
+        threadId: ThreadId.makeUnsafe("thread-child-project"),
+        projectId: ProjectId.makeUnsafe("project-child"),
+        title: "Child",
+        purpose: "standard",
+        elevatorSummary: "Child",
+        elevatorSummaryMessageCount: 0,
+        providerRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-parent-project"),
+          title: "Parent",
+          projectId: ProjectId.makeUnsafe("project-parent"),
+        },
+        latestTurnId: null,
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+        archivedAt: null,
+        deletingAt: null,
+        deletedAt: null,
+      });
+
+      const persisted = yield* threads.getById({
+        threadId: ThreadId.makeUnsafe("thread-child-project"),
+      });
+      assert.deepStrictEqual(Option.getOrNull(persisted)?.parentThread, {
+        threadId: ThreadId.makeUnsafe("thread-parent-project"),
+        title: "Parent",
+        projectId: ProjectId.makeUnsafe("project-parent"),
+      });
+    }),
+  );
+
   it.effect("lists project and global notes by scope", () =>
     Effect.gen(function* () {
       const notes = yield* ProjectionNoteRepository;

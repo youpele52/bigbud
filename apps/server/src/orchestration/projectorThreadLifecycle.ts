@@ -101,7 +101,14 @@ export function projectThreadCreated(
         archivedAt: null,
         deletingAt: null,
         deletedAt: null,
-        ...(payload.parentThread !== undefined ? { parentThread: payload.parentThread } : {}),
+        ...(payload.parentThread !== undefined
+          ? {
+              parentThread: {
+                ...payload.parentThread,
+                projectId: payload.parentThread.projectId ?? payload.projectId,
+              },
+            }
+          : {}),
         messages: [],
         activities: [],
         checkpoints: [],
