@@ -56,7 +56,7 @@ describe("contextWindow", () => {
   });
 
   it("re-arms dismissed warnings after 25% of the threshold", () => {
-    expect(getContextWindowWarningRearmTokens(120_000)).toBe(150_000);
+    expect(getContextWindowWarningRearmTokens(160_000, 120_000)).toBe(190_000);
   });
 
   it("includes total processed tokens when available", () => {

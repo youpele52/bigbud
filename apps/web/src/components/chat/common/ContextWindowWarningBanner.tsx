@@ -26,19 +26,21 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
 }) {
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
-  const [dismissedAtByThreadId, setDismissedAtByThreadId] = useState<Record<string, number>>({});
+  const [dismissUntilByThreadId, setDismissUntilByThreadId] = useState<Record<string, number>>({});
 
   const isOverThreshold = (usage?.usedTokens ?? 0) >= warningThreshold;
-  const warningRearmTokens = getContextWindowWarningRearmTokens(warningThreshold);
-  const dismissedAtTokens = dismissedAtByThreadId[threadId];
+  const dismissUntilTokens = dismissUntilByThreadId[threadId];
   const isDismissed =
-    dismissedAtTokens !== undefined && usage !== null && usage.usedTokens < dismissedAtTokens;
+    dismissUntilTokens !== undefined && usage !== null && usage.usedTokens < dismissUntilTokens;
 
   useEffect(() => {
-    if (!isOverThreshold || (usage?.usedTokens ?? 0) >= warningRearmTokens) {
-      setDismissedAtByThreadId(({ [threadId]: _, ...dismissals }) => dismissals);
+    if (dismissUntilTokens === undefined) {
+      return;
     }
-  }, [isOverThreshold, threadId, usage?.usedTokens, warningRearmTokens]);
+    if (!isOverThreshold || (usage?.usedTokens ?? 0) >= dismissUntilTokens) {
+      setDismissUntilByThreadId(({ [threadId]: _, ...dismissals }) => dismissals);
+    }
+  }, [dismissUntilTokens, isOverThreshold, threadId, usage?.usedTokens]);
 
   if (!usage || !isOverThreshold || isDismissed) {
     return null;
@@ -65,9 +67,9 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
             aria-label="Dismiss"
             className="inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning"
             onClick={() =>
-              setDismissedAtByThreadId((dismissals) => ({
+              setDismissUntilByThreadId((dismissals) => ({
                 ...dismissals,
-                [threadId]: warningRearmTokens,
+                [threadId]: getContextWindowWarningRearmTokens(usage.usedTokens, warningThreshold),
               }))
             }
           >
