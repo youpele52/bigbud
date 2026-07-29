@@ -100,7 +100,11 @@ function updateRecord(input: {
 
   const status = normalizeStatus(record.status);
   const subject = taskSubject(record);
-  if (!existing && !subject && !status) return undefined;
+  // Status-only records can update a task we already know, but they do not
+  // carry enough information to create a distinct visible task. CLIProxy can
+  // emit these while completing a TodoWrite snapshot. Legacy TodoWrite entries
+  // retain the default label for blank content.
+  if (!existing && !subject && !input.memberships?.legacyMember) return undefined;
   const preserveTerminal =
     existing &&
     isTerminal(existing) &&

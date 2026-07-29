@@ -264,13 +264,16 @@ describe("Claude task reducer", () => {
     expect(
       reduceClaudeTasks({
         ...firstSnapshot,
-        value: { todos: [{ content: "First task", status: "completed" }] },
+        value: { todos: [{ status: "completed" }, { status: "completed" }] },
         updatedAt: "2026-07-24T00:00:02.000Z",
       }),
     ).toBe(true);
 
     expect(claudeTaskPlanPayload(state)).toEqual({
-      plan: [{ step: "First task", status: "completed" }],
+      plan: [
+        { step: "First task", status: "completed" },
+        { step: "Second task", status: "completed" },
+      ],
     });
   });
 
