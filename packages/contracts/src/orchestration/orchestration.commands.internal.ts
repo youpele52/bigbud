@@ -8,6 +8,7 @@ import {
   ProjectId,
   RuntimeTaskId,
   ThreadId,
+  TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
 import {
@@ -54,6 +55,15 @@ const ThreadSessionSetCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   session: OrchestrationSession,
+  createdAt: IsoDateTime,
+});
+
+const ThreadTurnStartFailedCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn.start.failed"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
+  detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
   createdAt: IsoDateTime,
 });
 
@@ -149,6 +159,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadDeleteFinalizeCommand,
   ThreadDeleteAbortCommand,
   ThreadSessionSetCommand,
+  ThreadTurnStartFailedCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantReplaceCommand,
   ThreadMessageAssistantCompleteCommand,

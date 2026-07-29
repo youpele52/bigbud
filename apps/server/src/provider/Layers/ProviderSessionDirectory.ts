@@ -1,4 +1,4 @@
-import { PROVIDER_KINDS, type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -21,17 +21,13 @@ function toPersistenceError(operation: string) {
 
 function decodeProviderKind(
   providerName: string,
-  operation: string,
+  _operation: string,
 ): Effect.Effect<ProviderKind, ProviderSessionDirectoryPersistenceError> {
-  if (PROVIDER_KINDS.includes(providerName as ProviderKind)) {
-    return Effect.succeed(providerName as ProviderKind);
-  }
-  return Effect.fail(
-    new ProviderSessionDirectoryPersistenceError({
-      operation,
-      detail: `Unknown persisted provider '${providerName}'.`,
-    }),
-  );
+  // Persisted bindings are an inventory of historical provider state, not a
+  // declaration that the current build can route it. Preserve unknown names
+  // so startup and read paths remain lossless; ProviderService rejects them
+  // later when it checks the live adapter registry.
+  return Effect.succeed(providerName as ProviderKind);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

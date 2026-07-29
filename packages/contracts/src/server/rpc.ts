@@ -54,6 +54,7 @@ import {
   WsGitRemoveWorktreeRpc,
   WsGitResolvePullRequestRpc,
   WsGitRunStackedActionRpc,
+  WsServerActivateCliProxyRpc,
   WsServerCreateMobileRemotePairingRpc,
   WsServerExportThreadContextRpc,
   WsServerGetConfigRpc,
@@ -111,6 +112,7 @@ export * from "./rpc.workspace";
 export const WsRpcGroup = RpcGroup.make(
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
+  WsServerActivateCliProxyRpc,
   WsServerVerifyExecutionTargetRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,

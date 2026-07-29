@@ -304,6 +304,31 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
     }),
   );
 
+  it.effect("reads removed-provider project selections without rewriting them", () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectionProjectRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id, title, execution_target_id, workspace_root,
+          default_model_selection_json, scripts_json, created_at, updated_at
+        ) VALUES (
+          ${"project-legacy-provider"}, ${"Legacy project"}, ${LOCAL_EXECUTION_TARGET_ID},
+          ${"/tmp/legacy"}, ${JSON.stringify({ provider: "cliProxy", model: "legacy-model" })},
+          ${"[]"}, ${"2026-03-24T00:00:00.000Z"}, ${"2026-03-24T00:00:00.000Z"}
+        )
+      `;
+
+      const result = yield* projects.getById({
+        projectId: ProjectId.makeUnsafe("project-legacy-provider"),
+      });
+      assert.deepStrictEqual(Option.getOrNull(result)?.defaultModelSelection, {
+        provider: "cliProxy",
+        model: "legacy-model",
+      });
+    }),
+  );
+
   it.effect("derives title from H1 in content, not from filename", () =>
     Effect.gen(function* () {
       const notes = yield* ProjectionNoteRepository;

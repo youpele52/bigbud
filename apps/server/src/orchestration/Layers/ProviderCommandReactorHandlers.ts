@@ -1,16 +1,8 @@
-/**
- * ProviderCommandReactor turn-level and session-level event handlers.
- *
- * Contains the per-event processing functions that are called by
- * ProviderCommandReactor.ts after events arrive from the orchestration stream.
- */
 import {
   DEFAULT_SERVER_SETTINGS,
-  EventId,
   type ModelSelection,
   type OrchestrationSession,
   ThreadId,
-  type TurnId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
 import { Cache, Cause, Duration, Effect, FileSystem, Option, Path, Scope } from "effect";
@@ -40,6 +32,8 @@ import { makeProcessDeletionRequested } from "./ProviderCommandReactorHandlers.d
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import { makeProcessProjectDeletionRequested } from "./ProviderCommandReactorHandlers.project-delete.ts";
 import { makeProcessSessionHandlers } from "./ProviderCommandReactorHandlers.session.ts";
+import { makeProviderFailureHandlers } from "./ProviderCommandReactorHandlers.failures.ts";
+import { makeProviderCommandProjectResolvers } from "./ProviderCommandReactorHandlers.projects.ts";
 import { expandProviderInputMentions } from "./ProviderCommandReactorInputExpansion.ts";
 import {
   ensureSessionForThread,
@@ -68,7 +62,6 @@ type ProviderIntentEvent = Extract<
       | "project.deletion-requested";
   }
 >;
-
 export const turnStartKeyForEvent = (event: ProviderIntentEvent): string =>
   event.commandId !== null ? `command:${event.commandId}` : `event:${event.eventId}`;
 
@@ -103,38 +96,8 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
   const threadModelSelections = new Map<string, ModelSelection>();
 
-  const appendProviderFailureActivity = (input: {
-    readonly threadId: ThreadId;
-    readonly kind:
-      | "provider.turn.start.failed"
-      | "provider.turn.interrupt.failed"
-      | "provider.approval.respond.failed"
-      | "provider.user-input.respond.failed"
-      | "provider.session.stop.failed";
-    readonly summary: string;
-    readonly detail: string;
-    readonly turnId: TurnId | null;
-    readonly createdAt: string;
-    readonly requestId?: string;
-  }) =>
-    orchestrationEngine.dispatch({
-      type: "thread.activity.append",
-      commandId: serverCommandId("provider-failure-activity"),
-      threadId: input.threadId,
-      activity: {
-        id: EventId.makeUnsafe(crypto.randomUUID()),
-        tone: "error",
-        kind: input.kind,
-        summary: input.summary,
-        payload: {
-          detail: input.detail,
-          ...(input.requestId ? { requestId: input.requestId } : {}),
-        },
-        turnId: input.turnId,
-        createdAt: input.createdAt,
-      },
-      createdAt: input.createdAt,
-    });
+  const { appendProviderFailureActivity, recordTurnStartFailure } =
+    makeProviderFailureHandlers(orchestrationEngine);
 
   const setThreadSession = (input: {
     readonly threadId: ThreadId;
@@ -156,19 +119,8 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     return readModel.threads.find((entry) => entry.id === threadId);
   });
 
-  const resolveProject = Effect.fn("resolveProject")(function* (
-    projectId: import("@bigbud/contracts").ProjectId,
-  ) {
-    const readModel = yield* orchestrationEngine.getReadModel();
-    return readModel.projects.find((entry) => entry.id === projectId);
-  });
-
-  const resolveThreadsByProject = Effect.fn("resolveThreadsByProject")(function* (
-    projectId: import("@bigbud/contracts").ProjectId,
-  ) {
-    const readModel = yield* orchestrationEngine.getReadModel();
-    return readModel.threads.filter((entry) => entry.projectId === projectId);
-  });
+  const { resolveProject, resolveThreadsByProject } =
+    makeProviderCommandProjectResolvers(orchestrationEngine);
 
   const sessionOpServices: SessionOpServices = {
     orchestrationEngine,
@@ -236,12 +188,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
 
     const message = thread.messages.find((entry) => entry.id === event.payload.messageId);
     if (!message || message.role !== "user") {
-      yield* appendProviderFailureActivity({
+      const detail = `User message '${event.payload.messageId}' was not found for turn start request.`;
+      yield* recordTurnStartFailure({
         threadId: event.payload.threadId,
-        kind: "provider.turn.start.failed",
-        summary: "Provider turn start failed",
-        detail: `User message '${event.payload.messageId}' was not found for turn start request.`,
-        turnId: null,
+        context: "message-validation",
+        detail,
         createdAt: event.payload.createdAt,
       });
       return;
@@ -311,8 +262,6 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
           });
         }
 
-        // Fall back to the thread's own modelSelection when the turn-start event doesn't
-        // carry one (e.g. Pi, where the thread is already bound to a provider).
         const titleModelSelection = event.payload.modelSelection ?? thread.modelSelection;
         yield* maybeGenerateThreadTitleForFirstTurn(sessionOpServices)({
           threadId: event.payload.threadId,
@@ -357,12 +306,10 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       createdAt: event.payload.createdAt,
     }).pipe(
       Effect.catchCause((cause) =>
-        appendProviderFailureActivity({
+        recordTurnStartFailure({
           threadId: event.payload.threadId,
-          kind: "provider.turn.start.failed",
-          summary: "Provider turn start failed",
+          context: "provider-turn-start",
           detail: formatProviderServiceCauseDetail(cause),
-          turnId: null,
           createdAt: event.payload.createdAt,
         }),
       ),

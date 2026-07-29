@@ -1,12 +1,14 @@
 import { Cause, Effect, FileSystem } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
+  PROVIDER_KINDS,
   ServerHandoffJobError,
   type ServerHandoffJob,
   type ServerStartHandoffJobInput,
 } from "@bigbud/contracts";
 
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { resolveDefaultChatCwd, ServerSettingsService } from "./serverSettings.ts";
 import {
@@ -71,7 +73,37 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
       });
       const sourceMarkdown = buildThreadSnapshotMarkdown(thread);
       const chunks = chunkMarkdown(sourceMarkdown);
-      const generationModel = normalizeHandoffModelSelection(settings.textGenerationModelSelection);
+      const availableProviderKinds = PROVIDER_KINDS.filter(
+        (provider) => settings.providers[provider].enabled,
+      );
+      const resolution = resolveProviderWorkload({
+        requested: settings.textGenerationModelSelection,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds,
+        fallbackOrder: ["codex", "claudeAgent"],
+      });
+      const actualSelection = resolution.actual;
+      if (!actualSelection) {
+        return yield* new ServerHandoffJobError({
+          message: resolution.reason ?? "No supported handoff provider is available.",
+        });
+      }
+      const generationModel = yield* Effect.try({
+        try: () => normalizeHandoffModelSelection(actualSelection, availableProviderKinds),
+        catch: (cause) =>
+          new ServerHandoffJobError({
+            message:
+              cause instanceof Error
+                ? cause.message
+                : "No supported handoff provider is available.",
+            cause,
+          }),
+      });
+      yield* Effect.annotateCurrentSpan({
+        "handoff.requested-provider": resolution.requested.provider,
+        "handoff.actual-provider": generationModel.provider,
+        ...(resolution.reason ? { "handoff.fallback-reason": resolution.reason } : {}),
+      });
       const generateMarkdown = (context: string, mode: "chunk" | "final") =>
         generationModel.provider === "claudeAgent"
           ? generateClaudeHandoff(deps, {

@@ -142,6 +142,14 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+/** Durable terminal state for a provider turn-start attempt. */
+export const ThreadTurnStartFailedPayload = Schema.Struct({
+  threadId: ThreadId,
+  context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
+  detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  createdAt: IsoDateTime,
+});
+
 export const ThreadShellRunRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,

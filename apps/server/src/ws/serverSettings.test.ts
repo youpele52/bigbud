@@ -310,4 +310,73 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.equal(settings.favoriteThreadIds.length, FAVORITE_THREAD_LIMIT);
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
+
+  it.effect("preserves unrelated settings when a removed provider selection is stale", () =>
+    Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* fileSystem.writeFileString(
+        serverConfig.settingsPath,
+        JSON.stringify({
+          defaultChatCwd: "/workspace/keep-me",
+          observability: { otlpTracesUrl: "http://localhost:4318/v1/traces" },
+          textGenerationModelSelection: {
+            provider: "removedProvider",
+            model: "legacy-model",
+          },
+          providers: { codex: { binaryPath: "/custom/codex" } },
+        }),
+      );
+
+      const serverSettings = yield* ServerSettingsService;
+      yield* serverSettings.start;
+      const settings = yield* serverSettings.getSettings;
+
+      assert.equal(settings.defaultChatCwd, "/workspace/keep-me");
+      assert.equal(settings.observability.otlpTracesUrl, "http://localhost:4318/v1/traces");
+      assert.equal(settings.providers.codex.binaryPath, "/custom/codex");
+      assert.deepEqual(settings.textGenerationModelSelection, {
+        provider: "removedProvider",
+        model: "legacy-model",
+      } as unknown as typeof settings.textGenerationModelSelection);
+
+      const updated = yield* serverSettings.updateSettings({
+        defaultChatCwd: "/workspace/updated",
+      });
+      assert.equal(updated.defaultChatCwd, "/workspace/updated");
+      assert.deepEqual(updated.textGenerationModelSelection, {
+        provider: "removedProvider",
+        model: "legacy-model",
+      } as unknown as typeof updated.textGenerationModelSelection);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("rejects invalid updates while preserving a stale provider selection", () =>
+    Effect.gen(function* () {
+      const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      yield* fileSystem.writeFileString(
+        serverConfig.settingsPath,
+        JSON.stringify({
+          textGenerationModelSelection: {
+            provider: "removedProvider",
+            model: "legacy-model",
+          },
+        }),
+      );
+
+      const serverSettings = yield* ServerSettingsService;
+      yield* serverSettings.start;
+      const exit = yield* Effect.exit(
+        serverSettings.updateSettings({ defaultChatCwd: 42 } as never),
+      );
+
+      assert.equal(exit._tag, "Failure");
+      const settings = yield* serverSettings.getSettings;
+      assert.deepEqual(settings.textGenerationModelSelection, {
+        provider: "removedProvider",
+        model: "legacy-model",
+      } as never);
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
 });

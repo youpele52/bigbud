@@ -47,6 +47,13 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.enabled).toBe(true);
   });
 
+  test("defaults CLIProxyAPI to enabled without a persisted config path", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.cliProxy).toEqual({
+      enabled: true,
+      configPath: "",
+    });
+  });
+
   test("defaults Cursor to the agent CLI binary", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.binaryPath).toBe("agent");
   });
@@ -177,4 +184,39 @@ test("decodes a narrow Claude rollout settings patch", () => {
       },
     },
   });
+});
+
+test("decodes and preserves a CLIProxyAPI config path in settings patches", () => {
+  const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
+
+  expect(
+    decodePatch({
+      providers: {
+        cliProxy: {
+          configPath: "/Users/example/.cli-proxy-api/config.yaml",
+        },
+      },
+    }),
+  ).toEqual({
+    providers: {
+      cliProxy: {
+        configPath: "/Users/example/.cli-proxy-api/config.yaml",
+      },
+    },
+  });
+});
+
+test("decodes historical settings without CLIProxyAPI fields", () => {
+  const decoded = Schema.decodeUnknownSync(ServerSettings)({
+    providers: {
+      codex: {
+        enabled: false,
+        binaryPath: "codex",
+        homePath: "",
+        customModels: [],
+      },
+    },
+  });
+
+  expect(decoded.providers.cliProxy).toEqual({ enabled: true, configPath: "" });
 });

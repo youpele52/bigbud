@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  TextGenerationError,
   type CodexModelSelection,
   type ClaudeModelSelection,
   type ModelSelection,
@@ -13,6 +13,7 @@ import {
   serializeThreadWorkflowStatusMarkdown,
 } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import { normalizeTextGenerationModelSelection } from "../git/Layers/RoutingTextGeneration.ts";
+import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 
 export const HANDOFF_TIMEOUT_MS = 180_000;
 const HANDOFF_CHUNK_MAX_CHARS = 16_000;
@@ -27,20 +28,30 @@ export const ClaudeOutputEnvelope = Schema.Struct({
 
 export function normalizeHandoffModelSelection(
   modelSelection: ModelSelection,
+  availableProviderKinds?: ReadonlyArray<ModelSelection["provider"]>,
 ): CodexModelSelection | ClaudeModelSelection {
-  const normalized = normalizeTextGenerationModelSelection(modelSelection);
-  if (normalized.provider === "claudeAgent") {
+  const resolution = resolveProviderWorkload({
+    requested: modelSelection,
+    workload: "unattendedTextGeneration",
+    ...(availableProviderKinds ? { availableProviderKinds } : {}),
+    fallbackOrder: ["codex", "claudeAgent"],
+  });
+  if (!resolution.actual) {
+    throw new TextGenerationError({
+      operation: "normalizeHandoffModelSelection",
+      detail:
+        resolution.reason ??
+        `Provider '${modelSelection.provider}' has no supported handoff fallback.`,
+    });
+  }
+  const normalized = normalizeTextGenerationModelSelection(resolution.actual);
+  if (normalized.provider === "claudeAgent" || normalized.provider === "codex") {
     return normalized;
   }
-
-  if (normalized.provider === "codex") {
-    return normalized;
-  }
-
-  return {
-    provider: "codex",
-    model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
-  } satisfies CodexModelSelection;
+  throw new TextGenerationError({
+    operation: "normalizeHandoffModelSelection",
+    detail: `Provider '${normalized.provider}' cannot execute handoff generation.`,
+  });
 }
 
 export function chunkMarkdown(value: string): ReadonlyArray<string> {

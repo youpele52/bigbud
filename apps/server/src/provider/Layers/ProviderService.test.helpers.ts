@@ -22,7 +22,10 @@ import {
   ProviderUnsupportedError,
   type ProviderAdapterError,
 } from "../Errors.ts";
-import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import type {
+  ProviderAdapterCapabilities,
+  ProviderAdapterShape,
+} from "../Services/ProviderAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
 import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
@@ -31,6 +34,10 @@ import { ProviderSessionRuntimeRepositoryLive } from "../../persistence/Layers/P
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
+import {
+  getProviderCapabilities as getCoreProviderCapabilities,
+  type ProviderCapabilitiesResolver,
+} from "../providerCapabilities.ts";
 
 export const defaultServerSettingsLayer = ServerSettingsService.layerTest();
 
@@ -53,7 +60,10 @@ export type LegacyProviderRuntimeEvent = {
   readonly [key: string]: unknown;
 };
 
-export function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
+export function makeFakeCodexAdapter(
+  provider: ProviderKind = "codex",
+  capabilities: Partial<ProviderAdapterCapabilities> = {},
+) {
   const sessions = new Map<ThreadId, ProviderSession>();
   const runtimeEventPubSub = Effect.runSync(PubSub.unbounded<ProviderRuntimeEvent>());
 
@@ -174,6 +184,7 @@ export function makeFakeCodexAdapter(provider: ProviderKind = "codex") {
     provider,
     capabilities: {
       sessionModelSwitch: "in-session",
+      ...capabilities,
     },
     startSession,
     sendTurn,
@@ -238,26 +249,43 @@ export const hasMetricSnapshot = (
       Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
   );
 
-export function makeProviderServiceLayer() {
+export function makeProviderServiceLayer(options?: {
+  readonly getProviderCapabilities?: ProviderCapabilitiesResolver;
+  readonly includeCliProxyAdapter?: boolean;
+  readonly isProviderComposed?: (provider: ProviderKind) => boolean;
+  readonly settings?: Parameters<typeof ServerSettingsService.layerTest>[0];
+}) {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter("claudeAgent");
+  const cliProxy = makeFakeCodexAdapter("cliProxy", { sessionRecovery: "unsupported" });
   const copilot = makeFakeCodexAdapter("copilot");
   const opencode = makeFakeCodexAdapter("opencode");
   const pi = makeFakeCodexAdapter("pi");
+  const includeCliProxyAdapter = options?.includeCliProxyAdapter !== false;
   const registry: typeof ProviderAdapterRegistry.Service = {
     getByProvider: (provider) =>
       provider === "codex"
         ? Effect.succeed(codex.adapter)
         : provider === "claudeAgent"
           ? Effect.succeed(claude.adapter)
-          : provider === "copilot"
-            ? Effect.succeed(copilot.adapter)
-            : provider === "opencode"
-              ? Effect.succeed(opencode.adapter)
-              : provider === "pi"
-                ? Effect.succeed(pi.adapter)
-                : Effect.fail(new ProviderUnsupportedError({ provider })),
-    listProviders: () => Effect.succeed(["codex", "claudeAgent", "copilot", "opencode", "pi"]),
+          : provider === "cliProxy" && includeCliProxyAdapter
+            ? Effect.succeed(cliProxy.adapter)
+            : provider === "copilot"
+              ? Effect.succeed(copilot.adapter)
+              : provider === "opencode"
+                ? Effect.succeed(opencode.adapter)
+                : provider === "pi"
+                  ? Effect.succeed(pi.adapter)
+                  : Effect.fail(new ProviderUnsupportedError({ provider })),
+    listProviders: () =>
+      Effect.succeed([
+        "codex",
+        "claudeAgent",
+        ...(includeCliProxyAdapter ? (["cliProxy"] as const) : []),
+        "copilot",
+        "opencode",
+        "pi",
+      ]),
   };
 
   const providerAdapterLayer = Layer.succeed(ProviderAdapterRegistry, registry);
@@ -265,13 +293,31 @@ export function makeProviderServiceLayer() {
     Layer.provide(SqlitePersistenceMemory),
   );
   const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
+  const settingsLayer =
+    options?.settings === undefined
+      ? defaultServerSettingsLayer
+      : ServerSettingsService.layerTest(options.settings);
+  const getProviderCapabilities =
+    options?.getProviderCapabilities ??
+    ((provider: ProviderKind) =>
+      provider === "cliProxy"
+        ? {
+            supportsRemoteProviderRuntime: false,
+            supportsLocalRuntimeRemoteWorkspace: true,
+            toolInjectionMode: "mcp" as const,
+            needsBuiltinsDisabled: true,
+          }
+        : getCoreProviderCapabilities(provider));
 
   const layer = it.layer(
     Layer.mergeAll(
-      makeProviderServiceLive().pipe(
+      makeProviderServiceLive({
+        getProviderCapabilities,
+        ...(options?.isProviderComposed ? { isProviderComposed: options.isProviderComposed } : {}),
+      }).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
-        Layer.provide(defaultServerSettingsLayer),
+        Layer.provide(settingsLayer),
         Layer.provideMerge(AnalyticsService.layerTest),
       ),
       directoryLayer,
@@ -284,6 +330,7 @@ export function makeProviderServiceLayer() {
   return {
     codex,
     claude,
+    cliProxy,
     copilot,
     opencode,
     pi,

@@ -399,6 +399,14 @@ export const ServerProviderUpdatedPayload = Schema.Struct({
 });
 export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.Type;
 
+export class ServerCliProxyActivationError extends Schema.TaggedErrorClass<ServerCliProxyActivationError>()(
+  "ServerCliProxyActivationError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
 export {
   ServerLifecycleReadyPayload,
   ServerLifecycleStreamEvent,

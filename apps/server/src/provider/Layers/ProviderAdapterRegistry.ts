@@ -23,9 +23,11 @@ import { DevinAdapter } from "../Services/Devin/Adapter.ts";
 import { KilocodeAdapter } from "../Services/Kilocode/Adapter.ts";
 import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../Services/Pi/Adapter.ts";
+import type { AdapterRegistration } from "../ProviderRegistration.ts";
 
 export interface ProviderAdapterRegistryLiveOptions {
   readonly adapters?: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>;
+  readonly optionalRegistrations?: ReadonlyArray<AdapterRegistration>;
 }
 
 const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(function* (
@@ -37,6 +39,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
       : [
           yield* CodexAdapter,
           yield* ClaudeAdapter,
+          ...(options?.optionalRegistrations?.map((registration) => registration.service) ?? []),
           yield* CopilotAdapter,
           yield* CursorAdapter,
           yield* DevinAdapter,
@@ -63,7 +66,8 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
   } satisfies ProviderAdapterRegistryShape;
 });
 
-export const ProviderAdapterRegistryLive = Layer.effect(
-  ProviderAdapterRegistry,
-  makeProviderAdapterRegistry(),
-);
+export function makeProviderAdapterRegistryLive(options?: ProviderAdapterRegistryLiveOptions) {
+  return Layer.effect(ProviderAdapterRegistry, makeProviderAdapterRegistry(options));
+}
+
+export const ProviderAdapterRegistryLive = makeProviderAdapterRegistryLive();

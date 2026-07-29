@@ -34,6 +34,7 @@ import {
   projectThreadInteractionModeSet,
   projectThreadMetaUpdated,
   projectThreadRuntimeModeSet,
+  projectThreadTurnStartFailed,
   projectThreadUnarchived,
 } from "./projectorThreadLifecycle.ts";
 import {
@@ -99,6 +100,9 @@ export function projectEvent(
 
     case "thread.interaction-mode-set":
       return projectThreadInteractionModeSet(nextBase, event);
+
+    case "thread.turn-start-failed":
+      return projectThreadTurnStartFailed(nextBase, event);
 
     case "thread.message-sent":
       return Effect.gen(function* () {

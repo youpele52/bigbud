@@ -270,6 +270,21 @@ export function makeThreadsProjector(
         return;
       }
 
+      case "thread.turn-start-failed": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          latestTurnId: null,
+          updatedAt: event.payload.createdAt,
+        });
+        return;
+      }
+
       case "thread.turn-diff-completed": {
         const existingRow = yield* projectionThreadRepository.getById({
           threadId: event.payload.threadId,

@@ -36,7 +36,8 @@
     "effect-acp": "workspace:*",
     "node-pty": "^1.1.0",
     "open": "^10.1.0",
-    "playwright": "^1.58.2"
+    "playwright": "^1.58.2",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@bigbud/contracts": "workspace:*",

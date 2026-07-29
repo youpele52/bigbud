@@ -6,6 +6,7 @@ import {
   ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerCliProxyActivationError,
   ServerExportThreadContextError,
   ServerMobileRemoteError,
   ServerReadDocumentUrlError,
@@ -33,6 +34,21 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverRefreshProviders,
         context.providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverActivateCliProxy,
+        context.activateCliProxy().pipe(
+          Effect.map((providers) => ({ providers })),
+          Effect.mapError(
+            (cause) =>
+              new ServerCliProxyActivationError({
+                message: cause instanceof Error ? cause.message : "Failed to activate CLIProxyAPI.",
+                cause,
+              }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverGetSettings]: (_input: unknown) =>

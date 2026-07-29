@@ -52,7 +52,7 @@ import { makeClaudeControlOperations } from "./Adapter.controls.ts";
 
 export type { ClaudeAdapterLiveOptions };
 
-const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
+export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   options?: ClaudeAdapterLiveOptions,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -94,6 +94,8 @@ const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     fileSystem,
     serverConfig,
     serverSettingsService,
+    ...(options?.harness ? { harness: options.harness } : {}),
+    ...(options?.resolveHarness ? { resolveHarness: options.resolveHarness } : {}),
     nativeEventLogger,
     createQuery,
     sessions,

@@ -15,6 +15,7 @@ import type {
   CanonicalRequestType,
   ProviderApprovalDecision,
   ProviderSession,
+  ProviderSessionStartInput,
   ProviderUserInputAnswers,
   RuntimeContentStreamKind,
   ThreadId,
@@ -24,7 +25,7 @@ import type {
 } from "@bigbud/contracts";
 import type { Deferred, Effect, Fiber, Queue } from "effect";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
-import type { ProviderAdapterProcessError } from "../../Errors.ts";
+import type { ProviderAdapterError, ProviderAdapterProcessError } from "../../Errors.ts";
 import type { McpServerStatusEntry } from "@bigbud/contracts";
 import type { ClaudeInterruptReceipt, ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 import type { ClaudeTaskState } from "./Adapter.tasks.ts";
@@ -147,10 +148,23 @@ export interface ClaudeSessionContext {
 }
 
 export interface ClaudeAdapterLiveOptions {
+  readonly harness?: ClaudeHarnessConfig;
+  readonly resolveHarness?: (
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<ClaudeHarnessConfig, ProviderAdapterError>;
   readonly createQuery?: (input: {
     readonly prompt: AsyncIterable<SDKUserMessage>;
     readonly options: ClaudeQueryOptions;
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+}
+
+export interface ClaudeHarnessConfig {
+  readonly binaryPath: string;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
+  /** Harness-local rollout controls; native Claude settings must not leak into adapters. */
+  readonly boundedHookProgress?: boolean;
+  readonly forwardSubagentText?: boolean;
 }

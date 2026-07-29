@@ -31,6 +31,10 @@ export {
 
 export const ProviderKind = Schema.Literals(PROVIDER_KINDS);
 export type ProviderKind = typeof ProviderKind.Type;
+
+/** Current registry-backed provider names used for routing. */
+export const RoutableProviderKind = ProviderKind;
+export type RoutableProviderKind = ProviderKind;
 export const ProviderApprovalPolicy = Schema.Literals(PROVIDER_APPROVAL_POLICIES);
 export type ProviderApprovalPolicy = typeof ProviderApprovalPolicy.Type;
 export const ProviderSandboxMode = Schema.Literals(PROVIDER_SANDBOX_MODES);
@@ -49,6 +53,13 @@ export const ClaudeModelSelection = Schema.Struct({
   options: Schema.optionalKey(ClaudeModelOptions),
 });
 export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
+
+export const CliProxyModelSelection = Schema.Struct({
+  provider: Schema.Literal("cliProxy"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(Schema.Record(Schema.String, Schema.Never)),
+});
+export type CliProxyModelSelection = typeof CliProxyModelSelection.Type;
 
 export const CopilotModelSelection = Schema.Struct({
   provider: Schema.Literal("copilot"),
@@ -101,6 +112,7 @@ export type DevinModelSelection = typeof DevinModelSelection.Type;
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
+  CliProxyModelSelection,
   CopilotModelSelection,
   KilocodeModelSelection,
   OpencodeModelSelection,
@@ -109,6 +121,23 @@ export const ModelSelection = Schema.Union([
   DevinModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
+
+/** Current registry-backed selection accepted by routing APIs. */
+export const RoutableModelSelection = ModelSelection;
+export type RoutableModelSelection = ModelSelection;
+
+/**
+ * Lossless representation used when reading persisted state and legacy events.
+ * Unlike ModelSelection, the provider name is open-ended so removing a
+ * provider from the current registry cannot make old state undecodable.
+ */
+export const PersistedModelSelection = Schema.Struct({
+  provider: TrimmedNonEmptyString,
+  model: TrimmedNonEmptyString,
+  options: Schema.optional(Schema.Unknown),
+  subProviderID: Schema.optional(TrimmedNonEmptyString),
+});
+export type PersistedModelSelection = typeof PersistedModelSelection.Type;
 
 export const RuntimeMode = Schema.Literals(RUNTIME_MODES);
 export type RuntimeMode = typeof RuntimeMode.Type;

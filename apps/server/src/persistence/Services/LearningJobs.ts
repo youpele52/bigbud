@@ -5,7 +5,13 @@ import type { Effect } from "effect";
 
 import type { PersistenceDecodeError, PersistenceSqlError } from "../Errors.ts";
 
-export const LearningJobState = Schema.Literals(["queued", "reviewing", "completed", "failed"]);
+export const LearningJobState = Schema.Literals([
+  "queued",
+  "reviewing",
+  "completed",
+  "failed",
+  "requires-reselection",
+]);
 export type LearningJobState = typeof LearningJobState.Type;
 
 export const LearningJob = Schema.Struct({

@@ -344,6 +344,7 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<ServerConfig>;
     refreshProviders: () => Promise<ServerProviderUpdatedPayload>;
+    activateCliProxy: () => Promise<ServerProviderUpdatedPayload>;
     verifyExecutionTarget: (
       input: ServerVerifyExecutionTargetInput,
     ) => Promise<ServerVerifyExecutionTargetResult>;

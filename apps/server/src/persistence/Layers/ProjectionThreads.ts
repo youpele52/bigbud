@@ -1,6 +1,6 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { ModelSelection, ParentThreadReference } from "@bigbud/contracts";
+import { ParentThreadReference, PersistedModelSelection } from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
@@ -15,7 +15,8 @@ import {
 
 const ProjectionThreadDbRow = ProjectionThread.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    // Keep historical provider selections readable after a provider is removed.
+    modelSelection: Schema.fromJsonString(PersistedModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
   }),
 );
@@ -32,7 +33,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     providerRuntimeExecutionTargetId: row.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: row.workspaceExecutionTargetId,
     executionTargetId: row.executionTargetId,
-    modelSelection: row.modelSelection,
+    modelSelection: row.modelSelection as ProjectionThread["modelSelection"],
     runtimeMode: row.runtimeMode,
     interactionMode: row.interactionMode,
     branch: row.branch,

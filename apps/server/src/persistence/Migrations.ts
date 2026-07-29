@@ -59,6 +59,7 @@ import Migration0043 from "./Migrations/043_ProjectionThreadActivityUsageIndex.t
 import Migration0044 from "./Migrations/044_ProjectionUsageContributions.ts";
 import Migration0045 from "./Migrations/045_RepairProjectionUsageContributions.ts";
 import Migration0046 from "./Migrations/046_ProjectionThreadTasks.ts";
+import Migration0047 from "./Migrations/047_ProviderSelectionQuarantine.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -117,6 +118,7 @@ export const migrationEntries = [
   [44, "ProjectionUsageContributions", Migration0044],
   [45, "RepairProjectionUsageContributions", Migration0045],
   [46, "ProjectionThreadTasks", Migration0046],
+  [47, "ProviderSelectionQuarantine", Migration0047],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

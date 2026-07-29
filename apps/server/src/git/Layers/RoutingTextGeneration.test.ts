@@ -70,6 +70,18 @@ describe("normalizeGitTextGenerationModelSelection", () => {
     });
   });
 
+  it("preserves CLIProxy selections instead of silently replacing them with Codex", () => {
+    expect(
+      normalizeGitTextGenerationModelSelection({
+        provider: "cliProxy",
+        model: "gpt-5-codex",
+      }),
+    ).toEqual({
+      provider: "cliProxy",
+      model: "gpt-5-codex",
+    });
+  });
+
   it("keeps Cursor git text generation on the Cursor provider", () => {
     expect(
       normalizeGitTextGenerationModelSelection({

@@ -209,6 +209,11 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             }
 
             const providers = yield* registry.getProviders;
+            const refreshed = yield* registry.refresh("cliProxy");
+            assert.strictEqual(
+              refreshed.find((provider) => provider.provider === "cliProxy"),
+              undefined,
+            );
             assert.strictEqual(
               providers.find((provider) => provider.provider === "codex")?.status,
               "ready",

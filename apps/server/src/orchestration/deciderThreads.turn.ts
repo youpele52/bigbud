@@ -286,6 +286,29 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
       };
     }
 
+    case "thread.turn.start.failed": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.turn-start-failed",
+        payload: {
+          threadId: command.threadId,
+          context: command.context,
+          detail: command.detail,
+          createdAt: command.createdAt,
+        },
+      };
+    }
+
     case "thread.message.assistant.delta": {
       const thread = yield* requireThread({
         readModel,

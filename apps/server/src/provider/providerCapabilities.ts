@@ -1,15 +1,15 @@
 import type { ProviderKind } from "@bigbud/contracts";
 
-export type ProviderToolInjectionMode = "builtin-override" | "mcp" | "custom-tools";
+import type {
+  OptionalProviderRegistration,
+  ProviderCapabilities,
+  ProviderToolInjectionMode,
+} from "./ProviderRegistration.ts";
 
-export interface ProviderCapabilities {
-  readonly supportsRemoteProviderRuntime: boolean;
-  readonly supportsLocalRuntimeRemoteWorkspace: boolean;
-  readonly toolInjectionMode: ProviderToolInjectionMode;
-  readonly needsBuiltinsDisabled: boolean;
-}
+export type { ProviderCapabilities, ProviderToolInjectionMode };
+export type ProviderCapabilitiesResolver = (provider: ProviderKind) => ProviderCapabilities;
 
-const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
+const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilities>> = {
   claudeAgent: {
     supportsRemoteProviderRuntime: false,
     supportsLocalRuntimeRemoteWorkspace: true,
@@ -60,6 +60,32 @@ const PROVIDER_CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
   },
 };
 
+function missingCapabilities(provider: ProviderKind): never {
+  throw new Error(`Provider capabilities are not registered for '${provider}'.`);
+}
+
 export function getProviderCapabilities(provider: ProviderKind): ProviderCapabilities {
-  return PROVIDER_CAPABILITIES[provider];
+  return CORE_PROVIDER_CAPABILITIES[provider] ?? missingCapabilities(provider);
+}
+
+export function makeProviderCapabilitiesResolver(
+  registrations: ReadonlyArray<Pick<OptionalProviderRegistration, "provider" | "capabilities">>,
+): ProviderCapabilitiesResolver {
+  const optionalCapabilities = new Map(
+    registrations.map((registration) => [registration.provider, registration.capabilities]),
+  );
+  return (provider) =>
+    CORE_PROVIDER_CAPABILITIES[provider] ??
+    optionalCapabilities.get(provider) ??
+    missingCapabilities(provider);
+}
+
+export function isProviderRegistered(
+  provider: ProviderKind,
+  registrations: ReadonlyArray<Pick<OptionalProviderRegistration, "provider">>,
+): boolean {
+  return (
+    CORE_PROVIDER_CAPABILITIES[provider] !== undefined ||
+    registrations.some((registration) => registration.provider === provider)
+  );
 }

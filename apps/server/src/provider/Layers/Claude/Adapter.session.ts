@@ -24,7 +24,11 @@ import { Cause, Effect, FileSystem, Queue, Random, Ref, Stream } from "effect";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
+import {
+  ProviderAdapterProcessError,
+  ProviderAdapterValidationError,
+  type ProviderAdapterError,
+} from "../../Errors.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
@@ -34,6 +38,7 @@ import type {
   PendingApproval,
   PendingUserInput,
   PromptQueueItem,
+  ClaudeHarnessConfig,
 } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
@@ -78,6 +83,10 @@ export interface SessionStartDeps {
       Error
     >;
   };
+  readonly harness?: ClaudeHarnessConfig;
+  readonly resolveHarness?: (
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<NonNullable<SessionStartDeps["harness"]>, ProviderAdapterError>;
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
   readonly createQuery: (input: {
     readonly prompt: AsyncIterable<SDKUserMessage>;
@@ -119,6 +128,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       });
     }
 
+    const harness = deps.resolveHarness ? yield* deps.resolveHarness(input) : deps.harness;
     const startedAt = yield* nowIso;
     const resumeStateData = readClaudeResumeState(input.resumeCursor);
     const existingResumeSessionId = resumeStateData?.resume;
@@ -182,7 +192,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           }),
       ),
     );
-    const claudeBinaryPath = claudeSettings.binaryPath;
+    const claudeBinaryPath = harness?.binaryPath ?? claudeSettings.binaryPath;
     const executionContext = resolveProviderExecutionContext({
       providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
       workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -245,10 +255,15 @@ export const makeStartSession = (deps: SessionStartDeps) => {
         newSessionId,
         canUseTool,
         onElicitation,
-        boundedHookProgress: claudeSettings.rollout.boundedHookProgress,
-        forwardSubagentText: claudeSettings.rollout.forwardedSubagentText,
+        boundedHookProgress:
+          harness?.boundedHookProgress ??
+          (harness ? false : claudeSettings.rollout.boundedHookProgress),
+        forwardSubagentText:
+          harness?.forwardSubagentText ??
+          (harness ? false : claudeSettings.rollout.forwardedSubagentText),
+        ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
+        ...(harness?.environment ? { environment: harness.environment } : {}),
       });
-
     const queryRuntime = yield* Effect.try({
       try: () =>
         createQuery({

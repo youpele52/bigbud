@@ -55,6 +55,9 @@ export function usageContributionFromActivity(input: {
 
   const payload = accounting as UsageAccountingPayload;
   const provider = typeof payload.provider === "string" ? payload.provider.trim() : "";
+  if (!supportsUsageAccounting(provider)) {
+    return undefined;
+  }
   const model = typeof payload.model === "string" ? payload.model.trim() : "";
   const interactionMode = providerInteractionMode(payload.interactionMode);
   const scope = typeof payload.scope === "string" ? payload.scope.trim() : "";

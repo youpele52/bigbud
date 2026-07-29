@@ -1,4 +1,5 @@
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
+import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -59,6 +60,54 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.status).toBe("running");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
     expect(thread?.session?.activeTurnId).toEqual(asTurnId("turn-1"));
+  });
+
+  it("emits a durable terminal event when provider turn start fails", async () => {
+    const harness = await createHarness();
+    harness.sendTurn.mockReturnValue(
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "codex",
+          method: "sendTurn",
+          detail: "Provider session rejected the turn.",
+        }),
+      ) as never,
+    );
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-failure"),
+          role: "user",
+          text: "hello reactor",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return readModel.threads[0]?.session?.status === "error";
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    expect(readModel.threads[0]?.session).toMatchObject({
+      status: "error",
+      activeTurnId: null,
+      lastError: "Provider session rejected the turn.",
+    });
+    expect(
+      readModel.threads[0]?.activities.some(
+        (activity) => activity.kind === "provider.turn.start.failed",
+      ),
+    ).toBe(true);
   });
 
   it("adds attached file metadata with full source path to providers", async () => {

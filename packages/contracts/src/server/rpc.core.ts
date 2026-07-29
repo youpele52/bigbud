@@ -53,6 +53,7 @@ import {
   TerminalWriteInput,
 } from "../workspace/terminal";
 import {
+  ServerCliProxyActivationError,
   ServerConfig,
   ServerReadDocumentUrlError,
   ServerReadDocumentUrlInput,
@@ -108,6 +109,12 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, {
   payload: Schema.Struct({}),
   success: ServerProviderUpdatedPayload,
+});
+
+export const WsServerActivateCliProxyRpc = Rpc.make(WS_METHODS.serverActivateCliProxy, {
+  payload: Schema.Struct({}),
+  success: ServerProviderUpdatedPayload,
+  error: ServerCliProxyActivationError,
 });
 
 export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerifyExecutionTarget, {

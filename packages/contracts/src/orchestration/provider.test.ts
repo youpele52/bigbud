@@ -3,9 +3,49 @@ import { Schema } from "effect";
 
 import { LOCAL_EXECUTION_TARGET_ID } from "../core/baseSchemas";
 import { ProviderSendTurnInput, ProviderSessionStartInput } from "./provider";
+import { ModelSelection, PersistedModelSelection } from "./orchestration.provider";
 
 const decodeProviderSessionStartInput = Schema.decodeUnknownSync(ProviderSessionStartInput);
 const decodeProviderSendTurnInput = Schema.decodeUnknownSync(ProviderSendTurnInput);
+const decodeModelSelection = (value: unknown) =>
+  Schema.decodeUnknownSync(ModelSelection)(value, { onExcessProperty: "error" });
+const encodeModelSelection = Schema.encodeUnknownSync(ModelSelection);
+
+describe("CliProxyModelSelection", () => {
+  it("decodes and encodes the minimal persisted selection", () => {
+    const selection = { provider: "cliProxy", model: "gpt-5.6" } as const;
+
+    expect(decodeModelSelection(selection)).toEqual(selection);
+    expect(encodeModelSelection(selection)).toEqual(selection);
+  });
+
+  it("rejects blank models and unsupported options", () => {
+    expect(() => decodeModelSelection({ provider: "cliProxy", model: " " })).toThrow();
+    expect(() =>
+      decodeModelSelection({
+        provider: "cliProxy",
+        model: "gpt-5.6",
+        options: { fastMode: true },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("PersistedModelSelection", () => {
+  it("decodes a provider removed from the current routable registry", () => {
+    expect(
+      Schema.decodeUnknownSync(PersistedModelSelection)({
+        provider: "removedProvider",
+        model: "legacy-model",
+        options: { legacy: true },
+      }),
+    ).toEqual({
+      provider: "removedProvider",
+      model: "legacy-model",
+      options: { legacy: true },
+    });
+  });
+});
 
 describe("ProviderSessionStartInput", () => {
   it("accepts codex-compatible payloads", () => {

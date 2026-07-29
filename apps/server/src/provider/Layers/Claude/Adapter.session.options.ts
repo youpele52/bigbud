@@ -23,6 +23,8 @@ interface BuildClaudeQueryOptionsInput {
   readonly onElicitation?: OnElicitation;
   readonly boundedHookProgress: boolean;
   readonly forwardSubagentText: boolean;
+  readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
 }
 
 export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
@@ -59,7 +61,7 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
       ...(input.runtimeCwd ? { cwd: input.runtimeCwd } : {}),
       ...(apiModelId ? { model: apiModelId } : {}),
       pathToClaudeCodeExecutable: input.claudeBinaryPath,
-      settingSources: [...CLAUDE_SETTING_SOURCES],
+      settingSources: [...(input.settingSources ?? CLAUDE_SETTING_SOURCES)],
       ...(effectiveEffort ? { effort: effectiveEffort } : {}),
       ...(permissionMode ? { permissionMode } : {}),
       ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
@@ -85,7 +87,7 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
       ...(input.forwardSubagentText ? { forwardSubagentText: true } : {}),
       canUseTool: input.canUseTool,
       ...(input.onElicitation ? { onElicitation: input.onElicitation } : {}),
-      env: process.env,
+      env: input.environment ?? process.env,
       ...(input.runtimeCwd && !input.hasRemoteWorkspaceBridge
         ? { additionalDirectories: [input.runtimeCwd] }
         : {}),

@@ -1,7 +1,8 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Schema, Struct } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
+import { PersistedModelSelection } from "@bigbud/contracts";
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import {
   LearningJob,
@@ -9,13 +10,22 @@ import {
   type LearningJobRepositoryShape,
 } from "../Services/LearningJobs.ts";
 
-const LearningJobDbRow = LearningJob.mapFields(
-  Struct.assign({ modelSelection: Schema.fromJsonString(LearningJob.fields.modelSelection) }),
-);
+const LearningJobDbRow = Schema.Struct({
+  ...LearningJob.fields,
+  // Learning rows are historical work items. Keep their provider and
+  // selection available for quarantine instead of failing the whole queue.
+  provider: Schema.String,
+  modelSelection: Schema.fromJsonString(PersistedModelSelection),
+});
 
 const LatestMemoryUserMessageCount = Schema.Struct({
   memoryUserMessageCount: Schema.NullOr(Schema.Number),
 });
+
+type LearningJobDbRow = typeof LearningJobDbRow.Type;
+function normalizeLearningJobRow(row: LearningJobDbRow): typeof LearningJob.Type {
+  return row as unknown as typeof LearningJob.Type;
+}
 
 const makeLearningJobRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -77,7 +87,10 @@ const makeLearningJobRepository = Effect.gen(function* () {
   });
 
   const listQueued: LearningJobRepositoryShape["listQueued"] = () =>
-    listQueuedRows(undefined).pipe(Effect.mapError(mapError("LearningJobRepository.listQueued")));
+    listQueuedRows(undefined).pipe(
+      Effect.map((rows) => rows.map(normalizeLearningJobRow)),
+      Effect.mapError(mapError("LearningJobRepository.listQueued")),
+    );
 
   const getLatestMemoryUserMessageCount: LearningJobRepositoryShape["getLatestMemoryUserMessageCount"] =
     (input) =>

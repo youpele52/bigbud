@@ -163,6 +163,12 @@ export const ClaudeSettings = Schema.Struct({
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
+export const CliProxySettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  configPath: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
+});
+export type CliProxySettings = typeof CliProxySettings.Type;
+
 export const CopilotSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("copilot"),
@@ -238,6 +244,7 @@ export const ServerSettings = Schema.Struct({
   providers: Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    cliProxy: CliProxySettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -335,6 +342,10 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("claudeAgent")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(ClaudeModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("cliProxy")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
   }),
   Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("copilot")),
@@ -456,6 +467,12 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
+      cliProxy: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          configPath: Schema.optionalKey(Schema.String),
+        }),
+      ),
       copilot: Schema.optionalKey(CopilotSettingsPatch),
       kilocode: Schema.optionalKey(KilocodeSettingsPatch),
       opencode: Schema.optionalKey(OpencodeSettingsPatch),
