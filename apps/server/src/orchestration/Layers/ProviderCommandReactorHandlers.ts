@@ -5,7 +5,7 @@ import {
   ThreadId,
 } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
-import { Cache, Cause, Duration, Effect, FileSystem, Option, Path, Scope } from "effect";
+import { Cache, Cause, Duration, Effect, FileSystem, Path, Scope } from "effect";
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
@@ -45,28 +45,20 @@ import {
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import { resolveMemoryDocumentPath } from "../../learning/Layers/MemoryStore.ts";
-
-type ProviderIntentEvent = Extract<
-  import("@bigbud/contracts").OrchestrationEvent,
-  {
-    type:
-      | "thread.runtime-mode-set"
-      | "thread.turn-start-requested"
-      | "thread.message-sent"
-      | "thread.turn-interrupt-requested"
-      | "thread.approval-response-requested"
-      | "thread.user-input-response-requested"
-      | "thread.session-stop-requested"
-      | "thread.deletion-requested"
-      | "project.deletion-requested";
-  }
->;
-export const turnStartKeyForEvent = (event: ProviderIntentEvent): string =>
-  event.commandId !== null ? `command:${event.commandId}` : `event:${event.eventId}`;
-
-export type ProviderCommandHandlers =
-  typeof makeProviderCommandHandlers extends Effect.Effect<infer A, any, any> ? A : never;
+import {
+  createEffectiveCapabilityCatalog,
+  setEffectiveCapabilityCatalog,
+} from "../../capabilities/CapabilityCatalog.dynamic.ts";
+import {
+  restoreProviderCapabilityContextState,
+  saveProviderCapabilityContextState,
+} from "./ProviderCapabilityContextPersistence.ts";
+import { readProviderMemoryContext } from "./ProviderTurnMemoryContext.ts";
+import {
+  markTurnStartHandled,
+  turnStartKeyForEvent,
+  type ProviderIntentEvent,
+} from "./ProviderCommandReactorHandlers.events.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -87,14 +79,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     lookup: () => Effect.succeed(true),
   });
 
-  const hasHandledTurnStartRecently = (key: string) =>
-    Cache.getOption(handledTurnStartKeys, key).pipe(
-      Effect.flatMap((cached) =>
-        Cache.set(handledTurnStartKeys, key, true).pipe(Effect.as(Option.isSome(cached))),
-      ),
-    );
-
   const threadModelSelections = new Map<string, ModelSelection>();
+  const capabilityContextStates = new Map<
+    string,
+    import("./ProviderCommandReactorSessionOps.capabilityContext.ts").ProviderCapabilityContextState
+  >();
 
   const { appendProviderFailureActivity, recordTurnStartFailure } =
     makeProviderFailureHandlers(orchestrationEngine);
@@ -131,6 +120,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     serverSettingsService,
     serverConfig,
     threadModelSelections,
+    capabilityContextStates,
     setThreadSession,
     resolveThread,
   };
@@ -152,32 +142,13 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         Effect.map(resolveDefaultChatCwd),
         Effect.catch(() => Effect.succeed(resolveDefaultChatCwd(DEFAULT_SERVER_SETTINGS))),
       ),
-    readMemoryContext: (projectId) =>
-      Effect.gen(function* () {
-        const scopes = ["user", "global", "project"] as const;
-        const documents = yield* Effect.forEach(scopes, (scope) => {
-          const documentPath = resolveMemoryDocumentPath({
-            path,
-            stateDir: serverConfig.stateDir,
-            scope,
-            projectId: scope === "project" ? projectId : null,
-          });
-          return documentPath
-            ? fileSystem.readFileString(documentPath).pipe(Effect.orElseSucceed(() => ""))
-            : Effect.succeed("");
-        });
-        return documents
-          .filter((document) => document.trim().length > 0)
-          .join("\n\n")
-          .slice(0, 12_000);
-      }),
   });
 
   const processTurnStartRequested = Effect.fn("processTurnStartRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.turn-start-requested" }>,
   ) {
     const key = turnStartKeyForEvent(event);
-    if (yield* hasHandledTurnStartRecently(key)) {
+    if (yield* markTurnStartHandled(handledTurnStartKeys, key)) {
       return;
     }
 
@@ -209,6 +180,17 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       messageText: message.text,
       thread,
       ...(workspaceCwd ? { workspaceRoot: workspaceCwd } : {}),
+    });
+    const effectiveCapabilityCatalog = createEffectiveCapabilityCatalog({
+      discovery: yield* discoveryRegistry.getCatalog,
+      thread,
+    });
+    setEffectiveCapabilityCatalog(thread.id, effectiveCapabilityCatalog);
+    const memoryContext = yield* readProviderMemoryContext({
+      fileSystem,
+      path,
+      stateDir: serverConfig.stateDir,
+      projectId: thread.projectId,
     });
     const providerMessageText = buildProviderMessageText({
       text: expandedProviderInput,
@@ -291,10 +273,20 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       );
     }
 
+    yield* restoreProviderCapabilityContextState({
+      states: capabilityContextStates,
+      fileSystem,
+      path,
+      stateDir: serverConfig.stateDir,
+      threadId: event.payload.threadId,
+    });
+
     yield* sendTurnForThread(sessionOpServices)({
       threadId: event.payload.threadId,
       messageText: message.text,
       providerInputText,
+      capabilityCatalog: effectiveCapabilityCatalog,
+      memoryContext,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }
@@ -314,6 +306,13 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         }),
       ),
     );
+    yield* saveProviderCapabilityContextState({
+      states: capabilityContextStates,
+      fileSystem,
+      path,
+      stateDir: serverConfig.stateDir,
+      threadId: event.payload.threadId,
+    });
   });
 
   const {

@@ -31,6 +31,18 @@ import {
 } from "./threadOrchestrationBridge.shared.ts";
 import { COPILOT_COMPUTER_USE_PARAMETERS } from "./orchestrationComputerUseTool.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
+import {
+  READ_CAPABILITY_GUIDE_PARAMETERS,
+  READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
+  SEARCH_CAPABILITIES_PARAMETERS,
+  SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
+} from "./capabilityCatalogTool.shared.ts";
+import {
+  readCapabilityGuide,
+  searchCapabilities,
+  type CapabilityGuideSection,
+} from "../capabilities/CapabilityCatalog.operations.ts";
+import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
 
 const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
@@ -63,6 +75,18 @@ function requireDispatcher(): ThreadOrchestrationToolDispatcherShape {
 
 export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<CodexDynamicToolSpec> {
   return [
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "search_capabilities",
+      description: SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
+      inputSchema: SEARCH_CAPABILITIES_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "read_capability_guide",
+      description: READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
+      inputSchema: READ_CAPABILITY_GUIDE_PARAMETERS,
+    },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "browser",
@@ -187,8 +211,49 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     }
 
     const dispatcher = requireDispatcher();
+    const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
 
     switch (tool) {
+      case "search_capabilities": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const query = typeof argRecord?.query === "string" ? argRecord.query : "";
+        return {
+          contentItems: [
+            inputText(JSON.stringify(searchCapabilities(query, capabilityCatalog), null, 2)),
+          ],
+          success: true,
+        };
+      }
+      case "read_capability_guide": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const capabilityId =
+          typeof argRecord?.capabilityId === "string" ? argRecord.capabilityId.trim() : "";
+        if (capabilityId.length === 0) {
+          throw new Error("Capability ID is required.");
+        }
+        const section =
+          typeof argRecord?.section === "string"
+            ? (argRecord.section as CapabilityGuideSection)
+            : undefined;
+        return {
+          contentItems: [
+            inputText(
+              JSON.stringify(
+                readCapabilityGuide({
+                  capabilityId,
+                  ...(capabilityCatalog ? { catalog: capabilityCatalog } : {}),
+                  ...(section ? { section } : {}),
+                }),
+                null,
+                2,
+              ),
+            ),
+          ],
+          success: true,
+        };
+      }
       case "rename_thread": {
         const argRecord =
           args && typeof args === "object" ? (args as Record<string, unknown>) : null;

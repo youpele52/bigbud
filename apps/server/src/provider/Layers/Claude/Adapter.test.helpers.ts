@@ -13,6 +13,7 @@ import { makeClaudeAdapterLive, type ClaudeAdapterLiveOptions } from "./Adapter.
 import type {
   ClaudeInitializationResult,
   ClaudeInterruptReceipt,
+  ClaudeContextUsage,
   ClaudeMcpPermissionModeOverrideResult,
   ClaudeMcpServerStatuses,
   ClaudeMcpSetServersResult,
@@ -33,6 +34,20 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   private initializationResponse: ClaudeInitializationResult | undefined;
 
   public interruptResult: ClaudeInterruptReceipt = undefined;
+  public contextUsageResult: ClaudeContextUsage = {
+    categories: [],
+    totalTokens: 0,
+    maxTokens: 200_000,
+    rawMaxTokens: 200_000,
+    percentage: 0,
+    gridRows: [],
+    model: "fake-claude",
+    memoryFiles: [],
+    mcpTools: [],
+    agents: [],
+    isAutoCompactEnabled: true,
+    apiUsage: null,
+  };
   public mcpServerStatusesResult: ClaudeMcpServerStatuses = [
     { name: "bigbud_orchestration", status: "connected" },
     { name: "bigbud_remote_workspace", status: "connected" },
@@ -132,6 +147,11 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
     this.interruptCalls.push(undefined);
     this.throwControlFailure("interrupt");
     return this.interruptResult;
+  };
+
+  readonly getContextUsage: ClaudeQueryRuntime["getContextUsage"] = async () => {
+    this.throwControlFailure("getContextUsage");
+    return this.contextUsageResult;
   };
 
   readonly initializationResult: ClaudeQueryRuntime["initializationResult"] = async () => {

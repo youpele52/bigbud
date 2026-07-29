@@ -7,6 +7,9 @@ describe("provider capabilities", () => {
     expect(getProviderCapabilities("codex")).toMatchObject({
       supportsRemoteProviderRuntime: true,
       supportsLocalRuntimeRemoteWorkspace: true,
+      compactionBehavior: "signaled",
+      tokenUsageSemantics: "current-context",
+      sessionHistorySemantics: "bounded",
     });
     expect(() => getProviderCapabilities("cliProxy")).toThrow(
       "Provider capabilities are not registered for 'cliProxy'.",

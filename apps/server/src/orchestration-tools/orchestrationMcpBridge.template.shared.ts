@@ -24,11 +24,27 @@ import {
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
+import {
+  READ_CAPABILITY_GUIDE_PARAMETERS,
+  READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
+  SEARCH_CAPABILITIES_PARAMETERS,
+  SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
+} from "./capabilityCatalogTool.shared.ts";
 
 export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  "  {",
+  '    name: "search_capabilities",',
+  `    description: ${JSON.stringify(SEARCH_CAPABILITIES_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(SEARCH_CAPABILITIES_PARAMETERS)},`,
+  "  },",
+  "  {",
+  '    name: "read_capability_guide",',
+  `    description: ${JSON.stringify(READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(READ_CAPABILITY_GUIDE_PARAMETERS)},`,
+  "  },",
   "  {",
   '    name: "browser",',
   `    description: ${JSON.stringify(BROWSER_TOOL_DESCRIPTION)},`,

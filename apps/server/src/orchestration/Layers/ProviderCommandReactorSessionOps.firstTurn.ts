@@ -16,7 +16,7 @@ import {
   getThreadTitleVersion,
   shouldAllowAutoTitleReplace,
 } from "../../orchestration-tools/ThreadTitleLock.ts";
-import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.ts";
+import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 export const maybeGenerateAndRenameWorktreeBranchForFirstTurn = (services: SessionOpServices) =>
   Effect.fn("maybeGenerateAndRenameWorktreeBranchForFirstTurn")(function* (input: {

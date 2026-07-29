@@ -5,6 +5,7 @@ import { resolveApiModelId, resolveEffort } from "@bigbud/shared/model";
 import { getClaudeModelCapabilities } from "./Provider.ts";
 import { getEffectiveClaudeCodeEffort, CLAUDE_SETTING_SOURCES } from "./Adapter.utils.ts";
 import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
+import { BIGBUD_CAPABILITY_CATALOG_PROTOCOL } from "../../../capabilities/CapabilityCatalog.serialize.ts";
 
 interface BuildClaudeQueryOptionsInput {
   readonly input: ProviderSessionStartInput;
@@ -81,6 +82,12 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
         ...input.orchestrationConfig.allowedTools,
       ],
       includePartialMessages: true,
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: BIGBUD_CAPABILITY_CATALOG_PROTOCOL,
+        excludeDynamicSections: true,
+      },
       ...(input.boundedHookProgress
         ? { includeHookEvents: true, agentProgressSummaries: true }
         : {}),

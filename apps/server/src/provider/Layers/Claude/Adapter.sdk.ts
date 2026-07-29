@@ -5,6 +5,7 @@ export const CLAUDE_AGENT_SDK_VERSION = "0.3.219";
 export type ClaudeQueryControlSurface = Pick<
   Query,
   | "close"
+  | "getContextUsage"
   | "initializationResult"
   | "interrupt"
   | "mcpServerStatus"
@@ -25,6 +26,7 @@ export type ClaudeInterruptReceipt = Awaited<ReturnType<ClaudeQueryRuntime["inte
 export type ClaudeInitializationResult = Awaited<
   ReturnType<ClaudeQueryRuntime["initializationResult"]>
 >;
+export type ClaudeContextUsage = Awaited<ReturnType<ClaudeQueryRuntime["getContextUsage"]>>;
 export type ClaudeMcpServerStatuses = Awaited<ReturnType<ClaudeQueryRuntime["mcpServerStatus"]>>;
 export type ClaudeMcpPermissionModeOverrideResult = Awaited<
   ReturnType<ClaudeQueryRuntime["setMcpPermissionModeOverride"]>

@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   renderOpencodeOrchestrationRuntimeSource,
+  renderOpencodeReadCapabilityGuideToolSource,
   renderOpencodeRenameThreadToolSource,
+  renderOpencodeSearchCapabilitiesToolSource,
 } from "./opencodeThreadOrchestrationTools.ts";
 
 describe("opencodeThreadOrchestrationTools", () => {
   it("renders JavaScript-safe OpenCode thread tool sources", () => {
     const toolSource = renderOpencodeRenameThreadToolSource();
+    const searchToolSource = renderOpencodeSearchCapabilitiesToolSource();
+    const readToolSource = renderOpencodeReadCapabilityGuideToolSource();
     const runtimeSource = renderOpencodeOrchestrationRuntimeSource({
       host: "127.0.0.1",
       port: 3773,
@@ -21,5 +25,9 @@ describe("opencodeThreadOrchestrationTools", () => {
     expect(runtimeSource).not.toContain("input: {");
     expect(runtimeSource).toContain("export async function renameThread(input) {");
     expect(runtimeSource).toContain("export async function getThreadStatus(input) {");
+    expect(runtimeSource).toContain("export async function searchCapabilities(input) {");
+    expect(runtimeSource).toContain("export async function readCapabilityGuide(input) {");
+    expect(searchToolSource).toContain("runtime.searchCapabilities");
+    expect(readToolSource).toContain("runtime.readCapabilityGuide");
   });
 });

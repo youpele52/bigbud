@@ -6,12 +6,18 @@ import type { ProviderAdapterShape } from "./Services/ProviderAdapter.ts";
 import type { ServerProviderShape } from "./Services/ServerProvider.ts";
 
 export type ProviderToolInjectionMode = "builtin-override" | "mcp" | "custom-tools";
+export type ProviderCompactionBehavior = "signaled" | "silent" | "none" | "unknown";
+export type ProviderTokenUsageSemantics = "current-context" | "cumulative-only" | "unavailable";
+export type ProviderSessionHistorySemantics = "persistent" | "bounded" | "turn-local" | "unknown";
 
 export interface ProviderCapabilities {
   readonly supportsRemoteProviderRuntime: boolean;
   readonly supportsLocalRuntimeRemoteWorkspace: boolean;
   readonly toolInjectionMode: ProviderToolInjectionMode;
   readonly needsBuiltinsDisabled: boolean;
+  readonly compactionBehavior?: ProviderCompactionBehavior;
+  readonly tokenUsageSemantics?: ProviderTokenUsageSemantics;
+  readonly sessionHistorySemantics?: ProviderSessionHistorySemantics;
 }
 
 export interface ProviderRegistration {

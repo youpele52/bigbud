@@ -30,6 +30,8 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain("workspacePath: String(workspacePath).trim()");
     expect(source).toContain("watchForCompletion: watchForCompletion === true");
     expect(source).toContain('name: "get_thread_status"');
+    expect(source).toContain('name: "search_capabilities"');
+    expect(source).toContain('name: "read_capability_guide"');
     expect(source).toContain('name: "list_pinned_threads"');
     expect(source).toContain("name: 'pin_thread'");
     expect(source).toContain("name: 'unpin_thread'");
