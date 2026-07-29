@@ -161,6 +161,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitRemoveWorktree](input)),
       createBranch: (input) =>
         transport.request((client) => client[WS_METHODS.gitCreateBranch](input)),
+      renameBranch: (input) =>
+        transport.request((client) => client[WS_METHODS.gitRenameBranch](input)),
+      deleteBranch: (input) =>
+        transport.request((client) => client[WS_METHODS.gitDeleteBranch](input)),
       checkout: (input) => transport.request((client) => client[WS_METHODS.gitCheckout](input)),
       init: (input) => transport.request((client) => client[WS_METHODS.gitInit](input)),
       fetch: (input) => transport.request((client) => client[WS_METHODS.gitFetch](input)),
@@ -175,6 +179,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
       refreshProviders: () =>
         transport.request((client) => client[WS_METHODS.serverRefreshProviders]({})),
+      activateCliProxy: () =>
+        transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
       unlockSshKey: (input) =>
@@ -186,6 +192,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
       updateSettings: (patch) =>
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),
+      setThreadPinned: (input) =>
+        transport.request((client) => client[WS_METHODS.serverSetThreadPinned](input)),
       readDocumentUrl: (input) =>
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>

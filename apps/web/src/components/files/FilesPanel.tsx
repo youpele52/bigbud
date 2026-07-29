@@ -343,6 +343,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
       <FilesPanelContextMenu
         contextMenuState={contextMenuState}
         workspaceRoot={activeWorkspaceRoot ?? undefined}
+        threadId={workspaceRootOverride === null ? activeThreadId : null}
         onClose={closeContextMenu}
       />
     </>

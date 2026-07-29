@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge } from "@bigbud/contracts";
+import type { DesktopCertificateChallengeEvent } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
+import {
+  CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
+  RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
+} from "./window/certificateChallenge.channels";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -50,6 +55,16 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
+  onCertificateChallenge: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (typeof value !== "object" || value === null) return;
+      listener(value as DesktopCertificateChallengeEvent);
+    };
+    ipcRenderer.on(CERTIFICATE_CHALLENGE_EVENT_CHANNEL, wrappedListener);
+    return () => ipcRenderer.removeListener(CERTIFICATE_CHALLENGE_EVENT_CHANNEL, wrappedListener);
+  },
+  resolveCertificateChallenge: (resolution) =>
+    ipcRenderer.invoke(RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL, resolution),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
   setWindowMaterial: (windowMaterial) =>
     ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial),

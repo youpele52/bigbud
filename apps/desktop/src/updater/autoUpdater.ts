@@ -302,7 +302,7 @@ export function configureAutoUpdater(deps: AutoUpdaterDeps): void {
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
-  // Keep beta branding, but force all installs onto the stable update track.
+  // Release channels affect identity only; all installs use the stable update track.
   autoUpdater.channel = DESKTOP_UPDATE_CHANNEL;
   autoUpdater.allowPrerelease = DESKTOP_UPDATE_ALLOW_PRERELEASE;
   autoUpdater.allowDowngrade = false;

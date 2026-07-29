@@ -48,9 +48,16 @@ export function makeHandleEvent(
     const mapped = yield* mapEventFn(session, event);
     if (mapped.length > 0) {
       if (session.runtimeMode === "full-access") {
+        const requiresExplicitApproval =
+          event.type === "permission.asked" &&
+          (event.properties as { permission?: string }).permission === "external_directory";
         const visibleEvents = [] as ProviderRuntimeEvent[];
         for (const mappedEvent of mapped) {
-          if (mappedEvent.type === "request.opened" && mappedEvent.requestId) {
+          if (
+            mappedEvent.type === "request.opened" &&
+            mappedEvent.requestId &&
+            !requiresExplicitApproval
+          ) {
             scheduleAutoApprovePendingPermission(session, mappedEvent.requestId);
             continue;
           }

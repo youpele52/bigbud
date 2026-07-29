@@ -35,11 +35,16 @@ export interface ExtractedTerminalContexts {
 export interface DisplayedUserMessageState {
   visibleText: string;
   copyText: string;
+  delegatedThreadProvenance: ParsedDelegatedThreadProvenance | null;
   contextCount: number;
   previewTitle: string | null;
   contexts: ParsedTerminalContextEntry[];
   annotations: ParsedUserAnnotationEntry[];
   readDocument: ParsedReadDocumentEntry | null;
+}
+
+export interface ParsedDelegatedThreadProvenance {
+  body: string;
 }
 
 export interface ParsedTerminalContextEntry {
@@ -67,6 +72,8 @@ const READ_DOCUMENT_SOURCE_URL_PATTERN = /^Source URL:\s*(.+)$/m;
 const READ_DOCUMENT_RESOLVED_URL_PATTERN = /^Resolved URL:\s*(.+)$/m;
 const READ_DOCUMENT_TITLE_PATTERN = /^Title:\s*(.+)$/m;
 const READ_DOCUMENT_TEXT_PATTERN = /<document_contents>\n([\s\S]*?)\n<\/document_contents>/;
+const DELEGATED_THREAD_PROVENANCE_OPEN_TAG = "<delegated_thread_provenance>\n";
+const DELEGATED_THREAD_PROVENANCE_CLOSE_TAG = "\n</delegated_thread_provenance>";
 
 export function normalizeTerminalContextText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
@@ -267,18 +274,47 @@ export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMe
   const extractedAnnotations = extractTrailingAnnotations(prompt);
   const extractedContexts = extractTrailingTerminalContexts(extractedAnnotations.promptText);
   const extractedReadDocument = extractTrailingReadDocument(extractedContexts.promptText);
-  const visibleText = extractedReadDocument.promptText.replace(
+  const extractedProvenance = extractLeadingDelegatedThreadProvenance(
+    extractedReadDocument.promptText,
+  );
+  const visibleText = extractedProvenance.promptText.replace(
     TRAILING_ATTACHED_FILES_BLOCK_PATTERN,
     "",
   );
   return {
     visibleText,
     copyText: prompt,
+    delegatedThreadProvenance: extractedProvenance.provenance,
     contextCount: extractedContexts.contextCount,
     previewTitle: extractedContexts.previewTitle,
     contexts: extractedContexts.contexts,
     annotations: extractedAnnotations.annotations,
     readDocument: extractedReadDocument.document,
+  };
+}
+
+export function extractLeadingDelegatedThreadProvenance(prompt: string): {
+  promptText: string;
+  provenance: ParsedDelegatedThreadProvenance | null;
+} {
+  if (!prompt.startsWith(DELEGATED_THREAD_PROVENANCE_OPEN_TAG)) {
+    return { promptText: prompt, provenance: null };
+  }
+
+  const closeTagIndex = prompt.indexOf(
+    DELEGATED_THREAD_PROVENANCE_CLOSE_TAG,
+    DELEGATED_THREAD_PROVENANCE_OPEN_TAG.length,
+  );
+  if (closeTagIndex === -1) {
+    return { promptText: prompt, provenance: null };
+  }
+
+  const body = prompt.slice(DELEGATED_THREAD_PROVENANCE_OPEN_TAG.length, closeTagIndex);
+  const blockEnd = closeTagIndex + DELEGATED_THREAD_PROVENANCE_CLOSE_TAG.length;
+  const separatorLength = prompt.startsWith("\n\n", blockEnd) ? 2 : 0;
+  return {
+    promptText: prompt.slice(blockEnd + separatorLength),
+    provenance: { body },
   };
 }
 

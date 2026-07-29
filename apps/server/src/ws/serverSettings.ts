@@ -11,13 +11,14 @@
  * @module ServerSettings
  */
 import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
-  type ModelSelection,
+  FAVORITE_THREAD_LIMIT,
+  PersistedModelSelection,
   PROVIDER_KINDS,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  type ThreadId,
 } from "@bigbud/contracts";
 import {
   Cache,
@@ -28,20 +29,24 @@ import {
   FileSystem,
   Layer,
   Path,
-  Equal,
   PubSub,
   Ref,
   Schema,
-  SchemaIssue,
   Scope,
   ServiceMap,
   Stream,
   Cause,
+  SchemaIssue,
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerConfig } from "../startup/config";
 import { type DeepPartial, deepMerge } from "@bigbud/shared/Struct";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
+import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
+import {
+  decodeSettingsFieldWise,
+  stripDefaultServerSettings,
+} from "./serverSettings.persistence.ts";
 
 export interface ServerSettingsShape {
   /** Start the settings runtime and attach file watching. */
@@ -57,6 +62,12 @@ export interface ServerSettingsShape {
   readonly updateSettings: (
     patch: ServerSettingsPatch,
   ) => Effect.Effect<ServerSettings, ServerSettingsError>;
+
+  /** Atomically pin or unpin a thread and persist the resulting settings. */
+  readonly setThreadPinned: (input: {
+    readonly threadId: ThreadId;
+    readonly pinned: boolean;
+  }) => Effect.Effect<ServerSettings, ServerSettingsError>;
 
   /** Stream of settings change events. */
   readonly streamChanges: Stream.Stream<ServerSettings>;
@@ -83,6 +94,25 @@ export class ServerSettingsService extends ServiceMap.Service<
               Effect.map((currentSettings) => deepMerge(currentSettings, patch)),
               Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
             ),
+          setThreadPinned: ({ threadId, pinned }) =>
+            Effect.gen(function* () {
+              const currentSettings = yield* Ref.get(currentSettingsRef);
+              const withoutThread = currentSettings.favoriteThreadIds.filter(
+                (favoriteId) => favoriteId !== threadId,
+              );
+              if (pinned && withoutThread.length >= FAVORITE_THREAD_LIMIT) {
+                return yield* new ServerSettingsError({
+                  settingsPath: "<memory>",
+                  detail: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+                });
+              }
+              const nextSettings = {
+                ...currentSettings,
+                favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
+              };
+              yield* Ref.set(currentSettingsRef, nextSettings);
+              return nextSettings;
+            }),
           streamChanges: Stream.empty,
         } satisfies ServerSettingsShape;
       }),
@@ -91,30 +121,27 @@ export class ServerSettingsService extends ServiceMap.Service<
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
-/**
- * Ensure the `textGenerationModelSelection` points to an enabled provider.
- * If the selected provider is disabled, fall back to the first enabled
- * provider with its default model.  This is applied at read-time so the
- * persisted preference is preserved for when a provider is re-enabled.
- */
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   const selection = settings.textGenerationModelSelection;
-  if (settings.providers[selection.provider].enabled) {
+  if (!PROVIDER_KINDS.includes(selection.provider as (typeof PROVIDER_KINDS)[number])) {
     return settings;
   }
-
-  const fallback = PROVIDER_KINDS.find((p) => settings.providers[p].enabled);
-  if (!fallback) {
-    // No providers enabled — return as-is; callers will report the error.
+  const providerSettings =
+    settings.providers[selection.provider as keyof ServerSettings["providers"]];
+  if (providerSettings?.enabled) return settings;
+  const resolution = resolveProviderWorkload({
+    requested: selection,
+    workload: "unattendedTextGeneration",
+    availableProviderKinds: PROVIDER_KINDS.filter(
+      (provider) => settings.providers[provider].enabled,
+    ),
+  });
+  if (!resolution.actual || resolution.actual.provider === selection.provider) {
     return settings;
   }
-
   return {
     ...settings,
-    textGenerationModelSelection: {
-      provider: fallback,
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[fallback],
-    } as ModelSelection,
+    textGenerationModelSelection: resolution.actual,
   };
 }
 
@@ -131,43 +158,6 @@ function expandTildePath(input: string): string {
 export function resolveDefaultChatCwd(settings: ServerSettings): string {
   const candidate = settings.defaultChatCwd.trim();
   return expandTildePath(candidate.length > 0 ? candidate : DEFAULT_SERVER_SETTINGS.defaultChatCwd);
-}
-
-// Values under these keys are compared as a whole — never stripped field-by-field.
-const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set(["textGenerationModelSelection"]);
-
-function stripDefaultServerSettings(current: unknown, defaults: unknown): unknown | undefined {
-  if (Array.isArray(current) || Array.isArray(defaults)) {
-    return Equal.equals(current, defaults) ? undefined : current;
-  }
-
-  if (
-    current !== null &&
-    defaults !== null &&
-    typeof current === "object" &&
-    typeof defaults === "object"
-  ) {
-    const currentRecord = current as Record<string, unknown>;
-    const defaultsRecord = defaults as Record<string, unknown>;
-    const next: Record<string, unknown> = {};
-
-    for (const key of Object.keys(currentRecord)) {
-      if (ATOMIC_SETTINGS_KEYS.has(key)) {
-        if (!Equal.equals(currentRecord[key], defaultsRecord[key])) {
-          next[key] = currentRecord[key];
-        }
-      } else {
-        const stripped = stripDefaultServerSettings(currentRecord[key], defaultsRecord[key]);
-        if (stripped !== undefined) {
-          next[key] = stripped;
-        }
-      }
-    }
-
-    return Object.keys(next).length > 0 ? next : undefined;
-  }
-
-  return Object.is(current, defaults) ? undefined : current;
 }
 
 const makeServerSettings = Effect.gen(function* () {
@@ -214,14 +204,22 @@ const makeServerSettings = Effect.gen(function* () {
 
     const raw = yield* readRawConfig;
     const decoded = Schema.decodeUnknownExit(ServerSettingsJson)(raw);
-    if (decoded._tag === "Failure") {
-      yield* Effect.logWarning("failed to parse settings.json, using defaults", {
+    if (decoded._tag === "Success") return decoded.value;
+
+    const tolerant = decodeSettingsFieldWise(raw);
+    if (tolerant !== null) {
+      yield* Effect.logWarning("partially recovered settings.json", {
         path: settingsPath,
         issues: Cause.pretty(decoded.cause),
       });
-      return DEFAULT_SERVER_SETTINGS;
+      return tolerant;
     }
-    return decoded.value;
+
+    yield* Effect.logWarning("failed to parse settings.json, using defaults", {
+      path: settingsPath,
+      issues: Cause.pretty(decoded.cause),
+    });
+    return DEFAULT_SERVER_SETTINGS;
   });
 
   const settingsCache = yield* Cache.make<typeof cacheKey, ServerSettings, ServerSettingsError>({
@@ -250,6 +248,14 @@ const makeServerSettings = Effect.gen(function* () {
       ),
     );
   };
+
+  const persistSettings = (settings: ServerSettings) =>
+    Effect.gen(function* () {
+      yield* writeSettingsAtomically(settings);
+      yield* Cache.set(settingsCache, cacheKey, settings);
+      yield* emitChange(settings);
+      return resolveTextGenerationProvider(settings);
+    });
 
   const revalidateAndEmit = writeSemaphore.withPermits(1)(
     Effect.gen(function* () {
@@ -327,7 +333,19 @@ const makeServerSettings = Effect.gen(function* () {
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
           const current = yield* getSettingsFromCache;
-          const next = yield* Schema.decodeEffect(ServerSettings)(deepMerge(current, patch)).pipe(
+          const merged = deepMerge(current, patch);
+          const currentSelection = current.textGenerationModelSelection as unknown;
+          const preservePersistedSelection =
+            patch.textGenerationModelSelection === undefined &&
+            Schema.is(PersistedModelSelection)(currentSelection) &&
+            !PROVIDER_KINDS.includes(currentSelection.provider as (typeof PROVIDER_KINDS)[number]);
+          const candidate = preservePersistedSelection
+            ? {
+                ...merged,
+                textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
+              }
+            : merged;
+          const decoded = yield* Schema.decodeEffect(ServerSettings)(candidate).pipe(
             Effect.mapError(
               (cause) =>
                 new ServerSettingsError({
@@ -337,10 +355,30 @@ const makeServerSettings = Effect.gen(function* () {
                 }),
             ),
           );
-          yield* writeSettingsAtomically(next);
-          yield* Cache.set(settingsCache, cacheKey, next);
-          yield* emitChange(next);
-          return resolveTextGenerationProvider(next);
+          const next = preservePersistedSelection
+            ? ({ ...decoded, textGenerationModelSelection: currentSelection } as ServerSettings)
+            : decoded;
+          return yield* persistSettings(next);
+        }),
+      ),
+    setThreadPinned: ({ threadId, pinned }) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          const withoutThread = current.favoriteThreadIds.filter(
+            (favoriteId) => favoriteId !== threadId,
+          );
+          if (pinned && withoutThread.length >= FAVORITE_THREAD_LIMIT) {
+            return yield* new ServerSettingsError({
+              settingsPath,
+              detail: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+            });
+          }
+          const next = {
+            ...current,
+            favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
+          };
+          return yield* persistSettings(next);
         }),
       ),
     get streamChanges() {

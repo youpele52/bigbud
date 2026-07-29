@@ -15,6 +15,7 @@ import {
   type ThreadTokenUsageAccounting,
   type ThreadTokenUsageSnapshot,
 } from "@bigbud/contracts";
+import { toBoundedRedactedText } from "@bigbud/shared/providerRuntime";
 
 import { runtimeEventToActivitiesFromHelpers } from "./ProviderRuntimeIngestion.helpers.activities.ts";
 
@@ -57,7 +58,7 @@ export function sameId(left: string | null | undefined, right: string | null | u
 }
 
 export function truncateDetail(value: string, limit = 180): string {
-  return value.length > limit ? `${value.slice(0, limit - 3)}...` : value;
+  return toBoundedRedactedText(value, { maxChars: limit });
 }
 
 export function normalizeProposedPlanMarkdown(

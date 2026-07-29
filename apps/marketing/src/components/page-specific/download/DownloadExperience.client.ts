@@ -1,5 +1,11 @@
 import { attachCopyCommandButtons } from "../../../lib/copyText";
-import { fetchLatestPrerelease, fetchLatestRelease, RELEASES_URL } from "../../../lib/releases";
+import {
+  fetchLatestPrerelease,
+  fetchLatestRelease,
+  releaseChannelLabel,
+  RELEASES_URL,
+  resolveReleaseChannel,
+} from "../../../lib/releases";
 
 function findAsset(
   release: { assets: Array<{ name: string; browser_download_url: string }> },
@@ -23,15 +29,16 @@ function populateCards(
   });
 }
 
-function populateBetaLinks(
+function populatePrereleaseLinks(
   links: NodeListOf<HTMLAnchorElement>,
   prerelease: {
     tag_name: string;
     assets: Array<{ name: string; browser_download_url: string }>;
   } | null,
 ) {
+  const channel = prerelease ? resolveReleaseChannel(prerelease.tag_name) : null;
   links.forEach((link) => {
-    if (!prerelease) {
+    if (!prerelease || !channel) {
       link.style.display = "none";
       return;
     }
@@ -42,6 +49,8 @@ function populateBetaLinks(
     const match = findAsset(prerelease, suffix);
     if (match) {
       link.href = match.browser_download_url;
+      const platform = link.dataset.platform;
+      link.textContent = `Download ${releaseChannelLabel(channel).toLowerCase()}${platform ? ` for ${platform}` : ""}`;
       link.style.display = "";
     } else {
       link.style.display = "none";
@@ -52,7 +61,7 @@ function populateBetaLinks(
 export async function initDownloadExperience(): Promise<void> {
   const versionLabel = document.getElementById("version-label");
   const cards = document.querySelectorAll<HTMLAnchorElement>(".download-card");
-  const betaLinks = document.querySelectorAll<HTMLAnchorElement>(".download-beta-link");
+  const prereleaseLinks = document.querySelectorAll<HTMLAnchorElement>(".download-prerelease-link");
   attachCopyCommandButtons();
 
   try {
@@ -66,7 +75,7 @@ export async function initDownloadExperience(): Promise<void> {
     }
 
     populateCards(cards, release);
-    populateBetaLinks(betaLinks, prerelease);
+    populatePrereleaseLinks(prereleaseLinks, prerelease);
   } catch {
     if (versionLabel) {
       versionLabel.textContent = "Could not load release info.";
@@ -76,7 +85,7 @@ export async function initDownloadExperience(): Promise<void> {
       card.href = RELEASES_URL;
     });
 
-    betaLinks.forEach((link) => {
+    prereleaseLinks.forEach((link) => {
       link.style.display = "none";
     });
   }

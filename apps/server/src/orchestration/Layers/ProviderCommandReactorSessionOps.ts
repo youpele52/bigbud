@@ -1,34 +1,18 @@
-/**
- * Session-level operations for ProviderCommandReactor.
- *
- * Contains ensureSessionForThread, sendTurnForThread, and first-turn
- * enrichment helpers (branch rename, thread title generation).
- * All functions accept service objects as explicit parameters so they
- * can be extracted from the Effect.gen factory in Handlers.
- */
 import {
-  type ChatAttachment,
   DEFAULT_SERVER_SETTINGS,
   type ModelSelection,
-  type OrchestrationSession,
   ProviderKind,
   type ProviderSession,
-  type OrchestrationThread,
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
-import type { GitCoreShape } from "../../git/Services/GitCore.ts";
-import type { GitStatusBroadcasterShape } from "../../git/Services/GitStatusBroadcaster.ts";
-import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
-import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
-import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
+import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
 import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
-import { resolveDefaultChatCwd, type ServerSettingsShape } from "../../ws/serverSettings.ts";
-import { type ServerConfigShape } from "../../startup/config.ts";
-import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
+import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
+import { OrchestrationCommandInvariantError } from "../Errors.ts";
 import {
   buildResumedTurnInput,
   mapProviderSessionStatusToOrchestrationStatus,
@@ -44,24 +28,16 @@ import {
   resolveAndExportThreadContextPath,
 } from "./ProviderCommandReactorSessionOps.threadContext.ts";
 import { shouldRebuildProviderContextFromTranscript } from "./ProviderCommandReactorSessionOps.context.ts";
-
-/** Service bundle accepted by session-op helpers. */
-export type SessionOpServices = {
-  readonly orchestrationEngine: OrchestrationEngineShape;
-  readonly providerService: ProviderServiceShape;
-  readonly git: GitCoreShape;
-  readonly gitStatusBroadcaster: GitStatusBroadcasterShape;
-  readonly textGeneration: TextGenerationShape;
-  readonly serverSettingsService: ServerSettingsShape;
-  readonly serverConfig: ServerConfigShape;
-  readonly threadModelSelections: Map<string, ModelSelection>;
-  readonly setThreadSession: (input: {
-    readonly threadId: ThreadId;
-    readonly session: OrchestrationSession;
-    readonly createdAt: string;
-  }) => Effect.Effect<void, OrchestrationDispatchError>;
-  readonly resolveThread: (threadId: ThreadId) => Effect.Effect<OrchestrationThread | undefined>;
-};
+import { prependCapabilityContextToProviderInput } from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
+import {
+  rolloverProviderSessionAtHighWater,
+  withOneShotContextLimitRecovery,
+} from "./ProviderCommandReactorSessionOps.recovery.ts";
+import type {
+  SendTurnForThreadInput,
+  SessionOpServices,
+} from "./ProviderCommandReactorSessionOps.types.ts";
+export type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
@@ -72,8 +48,13 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       readonly restartFreshIfInactive?: boolean;
     },
   ) {
-    const { orchestrationEngine, providerService, threadModelSelections, setThreadSession } =
-      services;
+    const {
+      orchestrationEngine,
+      providerService,
+      threadModelSelections,
+      capabilityContextStates,
+      setThreadSession,
+    } = services;
 
     const readModel = yield* orchestrationEngine.getReadModel();
     const thread = readModel.threads.find((entry) => entry.id === threadId);
@@ -167,6 +148,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         requestedModelSelection.provider !== currentProvider;
       if (!activeSession && options?.restartFreshIfInactive) {
         const restartedSession = yield* startProviderSession({ fresh: true });
+        capabilityContextStates.delete(threadId);
         yield* bindSessionToThread(restartedSession);
         return restartedSession.threadId;
       }
@@ -214,6 +196,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       const restartedSession = yield* startProviderSession(
         resumeCursor !== undefined ? { resumeCursor } : undefined,
       );
+      capabilityContextStates.delete(threadId);
       yield* Effect.logInfo("provider command reactor restarted provider session", {
         threadId,
         previousSessionId: existingSessionThreadId,
@@ -228,21 +211,13 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     const startedSession = yield* startProviderSession(
       options?.restartFreshIfInactive ? { fresh: true } : undefined,
     );
+    capabilityContextStates.delete(threadId);
     yield* bindSessionToThread(startedSession);
     return startedSession.threadId;
   });
 
-export const sendTurnForThread = (services: SessionOpServices) =>
-  Effect.fn("sendTurnForThread")(function* (input: {
-    readonly threadId: ThreadId;
-    readonly messageText: string;
-    readonly providerInputText?: string;
-    readonly attachments?: ReadonlyArray<ChatAttachment>;
-    readonly modelSelection?: ModelSelection;
-    readonly interactionMode?: "default" | "plan";
-    readonly bootstrapSourceThreadId?: ThreadId;
-    readonly createdAt: string;
-  }) {
+const sendTurnAttempt = (services: SessionOpServices) =>
+  Effect.fn("sendTurnAttempt")(function* (input: SendTurnForThreadInput) {
     const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
     if (!thread) {
@@ -267,11 +242,18 @@ export const sendTurnForThread = (services: SessionOpServices) =>
       }
     }
     const normalizedAttachments = input.attachments ?? [];
-    const activeSession = yield* providerService
+    let activeSession = yield* providerService
       .listSessions()
       .pipe(
         Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
       );
+    activeSession = yield* rolloverProviderSessionAtHighWater({
+      providerService,
+      states: services.capabilityContextStates,
+      threadId: input.threadId,
+      activeSession,
+      activities: thread.activities,
+    });
     const shouldBootstrapFromTranscript = shouldRebuildProviderContextFromTranscript({
       thread,
       bootstrapThread,
@@ -300,18 +282,35 @@ export const sendTurnForThread = (services: SessionOpServices) =>
           latestProviderInputText: input.providerInputText ?? input.messageText,
         })
       : (input.providerInputText ?? input.messageText);
-    const serverSettings = yield* services.serverSettingsService.getSettings.pipe(
-      Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
-    );
-    const providerInputWithCurrentThread = baseInput
-      ? prependThreadContextToProviderInput({
+    const capabilityContextEnabled =
+      process.env.BIGBUD_CAPABILITY_CONTEXT_ENABLED?.trim().toLowerCase() !== "false";
+    const providerInputWithCurrentThread = capabilityContextEnabled
+      ? prependCapabilityContextToProviderInput({
           providerInputText: baseInput,
+          catalog: input.capabilityCatalog ?? BIGBUD_CAPABILITY_CATALOG,
+          thread,
+          ...(activeSession?.provider ? { provider: activeSession.provider } : {}),
+          ...(activeSession?.model ? { model: activeSession.model } : {}),
+          memoryContext: input.memoryContext ?? "",
+          contextRole: bootstrapThread
+            ? "branch"
+            : thread.parentThread
+              ? "delegated-child"
+              : "main",
+          states: services.capabilityContextStates,
+        })
+      : prependThreadContextToProviderInput({
+          providerInputText:
+            input.memoryContext && input.memoryContext.length > 0
+              ? `Relevant persistent bigbud memory:\n${input.memoryContext}\n\n${baseInput}`
+              : baseInput,
           threadId: thread.id,
           threadTitle: thread.title,
-          computerUseEnabled: serverSettings.computerUseEnabled,
+          computerUseEnabled: (yield* services.serverSettingsService.getSettings.pipe(
+            Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+          )).computerUseEnabled,
           serverMode: services.serverConfig.mode,
-        })
-      : baseInput;
+        });
     const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
       providerInputText: providerInputWithCurrentThread ?? "",
       currentThreadId: thread.id,
@@ -377,6 +376,16 @@ export const sendTurnForThread = (services: SessionOpServices) =>
         createdAt: input.createdAt,
       });
     }
+  });
+
+export const sendTurnForThread = (services: SessionOpServices) =>
+  Effect.fn("sendTurnForThread")(function* (input: SendTurnForThreadInput) {
+    yield* withOneShotContextLimitRecovery({
+      threadId: input.threadId,
+      providerService: services.providerService,
+      states: services.capabilityContextStates,
+      attempt: () => sendTurnAttempt(services)(input),
+    });
   });
 
 export { maybeGenerateAndRenameWorktreeBranchForFirstTurn, maybeGenerateThreadTitleForFirstTurn };

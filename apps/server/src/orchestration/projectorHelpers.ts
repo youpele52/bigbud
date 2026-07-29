@@ -15,6 +15,7 @@ import { OrchestrationThread } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 
 import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
+import { normalizeRemovedProviderSelectionsForValidation } from "../provider/providerSelectionCompatibility.ts";
 import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
@@ -47,10 +48,15 @@ export function decodeForEvent<A>(
   eventType: OrchestrationEvent["type"],
   field: string,
 ): Effect.Effect<A, OrchestrationProjectorDecodeError> {
-  return Effect.try({
-    try: () => Schema.decodeUnknownSync(schema as any)(value),
-    catch: (error) => toProjectorDecodeError(`${eventType}:${field}`)(error as Schema.SchemaError),
-  });
+  const decoded = Schema.decodeUnknownExit(schema as never)(value);
+  if (decoded._tag === "Success") return Effect.succeed(decoded.value as A);
+  const compatible = Schema.decodeUnknownExit(schema as never)(
+    normalizeRemovedProviderSelectionsForValidation(value),
+  );
+  if (compatible._tag === "Success") return Effect.succeed(value as A);
+  return Effect.fail(
+    toProjectorDecodeError(`${eventType}:${field}`)(decoded.cause as unknown as Schema.SchemaError),
+  );
 }
 
 // ─── Project event cases ─────────────────────────────────────────────────────

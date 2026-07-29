@@ -6,6 +6,7 @@ import {
   ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerCliProxyActivationError,
   ServerExportThreadContextError,
   ServerMobileRemoteError,
   ServerReadDocumentUrlError,
@@ -35,6 +36,21 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         context.providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverActivateCliProxy,
+        context.activateCliProxy().pipe(
+          Effect.map((providers) => ({ providers })),
+          Effect.mapError(
+            (cause) =>
+              new ServerCliProxyActivationError({
+                message: cause instanceof Error ? cause.message : "Failed to activate CLIProxyAPI.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverGetSettings]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverGetSettings,
@@ -51,6 +67,17 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverUpdateSettings,
         context.serverSettings.updateSettings(input.patch),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverSetThreadPinned]: (input: {
+      readonly threadId: Parameters<
+        WsRpcContext["serverSettings"]["setThreadPinned"]
+      >[0]["threadId"];
+      readonly pinned: boolean;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.serverSetThreadPinned,
+        context.serverSettings.setThreadPinned(input),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverReadDocumentUrl]: (input: { readonly url: string }) =>

@@ -35,7 +35,6 @@ export type ProviderCommandReactorInputExpansionServices = {
   readonly fileSystem: FileSystem.FileSystem;
   readonly workspacePaths: WorkspacePathsShape;
   readonly resolveDefaultChatCwd: () => Effect.Effect<string>;
-  readonly readMemoryContext?: (projectId: string) => Effect.Effect<string>;
 };
 
 function truncateText(value: string, maxChars: number): string {
@@ -320,17 +319,9 @@ export const expandProviderInputMentions = (
     readonly thread: OrchestrationThread;
     readonly workspaceRoot?: string;
   }) {
-    const memoryContext = services.readMemoryContext
-      ? yield* services.readMemoryContext(input.thread.projectId)
-      : "";
     const mentions = collectCompactMentions(input.messageText).slice(0, MAX_REFERENCE_BLOCKS);
     if (mentions.length === 0) {
-      return memoryContext.length === 0
-        ? input.messageText
-        : truncateText(
-            `${input.messageText}\n\nRelevant persistent bigbud memory:\n${memoryContext}`,
-            PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
-          );
+      return input.messageText;
     }
 
     const catalog = yield* services.discoveryRegistry.getCatalog;
@@ -391,9 +382,6 @@ export const expandProviderInputMentions = (
         "",
         "Resolved compact references from the user message. Use them as active context when answering:",
         ...referenceBlocks,
-        ...(memoryContext.length > 0
-          ? ["", "Relevant persistent bigbud memory:", memoryContext]
-          : []),
       ].join("\n\n"),
       PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
     );

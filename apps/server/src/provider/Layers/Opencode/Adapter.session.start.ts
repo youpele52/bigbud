@@ -90,12 +90,11 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
       }
 
       const settings = yield* deps.serverSettings.getSettings.pipe(
-        Effect.map(
-          (s) =>
-            (s.providers as Record<string, { binaryPath: string } | undefined>)[deps.provider] ?? {
-              binaryPath: deps.provider,
-            },
-        ),
+        Effect.map((s) => ({
+          binaryPath:
+            (s.providers as Record<string, { binaryPath?: string } | undefined>)[deps.provider]
+              ?.binaryPath ?? deps.provider,
+        })),
         Effect.mapError(
           (cause) =>
             new ProviderAdapterProcessError({

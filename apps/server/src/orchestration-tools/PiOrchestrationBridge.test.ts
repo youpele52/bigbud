@@ -19,7 +19,24 @@ describe("PiOrchestrationBridge", () => {
 
     expect(source).toContain('name: "rename_thread"');
     expect(source).toContain('name: "archive_thread"');
+    expect(source).toContain('name: "create_thread"');
+    expect(source).toContain(
+      "async execute(toolCallId, { title, task, projectId, workspacePath, watchForCompletion })",
+    );
+    expect(source).toContain("action: 'create_thread'");
+    expect(source).toContain("invocationId: toolCallId");
+    expect(source).toContain("sourceMessageId: SOURCE_MESSAGE_ID");
+    expect(source).toContain("const SOURCE_MESSAGE_ID = randomUUID();");
+    expect(source).toContain("workspacePath: String(workspacePath).trim()");
+    expect(source).toContain("watchForCompletion: watchForCompletion === true");
     expect(source).toContain('name: "get_thread_status"');
+    expect(source).toContain('name: "search_capabilities"');
+    expect(source).toContain('name: "read_capability_guide"');
+    expect(source).toContain('name: "list_pinned_threads"');
+    expect(source).toContain("name: 'pin_thread'");
+    expect(source).toContain("name: 'unpin_thread'");
+    expect(source).toContain("Only use this when the user explicitly asks to pin a thread.");
+    expect(source).toContain("Only use this when the user explicitly asks to unpin a thread.");
     expect(source).toContain('name: "update_plan"');
     expect(source).toContain('name: "computer_use"');
     expect(source).toContain('name: "browser"');

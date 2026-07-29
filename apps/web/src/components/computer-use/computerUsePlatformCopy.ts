@@ -19,17 +19,6 @@ export function isMacComputerUsePlatform(platform: string): boolean {
   return detectComputerUsePlatform(platform) === "mac";
 }
 
-export function getComputerUseDialogDescription(): string {
-  return "bigbud can automate native desktop apps and the in-app browser so agents can help with tasks like navigating desktop software, capturing screens, and interacting across apps.";
-}
-
-export function getComputerUsePermissionPromptDescription(platform: string): string {
-  if (isMacComputerUsePlatform(platform)) {
-    return "Requires Accessibility and Screen Recording. macOS will prompt you after you continue.";
-  }
-  return "Desktop automation may require additional operating system permissions. bigbud will request access when your platform supports it.";
-}
-
 export function getComputerUseSettingsDescription(platform: string): string {
   if (isMacComputerUsePlatform(platform)) {
     return "Allow agents to control native macOS apps such as Calendar and Reminders, capture screens, and interact through accessibility.";
@@ -50,9 +39,9 @@ export function getComputerUsePermissionsTitle(platform: string): string {
 
 export function getComputerUsePermissionsDescription(platform: string): string {
   if (isMacComputerUsePlatform(platform)) {
-    return "Desktop automation requires Accessibility and Screen Recording access. macOS will prompt when permissions are first requested.";
+    return "Desktop automation requires Accessibility and Screen Recording access. Grant them in System Settings, then check access here.";
   }
-  return "Desktop automation may require additional operating system permissions depending on your platform. bigbud will request access when needed.";
+  return "Desktop automation may require additional operating system permissions depending on your platform. Grant them in your system settings, then check access here.";
 }
 
 export function getComputerUsePermissionsToastTitle(platform: string): string {
@@ -63,9 +52,9 @@ export function getComputerUsePermissionsToastTitle(platform: string): string {
 
 export function getComputerUsePermissionsToastDescription(platform: string): string {
   if (isMacComputerUsePlatform(platform)) {
-    return "Approve Accessibility and Screen Recording to finish enabling Computer Use.";
+    return "Open System Settings to grant Accessibility and Screen Recording, then return to bigbud and check access.";
   }
-  return "Approve any operating system permission prompts to finish enabling Computer Use.";
+  return "Grant the needed operating system permissions in system settings, then return to bigbud and check access.";
 }
 
 export function getComputerUsePermissionsRequestFallback(platform: string): string {

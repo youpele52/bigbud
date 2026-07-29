@@ -4,11 +4,8 @@ import {
   type ServerProviderModel,
   type ThreadId,
 } from "@bigbud/contracts";
-import { isClaudeUltrathinkPrompt, resolveEffort } from "@bigbud/shared/model";
-import type { ReactNode } from "react";
-import { getProviderModelCapabilities } from "../../../models/provider";
-import { TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
 import {
+  isClaudeUltrathinkPrompt,
   normalizeClaudeModelOptionsWithCapabilities,
   normalizeCopilotModelOptionsWithCapabilities,
   normalizeCodexModelOptionsWithCapabilities,
@@ -16,7 +13,13 @@ import {
   normalizeDevinModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
+  resolveEffort,
 } from "@bigbud/shared/model";
+import type { ReactNode } from "react";
+
+import { getProviderModelCapabilities } from "../../../models/provider";
+import { TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
+import { getProviderDescriptor } from "./providerDescriptors";
 
 export type ComposerProviderStateInput = {
   provider: ProviderKind;
@@ -35,49 +38,52 @@ export type ComposerProviderState = {
   modelPickerIconClassName?: string;
 };
 
-type ProviderRegistryEntry = {
-  getState: (input: ComposerProviderStateInput) => ComposerProviderState;
-  renderTraitsMenuContent: (input: {
-    threadId: ThreadId;
-    model: string;
-    models: ReadonlyArray<ServerProviderModel>;
-    modelOptions: ProviderModelOptions[ProviderKind] | undefined;
-    prompt: string;
-    onPromptChange: (prompt: string) => void;
-  }) => ReactNode;
-  renderTraitsPicker: (input: {
-    threadId: ThreadId;
-    model: string;
-    models: ReadonlyArray<ServerProviderModel>;
-    modelOptions: ProviderModelOptions[ProviderKind] | undefined;
-    prompt: string;
-    onPromptChange: (prompt: string) => void;
-  }) => ReactNode;
+type TraitRenderInput = {
+  provider: ProviderKind;
+  threadId: ThreadId;
+  model: string;
+  models: ReadonlyArray<ServerProviderModel>;
+  modelOptions: ProviderModelOptions[ProviderKind] | undefined;
+  prompt: string;
+  onPromptChange: (prompt: string) => void;
 };
 
-function getProviderStateFromCapabilities(
-  input: ComposerProviderStateInput,
-): ComposerProviderState {
-  const { provider, model, models, prompt, modelOptions } = input;
-  const caps = getProviderModelCapabilities(models, model, provider);
+function getProviderOptions(
+  provider: ProviderKind,
+  modelOptions: ProviderModelOptions | null | undefined,
+): ProviderModelOptions[ProviderKind] | undefined {
+  return modelOptions?.[provider];
+}
 
-  // Resolve effort
-  const providerOptions =
-    provider === "codex"
-      ? modelOptions?.codex
-      : provider === "claudeAgent"
-        ? modelOptions?.claudeAgent
-        : provider === "cursor"
-          ? modelOptions?.cursor
-          : provider === "devin"
-            ? modelOptions?.devin
-            : provider === "opencode"
-              ? modelOptions?.opencode
-              : provider === "kilocode"
-                ? modelOptions?.kilocode
-                : provider === "pi"
-                  ? modelOptions?.pi
-                  : modelOptions?.copilot;
+function normalizeProviderOptions(
+  input: ComposerProviderStateInput,
+): ProviderModelOptions[ProviderKind] | undefined {
+  const caps = getProviderModelCapabilities(input.models, input.model, input.provider);
+  switch (input.provider) {
+    case "codex":
+      return normalizeCodexModelOptionsWithCapabilities(caps, input.modelOptions?.codex);
+    case "claudeAgent":
+      return normalizeClaudeModelOptionsWithCapabilities(caps, input.modelOptions?.claudeAgent);
+    case "cursor":
+      return normalizeCursorModelOptionsWithCapabilities(caps, input.modelOptions?.cursor);
+    case "devin":
+      return normalizeDevinModelOptionsWithCapabilities(caps, input.modelOptions?.devin);
+    case "opencode":
+      return normalizeOpencodeModelOptionsWithCapabilities(caps, input.modelOptions?.opencode);
+    case "kilocode":
+      return normalizeOpencodeModelOptionsWithCapabilities(caps, input.modelOptions?.kilocode);
+    case "pi":
+      return normalizePiModelOptionsWithCapabilities(caps, input.modelOptions?.pi);
+    case "cliProxy":
+      return input.modelOptions?.cliProxy;
+    case "copilot":
+      return normalizeCopilotModelOptionsWithCapabilities(caps, input.modelOptions?.copilot);
+  }
+}
+
+export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
+  const caps = getProviderModelCapabilities(input.models, input.model, input.provider);
+  const providerOptions = getProviderOptions(input.provider, input.modelOptions);
   const rawEffort = providerOptions
     ? "effort" in providerOptions
       ? providerOptions.effort
@@ -85,40 +91,13 @@ function getProviderStateFromCapabilities(
         ? providerOptions.reasoningEffort
         : null
     : null;
-
-  const promptEffort = resolveEffort(caps, rawEffort) ?? null;
-
-  // Normalize options for dispatch
-  let normalizedOptions: ProviderModelOptions[ProviderKind] | undefined;
-  if (provider === "codex") {
-    normalizedOptions = normalizeCodexModelOptionsWithCapabilities(caps, modelOptions?.codex);
-  } else if (provider === "claudeAgent") {
-    normalizedOptions = normalizeClaudeModelOptionsWithCapabilities(
-      caps,
-      modelOptions?.claudeAgent,
-    );
-  } else if (provider === "cursor") {
-    normalizedOptions = normalizeCursorModelOptionsWithCapabilities(caps, modelOptions?.cursor);
-  } else if (provider === "devin") {
-    normalizedOptions = normalizeDevinModelOptionsWithCapabilities(caps, modelOptions?.devin);
-  } else if (provider === "opencode") {
-    normalizedOptions = normalizeOpencodeModelOptionsWithCapabilities(caps, modelOptions?.opencode);
-  } else if (provider === "kilocode") {
-    normalizedOptions = normalizeOpencodeModelOptionsWithCapabilities(caps, modelOptions?.kilocode);
-  } else if (provider === "pi") {
-    normalizedOptions = normalizePiModelOptionsWithCapabilities(caps, modelOptions?.pi);
-  } else {
-    normalizedOptions = normalizeCopilotModelOptionsWithCapabilities(caps, modelOptions?.copilot);
-  }
-
-  // Ultrathink styling (driven by capabilities data, not provider identity)
   const ultrathinkActive =
-    caps.promptInjectedEffortLevels.length > 0 && isClaudeUltrathinkPrompt(prompt);
+    caps.promptInjectedEffortLevels.length > 0 && isClaudeUltrathinkPrompt(input.prompt);
 
   return {
-    provider,
-    promptEffort,
-    modelOptionsForDispatch: normalizedOptions,
+    provider: input.provider,
+    promptEffort: resolveEffort(caps, rawEffort) ?? null,
+    modelOptionsForDispatch: normalizeProviderOptions(input),
     ...(ultrathinkActive ? { composerFrameClassName: "ultrathink-frame" } : {}),
     ...(ultrathinkActive
       ? { composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.04)_inset]" }
@@ -127,303 +106,32 @@ function getProviderStateFromCapabilities(
   };
 }
 
-const composerProviderRegistry: Record<ProviderKind, ProviderRegistryEntry> = {
-  codex: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="codex"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="codex"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  claudeAgent: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="claudeAgent"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="claudeAgent"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  copilot: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="copilot"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="copilot"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  opencode: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="opencode"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="opencode"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  kilocode: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="kilocode"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="kilocode"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  pi: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="pi"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="pi"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  cursor: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="cursor"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="cursor"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-  devin: {
-    getState: (input) => getProviderStateFromCapabilities(input),
-    renderTraitsMenuContent: ({
-      threadId,
-      model,
-      models,
-      modelOptions,
-      prompt,
-      onPromptChange,
-    }) => (
-      <TraitsMenuContent
-        provider="devin"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-    renderTraitsPicker: ({ threadId, model, models, modelOptions, prompt, onPromptChange }) => (
-      <TraitsPicker
-        provider="devin"
-        models={models}
-        threadId={threadId}
-        model={model}
-        modelOptions={modelOptions}
-        prompt={prompt}
-        onPromptChange={onPromptChange}
-      />
-    ),
-  },
-};
-
-export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {
-  return composerProviderRegistry[input.provider].getState(input);
+export function renderProviderTraitsMenuContent(input: TraitRenderInput): ReactNode {
+  if (!getProviderDescriptor(input.provider).traitsEnabled) return null;
+  return (
+    <TraitsMenuContent
+      provider={input.provider}
+      models={input.models}
+      threadId={input.threadId}
+      model={input.model}
+      modelOptions={input.modelOptions}
+      prompt={input.prompt}
+      onPromptChange={input.onPromptChange}
+    />
+  );
 }
 
-export function renderProviderTraitsMenuContent(input: {
-  provider: ProviderKind;
-  threadId: ThreadId;
-  model: string;
-  models: ReadonlyArray<ServerProviderModel>;
-  modelOptions: ProviderModelOptions[ProviderKind] | undefined;
-  prompt: string;
-  onPromptChange: (prompt: string) => void;
-}): ReactNode {
-  return composerProviderRegistry[input.provider].renderTraitsMenuContent({
-    threadId: input.threadId,
-    model: input.model,
-    models: input.models,
-    modelOptions: input.modelOptions,
-    prompt: input.prompt,
-    onPromptChange: input.onPromptChange,
-  });
-}
-
-export function renderProviderTraitsPicker(input: {
-  provider: ProviderKind;
-  threadId: ThreadId;
-  model: string;
-  models: ReadonlyArray<ServerProviderModel>;
-  modelOptions: ProviderModelOptions[ProviderKind] | undefined;
-  prompt: string;
-  onPromptChange: (prompt: string) => void;
-}): ReactNode {
-  return composerProviderRegistry[input.provider].renderTraitsPicker({
-    threadId: input.threadId,
-    model: input.model,
-    models: input.models,
-    modelOptions: input.modelOptions,
-    prompt: input.prompt,
-    onPromptChange: input.onPromptChange,
-  });
+export function renderProviderTraitsPicker(input: TraitRenderInput): ReactNode {
+  if (!getProviderDescriptor(input.provider).traitsEnabled) return null;
+  return (
+    <TraitsPicker
+      provider={input.provider}
+      models={input.models}
+      threadId={input.threadId}
+      model={input.model}
+      modelOptions={input.modelOptions}
+      prompt={input.prompt}
+      onPromptChange={input.onPromptChange}
+    />
+  );
 }

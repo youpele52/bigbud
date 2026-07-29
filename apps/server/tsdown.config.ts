@@ -3,9 +3,8 @@ import { defineConfig } from "tsdown";
 // Packages that MUST remain external and cannot be inlined into the bundle:
 // - node-pty: native C++ addon (.node binary + spawn-helper executable); also
 //   resolved at runtime via createRequire/require.resolve in NodePTY.ts.
-// - @github/copilot-sdk, @github/copilot: CopilotAdapter.types.ts uses
-//   require.resolve("@github/copilot-sdk") at runtime to locate the sibling
-//   @github/copilot CLI entry point on disk.
+// - @github/copilot-sdk, @github/copilot: the Copilot runtime resolver loads
+//   the platform-native optional dependency at runtime under Electron.
 // - @mariozechner/pi-coding-agent: PiCli.ts uses createRequire().resolve(...) at
 //   runtime to locate Pi's bundled CLI entry point on disk.
 // - @effect/sql-sqlite-bun, @effect/platform-bun: Bun-only; wrap bun:sqlite

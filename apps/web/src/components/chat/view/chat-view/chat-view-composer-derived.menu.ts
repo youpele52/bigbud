@@ -26,7 +26,6 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
       searchableModelOptions: input.searchableModelOptions,
       workspaceEntries: input.workspaceEntries,
       selectedProvider: input.selectedProvider,
-      supportsCompact: input.supportsCompact,
       activeProviderSlashCommands: input.activeProviderSlashCommands,
     });
   }, [
@@ -36,7 +35,6 @@ export function useComposerMenuItems(input: ComposerDerivedMenuInput) {
     input.discoveredSkills,
     input.searchableModelOptions,
     input.selectedProvider,
-    input.supportsCompact,
     input.workspaceEntries,
   ]);
 }

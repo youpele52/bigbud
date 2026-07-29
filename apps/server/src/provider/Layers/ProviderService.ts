@@ -1,25 +1,18 @@
-/**
- * ProviderServiceLive - Cross-provider orchestration layer.
- *
- * Routes validated transport/API calls to provider adapters through
- * `ProviderAdapterRegistry` and `ProviderSessionDirectory`, and exposes a
- * unified provider event stream for subscribers.
- *
- * It does not implement provider protocol details (adapter concern).
- *
- * @module ProviderServiceLive
- */
+/** Cross-provider orchestration and provider-runtime event routing. */
 import {
   ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderSendTurnInput,
   ProviderStopSessionInput,
+  type ProviderKind,
   type ProviderRuntimeEvent,
 } from "@bigbud/contracts";
 import { Effect, Layer, PubSub, Stream } from "effect";
 
 import {
+  claudeModernizationEventsTotal,
+  claudeRuntimeMetricAttributes,
   increment,
   providerMetricAttributes,
   providerRuntimeEventsTotal,
@@ -33,6 +26,10 @@ import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts"
 import { ProviderService, type ProviderServiceShape } from "../Services/ProviderService.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
+import {
+  getProviderCapabilities,
+  type ProviderCapabilitiesResolver,
+} from "../providerCapabilities.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
@@ -55,6 +52,8 @@ import {
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
   readonly canonicalEventLogger?: EventNdjsonLogger;
+  readonly getProviderCapabilities?: ProviderCapabilitiesResolver;
+  readonly isProviderComposed?: (provider: ProviderKind) => boolean;
 }
 
 const makeProviderService = Effect.fn("makeProviderService")(function* (
@@ -62,6 +61,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 ) {
   const analytics = yield* Effect.service(AnalyticsService);
   const serverSettings = yield* ServerSettingsService;
+  const resolveCapabilities = options?.getProviderCapabilities ?? getProviderCapabilities;
+  const isProviderComposed = options?.isProviderComposed ?? (() => true);
   const canonicalEventLogger =
     options?.canonicalEventLogger ??
     (options?.canonicalEventLogPath !== undefined
@@ -85,11 +86,19 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const providers = yield* registry.listProviders();
   const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
-  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
-    increment(providerRuntimeEventsTotal, {
-      provider: event.provider,
-      eventType: event.type,
-    }).pipe(Effect.andThen(publishRuntimeEvent(event)));
+  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> => {
+    const claudeAttributes = claudeRuntimeMetricAttributes(event);
+    return Effect.all(
+      [
+        increment(providerRuntimeEventsTotal, {
+          provider: event.provider,
+          eventType: event.type,
+        }),
+        ...(claudeAttributes ? [increment(claudeModernizationEventsTotal, claudeAttributes)] : []),
+      ],
+      { discard: true },
+    ).pipe(Effect.andThen(publishRuntimeEvent(event)));
+  };
 
   yield* Effect.forEach(adapters, (adapter) =>
     Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped),
@@ -101,11 +110,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     directory,
     upsertSessionBinding,
     analytics,
+    resolveCapabilities,
   );
   const resolveRoutableSession = makeResolveRoutableSession(
     registry,
     directory,
     recoverSessionForThread,
+    isProviderComposed,
   );
 
   const stopStaleSessionsForThread = makeStopStaleSessionsForThread(adapters, analytics);
@@ -116,6 +127,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     upsertSessionBinding,
     analytics,
     serverSettings,
+    getProviderCapabilities: resolveCapabilities,
+    isProviderComposed,
     stopStaleSessionsForThread,
   });
   const startSessionFresh: ProviderServiceShape["startSessionFresh"] = makeStartSessionInternal({
@@ -124,6 +137,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     upsertSessionBinding,
     analytics,
     serverSettings,
+    getProviderCapabilities: resolveCapabilities,
+    isProviderComposed,
     stopStaleSessionsForThread,
     options: { reusePersistedResumeCursor: false },
   });

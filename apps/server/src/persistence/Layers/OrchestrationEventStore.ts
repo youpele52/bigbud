@@ -24,9 +24,19 @@ import {
   OrchestrationEventStore,
   type OrchestrationEventStoreShape,
 } from "../Services/OrchestrationEventStore.ts";
+import { normalizeRemovedProviderSelectionsForValidation } from "../../provider/providerSelectionCompatibility.ts";
 
 const decodeEvent = Schema.decodeUnknownEffect(OrchestrationEvent);
 const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
+
+const decodeEventCompat = (row: unknown) =>
+  decodeEvent(row).pipe(
+    Effect.catch(() =>
+      decodeEvent(normalizeRemovedProviderSelectionsForValidation(row)).pipe(
+        Effect.as(row as OrchestrationEvent),
+      ),
+    ),
+  );
 const EventMetadataFromJsonString = Schema.fromJsonString(OrchestrationEventMetadata);
 
 const AppendEventRequestSchema = Schema.Struct({
@@ -199,7 +209,7 @@ const makeEventStore = Effect.gen(function* () {
         ),
       ),
       Effect.flatMap((row) =>
-        decodeEvent(row).pipe(
+        decodeEventCompat(row).pipe(
           Effect.mapError(toPersistenceDecodeError("OrchestrationEventStore.append:rowToEvent")),
         ),
       ),
@@ -230,7 +240,7 @@ const makeEventStore = Effect.gen(function* () {
           ),
           Effect.flatMap((rows) =>
             Effect.forEach(rows, (row) =>
-              decodeEvent(row).pipe(
+              decodeEventCompat(row).pipe(
                 Effect.mapError(
                   toPersistenceDecodeError("OrchestrationEventStore.readFromSequence:rowToEvent"),
                 ),

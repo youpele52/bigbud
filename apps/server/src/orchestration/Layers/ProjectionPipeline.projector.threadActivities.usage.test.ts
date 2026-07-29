@@ -52,6 +52,32 @@ describe("usageContributionFromActivity", () => {
     });
   });
 
+  it("drops live CLIProxy accounting payloads because usage is not reliable", () => {
+    const contribution = usageContributionFromActivity({
+      threadId: ThreadId.makeUnsafe("thread-cli-proxy"),
+      activity: {
+        id: EventId.makeUnsafe("activity-cli-proxy"),
+        createdAt: "2026-03-02T00:00:00.000Z",
+        tone: "info",
+        kind: "context-window.updated",
+        summary: "Context window updated",
+        turnId: TurnId.makeUnsafe("turn-cli-proxy"),
+        payload: {
+          accounting: {
+            provider: "cliProxy",
+            model: "gpt-5-codex",
+            interactionMode: "default",
+            scope: "turn",
+            scopeId: "turn-cli-proxy",
+            processedTokens: 100,
+          },
+        },
+      },
+    });
+
+    expect(contribution).toBeUndefined();
+  });
+
   it("skips context-window-only payloads without accounting", () => {
     const contribution = usageContributionFromActivity({
       threadId: ThreadId.makeUnsafe("thread-1"),

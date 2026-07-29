@@ -143,6 +143,40 @@ export function applyThreadRuntimeEvent(
       );
     }
 
+    case "thread.turn-start-failed": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        ...(thread.session
+          ? {
+              session: {
+                ...thread.session,
+                status: "error" as const,
+                orchestrationStatus: "error" as const,
+                activeTurnId: undefined,
+                reason: event.payload.context,
+                lastError: event.payload.detail,
+                updatedAt: event.payload.createdAt,
+              },
+            }
+          : {}),
+        latestTurn:
+          thread.latestTurn === null
+            ? null
+            : buildLatestTurn({
+                previous: thread.latestTurn,
+                turnId: thread.latestTurn.turnId,
+                state: "error",
+                requestedAt: thread.latestTurn.requestedAt,
+                startedAt: thread.latestTurn.startedAt ?? event.payload.createdAt,
+                completedAt: thread.latestTurn.completedAt ?? event.payload.createdAt,
+                assistantMessageId: thread.latestTurn.assistantMessageId,
+                sourceProposedPlan: thread.latestTurn.sourceProposedPlan,
+              }),
+        error: sanitizeThreadErrorMessage(event.payload.detail) ?? event.payload.detail,
+        updatedAt: event.occurredAt,
+      }));
+    }
+
     case "thread.proposed-plan-upserted": {
       return updateThreadState(state, event.payload.threadId, (thread) => {
         const proposedPlan = mapProposedPlan(event.payload.proposedPlan);
@@ -229,9 +263,11 @@ export function applyThreadRuntimeEvent(
         ]
           .toSorted(compareActivities)
           .slice(-MAX_THREAD_ACTIVITIES);
+        const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
         return {
           ...thread,
           activities,
+          error: providerTurnStartError ?? thread.error,
           updatedAt: event.occurredAt,
         };
       });
@@ -240,6 +276,20 @@ export function applyThreadRuntimeEvent(
     default:
       return undefined;
   }
+}
+
+function getProviderTurnStartFailureDetail(activity: Thread["activities"][number]): string | null {
+  if (activity.kind !== "provider.turn.start.failed") {
+    return null;
+  }
+  const detail =
+    typeof activity.payload === "object" &&
+    activity.payload !== null &&
+    "detail" in activity.payload &&
+    typeof activity.payload.detail === "string"
+      ? activity.payload.detail
+      : activity.summary;
+  return sanitizeThreadErrorMessage(detail) ?? activity.summary;
 }
 
 function upsertThreadMessage(

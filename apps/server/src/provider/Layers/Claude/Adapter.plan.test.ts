@@ -39,6 +39,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-exit-1",
+          requestId: "sdk-request-exit-1",
         },
       );
       const proposedEvent = yield* Stream.runHead(adapter.streamEvents);
@@ -187,6 +188,7 @@ describe("ClaudeAdapterLive", () => {
       const permissionPromise = canUseTool("AskUserQuestion", askInput, {
         signal: new AbortController().signal,
         toolUseID: "tool-ask-1",
+        requestId: "sdk-request-ask-1",
       });
       const requestedEvent = yield* Stream.runHead(adapter.streamEvents);
       assert.equal(requestedEvent._tag, "Some");
@@ -204,6 +206,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(requestedEvent.value.payload.questions[0]?.question, "Which framework?");
       assert.deepEqual(requestedEvent.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-ask-1"),
+        providerRequestId: "sdk-request-ask-1",
       });
       yield* adapter.respondToUserInput(
         session.threadId,
@@ -224,7 +227,19 @@ describe("ClaudeAdapterLive", () => {
       });
       assert.deepEqual(resolvedEvent.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-ask-1"),
+        providerRequestId: "sdk-request-ask-1",
       });
+      yield* adapter.respondToUserInput(
+        session.threadId,
+        ApprovalRequestId.makeUnsafe(requestId!),
+        { "Which framework?": "React" },
+      );
+      const conflictingResponse = yield* adapter
+        .respondToUserInput(session.threadId, ApprovalRequestId.makeUnsafe(requestId!), {
+          "Which framework?": "Vue",
+        })
+        .pipe(Effect.result);
+      assert.equal(conflictingResponse._tag, "Failure");
       const permissionResult = yield* Effect.promise(() => permissionPromise);
       assert.equal((permissionResult as PermissionResult).behavior, "allow");
       const updatedInput = (permissionResult as { updatedInput: Record<string, unknown> })
@@ -281,6 +296,7 @@ describe("ClaudeAdapterLive", () => {
       const permissionPromise = canUseTool("AskUserQuestion", askInput, {
         signal: new AbortController().signal,
         toolUseID: "tool-ask-2",
+        requestId: "sdk-request-ask-2",
       });
       const requestedEvent = yield* Stream.runHead(adapter.streamEvents);
       assert.equal(requestedEvent._tag, "Some");
@@ -339,6 +355,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: controller.signal,
           toolUseID: "tool-ask-abort",
+          requestId: "sdk-request-ask-abort",
         },
       );
       const requestedEvent = yield* Stream.runHead(adapter.streamEvents);

@@ -1,11 +1,3 @@
-/**
- * ClaudeAdapter system and telemetry message handlers.
- *
- * Handles `system` and telemetry SDK messages (tool_progress, tool_use_summary,
- * auth_status, rate_limit_event), projecting them into canonical runtime events.
- *
- * @module ClaudeAdapter.stream.system
- */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type EventId, RuntimeTaskId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
@@ -16,30 +8,53 @@ import {
   normalizeClaudeTokenUsage,
   sdkNativeMethod,
 } from "./Adapter.utils.ts";
+import {
+  asRecord,
+  decodeClaudeApiRetryMessage,
+  decodeClaudeBackgroundTasksChangedMessage,
+  decodeClaudeCommandsChangedMessage,
+  decodeClaudeElicitationCompleteMessage,
+  decodeClaudeHookMessage,
+  decodeClaudeMcpInitialization,
+  decodeClaudeRefusalMessage,
+  decodeClaudeTaskNotificationMessage,
+  decodeClaudeTaskProgressMessage,
+  decodeClaudeTaskStartedMessage,
+  decodeClaudeTaskUpdatedMessage,
+} from "./Adapter.sdk.messages.ts";
+import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
+import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
+import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
+import { normalizeMcpServerStatuses, redactedMcpRuntimePayload } from "../../providerMcp.ts";
 
 export interface SystemHandlerDeps {
-  readonly makeEventStamp: () => Effect.Effect<{
-    eventId: EventId;
-    createdAt: string;
-  }>;
+  readonly makeEventStamp: () => Effect.Effect<{ eventId: EventId; createdAt: string }>;
   readonly offerRuntimeEvent: (event: ProviderRuntimeEvent) => Effect.Effect<void>;
+  readonly nowIso: Effect.Effect<string>;
   readonly turn: TurnHandlers;
 }
 
 export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
-  const { makeEventStamp, offerRuntimeEvent, turn } = deps;
+  const { makeEventStamp, offerRuntimeEvent, nowIso, turn } = deps;
+  const invalid = Effect.fn("invalidClaudeSystemMessage")(function* (
+    context: ClaudeSessionContext,
+    message: SDKMessage,
+  ) {
+    yield* turn.emitRuntimeWarning(
+      context,
+      `Invalid Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} ${claudeSdkMessageLabel(message)} message.`,
+      claudeSdkDiagnostic(message),
+    );
+  });
 
   const handleSystemMessage = Effect.fn("handleSystemMessage")(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
   ) {
-    if (message.type !== "system") {
-      return;
-    }
-
+    if (message.type !== "system") return;
     const stamp = yield* makeEventStamp();
     const base = {
       eventId: stamp.eventId,
@@ -48,35 +63,39 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       threadId: context.session.threadId,
       ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
       providerRefs: nativeProviderRefs(context),
-      raw: {
-        source: "claude.sdk.message" as const,
-        method: sdkNativeMethod(message),
-        messageType: `${message.type}:${message.subtype}`,
-        payload: message,
-      },
+      raw: claudeSdkRuntimeRaw(message, sdkNativeMethod(message)),
     };
 
     switch (message.subtype) {
-      case "init":
+      case "init": {
+        const init = decodeClaudeMcpInitialization(message);
+        if (!init) return yield* invalid(context, message);
+        const status = normalizeMcpServerStatuses(init.servers);
+        context.mcpStatuses = status;
         yield* offerRuntimeEvent({
           ...base,
           type: "session.configured",
           payload: {
-            config: message as Record<string, unknown>,
+            config: { sdkVersion: CLAUDE_AGENT_SDK_VERSION, mcpServerCount: status.length },
           },
         });
+        const mcpStamp = yield* makeEventStamp();
+        yield* offerRuntimeEvent({
+          ...base,
+          eventId: mcpStamp.eventId,
+          createdAt: mcpStamp.createdAt,
+          type: "mcp.status.updated",
+          payload: redactedMcpRuntimePayload(status),
+        });
         return;
+      }
       case "status":
         yield* offerRuntimeEvent({
           ...base,
           type: "session.state.changed",
           payload: {
             state: message.status === "compacting" ? "waiting" : "running",
-            reason:
-              message.status === "compacting"
-                ? "context.compacting"
-                : `status:${message.status ?? "active"}`,
-            detail: message,
+            reason: message.status === "compacting" ? "context.compacting" : "status:active",
           },
         });
         return;
@@ -84,155 +103,244 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
         yield* offerRuntimeEvent({
           ...base,
           type: "thread.state.changed",
-          payload: {
-            state: "compacted",
-            detail: message,
-          },
+          payload: { state: "compacted", detail: { trigger: message.compact_metadata.trigger } },
         });
         return;
       case "hook_started":
-        yield* offerRuntimeEvent({
-          ...base,
-          type: "hook.started",
-          payload: {
-            hookId: message.hook_id,
-            hookName: message.hook_name,
-            hookEvent: message.hook_event,
-          },
-        });
-        return;
       case "hook_progress":
-        yield* offerRuntimeEvent({
-          ...base,
-          type: "hook.progress",
-          payload: {
-            hookId: message.hook_id,
-            output: message.output,
-            stdout: message.stdout,
-            stderr: message.stderr,
-          },
-        });
+      case "hook_response": {
+        const hook = decodeClaudeHookMessage(message);
+        if (!hook) return yield* invalid(context, message);
+        if (hook.subtype === "hook_started") {
+          yield* offerRuntimeEvent({
+            ...base,
+            type: "hook.started",
+            payload: { hookId: hook.hookId, hookName: hook.hookName, hookEvent: hook.hookEvent },
+          });
+        } else if (hook.subtype === "hook_progress") {
+          yield* offerRuntimeEvent({
+            ...base,
+            type: "hook.progress",
+            payload: {
+              hookId: hook.hookId,
+              ...(hook.output !== undefined ? { output: hook.output } : {}),
+              ...(hook.stdout !== undefined ? { stdout: hook.stdout } : {}),
+              ...(hook.stderr !== undefined ? { stderr: hook.stderr } : {}),
+            },
+          });
+        } else {
+          const outcome = hook.outcome;
+          if (!outcome) return yield* invalid(context, message);
+          yield* offerRuntimeEvent({
+            ...base,
+            type: "hook.completed",
+            payload: {
+              hookId: hook.hookId,
+              outcome,
+              ...(hook.output !== undefined ? { output: hook.output } : {}),
+              ...(hook.stdout !== undefined ? { stdout: hook.stdout } : {}),
+              ...(hook.stderr !== undefined ? { stderr: hook.stderr } : {}),
+              ...(hook.exitCode !== undefined ? { exitCode: hook.exitCode } : {}),
+            },
+          });
+        }
         return;
-      case "hook_response":
-        yield* offerRuntimeEvent({
-          ...base,
-          type: "hook.completed",
-          payload: {
-            hookId: message.hook_id,
-            outcome: message.outcome,
-            output: message.output,
-            stdout: message.stdout,
-            stderr: message.stderr,
-            ...(typeof message.exit_code === "number" ? { exitCode: message.exit_code } : {}),
-          },
-        });
-        return;
-      case "task_started":
+      }
+      case "task_started": {
+        const task = decodeClaudeTaskStartedMessage(message);
+        if (!task) return yield* invalid(context, message);
         yield* offerRuntimeEvent({
           ...base,
           type: "task.started",
-          payload: {
-            taskId: RuntimeTaskId.makeUnsafe(message.task_id),
-            description: message.description,
-            ...(message.task_type ? { taskType: message.task_type } : {}),
-          },
+          payload: { taskId: RuntimeTaskId.makeUnsafe(task.taskId), description: task.description },
         });
         return;
-      case "task_progress":
-        if (message.usage) {
-          const normalizedUsage = normalizeClaudeTokenUsage(
-            message.usage,
-            context.lastKnownContextWindow,
-          );
-          if (normalizedUsage) {
-            context.lastKnownTokenUsage = normalizedUsage;
-            const usageStamp = yield* makeEventStamp();
-            yield* offerRuntimeEvent({
-              ...base,
-              eventId: usageStamp.eventId,
-              createdAt: usageStamp.createdAt,
-              type: "thread.token-usage.updated",
-              payload: {
-                usage: normalizedUsage,
+      }
+      case "task_progress": {
+        const task = decodeClaudeTaskProgressMessage(message);
+        if (!task) return yield* invalid(context, message);
+        const normalizedUsage = task.usage
+          ? normalizeClaudeTokenUsage(
+              {
+                total_tokens: task.usage.totalTokens,
+                tool_uses: task.usage.toolUses,
+                duration_ms: task.usage.durationMs,
               },
-            });
-          }
+              context.lastKnownContextWindow,
+            )
+          : undefined;
+        if (normalizedUsage) {
+          context.lastKnownTokenUsage = normalizedUsage;
+          const usageStamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent({
+            ...base,
+            eventId: usageStamp.eventId,
+            createdAt: usageStamp.createdAt,
+            type: "thread.token-usage.updated",
+            payload: { usage: normalizedUsage },
+          });
         }
         yield* offerRuntimeEvent({
           ...base,
           type: "task.progress",
           payload: {
-            taskId: RuntimeTaskId.makeUnsafe(message.task_id),
-            description: message.description,
-            ...(message.summary ? { summary: message.summary } : {}),
-            ...(message.usage ? { usage: message.usage } : {}),
-            ...(message.last_tool_name ? { lastToolName: message.last_tool_name } : {}),
+            taskId: RuntimeTaskId.makeUnsafe(task.taskId),
+            description: task.description,
+            ...(task.summary ? { summary: task.summary } : {}),
+            ...(task.usage ? { usage: task.usage } : {}),
+            ...(task.lastToolName ? { lastToolName: task.lastToolName } : {}),
           },
         });
         return;
-      case "task_notification":
-        if (message.usage) {
-          const normalizedUsage = normalizeClaudeTokenUsage(
-            message.usage,
-            context.lastKnownContextWindow,
-          );
-          if (normalizedUsage) {
-            context.lastKnownTokenUsage = normalizedUsage;
-            const usageStamp = yield* makeEventStamp();
-            yield* offerRuntimeEvent({
-              ...base,
-              eventId: usageStamp.eventId,
-              createdAt: usageStamp.createdAt,
-              type: "thread.token-usage.updated",
-              payload: {
-                usage: normalizedUsage,
+      }
+      case "task_notification": {
+        const task = decodeClaudeTaskNotificationMessage(message);
+        if (!task) return yield* invalid(context, message);
+        const normalizedUsage = task.usage
+          ? normalizeClaudeTokenUsage(
+              {
+                total_tokens: task.usage.totalTokens,
+                tool_uses: task.usage.toolUses,
+                duration_ms: task.usage.durationMs,
               },
-            });
-          }
+              context.lastKnownContextWindow,
+            )
+          : undefined;
+        if (normalizedUsage) {
+          context.lastKnownTokenUsage = normalizedUsage;
+          const usageStamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent({
+            ...base,
+            eventId: usageStamp.eventId,
+            createdAt: usageStamp.createdAt,
+            type: "thread.token-usage.updated",
+            payload: { usage: normalizedUsage },
+          });
         }
         yield* offerRuntimeEvent({
           ...base,
           type: "task.completed",
           payload: {
-            taskId: RuntimeTaskId.makeUnsafe(message.task_id),
-            status: message.status,
-            ...(message.summary ? { summary: message.summary } : {}),
-            ...(message.usage ? { usage: message.usage } : {}),
+            taskId: RuntimeTaskId.makeUnsafe(task.taskId),
+            status: task.status,
+            summary: task.summary,
+            ...(task.usage ? { usage: task.usage } : {}),
           },
         });
         return;
-      case "files_persisted":
+      }
+      case "task_updated": {
+        const task = decodeClaudeTaskUpdatedMessage(message);
+        if (!task) return yield* invalid(context, message);
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: task.taskId,
+          toolName: "task_updated",
+          input: { task_id: task.taskId, patch: task.patch },
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
+        return;
+      }
+      case "background_tasks_changed": {
+        const snapshot = decodeClaudeBackgroundTasksChangedMessage(message);
+        if (!snapshot) return yield* invalid(context, message);
+        yield* updateClaudeTaskPlan({
+          context,
+          toolUseId: snapshot.uuid,
+          toolName: "background_tasks_changed",
+          input: {
+            uuid: snapshot.uuid,
+            tasks: snapshot.tasks.map((task) => ({
+              task_id: task.taskId,
+              task_type: task.taskType,
+              description: task.description,
+            })),
+          },
+          authoritativeSnapshot: true,
+          now: yield* nowIso,
+          makeEventStamp,
+          offerRuntimeEvent,
+        });
+        return;
+      }
+      case "api_retry": {
+        const retry = decodeClaudeApiRetryMessage(message);
+        if (!retry) return yield* invalid(context, message);
+        yield* turn.emitRuntimeWarning(context, "Claude API request retry scheduled.", {
+          attempt: retry.attempt,
+          maxRetries: retry.maxRetries,
+          retryDelayMs: retry.retryDelayMs,
+          errorStatus: retry.errorStatus,
+        });
+        return;
+      }
+      case "model_refusal_fallback": {
+        const refusal = decodeClaudeRefusalMessage(message);
+        if (!refusal?.fallbackModel) return yield* invalid(context, message);
         yield* offerRuntimeEvent({
           ...base,
-          type: "files.persisted",
+          type: "model.rerouted",
           payload: {
-            files: Array.isArray(message.files)
-              ? message.files.map((file: { filename: string; file_id: string }) => ({
-                  filename: file.filename,
-                  fileId: file.file_id,
-                }))
-              : [],
-            ...(Array.isArray(message.failed)
-              ? {
-                  failed: message.failed.map((entry: { filename: string; error: string }) => ({
-                    filename: entry.filename,
-                    error: entry.error,
-                  })),
-                }
-              : {}),
+            fromModel: refusal.originalModel,
+            toModel: refusal.fallbackModel,
+            reason: "model_refusal_fallback",
           },
         });
         return;
+      }
+      case "model_refusal_no_fallback": {
+        const refusal = decodeClaudeRefusalMessage(message);
+        if (!refusal) return yield* invalid(context, message);
+        yield* turn.emitRuntimeWarning(
+          context,
+          "Claude model refusal has no configured fallback.",
+          {
+            category: refusal.category ?? null,
+          },
+        );
+        return;
+      }
+      case "commands_changed": {
+        const commands = decodeClaudeCommandsChangedMessage(message);
+        if (!commands) return yield* invalid(context, message);
+        yield* turn.emitRuntimeWarning(context, "Claude command list changed.", {
+          commandCount: commands.commands.length,
+        });
+        return;
+      }
+      case "elicitation_complete": {
+        const completion = decodeClaudeElicitationCompleteMessage(message);
+        if (!completion) return yield* invalid(context, message);
+        yield* offerRuntimeEvent({
+          ...base,
+          type: "mcp.oauth.completed",
+          payload: { success: true, name: completion.serverName },
+        });
+        return;
+      }
+      case "files_persisted": {
+        const record = asRecord(message);
+        const files = Array.isArray(record?.files)
+          ? record.files.flatMap((file) => {
+              const value = asRecord(file);
+              return typeof value?.filename === "string" && typeof value.file_id === "string"
+                ? [{ filename: value.filename, fileId: value.file_id }]
+                : [];
+            })
+          : [];
+        yield* offerRuntimeEvent({ ...base, type: "files.persisted", payload: { files } });
+        return;
+      }
       default:
         yield* turn.emitRuntimeWarning(
           context,
-          `Unhandled Claude system message subtype '${message.subtype}'.`,
-          message,
+          `Unhandled Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} system message '${claudeSdkMessageLabel(message)}'.`,
+          claudeSdkDiagnostic(message),
         );
-        return;
     }
   });
-
   const handleSdkTelemetryMessage = Effect.fn("handleSdkTelemetryMessage")(function* (
     context: ClaudeSessionContext,
     message: SDKMessage,
@@ -245,14 +353,8 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
       threadId: context.session.threadId,
       ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
       providerRefs: nativeProviderRefs(context),
-      raw: {
-        source: "claude.sdk.message" as const,
-        method: sdkNativeMethod(message),
-        messageType: message.type,
-        payload: message,
-      },
+      raw: claudeSdkRuntimeRaw(message, sdkNativeMethod(message)),
     };
-
     if (message.type === "tool_progress") {
       yield* offerRuntimeEvent({
         ...base,
@@ -264,10 +366,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           ...(message.task_id ? { summary: `task:${message.task_id}` } : {}),
         },
       });
-      return;
-    }
-
-    if (message.type === "tool_use_summary") {
+    } else if (message.type === "tool_use_summary") {
       yield* offerRuntimeEvent({
         ...base,
         type: "tool.summary",
@@ -278,10 +377,7 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
             : {}),
         },
       });
-      return;
-    }
-
-    if (message.type === "auth_status") {
+    } else if (message.type === "auth_status") {
       yield* offerRuntimeEvent({
         ...base,
         type: "auth.status",
@@ -291,25 +387,14 @@ export const makeSystemHandlers = (deps: SystemHandlerDeps) => {
           ...(message.error ? { error: message.error } : {}),
         },
       });
-      return;
-    }
-
-    if (message.type === "rate_limit_event") {
-      yield* offerRuntimeEvent({
-        ...base,
-        type: "account.rate-limits.updated",
-        payload: {
-          rateLimits: message,
-        },
-      });
-      return;
+    } else if (message.type === "rate_limit_event") {
+      yield* turn.emitRuntimeWarning(
+        context,
+        "Claude rate-limit status changed.",
+        claudeSdkDiagnostic(message),
+      );
     }
   });
-
-  return {
-    handleSystemMessage,
-    handleSdkTelemetryMessage,
-  };
+  return { handleSystemMessage, handleSdkTelemetryMessage };
 };
-
 export type SystemHandlers = ReturnType<typeof makeSystemHandlers>;

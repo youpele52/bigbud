@@ -72,10 +72,13 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           command,
           threadId: command.parentThread.threadId,
         });
-        if (parentThread.projectId !== command.projectId) {
+        if (
+          command.parentThread.projectId === undefined ||
+          parentThread.projectId !== command.parentThread.projectId
+        ) {
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,
-            detail: `Parent thread '${command.parentThread.threadId}' must belong to project '${command.projectId}'.`,
+            detail: `Parent thread '${command.parentThread.threadId}' must belong to referenced project '${command.parentThread.projectId ?? "unknown"}'.`,
           });
         }
       }

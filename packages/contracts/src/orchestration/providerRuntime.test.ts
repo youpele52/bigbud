@@ -6,6 +6,40 @@ import { ProviderRuntimeEvent } from "./providerRuntime";
 const decodeRuntimeEvent = Schema.decodeUnknownSync(ProviderRuntimeEvent);
 
 describe("ProviderRuntimeEvent", () => {
+  it("decodes bounded canonical MCP status events", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "mcp.status.updated",
+      eventId: "event-mcp-1",
+      provider: "claudeAgent",
+      createdAt: "2026-07-26T00:00:00.000Z",
+      threadId: "thread-1",
+      payload: {
+        status: [{ name: "bigbud_orchestration", status: "connected", version: "1.0.0" }],
+      },
+    });
+
+    expect(parsed.type).toBe("mcp.status.updated");
+    if (parsed.type !== "mcp.status.updated") throw new Error("expected mcp.status.updated");
+    expect(parsed.payload.status).toEqual([
+      { name: "bigbud_orchestration", status: "connected", version: "1.0.0" },
+    ]);
+  });
+
+  it("decodes explicit unavailable turn usage", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "turn.completed",
+      eventId: "event-usage-unavailable",
+      provider: "claudeAgent",
+      createdAt: "2026-07-26T00:00:00.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: { state: "completed", usageAvailable: false },
+    });
+    expect(parsed.type).toBe("turn.completed");
+    if (parsed.type !== "turn.completed") throw new Error("expected turn.completed");
+    expect(parsed.payload.usageAvailable).toBe(false);
+  });
+
   it("decodes turn.plan.updated for plan rendering", () => {
     const parsed = decodeRuntimeEvent({
       type: "turn.plan.updated",

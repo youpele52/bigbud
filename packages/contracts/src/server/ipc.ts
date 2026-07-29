@@ -3,6 +3,9 @@ import type {
   GitCheckoutResult,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
+  GitDeleteBranchInput,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
   GitPreparePullRequestThreadInput,
@@ -65,6 +68,7 @@ import type {
   NotesUpdateInput,
 } from "./notes";
 import type { TeachListProjectsInput, TeachListProjectsResult } from "./teach";
+import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -112,6 +116,7 @@ import type {
   ServerUpdateAutomationInput,
 } from "./automation";
 import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
+import type { ServerSetThreadPinnedInput } from "./pinnedThreads";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -212,13 +217,12 @@ export interface DesktopTailscaleRemoteAccessStatus {
   error: string | null;
 }
 
-export interface DesktopBridge extends DesktopComputerUseBridge {
+export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
-  /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
@@ -313,6 +317,8 @@ export interface NativeApi {
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;
+    renameBranch: (input: GitRenameBranchInput) => Promise<GitRenameBranchResult>;
+    deleteBranch: (input: GitDeleteBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<GitCheckoutResult>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
@@ -338,6 +344,7 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<ServerConfig>;
     refreshProviders: () => Promise<ServerProviderUpdatedPayload>;
+    activateCliProxy: () => Promise<ServerProviderUpdatedPayload>;
     verifyExecutionTarget: (
       input: ServerVerifyExecutionTargetInput,
     ) => Promise<ServerVerifyExecutionTargetResult>;
@@ -348,6 +355,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSettings>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,

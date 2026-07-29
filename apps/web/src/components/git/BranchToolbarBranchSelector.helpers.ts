@@ -27,6 +27,19 @@ export function getBranchTriggerLabel(input: {
   return resolvedActiveBranch;
 }
 
+export function getBranchStatusText(input: {
+  isPending: boolean;
+  isFetchingNextPage: boolean;
+  hasNextPage: boolean;
+  visibleCount: number;
+  totalCount: number;
+}): string | null {
+  if (input.isPending) return "Loading branches...";
+  if (input.isFetchingNextPage) return "Loading more branches...";
+  if (input.hasNextPage) return `Showing ${input.visibleCount} of ${input.totalCount} branches`;
+  return null;
+}
+
 export function deriveBranchSelectorState(input: {
   branches: GitBranch[];
   branchQuery: string;

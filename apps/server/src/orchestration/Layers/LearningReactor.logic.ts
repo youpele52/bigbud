@@ -42,5 +42,7 @@ export function resolveLearningModelSelection(input: {
       return { provider: "cursor", model: input.model };
     case "devin":
       return { provider: "devin", model: input.model };
+    case "cliProxy":
+      return { provider: "cliProxy", model: input.model };
   }
 }

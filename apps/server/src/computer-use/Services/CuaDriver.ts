@@ -22,6 +22,9 @@ export interface CuaDriverShape {
     args: Record<string, unknown>,
   ) => Effect.Effect<CuaDriverCallResult, CuaDriverError>;
   readonly runDoctor: () => Effect.Effect<string, CuaDriverError>;
+  readonly resetProxy: Effect.Effect<void, never>;
+  readonly resetAfterUncertainAction: (reason: string) => Effect.Effect<void, CuaDriverError>;
+  readonly withExclusiveAccess: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly dispose: Effect.Effect<void, never>;
 }
 

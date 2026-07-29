@@ -11,7 +11,10 @@
 import { Effect, Layer, ServiceMap } from "effect";
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  PROVIDER_KINDS,
+  TextGenerationError,
   type ModelSelection,
+  type ProviderKind,
 } from "@bigbud/contracts";
 
 import {
@@ -34,6 +37,7 @@ import {
 } from "./ProviderNativeThreadTitleGeneration.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OpencodeServerManager } from "../../provider/Services/Opencode/ServerManager.ts";
+import { resolveProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
 
 // ---------------------------------------------------------------------------
 // Internal service tags so both concrete layers can coexist.
@@ -51,11 +55,18 @@ class CursorTextGen extends ServiceMap.Service<CursorTextGen, TextGenerationShap
   "t3/git/Layers/RoutingTextGeneration/CursorTextGen",
 ) {}
 
+function genericTextGenerationFallbackOrder(provider: ProviderKind): ReadonlyArray<ProviderKind> {
+  return provider === "pi" || provider === "kilocode" || provider === "opencode"
+    ? ["claudeAgent", "codex", "cursor"]
+    : ["codex", "claudeAgent", "cursor"];
+}
+
 export function normalizeTextGenerationModelSelection(
   modelSelection: ModelSelection,
 ): ModelSelection {
   switch (modelSelection.provider) {
     case "claudeAgent":
+    case "cliProxy":
     case "codex":
     case "cursor":
       return modelSelection;
@@ -66,9 +77,8 @@ export function normalizeTextGenerationModelSelection(
         provider: "claudeAgent",
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
       };
-    case "devin":
     case "copilot":
-    default:
+    case "devin":
       return {
         provider: "codex",
         model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
@@ -122,6 +132,17 @@ export function normalizeThreadElevatorSummaryGenerationInput(
 // Routing implementation
 // ---------------------------------------------------------------------------
 
+function unsupportedTextGeneration(provider: ProviderKind, operation: string, reason?: string) {
+  return Effect.fail(
+    new TextGenerationError({
+      operation,
+      detail:
+        reason ??
+        `Provider '${provider}' does not support unattended text generation, and no supported fallback is available.`,
+    }),
+  );
+}
+
 const makeRoutingTextGeneration = Effect.gen(function* () {
   const codex = yield* CodexTextGen;
   const claude = yield* ClaudeTextGen;
@@ -129,94 +150,164 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
   const serverSettingsService = yield* ServerSettingsService;
   const opencodeServerManager = yield* OpencodeServerManager;
 
+  const resolveTextGenerationSelection = Effect.fn("resolveTextGenerationSelection")(
+    function* (input: {
+      readonly requested: ModelSelection;
+      readonly operation: string;
+      readonly fallbackOrder?: ReadonlyArray<ProviderKind>;
+      readonly normalizeGeneric?: boolean;
+    }) {
+      const settings = yield* serverSettingsService.getSettings.pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: input.operation,
+              detail: `Failed to load provider settings: ${cause.message}`,
+              cause,
+            }),
+        ),
+      );
+      const availableProviderKinds = PROVIDER_KINDS.filter(
+        (provider) => settings.providers[provider].enabled,
+      );
+      const resolution = resolveProviderWorkload({
+        requested: input.requested,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds,
+        fallbackOrder:
+          input.fallbackOrder ?? genericTextGenerationFallbackOrder(input.requested.provider),
+      });
+      if (!resolution.actual) {
+        return yield* unsupportedTextGeneration(
+          input.requested.provider,
+          input.operation,
+          resolution.reason ?? undefined,
+        );
+      }
+      const actual =
+        input.normalizeGeneric === false
+          ? resolution.actual
+          : normalizeTextGenerationModelSelection(resolution.actual);
+      yield* Effect.annotateCurrentSpan({
+        "text-generation.requested-provider": resolution.requested.provider,
+        "text-generation.actual-provider": actual.provider,
+        ...(resolution.reason ? { "text-generation.fallback-reason": resolution.reason } : {}),
+      });
+      return actual;
+    },
+  );
+
   const route = (provider?: TextGenerationProvider): TextGenerationShape =>
     provider === "claudeAgent" ? claude : provider === "cursor" ? cursor : codex;
 
   return {
-    generateCommitMessage: (input) => {
-      const normalizedInput = normalizeGitCommitMessageGenerationInput(input);
-      return route(normalizedInput.modelSelection.provider).generateCommitMessage(normalizedInput);
-    },
-    generatePrContent: (input) => {
-      const normalizedInput = normalizeGitPrContentGenerationInput(input);
-      return route(normalizedInput.modelSelection.provider).generatePrContent(normalizedInput);
-    },
-    generateBranchName: (input) => {
-      const normalizedInput = normalizeGitBranchNameGenerationInput(input);
-      return route(normalizedInput.modelSelection.provider).generateBranchName(normalizedInput);
-    },
-    generateThreadTitle: (input) => {
-      switch (input.modelSelection.provider) {
-        case "codex":
-        case "claudeAgent":
-        case "cursor":
-          return route(input.modelSelection.provider).generateThreadTitle(input);
-        case "pi":
-          return generatePiThreadTitleNative(
+    generateCommitMessage: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generateCommitMessage",
+        });
+        const normalizedInput = normalizeGitCommitMessageGenerationInput({
+          ...input,
+          modelSelection,
+        });
+        return yield* route(normalizedInput.modelSelection.provider).generateCommitMessage(
+          normalizedInput,
+        );
+      }),
+    generatePrContent: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generatePrContent",
+        });
+        const normalizedInput = normalizeGitPrContentGenerationInput({ ...input, modelSelection });
+        return yield* route(normalizedInput.modelSelection.provider).generatePrContent(
+          normalizedInput,
+        );
+      }),
+    generateBranchName: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generateBranchName",
+        });
+        const normalizedInput = normalizeGitBranchNameGenerationInput({ ...input, modelSelection });
+        return yield* route(normalizedInput.modelSelection.provider).generateBranchName(
+          normalizedInput,
+        );
+      }),
+    generateThreadTitle: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generateThreadTitle",
+          fallbackOrder: ["codex", "claudeAgent", "cursor", "opencode", "copilot", "pi"],
+          normalizeGeneric: false,
+        });
+        const resolvedInput = { ...input, modelSelection };
+        switch (modelSelection.provider) {
+          case "codex":
+          case "claudeAgent":
+          case "cursor":
+            return yield* route(modelSelection.provider).generateThreadTitle(resolvedInput);
+          case "pi":
+            return yield* generatePiThreadTitleNative(
+              { serverSettingsService, opencodeServerManager },
+              {
+                ...input,
+                modelSelection,
+              },
+            );
+          case "copilot":
+            return yield* generateCopilotThreadTitleNative(
+              { serverSettingsService, opencodeServerManager },
+              {
+                ...input,
+                modelSelection,
+              },
+            );
+          case "opencode":
+            return yield* generateOpencodeThreadTitleNative(
+              { serverSettingsService, opencodeServerManager },
+              {
+                ...input,
+                modelSelection,
+              },
+            );
+          default:
+            return yield* route("codex").generateThreadTitle({
+              ...input,
+              modelSelection: {
+                provider: "codex",
+                model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
+              },
+            });
+        }
+      }),
+    generateThreadElevatorSummary: (input) =>
+      Effect.gen(function* () {
+        const modelSelection = yield* resolveTextGenerationSelection({
+          requested: input.modelSelection,
+          operation: "generateThreadElevatorSummary",
+          fallbackOrder: ["opencode", "codex", "claudeAgent", "cursor"],
+          normalizeGeneric: false,
+        });
+        const resolvedInput = { ...input, modelSelection };
+        if (modelSelection.provider === "opencode") {
+          return yield* generateOpencodeThreadElevatorSummaryNative(
+            { serverSettingsService, opencodeServerManager },
             {
-              serverSettingsService,
-              opencodeServerManager,
+              ...input,
+              modelSelection,
             },
-            {
-              cwd: input.cwd,
-              message: input.message,
-              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-              modelSelection: input.modelSelection,
-            },
-          );
-        case "copilot":
-          return generateCopilotThreadTitleNative(
-            {
-              serverSettingsService,
-              opencodeServerManager,
-            },
-            {
-              cwd: input.cwd,
-              message: input.message,
-              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-              modelSelection: input.modelSelection,
-            },
-          );
-        case "opencode":
-          return generateOpencodeThreadTitleNative(
-            {
-              serverSettingsService,
-              opencodeServerManager,
-            },
-            {
-              cwd: input.cwd,
-              message: input.message,
-              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-              modelSelection: input.modelSelection,
-            },
-          );
-        default:
-          return route("codex").generateThreadTitle(input);
-      }
-    },
-    generateThreadElevatorSummary: (input) => {
-      switch (input.modelSelection.provider) {
-        case "opencode":
-          return generateOpencodeThreadElevatorSummaryNative(
-            {
-              serverSettingsService,
-              opencodeServerManager,
-            },
-            {
-              cwd: input.cwd,
-              transcript: input.transcript,
-              ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-              modelSelection: input.modelSelection,
-            },
-          );
-        default: {
-          const normalizedInput = normalizeThreadElevatorSummaryGenerationInput(input);
-          return route(normalizedInput.modelSelection.provider).generateThreadElevatorSummary(
-            normalizedInput,
           );
         }
-      }
-    },
+        const normalizedInput = normalizeThreadElevatorSummaryGenerationInput(resolvedInput);
+        return yield* route(normalizedInput.modelSelection.provider).generateThreadElevatorSummary(
+          normalizedInput,
+        );
+      }),
   } satisfies TextGenerationShape;
 });
 

@@ -335,6 +335,7 @@ export async function createHarness(input?: {
     Layer.provideMerge(orchestrationLayer),
     Layer.provideMerge(
       Layer.succeed(ProjectionThreadWatchRepository, {
+        addActiveWatch: () => Effect.void,
         replaceActiveWatchesForMessage: () => Effect.void,
         listActiveByWatchedThread: () => Effect.succeed([]),
         listActiveByWatcherAndMessage: () => Effect.succeed([]),

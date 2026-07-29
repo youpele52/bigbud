@@ -34,6 +34,7 @@ import {
   projectThreadInteractionModeSet,
   projectThreadMetaUpdated,
   projectThreadRuntimeModeSet,
+  projectThreadTurnStartFailed,
   projectThreadUnarchived,
 } from "./projectorThreadLifecycle.ts";
 import {
@@ -42,6 +43,7 @@ import {
   retainThreadMessagesAfterRevert,
   retainThreadProposedPlansAfterRevert,
 } from "./projectorThreadState.ts";
+import { projectThreadTaskEvent } from "./projectorTasks.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -98,6 +100,9 @@ export function projectEvent(
 
     case "thread.interaction-mode-set":
       return projectThreadInteractionModeSet(nextBase, event);
+
+    case "thread.turn-start-failed":
+      return projectThreadTurnStartFailed(nextBase, event);
 
     case "thread.message-sent":
       return Effect.gen(function* () {
@@ -389,6 +394,10 @@ export function projectEvent(
           };
         }),
       );
+
+    case "thread.task-upserted":
+    case "thread.task-removed":
+      return projectThreadTaskEvent(nextBase, event);
 
     default:
       return Effect.succeed(nextBase);

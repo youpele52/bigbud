@@ -106,7 +106,14 @@ const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       assertLocalExecutionTarget("git.createBranch", input.cwd, input.executionTargetId).pipe(
         Effect.andThen(branchOps.createBranch(input)),
       ),
-    renameBranch: branchOps.renameBranch,
+    renameBranch: (input) =>
+      assertLocalExecutionTarget("git.renameBranch", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.renameBranch(input)),
+      ),
+    deleteBranch: (input) =>
+      assertLocalExecutionTarget("git.deleteBranch", input.cwd, input.executionTargetId).pipe(
+        Effect.andThen(branchOps.deleteBranch(input)),
+      ),
     setBranchUpstream: branchOps.setBranchUpstream,
     listLocalBranchNames: branchOps.listLocalBranchNames,
     initRepo: (input) =>

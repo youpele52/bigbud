@@ -77,6 +77,18 @@ it.effect("parses keybinding rules", () =>
     });
     assert.strictEqual(parsedNotes.command, "notes.toggle");
 
+    const parsedSidecar = yield* decode(KeybindingRule, {
+      key: "mod+shift+s",
+      command: "sidecar.toggle",
+    });
+    assert.strictEqual(parsedSidecar.command, "sidecar.toggle");
+
+    const parsedPlanCard = yield* decode(KeybindingRule, {
+      key: "mod+shift+t",
+      command: "planCard.toggle",
+    });
+    assert.strictEqual(parsedPlanCard.command, "planCard.toggle");
+
     const parsedThreadPrevious = yield* decode(KeybindingRule, {
       key: "mod+shift+[",
       command: "thread.previous",

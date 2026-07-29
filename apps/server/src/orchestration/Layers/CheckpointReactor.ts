@@ -25,6 +25,7 @@ import {
 } from "./CheckpointReactorCapture.handlers.ts";
 import { makeHandleRevertRequested } from "./CheckpointReactorRevert.ts";
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
+import { makeHandlePathCheckpointRequested } from "./CheckpointReactorPath.ts";
 
 type ReactorInput =
   | { readonly source: "runtime"; readonly event: ProviderRuntimeEvent }
@@ -70,6 +71,11 @@ const make = Effect.gen(function* () {
     workspaceEntries,
     appendRevertFailureActivity,
     resolveSessionRuntimeForThread,
+  );
+  const handlePathCheckpointRequested = makeHandlePathCheckpointRequested(
+    orchestrationEngine,
+    checkpointStore,
+    workspaceEntries,
   );
 
   const ensurePreTurnBaselineFromTurnStart = Effect.fn("ensurePreTurnBaselineFromTurnStart")(
@@ -211,6 +217,14 @@ const make = Effect.gen(function* () {
       return;
     }
 
+    if (
+      event.type === "thread.path-checkpoint-capture-requested" ||
+      event.type === "thread.path-checkpoint-restore-requested"
+    ) {
+      yield* handlePathCheckpointRequested(event);
+      return;
+    }
+
     if (event.type === "thread.turn-diff-completed") {
       yield* captureCheckpointFromPlaceholder(event).pipe(
         Effect.catch((error: any) =>
@@ -278,6 +292,8 @@ const make = Effect.gen(function* () {
           event.type !== "thread.turn-start-requested" &&
           event.type !== "thread.message-sent" &&
           event.type !== "thread.checkpoint-revert-requested" &&
+          event.type !== "thread.path-checkpoint-capture-requested" &&
+          event.type !== "thread.path-checkpoint-restore-requested" &&
           event.type !== "thread.turn-diff-completed"
         ) {
           return Effect.void;

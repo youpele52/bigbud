@@ -80,7 +80,13 @@ function createBaseServerConfig(): ServerConfig {
       textGenerationModelSelection: { provider: "codex" as const, model: "gpt-5.4-mini" },
       providers: {
         codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
-        claudeAgent: { enabled: true, binaryPath: "", customModels: [] },
+        claudeAgent: {
+          ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
+          enabled: true,
+          binaryPath: "",
+          customModels: [],
+        },
+        cliProxy: { enabled: true, configPath: "" },
         copilot: { enabled: true, binaryPath: "", customModels: [] },
         opencode: { enabled: true, binaryPath: "", customModels: [] },
         kilocode: { enabled: true, binaryPath: "", customModels: [] },

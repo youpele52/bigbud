@@ -23,6 +23,7 @@ import {
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
   ThreadRuntimeModeSetPayload,
+  ThreadTurnStartFailedPayload,
   ThreadUnarchivedPayload,
 } from "./Schemas.ts";
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
@@ -100,7 +101,14 @@ export function projectThreadCreated(
         archivedAt: null,
         deletingAt: null,
         deletedAt: null,
-        ...(payload.parentThread !== undefined ? { parentThread: payload.parentThread } : {}),
+        ...(payload.parentThread !== undefined
+          ? {
+              parentThread: {
+                ...payload.parentThread,
+                projectId: payload.parentThread.projectId ?? payload.projectId,
+              },
+            }
+          : {}),
         messages: [],
         activities: [],
         checkpoints: [],
@@ -146,6 +154,57 @@ export function projectThreadDeletionFailed(
         updatedAt: payload.updatedAt,
       }),
     })),
+  );
+}
+
+export function projectThreadTurnStartFailed(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.turn-start-failed" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadTurnStartFailedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => {
+      const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+      if (!thread) {
+        return nextBase;
+      }
+
+      const session = thread.session
+        ? {
+            ...thread.session,
+            status: "error" as const,
+            activeTurnId: null,
+            reason: payload.context,
+            lastError: payload.detail,
+            updatedAt: payload.createdAt,
+          }
+        : {
+            threadId: thread.id,
+            status: "error" as const,
+            providerName: thread.modelSelection.provider,
+            runtimeMode: thread.runtimeMode,
+            activeTurnId: null,
+            reason: payload.context,
+            lastError: payload.detail,
+            updatedAt: payload.createdAt,
+          };
+      const latestTurn = thread.latestTurn
+        ? {
+            ...thread.latestTurn,
+            state: "error" as const,
+            startedAt: thread.latestTurn.startedAt ?? payload.createdAt,
+            completedAt: thread.latestTurn.completedAt ?? payload.createdAt,
+          }
+        : null;
+
+      return {
+        ...nextBase,
+        threads: updateThread(nextBase.threads, payload.threadId, {
+          session,
+          latestTurn,
+          updatedAt: payload.createdAt,
+        }),
+      };
+    }),
   );
 }
 

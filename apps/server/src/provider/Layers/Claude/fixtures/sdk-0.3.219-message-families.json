@@ -1,0 +1,103 @@
+{
+  "sdkVersion": "0.3.219",
+  "redaction": "Synthetic identifiers, models, commands, and text preserve SDK field shapes without user content, paths, URLs, tokens, or tool output.",
+  "messages": [
+    {
+      "type": "system",
+      "subtype": "task_started",
+      "task_id": "task-redacted-2",
+      "description": "Redacted task",
+      "uuid": "00000000-0000-4000-8000-000000000010",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "task_progress",
+      "task_id": "task-redacted-2",
+      "description": "Redacted task",
+      "usage": { "total_tokens": 12, "tool_uses": 1, "duration_ms": 20 },
+      "uuid": "00000000-0000-4000-8000-000000000011",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "task_notification",
+      "task_id": "task-redacted-2",
+      "status": "completed",
+      "output_file": "redacted",
+      "summary": "Redacted summary",
+      "usage": { "total_tokens": 12, "tool_uses": 1, "duration_ms": 20 },
+      "uuid": "00000000-0000-4000-8000-000000000012",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "hook_response",
+      "hook_id": "hook-redacted",
+      "hook_name": "PostToolUse",
+      "hook_event": "PostToolUse",
+      "output": "redacted",
+      "stdout": "",
+      "stderr": "",
+      "outcome": "success",
+      "uuid": "00000000-0000-4000-8000-000000000013",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "result",
+      "subtype": "success",
+      "is_error": false,
+      "errors": [],
+      "stop_reason": "end_turn",
+      "fast_mode_state": "on",
+      "uuid": "00000000-0000-4000-8000-000000000014",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "api_retry",
+      "attempt": 1,
+      "max_retries": 3,
+      "retry_delay_ms": 100,
+      "error_status": 429,
+      "error": "rate_limit",
+      "uuid": "00000000-0000-4000-8000-000000000015",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "model_refusal_fallback",
+      "trigger": "refusal",
+      "direction": "retry",
+      "original_model": "model-redacted",
+      "fallback_model": "fallback-redacted",
+      "request_id": "request-redacted",
+      "api_refusal_category": "cyber",
+      "content": "redacted",
+      "uuid": "00000000-0000-4000-8000-000000000016",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "commands_changed",
+      "commands": [{ "name": "/redacted" }],
+      "uuid": "00000000-0000-4000-8000-000000000017",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "init",
+      "mcp_servers": [{ "name": "mcp-redacted", "status": "connected" }],
+      "uuid": "00000000-0000-4000-8000-000000000018",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "elicitation_complete",
+      "mcp_server_name": "mcp-redacted",
+      "elicitation_id": "elicitation-redacted",
+      "uuid": "00000000-0000-4000-8000-000000000019",
+      "session_id": "session-redacted"
+    }
+  ]
+}

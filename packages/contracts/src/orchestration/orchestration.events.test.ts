@@ -11,6 +11,7 @@ import {
   ThreadCreatedPayload,
   ThreadMetaUpdatedPayload,
   ThreadTurnStartRequestedPayload,
+  ThreadTurnStartFailedPayload,
   ThreadShellRunRequestedPayload,
 } from "./orchestration.events";
 
@@ -19,6 +20,7 @@ const decodeProjectMetaUpdatedPayload = Schema.decodeUnknownEffect(ProjectMetaUp
 const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
 );
+const decodeThreadTurnStartFailedPayload = Schema.decodeUnknownEffect(ThreadTurnStartFailedPayload);
 const decodeThreadShellRunRequestedPayload = Schema.decodeUnknownEffect(
   ThreadShellRunRequestedPayload,
 );
@@ -108,6 +110,7 @@ it.effect("decodes thread.created parent thread metadata when present", () =>
       parentThread: {
         threadId: "thread-1",
         title: "Parent thread",
+        projectId: "project-1",
       },
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -116,6 +119,7 @@ it.effect("decodes thread.created parent thread metadata when present", () =>
     assert.deepStrictEqual(parsed.parentThread, {
       threadId: "thread-1",
       title: "Parent thread",
+      projectId: "project-1",
     });
     assert.strictEqual(
       parsed.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
@@ -226,6 +230,19 @@ it.effect(
       assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
       assert.strictEqual(parsed.sourceProposedPlan, undefined);
     }),
+);
+
+it.effect("decodes durable terminal thread turn-start failures", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeThreadTurnStartFailedPayload({
+      threadId: "thread-1",
+      context: "provider-turn-start",
+      detail: "Provider session could not be started.",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.context, "provider-turn-start");
+    assert.strictEqual(parsed.detail, "Provider session could not be started.");
+  }),
 );
 
 it.effect("decodes thread.turn-start-requested source proposed plan metadata when present", () =>

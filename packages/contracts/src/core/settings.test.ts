@@ -17,6 +17,7 @@ import {
   DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD,
   DEFAULT_SERVER_SETTINGS,
   ServerSettings,
+  ServerSettingsPatch,
 } from "./settings";
 
 const decodeClientSettings = Schema.decodeUnknownEffect(ClientSettingsSchema);
@@ -46,6 +47,13 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.enabled).toBe(true);
   });
 
+  test("defaults CLIProxyAPI to enabled without a persisted config path", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.cliProxy).toEqual({
+      enabled: true,
+      configPath: "",
+    });
+  });
+
   test("defaults Cursor to the agent CLI binary", () => {
     expect(DEFAULT_SERVER_SETTINGS.providers.cursor.binaryPath).toBe("agent");
   });
@@ -53,6 +61,17 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
   test("defaults desktop computer use to disabled until the user opts in", () => {
     expect(DEFAULT_SERVER_SETTINGS.computerUseEnabled).toBe(false);
     expect(DEFAULT_SERVER_SETTINGS.hasSeenComputerUsePrompt).toBe(false);
+  });
+
+  test("keeps shipped Claude paths enabled and preview features disabled", () => {
+    expect(DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout).toEqual({
+      modernTaskExposure: true,
+      boundedHookProgress: true,
+      forwardedSubagentText: false,
+      mcpControls: true,
+      fileCheckpointRewind: false,
+      nativeFork: false,
+    });
   });
 
   test("defaults computer use limits", () => {
@@ -141,3 +160,63 @@ it.effect("rejects out-of-range computer use limits", () =>
     assert.strictEqual(result._tag, "Failure");
   }),
 );
+
+test("decodes a narrow Claude rollout settings patch", () => {
+  const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
+  expect(
+    decodePatch({
+      providers: {
+        claudeAgent: {
+          rollout: {
+            modernTaskExposure: true,
+            boundedHookProgress: true,
+          },
+        },
+      },
+    }),
+  ).toEqual({
+    providers: {
+      claudeAgent: {
+        rollout: {
+          modernTaskExposure: true,
+          boundedHookProgress: true,
+        },
+      },
+    },
+  });
+});
+
+test("decodes and preserves a CLIProxyAPI config path in settings patches", () => {
+  const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
+
+  expect(
+    decodePatch({
+      providers: {
+        cliProxy: {
+          configPath: "/Users/example/.cli-proxy-api/config.yaml",
+        },
+      },
+    }),
+  ).toEqual({
+    providers: {
+      cliProxy: {
+        configPath: "/Users/example/.cli-proxy-api/config.yaml",
+      },
+    },
+  });
+});
+
+test("decodes historical settings without CLIProxyAPI fields", () => {
+  const decoded = Schema.decodeUnknownSync(ServerSettings)({
+    providers: {
+      codex: {
+        enabled: false,
+        binaryPath: "codex",
+        homePath: "",
+        customModels: [],
+      },
+    },
+  });
+
+  expect(decoded.providers.cliProxy).toEqual({ enabled: true, configPath: "" });
+});

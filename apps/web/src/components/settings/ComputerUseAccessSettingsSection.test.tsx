@@ -8,6 +8,16 @@ const mockSettings = vi.hoisted(() => ({
   computerUseActionTimeoutMs: 15 * 60_000,
 }));
 const mockNativeApi = vi.hoisted(() => ({ present: true as boolean }));
+const mockComputerUse = vi.hoisted(() => ({
+  permissions: null as null | {
+    runtimeAvailable: boolean;
+    granted: boolean;
+    pendingHostAccessibilityApproval?: boolean;
+    message: string | null;
+    permissions: Array<{ name: string; granted: boolean }>;
+    source?: { attribution: string | null; embedded: boolean | null; hostBundleId: string | null };
+  },
+}));
 
 vi.mock("../../hooks/useSettings", () => ({
   useSettings: () => mockSettings,
@@ -20,7 +30,10 @@ vi.mock("../../rpc/nativeApi", () => ({
 
 vi.mock("../../lib/desktopComputerUseReactQuery", () => ({
   useDesktopComputerUseStatus: () => ({ data: null, isLoading: false }),
-  useDesktopComputerUsePermissions: () => ({ data: null, isLoading: false }),
+  useDesktopComputerUsePermissions: () => ({
+    data: mockComputerUse.permissions,
+    isLoading: false,
+  }),
   desktopComputerUsePermissionsQueryOptions: () => ({ queryKey: ["permissions"] }),
   setDesktopComputerUseStatusQueryData: vi.fn(),
   setDesktopComputerUsePermissionsQueryData: vi.fn(),
@@ -31,7 +44,10 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
-import { ComputerUseAccessSettingsSection } from "./ComputerUseAccessSettingsSection";
+import {
+  ComputerUseAccessSettingsSection,
+  formatComputerUsePermissionMessage,
+} from "./ComputerUseAccessSettingsSection";
 
 describe("ComputerUseAccessSettingsSection", () => {
   beforeEach(() => {
@@ -44,6 +60,7 @@ describe("ComputerUseAccessSettingsSection", () => {
   beforeEach(() => {
     mockSettings.computerUseEnabled = false;
     mockNativeApi.present = true;
+    mockComputerUse.permissions = null;
   });
 
   it("renders nothing outside the desktop shell", () => {
@@ -70,7 +87,49 @@ describe("ComputerUseAccessSettingsSection", () => {
     const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
 
     expect(markup).toContain("macOS permissions");
-    expect(markup).toContain("Request access");
+    expect(markup).toContain("Check access");
+  });
+
+  it("shows pending host approval and the active bundle identity", () => {
+    mockSettings.computerUseEnabled = true;
+    mockComputerUse.permissions = {
+      runtimeAvailable: true,
+      granted: false,
+      pendingHostAccessibilityApproval: true,
+      message: "Approve Accessibility, then check again.",
+      permissions: [{ name: "accessibility", granted: false }],
+      source: {
+        attribution: "host",
+        embedded: true,
+        hostBundleId: "ai.bigbud.desktop.dev",
+      },
+    };
+
+    const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
+
+    expect(markup).toContain("Waiting for Accessibility approval");
+    expect(markup).toContain("ai.bigbud.desktop.dev");
+  });
+
+  it("hides technical guidance after all permissions are granted", () => {
+    mockSettings.computerUseEnabled = true;
+    mockComputerUse.permissions = {
+      runtimeAvailable: true,
+      granted: true,
+      message: "ℹ️ Embedded mode: status reflects the HOST app's TCC grant.",
+      permissions: [{ name: "accessibility", granted: true }],
+      source: {
+        attribution: "host",
+        embedded: true,
+        hostBundleId: "ai.bigbud.desktop.dev",
+      },
+    };
+
+    const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
+
+    expect(markup).not.toContain("Embedded mode:");
+    expect(markup).toContain("Permission attribution:");
+    expect(markup).toContain("ai.bigbud.desktop.dev");
   });
 
   it("uses generic desktop wording on non-mac platforms", () => {
@@ -87,5 +146,13 @@ describe("ComputerUseAccessSettingsSection", () => {
     expect(markup).not.toContain("macOS permissions");
     expect(markup).not.toContain("Calendar and Reminders");
     expect(markup).not.toContain("System Settings");
+  });
+
+  it("keeps only informational permission guidance when permission cards provide the status", () => {
+    expect(
+      formatComputerUsePermissionMessage(
+        "✅ Accessibility: granted. ✅ Screen Recording: granted. ℹ️ Embedded mode: status reflects the HOST app's TCC grant.",
+      ),
+    ).toBe("Embedded mode: status reflects the HOST app's TCC grant.");
   });
 });

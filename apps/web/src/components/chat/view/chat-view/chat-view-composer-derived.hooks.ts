@@ -94,7 +94,6 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     activeProviderStatus,
     selectedModelForPickerWithCustomFallback,
     searchableModelOptions,
-    supportsCompact,
   } = useComposerProviderState(base, providerStatuses);
   const gitCwd = base.activeProject
     ? projectScriptCwd({
@@ -142,7 +141,6 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     searchableModelOptions,
     workspaceEntries,
     selectedProvider,
-    supportsCompact,
     activeProviderSlashCommands: activeProviderStatus?.slashCommands,
   });
 
@@ -264,7 +262,6 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     activeComposerMenuItem,
     nonPersistedComposerImageIdSet,
     activeProviderStatus,
-    supportsCompact,
     isGitRepo,
     terminalToggleShortcutLabel,
     terminalPanelToggleShortcutLabel,

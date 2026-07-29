@@ -115,10 +115,17 @@ export interface GitRenameBranchInput {
   cwd: string;
   oldBranch: string;
   newBranch: string;
+  executionTargetId?: string | undefined;
 }
 
 export interface GitRenameBranchResult {
   branch: string;
+}
+
+export interface GitDeleteBranchInput {
+  cwd: string;
+  branch: string;
+  executionTargetId?: string | undefined;
 }
 
 export interface GitFetchPullRequestBranchInput {
@@ -322,6 +329,8 @@ export interface GitCoreShape {
   readonly renameBranch: (
     input: GitRenameBranchInput,
   ) => Effect.Effect<GitRenameBranchResult, GitCommandError>;
+
+  readonly deleteBranch: (input: GitDeleteBranchInput) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Create a local branch.

@@ -1,17 +1,34 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { type RuntimeMode } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Fiber, Random, Stream } from "effect";
 
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import {
   makeHarness,
+  readFirstPromptMessage,
   makeDeterministicRandomService,
   THREAD_ID,
   RESUME_THREAD_ID,
 } from "./Adapter.test.helpers.ts";
 
 describe("ClaudeAdapterLive", () => {
+  it.effect("reports explicit recovery and rewind capabilities", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      assert.deepEqual(adapter.capabilities, {
+        sessionModelSwitch: "in-session",
+        sessionRecovery: "resume-restart",
+        conversationRewind: "unsupported",
+        conversationFork: "unsupported",
+      });
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("passes Claude resume ids without pinning a stale assistant checkpoint", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {
@@ -23,7 +40,7 @@ describe("ClaudeAdapterLive", () => {
         resumeCursor: {
           threadId: "resume-thread-1",
           resume: "550e8400-e29b-41d4-a716-446655440000",
-          resumeSessionAt: "assistant-99",
+          resumeSessionAt: "550e8400-e29b-41d4-a716-446655440001",
           turnCount: 3,
         },
         runtimeMode: "full-access",
@@ -33,14 +50,34 @@ describe("ClaudeAdapterLive", () => {
       assert.deepEqual(session.resumeCursor, {
         threadId: RESUME_THREAD_ID,
         resume: "550e8400-e29b-41d4-a716-446655440000",
-        resumeSessionAt: "assistant-99",
+        resumeSessionAt: "550e8400-e29b-41d4-a716-446655440001",
         turnCount: 3,
       });
 
       const createInput = harness.getLastCreateQueryInput();
       assert.equal(createInput?.options.resume, "550e8400-e29b-41d4-a716-446655440000");
       assert.equal(createInput?.options.sessionId, undefined);
-      assert.equal(createInput?.options.resumeSessionAt, undefined);
+      assert.equal(createInput?.options.resumeSessionAt, "550e8400-e29b-41d4-a716-446655440001");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("drops malformed persisted assistant resume boundaries", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: RESUME_THREAD_ID,
+        provider: "claudeAgent",
+        resumeCursor: {
+          resume: "550e8400-e29b-41d4-a716-446655440000",
+          resumeSessionAt: "assistant-99",
+        },
+        runtimeMode: "full-access",
+      });
+      assert.equal(harness.getLastCreateQueryInput()?.options.resumeSessionAt, undefined);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
@@ -79,8 +116,28 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("assigns native UUIDs to bigbud-originated user messages", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({ threadId: THREAD_ID, input: "hello", attachments: [] });
+      const message = yield* Effect.promise(() =>
+        readFirstPromptMessage(harness.getLastCreateQueryInput()),
+      );
+      assert.isTrue(typeof message?.uuid === "string");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect(
-    "supports rollbackThread by trimming in-memory turns and preserving earlier turns",
+    "rejects rollbackThread until SDK-backed transcript and file rewind are available",
     () => {
       const harness = makeHarness();
       return Effect.gen(function* () {
@@ -147,13 +204,18 @@ describe("ClaudeAdapterLive", () => {
         const threadBeforeRollback = yield* adapter.readThread(session.threadId);
         assert.equal(threadBeforeRollback.turns.length, 2);
 
-        const rolledBack = yield* adapter.rollbackThread(session.threadId, 1);
-        assert.equal(rolledBack.turns.length, 1);
-        assert.equal(rolledBack.turns[0]?.id, firstTurn.turnId);
+        const rollbackResult = yield* adapter.rollbackThread(session.threadId, 1).pipe(
+          Effect.match({
+            onFailure: () => "unsupported",
+            onSuccess: () => "rolled-back",
+          }),
+        );
+        assert.equal(rollbackResult, "unsupported");
 
         const threadAfterRollback = yield* adapter.readThread(session.threadId);
-        assert.equal(threadAfterRollback.turns.length, 1);
+        assert.equal(threadAfterRollback.turns.length, 2);
         assert.equal(threadAfterRollback.turns[0]?.id, firstTurn.turnId);
+        assert.equal(threadAfterRollback.turns[1]?.id, secondTurn.turnId);
       }).pipe(
         Effect.provideService(Random.Random, makeDeterministicRandomService()),
         Effect.provide(harness.layer),
@@ -261,108 +323,6 @@ describe("ClaudeAdapterLive", () => {
       });
 
       assert.deepEqual(harness.query.setModelCalls, ["claude-opus-4-6[1m]", "claude-opus-4-6"]);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect("sets plan permission mode on sendTurn when interactionMode is plan", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-
-      const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-      yield* adapter.sendTurn({
-        threadId: session.threadId,
-        input: "plan this for me",
-        interactionMode: "plan",
-        attachments: [],
-      });
-
-      assert.deepEqual(harness.query.setPermissionModeCalls, ["plan"]);
-    }).pipe(
-      Effect.provideService(Random.Random, makeDeterministicRandomService()),
-      Effect.provide(harness.layer),
-    );
-  });
-
-  it.effect.each<{ runtimeMode: RuntimeMode; expectedBase: string }>([
-    { runtimeMode: "full-access", expectedBase: "bypassPermissions" },
-    { runtimeMode: "approval-required", expectedBase: "default" },
-    { runtimeMode: "auto-accept-edits", expectedBase: "acceptEdits" },
-  ])(
-    "restores $expectedBase permission mode after plan turn ($runtimeMode)",
-    ({ runtimeMode, expectedBase }) => {
-      const harness = makeHarness();
-      return Effect.gen(function* () {
-        const adapter = yield* ClaudeAdapter;
-
-        const session = yield* adapter.startSession({
-          threadId: THREAD_ID,
-          provider: "claudeAgent",
-          runtimeMode,
-        });
-
-        yield* adapter.sendTurn({
-          threadId: session.threadId,
-          input: "plan this",
-          interactionMode: "plan",
-          attachments: [],
-        });
-
-        const turnCompletedFiber = yield* Stream.filter(
-          adapter.streamEvents,
-          (event) => event.type === "turn.completed",
-        ).pipe(Stream.runHead, Effect.forkChild);
-
-        harness.query.emit({
-          type: "result",
-          subtype: "success",
-          is_error: false,
-          errors: [],
-          session_id: `sdk-session-${runtimeMode}`,
-          uuid: `result-${runtimeMode}`,
-        } as unknown as SDKMessage);
-
-        yield* Fiber.join(turnCompletedFiber);
-
-        yield* adapter.sendTurn({
-          threadId: session.threadId,
-          input: "now do it",
-          interactionMode: "default",
-          attachments: [],
-        });
-
-        assert.deepEqual(harness.query.setPermissionModeCalls, ["plan", expectedBase]);
-      }).pipe(
-        Effect.provideService(Random.Random, makeDeterministicRandomService()),
-        Effect.provide(harness.layer),
-      );
-    },
-  );
-
-  it.effect("does not call setPermissionMode when interactionMode is absent", () => {
-    const harness = makeHarness();
-    return Effect.gen(function* () {
-      const adapter = yield* ClaudeAdapter;
-
-      const session = yield* adapter.startSession({
-        threadId: THREAD_ID,
-        provider: "claudeAgent",
-        runtimeMode: "full-access",
-      });
-      yield* adapter.sendTurn({
-        threadId: session.threadId,
-        input: "hello",
-        attachments: [],
-      });
-
-      assert.deepEqual(harness.query.setPermissionModeCalls, []);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

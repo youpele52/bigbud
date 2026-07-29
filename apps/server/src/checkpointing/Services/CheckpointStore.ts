@@ -27,6 +27,12 @@ export interface RestoreCheckpointInput {
   readonly fallbackToHead?: boolean;
 }
 
+export interface PathCheckpointInput {
+  readonly cwd: string;
+  readonly checkpointRef: CheckpointRef;
+  readonly path: string;
+}
+
 export interface DiffCheckpointsInput {
   readonly cwd: string;
   readonly fromCheckpointRef: CheckpointRef;
@@ -57,6 +63,11 @@ export interface CheckpointStoreShape {
     input: CaptureCheckpointInput,
   ) => Effect.Effect<void, CheckpointStoreError>;
 
+  /** Capture only one literal workspace-relative path. */
+  readonly capturePathCheckpoint: (
+    input: PathCheckpointInput,
+  ) => Effect.Effect<void, CheckpointStoreError>;
+
   /**
    * Check whether a checkpoint ref exists.
    */
@@ -71,6 +82,11 @@ export interface CheckpointStoreShape {
    */
   readonly restoreCheckpoint: (
     input: RestoreCheckpointInput,
+  ) => Effect.Effect<boolean, CheckpointStoreError>;
+
+  /** Restore only one literal workspace-relative path. */
+  readonly restorePathCheckpoint: (
+    input: PathCheckpointInput,
   ) => Effect.Effect<boolean, CheckpointStoreError>;
 
   /**

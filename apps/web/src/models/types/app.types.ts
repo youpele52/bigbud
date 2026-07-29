@@ -214,8 +214,10 @@ export interface SidebarThreadSummary {
   hasActionableProposedPlan: boolean;
 }
 
+export type ThreadSessionProvider = ProviderKind | "unknown";
+
 export interface ThreadSession {
-  provider: ProviderKind;
+  provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;
   createdAt: string;

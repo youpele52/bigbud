@@ -268,6 +268,22 @@ const ThreadCheckpointRevertCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadPathCheckpointCaptureCommand = Schema.Struct({
+  type: Schema.Literal("thread.path-checkpoint.capture"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+const ThreadPathCheckpointRestoreCommand = Schema.Struct({
+  type: Schema.Literal("thread.path-checkpoint.restore"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
 const ThreadSessionStopCommand = Schema.Struct({
   type: Schema.Literal("thread.session.stop"),
   commandId: CommandId,
@@ -292,6 +308,8 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
+  ThreadPathCheckpointCaptureCommand,
+  ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
@@ -314,6 +332,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadApprovalRespondCommand,
   ThreadUserInputRespondCommand,
   ThreadCheckpointRevertCommand,
+  ThreadPathCheckpointCaptureCommand,
+  ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;

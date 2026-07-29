@@ -5,6 +5,7 @@ import * as Path from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 
 import type { RotatingFileSink } from "@bigbud/shared/logging";
+import { releaseChannelLabel, resolveReleaseChannel } from "@bigbud/shared/releaseChannel";
 import {
   clearUpdatePollTimer,
   checkForUpdates,
@@ -36,6 +37,13 @@ import {
   requestComputerUsePermissions,
   runComputerUseDoctor,
 } from "./backend/cuaDriver";
+import { stopCuaDriverDaemon } from "./backend/cuaDriver.daemon";
+import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
+import {
+  makeCuaDriverLifecycle,
+  requestCuaDriverPermissionsAfterHostPreflight,
+} from "./backend/cuaDriver.lifecycle";
+import { requestHostAccessibilityPermission } from "./backend/cuaHostPermissions";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
   formatErrorMessage,
@@ -108,7 +116,13 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "bigbud";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const APP_DISPLAY_NAME = isDevelopment ? "bigbud (Dev)" : "bigbud (Beta)";
+const CUA_DRIVER_HOST_BUNDLE_ID = resolveCuaDriverHostBundleId(app.isPackaged);
+const releaseChannel = resolveReleaseChannel(app.getVersion());
+const APP_DISPLAY_NAME = isDevelopment
+  ? "bigbud (Dev)"
+  : releaseChannel
+    ? `bigbud (${releaseChannelLabel(releaseChannel)})`
+    : "bigbud";
 const APP_USER_MODEL_ID = "ai.bigbud.desktop";
 const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "bigbud-dev.desktop" : "bigbud.desktop";
 const LINUX_WM_CLASS = isDevelopment ? "bigbud-dev" : "bigbud";
@@ -136,6 +150,11 @@ let backendLogSink: RotatingFileSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let mobileBackendBaseUrl = "";
 let localMobileBackendBaseUrl = "";
+const cuaDriverLifecycle = makeCuaDriverLifecycle({
+  stopBackendAndWaitForExit,
+  stopCuaDriverDaemon,
+  startBackend,
+});
 
 async function syncMobileBackendBaseUrlFromTailscaleRemoteAccess(): Promise<void> {
   const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
@@ -191,6 +210,7 @@ function handleFatalStartupError(stage: string, error: unknown): void {
     dialog.showErrorBox("bigbud failed to start", `Stage: ${stage}\n${message}${detail}`);
   }
   stopBackend();
+  stopCuaDriverDaemon();
   restoreStdIoCapture?.();
   app.quit();
 }
@@ -225,6 +245,7 @@ process.on("uncaughtException", (error) => {
     isQuitting = true;
     dialog.showErrorBox("bigbud encountered an unexpected error", formatErrorMessage(error));
     stopBackend();
+    stopCuaDriverDaemon();
     restoreStdIoCapture?.();
     app.quit();
   }
@@ -262,6 +283,7 @@ function makeWindow(): BrowserWindow {
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
     desktopDir: __dirname,
+    menuActionChannel: MENU_ACTION_CHANNEL,
     spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
     resolveIconPath,
     getSafeExternalUrl,
@@ -342,8 +364,21 @@ async function bootstrap(): Promise<void> {
     getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
     getComputerUseRuntimeStatus: () => getComputerUseRuntimeStatus(BASE_DIR),
     getComputerUsePermissionsStatus: () => getComputerUsePermissionsStatus(BASE_DIR),
-    requestComputerUsePermissions: () => requestComputerUsePermissions(BASE_DIR),
-    installComputerUseRuntime: () => installComputerUseRuntime(BASE_DIR),
+    requestHostAccessibilityPermission,
+    requestComputerUsePermissions: (hostAccessibilityTrusted) =>
+      requestCuaDriverPermissionsAfterHostPreflight({
+        hostAccessibilityTrusted,
+        hostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
+        lifecycle: cuaDriverLifecycle,
+        requestPermissions: () => requestComputerUsePermissions(BASE_DIR),
+      }),
+    installComputerUseRuntime: async () => {
+      const result = await installComputerUseRuntime(BASE_DIR, CUA_DRIVER_HOST_BUNDLE_ID);
+      if (!result.ok) return result;
+      await cuaDriverLifecycle.refresh();
+      const status = await getComputerUseRuntimeStatus(BASE_DIR);
+      return { ok: !status.repairRequired, status };
+    },
     runComputerUseDoctor: () => runComputerUseDoctor(BASE_DIR),
     getTailscaleRemoteAccessStatus: async () => {
       const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
@@ -383,7 +418,7 @@ async function bootstrap(): Promise<void> {
   logHeader("bootstrap login shell hydration started");
   await syncShellEnvironmentAsync();
   logHeader("bootstrap login shell hydration completed");
-  startBackend();
+  await startBackend();
   logHeader("bootstrap backend start requested");
 }
 
@@ -402,6 +437,7 @@ function prepareForAppQuit(reason: string): void {
   logHeader(`${reason} received`);
   clearUpdatePollTimer();
   stopBackend();
+  stopCuaDriverDaemon();
   restoreStdIoCapture?.();
 }
 
@@ -424,6 +460,7 @@ app
       rootDir: ROOT_DIR,
       baseDir: BASE_DIR,
       backendMaxOldSpaceMb: desktopLinuxRuntimeConfig.backendMaxOldSpaceMb,
+      cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
       serverSettingsPath: SERVER_SETTINGS_PATH,
       getIsQuitting: () => isQuitting,
       getBackendLogSink: () => backendLogSink,

@@ -82,6 +82,30 @@ it.effect("rejects command fields that become empty after trim", () =>
   }),
 );
 
+it.effect("decodes path checkpoint capture and restore commands", () =>
+  Effect.gen(function* () {
+    const capture = yield* decodeOrchestrationCommand({
+      type: "thread.path-checkpoint.capture",
+      commandId: "command-1",
+      threadId: "thread-1",
+      path: " src/example.ts ",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const restore = yield* decodeOrchestrationCommand({
+      type: "thread.path-checkpoint.restore",
+      commandId: "command-2",
+      threadId: "thread-1",
+      path: "src/example.ts",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(capture.type, "thread.path-checkpoint.capture");
+    if (capture.type === "thread.path-checkpoint.capture") {
+      assert.strictEqual(capture.path, "src/example.ts");
+    }
+    assert.strictEqual(restore.type, "thread.path-checkpoint.restore");
+  }),
+);
+
 it.effect("decodes thread.turn.start defaults for provider and runtime mode", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadTurnStartCommand({

@@ -1,4 +1,4 @@
-import type { ModelSelection, ProviderKind } from "@bigbud/contracts";
+import { PROVIDER_DISPLAY_NAMES, type ModelSelection, type ProviderKind } from "@bigbud/contracts";
 import { useCallback, useRef, useState } from "react";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -24,19 +24,8 @@ interface UseChatViewProviderSwitchInput {
   runtime: ChatViewRuntimeState;
 }
 
-function providerSwitchTargetLabel(provider: ProviderKind): string {
-  switch (provider) {
-    case "claudeAgent":
-      return "Claude";
-    case "copilot":
-      return "Copilot";
-    case "opencode":
-      return "OpenCode";
-    case "pi":
-      return "Pi";
-    default:
-      return "Codex";
-  }
+export function providerSwitchTargetLabel(provider: ProviderKind): string {
+  return PROVIDER_DISPLAY_NAMES[provider];
 }
 
 export function useChatViewProviderSwitch({

@@ -212,12 +212,16 @@ export function initializePackagedLogging(
 // Backend output capture
 // ---------------------------------------------------------------------------
 
-/** Pipes child stdout/stderr into `backendLogSink` (packaged builds only). */
+/** Pipes backend stderr to the terminal in development and captures output in packaged builds. */
 export function captureBackendOutput(
   child: ChildProcess.ChildProcess,
   backendLogSink: RotatingFileSink | null,
 ): void {
-  if (!app.isPackaged || backendLogSink === null) return;
+  if (!app.isPackaged) {
+    child.stderr?.pipe(process.stderr);
+    return;
+  }
+  if (backendLogSink === null) return;
   const writeChunk = (chunk: unknown): void => {
     if (!backendLogSink) return;
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");

@@ -322,4 +322,29 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
 
       fs.rmSync(tempDir, { recursive: true, force: true });
     }));
+
+  it("reads a legacy provider binding without claiming it is routable", () =>
+    Effect.gen(function* () {
+      const directory = yield* ProviderSessionDirectory;
+      const sql = yield* SqlClient.SqlClient;
+      const threadId = ThreadId.makeUnsafe("thread-legacy-cli-proxy");
+      const now = new Date().toISOString();
+
+      yield* sql`
+        INSERT INTO provider_session_runtime (
+          thread_id, provider_name, adapter_key, execution_target_id, runtime_mode,
+          status, last_seen_at, resume_cursor_json, runtime_payload_json
+        ) VALUES (
+          ${threadId}, ${"cliProxy"}, ${"cliProxy"}, ${"local"}, ${"full-access"},
+          ${"running"}, ${now}, ${JSON.stringify({ cursor: "preserve" })}, ${null}
+        )
+      `;
+
+      const binding = yield* directory.getBinding(threadId);
+      assert.equal(Option.isSome(binding), true);
+      if (Option.isSome(binding)) {
+        assert.equal(binding.value.provider, "cliProxy");
+        assert.deepEqual(binding.value.resumeCursor, { cursor: "preserve" });
+      }
+    }));
 });

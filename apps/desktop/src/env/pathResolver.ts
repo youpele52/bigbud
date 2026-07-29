@@ -194,6 +194,21 @@ export function resolveBackendLauncherPath(): string {
   return process.execPath;
 }
 
+export function resolveBackendNodeExecutable(backendLauncherPath: string): string {
+  if (process.platform !== "darwin") return backendLauncherPath;
+  const executableName = Path.basename(backendLauncherPath);
+  const contentsDir = Path.resolve(Path.dirname(backendLauncherPath), "..");
+  const helperPath = Path.join(
+    contentsDir,
+    "Frameworks",
+    `${executableName} Helper.app`,
+    "Contents",
+    "MacOS",
+    `${executableName} Helper`,
+  );
+  return FS.existsSync(helperPath) ? helperPath : backendLauncherPath;
+}
+
 export function resolvePackagedOpencodeBinaryDir(): string | null {
   if (!app.isPackaged) return null;
 

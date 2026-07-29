@@ -44,6 +44,10 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: claudeOptions })
         : createModelSelection("claudeAgent", DEFAULT_MODEL_BY_PROVIDER.claudeAgent, claudeOptions);
     }
+    case "cliProxy":
+      return current?.provider === "cliProxy"
+        ? cloneModelSelection(current, { options: {} })
+        : createModelSelection("cliProxy", DEFAULT_MODEL_BY_PROVIDER.cliProxy, {});
     case "copilot": {
       const copilotOptions = options as NonNullable<ProviderModelOptions["copilot"]>;
       return current?.provider === "copilot"

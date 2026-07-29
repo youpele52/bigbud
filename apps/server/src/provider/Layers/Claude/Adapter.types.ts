@@ -15,6 +15,7 @@ import type {
   CanonicalRequestType,
   ProviderApprovalDecision,
   ProviderSession,
+  ProviderSessionStartInput,
   ProviderUserInputAnswers,
   RuntimeContentStreamKind,
   ThreadId,
@@ -22,8 +23,15 @@ import type {
   TurnId,
   UserInputQuestion,
 } from "@bigbud/contracts";
-import type { Deferred, Fiber, Queue } from "effect";
+import type { Deferred, Effect, Fiber, Queue } from "effect";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
+import type { ProviderAdapterError, ProviderAdapterProcessError } from "../../Errors.ts";
+import type { McpServerStatusEntry } from "@bigbud/contracts";
+import type { ClaudeInterruptReceipt, ClaudeQueryRuntime } from "./Adapter.sdk.ts";
+import type { ClaudeTaskState } from "./Adapter.tasks.ts";
+import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
+
+export type { ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 
 export const PROVIDER = "claudeAgent" as const;
 
@@ -81,6 +89,8 @@ export interface PendingApproval {
 export interface PendingUserInput {
   readonly questions: ReadonlyArray<UserInputQuestion>;
   readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
+  cancelled: boolean;
+  readonly sensitive?: boolean;
 }
 
 export interface ToolInFlight {
@@ -99,41 +109,62 @@ export interface ClaudeSessionContext {
   readonly promptQueue: Queue.Queue<PromptQueueItem>;
   readonly query: ClaudeQueryRuntime;
   readonly cleanupRemoteWorkspaceBridge?: () => Promise<void>;
-  streamFiber: Fiber.Fiber<void, Error> | undefined;
+  streamFiber: Fiber.Fiber<void, unknown> | undefined;
   readonly startedAt: string;
   readonly basePermissionMode: PermissionMode | undefined;
+  effectivePermissionMode: PermissionMode | undefined;
   currentApiModelId: string | undefined;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
+  readonly resolvedApprovals: Map<ApprovalRequestId, ProviderApprovalDecision>;
+  readonly resolvedApprovalSuggestions: Map<ApprovalRequestId, ReadonlyArray<PermissionUpdate>>;
+  readonly requestLedger: ClaudeRequestLedger;
+  readonly appliedSessionPermissionRequests: Set<ApprovalRequestId>;
+  readonly resolvedUserInputs: Map<ApprovalRequestId, ProviderUserInputAnswers>;
   readonly turns: Array<{
     id: TurnId;
     items: Array<unknown>;
   }>;
   readonly inFlightTools: Map<number, ToolInFlight>;
+  readonly taskState: ClaudeTaskState;
+  lastPlanFingerprint: string | undefined;
   turnState: ClaudeTurnState | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
   lastAssistantUuid: string | undefined;
+  lastInterruptReceipt: ClaudeInterruptReceipt | undefined;
+  readonly queuedUserMessageIds: Set<string>;
   lastThreadStartedId: string | undefined;
+  readonly seenNativeMessageIds: Set<string>;
+  mcpStatuses: Array<McpServerStatusEntry>;
+  readonly requiredMcpServerNames: ReadonlySet<string>;
+  readonly modernTaskExposure: boolean;
+  readonly mcpControlsEnabled: boolean;
+  refreshMcpStatuses: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
+  recoverStream: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
+  recoveryInFlight: Promise<void> | undefined;
   stopped: boolean;
 }
 
-export interface ClaudeQueryRuntime extends AsyncIterable<
-  import("@anthropic-ai/claude-agent-sdk").SDKMessage
-> {
-  readonly interrupt: () => Promise<void>;
-  readonly setModel: (model?: string) => Promise<void>;
-  readonly setPermissionMode: (mode: PermissionMode) => Promise<void>;
-  readonly setMaxThinkingTokens: (maxThinkingTokens: number | null) => Promise<void>;
-  readonly close: () => void;
-}
-
 export interface ClaudeAdapterLiveOptions {
+  readonly harness?: ClaudeHarnessConfig;
+  readonly resolveHarness?: (
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<ClaudeHarnessConfig, ProviderAdapterError>;
   readonly createQuery?: (input: {
     readonly prompt: AsyncIterable<SDKUserMessage>;
     readonly options: ClaudeQueryOptions;
   }) => ClaudeQueryRuntime;
   readonly nativeEventLogPath?: string;
   readonly nativeEventLogger?: EventNdjsonLogger;
+}
+
+export interface ClaudeHarnessConfig {
+  readonly binaryPath: string;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
+  /** Harness-local rollout controls; native Claude settings must not leak into adapters. */
+  readonly boundedHookProgress?: boolean;
+  readonly forwardSubagentText?: boolean;
 }

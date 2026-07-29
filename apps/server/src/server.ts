@@ -30,6 +30,7 @@ import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionD
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
+import { CliProxyCompositionLive } from "./provider/Layers/CliProxy/Composition";
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
@@ -37,7 +38,7 @@ import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
 import { makeOpencodeAdapterLive } from "./provider/Layers/Opencode/Adapter";
 import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
-import { ProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
+import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
@@ -65,8 +66,16 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
 import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
-import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
+import { makeProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
+import {
+  OptionalProviderRegistrations,
+  type OptionalProviderRegistration,
+} from "./provider/ProviderRegistration";
+import {
+  isProviderRegistered,
+  makeProviderCapabilitiesResolver,
+} from "./provider/providerCapabilities";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { WorkspaceEntriesLive } from "./workspace/Layers/WorkspaceEntries";
@@ -180,66 +189,94 @@ const CheckpointingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointStoreLive),
 );
 
-const ProviderLayerLive = Layer.unwrap(
+const makeProviderLayerLive = (
+  optionalRegistrations: ReadonlyArray<OptionalProviderRegistration>,
+) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
+      yield* cleanupProviderLogDirectories([
+        path.join(baseDir, "userdata", "logs", "provider"),
+        path.join(baseDir, "dev", "logs", "provider"),
+      ]);
+      const nativeEventLogger =
+        devUrl !== undefined
+          ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+              stream: "native",
+            })
+          : undefined;
+      const canonicalEventLogger =
+        devUrl !== undefined
+          ? yield* makeEventNdjsonLogger(providerEventLogPath, {
+              stream: "canonical",
+            })
+          : undefined;
+      const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
+        Layer.provide(ProviderSessionRuntimeRepositoryLive),
+      );
+      const codexAdapterLayer = makeCodexAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const claudeAdapterLayer = makeClaudeAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const copilotAdapterLayer = makeCopilotAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const cursorAdapterLayer = makeCursorAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const devinAdapterLayer = makeDevinAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const kilocodeAdapterLayer = makeKilocodeAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const opencodeAdapterLayer = makeOpencodeAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const piAdapterLayer = makePiAdapterLive(
+        nativeEventLogger ? { nativeEventLogger } : undefined,
+      );
+      const adapterRegistryLayer = makeProviderAdapterRegistryLive({
+        optionalRegistrations: optionalRegistrations.map((registration) => ({
+          provider: registration.provider,
+          service: registration.adapterService,
+        })),
+      }).pipe(
+        Layer.provide(codexAdapterLayer),
+        Layer.provide(claudeAdapterLayer),
+        Layer.provide(copilotAdapterLayer),
+        Layer.provide(cursorAdapterLayer),
+        Layer.provide(devinAdapterLayer),
+        Layer.provide(kilocodeAdapterLayer),
+        Layer.provide(opencodeAdapterLayer),
+        Layer.provide(piAdapterLayer),
+        Layer.provideMerge(providerSessionDirectoryLayer),
+      );
+      const getProviderCapabilities = makeProviderCapabilitiesResolver(optionalRegistrations);
+      return makeProviderServiceLive({
+        ...(canonicalEventLogger ? { canonicalEventLogger } : {}),
+        getProviderCapabilities,
+        isProviderComposed: (provider) => isProviderRegistered(provider, optionalRegistrations),
+      }).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
+    }),
+  );
+
+const ProviderInfrastructureLayerLive = Layer.unwrap(
   Effect.gen(function* () {
-    const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
-    yield* cleanupProviderLogDirectories([
-      path.join(baseDir, "userdata", "logs", "provider"),
-      path.join(baseDir, "dev", "logs", "provider"),
-    ]);
-    const nativeEventLogger =
-      devUrl !== undefined
-        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
-            stream: "native",
-          })
-        : undefined;
-    const canonicalEventLogger =
-      devUrl !== undefined
-        ? yield* makeEventNdjsonLogger(providerEventLogPath, {
-            stream: "canonical",
-          })
-        : undefined;
-    const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
-      Layer.provide(ProviderSessionRuntimeRepositoryLive),
+    const optionalRegistrations = yield* OptionalProviderRegistrations;
+    return Layer.mergeAll(
+      makeProviderLayerLive(optionalRegistrations),
+      makeProviderRegistryLive({
+        optionalRegistrations: optionalRegistrations.map((registration) => ({
+          provider: registration.provider,
+          service: registration.providerService,
+        })),
+      }),
     );
-    const codexAdapterLayer = makeCodexAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const claudeAdapterLayer = makeClaudeAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const copilotAdapterLayer = makeCopilotAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const cursorAdapterLayer = makeCursorAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const devinAdapterLayer = makeDevinAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const kilocodeAdapterLayer = makeKilocodeAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const opencodeAdapterLayer = makeOpencodeAdapterLive(
-      nativeEventLogger ? { nativeEventLogger } : undefined,
-    );
-    const piAdapterLayer = makePiAdapterLive(nativeEventLogger ? { nativeEventLogger } : undefined);
-    const adapterRegistryLayer = ProviderAdapterRegistryLive.pipe(
-      Layer.provide(codexAdapterLayer),
-      Layer.provide(claudeAdapterLayer),
-      Layer.provide(copilotAdapterLayer),
-      Layer.provide(cursorAdapterLayer),
-      Layer.provide(devinAdapterLayer),
-      Layer.provide(kilocodeAdapterLayer),
-      Layer.provide(opencodeAdapterLayer),
-      Layer.provide(piAdapterLayer),
-      Layer.provideMerge(providerSessionDirectoryLayer),
-    );
-    return makeProviderServiceLive(
-      canonicalEventLogger ? { canonicalEventLogger } : undefined,
-    ).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
   }),
-);
+).pipe(Layer.provide(CliProxyCompositionLive));
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
@@ -286,11 +323,10 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
-  Layer.provideMerge(ProviderLayerLive),
+  Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(TerminalLayerLive),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
-  Layer.provideMerge(ProviderRegistryLive),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive))),

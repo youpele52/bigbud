@@ -19,11 +19,9 @@ function formatPercentage(value: number | null): string | null {
 export function ContextWindowMeter(props: {
   usage: ContextWindowSnapshot;
   handoffAvailable: boolean;
-  compactAvailable: boolean;
   onUseHandoff: () => void;
-  onCompact: () => void;
 }) {
-  const { usage, handoffAvailable, compactAvailable, onUseHandoff, onCompact } = props;
+  const { usage, handoffAvailable, onUseHandoff } = props;
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
   const usedPercentage = formatPercentage(usage.usedPercentage);
@@ -135,13 +133,10 @@ export function ContextWindowMeter(props: {
               <AlertTitle>Context window warning</AlertTitle>
               <AlertDescription>
                 Some models may start deteriorating past{" "}
-                {formatContextWindowTokens(warningThreshold)} tokens. Consider using a handoff skill
-                or /compact.
+                {formatContextWindowTokens(warningThreshold)} tokens. Consider using handoff.
                 <ContextWindowRecoveryActions
                   handoffAvailable={handoffAvailable}
-                  compactAvailable={compactAvailable}
                   onUseHandoff={onUseHandoff}
-                  onCompact={onCompact}
                 />
               </AlertDescription>
             </Alert>

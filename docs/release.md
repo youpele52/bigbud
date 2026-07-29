@@ -13,9 +13,11 @@ This document covers how to run desktop releases from one tag, first without sig
   - Linux `x64` .deb
   - Windows `x64` NSIS installer
 - Publishes one GitHub Release with all produced files.
-  - Versions with a suffix after `X.Y.Z` (for example `1.2.3-beta.1`) are published as GitHub prereleases.
+  - Versions with an approved channel suffix after `X.Y.Z` (for example `1.2.3-beta.1`, `1.2.3-preview.1`, or `1.2.3-nightly.20260726`) are published as GitHub prereleases.
+  - Stable releases have no suffix; unsupported prerelease channel names fail preflight.
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
 - Includes Electron auto-update metadata (for example `latest*.yml` and `*.blockmap`) in release assets.
+- Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
 - Signing is optional and auto-detected per platform from secrets.
 
 ## Desktop auto-update notes
@@ -74,14 +76,23 @@ This document covers how to run desktop releases from one tag, first without sig
 - Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release.
 - Public curl-installable assets are only published by `.github/workflows/release.yml` on version tags like `v1.2.3`.
 
+## CUA driver 0.9.1 upgrade note
+
+- Desktop builds package `cua-driver-rs` 0.9.1; managed Runtime repair/install uses the same pinned release metadata and verified checksums.
+- Implementation and repository validation are complete: formatting, linting, typechecking, and all nine test tasks pass.
+- The runtime is a pre-release dependency. Promote it through an internal/preview desktop build before a stable desktop release.
+- bigbud owns the embedded daemon and its private endpoint. CUA telemetry and driver self-update checks are always disabled for bigbud-owned CUA processes.
+- As general release certification—not unfinished CUA implementation—run packaged and managed smoke checks on the targets supported by that release. Verify daemon restart/cleanup, permissions, capture/input, and fail-closed unsupported Wayland routes.
+- Monitor only bigbud's existing privacy-respecting lifecycle diagnostics; never collect action text, screenshots, or user content for rollout analysis.
+
 ## 1) Dry-run release without signing
 
 Use this first to validate the release pipeline.
 
 1. Confirm no signing secrets are required for this test.
 2. Create a test tag:
-   - `git tag v0.0.0-test.1`
-   - `git push origin v0.0.0-test.1`
+   - `git tag v0.0.0-beta.1`
+   - `git push origin v0.0.0-beta.1`
 3. Wait for `.github/workflows/release.yml` to finish.
 4. Verify the GitHub Release contains all platform artifacts.
 5. Download each artifact and sanity-check installation on each OS.

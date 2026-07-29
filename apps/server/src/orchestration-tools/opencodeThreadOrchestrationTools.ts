@@ -11,6 +11,10 @@ import {
   renderThreadOrchestrationConfigLiteral,
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
+import {
+  READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
+  SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
+} from "./capabilityCatalogTool.shared.ts";
 
 function renderOrchestrationToolSource(input: {
   readonly description: string;
@@ -67,6 +71,38 @@ export function renderOpencodeGetThreadStatusToolSource(): string {
   });
 }
 
+export function renderOpencodeSearchCapabilitiesToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
+    argsSource: [
+      '    query: tool.schema.string().optional().describe("Task or keywords to match"),',
+    ].join("\n"),
+    executeBody: [
+      "const result = await runtime.searchCapabilities({",
+      "  query: String(args.query ?? ''),",
+      "});",
+      "return result.message;",
+    ],
+  });
+}
+
+export function renderOpencodeReadCapabilityGuideToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
+    argsSource: [
+      '    capabilityId: tool.schema.string().describe("Capability ID or logical Track URI"),',
+      '    section: tool.schema.enum(["summary", "workflow", "permissions", "examples", "full"]).optional(),',
+    ].join("\n"),
+    executeBody: [
+      "const result = await runtime.readCapabilityGuide({",
+      "  capabilityId: String(args.capabilityId ?? ''),",
+      "  section: args.section ? String(args.section) : undefined,",
+      "});",
+      "return result.message;",
+    ],
+  });
+}
+
 export function renderOpencodeOrchestrationRuntimeSource(
   input: ThreadOrchestrationHttpConfig,
 ): string {
@@ -99,6 +135,25 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "  if (threadId.length === 0) throw new Error('Thread ID is required.');",
     "  const result = await callOrchestrationTool({ action: 'get_status', threadId });",
     "  return { message: JSON.stringify(result.status ?? {}, null, 2) };",
+    "}",
+    "",
+    "export async function searchCapabilities(input) {",
+    "  const result = await callOrchestrationTool({",
+    "    action: 'search_capabilities',",
+    "    query: input.query,",
+    "  });",
+    "  return { message: JSON.stringify(result.result ?? {}, null, 2) };",
+    "}",
+    "",
+    "export async function readCapabilityGuide(input) {",
+    "  const capabilityId = input.capabilityId.trim();",
+    "  if (capabilityId.length === 0) throw new Error('Capability ID is required.');",
+    "  const result = await callOrchestrationTool({",
+    "    action: 'read_capability_guide',",
+    "    capabilityId,",
+    "    ...(input.section ? { section: input.section } : {}),",
+    "  });",
+    "  return { message: JSON.stringify(result.result ?? {}, null, 2) };",
     "}",
     "",
   ].join("\n");
@@ -143,6 +198,16 @@ export async function writeOpencodeOrchestrationTools(input: {
       "utf8",
     ),
     writeFile(
+      path.join(toolsDir, "search_capabilities.ts"),
+      renderOpencodeSearchCapabilitiesToolSource(),
+      "utf8",
+    ),
+    writeFile(
+      path.join(toolsDir, "read_capability_guide.ts"),
+      renderOpencodeReadCapabilityGuideToolSource(),
+      "utf8",
+    ),
+    writeFile(
       path.join(runtimeDir, "opencode-orchestration-runtime.ts"),
       renderOpencodeOrchestrationRuntimeSource(httpConfig),
       "utf8",
@@ -154,6 +219,8 @@ export const OPENCODE_ORCHESTRATION_TOOL_FILES = {
   ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource,
   ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource,
   ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource,
+  ".opencode/tools/search_capabilities.ts": renderOpencodeSearchCapabilitiesToolSource,
+  ".opencode/tools/read_capability_guide.ts": renderOpencodeReadCapabilityGuideToolSource,
 } as const;
 
 export function renderOpencodeOrchestrationBridgeFiles(
@@ -163,6 +230,8 @@ export function renderOpencodeOrchestrationBridgeFiles(
     ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource(),
     ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource(),
     ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource(),
+    ".opencode/tools/search_capabilities.ts": renderOpencodeSearchCapabilitiesToolSource(),
+    ".opencode/tools/read_capability_guide.ts": renderOpencodeReadCapabilityGuideToolSource(),
     ".bigbud/opencode-orchestration-runtime.ts": renderOpencodeOrchestrationRuntimeSource(input),
   };
 }

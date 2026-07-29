@@ -56,7 +56,10 @@ export function buildOpenCodePermissionRules(
   runtimeMode: ProviderSession["runtimeMode"],
 ): PermissionRuleset {
   if (runtimeMode === "full-access") {
-    return [{ permission: "*", pattern: "*", action: "allow" }];
+    return [
+      { permission: "*", pattern: "*", action: "allow" },
+      { permission: "external_directory", pattern: "*", action: "ask" },
+    ];
   }
 
   const approvalRequiredRules: PermissionRuleset = [

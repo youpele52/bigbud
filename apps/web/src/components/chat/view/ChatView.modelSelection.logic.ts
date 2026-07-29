@@ -3,9 +3,10 @@ import { useMemo } from "react";
 import { LRUCache } from "../../../lib/lruCache";
 import { useStore } from "../../../stores/main";
 import type { Thread } from "../../../models/types";
+import { getProviderDescriptor } from "../provider/providerDescriptors";
 
 export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "kilocode" || provider === "pi";
+  return getProviderDescriptor(provider).supportsSubProviderID;
 }
 
 export function getModelSelectionSubProviderID(

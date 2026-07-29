@@ -20,13 +20,13 @@
     "smoke-test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
+    "@bigbud/shared": "workspace:*",
     "effect": "catalog:",
     "electron": "40.6.0",
     "electron-updater": "^6.6.2"
   },
   "devDependencies": {
     "@bigbud/contracts": "workspace:*",
-    "@bigbud/shared": "workspace:*",
     "@electron/notarize": "^3.1.1",
     "@types/node": "catalog:",
     "electron-builder": "25.1.8",

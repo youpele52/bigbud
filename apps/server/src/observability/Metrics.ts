@@ -1,5 +1,6 @@
 import { Duration, Effect, Exit, Metric } from "effect";
 import { dual } from "effect/Function";
+import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 
 import {
   compactMetricAttributes,
@@ -69,6 +70,90 @@ export const terminalSessionsTotal = Metric.counter("t3_terminal_sessions_total"
 export const terminalRestartsTotal = Metric.counter("t3_terminal_restarts_total", {
   description: "Total terminal restart requests handled.",
 });
+
+/** Low-cardinality counters for the Claude modernization rollout. */
+export const claudeModernizationEventsTotal = Metric.counter(
+  "t3_claude_modernization_events_total",
+  { description: "Privacy-safe Claude modernization lifecycle events." },
+);
+
+const CLAUDE_MODERNIZATION_EVENT_NAMES = new Set([
+  "initialization",
+  "unknown_message",
+  "task_reconciliation",
+  "activity_suppression",
+  "approval_replay",
+  "approval_conflict",
+  "interrupt",
+  "reinitialize",
+  "mcp",
+]);
+
+const CLAUDE_METRIC_PROVIDERS = new Set(["claudeAgent"]);
+const CLAUDE_METRIC_OUTCOMES = new Set([
+  "success",
+  "failure",
+  "cancelled",
+  "conflict",
+  "suppressed",
+  "unavailable",
+]);
+const CLAUDE_METRIC_SOURCES = new Set(["sdk", "runtime", "recovery", "initialization"]);
+const CLAUDE_METRIC_MODES = new Set([
+  "accept",
+  "deny",
+  "cancel",
+  "session",
+  "required",
+  "optional",
+]);
+
+const allowlistedClaudeMetricDimension = (
+  value: string | undefined,
+  allowed: ReadonlySet<string>,
+): string | undefined => (value && allowed.has(value) ? value : undefined);
+
+/** Allowlist rollout dimensions; prompts, paths, URLs, tokens, and SDK payloads are excluded. */
+export function claudeModernizationMetricAttributes(input: {
+  readonly event: string;
+  readonly provider?: string;
+  readonly outcome?: string;
+  readonly source?: string;
+  readonly mode?: string;
+}): Readonly<Record<string, string>> {
+  return compactMetricAttributes({
+    event: CLAUDE_MODERNIZATION_EVENT_NAMES.has(input.event) ? input.event : "unknown",
+    provider: allowlistedClaudeMetricDimension(input.provider, CLAUDE_METRIC_PROVIDERS),
+    outcome: allowlistedClaudeMetricDimension(input.outcome, CLAUDE_METRIC_OUTCOMES),
+    source: allowlistedClaudeMetricDimension(input.source, CLAUDE_METRIC_SOURCES),
+    mode: allowlistedClaudeMetricDimension(input.mode, CLAUDE_METRIC_MODES),
+  });
+}
+
+export function claudeRuntimeMetricAttributes(
+  event: ProviderRuntimeEvent,
+): Readonly<Record<string, string>> | undefined {
+  if (event.provider !== "claudeAgent") return undefined;
+  const name =
+    event.type === "session.configured"
+      ? "initialization"
+      : event.type === "task.updated" || event.type === "turn.plan.updated"
+        ? "task_reconciliation"
+        : event.type === "mcp.status.updated" || event.type === "mcp.oauth.completed"
+          ? "mcp"
+          : event.type === "runtime.warning"
+            ? "unknown_message"
+            : event.type === "turn.completed" && event.payload.state === "interrupted"
+              ? "interrupt"
+              : undefined;
+  return name
+    ? claudeModernizationMetricAttributes({
+        event: name,
+        provider: "claudeAgent",
+        source: "runtime",
+      })
+    : undefined;
+}
 
 export const metricAttributes = (
   attributes: Readonly<Record<string, unknown>>,

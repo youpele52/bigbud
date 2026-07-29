@@ -2,3 +2,4 @@
 export * from "./providerRuntime.primitives";
 export * from "./providerRuntime.payloads";
 export * from "./providerRuntime.events";
+export * from "./providerRuntime.mcp";

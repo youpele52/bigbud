@@ -30,9 +30,22 @@ const grantedPermissions: DesktopComputerUsePermissionsStatus = {
 
 const managedRuntime: DesktopComputerUseRuntimeStatus = {
   available: true,
+  ready: true,
+  repairRequired: false,
+  state: "ready",
   source: "managed",
   binaryPath: "/tmp/cua-driver",
-  version: "0.6.8",
+  version: "cua-driver 0.9.1",
+  expectedVersion: "0.9.1",
+  manifestSchema: "1",
+  policyVersion: "1",
+  policySha256: "digest",
+  daemonState: "ready",
+  platform: "darwin",
+  architecture: "arm64",
+  platformHealth: "ready",
+  healthSummary: "ok",
+  lastError: null,
   message: null,
   diagnostics: null,
 };
@@ -72,7 +85,6 @@ describe("enableComputerUseInBackground", () => {
 
     expect(updateSettings).toHaveBeenCalledWith({
       computerUseEnabled: true,
-      hasSeenComputerUsePrompt: true,
     });
 
     await vi.waitFor(() => {
@@ -103,9 +115,22 @@ describe("enableComputerUseInBackground", () => {
     getTestWindow().desktopBridge = makeDesktopBridge({
       getComputerUseRuntimeStatus: async () => ({
         available: false,
+        ready: false,
+        repairRequired: true,
+        state: "missing",
         source: "missing",
         binaryPath: null,
         version: null,
+        expectedVersion: "0.9.1",
+        manifestSchema: null,
+        policyVersion: null,
+        policySha256: null,
+        daemonState: "stopped",
+        platform: "darwin",
+        architecture: "arm64",
+        platformHealth: "degraded",
+        healthSummary: null,
+        lastError: null,
         message: "Computer Use runtime is not installed yet.",
         diagnostics: null,
       }),
@@ -124,6 +149,76 @@ describe("enableComputerUseInBackground", () => {
       type: "info",
       title: "Setting up Computer Use",
       description: "bigbud is preparing desktop automation in the background.",
+    });
+  });
+
+  it("requests permissions without reinstalling a permission-degraded runtime", async () => {
+    const queryClient = new QueryClient();
+    const updateSettings = vi.fn();
+    const installRuntime = vi.fn();
+    const requestPermissions = vi.fn().mockResolvedValue({
+      runtimeAvailable: true,
+      granted: false,
+      pendingHostAccessibilityApproval: true,
+      message: "Approve Accessibility, then check access again.",
+      permissions: [{ name: "accessibility", granted: false }],
+    });
+
+    getTestWindow().desktopBridge = makeDesktopBridge({
+      getComputerUseRuntimeStatus: async () => ({
+        ...managedRuntime,
+        ready: false,
+        repairRequired: false,
+        state: "degraded",
+        daemonState: "degraded",
+        platformHealth: "degraded",
+        healthSummary: "degraded",
+      }),
+      installComputerUseRuntime: installRuntime,
+      requestComputerUsePermissions: requestPermissions,
+    });
+
+    enableComputerUseInBackground({ queryClient, updateSettings });
+
+    await vi.waitFor(() => {
+      expect(requestPermissions).toHaveBeenCalledTimes(1);
+    });
+    expect(installRuntime).not.toHaveBeenCalled();
+    expect(addToast).toHaveBeenCalledWith({
+      type: "info",
+      title: "Finish macOS permissions",
+      description: "Approve Accessibility, then check access again.",
+    });
+  });
+
+  it("repairs an available but incompatible runtime before requesting permissions", async () => {
+    const queryClient = new QueryClient();
+    const updateSettings = vi.fn();
+    const installRuntime = vi.fn().mockResolvedValue({ ok: true, status: managedRuntime });
+    const requestPermissions = vi.fn().mockResolvedValue(grantedPermissions);
+
+    getTestWindow().desktopBridge = makeDesktopBridge({
+      getComputerUseRuntimeStatus: async () => ({
+        ...managedRuntime,
+        ready: false,
+        repairRequired: true,
+        state: "incompatible",
+        version: "cua-driver 0.6.8",
+        daemonState: "degraded",
+        platformHealth: "degraded",
+        healthSummary: null,
+        lastError: "cua-driver is missing required tools: get_session_state.",
+        message: "Expected cua-driver 0.9.1.",
+      }),
+      installComputerUseRuntime: installRuntime,
+      requestComputerUsePermissions: requestPermissions,
+    });
+
+    enableComputerUseInBackground({ queryClient, updateSettings });
+
+    await vi.waitFor(() => {
+      expect(installRuntime).toHaveBeenCalledTimes(1);
+      expect(requestPermissions).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -157,7 +252,7 @@ describe("enableComputerUseInBackground", () => {
       type: "info",
       title: "Finish desktop permissions",
       description:
-        "Approve any operating system permission prompts to finish enabling Computer Use.",
+        "Grant the needed operating system permissions in system settings, then return to bigbud and check access.",
     });
   });
 });

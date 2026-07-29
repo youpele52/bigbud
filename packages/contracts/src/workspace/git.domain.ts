@@ -71,6 +71,13 @@ export const GitRunStackedActionToast = Schema.Struct({
 });
 export type GitRunStackedActionToast = typeof GitRunStackedActionToast.Type;
 
+export const GitBranchWebLink = Schema.Struct({
+  provider: Schema.Literals(["github", "gitlab"]),
+  repositoryUrl: Schema.String,
+  branchUrl: Schema.String,
+});
+export type GitBranchWebLink = typeof GitBranchWebLink.Type;
+
 export const GitBranch = Schema.Struct({
   name: TrimmedNonEmptyStringSchema,
   isRemote: Schema.optional(Schema.Boolean),
@@ -78,6 +85,7 @@ export const GitBranch = Schema.Struct({
   current: Schema.Boolean,
   isDefault: Schema.Boolean,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
+  webLink: Schema.optional(GitBranchWebLink),
 });
 export type GitBranch = typeof GitBranch.Type;
 

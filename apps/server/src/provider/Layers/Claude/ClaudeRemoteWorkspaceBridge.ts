@@ -2,10 +2,15 @@ import type { Options as ClaudeQueryOptions } from "@anthropic-ai/claude-agent-s
 
 import { createRemoteWorkspaceMcpBridge } from "../../../remote-workspace-bridge/remoteWorkspaceMcpBridge.ts";
 import type { WorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
+import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 
 const CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME = "bigbud_remote_workspace";
 const CLAUDE_REMOTE_WORKSPACE_BUILTIN_TOOLS = [
   "AskUserQuestion",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskGet",
+  "TaskList",
   "TodoWrite",
   "ExitPlanMode",
 ] as const;
@@ -43,7 +48,7 @@ export async function createClaudeRemoteWorkspaceBridge(
       allowedTools: [...CLAUDE_REMOTE_WORKSPACE_ALLOWED_TOOLS],
       mcpServers: {
         [CLAUDE_REMOTE_WORKSPACE_MCP_SERVER_NAME]: {
-          command: process.execPath,
+          command: resolveNodeExecutable(),
           args: [bridge.serverPath],
         },
       },

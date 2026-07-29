@@ -166,7 +166,6 @@ export function useOrchestraPlayerComposer(input: {
           searchableModelOptions,
           workspaceEntries,
           selectedProvider,
-          supportsCompact: false,
           activeProviderSlashCommands,
         }),
       ),

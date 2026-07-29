@@ -333,11 +333,14 @@ export function handleServerRequest(
   if (request.method === "item/tool/call" && context.dynamicToolCallHandler) {
     const params = readObject(request.params);
     const namespace = readString(params, "namespace");
+    const sourceMessageId = readString(params, "sourceMessageId");
     void context
       .dynamicToolCallHandler({
+        requestId: request.id,
         tool: readString(params, "tool") ?? "",
         arguments: params?.arguments,
         ...(namespace ? { namespace } : {}),
+        ...(sourceMessageId ? { sourceMessageId } : {}),
       })
       .then((result) => {
         callbacks.writeMessage(context, {

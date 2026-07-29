@@ -69,12 +69,14 @@ describe("CheckpointDiffQueryLive", () => {
     const checkpointStore: CheckpointStoreShape = {
       isGitRepository: () => Effect.succeed(true),
       captureCheckpoint: () => Effect.void,
+      capturePathCheckpoint: () => Effect.void,
       hasCheckpointRef: ({ checkpointRef }) =>
         Effect.sync(() => {
           hasCheckpointRefCalls.push(checkpointRef);
           return true;
         }),
       restoreCheckpoint: () => Effect.succeed(true),
+      restorePathCheckpoint: () => Effect.succeed(true),
       diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd }) =>
         Effect.sync(() => {
           diffCheckpointsCalls.push({ fromCheckpointRef, toCheckpointRef, cwd });
@@ -133,8 +135,10 @@ describe("CheckpointDiffQueryLive", () => {
     const checkpointStore: CheckpointStoreShape = {
       isGitRepository: () => Effect.succeed(true),
       captureCheckpoint: () => Effect.void,
+      capturePathCheckpoint: () => Effect.void,
       hasCheckpointRef: () => Effect.succeed(true),
       restoreCheckpoint: () => Effect.succeed(true),
+      restorePathCheckpoint: () => Effect.succeed(true),
       diffCheckpoints: () => Effect.succeed(""),
       deleteCheckpointRefs: () => Effect.void,
     };

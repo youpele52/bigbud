@@ -9,7 +9,9 @@
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   type CanonicalItemType,
+  ProviderAgentId,
   ProviderItemId,
+  ProviderRequestId,
   RuntimeItemId,
   type ProviderRuntimeEvent,
   type ProviderRuntimeTurnStatus,
@@ -47,14 +49,21 @@ export function nativeProviderRefs(
   _context: ClaudeSessionContext,
   options?: {
     readonly providerItemId?: string | undefined;
+    readonly providerRequestId?: string | undefined;
+    readonly providerAgentId?: string | undefined;
   },
 ): NonNullable<ProviderRuntimeEvent["providerRefs"]> {
-  if (options?.providerItemId) {
-    return {
-      providerItemId: ProviderItemId.makeUnsafe(options.providerItemId),
-    };
-  }
-  return {};
+  return {
+    ...(options?.providerItemId
+      ? { providerItemId: ProviderItemId.makeUnsafe(options.providerItemId) }
+      : {}),
+    ...(options?.providerRequestId
+      ? { providerRequestId: ProviderRequestId.makeUnsafe(options.providerRequestId) }
+      : {}),
+    ...(options?.providerAgentId
+      ? { providerAgentId: ProviderAgentId.makeUnsafe(options.providerAgentId) }
+      : {}),
+  };
 }
 
 export function extractAssistantTextBlocks(message: SDKMessage): Array<string> {

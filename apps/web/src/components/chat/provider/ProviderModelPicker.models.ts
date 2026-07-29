@@ -1,16 +1,11 @@
-import { type ProviderKind } from "@bigbud/contracts";
-import { type ProviderPickerKind, PROVIDER_OPTIONS } from "../../../logic/session";
+import { type ProviderKind, type ServerProvider } from "@bigbud/contracts";
+import type { Icon } from "../../Icons";
 import {
-  ClaudeAI,
-  CopilotIcon,
-  CursorIcon,
-  DevinIcon,
-  type Icon,
-  KilocodeIcon,
-  OpenAI,
-  OpenCodeIcon,
-  PiIcon,
-} from "../../Icons";
+  PROVIDER_DESCRIPTORS,
+  PROVIDER_OPTIONS,
+  providerSupportsSubProviderID as descriptorSupportsSubProviderID,
+  type ProviderPickerKind,
+} from "./providerDescriptors";
 
 export function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
   value: ProviderKind;
@@ -20,20 +15,42 @@ export function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[numb
   return option.available;
 }
 
-export const PROVIDER_ICON_BY_PROVIDER: Record<ProviderPickerKind, Icon> = {
-  codex: OpenAI,
-  claudeAgent: ClaudeAI,
-  copilot: CopilotIcon,
-  opencode: OpenCodeIcon,
-  kilocode: KilocodeIcon,
-  pi: PiIcon,
-  cursor: CursorIcon,
-  devin: DevinIcon,
-};
+export const PROVIDER_ICON_BY_PROVIDER = Object.fromEntries(
+  PROVIDER_DESCRIPTORS.map((descriptor) => [descriptor.provider, descriptor.icon]),
+) as Record<ProviderPickerKind, Icon>;
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 export const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
-export type { ProviderPickerKind } from "../../../logic/session";
+export type { ProviderPickerKind } from "./providerDescriptors";
+
+export function getProviderModelAvailability(input: {
+  providers: ReadonlyArray<ServerProvider> | undefined;
+  provider: ServerProvider | undefined;
+  modelCount: number;
+}) {
+  const loading =
+    input.modelCount === 0 && (input.providers === undefined || input.provider === undefined);
+  const unavailableMessage =
+    input.provider &&
+    (!input.provider.enabled
+      ? "Provider is disabled"
+      : !input.provider.installed
+        ? "Provider is not installed"
+        : input.provider.auth.status === "unauthenticated"
+          ? "Provider login required"
+          : input.provider.status === "error" || input.provider.status === "warning"
+            ? (input.provider.message ?? "Provider unavailable")
+            : undefined);
+  const unavailable =
+    input.provider !== undefined &&
+    (!input.provider.enabled ||
+      !input.provider.installed ||
+      input.provider.auth.status === "unauthenticated" ||
+      input.provider.status === "error" ||
+      (input.provider.status === "warning" && input.modelCount === 0));
+
+  return { loading, unavailable, unavailableMessage };
+}
 
 // exactOptionalPropertyTypes: group/subProviderID must be `string | undefined` so callers can
 // safely pass through server model mappings unchanged.
@@ -70,7 +87,7 @@ export function modelOptionValue(option: ModelOption): string {
 }
 
 export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
-  return provider === "opencode" || provider === "kilocode" || provider === "pi";
+  return descriptorSupportsSubProviderID(provider);
 }
 
 export function visibleModelOptionsForPicker(

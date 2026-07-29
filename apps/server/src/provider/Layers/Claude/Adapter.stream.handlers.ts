@@ -7,8 +7,6 @@ import {
   asCanonicalTurnId,
   asRuntimeItemId,
   classifyToolItemType,
-  extractPlanStepsFromTodoInput,
-  isTodoTool,
   nativeProviderRefs,
   streamKindFromDeltaType,
   summarizeToolRequest,
@@ -24,6 +22,10 @@ import type {
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeMessageSpecificHandlers } from "./Adapter.stream.handlers.messages.ts";
+import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
+import { asRecord } from "./Adapter.sdk.messages.ts";
+import { CLAUDE_AGENT_SDK_VERSION, claudeSdkMessageLabel } from "./Adapter.sdk.ts";
+import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import { makeSystemHandlers } from "./Adapter.stream.system.ts";
 
@@ -41,7 +43,7 @@ export interface MessageHandlerDeps {
 export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
   const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn } = deps;
 
-  const systemHandlers = makeSystemHandlers({ makeEventStamp, offerRuntimeEvent, turn });
+  const systemHandlers = makeSystemHandlers({ makeEventStamp, offerRuntimeEvent, nowIso, turn });
   const messageSpecificHandlers = makeMessageSpecificHandlers({
     makeEventStamp,
     offerRuntimeEvent,
@@ -105,11 +107,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
             delta: deltaText,
           },
           providerRefs: nativeProviderRefs(context),
-          raw: {
-            source: "claude.sdk.message",
-            method: "claude/stream_event/content_block_delta",
-            payload: message,
-          },
+          raw: claudeSdkRuntimeRaw(message, "claude/stream_event/content_block_delta"),
         });
         return;
       }
@@ -170,32 +168,22 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
             },
           },
           providerRefs: nativeProviderRefs(context, { providerItemId: nextTool.itemId }),
-          raw: {
-            source: "claude.sdk.message",
-            method: "claude/stream_event/content_block_delta/input_json_delta",
-            payload: message,
-          },
+          raw: claudeSdkRuntimeRaw(
+            message,
+            "claude/stream_event/content_block_delta/input_json_delta",
+          ),
         });
 
-        if (isTodoTool(nextTool.toolName) && parsedInput) {
-          const planSteps = extractPlanStepsFromTodoInput(parsedInput);
-          if (planSteps.length > 0 && context.turnState) {
-            const planStamp = yield* makeEventStamp();
-            yield* offerRuntimeEvent({
-              type: "turn.plan.updated",
-              eventId: planStamp.eventId,
-              provider: PROVIDER,
-              createdAt: planStamp.createdAt,
-              threadId: context.session.threadId,
-              turnId: context.turnState.turnId,
-              payload: {
-                plan: planSteps,
-              },
-              providerRefs: nativeProviderRefs(context, {
-                providerItemId: nextTool.itemId,
-              }),
-            });
-          }
+        if (parsedInput) {
+          yield* updateClaudeTaskPlan({
+            context,
+            toolUseId: nextTool.itemId,
+            toolName: nextTool.toolName,
+            input: parsedInput,
+            now: yield* nowIso,
+            makeEventStamp,
+            offerRuntimeEvent,
+          });
         }
       }
       return;
@@ -219,10 +207,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
 
       const toolName = block.name;
       const itemType = classifyToolItemType(toolName);
-      const toolInput =
-        typeof block.input === "object" && block.input !== null
-          ? (block.input as Record<string, unknown>)
-          : {};
+      const toolInput = asRecord(block.input) ?? {};
       const itemId = block.id;
       const detail = summarizeToolRequest(toolName, toolInput);
       const inputFingerprint =
@@ -260,11 +245,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
           },
         },
         providerRefs: nativeProviderRefs(context, { providerItemId: tool.itemId }),
-        raw: {
-          source: "claude.sdk.message",
-          method: "claude/stream_event/content_block_start",
-          payload: message,
-        },
+        raw: claudeSdkRuntimeRaw(message, "claude/stream_event/content_block_start"),
       });
       return;
     }
@@ -276,7 +257,7 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         assistantBlock.streamClosed = true;
         yield* blocks.completeAssistantTextBlock(context, assistantBlock, {
           rawMethod: "claude/stream_event/content_block_stop",
-          rawPayload: message,
+          rawPayload: claudeSdkDiagnostic(message),
         });
         return;
       }
@@ -285,24 +266,16 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
         return;
       }
 
-      if (isTodoTool(tool.toolName) && tool.input && typeof tool.input === "object") {
-        const planSteps = extractPlanStepsFromTodoInput(tool.input as Record<string, unknown>);
-        if (planSteps.length > 0 && context.turnState) {
-          const planStamp = yield* makeEventStamp();
-          yield* offerRuntimeEvent({
-            type: "turn.plan.updated",
-            eventId: planStamp.eventId,
-            provider: PROVIDER,
-            createdAt: planStamp.createdAt,
-            threadId: context.session.threadId,
-            turnId: context.turnState.turnId,
-            payload: {
-              plan: planSteps,
-            },
-            providerRefs: nativeProviderRefs(context, { providerItemId: tool.itemId }),
-          });
-        }
-      }
+      yield* updateClaudeTaskPlan({
+        context,
+        toolUseId: tool.itemId,
+        toolName: tool.toolName,
+        input: tool.input,
+        ...(tool.toolName === "TaskList" ? { authoritativeSnapshot: true } : {}),
+        now: yield* nowIso,
+        makeEventStamp,
+        offerRuntimeEvent,
+      });
     }
   });
 
@@ -339,8 +312,8 @@ export const makeMessageHandlers = (deps: MessageHandlerDeps) => {
       default:
         yield* turn.emitRuntimeWarning(
           context,
-          `Unhandled Claude SDK message type '${message.type}'.`,
-          message,
+          `Unhandled Claude Agent SDK ${CLAUDE_AGENT_SDK_VERSION} message '${claudeSdkMessageLabel(message)}'.`,
+          { sdkVersion: CLAUDE_AGENT_SDK_VERSION, message: claudeSdkMessageLabel(message) },
         );
         return;
     }

@@ -96,7 +96,7 @@ describe("CheckpointReactor", () => {
     ).toBe(false);
   });
 
-  it("executes provider revert and emits thread.reverted for claude sessions", async () => {
+  it("rejects Claude revert before provider or filesystem mutation", async () => {
     const harness = await createHarness({ providerName: "claudeAgent" });
     const createdAt = new Date().toISOString();
 
@@ -157,12 +157,14 @@ describe("CheckpointReactor", () => {
       }),
     );
 
-    await waitForEvent(harness.engine, (event) => event.type === "thread.reverted");
-    expect(harness.provider.rollbackConversation).toHaveBeenCalledTimes(1);
-    expect(harness.provider.rollbackConversation).toHaveBeenCalledWith({
-      threadId: ThreadId.makeUnsafe("thread-1"),
-      numTurns: 1,
-    });
+    await waitForThread(harness.engine, (entry) =>
+      entry.activities.some((activity) => activity.kind === "checkpoint.revert.failed"),
+    );
+    expect(harness.provider.rollbackConversation).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(harness.cwd, "README.md"), "utf8")).toBe("v3\n");
+    expect(
+      gitRefExists(harness.cwd, checkpointRefForThreadTurn(ThreadId.makeUnsafe("thread-1"), 2)),
+    ).toBe(true);
   });
 
   it("processes consecutive revert requests with deterministic rollback sequencing", async () => {

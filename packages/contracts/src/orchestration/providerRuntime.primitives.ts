@@ -39,13 +39,17 @@ export const RuntimeEventRaw = Schema.Struct({
 });
 export type RuntimeEventRaw = typeof RuntimeEventRaw.Type;
 
-const ProviderRequestId = TrimmedNonEmptyStringSchema;
+export const ProviderRequestId = TrimmedNonEmptyStringSchema;
 export type ProviderRequestId = typeof ProviderRequestId.Type;
+
+export const ProviderAgentId = TrimmedNonEmptyStringSchema;
+export type ProviderAgentId = typeof ProviderAgentId.Type;
 
 export const ProviderRefs = Schema.Struct({
   providerTurnId: Schema.optional(TrimmedNonEmptyStringSchema),
   providerItemId: Schema.optional(ProviderItemId),
   providerRequestId: Schema.optional(ProviderRequestId),
+  providerAgentId: Schema.optional(ProviderAgentId),
 });
 export type ProviderRefs = typeof ProviderRefs.Type;
 
@@ -125,6 +129,7 @@ export const ProviderRuntimeEventType = Schema.Literals([
   "task.started",
   "task.progress",
   "task.completed",
+  "task.updated",
   "hook.started",
   "hook.progress",
   "hook.completed",

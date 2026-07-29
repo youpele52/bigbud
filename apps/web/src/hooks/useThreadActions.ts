@@ -306,6 +306,7 @@ export function useThreadActions() {
           parentThread: {
             threadId: sourceThreadId,
             title: sourceThread.title,
+            projectId: sourceThread.projectId,
           },
           seedMessages,
           createdAt,

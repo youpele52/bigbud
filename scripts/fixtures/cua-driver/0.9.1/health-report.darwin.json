@@ -1,0 +1,70 @@
+{
+  "content": [
+    {
+      "text": "⚠️ cua-driver 0.9.1 on darwin — degraded\n  ✅ binary_version: cua-driver 0.9.1\n  ✅ platform_supported: macOS 26.5.2 (arm64)\n  ✅ session_active: MCP session is active.\n  ❌ bundle_identity: Process has no CFBundleIdentifier.\n  ❌ tcc_accessibility: Accessibility is NOT granted for this process.\n  ✅ tcc_screen_recording: Screen Recording is granted.\n  ❌ ax_capability: AX is not trusted; UI inspection and event posting will fail.\n  ✅ screen_capture_capability: ScreenCaptureKit reachable; 2 display(s) shareable.",
+      "type": "text"
+    }
+  ],
+  "isError": false,
+  "structuredContent": {
+    "checks": [
+      {
+        "message": "cua-driver 0.9.1",
+        "name": "binary_version",
+        "status": "pass"
+      },
+      {
+        "data": {
+          "architecture": "arm64",
+          "os_version": "26.5.2"
+        },
+        "message": "macOS 26.5.2 (arm64)",
+        "name": "platform_supported",
+        "status": "pass"
+      },
+      {
+        "message": "MCP session is active.",
+        "name": "session_active",
+        "status": "pass"
+      },
+      {
+        "data": {
+          "executable_path": "/private<TEMP_DIR>/extract/cua-driver-rs-0.9.1-darwin-universal/cua-driver"
+        },
+        "hint": "Run the binary inside CuaDriver.app so TCC grants attribute correctly. Start the daemon with `open -n -g -a CuaDriver --args serve` and connect via `cua-driver mcp`.",
+        "message": "Process has no CFBundleIdentifier.",
+        "name": "bundle_identity",
+        "status": "fail"
+      },
+      {
+        "hint": "Grant Accessibility to CuaDriver.app in System Settings → Privacy & Security → Accessibility. If the process bundle is not com.trycua.driver (see bundle_identity), the grant must target the responsible app — restart via `cua-driver mcp` to relaunch inside CuaDriver.app.",
+        "message": "Accessibility is NOT granted for this process.",
+        "name": "tcc_accessibility",
+        "status": "fail"
+      },
+      {
+        "message": "Screen Recording is granted.",
+        "name": "tcc_screen_recording",
+        "status": "pass"
+      },
+      {
+        "hint": "Resolve tcc_accessibility first — AX capability follows directly from the Accessibility TCC grant.",
+        "message": "AX is not trusted; UI inspection and event posting will fail.",
+        "name": "ax_capability",
+        "status": "fail"
+      },
+      {
+        "data": {
+          "display_count": 2
+        },
+        "message": "ScreenCaptureKit reachable; 2 display(s) shareable.",
+        "name": "screen_capture_capability",
+        "status": "pass"
+      }
+    ],
+    "driver_version": "0.9.1",
+    "overall": "degraded",
+    "platform": "darwin",
+    "schema_version": "1"
+  }
+}

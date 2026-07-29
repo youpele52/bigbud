@@ -15,7 +15,15 @@ describe("ClaudeRemoteWorkspaceBridge", () => {
     });
 
     expect(bridge.cwd).toContain("bigbud-claude-remote-workspace-");
-    expect(bridge.queryOptions.tools).toEqual(["AskUserQuestion", "TodoWrite", "ExitPlanMode"]);
+    expect(bridge.queryOptions.tools).toEqual([
+      "AskUserQuestion",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskGet",
+      "TaskList",
+      "TodoWrite",
+      "ExitPlanMode",
+    ]);
     expect(bridge.queryOptions.allowedTools).toEqual([
       "mcp__bigbud_remote_workspace__read",
       "mcp__bigbud_remote_workspace__grep",

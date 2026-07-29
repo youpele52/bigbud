@@ -22,6 +22,7 @@ import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserP
 import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
 import { toggleNotesPanel } from "~/stores/notes/notesPanel.coordinator";
+import { toggleSideChat } from "~/components/chat/side-chat/sideChat.actions";
 import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { toastManager } from "~/components/ui/toast";
@@ -165,6 +166,14 @@ function ChatRouteGlobalShortcuts({ onToggleSearch }: ChatRouteGlobalShortcutsPr
         event.preventDefault();
         event.stopPropagation();
         toggleNotesPanel();
+        return;
+      }
+
+      if (command === "sidecar.toggle") {
+        if (!activeThread) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void toggleSideChat(activeThread);
         return;
       }
 

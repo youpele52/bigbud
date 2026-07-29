@@ -38,6 +38,17 @@ describe("wsNativeApi — server", () => {
     expect(rpcClientMock.server.refreshProviders).toHaveBeenCalledWith();
   });
 
+  it("forwards CLIProxy activation directly to the RPC client", async () => {
+    const refreshed = { providers: defaultProviders };
+    rpcClientMock.server.activateCliProxy.mockResolvedValue(refreshed);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.server.activateCliProxy()).resolves.toEqual(refreshed);
+    expect(rpcClientMock.server.activateCliProxy).toHaveBeenCalledWith();
+  });
+
   it("forwards server settings updates directly to the RPC client", async () => {
     const nextSettings = {
       ...DEFAULT_SERVER_SETTINGS,
@@ -54,6 +65,23 @@ describe("wsNativeApi — server", () => {
     expect(rpcClientMock.server.updateSettings).toHaveBeenCalledWith({
       enableAssistantStreaming: true,
     });
+  });
+
+  it("forwards atomic pinned-thread updates directly to the RPC client", async () => {
+    const threadId = ThreadId.makeUnsafe("thread-pin");
+    const nextSettings = {
+      ...DEFAULT_SERVER_SETTINGS,
+      favoriteThreadIds: [threadId],
+    };
+    rpcClientMock.server.setThreadPinned.mockResolvedValue(nextSettings);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.server.setThreadPinned({ threadId, pinned: true })).resolves.toEqual(
+      nextSettings,
+    );
+    expect(rpcClientMock.server.setThreadPinned).toHaveBeenCalledWith({ threadId, pinned: true });
   });
 
   it("forwards document URL reads directly to the RPC client", async () => {

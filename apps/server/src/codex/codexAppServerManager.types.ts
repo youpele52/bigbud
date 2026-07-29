@@ -57,6 +57,8 @@ export interface CodexDynamicToolCallInput {
   readonly namespace?: string;
   readonly tool: string;
   readonly arguments: unknown;
+  readonly requestId: string | number;
+  readonly sourceMessageId?: string;
 }
 
 export interface CodexDynamicToolCallResult {

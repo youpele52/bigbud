@@ -14,8 +14,8 @@ import { Button } from "../ui/button";
 import { useUpdateSettings } from "../../hooks/useSettings";
 import { enableComputerUseInBackground } from "./computerUseEnable";
 import {
-  getComputerUseDialogDescription,
-  getComputerUsePermissionPromptDescription,
+  getComputerUsePermissionsDescription,
+  getComputerUseSettingsDescription,
 } from "./computerUsePlatformCopy";
 
 interface ComputerUsePermissionDialogProps {
@@ -62,13 +62,13 @@ export function ComputerUsePermissionDialog({
             <BotIcon className="size-4 text-primary" />
             Enable Computer Use
           </DialogTitle>
-          <DialogDescription>{getComputerUseDialogDescription()}</DialogDescription>
+          <DialogDescription>{getComputerUseSettingsDescription(platform)}</DialogDescription>
         </DialogHeader>
 
         <DialogPanel className="space-y-4 text-xs text-muted-foreground">
           <div className="space-y-1">
             <p className="text-sm font-medium text-foreground">Allow computer use</p>
-            <p>{getComputerUsePermissionPromptDescription(platform)}</p>
+            <p>{getComputerUsePermissionsDescription(platform)}</p>
           </div>
 
           <div className="space-y-1">

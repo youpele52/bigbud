@@ -1,34 +1,34 @@
 /**
  * ClaudeAdapter session startup helpers.
- *
- * Contains `logNativeSdkMessage`, `buildUserMessageEffect`, and `startSession` —
- * the session initialization logic extracted from the main adapter module.
+ * Contains `logNativeSdkMessage`, `buildUserMessageEffect`, and `startSession`.
  *
  * @module ClaudeAdapter.session
  */
 import {
   type Options as ClaudeQueryOptions,
-  type SDKMessage,
+  type PermissionUpdate,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   ApprovalRequestId,
   LOCAL_EXECUTION_TARGET_ID,
   type EventId,
-  ProviderItemId,
+  type ProviderApprovalDecision,
   type ProviderRuntimeEvent,
   type ProviderSession,
   type ProviderSessionStartInput,
+  type ProviderUserInputAnswers,
   ThreadId,
-  ClaudeCodeEffort,
 } from "@bigbud/contracts";
-import { resolveApiModelId, resolveEffort } from "@bigbud/shared/model";
 import { Cause, Effect, FileSystem, Queue, Random, Ref, Stream } from "effect";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { getClaudeModelCapabilities } from "./Provider.ts";
-import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
+import {
+  ProviderAdapterProcessError,
+  ProviderAdapterValidationError,
+  type ProviderAdapterError,
+} from "../../Errors.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
@@ -38,6 +38,7 @@ import type {
   PendingApproval,
   PendingUserInput,
   PromptQueueItem,
+  ClaudeHarnessConfig,
 } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { StreamHandlers } from "./Adapter.stream.ts";
@@ -49,16 +50,12 @@ import {
   prepareThreadOrchestrationMcpBridge,
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
-import {
-  asCanonicalTurnId,
-  getEffectiveClaudeCodeEffort,
-  readClaudeResumeState,
-  sdkNativeItemId,
-  sdkNativeMethod,
-  toMessage,
-  CLAUDE_SETTING_SOURCES,
-} from "./Adapter.utils.ts";
-import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
+import { readClaudeResumeState, toMessage } from "./Adapter.utils.ts";
+import { buildClaudeQueryOptions } from "./Adapter.session.options.ts";
+import { makeClaudeTaskState } from "./Adapter.tasks.ts";
+import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
+import { makeLogNativeSdkMessage } from "./Adapter.session.log.ts";
+import { initializeClaudeMcpLifecycle } from "./Adapter.session.mcp.ts";
 
 export interface SessionStartDeps {
   readonly fileSystem: FileSystem.FileSystem;
@@ -70,10 +67,26 @@ export interface SessionStartDeps {
   };
   readonly serverSettingsService: {
     readonly getSettings: Effect.Effect<
-      { readonly providers: { readonly claudeAgent: { readonly binaryPath: string } } },
+      {
+        readonly providers: {
+          readonly claudeAgent: {
+            readonly binaryPath: string;
+            readonly rollout: {
+              readonly modernTaskExposure: boolean;
+              readonly boundedHookProgress: boolean;
+              readonly forwardedSubagentText: boolean;
+              readonly mcpControls: boolean;
+            };
+          };
+        };
+      },
       Error
     >;
   };
+  readonly harness?: ClaudeHarnessConfig;
+  readonly resolveHarness?: (
+    input: ProviderSessionStartInput,
+  ) => Effect.Effect<NonNullable<SessionStartDeps["harness"]>, ProviderAdapterError>;
   readonly nativeEventLogger: EventNdjsonLogger | undefined;
   readonly createQuery: (input: {
     readonly prompt: AsyncIterable<SDKUserMessage>;
@@ -85,49 +98,6 @@ export interface SessionStartDeps {
   readonly nowIso: Effect.Effect<string>;
   readonly streamHandlers: StreamHandlers;
 }
-
-/** Log a raw SDK message to the native event log if enabled. */
-export const makeLogNativeSdkMessage = (deps: Pick<SessionStartDeps, "nativeEventLogger">) => {
-  const { nativeEventLogger } = deps;
-  return Effect.fn("logNativeSdkMessage")(function* (
-    context: ClaudeSessionContext,
-    message: SDKMessage,
-  ) {
-    if (!nativeEventLogger) {
-      return;
-    }
-
-    const observedAt = new Date().toISOString();
-    const itemId = sdkNativeItemId(message);
-
-    yield* nativeEventLogger.write(
-      {
-        observedAt,
-        event: {
-          id:
-            "uuid" in message && typeof message.uuid === "string"
-              ? message.uuid
-              : crypto.randomUUID(),
-          kind: "notification",
-          provider: PROVIDER,
-          createdAt: observedAt,
-          method: sdkNativeMethod(message),
-          ...(typeof message.session_id === "string"
-            ? { providerThreadId: message.session_id }
-            : {}),
-          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-          ...(itemId
-            ? {
-                itemId: ProviderItemId.makeUnsafe(itemId),
-              }
-            : {}),
-          payload: message,
-        },
-      },
-      context.session.threadId,
-    );
-  });
-};
 
 /** Initialize a new provider session and start the SDK stream fiber. */
 export const makeStartSession = (deps: SessionStartDeps) => {
@@ -141,7 +111,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     streamHandlers,
   } = deps;
 
-  const logNativeSdkMessage = makeLogNativeSdkMessage(deps);
+  const logNativeSdkMessage = makeLogNativeSdkMessage(deps.nativeEventLogger);
   const emitRuntimeEvents = emitSessionRuntimeEvents({ makeEventStamp, offerRuntimeEvent });
   const startRuntimeStream = startSessionRuntimeStream({
     makeEventStamp,
@@ -158,6 +128,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       });
     }
 
+    const harness = deps.resolveHarness ? yield* deps.resolveHarness(input) : deps.harness;
     const startedAt = yield* nowIso;
     const resumeStateData = readClaudeResumeState(input.resumeCursor);
     const existingResumeSessionId = resumeStateData?.resume;
@@ -183,10 +154,18 @@ export const makeStartSession = (deps: SessionStartDeps) => {
 
     const pendingApprovals = new Map<ApprovalRequestId, PendingApproval>();
     const pendingUserInputs = new Map<ApprovalRequestId, PendingUserInput>();
+    const resolvedApprovals = new Map<ApprovalRequestId, ProviderApprovalDecision>();
+    const resolvedApprovalSuggestions = new Map<
+      ApprovalRequestId,
+      ReadonlyArray<PermissionUpdate>
+    >();
+    const appliedSessionPermissionRequests = new Set<ApprovalRequestId>();
+    const resolvedUserInputs = new Map<ApprovalRequestId, ProviderUserInputAnswers>();
+    const requestLedger: ClaudeRequestLedger = new Map();
 
     const contextRef = yield* Ref.make<ClaudeSessionContext | undefined>(undefined);
 
-    const { canUseTool } = makeApprovalHandlers({
+    const { canUseTool, onElicitation } = makeApprovalHandlers({
       makeEventStamp,
       offerRuntimeEvent,
       runFork,
@@ -195,6 +174,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       contextRef,
       pendingApprovals,
       pendingUserInputs,
+      resolvedApprovals,
+      resolvedApprovalSuggestions,
+      requestLedger,
       runtimeMode: input.runtimeMode,
     });
 
@@ -210,7 +192,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           }),
       ),
     );
-    const claudeBinaryPath = claudeSettings.binaryPath;
+    const claudeBinaryPath = harness?.binaryPath ?? claudeSettings.binaryPath;
     const executionContext = resolveProviderExecutionContext({
       providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
       workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -259,49 +241,29 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     );
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
-    const caps = getClaudeModelCapabilities(modelSelection?.model);
-    const apiModelId = modelSelection ? resolveApiModelId(modelSelection) : undefined;
-    const effort = (resolveEffort(caps, modelSelection?.options?.effort) ??
-      null) as ClaudeCodeEffort | null;
-    const fastMode = modelSelection?.options?.fastMode === true && caps.supportsFastMode;
-    const thinking =
-      typeof modelSelection?.options?.thinking === "boolean" && caps.supportsThinkingToggle
-        ? modelSelection.options.thinking
-        : undefined;
-    const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
-    const permissionMode = resolveBasePermissionMode(input.runtimeMode);
-    const settings = {
-      ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
-      ...(fastMode ? { fastMode: true } : {}),
-    };
     const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
-
-    const remoteQueryOptions = remoteWorkspaceBridge?.queryOptions;
-    const queryOptions = {
-      ...(runtimeCwd ? { cwd: runtimeCwd } : {}),
-      ...(apiModelId ? { model: apiModelId } : {}),
-      pathToClaudeCodeExecutable: claudeBinaryPath,
-      settingSources: [...CLAUDE_SETTING_SOURCES],
-      ...(effectiveEffort ? { effort: effectiveEffort } : {}),
-      ...(permissionMode ? { permissionMode } : {}),
-      ...(Object.keys(settings).length > 0 ? { settings } : {}),
-      ...(existingResumeSessionId ? { resume: existingResumeSessionId } : {}),
-      ...(newSessionId ? { sessionId: newSessionId } : {}),
-      ...remoteQueryOptions,
-      mcpServers: {
-        ...remoteQueryOptions?.mcpServers,
-        ...orchestrationConfig.mcpServers,
-      },
-      allowedTools: [
-        ...(remoteQueryOptions?.allowedTools ?? []),
-        ...orchestrationConfig.allowedTools,
-      ],
-      includePartialMessages: true,
-      canUseTool,
-      env: process.env,
-      ...(runtimeCwd && !remoteWorkspaceBridge ? { additionalDirectories: [runtimeCwd] } : {}),
-    } as ClaudeQueryOptions;
-
+    const { apiModelId, effectiveEffort, fastMode, permissionMode, queryOptions } =
+      buildClaudeQueryOptions({
+        input,
+        claudeBinaryPath,
+        orchestrationConfig,
+        runtimeCwd,
+        remoteQueryOptions: remoteWorkspaceBridge?.queryOptions,
+        hasRemoteWorkspaceBridge: remoteWorkspaceBridge !== undefined,
+        existingResumeSessionId,
+        resumeSessionAt: resumeStateData?.resumeSessionAt,
+        newSessionId,
+        canUseTool,
+        onElicitation,
+        boundedHookProgress:
+          harness?.boundedHookProgress ??
+          (harness ? false : claudeSettings.rollout.boundedHookProgress),
+        forwardSubagentText:
+          harness?.forwardSubagentText ??
+          (harness ? false : claudeSettings.rollout.forwardedSubagentText),
+        ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
+        ...(harness?.environment ? { environment: harness.environment } : {}),
+      });
     const queryRuntime = yield* Effect.try({
       try: () =>
         createQuery({
@@ -363,21 +325,60 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       streamFiber: undefined,
       startedAt,
       basePermissionMode: permissionMode,
+      effectivePermissionMode: permissionMode,
       currentApiModelId: apiModelId,
       resumeSessionId: sessionId,
       pendingApprovals,
       pendingUserInputs,
+      resolvedApprovals,
+      resolvedApprovalSuggestions,
+      appliedSessionPermissionRequests,
+      resolvedUserInputs,
+      requestLedger,
       turns: [],
       inFlightTools: new Map(),
+      taskState: makeClaudeTaskState(),
+      lastPlanFingerprint: undefined,
       turnState: undefined,
       lastKnownContextWindow: undefined,
       lastKnownTokenUsage: undefined,
       lastAssistantUuid: resumeStateData?.resumeSessionAt,
+      lastInterruptReceipt: undefined,
+      queuedUserMessageIds: new Set(),
       lastThreadStartedId: undefined,
+      seenNativeMessageIds: new Set(),
+      mcpStatuses: [],
+      requiredMcpServerNames: new Set([
+        ...Object.keys(orchestrationConfig.mcpServers),
+        ...(remoteWorkspaceBridge ? ["bigbud_remote_workspace"] : []),
+      ]),
+      modernTaskExposure: claudeSettings.rollout.modernTaskExposure,
+      mcpControlsEnabled: claudeSettings.rollout.mcpControls,
+      refreshMcpStatuses: undefined,
+      recoverStream: undefined,
+      recoveryInFlight: undefined,
       stopped: false,
     };
     yield* Ref.set(contextRef, context);
     sessions.set(threadId, context);
+
+    yield* initializeClaudeMcpLifecycle({ context, query: queryRuntime, threadId }).pipe(
+      Effect.tapError(() =>
+        Ref.set(contextRef, undefined).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              sessions.delete(threadId);
+              try {
+                queryRuntime.close();
+              } catch {
+                // Preserve the readiness error; shutdown is best effort here.
+              }
+              void cleanupBridge().catch(() => undefined);
+            }),
+          ),
+        ),
+      ),
+    );
 
     yield* emitRuntimeEvents({
       threadId,
@@ -386,6 +387,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       cwd: input.cwd,
       effectiveEffort: effectiveEffort ?? undefined,
       permissionMode,
+      dangerousPermissionBypass: permissionMode === "bypassPermissions",
       fastMode,
     });
 

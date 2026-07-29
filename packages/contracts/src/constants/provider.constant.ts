@@ -9,6 +9,7 @@
 export const PROVIDER_KINDS = [
   "codex",
   "claudeAgent",
+  "cliProxy",
   "copilot",
   "kilocode",
   "opencode",
@@ -20,6 +21,7 @@ export const PROVIDER_KINDS = [
 export const PROVIDER_DISPLAY_NAMES = {
   codex: "Codex",
   claudeAgent: "Claude",
+  cliProxy: "CLIProxyAPI",
   copilot: "Copilot",
   kilocode: "KiloCode",
   opencode: "OpenCode",

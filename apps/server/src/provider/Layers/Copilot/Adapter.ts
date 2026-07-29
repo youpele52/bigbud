@@ -42,7 +42,7 @@ import {
   makeRollbackThread,
 } from "./Adapter.session.ts";
 
-export { makeNodeWrapperCliPath } from "./Adapter.types.ts";
+export { resolveCopilotRuntimeInvocation } from "./Adapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./Adapter.types.ts";
 
 const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (

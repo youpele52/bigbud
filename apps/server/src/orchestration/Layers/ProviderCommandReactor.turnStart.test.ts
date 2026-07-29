@@ -1,4 +1,5 @@
 import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
+import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -59,6 +60,58 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.status).toBe("running");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
     expect(thread?.session?.activeTurnId).toEqual(asTurnId("turn-1"));
+  });
+
+  it("emits a durable terminal event when provider turn start fails", async () => {
+    const harness = await createHarness();
+    harness.sendTurn.mockReturnValue(
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "codex",
+          method: "sendTurn",
+          detail: "Provider session rejected the turn.",
+        }),
+      ) as never,
+    );
+    const now = new Date().toISOString();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-failure"),
+          role: "user",
+          text: "hello reactor",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      const thread = readModel.threads[0];
+      return (
+        thread?.session?.status === "error" &&
+        thread.activities.some((activity) => activity.kind === "provider.turn.start.failed")
+      );
+    });
+
+    const readModel = await Effect.runPromise(harness.engine.getReadModel());
+    expect(readModel.threads[0]?.session).toMatchObject({
+      status: "error",
+      activeTurnId: null,
+      lastError: "Provider session rejected the turn.",
+    });
+    expect(
+      readModel.threads[0]?.activities.some(
+        (activity) => activity.kind === "provider.turn.start.failed",
+      ),
+    ).toBe(true);
   });
 
   it("adds attached file metadata with full source path to providers", async () => {
@@ -237,7 +290,7 @@ describe("ProviderCommandReactor", () => {
     );
   });
 
-  it("prepends current thread context to provider input", async () => {
+  it("prepends the capability LP to the first provider input", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
@@ -261,19 +314,13 @@ describe("ProviderCommandReactor", () => {
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
 
     const sendInput = harness.sendTurn.mock.calls[0]?.[0] as { input?: string } | undefined;
-    expect(sendInput?.input).toContain("Current thread context:");
-    expect(sendInput?.input).toContain("Thread ID: thread-1");
-    expect(sendInput?.input).toContain("Thread title:");
-    expect(sendInput?.input).toContain(
-      "To rename the current thread, call the `rename_thread` tool with the new title.",
-    );
-    expect(sendInput?.input).toContain(
-      "To archive the current thread, call the `archive_thread` tool.",
-    );
-    expect(sendInput?.input).toContain("When the `update_plan` tool is available");
-    expect(sendInput?.input).toContain("Do not wait until the end of the turn.");
-    expect(sendInput?.input).toContain("Use the `browser` tool for bigbud's built-in");
-    expect(sendInput?.input).toContain("You must not delete threads.");
+    expect(sendInput?.input).toContain("<bigbud_capability_lp>");
+    expect(sendInput?.input).toContain("- thread: hello reactor (thread-1)");
+    expect(sendInput?.input).toContain("bigbud://capabilities/thread.rename");
+    expect(sendInput?.input).toContain("bigbud://capabilities/thread.archive");
+    expect(sendInput?.input).toContain("bigbud://capabilities/thread.create");
+    expect(sendInput?.input).toContain("Standalone delegated threads");
+    expect(sendInput?.input).not.toContain("Current thread context:");
     expect(sendInput?.input).toContain("hello reactor");
   });
 

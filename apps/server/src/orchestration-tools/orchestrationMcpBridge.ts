@@ -9,6 +9,7 @@ import {
   prepareThreadOrchestrationSessionAuth,
   resolveThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
+import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 
 export interface ThreadOrchestrationBridgeInput {
   readonly stateDir: string;
@@ -108,7 +109,7 @@ export function buildCodexOrchestrationBridgeConfig(
     serverName: bridge.serverName,
     configArgs: [
       "-c",
-      `mcp_servers.${bridge.serverName}.command=${quoteTomlString(process.execPath)}`,
+      `mcp_servers.${bridge.serverName}.command=${quoteTomlString(resolveNodeExecutable())}`,
       "-c",
       `mcp_servers.${bridge.serverName}.args=${quoteTomlStringArray([bridge.serverPath])}`,
       "-c",
@@ -123,7 +124,7 @@ export function buildClaudeOrchestrationBridgeConfig(
   return {
     mcpServers: {
       [bridge.serverName]: {
-        command: process.execPath,
+        command: resolveNodeExecutable(),
         args: [bridge.serverPath],
       },
     },
@@ -133,6 +134,9 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__rename_thread`,
       `mcp__${bridge.serverName}__archive_thread`,
       `mcp__${bridge.serverName}__get_thread_status`,
+      `mcp__${bridge.serverName}__list_pinned_threads`,
+      `mcp__${bridge.serverName}__pin_thread`,
+      `mcp__${bridge.serverName}__unpin_thread`,
     ],
   };
 }
@@ -146,7 +150,7 @@ export function buildOpencodeOrchestrationBridgeConfig(
     name: bridge.serverName,
     config: {
       type: "local",
-      command: [process.execPath, bridge.serverPath],
+      command: [resolveNodeExecutable(), bridge.serverPath],
       ...(bridge.bridgeDir ? { cwd: bridge.bridgeDir } : {}),
       enabled: true,
       timeout: OPENCODE_ORCHESTRATION_MCP_TOOL_TIMEOUT_MS,
@@ -161,7 +165,7 @@ export function buildAcpOrchestrationBridgeConfig(
     mcpServers: [
       {
         name: bridge.serverName,
-        command: process.execPath,
+        command: resolveNodeExecutable(),
         args: [bridge.serverPath],
         env: [],
       },
