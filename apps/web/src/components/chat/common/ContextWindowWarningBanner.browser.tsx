@@ -42,9 +42,7 @@ function makeBanner(usage: ContextWindowSnapshot) {
       threadId="thread-1"
       usage={usage}
       handoffAvailable
-      compactAvailable
       onUseHandoff={vi.fn()}
-      onCompact={vi.fn()}
     />
   );
 }

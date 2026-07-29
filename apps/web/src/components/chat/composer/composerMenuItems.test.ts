@@ -52,7 +52,6 @@ const baseInput = {
   ],
   workspaceEntries: [workspaceEntry],
   selectedProvider: "opencode",
-  supportsCompact: true,
   activeProviderSlashCommands: [
     {
       name: "doctor",

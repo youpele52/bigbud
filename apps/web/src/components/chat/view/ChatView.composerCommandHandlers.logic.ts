@@ -175,12 +175,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
           return;
         }
 
-        if (
-          item.command === "agents" ||
-          item.command === "skill" ||
-          item.command === "skills" ||
-          item.command === "compact"
-        ) {
+        if (item.command === "agents" || item.command === "skill" || item.command === "skills") {
           const replacement = `/${item.command} `;
           const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
             snapshot.value,

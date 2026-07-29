@@ -80,23 +80,6 @@ describe("useComposerCommandHandlers", () => {
     vi.unstubAllGlobals();
   });
 
-  it("inserts /compact for the first-class compact command", () => {
-    const input = makeInput();
-    const handlers = renderUseComposerCommandHandlers(input);
-
-    handlers.onSelectComposerItem({
-      id: "slash:compact:opencode",
-      type: "slash-command",
-      command: "compact",
-      label: "/compact",
-      description: "Compact context now using opencode",
-    });
-
-    expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 3, "/compact ", {
-      expectedText: "/co",
-    });
-  });
-
   it("inserts generic provider slash commands instead of toggling default mode", () => {
     const input = makeInput({ promptRef: { current: "/ag" }, composerCursor: 3 });
     const handlers = renderUseComposerCommandHandlers(input);

@@ -13,16 +13,12 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
   threadId,
   usage,
   handoffAvailable,
-  compactAvailable,
   onUseHandoff,
-  onCompact,
 }: {
   threadId: string;
   usage: ContextWindowSnapshot | null;
   handoffAvailable: boolean;
-  compactAvailable: boolean;
   onUseHandoff: () => void;
-  onCompact: () => void;
 }) {
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
@@ -53,12 +49,10 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
         <AlertTitle>Context window warning</AlertTitle>
         <AlertDescription>
           Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
-          tokens. Consider using handoff or /compact.
+          tokens. Consider using handoff.
           <ContextWindowRecoveryActions
             handoffAvailable={handoffAvailable}
-            compactAvailable={compactAvailable}
             onUseHandoff={onUseHandoff}
-            onCompact={onCompact}
           />
         </AlertDescription>
         <AlertAction>

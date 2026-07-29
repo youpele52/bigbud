@@ -2,7 +2,7 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.2.0 (29 July, 2026)
+## v0.2.0 (30 July, 2026)
 
 ### More Reliable Agent Workflows
 
@@ -16,9 +16,9 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Fixed Copilot startup under Electron by resolving the bundled platform-native runtime instead of launching the JavaScript wrapper, so Copilot can start reliably in the desktop app while still honoring custom binary paths.
 - Isolated Cursor discovery probes in a temporary workspace so searches do not enter protected home-directory application data or repeatedly trigger macOS privacy prompts.
 
-### CLIProxyAPI Is Here
+### CLIProxyAPI (aka Claudex) Is Here
 
-- **CLIProxyAPI is now built into bigbud.** Connect your existing local proxy and its live model catalog appears directly in the provider picker, ready for new chats without juggling endpoints or leaving the app. ![CLIProxyAPI in bigbud](https://assets.bigbud.app/content/CLIProxyAPI.png)
+- **[CLIProxyAPI](https://help.router-for.me/introduction/what-is-cliproxyapi.html) (aka Claudex) is now built into bigbud.** Connect your existing local proxy and its live model catalog appears directly in the provider picker, ready for new chats without juggling endpoints or leaving the app. ![CLIProxyAPI in bigbud](https://assets.bigbud.app/content/CLIProxyAPI.png)
 - Setup is one path and one click: point bigbud at your CLIProxyAPI config, then start or retry it from Settings or the model picker while bigbud validates the local connection, credentials, Claude CLI, and available models.
 - Every chat gets an isolated Claude-compatible session with safe model switching and persisted selections, while unsupported background workloads fall back cleanly instead of silently using the wrong provider.
 
@@ -39,6 +39,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Repaired databases that recorded the previous usage migration before its schema was complete, preserving existing contributions so Usage data remains available after an update.
 - Restored context-window warning rearming at 125% of the configured threshold and made unavailable-provider Usage warnings dismissible for the current session, reducing confusing or repeated notices.
+- Simplified context-window recovery around handoff by removing the provider-dependent compact action from warnings and composer commands, giving every supported provider one predictable way to continue with fresh context.
 - Normalized recently used model storage so invalid, stale, and legacy provider records are discarded without losing valid models, keeping model pickers cleaner and more dependable.
 - Updated Pierre diffs to stable 1.2.12 and improved desktop packaged logging and workflow integration for a smoother editing and troubleshooting experience.
 

@@ -99,14 +99,8 @@ export function useChatViewComposerActions(input: UseChatViewComposerActionsInpu
     );
   }, [input.base.activeThread, input.interactions]);
 
-  const onCompactFromMeter = useCallback(() => {
-    setPromptAndCursor("/compact");
-    input.interactions.onSend();
-  }, [input.interactions, setPromptAndCursor]);
-
   return {
     insertMention,
-    onCompactFromMeter,
     onMicTranscript,
     onOpenReadDialog,
     onSubmitReadFiles,

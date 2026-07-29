@@ -21,8 +21,6 @@ import { threadHasStarted } from "../ChatView.logic";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 
-const FIRST_CLASS_COMPACT_PROVIDERS = new Set(["claudeAgent", "opencode"]);
-
 export function useComposerProviderState(
   base: ChatViewBaseState,
   providerStatuses: ReadonlyArray<ServerProvider>,
@@ -186,6 +184,5 @@ export function useComposerProviderState(
     activeProviderStatus,
     selectedModelForPickerWithCustomFallback,
     searchableModelOptions,
-    supportsCompact: FIRST_CLASS_COMPACT_PROVIDERS.has(selectedProvider),
   };
 }
