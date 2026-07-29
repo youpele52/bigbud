@@ -15,11 +15,8 @@ import {
 import { useEffectiveComposerModelState } from "../../../../stores/composer";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../../provider/ProviderModelPicker";
 import { getComposerProviderState } from "../../provider/composerProviderRegistry";
-import {
-  getModelSelectionSubProviderID,
-  modelPickerValue,
-  providerSupportsSubProviderID,
-} from "../ChatView.modelSelection.logic";
+import { getProviderDescriptor, PROVIDER_DESCRIPTORS } from "../../provider/providerDescriptors";
+import { getModelSelectionSubProviderID, modelPickerValue } from "../ChatView.modelSelection.logic";
 import { threadHasStarted } from "../ChatView.logic";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -39,7 +36,9 @@ export function useComposerProviderState(
   const hasThreadStarted = threadHasStarted(base.activeThread);
   const lockedProvider: ProviderKind | null =
     hasThreadStarted && !base.providerUnlocked
-      ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
+      ? sessionProvider !== "unknown"
+        ? (sessionProvider ?? threadProvider ?? selectedProviderByThreadId ?? null)
+        : null
       : null;
 
   const unlockedSelectedProvider = resolveSelectableProvider(
@@ -87,7 +86,7 @@ export function useComposerProviderState(
       selectedModel,
       selectedModelOptionsForDispatch,
     );
-    if (providerSupportsSubProviderID(selectedProvider)) {
+    if (getProviderDescriptor(selectedProvider).supportsSubProviderID) {
       const currentSubProviderID = getModelSelectionSubProviderID(
         selectedDraftOrThreadModelSelection,
       );
@@ -114,17 +113,13 @@ export function useComposerProviderState(
 
   const selectedModelForPicker = modelPickerValue(selectedModelSelection);
   const modelOptionsByProvider = useMemo<Record<ProviderKind, ReadonlyArray<ServerProviderModel>>>(
-    () => ({
-      codex: providerStatuses.find((provider) => provider.provider === "codex")?.models ?? [],
-      claudeAgent:
-        providerStatuses.find((provider) => provider.provider === "claudeAgent")?.models ?? [],
-      copilot: providerStatuses.find((provider) => provider.provider === "copilot")?.models ?? [],
-      opencode: providerStatuses.find((provider) => provider.provider === "opencode")?.models ?? [],
-      kilocode: providerStatuses.find((provider) => provider.provider === "kilocode")?.models ?? [],
-      pi: providerStatuses.find((provider) => provider.provider === "pi")?.models ?? [],
-      cursor: providerStatuses.find((provider) => provider.provider === "cursor")?.models ?? [],
-      devin: providerStatuses.find((provider) => provider.provider === "devin")?.models ?? [],
-    }),
+    () =>
+      Object.fromEntries(
+        PROVIDER_DESCRIPTORS.map((descriptor) => [
+          descriptor.provider,
+          getProviderModels(providerStatuses, descriptor.provider),
+        ]),
+      ) as Record<ProviderKind, ReadonlyArray<ServerProviderModel>>,
     [providerStatuses],
   );
   const activeProviderStatus = useMemo(
@@ -134,6 +129,11 @@ export function useComposerProviderState(
 
   const selectedModelForPickerWithCustomFallback = useMemo(() => {
     const currentOptions = modelOptionsByProvider[selectedProvider];
+    if (getProviderDescriptor(selectedProvider).catalogAuthoritative) {
+      // Keep stale catalog values visible but never normalize them into a
+      // synthetic custom option. The next picker choice must come from the catalog.
+      return selectedModelForPicker;
+    }
     return currentOptions.some(
       (option) =>
         modelPickerValue({

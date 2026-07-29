@@ -179,6 +179,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
       refreshProviders: () =>
         transport.request((client) => client[WS_METHODS.serverRefreshProviders]({})),
+      activateCliProxy: () =>
+        transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
       unlockSshKey: (input) =>

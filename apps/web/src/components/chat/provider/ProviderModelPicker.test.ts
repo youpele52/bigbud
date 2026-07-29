@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { visibleModelOptionsForPicker } from "./ProviderModelPicker";
+import { getProviderDescriptor } from "./providerDescriptors";
+
+const provider = (value: Partial<import("@bigbud/contracts").ServerProvider>) =>
+  ({
+    provider: "cliProxy",
+    enabled: true,
+    installed: true,
+    status: "error",
+    checkedAt: "2026-01-01T00:00:00.000Z",
+    models: [],
+    version: null,
+    auth: { status: "unknown" },
+    ...value,
+  }) as import("@bigbud/contracts").ServerProvider;
 
 describe("visibleModelOptionsForPicker", () => {
   const options = [
@@ -35,5 +49,17 @@ describe("visibleModelOptionsForPicker", () => {
       "",
     );
     expect(result).toEqual(opencodeOptions);
+  });
+});
+
+describe("CLIProxyAPI picker visibility", () => {
+  it("keeps an installed but stopped CLIProxyAPI visible for activation", () => {
+    expect(getProviderDescriptor("cliProxy").isVisible([provider({})])).toBe(true);
+  });
+
+  it("hides CLIProxyAPI when its server snapshot is not installed", () => {
+    expect(getProviderDescriptor("cliProxy").isVisible([provider({ installed: false })])).toBe(
+      false,
+    );
   });
 });

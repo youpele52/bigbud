@@ -239,6 +239,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         )}
         {thread.session?.provider &&
           (() => {
+            if (thread.session.provider === "unknown") return null;
             const Icon = PROVIDER_ICON_BY_PROVIDER[thread.session.provider];
             return (
               <Icon

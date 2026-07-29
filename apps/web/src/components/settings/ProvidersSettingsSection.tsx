@@ -7,6 +7,7 @@ import { ensureNativeApi } from "../../rpc/nativeApi";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useServerProviders } from "../../rpc/serverState";
+import { useCliProxyActivation } from "../../hooks/useCliProxyActivation";
 import { SettingsSection } from "./settingsLayout";
 import { ProviderCard } from "./ProviderCard";
 import { ProviderLastChecked } from "./ProvidersSettingsSection.lastChecked";
@@ -23,6 +24,7 @@ export function ProvidersSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const serverProviders = useServerProviders();
+  const { activateCliProxy, isActivatingCliProxy } = useCliProxyActivation();
 
   const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>(
     () => createInitialOpenProviderDetails(settings),
@@ -57,7 +59,9 @@ export function ProvidersSettingsSection() {
   const addCustomModel = useCallback(
     (provider: ProviderKind) => {
       const customModelInput = customModelInputByProvider[provider];
-      const customModels = settings.providers[provider].customModels;
+      const providerSettings = settings.providers[provider];
+      if (!("customModels" in providerSettings)) return;
+      const customModels = providerSettings.customModels;
       const { normalized, error } = getAddCustomModelError({
         provider,
         rawInput: customModelInput,
@@ -97,12 +101,14 @@ export function ProvidersSettingsSection() {
 
   const removeCustomModel = useCallback(
     (provider: ProviderKind, slug: string) => {
+      const providerSettings = settings.providers[provider];
+      if (!("customModels" in providerSettings)) return;
       updateSettings({
         providers: {
           ...settings.providers,
           [provider]: {
             ...settings.providers[provider],
-            customModels: settings.providers[provider].customModels.filter((m) => m !== slug),
+            customModels: providerSettings.customModels.filter((m) => m !== slug),
           },
         },
       });
@@ -185,6 +191,10 @@ export function ProvidersSettingsSection() {
               });
               setCustomModelErrorByProvider((prev) => ({ ...prev, [card.provider]: null }));
             }}
+            onActivateCliProxy={
+              card.provider === "cliProxy" ? () => void activateCliProxy() : undefined
+            }
+            isActivatingCliProxy={card.provider === "cliProxy" ? isActivatingCliProxy : false}
             onToggleEnabled={(checked) => {
               const shouldClearModelSelection = shouldClearTextGenerationSelection({
                 settings,
@@ -216,6 +226,21 @@ export function ProvidersSettingsSection() {
                 },
               })
             }
+            onConfigPathChange={(value) =>
+              updateSettings({
+                providers: {
+                  ...settings.providers,
+                  cliProxy: { ...settings.providers.cliProxy, configPath: value },
+                },
+              })
+            }
+            onOpenSetupGuide={() => {
+              void ensureNativeApi()
+                .shell.openExternal("https://help.router-for.me/introduction/quick-start.html")
+                .catch((error: unknown) =>
+                  console.warn("Failed to open CLIProxyAPI setup guide", error),
+                );
+            }}
             onHomePathChange={(value) =>
               updateSettings({
                 providers: {

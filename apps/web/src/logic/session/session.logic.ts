@@ -2,13 +2,16 @@ import {
   ApprovalRequestId,
   type OrchestrationLatestTurn,
   type OrchestrationProposedPlanId,
-  type ProviderKind,
   type UserInputQuestion,
   type ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
 
 import type { ChatMessage, ProposedPlan, ThreadSession } from "../../models/types";
+import {
+  PROVIDER_OPTIONS as DESCRIPTOR_PROVIDER_OPTIONS,
+  type ProviderPickerKind,
+} from "../../components/chat/provider/providerDescriptors";
 
 export type { WorkLogEntry } from "./worklog.logic";
 export { deriveWorkLogEntries } from "./worklog.logic";
@@ -37,22 +40,8 @@ export {
 
 // ── Types ─────────────────────────────────────────────────────────────
 
-export type ProviderPickerKind = ProviderKind;
-
-export const PROVIDER_OPTIONS: Array<{
-  value: ProviderPickerKind;
-  label: string;
-  available: boolean;
-}> = [
-  { value: "claudeAgent", label: "Claude", available: true },
-  { value: "codex", label: "Codex", available: true },
-  { value: "copilot", label: "Copilot", available: true },
-  { value: "cursor", label: "Cursor", available: true },
-  { value: "devin", label: "Devin", available: true },
-  { value: "kilocode", label: "KiloCode", available: true },
-  { value: "opencode", label: "OpenCode", available: true },
-  { value: "pi", label: "Pi", available: true },
-];
+export type { ProviderPickerKind };
+export const PROVIDER_OPTIONS = DESCRIPTOR_PROVIDER_OPTIONS;
 
 export interface PendingApproval {
   requestId: ApprovalRequestId;

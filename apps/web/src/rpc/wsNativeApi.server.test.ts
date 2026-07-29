@@ -38,6 +38,17 @@ describe("wsNativeApi — server", () => {
     expect(rpcClientMock.server.refreshProviders).toHaveBeenCalledWith();
   });
 
+  it("forwards CLIProxy activation directly to the RPC client", async () => {
+    const refreshed = { providers: defaultProviders };
+    rpcClientMock.server.activateCliProxy.mockResolvedValue(refreshed);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    const api = createWsNativeApi();
+
+    await expect(api.server.activateCliProxy()).resolves.toEqual(refreshed);
+    expect(rpcClientMock.server.activateCliProxy).toHaveBeenCalledWith();
+  });
+
   it("forwards server settings updates directly to the RPC client", async () => {
     const nextSettings = {
       ...DEFAULT_SERVER_SETTINGS,

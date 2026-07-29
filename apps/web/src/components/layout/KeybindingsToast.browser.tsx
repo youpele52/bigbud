@@ -86,6 +86,7 @@ function createBaseServerConfig(): ServerConfig {
           binaryPath: "",
           customModels: [],
         },
+        cliProxy: { enabled: true, configPath: "" },
         copilot: { enabled: true, binaryPath: "", customModels: [] },
         opencode: { enabled: true, binaryPath: "", customModels: [] },
         kilocode: { enabled: true, binaryPath: "", customModels: [] },

@@ -125,6 +125,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   server: {
     getConfig: vi.fn(),
     refreshProviders: vi.fn(),
+    activateCliProxy: vi.fn(),
     verifyExecutionTarget: vi.fn(),
     unlockSshKey: vi.fn(),
     unlockSshPassword: vi.fn(),

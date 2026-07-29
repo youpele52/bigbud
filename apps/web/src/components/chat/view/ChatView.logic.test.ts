@@ -256,6 +256,31 @@ describe("hasServerAcknowledgedLocalDispatch", () => {
     ).toBe(false);
   });
 
+  it("clears local dispatch when the server reports a thread error", () => {
+    const localDispatch = {
+      startedAt: "2026-03-29T00:01:00.000Z",
+      preparingWorktree: false,
+      latestTurnTurnId: previousLatestTurn.turnId,
+      latestTurnRequestedAt: previousLatestTurn.requestedAt,
+      latestTurnStartedAt: previousLatestTurn.startedAt,
+      latestTurnCompletedAt: previousLatestTurn.completedAt,
+      sessionOrchestrationStatus: previousSession.orchestrationStatus,
+      sessionUpdatedAt: previousSession.updatedAt,
+    };
+
+    expect(
+      hasServerAcknowledgedLocalDispatch({
+        localDispatch,
+        phase: "ready",
+        latestTurn: previousLatestTurn,
+        session: previousSession,
+        hasPendingApproval: false,
+        hasPendingUserInput: false,
+        threadError: "Provider turn start failed",
+      }),
+    ).toBe(true);
+  });
+
   it("clears local dispatch when a new turn is already settled", () => {
     const localDispatch = createLocalDispatchSnapshot({
       id: ThreadId.makeUnsafe("thread-1"),

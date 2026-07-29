@@ -1,4 +1,4 @@
-import { ChevronDownIcon, InfoIcon, PlusIcon, XIcon } from "lucide-react";
+import { ChevronDownIcon, InfoIcon, LoaderIcon, PlusIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject } from "react";
 import {
   PROVIDER_DISPLAY_NAMES,
@@ -18,10 +18,15 @@ export type ProviderCardData = {
   title: string;
   binaryPlaceholder: string;
   binaryDescription: ReactNode;
+  configPath?: boolean | undefined;
   homePathKey?: "codexHomePath" | undefined;
   homePlaceholder?: string | undefined;
   homeDescription?: ReactNode | undefined;
+  setupUrl?: string | undefined;
+  supportsCustomModels: boolean;
+  customModelPlaceholder?: string | undefined;
   binaryPathValue: string;
+  configPathValue: string;
   isDirty: boolean;
   models: ReadonlyArray<ServerProviderModel>;
   providerConfig: { enabled: boolean };
@@ -41,7 +46,11 @@ type ProviderCardProps = {
   onOpenChange: (open: boolean) => void;
   onResetProvider: () => void;
   onToggleEnabled: (checked: boolean) => void;
+  onActivateCliProxy?: (() => void) | undefined;
+  isActivatingCliProxy?: boolean | undefined;
   onBinaryPathChange: (value: string) => void;
+  onConfigPathChange: (value: string) => void;
+  onOpenSetupGuide: () => void;
   onHomePathChange: (value: string) => void;
   onCustomModelInputChange: (value: string) => void;
   onAddCustomModel: () => void;
@@ -59,7 +68,11 @@ export function ProviderCard({
   onOpenChange,
   onResetProvider,
   onToggleEnabled,
+  onActivateCliProxy,
+  isActivatingCliProxy = false,
   onBinaryPathChange,
+  onConfigPathChange,
+  onOpenSetupGuide,
   onHomePathChange,
   onCustomModelInputChange,
   onAddCustomModel,
@@ -91,6 +104,22 @@ export function ProviderCard({
               {card.summary.headline}
               {card.summary.detail ? ` - ${card.summary.detail}` : null}
             </p>
+            {card.provider === "cliProxy" &&
+            card.providerConfig.enabled &&
+            card.summary.headline !== "Not found" &&
+            card.models.length === 0 &&
+            onActivateCliProxy ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 h-7 px-2 text-xs"
+                disabled={isActivatingCliProxy}
+                onClick={onActivateCliProxy}
+              >
+                {isActivatingCliProxy ? <LoaderIcon className="size-3 animate-spin" /> : null}
+                {isActivatingCliProxy ? "Starting..." : "Start / retry"}
+              </Button>
+            ) : null}
           </div>
           <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
             <Button
@@ -119,19 +148,34 @@ export function ProviderCard({
             <div className="border-t border-border/60 px-4 py-3 sm:px-5">
               <label htmlFor={`provider-install-${card.provider}-binary-path`} className="block">
                 <span className="text-xs font-medium text-foreground">
-                  {providerDisplayName} binary path
+                  {card.configPath
+                    ? "CLIProxyAPI config path"
+                    : `${providerDisplayName} binary path`}
                 </span>
                 <Input
                   id={`provider-install-${card.provider}-binary-path`}
                   className="mt-1.5"
-                  value={card.binaryPathValue}
-                  onChange={(event) => onBinaryPathChange(event.target.value)}
+                  value={card.configPath ? card.configPathValue : card.binaryPathValue}
+                  onChange={(event) =>
+                    card.configPath
+                      ? onConfigPathChange(event.target.value)
+                      : onBinaryPathChange(event.target.value)
+                  }
                   placeholder={card.binaryPlaceholder}
                   spellCheck={false}
                 />
                 <span className="mt-1 block text-xs text-muted-foreground">
                   {card.binaryDescription}
                 </span>
+                {card.setupUrl ? (
+                  <Button
+                    className="mt-2 h-7 px-2 text-xs"
+                    variant="outline"
+                    onClick={onOpenSetupGuide}
+                  >
+                    {providerDisplayName} setup guide
+                  </Button>
+                ) : null}
               </label>
             </div>
 
@@ -229,29 +273,31 @@ export function ProviderCard({
                 })}
               </div>
 
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id={`custom-model-${card.provider}`}
-                  value={customModelInput}
-                  onChange={(event) => onCustomModelInputChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    onAddCustomModel();
-                  }}
-                  placeholder={
-                    card.provider === "codex" ? "gpt-6.7-codex-ultra-preview" : "claude-sonnet-5-0"
-                  }
-                  spellCheck={false}
-                />
-                <Button className="shrink-0" variant="outline" onClick={onAddCustomModel}>
-                  <PlusIcon className="size-3.5" />
-                  Add
-                </Button>
-              </div>
+              {card.supportsCustomModels ? (
+                <>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      id={`custom-model-${card.provider}`}
+                      value={customModelInput}
+                      onChange={(event) => onCustomModelInputChange(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        onAddCustomModel();
+                      }}
+                      placeholder={card.customModelPlaceholder}
+                      spellCheck={false}
+                    />
+                    <Button className="shrink-0" variant="outline" onClick={onAddCustomModel}>
+                      <PlusIcon className="size-3.5" />
+                      Add
+                    </Button>
+                  </div>
 
-              {customModelError ? (
-                <p className="mt-2 text-xs text-destructive">{customModelError}</p>
+                  {customModelError ? (
+                    <p className="mt-2 text-xs text-destructive">{customModelError}</p>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </div>

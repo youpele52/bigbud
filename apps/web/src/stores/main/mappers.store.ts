@@ -1,5 +1,7 @@
+import { Schema } from "effect";
 import {
   LOCAL_EXECUTION_TARGET_ID,
+  ProviderKind,
   type OrchestrationCheckpointSummary,
   type OrchestrationMessage,
   type OrchestrationProposedPlan,
@@ -7,7 +9,6 @@ import {
   type OrchestrationSession,
   type OrchestrationSessionStatus,
   type OrchestrationThread,
-  type ProviderKind,
   ThreadId,
 } from "@bigbud/contracts";
 import { resolveModelSlugForProvider } from "@bigbud/shared/model";
@@ -65,25 +66,13 @@ export function toLegacySessionStatus(
   }
 }
 
-export function toLegacyProvider(providerName: string | null): ProviderKind {
-  if (
-    providerName === "codex" ||
-    providerName === "claudeAgent" ||
-    providerName === "copilot" ||
-    providerName === "cursor" ||
-    providerName === "devin" ||
-    providerName === "kilocode" ||
-    providerName === "opencode" ||
-    providerName === "pi"
-  ) {
-    return providerName;
-  }
-  return "codex";
+export function toLegacyProvider(providerName: string | null): ProviderKind | "unknown" {
+  return Schema.is(ProviderKind)(providerName) ? providerName : "unknown";
 }
 
 // ── Domain object mappers ─────────────────────────────────────────────
 
-export function mapSession(session: OrchestrationSession): Thread["session"] {
+export function mapSession(session: OrchestrationSession): NonNullable<Thread["session"]> {
   return {
     provider: toLegacyProvider(session.providerName),
     status: toLegacySessionStatus(session.status),
@@ -183,6 +172,12 @@ export function mapTurnDiffSummary(
 }
 
 export function mapThread(thread: OrchestrationThread): Thread {
+  const session = thread.session ? mapSession(thread.session) : null;
+  const unknownProviderError =
+    thread.session !== null && session?.provider === "unknown"
+      ? "Thread is bound to an unknown provider and cannot route turns."
+      : null;
+
   return {
     id: thread.id,
     codexThreadId: null,
@@ -202,10 +197,10 @@ export function mapThread(thread: OrchestrationThread): Thread {
     modelSelection: normalizeModelSlug(thread.modelSelection),
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
-    session: thread.session ? mapSession(thread.session) : null,
+    session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
-    error: sanitizeThreadErrorMessage(thread.session?.lastError),
+    error: unknownProviderError ?? sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
     deletingAt: thread.deletingAt ?? null,
