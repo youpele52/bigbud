@@ -15,6 +15,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Fixed Copilot startup under Electron by resolving the bundled platform-native runtime instead of launching the JavaScript wrapper, so Copilot can start reliably in the desktop app while still honoring custom binary paths.
 - Isolated Cursor discovery probes in a temporary workspace so searches do not enter protected home-directory application data or repeatedly trigger macOS privacy prompts.
 
+### CLIProxyAPI Is Here
+
+- **CLIProxyAPI is now built into bigbud.** Connect your existing local proxy and its live model catalog appears directly in the provider picker, ready for new chats without juggling endpoints or leaving the app. ![CLIProxyAPI in bigbud](https://assets.bigbud.app/content/CLIProxyAPI.png)
+- Setup is one path and one click: point bigbud at your CLIProxyAPI config, then start or retry it from Settings or the model picker while bigbud validates the local connection, credentials, Claude CLI, and available models.
+- Every chat gets an isolated Claude-compatible session with safe model switching and persisted selections, while unsupported background workloads fall back cleanly instead of silently using the wrong provider.
+
 ### Safer, More Dependable Computer Use
 
 - Updated the CUA driver to the 0.9.1 desktop lifecycle with managed runtime activation, policy validation, daemon startup and recovery, health checks, cleanup, diagnostics, MCP tool validation, and reset handling after uncertain actions, so computer-use sessions recover more safely when something goes wrong.
@@ -38,6 +44,11 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Faster Right-Panel Access
 
 - Updated the right-panel launcher with a compact three-column tool grid, larger icons, clearer labels, and hover tooltips that show descriptions and shortcuts, so Browser, Files, Notes, Kanban, Terminal, Git, and Diff are easier to scan and open. ![Updated right-panel launcher](https://assets.bigbud.app/content/HOK1lZrWMAIbRIb.png)
+
+### Keyboard Shortcuts
+
+- Added `Cmd/Ctrl+Shift+S` to show or minimize Sidecar, making the temporary conversation faster to access.
+- Added `Cmd/Ctrl+Shift+T` to show or hide Tasks, making the active workflow plan faster to access.
 
 ### Branch Management
 
