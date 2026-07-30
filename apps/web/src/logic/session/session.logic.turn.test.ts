@@ -195,15 +195,15 @@ describe("PROVIDER_OPTIONS", () => {
     const cursor = PROVIDER_OPTIONS.find((option) => option.value === "cursor");
     const devin = PROVIDER_OPTIONS.find((option) => option.value === "devin");
     expect(PROVIDER_OPTIONS).toEqual([
-      { value: "codex", label: "Codex", available: true },
       { value: "claudeAgent", label: "Claude", available: true },
       { value: "cliProxy", label: "CLIProxyAPI", available: true },
+      { value: "codex", label: "Codex", available: true },
       { value: "copilot", label: "Copilot", available: true },
+      { value: "cursor", label: "Cursor", available: true },
+      { value: "devin", label: "Devin", available: true },
       { value: "kilocode", label: "KiloCode", available: true },
       { value: "opencode", label: "OpenCode", available: true },
       { value: "pi", label: "Pi", available: true },
-      { value: "cursor", label: "Cursor", available: true },
-      { value: "devin", label: "Devin", available: true },
     ]);
     expect(claude).toEqual({
       value: "claudeAgent",
