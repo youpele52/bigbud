@@ -11,7 +11,7 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
@@ -138,10 +138,7 @@ const MobileWsRpcLayer = MobileWsRpcGroup.toLayer(
       }) =>
         observeRpcEffect(
           ORCHESTRATION_WS_METHODS.replayEvents,
-          Stream.runCollect(
-            context.orchestrationEngine.readEvents(input.fromSequenceExclusive),
-          ).pipe(
-            Effect.map((events) => Array.from(events)),
+          context.orchestrationEngine.readReplay(input.fromSequenceExclusive).pipe(
             Effect.mapError(
               (cause) =>
                 new OrchestrationReplayEventsError({

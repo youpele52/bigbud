@@ -1,5 +1,4 @@
 import path from "node:path";
-
 import { Effect, Layer } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
@@ -47,6 +46,8 @@ import { OrchestrationCommandReceiptRepositoryLive } from "./persistence/Layers/
 import { AutomationScheduleRepositoryLive } from "./persistence/Layers/AutomationScheduleRepository";
 import { CheckpointDiffQueryLive } from "./checkpointing/Layers/CheckpointDiffQuery";
 import { OrchestrationProjectionSnapshotQueryLive } from "./orchestration/Layers/ProjectionSnapshotQuery";
+import { ProjectionCatalogQueryLive } from "./orchestration/Layers/ProjectionCatalogQuery";
+import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/ProjectionOperationalStateQuery";
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
 import { GitCoreLive } from "./git/Layers/GitCore";
 import { GitHubCliLive } from "./git/Layers/GitHubCli";
@@ -96,7 +97,7 @@ import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillCha
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
-
+import { EntityPurgeLive } from "./deletion/Layers/EntityPurge";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -169,9 +170,12 @@ const OrchestrationProjectionPipelineLayerLive = OrchestrationProjectionPipeline
 
 const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionSnapshotQueryLive,
+  ProjectionCatalogQueryLive,
+  ProjectionOperationalStateQueryLive,
   OrchestrationEventInfrastructureLayerLive,
   AutomationInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
+  EntityPurgeLive,
 );
 
 const OrchestrationLayerLive = Layer.mergeAll(

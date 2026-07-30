@@ -65,6 +65,7 @@ export const makeDefaultOrchestrationReadModel = () => {
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
+        pinnedAt: null,
         latestTurn: null,
         messages: [],
         session: null,

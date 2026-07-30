@@ -39,6 +39,7 @@ function makeThread(): OrchestrationThread {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     archivedAt: null,
+    pinnedAt: null,
     deletingAt: null,
     deletedAt: null,
     messages: [],

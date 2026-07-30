@@ -1,5 +1,7 @@
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import {
+  FAVORITE_THREAD_LIMIT,
+  OrchestrationDispatchCommandError,
   ProjectDirectoryWatchError,
   ProjectListDirectoryError,
   ProjectReadFilePreviewError,
@@ -70,14 +72,40 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverSetThreadPinned]: (input: {
-      readonly threadId: Parameters<
-        WsRpcContext["serverSettings"]["setThreadPinned"]
-      >[0]["threadId"];
+      readonly threadId: ThreadId;
       readonly pinned: boolean;
     }) =>
       observeRpcEffect(
         WS_METHODS.serverSetThreadPinned,
-        context.serverSettings.setThreadPinned(input),
+        Effect.gen(function* () {
+          yield* context.dispatchNormalizedCommand({
+            type: input.pinned ? "thread.pin" : "thread.unpin",
+            commandId: context.serverCommandId(input.pinned ? "thread-pin" : "thread-unpin"),
+            threadId: input.threadId,
+          });
+          const readModel = yield* context.orchestrationEngine.getReadModel();
+          const thread = readModel.threads.find((candidate) => candidate.id === input.threadId);
+          const count = readModel.threads.filter(
+            (candidate) => candidate.deletedAt === null && (candidate.pinnedAt ?? null) !== null,
+          ).length;
+          return {
+            threadId: input.threadId,
+            pinned: input.pinned,
+            pinnedAt: thread?.pinnedAt ?? null,
+            count,
+            limit: FAVORITE_THREAD_LIMIT,
+            remaining: FAVORITE_THREAD_LIMIT - count,
+          };
+        }).pipe(
+          Effect.mapError((cause) =>
+            Schema.is(OrchestrationDispatchCommandError)(cause)
+              ? cause
+              : new OrchestrationDispatchCommandError({
+                  message: "Failed to update pinned thread",
+                  cause,
+                }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverReadDocumentUrl]: (input: { readonly url: string }) =>
@@ -119,7 +147,20 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverExportThreadContext,
         Effect.gen(function* () {
-          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot().pipe(
+          const snapshot = yield* (
+            Option.isSome(context.projectionOperationalStateQuery)
+              ? context.projectionOperationalStateQuery.value
+                  .getFullThreadHistory(input.threadId)
+                  .pipe(
+                    Effect.flatMap(
+                      Option.match({
+                        onNone: () => Effect.fail(new Error("Thread was not found.")),
+                        onSome: Effect.succeed,
+                      }),
+                    ),
+                  )
+              : context.projectionSnapshotQuery.getSnapshot()
+          ).pipe(
             Effect.mapError(
               (cause) =>
                 new ServerExportThreadContextError({

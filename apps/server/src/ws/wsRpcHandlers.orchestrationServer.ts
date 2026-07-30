@@ -1,15 +1,17 @@
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Schema } from "effect";
 import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  OrchestrationGetProjectThreadSummariesError,
+  OrchestrationGetStartupProjectCatalogError,
+  OrchestrationGetSelectedThreadDetailError,
   OrchestrationGetTurnDiffError,
   OrchestrationReplayEventsError,
   ORCHESTRATION_WS_METHODS,
   ProjectDirectoryWatchError,
   WS_METHODS,
 } from "@bigbud/contracts";
-import { clamp } from "effect/Number";
 
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem";
@@ -35,6 +37,54 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   };
 
   return {
+    [ORCHESTRATION_WS_METHODS.getStartupProjectCatalog]: (
+      input: Parameters<WsRpcContext["projectionCatalogQuery"]["getStartupProjectCatalog"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getStartupProjectCatalog,
+        context.projectionCatalogQuery.getStartupProjectCatalog(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationGetStartupProjectCatalogError({
+                message: "Failed to load startup project catalog",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getProjectThreadSummaries]: (
+      input: Parameters<WsRpcContext["projectionCatalogQuery"]["getProjectThreadSummaries"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getProjectThreadSummaries,
+        context.projectionCatalogQuery.getProjectThreadSummaries(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationGetProjectThreadSummariesError({
+                message: "Failed to load project thread summaries",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
+    [ORCHESTRATION_WS_METHODS.getSelectedThreadDetail]: (
+      input: Parameters<WsRpcContext["projectionCatalogQuery"]["getSelectedThreadDetail"]>[0],
+    ) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getSelectedThreadDetail,
+        context.projectionCatalogQuery.getSelectedThreadDetail(input).pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationGetSelectedThreadDetailError({
+                message: "Failed to load selected thread detail",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
     [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
       observeRpcEffect(
         ORCHESTRATION_WS_METHODS.getSnapshot,
@@ -118,12 +168,7 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
     [ORCHESTRATION_WS_METHODS.replayEvents]: (input: { readonly fromSequenceExclusive: number }) =>
       observeRpcEffect(
         ORCHESTRATION_WS_METHODS.replayEvents,
-        Stream.runCollect(
-          context.orchestrationEngine.readEvents(
-            clamp(input.fromSequenceExclusive, { maximum: Number.MAX_SAFE_INTEGER, minimum: 0 }),
-          ),
-        ).pipe(
-          Effect.map((events) => Array.from(events)),
+        context.orchestrationEngine.readReplay(input.fromSequenceExclusive).pipe(
           Effect.mapError(
             (cause) =>
               new OrchestrationReplayEventsError({
