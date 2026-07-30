@@ -52,6 +52,7 @@ function engine(dispatched: OrchestrationCommand[]): OrchestrationEngineShape {
   return {
     getReadModel: () => Effect.succeed(readModel()),
     readEvents: () => Stream.empty,
+    readReplay: () => Effect.die("unused replay"),
     dispatch: (command) => {
       dispatched.push(command);
       return Effect.succeed({ sequence: dispatched.length });

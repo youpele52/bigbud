@@ -177,6 +177,7 @@ function mapThreadRow(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
     messages: groupedRows.messagesByThread.get(row.threadId) ?? [],

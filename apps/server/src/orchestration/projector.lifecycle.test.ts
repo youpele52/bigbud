@@ -62,6 +62,7 @@ describe("orchestration projector — thread lifecycle", () => {
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
+        pinnedAt: null,
         deletingAt: null,
         deletedAt: null,
         messages: [],

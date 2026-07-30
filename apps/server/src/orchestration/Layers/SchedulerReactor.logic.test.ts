@@ -44,6 +44,7 @@ function makeOrchestrationEngineMock(
   return {
     getReadModel: () => Effect.succeed(createEmptyReadModel(new Date().toISOString())),
     readEvents: () => Stream.empty,
+    readReplay: () => Effect.die("unused replay"),
     dispatch,
     get streamDomainEvents() {
       return Stream.empty;

@@ -33,9 +33,11 @@ import {
   projectThreadDeleted,
   projectThreadInteractionModeSet,
   projectThreadMetaUpdated,
+  projectThreadPinned,
   projectThreadRuntimeModeSet,
   projectThreadTurnStartFailed,
   projectThreadUnarchived,
+  projectThreadUnpinned,
 } from "./projectorThreadLifecycle.ts";
 import {
   compareThreadActivities,
@@ -91,6 +93,12 @@ export function projectEvent(
 
     case "thread.unarchived":
       return projectThreadUnarchived(nextBase, event);
+
+    case "thread.pinned":
+      return projectThreadPinned(nextBase, event);
+
+    case "thread.unpinned":
+      return projectThreadUnpinned(nextBase, event);
 
     case "thread.meta-updated":
       return projectThreadMetaUpdated(nextBase, event);

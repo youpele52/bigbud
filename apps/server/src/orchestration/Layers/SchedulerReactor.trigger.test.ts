@@ -37,6 +37,7 @@ function makeTriggerTestLayer(dispatch: OrchestrationEngineShape["dispatch"]) {
       Layer.succeed(OrchestrationEngineService, {
         getReadModel: () => Effect.succeed(createEmptyReadModel(new Date().toISOString())),
         readEvents: () => Stream.fromIterable([] as ReadonlyArray<OrchestrationEvent>),
+        readReplay: () => Effect.die("unused replay"),
         dispatch: (command) => dispatch(command),
         streamDomainEvents: Stream.fromIterable([] as ReadonlyArray<OrchestrationEvent>),
       }),

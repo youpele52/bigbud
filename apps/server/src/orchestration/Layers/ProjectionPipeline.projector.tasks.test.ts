@@ -60,8 +60,6 @@ describe("durable task projector", () => {
     });
     await Effect.runPromise(
       projector.apply(upsertEvent(baseTask, 1), {
-        deletedThreadIds: new Set(),
-        deletedProjectMemoryIds: new Set(),
         prunedThreadRelativePaths: new Map(),
       }),
     );
@@ -77,8 +75,6 @@ describe("durable task projector", () => {
           2,
         ),
         {
-          deletedThreadIds: new Set(),
-          deletedProjectMemoryIds: new Set(),
           prunedThreadRelativePaths: new Map(),
         },
       ),
@@ -88,8 +84,6 @@ describe("durable task projector", () => {
       projector.apply(
         upsertEvent({ ...baseTask, subject: "Stale", updatedAt: "2026-07-25T00:00:00.500Z" }, 3),
         {
-          deletedThreadIds: new Set(),
-          deletedProjectMemoryIds: new Set(),
           prunedThreadRelativePaths: new Map(),
         },
       ),

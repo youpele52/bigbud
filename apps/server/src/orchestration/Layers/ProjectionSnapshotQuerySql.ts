@@ -109,6 +109,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads

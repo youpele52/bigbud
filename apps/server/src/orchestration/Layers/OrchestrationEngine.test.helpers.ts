@@ -12,6 +12,7 @@ import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 
 export const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 export const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
@@ -44,6 +45,7 @@ export async function createOrchestrationSystem() {
   });
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
+    Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),

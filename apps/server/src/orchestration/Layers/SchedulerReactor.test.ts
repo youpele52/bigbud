@@ -51,6 +51,7 @@ describe("SchedulerReactor", () => {
         Layer.succeed(OrchestrationEngineService, {
           getReadModel: () => Effect.succeed(createEmptyReadModel(new Date().toISOString())),
           readEvents: () => Stream.fromIterable([] as ReadonlyArray<OrchestrationEvent>),
+          readReplay: () => Effect.die("unused replay"),
           dispatch: (command) =>
             Effect.sync(() => {
               if (command.type === "thread.turn.start") {
@@ -139,6 +140,7 @@ describe("SchedulerReactor", () => {
         Layer.succeed(OrchestrationEngineService, {
           getReadModel: () => Effect.succeed(createEmptyReadModel(new Date().toISOString())),
           readEvents: () => Stream.fromIterable([] as ReadonlyArray<OrchestrationEvent>),
+          readReplay: () => Effect.die("unused replay"),
           dispatch: () =>
             Effect.fail(
               new OrchestrationListenerCallbackError({

@@ -14,7 +14,7 @@ import {
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("bigbud-project-memory-delete-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
-    it.effect("removes project memory only after project deletion is finalized", () =>
+    it.effect("retains project memory for EntityPurge after project deletion is finalized", () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -100,7 +100,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("bigbud-project-mem
           payload: { projectId, deletedAt: now },
         });
 
-        assert.isFalse(yield* exists(memoryDirectory!));
+        assert.isTrue(yield* exists(memoryDirectory!));
       }),
     );
   },

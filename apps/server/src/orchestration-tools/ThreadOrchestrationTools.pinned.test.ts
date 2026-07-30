@@ -1,17 +1,14 @@
 import {
-  DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ThreadId,
   type OrchestrationProject,
   type OrchestrationReadModel,
   type OrchestrationThread,
-  type ServerSettings,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
-import type { ServerSettingsShape } from "../ws/serverSettings.ts";
 import {
   listPinnedThreadsViaOrchestration,
   setThreadPinnedViaOrchestration,
@@ -58,6 +55,7 @@ function makeThread(
     createdAt: NOW,
     updatedAt: NOW,
     archivedAt,
+    pinnedAt: null,
     deletedAt: null,
     messages: [],
     proposedPlans: [],
@@ -69,7 +67,7 @@ function makeThread(
 }
 
 function makeHarness(input?: { readonly targetArchived?: boolean }) {
-  const readModel: OrchestrationReadModel = {
+  let readModel: OrchestrationReadModel = {
     snapshotSequence: 1,
     projects: [
       makeProject(CALLER_PROJECT_ID, "Caller project"),
@@ -89,27 +87,28 @@ function makeHarness(input?: { readonly targetArchived?: boolean }) {
   const orchestrationEngine: OrchestrationEngineShape = {
     getReadModel: () => Effect.succeed(readModel),
     readEvents: () => Stream.empty,
-    dispatch: () => Effect.succeed({ sequence: 1 }),
+    readReplay: () => Effect.die("unused replay"),
+    dispatch: (command) =>
+      Effect.sync(() => {
+        if (command.type === "thread.pin" || command.type === "thread.unpin") {
+          const threads = [...readModel.threads];
+          const threadIndex = threads.findIndex((thread) => thread.id === command.threadId);
+          if (threadIndex >= 0) {
+            threads[threadIndex] = {
+              ...threads[threadIndex]!,
+              pinnedAt: command.type === "thread.pin" ? NOW : null,
+            };
+          }
+          readModel = {
+            ...readModel,
+            threads,
+          };
+        }
+        return { sequence: 1 };
+      }),
     streamDomainEvents: Stream.empty,
   };
-  let settings: ServerSettings = DEFAULT_SERVER_SETTINGS;
-  const serverSettings: ServerSettingsShape = {
-    start: Effect.void,
-    ready: Effect.void,
-    getSettings: Effect.sync(() => settings),
-    updateSettings: () => Effect.sync(() => settings),
-    setThreadPinned: ({ threadId, pinned }) =>
-      Effect.sync(() => {
-        const withoutThread = settings.favoriteThreadIds.filter((id) => id !== threadId);
-        settings = {
-          ...settings,
-          favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
-        };
-        return settings;
-      }),
-    streamChanges: Stream.empty,
-  };
-  return { orchestrationEngine, serverSettings };
+  return { orchestrationEngine };
 }
 
 describe("pinned thread orchestration tools", () => {

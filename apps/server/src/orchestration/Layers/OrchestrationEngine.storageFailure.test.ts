@@ -54,6 +54,8 @@ describe("OrchestrationEngine", () => {
       readFromSequence(sequenceExclusive) {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
+      readReplay: () => Effect.die("unused replay"),
+      findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll() {
         return Stream.fromIterable(events);
       },

@@ -102,6 +102,7 @@ describe("codexThreadDynamicTools", () => {
         return Effect.succeed({
           threadId: input.threadId,
           pinned: input.pinned,
+          pinnedAt: input.pinned ? new Date().toISOString() : null,
           count: input.pinned ? 1 : 0,
           limit: 5,
           remaining: input.pinned ? 4 : 5,

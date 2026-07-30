@@ -15,6 +15,8 @@ import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager, type TerminalError } from "../../terminal/Services/Manager.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
+import { EntityPurge } from "../../deletion/Services/EntityPurge.ts";
+import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 
 type DeleteRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -46,6 +48,8 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const browser = yield* BrowserManager;
   const terminal = yield* TerminalManager;
+  const entityPurge = yield* EntityPurge;
+  const projectionPipeline = yield* OrchestrationProjectionPipeline;
 
   const appendDeletionFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -177,11 +181,16 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
     }
 
     const createdAt = new Date().toISOString();
+    const purgeJob = yield* entityPurge.requestThread(thread.id);
     yield* orchestrationEngine.dispatch({
       type: "thread.delete.finalize",
       commandId: serverCommandId("thread-delete-finalize"),
       threadId: thread.id,
       createdAt,
     });
+    if (projectionPipeline.compactCanonicalEvents) {
+      yield* projectionPipeline.compactCanonicalEvents();
+    }
+    yield* entityPurge.run(purgeJob);
   });
 });
