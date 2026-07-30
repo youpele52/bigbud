@@ -19,6 +19,7 @@ import {
   PubSub,
   Queue,
   Schema,
+  Semaphore,
   Stream,
 } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -41,7 +42,7 @@ import { decideOrchestrationCommand } from "../decider.ts";
 import { projectEvent } from "../projector.ts";
 import { createEmptyReadModel } from "../projectorReadModel.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
-import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -73,6 +74,7 @@ import { ThreadDelegationRepository } from "../../persistence/Services/ThreadDel
 import { ThreadDelegationRepositoryLive } from "../../persistence/Layers/ThreadDelegations.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../../persistence/Layers/ProjectionThreadWatches.ts";
+import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
 
 interface CommandEnvelope {
   command: OrchestrationCommand;
@@ -107,7 +109,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
-  const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const operationalQueryOption = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
   const computerUse = yield* ComputerUse;
   const browser = yield* BrowserManager;
   const visibleBrowser = yield* VisibleBrowserControl;
@@ -119,6 +121,24 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const threadWatchRepository = yield* ProjectionThreadWatchRepository;
 
   let readModel = createEmptyReadModel(new Date().toISOString());
+  const commandSemaphore = yield* Semaphore.make(1);
+
+  const threadStateHydrator = Option.isSome(operationalQueryOption)
+    ? makeThreadStateHydrator({
+        query: operationalQueryOption.value,
+        eventStore,
+        readModel: () => readModel,
+        install: ({ threadId, thread, project }) => {
+          const threads = thread
+            ? [...readModel.threads.filter((candidate) => candidate.id !== threadId), thread]
+            : readModel.threads.filter((candidate) => candidate.id !== threadId);
+          const projects = project
+            ? [...readModel.projects.filter((candidate) => candidate.id !== project.id), project]
+            : readModel.projects;
+          readModel = { ...readModel, projects, threads };
+        },
+      })
+    : null;
 
   const commandQueue = yield* Queue.unbounded<CommandEnvelope>();
   const eventPubSub = yield* PubSub.unbounded<OrchestrationEvent>();
@@ -194,10 +214,21 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
               const lastSavedEvent = committedEvents.at(-1) ?? null;
               if (lastSavedEvent === null) {
-                return yield* new OrchestrationCommandInvariantError({
-                  commandType: envelope.command.type,
-                  detail: "Command produced no events.",
+                yield* commandReceiptRepository.upsert({
+                  commandId: envelope.command.commandId,
+                  aggregateKind: aggregateRef.aggregateKind,
+                  aggregateId: aggregateRef.aggregateId,
+                  acceptedAt: new Date().toISOString(),
+                  resultSequence: readModel.snapshotSequence,
+                  status: "accepted",
+                  error: null,
                 });
+
+                return {
+                  committedEvents,
+                  lastSequence: readModel.snapshotSequence,
+                  nextReadModel,
+                } as const;
               }
 
               yield* commandReceiptRepository.upsert({
@@ -322,15 +353,55 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     );
   };
 
+  const prepareCommandState = (command: OrchestrationCommand) => {
+    if (threadStateHydrator === null || command.type === "thread.create") {
+      return Effect.void;
+    }
+    const aggregate = commandToAggregateRef(command);
+    if (aggregate.aggregateKind !== "thread") {
+      return Effect.void;
+    }
+    const historyRequired =
+      command.type === "thread.turn.start" ||
+      command.type === "thread.checkpoint.revert" ||
+      command.type === "thread.revert.complete";
+    return Effect.gen(function* () {
+      yield* threadStateHydrator.load(
+        aggregate.aggregateId as ThreadId,
+        historyRequired ? "history" : "operational",
+      );
+      if (command.type === "thread.turn.start" && command.sourceProposedPlan) {
+        yield* threadStateHydrator.load(command.sourceProposedPlan.threadId, "history");
+      }
+    });
+  };
+
   yield* projectionPipeline.bootstrap;
-  readModel = yield* projectionSnapshotQuery.getSnapshot();
-  rehydrateThreadTitleLocks(
-    yield* Stream.runCollect(eventStore.readFromSequence(0)).pipe(
-      Effect.map((events) => Array.from(events)),
+  readModel = Option.isSome(operationalQueryOption)
+    ? yield* operationalQueryOption.value.getStartupOperationalState()
+    : readModel;
+  rehydrateThreadTitleLocks([]);
+
+  const worker = Effect.forever(
+    Queue.take(commandQueue).pipe(
+      Effect.flatMap((envelope) =>
+        commandSemaphore.withPermits(1)(
+          prepareCommandState(envelope.command).pipe(
+            Effect.andThen(processEnvelope(envelope)),
+            Effect.catch((error) =>
+              Deferred.fail(
+                envelope.result,
+                new OrchestrationCommandInvariantError({
+                  commandType: envelope.command.type,
+                  detail: error instanceof Error ? error.message : String(error),
+                }),
+              ).pipe(Effect.asVoid),
+            ),
+          ),
+        ),
+      ),
     ),
   );
-
-  const worker = Effect.forever(Queue.take(commandQueue).pipe(Effect.flatMap(processEnvelope)));
   yield* Effect.forkScoped(worker);
   yield* Effect.forkScoped(
     projectionPipeline.backfillUsageContributions.pipe(
@@ -350,6 +421,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
 
   const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
     eventStore.readFromSequence(fromSequenceExclusive);
+  const readReplay: OrchestrationEngineShape["readReplay"] = (fromSequenceExclusive) =>
+    eventStore.readReplay(fromSequenceExclusive);
 
   const dispatch: OrchestrationEngineShape["dispatch"] = (command) =>
     Effect.gen(function* () {
@@ -361,6 +434,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const engine: OrchestrationEngineShape = {
     getReadModel,
     readEvents,
+    readReplay,
+    ...(threadStateHydrator === null
+      ? {}
+      : {
+          ensureThreadState: (threadId: ThreadId, level: "operational" | "history") =>
+            commandSemaphore
+              .withPermits(1)(threadStateHydrator.load(threadId, level))
+              .pipe(Effect.orDie),
+        }),
     dispatch,
     // Each access creates a fresh PubSub subscription so that multiple
     // consumers (wsServer, ProviderRuntimeIngestion, CheckpointReactor, etc.)
@@ -392,13 +474,11 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     listPinned: (input) =>
       listPinnedThreadsViaThreadTools({
         orchestrationEngine: engine,
-        serverSettings: serverSettingsService,
         callerThreadId: input.callerThreadId,
       }),
     setPinned: (input) =>
       setThreadPinnedViaThreadTools({
         orchestrationEngine: engine,
-        serverSettings: serverSettingsService,
         callerThreadId: input.callerThreadId,
         threadId: input.threadId,
         pinned: input.pinned,
