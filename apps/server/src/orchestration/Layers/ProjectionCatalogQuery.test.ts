@@ -32,6 +32,7 @@ layer("ProjectionCatalogQuery", (it) => {
         first.projects.map((project) => project.id),
         ["project-a", "project-b"],
       );
+      assert.equal(first.projects[0]?.workspaceExecutionTargetId, "local");
       assert.deepEqual(first.nextCursor, {
         lastUsedAt: "2026-01-03",
         projectId: "project-b",
@@ -65,6 +66,7 @@ layer("ProjectionCatalogQuery", (it) => {
       yield* sql`DELETE FROM projection_threads`;
       yield* sql`DELETE FROM projection_thread_sessions`;
       yield* sql`DELETE FROM projection_pending_approvals`;
+      yield* sql`DELETE FROM projection_thread_messages`;
       yield* sql`
         INSERT INTO projection_threads (
           thread_id, project_id, title, purpose, elevator_summary,
@@ -88,10 +90,18 @@ layer("ProjectionCatalogQuery", (it) => {
         ) VALUES ('thread-a', 'running', 'codex', '2026-01-03')
       `;
       yield* sql`
-        INSERT INTO projection_pending_approvals (
+         INSERT INTO projection_pending_approvals (
           request_id, thread_id, status, created_at
-        ) VALUES ('approval-1', 'thread-a', 'pending', '2026-01-03')
-      `;
+         ) VALUES ('approval-1', 'thread-a', 'pending', '2026-01-03')
+       `;
+      yield* sql`
+         INSERT INTO projection_thread_messages (
+           message_id, thread_id, role, text, is_streaming, created_at, updated_at
+         ) VALUES
+           ('assistant-message', 'thread-a', 'assistant', 'Hello', 0, '2026-01-04', '2026-01-04'),
+           ('old-user-message', 'thread-a', 'user', 'Earlier request', 0, '2026-01-05', '2026-01-05'),
+           ('latest-user-message', 'thread-a', 'user', 'Latest request', 0, '2026-01-06', '2026-01-06')
+       `;
 
       const result = yield* query.getProjectThreadSummaries({
         projectId: ProjectId.makeUnsafe("project-a"),
@@ -107,6 +117,8 @@ layer("ProjectionCatalogQuery", (it) => {
       assert.equal(result.threads[0]?.executionTargetId, "ssh:legacy");
       assert.equal(result.threads[0]?.branch, "feature/remote");
       assert.equal(result.threads[0]?.worktreePath, "/worktrees/remote");
+      assert.equal(result.threads[0]?.createdAt, "2026-01-01");
+      assert.equal(result.threads[0]?.latestUserMessageAt, "2026-01-06");
       assert.equal("messages" in (result.threads[0] ?? {}), false);
       assert.deepEqual(result.nextCursor, {
         updatedAt: "2026-01-03",
@@ -147,6 +159,38 @@ layer("ProjectionCatalogQuery", (it) => {
       const result = yield* query.getStartupProjectCatalog({ limit: 100 });
       assert.equal(result.projects.length, 20);
       assert.notEqual(result.nextCursor, undefined);
+    }),
+  );
+
+  it.effect("returns null when a thread has no user messages", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionCatalogQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM projection_thread_messages`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id, project_id, title, purpose, model_selection_json, runtime_mode,
+          interaction_mode, created_at, updated_at, archived_at, deleted_at
+        ) VALUES (
+          'assistant-only-thread', 'project-a', 'Assistant only', 'standard',
+          '{"provider":"codex","model":"gpt-5-codex"}', 'full-access',
+          'default', '2026-01-01', '2026-01-03', NULL, NULL
+        )
+      `;
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('assistant-only-message', 'assistant-only-thread', 'assistant', 'Hello', 0,
+          '2026-01-02', '2026-01-02')
+      `;
+
+      const result = yield* query.getProjectThreadSummaries({
+        projectId: ProjectId.makeUnsafe("project-a"),
+      });
+
+      assert.equal(result.threads[0]?.latestUserMessageAt, null);
+      assert.equal(result.threads[0]?.createdAt, "2026-01-01");
     }),
   );
 });

@@ -123,6 +123,9 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       SELECT
         p.project_id AS id,
         p.title,
+        p.provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
+        p.workspace_execution_target_id AS "workspaceExecutionTargetId",
+        p.execution_target_id AS "executionTargetId",
         p.workspace_root AS "workspaceRoot",
         p.last_used_at AS "lastUsedAt",
         p.updated_at AS "updatedAt",
@@ -155,7 +158,13 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         t.execution_target_id AS "executionTargetId",
         t.branch,
         t.worktree_path AS "worktreePath",
+        t.created_at AS "createdAt",
         t.updated_at AS "updatedAt",
+        (
+          SELECT MAX(m.created_at)
+          FROM projection_thread_messages m
+          WHERE m.thread_id = t.thread_id AND m.role = 'user'
+        ) AS "latestUserMessageAt",
         t.pinned_at AS "pinnedAt",
         s.status AS "sessionStatus",
         s.provider_name AS "providerName",

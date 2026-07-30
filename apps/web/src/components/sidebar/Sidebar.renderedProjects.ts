@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../../stores/main";
@@ -129,7 +129,10 @@ export function useSidebarRenderedProjects({
         const hasMoreThreads = threadSummaryCursorByProjectId[project.id] !== null;
         const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
         const renderedThreadIds = visibleProjectThreads.map((thread) => thread.id);
-        const showEmptyThreadState = project.expanded && projectThreads.length === 0;
+        const showEmptyThreadState =
+          project.expanded &&
+          projectThreads.length === 0 &&
+          Object.hasOwn(threadSummaryCursorByProjectId, project.id);
 
         return {
           hasHiddenThreads,
@@ -243,6 +246,23 @@ export function useSidebarRenderedProjects({
     },
     [loadingThreadPagesByProject],
   );
+
+  useEffect(() => {
+    for (const project of sortedProjects) {
+      if (
+        project.expanded &&
+        !Object.hasOwn(threadSummaryCursorByProjectId, project.id) &&
+        !loadingThreadPagesByProject.has(project.id)
+      ) {
+        loadMoreThreadsForProject(project.id);
+      }
+    }
+  }, [
+    loadMoreThreadsForProject,
+    loadingThreadPagesByProject,
+    sortedProjects,
+    threadSummaryCursorByProjectId,
+  ]);
 
   const animatedThreadListsRef = useRef(new WeakSet<HTMLElement>());
   const attachThreadListAutoAnimateRef = useCallback((node: HTMLElement | null) => {

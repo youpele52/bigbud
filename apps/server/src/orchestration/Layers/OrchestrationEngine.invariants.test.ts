@@ -98,6 +98,88 @@ describe("OrchestrationEngine", () => {
     await system.dispose();
   });
 
+  it("rejects duplicate project workspace identities", async () => {
+    const system = await createOrchestrationSystem();
+    const createdAt = now();
+
+    await system.run(
+      system.engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-workspace-1"),
+        projectId: asProjectId("project-workspace-1"),
+        title: "Workspace",
+        workspaceRoot: "/tmp/workspace",
+        defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+        createdAt,
+      }),
+    );
+
+    await expect(
+      system.run(
+        system.engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe("cmd-project-workspace-2"),
+          projectId: asProjectId("project-workspace-2"),
+          title: "Workspace duplicate",
+          workspaceRoot: "/tmp/workspace",
+          defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+          createdAt,
+        }),
+      ),
+    ).rejects.toThrow("already exists for workspace");
+
+    await system.dispose();
+  });
+
+  it("distinguishes projects with the same path on different workspace targets", async () => {
+    const system = await createOrchestrationSystem();
+    const createdAt = now();
+    const sharedWorkspace = "/srv/workspace";
+
+    await system.run(
+      system.engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-remote-1"),
+        projectId: asProjectId("project-remote-1"),
+        title: "Remote 1",
+        workspaceRoot: sharedWorkspace,
+        workspaceExecutionTargetId: "ssh:host=one&user=root",
+        defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+        createdAt,
+      }),
+    );
+
+    await expect(
+      system.run(
+        system.engine.dispatch({
+          type: "project.create",
+          commandId: CommandId.makeUnsafe("cmd-project-remote-duplicate"),
+          projectId: asProjectId("project-remote-duplicate"),
+          title: "Remote duplicate",
+          workspaceRoot: sharedWorkspace,
+          workspaceExecutionTargetId: "ssh:host=one&user=root",
+          defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+          createdAt,
+        }),
+      ),
+    ).rejects.toThrow("already exists for workspace");
+
+    await system.run(
+      system.engine.dispatch({
+        type: "project.create",
+        commandId: CommandId.makeUnsafe("cmd-project-remote-2"),
+        projectId: asProjectId("project-remote-2"),
+        title: "Remote 2",
+        workspaceRoot: sharedWorkspace,
+        workspaceExecutionTargetId: "ssh:host=two&user=root",
+        defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
+        createdAt,
+      }),
+    );
+
+    await system.dispose();
+  });
+
   it("allows a thread to reference an existing parent in another project", async () => {
     const system = await createOrchestrationSystem();
     const { engine } = system;

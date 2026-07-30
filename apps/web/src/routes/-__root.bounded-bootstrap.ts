@@ -1,6 +1,7 @@
 import {
   PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
   STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+  STARTUP_PROJECT_CATALOG_MAX_LIMIT,
   ThreadId,
   type GetProjectThreadSummariesResult,
   type GetStartupProjectCatalogResult,
@@ -58,13 +59,31 @@ export async function runBoundedBootstrap(input: {
   let catalog: GetStartupProjectCatalogResult;
   const pages: GetProjectThreadSummariesResult[] = [];
   try {
-    catalog = await input.api.orchestration.getStartupProjectCatalog({
+    const firstCatalogPage = await input.api.orchestration.getStartupProjectCatalog({
       limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
       ...(selectedDetail ? { priorityProjectId: selectedDetail.projectId } : {}),
     });
-    sequences.push(catalog.projectionSequence);
+    sequences.push(firstCatalogPage.projectionSequence);
 
-    for (const project of catalog.projects) {
+    const projectsById = new Map(firstCatalogPage.projects.map((project) => [project.id, project]));
+    let cursor = firstCatalogPage.nextCursor;
+    while (cursor !== undefined) {
+      const page = await input.api.orchestration.getStartupProjectCatalog({
+        limit: STARTUP_PROJECT_CATALOG_MAX_LIMIT,
+        cursor,
+      });
+      sequences.push(page.projectionSequence);
+      for (const project of page.projects) {
+        projectsById.set(project.id, project);
+      }
+      cursor = page.nextCursor;
+    }
+    catalog = {
+      projectionSequence: firstCatalogPage.projectionSequence,
+      projects: [...projectsById.values()],
+    };
+
+    for (const project of firstCatalogPage.projects) {
       const page = await input.api.orchestration.getProjectThreadSummaries({
         projectId: project.id,
         limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
@@ -173,12 +192,13 @@ export async function loadMoreProjectThreadSummaries(input: {
   if (!cursorByProjectId) {
     return;
   }
-  const cursor = cursorByProjectId[input.projectId] ?? null;
-  if (cursor === null) return;
+  const hasLoadedInitialPage = Object.hasOwn(cursorByProjectId, input.projectId);
+  const cursor = cursorByProjectId[input.projectId];
+  if (hasLoadedInitialPage && cursor === null) return;
   const page = await input.api.orchestration.getProjectThreadSummaries({
     projectId: input.projectId,
     limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
-    cursor,
+    ...(cursor ? { cursor } : {}),
   });
   useStore.getState().appendProjectThreadSummaries(page);
 }

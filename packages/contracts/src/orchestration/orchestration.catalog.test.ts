@@ -5,6 +5,7 @@ import { Effect, Schema } from "effect";
 import {
   GetProjectThreadSummariesResult,
   GetStartupProjectCatalogInput,
+  GetStartupProjectCatalogResult,
 } from "./orchestration.catalog";
 import { OrchestrationRpcSchemas } from "./orchestration.rpc";
 
@@ -38,7 +39,9 @@ it.effect("decodes thread summaries without history arrays", () =>
           executionTargetId: "ssh:legacy",
           branch: "feature/remote",
           worktreePath: "/worktrees/remote",
+          createdAt: "2026-01-02T00:00:00.000Z",
           updatedAt: "2026-01-03T00:00:00.000Z",
+          latestUserMessageAt: "2026-01-03T00:00:00.000Z",
           pinnedAt: "2026-01-03T00:00:00.000Z",
           sessionStatus: "running",
           providerName: "codex",
@@ -54,6 +57,31 @@ it.effect("decodes thread summaries without history arrays", () =>
     assert.equal(result.threads[0]?.pinnedAt, "2026-01-03T00:00:00.000Z");
     assert.equal(result.threads[0]?.worktreePath, "/worktrees/remote");
     assert.equal("messages" in (result.threads[0] ?? {}), false);
+  }),
+);
+
+it.effect("decodes project execution targets", () =>
+  Effect.gen(function* () {
+    const result = yield* Schema.decodeUnknownEffect(GetStartupProjectCatalogResult)({
+      projectionSequence: 4,
+      projects: [
+        {
+          id: "project-1",
+          title: "Remote",
+          providerRuntimeExecutionTargetId: "ssh:provider",
+          workspaceExecutionTargetId: "ssh:workspace",
+          executionTargetId: "ssh:legacy",
+          workspaceRoot: "/workspace",
+          lastUsedAt: "2026-01-03T00:00:00.000Z",
+          updatedAt: "2026-01-03T00:00:00.000Z",
+          deletingAt: null,
+          threadCount: 0,
+          exceptionalThreadCount: 0,
+          hasExceptionalThreads: false,
+        },
+      ],
+    });
+    assert.equal(result.projects[0]?.workspaceExecutionTargetId, "ssh:workspace");
   }),
 );
 
