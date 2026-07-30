@@ -12,7 +12,6 @@ import {
   ProductionWindowsIconSource,
   commandOutputOptions,
   runCommand,
-  type BuildArch,
   type BuildPlatform,
 } from "./shared.ts";
 
@@ -22,14 +21,6 @@ const DESKTOP_PACKAGED_APP_FILES = [
   "apps/desktop/resources/**",
   "apps/desktop/prod-resources/**",
 ] as const;
-
-export function resolveMacAdditionalBinaries(arch: typeof BuildArch.Type): string[] {
-  const arches = arch === "universal" ? (["arm64", "x64"] as const) : [arch];
-  return arches.map(
-    (binaryArch) =>
-      `Contents/Resources/server/_modules/@github/copilot-darwin-${binaryArch}/prebuilds/darwin-${binaryArch}/mediaremote-adapter/MediaRemoteAdapter.framework/MediaRemoteAdapter`,
-  );
-}
 
 function generateMacIconSet(
   sourcePng: string,
@@ -202,7 +193,6 @@ function resolveGitHubPublishConfig():
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   platform: typeof BuildPlatform.Type,
-  arch: typeof BuildArch.Type,
   target: string,
   productName: string,
   signed: boolean,
@@ -276,10 +266,6 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       // binaries (e.g. .node files), so a relative path fails to resolve.
       macConfig.entitlements = join(buildResourcesDir, "entitlements.mac.plist");
       macConfig.entitlementsInherit = join(buildResourcesDir, "entitlements.mac.plist");
-      // The Copilot runtime is copied through extraResources, outside the
-      // desktop asar. Explicitly include its nested framework executable so
-      // electron-builder re-signs it before Apple notarization.
-      macConfig.binaries = resolveMacAdditionalBinaries(arch);
       // afterSign is a root-level electron-builder property, not mac-specific.
       buildConfig.afterSign = join(repoRoot, "apps/desktop/scripts/notarize.cjs");
     } else {
