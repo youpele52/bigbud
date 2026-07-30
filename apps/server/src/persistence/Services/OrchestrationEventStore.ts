@@ -9,8 +9,13 @@
  *
  * @module OrchestrationEventStore
  */
-import { OrchestrationEvent } from "@bigbud/contracts";
-import { ServiceMap } from "effect";
+import {
+  OrchestrationEvent,
+  type OrchestrationReplayEventsResult,
+  ThreadId,
+  ProjectId,
+} from "@bigbud/contracts";
+import { Option, ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { OrchestrationEventStoreError } from "../Errors.ts";
@@ -44,6 +49,28 @@ export interface OrchestrationEventStoreShape {
     sequenceExclusive: number,
     limit?: number,
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError>;
+
+  /** Read one replay page together with authoritative retained-range metadata. */
+  readonly readReplay: (
+    sequenceExclusive: number,
+    limit?: number,
+  ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
+
+  /** Delete at most one bounded canonical prefix covered by a verified baseline. */
+  readonly compactVerifiedPrefix?: (batchSize?: number) => Effect.Effect<
+    {
+      readonly deletedCount: number;
+      readonly retainedThroughSequence: number;
+      readonly compactThroughSequence: number;
+      readonly complete: boolean;
+    },
+    OrchestrationEventStoreError
+  >;
+
+  /** Resolve a thread's durable project identity, including deleted threads. */
+  readonly findThreadProjectId: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<ProjectId>, OrchestrationEventStoreError>;
 
   /**
    * Read all events from the beginning of the stream.

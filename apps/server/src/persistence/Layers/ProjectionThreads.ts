@@ -43,6 +43,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
   };
@@ -77,6 +78,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at,
           updated_at,
           archived_at,
+          pinned_at,
           deleting_at,
           deleted_at
         )
@@ -102,6 +104,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.createdAt},
           ${row.updatedAt},
           ${row.archivedAt},
+          ${row.pinnedAt},
           ${row.deletingAt},
           ${row.deletedAt}
         )
@@ -127,6 +130,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           archived_at = excluded.archived_at,
+          pinned_at = excluded.pinned_at,
           deleting_at = excluded.deleting_at,
           deleted_at = excluded.deleted_at
       `,
@@ -164,6 +168,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
@@ -203,6 +208,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads

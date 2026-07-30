@@ -44,6 +44,12 @@ export const DeleteProjectionProjectInput = Schema.Struct({
 });
 export type DeleteProjectionProjectInput = typeof DeleteProjectionProjectInput.Type;
 
+export const TouchProjectionProjectLastUsedInput = Schema.Struct({
+  projectId: ProjectId,
+  lastUsedAt: IsoDateTime,
+});
+export type TouchProjectionProjectLastUsedInput = typeof TouchProjectionProjectLastUsedInput.Type;
+
 /**
  * ProjectionProjectRepositoryShape - Service API for projected project records.
  */
@@ -77,6 +83,10 @@ export interface ProjectionProjectRepositoryShape {
    */
   readonly deleteById: (
     input: DeleteProjectionProjectInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  readonly touchLastUsedAt: (
+    input: TouchProjectionProjectLastUsedInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

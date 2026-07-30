@@ -45,6 +45,12 @@ export const DeleteProjectionPendingApprovalInput = Schema.Struct({
 });
 export type DeleteProjectionPendingApprovalInput = typeof DeleteProjectionPendingApprovalInput.Type;
 
+export const DeleteProjectionPendingApprovalsByThreadInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type DeleteProjectionPendingApprovalsByThreadInput =
+  typeof DeleteProjectionPendingApprovalsByThreadInput.Type;
+
 /**
  * ProjectionPendingApprovalRepositoryShape - Service API for pending approvals.
  */
@@ -79,6 +85,10 @@ export interface ProjectionPendingApprovalRepositoryShape {
    */
   readonly deleteByRequestId: (
     input: DeleteProjectionPendingApprovalInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  readonly deleteByThreadId: (
+    input: DeleteProjectionPendingApprovalsByThreadInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

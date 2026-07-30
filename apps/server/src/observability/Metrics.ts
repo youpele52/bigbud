@@ -71,6 +71,14 @@ export const terminalRestartsTotal = Metric.counter("t3_terminal_restarts_total"
   description: "Total terminal restart requests handled.",
 });
 
+export const serverStartupPhasesTotal = Metric.counter("t3_server_startup_phases_total", {
+  description: "Total server startup phases completed, grouped by outcome.",
+});
+
+export const serverStartupPhaseDuration = Metric.timer("t3_server_startup_phase_duration", {
+  description: "Server startup phase duration.",
+});
+
 /** Low-cardinality counters for the Claude modernization rollout. */
 export const claudeModernizationEventsTotal = Metric.counter(
   "t3_claude_modernization_events_total",
