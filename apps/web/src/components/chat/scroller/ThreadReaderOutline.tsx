@@ -104,7 +104,7 @@ export function ThreadReaderOutline({
       ref={rootRef}
       aria-label="Transcript outline"
       className={cn(
-        "pointer-events-auto h-full w-full overflow-hidden rounded-md px-1 py-1 transition-colors hover:bg-accent/20",
+        "pointer-events-auto h-full w-full overflow-visible rounded-md px-1 py-1",
         shouldCompress ? "relative" : "relative flex flex-col items-end justify-center gap-px",
         className,
       )}
@@ -231,7 +231,7 @@ export function ThreadReaderOutline({
             onFocus={() => setHoveredAnchorIndex(index)}
           >
             {isHovered && !outlineOpen ? (
-              <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-56 -translate-y-1/2 rounded-xl border border-border/70 bg-background/96 px-3 py-2 text-left text-sm text-foreground shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
+              <span className="pointer-events-none absolute right-full top-1/2 mr-3 w-56 -translate-y-1/2 rounded-xl border border-border/70 bg-background/96 px-3 py-2 text-left text-xs text-foreground shadow-lg shadow-black/10 backdrop-blur-sm dark:border-border/60 dark:bg-background/92">
                 <span className="line-clamp-3 block">{anchor.label}</span>
               </span>
             ) : null}
