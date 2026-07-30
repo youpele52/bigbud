@@ -25,6 +25,7 @@ import {
   ThreadCheckpointRevertRequestedPayload,
   ThreadPathCheckpointCaptureRequestedPayload,
   ThreadPathCheckpointRestoreRequestedPayload,
+  ThreadPinnedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadDeletionFailedPayload,
@@ -45,6 +46,7 @@ import {
   ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -80,6 +82,8 @@ export {
   ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadPinnedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -95,6 +99,8 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.deleted",
   "thread.archived",
   "thread.unarchived",
+  "thread.pinned",
+  "thread.unpinned",
   "thread.meta-updated",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
@@ -197,6 +203,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.unarchived"),
     payload: ThreadUnarchivedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.pinned"),
+    payload: ThreadPinnedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.unpinned"),
+    payload: ThreadUnpinnedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

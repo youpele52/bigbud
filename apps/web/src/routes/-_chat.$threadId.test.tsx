@@ -3,7 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockNavigate = vi.fn();
-const routeState = vi.hoisted(() => ({ purpose: "standard" as "standard" | "side-chat" }));
+const routeState = vi.hoisted(() => ({
+  purpose: "standard" as "standard" | "side-chat",
+  hydrationStatus: "complete" as
+    | "unloaded"
+    | "loading"
+    | "loadingOlder"
+    | "loaded"
+    | "complete"
+    | "failed",
+}));
 const threadId = ThreadId.makeUnsafe("thread-1");
 
 vi.mock("@tanstack/react-router", () => ({
@@ -38,11 +47,13 @@ vi.mock("../stores/main", () => ({
     selector: (state: {
       bootstrapComplete: boolean;
       threads: Array<{ id: ThreadId; title: string; purpose: "standard" | "side-chat" }>;
+      threadHydrationById: Record<string, { status: typeof routeState.hydrationStatus }>;
     }) => unknown,
   ) =>
     selector({
       bootstrapComplete: true,
       threads: [{ id: threadId, purpose: routeState.purpose, title: "Thread" }],
+      threadHydrationById: { [threadId]: { status: routeState.hydrationStatus } },
     }),
 }));
 
@@ -65,11 +76,36 @@ vi.mock("../stores/rightPanel/rightPanelTabs.store", () => ({
   },
 }));
 
-import { ChatThreadRouteView } from "./_chat.$threadId";
+import { ChatThreadRouteView, getMissingThreadRouteAction } from "./_chat.$threadId";
 
 describe("/_chat/$threadId route", () => {
   beforeEach(() => {
     routeState.purpose = "standard";
+    routeState.hydrationStatus = "complete";
+  });
+
+  it("bootstraps a missing deep-linked thread before redirecting after hydration fails", () => {
+    expect(
+      getMissingThreadRouteAction({
+        bootstrapComplete: true,
+        routeThreadExists: false,
+        hydrationStatus: "unloaded",
+      }),
+    ).toBe("bootstrap");
+    expect(
+      getMissingThreadRouteAction({
+        bootstrapComplete: true,
+        routeThreadExists: false,
+        hydrationStatus: "loading",
+      }),
+    ).toBeNull();
+    expect(
+      getMissingThreadRouteAction({
+        bootstrapComplete: true,
+        routeThreadExists: false,
+        hydrationStatus: "failed",
+      }),
+    ).toBe("redirect");
   });
 
   it("keeps rendering chat content only when diff route search is open", () => {

@@ -24,6 +24,43 @@ import { TerminalEvent } from "../workspace/terminal";
 import { ServerConfigStreamEvent, ServerLifecycleStreamEvent } from "./server";
 import { ServerSettingsError } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
+import {
+  GetProjectThreadSummariesInput,
+  GetStartupProjectCatalogInput,
+} from "../orchestration/orchestration.catalog";
+import { GetSelectedThreadDetailInput } from "../orchestration/orchestration.detail";
+import {
+  OrchestrationGetProjectThreadSummariesError,
+  OrchestrationGetStartupProjectCatalogError,
+  OrchestrationGetSelectedThreadDetailError,
+} from "../orchestration/orchestration.rpc";
+
+export const WsOrchestrationGetStartupProjectCatalogRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getStartupProjectCatalog,
+  {
+    payload: GetStartupProjectCatalogInput,
+    success: OrchestrationRpcSchemas.getStartupProjectCatalog.output,
+    error: OrchestrationGetStartupProjectCatalogError,
+  },
+);
+
+export const WsOrchestrationGetProjectThreadSummariesRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getProjectThreadSummaries,
+  {
+    payload: GetProjectThreadSummariesInput,
+    success: OrchestrationRpcSchemas.getProjectThreadSummaries.output,
+    error: OrchestrationGetProjectThreadSummariesError,
+  },
+);
+
+export const WsOrchestrationGetSelectedThreadDetailRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getSelectedThreadDetail,
+  {
+    payload: GetSelectedThreadDetailInput,
+    success: OrchestrationRpcSchemas.getSelectedThreadDetail.output,
+    error: OrchestrationGetSelectedThreadDetailError,
+  },
+);
 
 export const WsOrchestrationGetSnapshotRpc = Rpc.make(ORCHESTRATION_WS_METHODS.getSnapshot, {
   payload: OrchestrationGetSnapshotInput,

@@ -156,6 +156,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     subscribeLifecycle: vi.fn(),
   },
   orchestration: {
+    getStartupProjectCatalog: vi.fn(),
+    getProjectThreadSummaries: vi.fn(),
+    getSelectedThreadDetail: vi.fn(),
     getSnapshot: vi.fn(),
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),

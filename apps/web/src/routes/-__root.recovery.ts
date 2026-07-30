@@ -24,9 +24,14 @@ import {
   type ReplayRetryTracker,
 } from "../logic/orchestration";
 import {
+  setThreadHydrationEventApplier,
+  threadHydrationEventBuffer,
+} from "../logic/orchestration/thread-hydration-events.logic";
+import {
   coalesceOrchestrationUiEvents,
   shouldFlushOrchestrationEventImmediately,
 } from "./-__root.orchestration-events";
+import { runBoundedBootstrap } from "./-__root.bounded-bootstrap";
 
 export const REPLAY_RECOVERY_RETRY_DELAY_MS = 100;
 export const MAX_NO_PROGRESS_REPLAY_RETRIES = 3;
@@ -37,7 +42,6 @@ interface OrchestrationRecoveryInput {
   clearAllThinkingDeltas: () => void;
   reconcileThinkingActivities: (events: ReadonlyArray<OrchestrationEvent>) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
-  syncServerReadModel: ReturnType<typeof useStore.getState>["syncServerReadModel"];
   syncProjects: (projects: readonly SyncProjectInput[]) => void;
   syncThreads: (threads: readonly SyncThreadInput[]) => void;
   clearThreadUi: (threadId: ThreadId) => void;
@@ -98,8 +102,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     },
   );
 
-  const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
-    const nextEvents = recovery.markEventBatchApplied(events);
+  const applyAcceptedEventBatch = (nextEvents: ReadonlyArray<OrchestrationEvent>) => {
     if (nextEvents.length === 0) {
       return;
     }
@@ -155,6 +158,14 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
   };
 
+  const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
+    const nextEvents = recovery.markEventBatchApplied(events);
+    applyAcceptedEventBatch(
+      nextEvents.filter((event) => !threadHydrationEventBuffer.bufferEvent(event)),
+    );
+  };
+  setThreadHydrationEventApplier(applyAcceptedEventBatch);
+
   const flushPendingDomainEvents = (disposed: boolean) => {
     flushPendingDomainEventsScheduled = false;
     if (disposed || pendingDomainEvents.length === 0) {
@@ -175,26 +186,35 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
   const runReplayRecovery = async (
     reason: "sequence-gap" | "resubscribe",
     disposed: () => boolean,
-    fallbackToSnapshotRecovery: () => void,
+    fallbackToBoundedRecovery: () => void,
   ): Promise<void> => {
     if (!recovery.beginReplayRecovery(reason)) {
       return;
     }
     const fromSequenceExclusive = recovery.getState().latestSequence;
     try {
-      const events = await retryTransportRecoveryOperation(
+      const replay = await retryTransportRecoveryOperation(
         () => input.api.orchestration.replayEvents(fromSequenceExclusive),
         { shouldAbort: disposed },
       );
+      if (replay.availability === "gap") {
+        replayRetryTracker = null;
+        recovery.failReplayRecovery();
+        if (!disposed()) {
+          fallbackToBoundedRecovery();
+        }
+        return;
+      }
+      recovery.observeReplayTarget(replay.latestSequence);
       if (!disposed()) {
         input.clearAllThinkingDeltas();
-        applyEventBatch(events);
+        applyEventBatch(replay.events);
       }
     } catch {
       replayRetryTracker = null;
       recovery.failReplayRecovery();
       if (!disposed()) {
-        fallbackToSnapshotRecovery();
+        fallbackToBoundedRecovery();
       }
       return;
     }
@@ -222,6 +242,9 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           },
         );
       }
+      if (replayCompletion.shouldReplay) {
+        fallbackToBoundedRecovery();
+      }
       return;
     }
 
@@ -233,11 +256,12 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
         return;
       }
     }
-    void runReplayRecovery(reason, disposed, fallbackToSnapshotRecovery);
+    void runReplayRecovery(reason, disposed, fallbackToBoundedRecovery);
   };
 
-  const runSnapshotRecovery = async (
+  const runBoundedRecovery = async (
     reason: "bootstrap" | "replay-failed",
+    selectedThreadId: ThreadId | null,
     disposed: () => boolean,
   ): Promise<void> => {
     const started = recovery.beginSnapshotRecovery(reason);
@@ -259,16 +283,15 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       return;
     }
     try {
-      const snapshot = await retryTransportRecoveryOperation(
-        () => input.api.orchestration.getSnapshot(),
+      const projectionSequence = await retryTransportRecoveryOperation(
+        () => runBoundedBootstrap({ api: input.api, selectedThreadId, disposed }),
         { shouldAbort: disposed },
       );
       if (!disposed()) {
-        input.syncServerReadModel(snapshot);
         reconcileSnapshotDerivedState();
-        if (recovery.completeSnapshotRecovery(snapshot.snapshotSequence)) {
+        if (recovery.completeSnapshotRecovery(projectionSequence)) {
           void runReplayRecovery("sequence-gap", disposed, () => {
-            void runSnapshotRecovery("replay-failed", disposed);
+            void runBoundedRecovery("replay-failed", selectedThreadId, disposed);
           });
         }
       }
@@ -282,13 +305,15 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     flushPendingDomainEvents,
     schedulePendingDomainEventFlush,
     runReplayRecovery,
-    runSnapshotRecovery,
+    runBoundedRecovery,
     classifyDomainEvent: recovery.classifyDomainEvent.bind(recovery),
     cancel: () => {
       needsProviderInvalidation = false;
       flushPendingDomainEventsScheduled = false;
       pendingDomainEvents.length = 0;
       queryInvalidationThrottler.cancel();
+      threadHydrationEventBuffer.clear();
+      setThreadHydrationEventApplier(null);
     },
     pushPendingDomainEvent: (event: OrchestrationEvent) => {
       pendingDomainEvents.push(event);

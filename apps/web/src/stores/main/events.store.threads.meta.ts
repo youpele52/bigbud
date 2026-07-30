@@ -58,6 +58,22 @@ export function applyThreadMetaEvent(
       }));
     }
 
+    case "thread.pinned": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        pinnedAt: event.payload.pinnedAt,
+        updatedAt: event.payload.updatedAt,
+      }));
+    }
+
+    case "thread.unpinned": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        pinnedAt: null,
+        updatedAt: event.payload.updatedAt,
+      }));
+    }
+
     case "thread.meta-updated": {
       return updateThreadState(state, event.payload.threadId, (thread) => {
         const nextThread = {

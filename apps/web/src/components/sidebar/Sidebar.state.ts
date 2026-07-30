@@ -283,10 +283,18 @@ export function useSidebarState(): SidebarState {
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
+  const pinnedThreadIds = Object.values(sidebarThreadsById)
+    .filter((thread) => (thread.pinnedAt ?? null) !== null)
+    .toSorted(
+      (left, right) =>
+        (right.pinnedAt ?? "").localeCompare(left.pinnedAt ?? "") ||
+        left.id.localeCompare(right.id),
+    )
+    .map((thread) => thread.id);
 
   const { favoriteThreadIds, renderedFavorites, renderedChats, visibleChatThreadIdsForJumpHints } =
     useSidebarRecentSections({
-      favoriteThreadIds: appSettings.favoriteThreadIds,
+      favoriteThreadIds: pinnedThreadIds,
       sidebarThreadsById,
       visibleChatThreads,
       sidebarChatsSortOrder: appSettings.sidebarChatsSortOrder,

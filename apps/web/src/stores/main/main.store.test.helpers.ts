@@ -58,7 +58,9 @@ export function makeState(thread: Thread): AppState {
     threads: [thread],
     sidebarThreadsById: {},
     threadIdsByProjectId,
+    threadSummaryCursorByProjectId: {},
     bootstrapComplete: true,
+    threadHydrationById: {},
   };
 }
 
@@ -108,6 +110,7 @@ export function makeReadModelThread(overrides: Partial<OrchestrationReadModel["t
     createdAt: "2026-02-27T00:00:00.000Z",
     updatedAt: "2026-02-27T00:00:00.000Z",
     archivedAt: null,
+    pinnedAt: null,
     deletedAt: null,
     messages: [],
     activities: [],

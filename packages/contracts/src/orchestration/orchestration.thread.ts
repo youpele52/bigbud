@@ -231,7 +231,7 @@ export const OrchestrationTask = Schema.Struct({
 });
 export type OrchestrationTask = typeof OrchestrationTask.Type;
 
-const OrchestrationLatestTurnState = Schema.Literals([
+export const OrchestrationLatestTurnState = Schema.Literals([
   "running",
   "interrupted",
   "completed",
@@ -271,6 +271,9 @@ export const OrchestrationThread = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
+  pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   deletingAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   parentThread: Schema.optional(ParentThreadReference),

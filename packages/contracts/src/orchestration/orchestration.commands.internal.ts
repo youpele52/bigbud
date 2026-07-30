@@ -50,6 +50,13 @@ const ThreadDeleteAbortCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadPinMigrateCommand = Schema.Struct({
+  type: Schema.Literal("thread.pin.migrate"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  pinnedAt: IsoDateTime,
+});
+
 const ThreadSessionSetCommand = Schema.Struct({
   type: Schema.Literal("thread.session.set"),
   commandId: CommandId,
@@ -158,6 +165,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ProjectDeleteAbortCommand,
   ThreadDeleteFinalizeCommand,
   ThreadDeleteAbortCommand,
+  ThreadPinMigrateCommand,
   ThreadSessionSetCommand,
   ThreadTurnStartFailedCommand,
   ThreadMessageAssistantDeltaCommand,

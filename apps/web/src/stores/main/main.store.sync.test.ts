@@ -165,7 +165,9 @@ describe("store read model sync", () => {
       threads: [],
       sidebarThreadsById: {},
       threadIdsByProjectId: {},
+      threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      threadHydrationById: {},
     };
     const readModel: OrchestrationReadModel = {
       snapshotSequence: 2,

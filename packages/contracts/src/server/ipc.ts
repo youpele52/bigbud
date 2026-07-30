@@ -116,7 +116,7 @@ import type {
   ServerUpdateAutomationInput,
 } from "./automation";
 import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
-import type { ServerSetThreadPinnedInput } from "./pinnedThreads";
+import type { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -130,12 +130,19 @@ import type {
 import type { ServerUpsertKeybindingInput } from "./server";
 import type {
   ClientOrchestrationCommand,
+  GetProjectThreadSummariesInput,
+  GetProjectThreadSummariesResult,
+  GetSelectedThreadDetailInput,
+  GetSelectedThreadDetailResult,
+  GetStartupProjectCatalogInput,
+  GetStartupProjectCatalogResult,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
@@ -355,7 +362,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
-    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSettings>;
+    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSetThreadPinnedResult>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
@@ -389,13 +396,22 @@ export interface NativeApi {
     getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
+    getStartupProjectCatalog: (
+      input: GetStartupProjectCatalogInput,
+    ) => Promise<GetStartupProjectCatalogResult>;
+    getProjectThreadSummaries: (
+      input: GetProjectThreadSummariesInput,
+    ) => Promise<GetProjectThreadSummariesResult>;
+    getSelectedThreadDetail: (
+      input: GetSelectedThreadDetailInput,
+    ) => Promise<GetSelectedThreadDetailResult>;
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
-    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
+    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationReplayEventsResult>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,
       options?: { onResubscribe?: () => void },

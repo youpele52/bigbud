@@ -69,18 +69,20 @@ describe("wsNativeApi — server", () => {
 
   it("forwards atomic pinned-thread updates directly to the RPC client", async () => {
     const threadId = ThreadId.makeUnsafe("thread-pin");
-    const nextSettings = {
-      ...DEFAULT_SERVER_SETTINGS,
-      favoriteThreadIds: [threadId],
+    const result = {
+      threadId,
+      pinned: true,
+      pinnedAt: "2026-07-30T00:00:00.000Z",
+      count: 1,
+      limit: 5,
+      remaining: 4,
     };
-    rpcClientMock.server.setThreadPinned.mockResolvedValue(nextSettings);
+    rpcClientMock.server.setThreadPinned.mockResolvedValue(result);
     const { createWsNativeApi } = await import("./wsNativeApi");
 
     const api = createWsNativeApi();
 
-    await expect(api.server.setThreadPinned({ threadId, pinned: true })).resolves.toEqual(
-      nextSettings,
-    );
+    await expect(api.server.setThreadPinned({ threadId, pinned: true })).resolves.toEqual(result);
     expect(rpcClientMock.server.setThreadPinned).toHaveBeenCalledWith({ threadId, pinned: true });
   });
 
