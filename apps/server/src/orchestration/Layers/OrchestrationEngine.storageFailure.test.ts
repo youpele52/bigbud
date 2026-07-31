@@ -54,7 +54,21 @@ describe("OrchestrationEngine", () => {
       readFromSequence(sequenceExclusive) {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
-      readReplay: () => Effect.die("unused replay"),
+      readReplay(sequenceExclusive, limit = events.length) {
+        const replayed = events
+          .filter((event) => event.sequence > sequenceExclusive)
+          .slice(0, limit);
+        return Effect.succeed({
+          requestedFromSequenceExclusive: sequenceExclusive,
+          retainedFromSequenceExclusive: 0,
+          earliestAvailableSequence: 1,
+          latestSequence: events.at(-1)?.sequence ?? 0,
+          availability: "available" as const,
+          complete:
+            replayed.length === events.filter((event) => event.sequence > sequenceExclusive).length,
+          events: replayed,
+        });
+      },
       findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll() {
         return Stream.fromIterable(events);
