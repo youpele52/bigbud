@@ -5,11 +5,21 @@ import { Effect, FileSystem, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { EntityPurge } from "../Services/EntityPurge.ts";
+import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { EntityPurgeLive } from "./EntityPurge.ts";
 
 const testLayer = EntityPurgeLive.pipe(
+  Layer.provideMerge(
+    Layer.succeed(OrchestrationProjectionPipeline, {
+      bootstrap: Effect.void,
+      backfillUsageContributions: Effect.void,
+      ensureVerifiedBaselineThrough: () => Effect.void,
+      compactVerifiedPrefix: () => Effect.void,
+      projectEvent: () => Effect.void,
+    }),
+  ),
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "bigbud-entity-purge-" })),
   Layer.provideMerge(SqlitePersistenceMemory),
   Layer.provideMerge(NodeServices.layer),
@@ -45,6 +55,19 @@ const seedProjectAndThread = Effect.fn("seedProjectAndThread")(function* (input:
   `;
 });
 
+const seedCoveredDeletion = Effect.fn("seedCoveredDeletion")(function* (input: {
+  readonly entityKind: "project" | "thread";
+  readonly entityId: string;
+}) {
+  const sql = yield* SqlClient.SqlClient;
+  const now = "2026-07-30T00:00:00.000Z";
+  yield* sql`
+    INSERT INTO orchestration_deletion_markers (
+      entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
+    ) VALUES (${input.entityKind}, ${input.entityId}, 1, ${now}, NULL)
+  `;
+});
+
 it.layer(testLayer)("EntityPurge", (it) => {
   it.effect("hard-deletes thread rows and only explicitly owned managed files", () =>
     Effect.gen(function* () {
@@ -68,6 +91,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
         workspaceRoot,
         worktreePath,
       });
+      yield* seedCoveredDeletion({ entityKind: "thread", entityId: threadId });
       yield* sql`
         INSERT INTO projection_thread_messages (
           message_id, thread_id, role, text, is_streaming, created_at, updated_at, attachments_json
@@ -130,6 +154,8 @@ it.layer(testLayer)("EntityPurge", (it) => {
         worktreePath: null,
         deletedAt: "2026-07-30T00:00:00.000Z",
       });
+      yield* seedCoveredDeletion({ entityKind: "project", entityId: projectId });
+      yield* seedCoveredDeletion({ entityKind: "thread", entityId: threadId });
       const pinned = yield* sql<{ readonly pinnedAt: string | null }>`
         SELECT pinned_at AS "pinnedAt" FROM projection_threads WHERE thread_id = ${threadId}
       `;
@@ -179,7 +205,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
           job_id, entity_kind, entity_id, phase, status, resource_manifest_json,
           attempt_count, last_error, created_at, updated_at, completed_at
         ) VALUES (
-          'purge-traversal', 'thread', 'thread-traversal', 'marking', 'pending',
+          'purge-traversal', 'thread', 'thread-traversal', 'awaiting-finalization', 'pending',
           '[{"kind":"managed-worktree","relativePath":"../outside-managed-root.txt"}]',
           0, NULL, '2026-07-30T00:00:00.000Z', '2026-07-30T00:00:00.000Z', NULL
         )
@@ -203,6 +229,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
         workspaceRoot: "/tmp/project-resume-purge",
         worktreePath: null,
       });
+      yield* seedCoveredDeletion({ entityKind: "thread", entityId: threadId });
       const pinned = yield* sql<{ readonly pinnedAt: string | null }>`
         SELECT pinned_at AS "pinnedAt" FROM projection_threads WHERE thread_id = ${threadId}
       `;

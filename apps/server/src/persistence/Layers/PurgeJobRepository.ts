@@ -9,6 +9,7 @@ import {
   FindIncompletePurgeJobInput,
   PurgeJob,
   PurgeJobRepository,
+  TransitionPurgeJobInput,
   type PurgeJobRepositoryShape,
   UpdatePurgeJobInput,
 } from "../Services/PurgeJobRepository.ts";
@@ -38,7 +39,7 @@ const makePurgeJobRepository = Effect.gen(function* () {
         ${input.jobId},
         ${input.entityKind},
         ${input.entityId},
-        'marking',
+        'awaiting-finalization',
         'pending',
         ${JSON.stringify(input.resourceManifest)},
         0,
@@ -113,6 +114,20 @@ const makePurgeJobRepository = Effect.gen(function* () {
     `,
   });
 
+  const transitionJob = SqlSchema.findAll({
+    Request: TransitionPurgeJobInput,
+    Result: Schema.Struct({ jobId: Schema.String }),
+    execute: (input) => sql`
+      UPDATE purge_jobs
+      SET phase = ${input.nextPhase}, status = 'running', last_error = NULL,
+        updated_at = ${input.updatedAt}
+      WHERE job_id = ${input.jobId}
+        AND phase = ${input.expectedPhase}
+        AND status <> 'completed'
+      RETURNING job_id AS "jobId"
+    `,
+  });
+
   const completeJob = SqlSchema.void({
     Request: CompletePurgeJobInput,
     execute: (input) => sql`
@@ -156,6 +171,11 @@ const makePurgeJobRepository = Effect.gen(function* () {
     update: (input) =>
       updateJob(input).pipe(
         Effect.mapError(toPersistenceSqlError("PurgeJobRepository.update:query")),
+      ),
+    transition: (input) =>
+      transitionJob(input).pipe(
+        Effect.map((rows) => rows.length === 1),
+        Effect.mapError(toPersistenceSqlError("PurgeJobRepository.transition:query")),
       ),
     complete: (input) =>
       completeJob(input).pipe(

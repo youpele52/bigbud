@@ -43,6 +43,8 @@ const startupLayer = (
   projectionPipeline: OrchestrationProjectionPipelineShape = {
     bootstrap: Effect.void,
     backfillUsageContributions: Effect.void,
+    ensureVerifiedBaselineThrough: () => Effect.void,
+    compactVerifiedPrefix: () => Effect.void,
     projectEvent: () => Effect.void,
   },
 ) => {
@@ -253,7 +255,8 @@ it.effect("does not compact canonical events during startup", () => {
         startupLayer(events, {
           bootstrap: Effect.void,
           backfillUsageContributions: Effect.void,
-          compactCanonicalEvents: () => Effect.sync(() => events.push("compaction.start")),
+          ensureVerifiedBaselineThrough: () => Effect.sync(() => events.push("compaction.start")),
+          compactVerifiedPrefix: () => Effect.sync(() => events.push("compaction.start")),
           projectEvent: () => Effect.void,
         }),
       ),

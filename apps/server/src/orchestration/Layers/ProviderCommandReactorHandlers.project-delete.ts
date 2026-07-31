@@ -5,7 +5,6 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { EntityPurge } from "../../deletion/Services/EntityPurge.ts";
-import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 
 type ProjectDeletionRequestedEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -27,7 +26,6 @@ const PROJECT_DELETE_POLL_INTERVAL = Duration.millis(100);
 export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const entityPurge = yield* EntityPurge;
-  const projectionPipeline = yield* OrchestrationProjectionPipeline;
 
   const waitForProjectThreadsToSettle = Effect.fn("waitForProjectThreadsToSettle")(function* (
     deps: ProjectDeletionDeps,
@@ -97,9 +95,6 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
       projectId: event.payload.projectId,
       createdAt,
     });
-    if (projectionPipeline.compactCanonicalEvents) {
-      yield* projectionPipeline.compactCanonicalEvents();
-    }
     yield* entityPurge.run(purgeJob);
   });
 });

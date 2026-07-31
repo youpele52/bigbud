@@ -13,6 +13,8 @@ const ThreadAssetRow = Schema.Struct({
   worktreePath: Schema.NullOr(Schema.String),
 });
 const RemainingRow = Schema.Struct({ count: Schema.Number });
+const DeletionMarkerRow = Schema.Struct({ deletionSequence: Schema.Number });
+type DeletionMarkerRow = typeof DeletionMarkerRow.Type;
 
 export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
   const readThreadAssets = SqlSchema.findAll({
@@ -193,6 +195,17 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
         ) AS "maxCanonicalSequence"
     `;
 
+  const readDeletionMarker = (input: {
+    readonly entityKind: "project" | "thread";
+    readonly entityId: ProjectId | ThreadId;
+  }) =>
+    sql<DeletionMarkerRow>`
+      SELECT deletion_sequence AS "deletionSequence"
+      FROM orchestration_deletion_markers
+      WHERE entity_kind = ${input.entityKind} AND entity_id = ${input.entityId}
+      LIMIT 1
+    `;
+
   const deleteProvenReceipts = (input: {
     readonly entityKind: "project" | "thread";
     readonly entityId: ProjectId | ThreadId;
@@ -221,6 +234,7 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     countThreadRows,
     countProjectRows,
     readCanonicalProof,
+    readDeletionMarker,
     deleteProvenReceipts,
     deleteThreadRoot: ({ threadId }: { readonly threadId: ThreadId }) =>
       sql`DELETE FROM projection_threads WHERE thread_id = ${threadId}`.pipe(Effect.asVoid),

@@ -76,4 +76,33 @@ it.layer(repositoryLayer)("PurgeJobRepository", (it) => {
       assert.equal(replacement.jobId, "purge-project-2");
     }),
   );
+
+  it.effect("transitions a job only from its expected phase", () =>
+    Effect.gen(function* () {
+      const repository = yield* PurgeJobRepository;
+      const job = yield* repository.createOrGet({
+        jobId: "purge-transition",
+        entityKind: "thread",
+        entityId: "thread-transition",
+        resourceManifest: [],
+        createdAt: "2026-07-30T00:00:00.000Z",
+      });
+      assert.isTrue(
+        yield* repository.transition({
+          jobId: job.jobId,
+          expectedPhase: "awaiting-finalization",
+          nextPhase: "baseline",
+          updatedAt: "2026-07-30T00:00:01.000Z",
+        }),
+      );
+      assert.isFalse(
+        yield* repository.transition({
+          jobId: job.jobId,
+          expectedPhase: "awaiting-finalization",
+          nextPhase: "baseline",
+          updatedAt: "2026-07-30T00:00:02.000Z",
+        }),
+      );
+    }),
+  );
 });

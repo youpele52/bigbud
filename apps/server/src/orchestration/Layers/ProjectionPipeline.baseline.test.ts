@@ -50,7 +50,8 @@ layer("projection baseline compaction", (it) => {
           },
         });
         yield* pipeline.bootstrap;
-        yield* pipeline.compactCanonicalEvents!(1);
+        yield* pipeline.ensureVerifiedBaselineThrough(1);
+        yield* pipeline.compactVerifiedPrefix(1);
 
         const deleted = yield* eventStore.append({
           type: "project.deleted",
@@ -65,7 +66,8 @@ layer("projection baseline compaction", (it) => {
           payload: { projectId, deletedAt: now },
         });
         yield* pipeline.projectEvent(deleted);
-        yield* pipeline.compactCanonicalEvents!(1);
+        yield* pipeline.ensureVerifiedBaselineThrough(2);
+        yield* pipeline.compactVerifiedPrefix(1);
 
         const baselines = yield* sql<{
           readonly sequence: number;

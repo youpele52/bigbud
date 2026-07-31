@@ -15,6 +15,7 @@ import {
   type PurgeResource,
 } from "../../persistence/Services/PurgeJobRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
+import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { EntityPurge, type EntityPurgeShape } from "../Services/EntityPurge.ts";
 import { makeEntityPurgeSql } from "./EntityPurge.sql.ts";
 
@@ -48,6 +49,7 @@ const makeEntityPurge = Effect.gen(function* () {
   const jobs = yield* PurgeJobRepository;
   const fs = yield* FileSystem.FileSystem;
   const config = yield* ServerConfig;
+  const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const queries = makeEntityPurgeSql(sql);
 
   const updateJob = (job: PurgeJob, phase: PurgeJob["phase"]) =>
@@ -196,7 +198,23 @@ const makeEntityPurge = Effect.gen(function* () {
       let phase = job.phase;
       yield* updateJob(job, phase);
 
-      if (phase === "marking") {
+      if (phase === "awaiting-finalization") {
+        const markers = yield* queries.readDeletionMarker({
+          entityKind: job.entityKind,
+          entityId,
+        });
+        if (markers[0] === undefined) return;
+        phase = "baseline";
+        yield* updateJob(job, phase);
+      }
+      if (phase === "baseline") {
+        const markers = yield* queries.readDeletionMarker({
+          entityKind: job.entityKind,
+          entityId,
+        });
+        const marker = markers[0];
+        if (marker === undefined) return;
+        yield* projectionPipeline.ensureVerifiedBaselineThrough(marker.deletionSequence);
         phase = "database";
         yield* updateJob(job, phase);
       }
@@ -291,7 +309,22 @@ const makeEntityPurge = Effect.gen(function* () {
     return yield* Effect.gen(function* () {
       const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
       const incomplete = yield* jobs.listIncomplete(limit);
-      yield* Effect.forEach(incomplete, run, { concurrency: 1, discard: true });
+      yield* Effect.forEach(
+        incomplete,
+        (job) =>
+          run(job).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("entity purge audit job failed", {
+                jobId: job.jobId,
+                entityKind: job.entityKind,
+                entityId: job.entityId,
+                phase: job.phase,
+                cause,
+              }),
+            ),
+          ),
+        { concurrency: 1, discard: true },
+      );
       yield* queries.deleteOrphanRows(limit);
 
       const deletedThreads = yield* queries.listDeletedThreads({ limit });

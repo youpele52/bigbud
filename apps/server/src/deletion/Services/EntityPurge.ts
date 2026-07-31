@@ -23,7 +23,7 @@ const noopJob = (entityKind: "thread" | "project", entityId: string): PurgeJob =
   jobId: `test:${entityKind}:${entityId}`,
   entityKind,
   entityId,
-  phase: "marking",
+  phase: "awaiting-finalization",
   status: "pending",
   resourceManifest: [],
   attemptCount: 0,

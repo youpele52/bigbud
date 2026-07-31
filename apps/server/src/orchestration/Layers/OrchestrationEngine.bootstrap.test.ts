@@ -104,7 +104,8 @@ describe("OrchestrationEngine", () => {
         Layer.succeed(OrchestrationProjectionPipeline, {
           bootstrap: Effect.void,
           backfillUsageContributions: Effect.void,
-          compactCanonicalEvents: () => Effect.never,
+          ensureVerifiedBaselineThrough: () => Effect.never,
+          compactVerifiedPrefix: () => Effect.never,
           projectEvent: () => Effect.void,
         } satisfies OrchestrationProjectionPipelineShape),
       ),

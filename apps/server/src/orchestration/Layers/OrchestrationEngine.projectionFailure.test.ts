@@ -38,6 +38,8 @@ describe("OrchestrationEngine", () => {
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
       backfillUsageContributions: Effect.void,
+      ensureVerifiedBaselineThrough: () => Effect.void,
+      compactVerifiedPrefix: () => Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailRequestedProjection &&
@@ -188,6 +190,8 @@ describe("OrchestrationEngine", () => {
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
       backfillUsageContributions: Effect.void,
+      ensureVerifiedBaselineThrough: () => Effect.void,
+      compactVerifiedPrefix: () => Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailProjection &&

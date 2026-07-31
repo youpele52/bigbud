@@ -7,7 +7,14 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 export const PurgeEntityKind = Schema.Literals(["thread", "project"]);
 export type PurgeEntityKind = typeof PurgeEntityKind.Type;
 
-export const PurgeJobPhase = Schema.Literals(["marking", "database", "files", "verifying", "root"]);
+export const PurgeJobPhase = Schema.Literals([
+  "awaiting-finalization",
+  "baseline",
+  "database",
+  "files",
+  "verifying",
+  "root",
+]);
 export type PurgeJobPhase = typeof PurgeJobPhase.Type;
 
 export const PurgeJobStatus = Schema.Literals(["pending", "running", "failed", "completed"]);
@@ -67,6 +74,14 @@ export const UpdatePurgeJobInput = Schema.Struct({
 });
 export type UpdatePurgeJobInput = typeof UpdatePurgeJobInput.Type;
 
+export const TransitionPurgeJobInput = Schema.Struct({
+  jobId: Schema.String,
+  expectedPhase: PurgeJobPhase,
+  nextPhase: PurgeJobPhase,
+  updatedAt: IsoDateTime,
+});
+export type TransitionPurgeJobInput = typeof TransitionPurgeJobInput.Type;
+
 export const CompletePurgeJobInput = Schema.Struct({
   jobId: Schema.String,
   completedAt: IsoDateTime,
@@ -84,6 +99,9 @@ export interface PurgeJobRepositoryShape {
     limit: number,
   ) => Effect.Effect<ReadonlyArray<PurgeJob>, ProjectionRepositoryError>;
   readonly update: (input: UpdatePurgeJobInput) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly transition: (
+    input: TransitionPurgeJobInput,
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
   readonly complete: (
     input: CompletePurgeJobInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;

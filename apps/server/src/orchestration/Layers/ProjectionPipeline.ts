@@ -7,7 +7,7 @@
  * @module ProjectionPipeline
  */
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Semaphore, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
@@ -49,6 +49,7 @@ import {
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
+import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
 
@@ -123,23 +124,23 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
 
     const projectorNames = Object.values(ORCHESTRATION_PROJECTOR_NAMES);
     const baselineOperations = makeProjectionBaselineOperations({
-      sql,
       eventStore,
       baselines: projectionBaselineRepository,
       projectorNames,
-      replayEvent: (event) =>
-        Effect.forEach(projectors, (projector) => runProjectorForEvent(projector, event, false), {
-          concurrency: 1,
-          discard: true,
+      verifyCandidate: (candidate, source) =>
+        verifyCandidateInWorkspace({
+          candidate,
+          source,
+          eventStore,
+          projectorNames,
         }).pipe(
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
           Effect.provideService(ServerConfig, serverConfig),
-          Effect.catchTag("SqlError", (sqlError) =>
-            Effect.fail(toPersistenceSqlError("ProjectionPipeline.verify:query")(sqlError)),
-          ),
+          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.verify:workspace")),
         ),
     });
+    const baselineSemaphore = yield* Semaphore.make(1);
 
     const bootstrapProjector = (projector: ProjectorDefinition) =>
       projectionStateRepository
@@ -222,18 +223,34 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         repository: projectionThreadActivityRepository,
       });
 
-    const compactCanonicalEvents = (batchSize?: number) =>
-      baselineOperations.compact(batchSize).pipe(
-        Effect.asVoid,
-        Effect.catchTag("SqlError", (sqlError) =>
-          Effect.fail(toPersistenceSqlError("ProjectionPipeline.compact:query")(sqlError)),
-        ),
-      );
+    const ensureVerifiedBaselineThrough = (sequence: number) =>
+      baselineSemaphore
+        .withPermits(1)(
+          projectionBaselineRepository
+            .latestVerified()
+            .pipe(
+              Effect.flatMap((verified) =>
+                Option.isSome(verified) && verified.value.sequence >= sequence
+                  ? Effect.void
+                  : baselineOperations.compact(),
+              ),
+            ),
+        )
+        .pipe(
+          Effect.asVoid,
+          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.ensureBaseline:query")),
+        );
+
+    const compactVerifiedPrefix = (batchSize?: number) =>
+      eventStore.compactVerifiedPrefix
+        ? eventStore.compactVerifiedPrefix(batchSize).pipe(Effect.asVoid)
+        : Effect.void;
 
     return {
       bootstrap,
       backfillUsageContributions,
-      compactCanonicalEvents,
+      ensureVerifiedBaselineThrough,
+      compactVerifiedPrefix,
       projectEvent,
     } satisfies OrchestrationProjectionPipelineShape;
   },

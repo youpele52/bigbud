@@ -175,7 +175,7 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationEventInfrastructureLayerLive,
   AutomationInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
-  EntityPurgeLive,
+  EntityPurgeLive.pipe(Layer.provide(OrchestrationProjectionPipelineLayerLive)),
 );
 
 const OrchestrationLayerLive = Layer.mergeAll(

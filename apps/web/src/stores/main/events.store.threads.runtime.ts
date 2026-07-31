@@ -247,11 +247,15 @@ export function applyThreadRuntimeEvent(
     }
 
     case "thread.reverted": {
-      return updateThreadState(state, event.payload.threadId, (thread) =>
-        applyThreadReverted(thread, {
-          turnCount: event.payload.turnCount,
-          occurredAt: event.occurredAt,
-        }),
+      return updateThreadState(
+        state,
+        event.payload.threadId,
+        (thread) =>
+          applyThreadReverted(thread, {
+            turnCount: event.payload.turnCount,
+            occurredAt: event.occurredAt,
+          }),
+        { preserveLatestUserMessageAt: false },
       );
     }
 

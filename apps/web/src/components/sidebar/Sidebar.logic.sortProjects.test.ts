@@ -185,6 +185,7 @@ describe("sortProjectsForSidebar", () => {
         makeThread({
           id: ThreadId.makeUnsafe("thread-visible"),
           projectId: ProjectId.makeUnsafe("project-1"),
+          createdAt: "2026-03-09T10:02:00.000Z",
           updatedAt: "2026-03-09T10:02:00.000Z",
           archivedAt: null,
         }),

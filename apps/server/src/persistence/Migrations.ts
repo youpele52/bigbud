@@ -71,6 +71,8 @@ import Migration0055 from "./Migrations/055_ProjectionPendingUserInputs.ts";
 import Migration0056 from "./Migrations/056_ProjectionBaselines.ts";
 import Migration0057 from "./Migrations/057_OrchestrationThreadIdentity.ts";
 import Migration0058 from "./Migrations/058_RepairProjectionNotes.ts";
+import Migration0059 from "./Migrations/059_ResumablePurgeBaseline.ts";
+import Migration0060 from "./Migrations/060_ProjectionCatalogUserMessageIndex.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -141,6 +143,8 @@ export const migrationEntries = [
   [56, "ProjectionBaselines", Migration0056],
   [57, "OrchestrationThreadIdentity", Migration0057],
   [58, "RepairProjectionNotes", Migration0058],
+  [59, "ResumablePurgeBaseline", Migration0059],
+  [60, "ProjectionCatalogUserMessageIndex", Migration0060],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

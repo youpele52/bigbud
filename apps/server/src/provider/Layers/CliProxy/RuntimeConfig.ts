@@ -232,6 +232,7 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
         }),
     });
 
+    const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
     return Object.freeze({
       config,
       models,
@@ -244,6 +245,7 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
         environment: Object.freeze({
           PATH: process.env.PATH,
           HOME: process.env.HOME,
+          ...(electronRunAsNode === undefined ? {} : { ELECTRON_RUN_AS_NODE: electronRunAsNode }),
           ANTHROPIC_BASE_URL: config.baseUrl.toString().replace(/\/$/u, ""),
           ANTHROPIC_AUTH_TOKEN: config.apiKey,
         }),

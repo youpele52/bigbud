@@ -104,6 +104,9 @@ describe("resolveCliProxyRuntimeConfig", () => {
   it("reads fresh settings for each session and returns an isolated frozen harness", async () => {
     const firstPath = configFile("first-token");
     const secondPath = configFile("second-token");
+    const originalElectronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+    const originalNodeExecutable = process.env.BIGBUD_NODE_EXECUTABLE;
+    const originalUnrelatedSecret = process.env.BIGBUD_RUNTIME_CONFIG_TEST_SECRET;
     const inspect = vi.fn(async () => [{ id: "gpt-5-codex", name: "GPT-5 Codex" }]);
     const activate = vi.fn(async () => ({ _tag: "started", strategy: "direct" }) as const);
     const settingsLayer = ServerSettingsService.layerTest({
@@ -115,24 +118,41 @@ describe("resolveCliProxyRuntimeConfig", () => {
     });
     const resolveRuntime = makeResolveCliProxyRuntimeConfig({ inspect });
 
+    process.env.ELECTRON_RUN_AS_NODE = "1";
+    process.env.BIGBUD_NODE_EXECUTABLE = "/Applications/bigbud.app/Contents/MacOS/bigbud";
+    process.env.BIGBUD_RUNTIME_CONFIG_TEST_SECRET = "must-not-leak";
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const settings = yield* ServerSettingsService;
         const first = yield* resolveRuntime(input());
         yield* settings.updateSettings({ providers: { cliProxy: { configPath: secondPath } } });
+        delete process.env.ELECTRON_RUN_AS_NODE;
         const second = yield* resolveRuntime(input());
         return { first, second };
       }).pipe(Effect.provide(Layer.mergeAll(settingsLayer, lifecycleLayer))),
-    );
+    ).finally(() => {
+      if (originalElectronRunAsNode === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
+      else process.env.ELECTRON_RUN_AS_NODE = originalElectronRunAsNode;
+      if (originalNodeExecutable === undefined) delete process.env.BIGBUD_NODE_EXECUTABLE;
+      else process.env.BIGBUD_NODE_EXECUTABLE = originalNodeExecutable;
+      if (originalUnrelatedSecret === undefined)
+        delete process.env.BIGBUD_RUNTIME_CONFIG_TEST_SECRET;
+      else process.env.BIGBUD_RUNTIME_CONFIG_TEST_SECRET = originalUnrelatedSecret;
+    });
 
-    expect(result.first.harness.environment).toMatchObject({
+    expect(result.first.harness.environment).toEqual({
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      ELECTRON_RUN_AS_NODE: "1",
       ANTHROPIC_AUTH_TOKEN: "first-token",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
     });
-    expect(result.second.harness.environment).toMatchObject({
+    expect(result.second.harness.environment).toEqual({
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
       ANTHROPIC_AUTH_TOKEN: "second-token",
+      ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
     });
-    expect(result.second.harness.environment).not.toHaveProperty("ANTHROPIC_API_KEY");
     expect(result.second.harness.settingSources).toEqual([]);
     expect(Object.isFrozen(result.second)).toBe(true);
     expect(Object.isFrozen(result.second.harness)).toBe(true);
