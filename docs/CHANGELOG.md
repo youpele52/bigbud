@@ -2,6 +2,36 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.1 (31 July, 2026)
+
+### Faster, More Reliable Projects and Threads
+
+- Restored every project to the sidebar after a restart while continuing to load conversation lists and full thread history only when needed, keeping startup responsive for larger project collections. Long conversations open with recent history first, then load older messages and additional sidebar rows on demand.
+- Improved thread recovery so selected conversations, older messages, pending requests, plans, approvals, and live updates remain synchronized while history loads.
+- Preserved remote-project classification after restart and prevented duplicate projects for the same workspace and execution target.
+- Improved recent-thread ordering and timestamps by prioritizing the latest user message and safely falling back to the conversation’s creation time.
+- Moved existing pinned conversations from legacy settings into durable thread storage, preserving their order and ensuring the migration can be safely retried.
+
+### More Dependable Data Recovery
+
+- Hardened cleanup, restart, and database-repair handling so interrupted deletion work, projection recovery, and older installations are less likely to lose access to project or conversation data.
+- Made conversation and project deletion safely resumable after an interruption, removing owned attachments, managed worktrees, memory, notes, and Kanban data while preserving the original project workspace.
+- Repaired installations missing the notes projection schema and made background maintenance independent from app readiness, so bigbud can become available without waiting for cleanup work.
+
+### Refined Conversation Experience
+
+- Expanded transcript-outline previews and let them extend beyond the narrow timeline rail, making hovered user messages easier to read.
+- Sorted providers alphabetically by their displayed names for a more predictable model-picker experience.
+- While a chat is working, the status line now cycles through “bigbuding” too, so the spinner copy stays friendly and on-brand.
+
+### CLIProxyAPI Reliability
+
+- Preserved Electron’s Node runtime mode for isolated CLIProxyAPI sessions, improving CLIProxyAPI-backed chat startup in the desktop app.
+
+### Validation
+
+- Added regression coverage for project-catalog recovery, lazy thread loading and hydration, pinned-thread migration, remote-workspace identity, projection recovery and cleanup, CLIProxyAPI runtime configuration, provider ordering, and transcript-outline behavior.
+
 ## v0.2.0 (30 July, 2026)
 
 ### More Reliable Agent Workflows
