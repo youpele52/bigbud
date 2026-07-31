@@ -2,6 +2,10 @@ import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Deferred, Effect, Fiber, Layer, Metric, Option, Ref, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { vi } from "vitest";
+
+const writeStartupStatus = vi.hoisted(() => vi.fn());
+vi.mock("./startupStatus.ts", () => ({ writeStartupStatus }));
 
 import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
 import { Keybindings } from "../keybindings/keybindings.ts";
@@ -47,6 +51,7 @@ const startupLayer = (
     compactVerifiedPrefix: () => Effect.void,
     projectEvent: () => Effect.void,
   },
+  reactorStart: Effect.Effect<void> = Effect.sync(() => events.push("reactors.start")),
 ) => {
   const nodeServices = NodeServices.layer;
   const serverConfig = ServerConfig.layerTest(process.cwd(), {
@@ -78,7 +83,7 @@ const startupLayer = (
           auditAndResume: () => Effect.sync(() => events.push("purge.audit")),
         }),
         Layer.succeed(OrchestrationReactor, {
-          start: () => Effect.sync(() => events.push("reactors.start")),
+          start: () => reactorStart,
         }),
         Layer.succeed(OrchestrationEngineService, {
           getReadModel: () => Effect.succeed({ projects: [] } as never),
@@ -263,3 +268,14 @@ it.effect("does not compact canonical events during startup", () => {
     ),
   );
 });
+
+it.effect("reports asynchronous runtime startup failures to the desktop status pipe", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      writeStartupStatus.mockClear();
+      const startup = yield* ServerRuntimeStartup;
+      yield* Effect.flip(startup.awaitCommandReady);
+      assert.deepEqual(writeStartupStatus.mock.calls, [["error", "server_runtime_startup_failed"]]);
+    }).pipe(Effect.provide(startupLayer([], undefined, Effect.die("reactor failed")))),
+  ),
+);

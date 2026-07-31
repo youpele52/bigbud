@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge } from "@bigbud/contracts";
 import type { DesktopCertificateChallengeEvent } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
+import { isBackendStartupState } from "./backend/backendStartupDiagnostics.validation";
 import {
   CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
@@ -32,6 +33,11 @@ const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
 const REQUEST_FILE_ACCESS_CHANNEL = "desktop:request-file-access";
+const BACKEND_STARTUP_STATE_CHANNEL = "desktop:backend-startup-state";
+const BACKEND_STARTUP_GET_STATE_CHANNEL = "desktop:backend-startup-get-state";
+const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" } as const;
+// This is evaluated inside the isolated preload, not supplied by the renderer.
+const allowDevelopmentDiagnostics = process.defaultApp === true;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
   getWsUrl: () => {
@@ -41,6 +47,21 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getMobileBackendBaseUrl: () => {
     const result = ipcRenderer.sendSync(GET_MOBILE_BACKEND_BASE_URL_CHANNEL);
     return typeof result === "string" ? result : null;
+  },
+  getBackendStartupState: () =>
+    ipcRenderer
+      .invoke(BACKEND_STARTUP_GET_STATE_CHANNEL)
+      .then((state: unknown) =>
+        isBackendStartupState(state, allowDevelopmentDiagnostics)
+          ? state
+          : emptyBackendStartupState,
+      ),
+  onBackendStartupState: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
+      if (isBackendStartupState(state, allowDevelopmentDiagnostics)) listener(state);
+    };
+    ipcRenderer.on(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
+    return () => ipcRenderer.removeListener(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
   },
   getComputerUseRuntimeStatus: () => ipcRenderer.invoke(GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL),
   getComputerUsePermissionsStatus: () =>

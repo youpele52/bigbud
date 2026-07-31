@@ -2,6 +2,26 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.101 (31 July, 2026)
+
+### Desktop Startup Recovery
+
+- Made desktop startup status more truthful after an update: bigbud now shows `Starting bigbud` while the local backend starts and `Upgrading local data, please wait` when local data is being upgraded.
+- Kept local-backend recovery retries active for up to 10 minutes, with a timeout that can still reconnect automatically if startup completes later. After 30 seconds, bigbud shows a persistent wait notice instead of leaving the delay unexplained.
+
+### Safer Startup Diagnostics
+
+- Added clear, categorized guidance when local startup cannot finish, with optional technical details for troubleshooting.
+- Bounded and redacted production diagnostics before they reach the app, while retaining richer crash context in unpackaged development builds.
+
+### Durable Desktop Crash Logging
+
+- Added rotated, redacted local desktop and backend lifecycle logs, including reliable main-process and backend crash capture during startup, shutdown, and unexpected process exits.
+
+### Validation
+
+- Added regression coverage for startup status reporting, timeout recovery, diagnostics validation and redaction, production log rotation, backend status-pipe parsing, and desktop reconnect behavior.
+
 ## v0.2.100 (31 July, 2026)
 
 ### Faster, More Reliable Projects and Threads

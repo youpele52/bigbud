@@ -1,7 +1,6 @@
 import { type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { APP_SERVER_NAME } from "../config/branding";
-import { type SlowRpcAckRequest, useSlowRpcAckRequests } from "../rpc/requestLatencyState";
 import { useServerConfig } from "../rpc/serverState";
 import {
   getWsConnectionStatus,
@@ -15,6 +14,7 @@ import {
 import { getWsRpcClient } from "../rpc/wsRpcClient";
 import {
   shouldAutoReconnect,
+  shouldShowDesktopStartupBlockingState,
   shouldRestartStalledReconnect,
   type WsAutoReconnectTrigger,
 } from "./WebSocketConnectionSurface.logic";
@@ -23,6 +23,7 @@ import {
   WebSocketBlockingState,
 } from "./WebSocketConnectionSurface.blocking";
 import { toastManager } from "./ui/toast";
+import { useDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
 
@@ -63,13 +64,6 @@ function describeRecoveredToast(
   }
 
   return "Connection restored.";
-}
-
-function describeSlowRpcAckToast(requests: ReadonlyArray<SlowRpcAckRequest>): ReactNode {
-  const count = requests.length;
-  const thresholdSeconds = Math.round((requests[0]?.thresholdMs ?? 0) / 1000);
-
-  return `${count} request${count === 1 ? "" : "s"} waiting longer than ${thresholdSeconds}s.`;
 }
 
 export function WebSocketConnectionCoordinator() {
@@ -299,45 +293,6 @@ export function WebSocketConnectionCoordinator() {
   return null;
 }
 
-export function SlowRpcAckToastCoordinator() {
-  const slowRequests = useSlowRpcAckRequests();
-  const status = useWsConnectionStatus();
-  const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
-
-  useEffect(() => {
-    if (getWsConnectionUiState(status) !== "connected") {
-      if (toastIdRef.current) {
-        toastManager.close(toastIdRef.current);
-        toastIdRef.current = null;
-      }
-      return;
-    }
-
-    if (slowRequests.length === 0) {
-      if (toastIdRef.current) {
-        toastManager.close(toastIdRef.current);
-        toastIdRef.current = null;
-      }
-      return;
-    }
-
-    const nextToast = {
-      description: describeSlowRpcAckToast(slowRequests),
-      timeout: 0,
-      title: "Some requests are slow",
-      type: "warning" as const,
-    };
-
-    if (toastIdRef.current) {
-      toastManager.update(toastIdRef.current, nextToast);
-    } else {
-      toastIdRef.current = toastManager.add(nextToast);
-    }
-  }, [slowRequests, status]);
-
-  return null;
-}
-
 /**
  * How long to wait for the initial server config before showing the blocking
  * "Connecting…" screen. 60s gives enough room for slow server startups without
@@ -348,6 +303,7 @@ const BLOCKING_STATE_DELAY_MS = 60_000;
 export function WebSocketConnectionSurface({ children }: { readonly children: ReactNode }) {
   const serverConfig = useServerConfig();
   const status = useWsConnectionStatus();
+  const desktopStartup = useDesktopBackendStartupState();
   const [delayElapsed, setDelayElapsed] = useState(false);
 
   useEffect(() => {
@@ -360,12 +316,16 @@ export function WebSocketConnectionSurface({ children }: { readonly children: Re
     return () => window.clearTimeout(id);
   }, [serverConfig]);
 
-  if (serverConfig === null && delayElapsed) {
+  if (
+    serverConfig === null &&
+    (delayElapsed || shouldShowDesktopStartupBlockingState(desktopStartup))
+  ) {
     const uiState = getWsConnectionUiState(status);
     return (
       <WebSocketBlockingState
         status={status}
         uiState={uiState === "connected" ? "connecting" : uiState}
+        desktopStartup={desktopStartup}
       />
     );
   }

@@ -13,10 +13,11 @@ import { StartupSplash } from "../components/layout/StartupSplash";
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
 import {
-  SlowRpcAckToastCoordinator,
   WebSocketConnectionCoordinator,
   WebSocketConnectionSurface,
 } from "../components/WebSocketConnectionSurface";
+import { SlowRpcAckToastCoordinator } from "../components/SlowRpcAckToastCoordinator";
+import { DesktopBackendStartupCoordinator } from "../components/DesktopBackendStartupCoordinator";
 import { readNativeApi } from "../rpc/nativeApi";
 import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
@@ -99,6 +100,7 @@ function RootRouteView() {
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
+        <DesktopBackendStartupCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
