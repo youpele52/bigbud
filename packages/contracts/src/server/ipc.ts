@@ -134,6 +134,7 @@ import type {
   GetProjectThreadSummariesResult,
   GetSelectedThreadDetailInput,
   GetSelectedThreadDetailResult,
+  GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
   OrchestrationGetFullThreadDiffInput,
@@ -367,6 +368,7 @@ export interface NativeApi {
     getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
+    getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;
     getStartupProjectCatalog: (
       input: GetStartupProjectCatalogInput,
     ) => Promise<GetStartupProjectCatalogResult>;

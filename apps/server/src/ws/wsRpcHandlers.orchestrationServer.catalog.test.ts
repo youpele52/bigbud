@@ -5,6 +5,26 @@ import { Effect } from "effect";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer.ts";
 import type { WsRpcContext } from "./wsRpcContext.ts";
 
+it.effect("routes the global sidebar catalog RPC to the projection query", () =>
+  Effect.gen(function* () {
+    const context = {
+      projectionCatalogQuery: {
+        getSidebarThreadCatalog: () =>
+          Effect.succeed({
+            projectionSequence: 8,
+            threads: [],
+            recentThreadIds: [],
+            pinnedThreadIds: [],
+          }),
+      },
+    } as unknown as WsRpcContext;
+    const handlers = makeWsRpcOrchestrationServerHandlers(context);
+    const handler = handlers[ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog];
+
+    assert.equal((yield* handler({})).projectionSequence, 8);
+  }),
+);
+
 it.effect("routes selected-thread detail RPCs to the catalog query service", () =>
   Effect.gen(function* () {
     const threadId = ThreadId.makeUnsafe("thread-rpc");

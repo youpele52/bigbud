@@ -22,6 +22,8 @@ export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 2;
 export const STARTUP_PROJECT_CATALOG_MAX_LIMIT = 20;
 export const PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT = 5;
 export const PROJECT_THREAD_SUMMARY_MAX_LIMIT = 50;
+export const SIDEBAR_THREAD_CATALOG_RECENT_LIMIT = 5;
+export const SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS = SIDEBAR_THREAD_CATALOG_RECENT_LIMIT * 2;
 
 export const ProjectSummary = Schema.Struct({
   id: ProjectId,
@@ -109,3 +111,14 @@ export const GetProjectThreadSummariesResult = Schema.Struct({
   nextCursor: Schema.optional(ThreadSummaryCursor),
 });
 export type GetProjectThreadSummariesResult = typeof GetProjectThreadSummariesResult.Type;
+
+export const GetSidebarThreadCatalogInput = Schema.Struct({});
+export type GetSidebarThreadCatalogInput = typeof GetSidebarThreadCatalogInput.Type;
+
+export const GetSidebarThreadCatalogResult = Schema.Struct({
+  projectionSequence: NonNegativeInt,
+  threads: Schema.Array(ThreadSummary),
+  recentThreadIds: Schema.Array(ThreadId),
+  pinnedThreadIds: Schema.Array(ThreadId),
+});
+export type GetSidebarThreadCatalogResult = typeof GetSidebarThreadCatalogResult.Type;

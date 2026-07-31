@@ -171,6 +171,7 @@ export function createWsNativeApi(): NativeApi {
       getUsageSummary: rpcClient.server.getUsageSummary,
     },
     orchestration: {
+      getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,

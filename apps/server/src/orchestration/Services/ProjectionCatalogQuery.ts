@@ -8,6 +8,7 @@ import type {
   GetSelectedThreadDetailInput,
   GetSelectedThreadDetailResult,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
+import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
 import { ServiceMap } from "effect";
 import { Schema } from "effect";
 import type { Effect } from "effect";
@@ -24,6 +25,10 @@ export type ProjectionCatalogQueryError =
   | ProjectionThreadDetailNotFoundError;
 
 export interface ProjectionCatalogQueryShape {
+  readonly getSidebarThreadCatalog: () => Effect.Effect<
+    GetSidebarThreadCatalogResult,
+    ProjectionRepositoryError
+  >;
   readonly getStartupProjectCatalog: (
     input: GetStartupProjectCatalogInput,
   ) => Effect.Effect<GetStartupProjectCatalogResult, ProjectionRepositoryError>;

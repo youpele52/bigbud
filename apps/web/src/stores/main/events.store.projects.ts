@@ -1,4 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
+import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 
 import {
   buildSidebarThreadSummary,
@@ -15,6 +16,7 @@ import {
   updateProject,
 } from "./helpers.store";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { prependSidebarRecentThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
 
 export function applyProjectEvent(
   state: AppState,
@@ -119,6 +121,9 @@ export function applyProjectEvent(
         threads,
         sidebarThreadsById,
         threadIdsByProjectId,
+        sidebarRecentThreadIds: isBuiltInChatsProject(nextThread.projectId)
+          ? prependSidebarRecentThreadId(state.sidebarRecentThreadIds, nextThread.id)
+          : state.sidebarRecentThreadIds,
       };
     }
 
@@ -146,6 +151,14 @@ export function applyProjectEvent(
         sidebarThreadsById,
         threadIdsByProjectId,
         threadHydrationById,
+        sidebarRecentThreadIds: removeSidebarThreadId(
+          state.sidebarRecentThreadIds,
+          event.payload.threadId,
+        ),
+        sidebarPinnedThreadIds: removeSidebarThreadId(
+          state.sidebarPinnedThreadIds,
+          event.payload.threadId,
+        ),
       };
     }
 

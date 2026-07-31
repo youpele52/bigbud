@@ -17,6 +17,8 @@ import {
 } from "./helpers.store";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
 import { isStaleRunningSessionUpdate } from "./events.store.threads.runtime.logic";
+import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
+import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 
 export function applyThreadRuntimeEvent(
   state: AppState,
@@ -24,7 +26,7 @@ export function applyThreadRuntimeEvent(
 ): AppState | undefined {
   switch (event.type) {
     case "thread.message-sent": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+      const nextState = updateThreadState(state, event.payload.threadId, (thread) => {
         const message = mapMessage({
           id: event.payload.messageId,
           role: event.payload.role,
@@ -56,6 +58,17 @@ export function applyThreadRuntimeEvent(
           updatedAt: event.occurredAt,
         };
       });
+      const summary = nextState.sidebarThreadsById[event.payload.threadId];
+      if (event.payload.role !== "user" || !summary || !isBuiltInChatsProject(summary.projectId)) {
+        return nextState;
+      }
+      return {
+        ...nextState,
+        sidebarRecentThreadIds: prependSidebarRecentThreadId(
+          nextState.sidebarRecentThreadIds,
+          event.payload.threadId,
+        ),
+      };
     }
 
     case "thread.session-set": {

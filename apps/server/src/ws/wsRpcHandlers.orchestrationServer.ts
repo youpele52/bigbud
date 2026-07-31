@@ -3,6 +3,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetSnapshotError,
+  OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetProjectThreadSummariesError,
   OrchestrationGetStartupProjectCatalogError,
   OrchestrationGetSelectedThreadDetailError,
@@ -37,6 +38,20 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   };
 
   return {
+    [ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]: (_input: unknown) =>
+      observeRpcEffect(
+        ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog,
+        context.projectionCatalogQuery.getSidebarThreadCatalog().pipe(
+          Effect.mapError(
+            (cause) =>
+              new OrchestrationGetSidebarThreadCatalogError({
+                message: "Failed to load sidebar thread catalog",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "orchestration" },
+      ),
     [ORCHESTRATION_WS_METHODS.getStartupProjectCatalog]: (
       input: Parameters<WsRpcContext["projectionCatalogQuery"]["getStartupProjectCatalog"]>[0],
     ) =>

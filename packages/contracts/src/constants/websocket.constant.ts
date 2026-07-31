@@ -121,6 +121,7 @@ export const WS_METHODS = {
  * turn execution, and event replay.
  */
 export const ORCHESTRATION_WS_METHODS = {
+  getSidebarThreadCatalog: "orchestration.getSidebarThreadCatalog",
   getStartupProjectCatalog: "orchestration.getStartupProjectCatalog",
   getProjectThreadSummaries: "orchestration.getProjectThreadSummaries",
   getSelectedThreadDetail: "orchestration.getSelectedThreadDetail",

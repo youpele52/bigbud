@@ -248,6 +248,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
     },
     orchestration: {
+      getSidebarThreadCatalog: () =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]({})),
       getStartupProjectCatalog: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog](input),

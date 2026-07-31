@@ -5,7 +5,6 @@ import {
   STARTUP_PROJECT_CATALOG_MAX_LIMIT,
   type GetProjectThreadSummariesInput,
   type ProjectSummary,
-  type ThreadSummary,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
 import { Effect, Layer, Schema } from "effect";
 import { clamp } from "effect/Number";
@@ -21,8 +20,10 @@ import {
   ProjectCatalogDbRow,
   ProjectionSequenceDbRow,
   ThreadSummaryDbRow,
+  normalizeThreadSummary,
 } from "./ProjectionCatalogQuery.schemas.ts";
 import { makeGetSelectedThreadDetail } from "./ProjectionCatalogQuery.detail.ts";
+import { makeGetSidebarThreadCatalog } from "./ProjectionCatalogQuery.sidebar.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
   limit: Schema.Number,
@@ -41,17 +42,6 @@ const ThreadSummaryQueryRequest = Schema.Struct({
 
 function normalizeProject(row: ProjectCatalogDbRow): ProjectSummary {
   return { ...row, hasExceptionalThreads: row.hasExceptionalThreads === 1 };
-}
-
-function normalizeThread(row: ThreadSummaryDbRow): ThreadSummary {
-  return {
-    ...row,
-    modelSelection: row.modelSelection as ThreadSummary["modelSelection"],
-    isWatching: row.isWatching === 1,
-    isWatched: row.isWatched === 1,
-    isDelegated: row.isDelegated === 1,
-    isAwaitingApproval: row.isAwaitingApproval === 1,
-  };
 }
 
 const makeProjectionCatalogQuery = Effect.gen(function* () {
@@ -194,6 +184,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       WHERE t.project_id = ${projectId}
         AND t.deleted_at IS NULL
         AND t.archived_at IS NULL
+        AND t.deleting_at IS NULL
         AND (
           ${cursorUpdatedAt} IS NULL
           OR ${priorityThreadId} IS NULL
@@ -267,7 +258,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       )
       .pipe(
         Effect.map(({ rows, sequence }) => {
-          const threads = rows.slice(0, limit).map(normalizeThread);
+          const threads = rows.slice(0, limit).map(normalizeThreadSummary);
           const last = threads.at(-1);
           return {
             projectionSequence: sequence.projectionSequence ?? 0,
@@ -288,8 +279,15 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionCatalogQuery.getSelectedThreadDetail")),
     ),
   );
+  const getSidebarThreadCatalog = makeGetSidebarThreadCatalog(sql, () =>
+    readProjectionSequence(undefined).pipe(
+      Effect.map((row) => row.projectionSequence ?? 0),
+      Effect.mapError(toPersistenceSqlError("ProjectionCatalogQuery.getSidebarThreadCatalog")),
+    ),
+  );
 
   return {
+    getSidebarThreadCatalog,
     getStartupProjectCatalog,
     getProjectThreadSummaries,
     getSelectedThreadDetail,

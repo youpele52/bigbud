@@ -3,6 +3,7 @@ import { type OrchestrationEvent } from "@bigbud/contracts";
 import { normalizeModelSlug } from "./mappers.store";
 import { type AppState } from "./main.store";
 import { buildLatestTurn, updateThreadState } from "./helpers.store";
+import { prependSidebarPinnedThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
 
 function resolveSyncedElevatorSummary(thread: {
   readonly title: string;
@@ -27,11 +28,22 @@ export function applyThreadMetaEvent(
 ): AppState | undefined {
   switch (event.type) {
     case "thread.deletion-requested": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
+      const nextState = updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         deletingAt: event.payload.deletingAt,
         updatedAt: event.payload.deletingAt,
       }));
+      return {
+        ...nextState,
+        sidebarRecentThreadIds: removeSidebarThreadId(
+          nextState.sidebarRecentThreadIds,
+          event.payload.threadId,
+        ),
+        sidebarPinnedThreadIds: removeSidebarThreadId(
+          nextState.sidebarPinnedThreadIds,
+          event.payload.threadId,
+        ),
+      };
     }
 
     case "thread.deletion-failed": {
@@ -43,11 +55,22 @@ export function applyThreadMetaEvent(
     }
 
     case "thread.archived": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
+      const nextState = updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         archivedAt: event.payload.archivedAt,
         updatedAt: event.payload.updatedAt,
       }));
+      return {
+        ...nextState,
+        sidebarRecentThreadIds: removeSidebarThreadId(
+          nextState.sidebarRecentThreadIds,
+          event.payload.threadId,
+        ),
+        sidebarPinnedThreadIds: removeSidebarThreadId(
+          nextState.sidebarPinnedThreadIds,
+          event.payload.threadId,
+        ),
+      };
     }
 
     case "thread.unarchived": {
@@ -59,19 +82,33 @@ export function applyThreadMetaEvent(
     }
 
     case "thread.pinned": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
+      const nextState = updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         pinnedAt: event.payload.pinnedAt,
         updatedAt: event.payload.updatedAt,
       }));
+      return {
+        ...nextState,
+        sidebarPinnedThreadIds:
+          nextState.sidebarThreadsById[event.payload.threadId] !== undefined
+            ? prependSidebarPinnedThreadId(nextState.sidebarPinnedThreadIds, event.payload.threadId)
+            : nextState.sidebarPinnedThreadIds,
+      };
     }
 
     case "thread.unpinned": {
-      return updateThreadState(state, event.payload.threadId, (thread) => ({
+      const nextState = updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
         pinnedAt: null,
         updatedAt: event.payload.updatedAt,
       }));
+      return {
+        ...nextState,
+        sidebarPinnedThreadIds: removeSidebarThreadId(
+          nextState.sidebarPinnedThreadIds,
+          event.payload.threadId,
+        ),
+      };
     }
 
     case "thread.meta-updated": {

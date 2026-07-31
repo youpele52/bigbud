@@ -117,6 +117,12 @@ function makeDetail(): GetSelectedThreadDetailResult {
 
 function makeApi() {
   const orchestration = {
+    getSidebarThreadCatalog: vi.fn(async () => ({
+      projectionSequence: 10,
+      threads: [],
+      recentThreadIds: [],
+      pinnedThreadIds: [],
+    })),
     getStartupProjectCatalog: vi.fn(async () => makeCatalog()),
     getProjectThreadSummaries: vi.fn(async ({ projectId }) => makeThreadPage(projectId)),
     getSelectedThreadDetail: vi.fn(async () => makeDetail()),
@@ -162,6 +168,8 @@ beforeEach(() => {
     sidebarThreadsById: {},
     threadIdsByProjectId: {},
     threadSummaryCursorByProjectId: {},
+    sidebarRecentThreadIds: [],
+    sidebarPinnedThreadIds: [],
     threadHydrationById: {},
     bootstrapComplete: false,
   });
@@ -174,6 +182,7 @@ describe("bounded orchestration bootstrap", () => {
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
 
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledTimes(1);
+    expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(1);
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledWith({
       threadId: selectedThread,
     });
@@ -347,6 +356,7 @@ describe("bounded orchestration bootstrap", () => {
     });
 
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledTimes(2);
+    expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(2);
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(4);
     expect(orchestration.getSnapshot).not.toHaveBeenCalled();
   });

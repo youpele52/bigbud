@@ -6,6 +6,7 @@ import {
   type GetProjectThreadSummariesResult,
   type GetStartupProjectCatalogResult,
 } from "@bigbud/contracts";
+import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
@@ -57,8 +58,11 @@ export async function runBoundedBootstrap(input: {
   }
 
   let catalog: GetStartupProjectCatalogResult;
+  let sidebarCatalog: GetSidebarThreadCatalogResult;
   const pages: GetProjectThreadSummariesResult[] = [];
   try {
+    sidebarCatalog = await input.api.orchestration.getSidebarThreadCatalog();
+    sequences.push(sidebarCatalog.projectionSequence);
     const firstCatalogPage = await input.api.orchestration.getStartupProjectCatalog({
       limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
       ...(selectedDetail ? { priorityProjectId: selectedDetail.projectId } : {}),
@@ -111,7 +115,7 @@ export async function runBoundedBootstrap(input: {
 
   if (!input.disposed()) {
     const store = useStore.getState();
-    store.syncBoundedCatalog(catalog, pages);
+    store.syncBoundedCatalog(catalog, sidebarCatalog, pages);
     if (selectedDetail !== null && hydrationToken !== null) {
       const events = threadHydrationEventBuffer.finish(
         selectedDetail.threadId,
