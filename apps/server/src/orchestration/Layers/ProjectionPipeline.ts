@@ -7,24 +7,30 @@
  * @module ProjectionPipeline
  */
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Semaphore, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
+import { ProjectionBaselineRepository } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
+import { ProjectionPendingUserInputRepository } from "../../persistence/Services/ProjectionPendingUserInputs.ts";
 import { ProjectionProjectRepository } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionStateRepository } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivityRepository } from "../../persistence/Services/ProjectionThreadActivities.ts";
+import { ProjectionThreadTaskRepository } from "../../persistence/Services/ProjectionThreadTasks.ts";
 import { ProjectionThreadMessageRepository } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlanRepository } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSessionRepository } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { ProjectionPendingApprovalRepositoryLive } from "../../persistence/Layers/ProjectionPendingApprovals.ts";
+import { ProjectionBaselineRepositoryLive } from "../../persistence/Layers/ProjectionBaselines.ts";
+import { ProjectionPendingUserInputRepositoryLive } from "../../persistence/Layers/ProjectionPendingUserInputs.ts";
 import { ProjectionProjectRepositoryLive } from "../../persistence/Layers/ProjectionProjects.ts";
 import { ProjectionStateRepositoryLive } from "../../persistence/Layers/ProjectionState.ts";
 import { ProjectionThreadActivityRepositoryLive } from "../../persistence/Layers/ProjectionThreadActivities.ts";
+import { ProjectionThreadTaskRepositoryLive } from "../../persistence/Layers/ProjectionThreadTasks.ts";
 import { ProjectionThreadMessageRepositoryLive } from "../../persistence/Layers/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlanRepositoryLive } from "../../persistence/Layers/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSessionRepositoryLive } from "../../persistence/Layers/ProjectionThreadSessions.ts";
@@ -42,6 +48,8 @@ import {
 } from "./ProjectionPipeline.helpers.ts";
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
+import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
+import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
 
@@ -55,32 +63,37 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const projectionThreadMessageRepository = yield* ProjectionThreadMessageRepository;
     const projectionThreadProposedPlanRepository = yield* ProjectionThreadProposedPlanRepository;
     const projectionThreadActivityRepository = yield* ProjectionThreadActivityRepository;
+    const projectionThreadTaskRepository = yield* ProjectionThreadTaskRepository;
     const projectionThreadSessionRepository = yield* ProjectionThreadSessionRepository;
     const projectionTurnRepository = yield* ProjectionTurnRepository;
     const projectionPendingApprovalRepository = yield* ProjectionPendingApprovalRepository;
+    const projectionPendingUserInputRepository = yield* ProjectionPendingUserInputRepository;
+    const projectionBaselineRepository = yield* ProjectionBaselineRepository;
 
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const serverConfig = yield* ServerConfig;
 
     const projectors: ReadonlyArray<ProjectorDefinition> = makeProjectors({
+      findThreadProjectId: eventStore.findThreadProjectId,
       projectionProjectRepository,
       projectionThreadRepository,
       projectionThreadMessageRepository,
       projectionThreadProposedPlanRepository,
       projectionThreadActivityRepository,
+      projectionThreadTaskRepository,
       projectionThreadSessionRepository,
       projectionTurnRepository,
       projectionPendingApprovalRepository,
+      projectionPendingUserInputRepository,
     });
 
     const runProjectorForEvent = Effect.fn("runProjectorForEvent")(function* (
       projector: ProjectorDefinition,
       event: OrchestrationEvent,
+      runSideEffects = true,
     ) {
       const attachmentSideEffects: AttachmentSideEffects = {
-        deletedThreadIds: new Set<string>(),
-        deletedProjectMemoryIds: new Set<string>(),
         prunedThreadRelativePaths: new Map<string, Set<string>>(),
       };
 
@@ -96,6 +109,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         ),
       );
 
+      if (!runSideEffects) return;
       yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
         Effect.catch((cause) =>
           Effect.logWarning("failed to apply projected attachment side-effects", {
@@ -108,6 +122,26 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       );
     });
 
+    const projectorNames = Object.values(ORCHESTRATION_PROJECTOR_NAMES);
+    const baselineOperations = makeProjectionBaselineOperations({
+      eventStore,
+      baselines: projectionBaselineRepository,
+      projectorNames,
+      verifyCandidate: (candidate, source) =>
+        verifyCandidateInWorkspace({
+          candidate,
+          source,
+          eventStore,
+          projectorNames,
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.provideService(ServerConfig, serverConfig),
+          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.verify:workspace")),
+        ),
+    });
+    const baselineSemaphore = yield* Semaphore.make(1);
+
     const bootstrapProjector = (projector: ProjectorDefinition) =>
       projectionStateRepository
         .getByProjector({
@@ -118,6 +152,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             Stream.runForEach(
               eventStore.readFromSequence(
                 Option.isSome(stateRow) ? stateRow.value.lastAppliedSequence : 0,
+                Number.MAX_SAFE_INTEGER,
               ),
               (event) => runProjectorForEvent(projector, event),
             ),
@@ -137,10 +172,37 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         ),
       );
 
-    const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.forEach(
-      projectors,
-      bootstrapProjector,
-      { concurrency: 1 },
+    const restoreBaselineForRetainedGap = Effect.gen(function* () {
+      const states = yield* projectionStateRepository.listAll();
+      const stateNames = new Set(states.map((state) => state.projector));
+      const hasEveryRequiredCursor = projectorNames.every((projector) => stateNames.has(projector));
+      const cursor =
+        states.length === 0 || !hasEveryRequiredCursor
+          ? 0
+          : Math.min(...states.map((state) => state.lastAppliedSequence));
+      const replay = yield* eventStore.readReplay(cursor, 0);
+      if (replay.availability !== "gap") return;
+      const baseline = yield* projectionBaselineRepository.latestVerified();
+      if (
+        Option.isNone(baseline) ||
+        baseline.value.sequence < replay.retainedFromSequenceExclusive
+      ) {
+        return yield* toPersistenceSqlError("ProjectionPipeline.bootstrap:retainedGap")(
+          new Error(
+            `no verified baseline covers retained sequence ${replay.retainedFromSequenceExclusive}`,
+          ),
+        );
+      }
+      yield* projectionBaselineRepository.restorePayload(
+        baseline.value.payloadJson,
+        baseline.value.sequence,
+        projectorNames,
+      );
+    });
+
+    const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.andThen(
+      restoreBaselineForRetainedGap,
+      Effect.forEach(projectors, bootstrapProjector, { concurrency: 1 }),
     ).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
@@ -161,9 +223,34 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         repository: projectionThreadActivityRepository,
       });
 
+    const ensureVerifiedBaselineThrough = (sequence: number) =>
+      baselineSemaphore
+        .withPermits(1)(
+          projectionBaselineRepository
+            .latestVerified()
+            .pipe(
+              Effect.flatMap((verified) =>
+                Option.isSome(verified) && verified.value.sequence >= sequence
+                  ? Effect.void
+                  : baselineOperations.compact(),
+              ),
+            ),
+        )
+        .pipe(
+          Effect.asVoid,
+          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.ensureBaseline:query")),
+        );
+
+    const compactVerifiedPrefix = (batchSize?: number) =>
+      eventStore.compactVerifiedPrefix
+        ? eventStore.compactVerifiedPrefix(batchSize).pipe(Effect.asVoid)
+        : Effect.void;
+
     return {
       bootstrap,
       backfillUsageContributions,
+      ensureVerifiedBaselineThrough,
+      compactVerifiedPrefix,
       projectEvent,
     } satisfies OrchestrationProjectionPipelineShape;
   },
@@ -178,8 +265,11 @@ export const OrchestrationProjectionPipelineLive = Layer.effect(
   Layer.provideMerge(ProjectionThreadMessageRepositoryLive),
   Layer.provideMerge(ProjectionThreadProposedPlanRepositoryLive),
   Layer.provideMerge(ProjectionThreadActivityRepositoryLive),
+  Layer.provideMerge(ProjectionThreadTaskRepositoryLive),
   Layer.provideMerge(ProjectionThreadSessionRepositoryLive),
   Layer.provideMerge(ProjectionTurnRepositoryLive),
   Layer.provideMerge(ProjectionPendingApprovalRepositoryLive),
+  Layer.provideMerge(ProjectionPendingUserInputRepositoryLive),
+  Layer.provideMerge(ProjectionBaselineRepositoryLive),
   Layer.provideMerge(ProjectionStateRepositoryLive),
 );

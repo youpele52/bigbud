@@ -52,7 +52,7 @@ export function makeThreadsProjector(
 
   const apply = Effect.fn("applyThreadsProjection")(function* (
     event: OrchestrationEvent,
-    attachmentSideEffects: AttachmentSideEffects,
+    _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
       case "thread.created":
@@ -84,6 +84,7 @@ export function makeThreadsProjector(
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           archivedAt: null,
+          pinnedAt: null,
           deletingAt: null,
           deletedAt: null,
         });
@@ -144,6 +145,32 @@ export function makeThreadsProjector(
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
           archivedAt: null,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
+
+      case "thread.pinned": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) return;
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          pinnedAt: event.payload.pinnedAt,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
+
+      case "thread.unpinned": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) return;
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          pinnedAt: null,
           updatedAt: event.payload.updatedAt,
         });
         return;
@@ -223,18 +250,8 @@ export function makeThreadsProjector(
       }
 
       case "thread.deleted": {
-        attachmentSideEffects.deletedThreadIds.add(event.payload.threadId);
-        const existingRow = yield* projectionThreadRepository.getById({
+        yield* projectionThreadRepository.deleteById({
           threadId: event.payload.threadId,
-        });
-        if (Option.isNone(existingRow)) {
-          return;
-        }
-        yield* projectionThreadRepository.upsert({
-          ...existingRow.value,
-          deletingAt: null,
-          deletedAt: event.payload.deletedAt,
-          updatedAt: event.payload.deletedAt,
         });
         return;
       }
@@ -266,6 +283,21 @@ export function makeThreadsProjector(
           ...existingRow.value,
           latestTurnId: event.payload.session.activeTurnId,
           updatedAt: event.occurredAt,
+        });
+        return;
+      }
+
+      case "thread.turn-start-failed": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) {
+          return;
+        }
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          latestTurnId: null,
+          updatedAt: event.payload.createdAt,
         });
         return;
       }

@@ -87,6 +87,7 @@ function makeOrchestrationEngine(input: {
   return {
     getReadModel: () => Effect.succeed(input.readModel),
     readEvents: () => Stream.empty,
+    readReplay: () => Effect.die("unused replay"),
     dispatch: (command) => {
       input.dispatched.push(command);
       return Effect.succeed({ sequence: input.dispatched.length });

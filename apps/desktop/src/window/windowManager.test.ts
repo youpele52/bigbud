@@ -30,12 +30,16 @@ vi.mock("electron", () => {
         if (event === "context-menu") {
           this.contextMenuHandler = handler;
         }
+        if (event === "did-attach-webview") {
+          this.didAttachWebviewHandler = handler;
+        }
       }),
       setWindowOpenHandler: vi.fn(),
       openDevTools: vi.fn(),
       loadURL: vi.fn(),
       replaceMisspelling: vi.fn(),
       copyImageAt: vi.fn(),
+      send: vi.fn(),
     };
     on = vi.fn();
     once = vi.fn();
@@ -46,6 +50,7 @@ vi.mock("electron", () => {
     loadURL = vi.fn();
     contextMenuHandler: ((event: { preventDefault: () => void }, params: any) => void) | null =
       null;
+    didAttachWebviewHandler: ((event: unknown, guestWebContents: any) => void) | null = null;
   }
 
   return {
@@ -70,6 +75,7 @@ function createWindowUnderTest() {
     desktopScheme: "bigbud",
     isDevelopment: false,
     desktopDir: "/desktop",
+    menuActionChannel: "desktop:menu-action",
     spellcheckEnabled: true,
     resolveIconPath: () => null,
     getSafeExternalUrl: () => null,
@@ -89,6 +95,7 @@ describe("windowManager context menu", () => {
       desktopScheme: "bigbud",
       isDevelopment: false,
       desktopDir: "/desktop",
+      menuActionChannel: "desktop:menu-action",
       spellcheckEnabled: false,
       resolveIconPath: () => null,
       getSafeExternalUrl: () => null,
@@ -111,6 +118,31 @@ describe("windowManager context menu", () => {
         visualEffectState: "active",
       });
     }
+  });
+
+  it("closes the browser context menu on guest left clicks", () => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const guestHandlers = new Map<string, (...args: any[]) => void>();
+    const guestWebContents = {
+      id: 2,
+      once: vi.fn(),
+      on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+        guestHandlers.set(event, handler);
+      }),
+    };
+
+    window?.didAttachWebviewHandler?.({}, guestWebContents);
+    const beforeMouseEvent = guestHandlers.get("before-mouse-event");
+    beforeMouseEvent?.({}, { type: "mouseDown", button: "left" });
+    beforeMouseEvent?.({}, { type: "mouseUp", button: "left" });
+    beforeMouseEvent?.({}, { type: "mouseDown", button: "right" });
+
+    expect(window?.webContents.send).toHaveBeenCalledTimes(1);
+    expect(window?.webContents.send).toHaveBeenCalledWith(
+      "desktop:menu-action",
+      "close-browser-context-menu",
+    );
   });
 
   it("adds Copy Image for image context menus", () => {

@@ -17,7 +17,7 @@ import type { ProviderAdapterRegistryShape } from "../Services/ProviderAdapterRe
 import type { ProviderSessionDirectoryShape } from "../Services/ProviderSessionDirectory.ts";
 import type { ProviderSessionDirectoryWriteError } from "../Services/ProviderSessionDirectory.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
-import { getProviderCapabilities } from "../providerCapabilities.ts";
+import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
 import {
   formatUnsupportedProviderExecutionTargetDetail,
   supportsProviderExecutionTarget,
@@ -48,6 +48,8 @@ export function makeStartSessionInternal(input: {
       Error
     >;
   };
+  readonly getProviderCapabilities: ProviderCapabilitiesResolver;
+  readonly isProviderComposed: (provider: ProviderSession["provider"]) => boolean;
   readonly stopStaleSessionsForThread: (args: {
     readonly threadId: ThreadId;
     readonly currentProvider: ProviderSession["provider"];
@@ -65,9 +67,26 @@ export function makeStartSessionInternal(input: {
       schema: ProviderSessionStartInput,
       payload: rawInput,
     });
-    const persistedBinding = Option.getOrUndefined(yield* input.directory.getBinding(threadId));
+    if (
+      parsed.provider !== undefined &&
+      parsed.modelSelection?.provider !== undefined &&
+      parsed.provider !== parsed.modelSelection.provider
+    ) {
+      return yield* toValidationError(
+        "ProviderService.startSession",
+        `Provider '${parsed.provider}' does not match modelSelection provider '${parsed.modelSelection.provider}'.`,
+      );
+    }
+    const provider = parsed.provider ?? parsed.modelSelection?.provider ?? "codex";
+    if (!input.isProviderComposed(provider)) {
+      return yield* toValidationError(
+        "ProviderService.startSession",
+        `Provider '${provider}' is unavailable in this bigbud build.`,
+      );
+    }
 
-    const provider = parsed.provider ?? "codex";
+    const capabilities = input.getProviderCapabilities(provider);
+    const persistedBinding = Option.getOrUndefined(yield* input.directory.getBinding(threadId));
     const workspaceDefaultExecutionTargetId =
       persistedBinding?.workspaceExecutionTargetId ??
       persistedBinding?.executionTargetId ??
@@ -81,9 +100,8 @@ export function makeStartSessionInternal(input: {
         workspaceExecutionTargetId: parsed.workspaceExecutionTargetId,
         executionTargetId: parsed.executionTargetId,
         useLegacyExecutionTargetForProviderRuntime:
-          !getProviderCapabilities(provider).supportsLocalRuntimeRemoteWorkspace,
-        defaultProviderRuntimeExecutionTargetId: getProviderCapabilities(provider)
-          .supportsLocalRuntimeRemoteWorkspace
+          !capabilities.supportsLocalRuntimeRemoteWorkspace,
+        defaultProviderRuntimeExecutionTargetId: capabilities.supportsLocalRuntimeRemoteWorkspace
           ? LOCAL_EXECUTION_TARGET_ID
           : (persistedBinding?.providerRuntimeExecutionTargetId ??
             persistedBinding?.executionTargetId ??
@@ -101,10 +119,13 @@ export function makeStartSessionInternal(input: {
 
     return yield* Effect.gen(function* () {
       if (
-        !supportsProviderExecutionTarget({
-          provider: startInput.provider,
-          executionTargetId: startInput.providerRuntimeExecutionTargetId,
-        })
+        !supportsProviderExecutionTarget(
+          {
+            provider: startInput.provider,
+            executionTargetId: startInput.providerRuntimeExecutionTargetId,
+          },
+          input.getProviderCapabilities,
+        )
       ) {
         return yield* toValidationError(
           "ProviderService.startSession",
@@ -133,13 +154,21 @@ export function makeStartSessionInternal(input: {
         );
       }
 
+      const adapter = yield* input.registry.getByProvider(startInput.provider);
+      const recoveryUnsupported = adapter.capabilities.sessionRecovery === "unsupported";
+      if (startInput.resumeCursor !== undefined && recoveryUnsupported) {
+        return yield* toValidationError(
+          "ProviderService.startSession",
+          `Provider '${startInput.provider}' does not support session recovery.`,
+        );
+      }
       const effectiveResumeCursor =
         startInput.resumeCursor ??
-        (input.options?.reusePersistedResumeCursor !== false &&
+        (!recoveryUnsupported &&
+        input.options?.reusePersistedResumeCursor !== false &&
         persistedBinding?.provider === startInput.provider
           ? persistedBinding.resumeCursor
           : undefined);
-      const adapter = yield* input.registry.getByProvider(startInput.provider);
       const sessionOption = yield* adapter
         .startSession({
           ...startInput,

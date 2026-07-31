@@ -1,8 +1,23 @@
-import { type OrchestrationEvent, ThreadId, type OrchestrationReadModel } from "@bigbud/contracts";
+import {
+  type GetProjectThreadSummariesResult,
+  type GetSelectedThreadDetailResult,
+  type GetStartupProjectCatalogResult,
+  type OrchestrationEvent,
+  ThreadId,
+  type ThreadMessageCursor,
+  type ThreadSummaryCursor,
+  type OrchestrationReadModel,
+} from "@bigbud/contracts";
 import { create } from "zustand";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.store";
 import { syncServerReadModel } from "./helpers.store";
+import {
+  setThreadHydration,
+  appendProjectThreadSummaries,
+  syncBoundedCatalog,
+  syncSelectedThreadDetail,
+} from "./helpers.lazy.store";
 import {
   selectProjectById,
   selectIsThreadCompacting,
@@ -21,15 +36,28 @@ export interface AppState {
   threads: Thread[];
   sidebarThreadsById: Record<string, SidebarThreadSummary>;
   threadIdsByProjectId: Record<string, ThreadId[]>;
+  threadSummaryCursorByProjectId?: Record<string, ThreadSummaryCursor | null>;
   bootstrapComplete: boolean;
+  threadHydrationById: Record<string, ThreadHydration>;
 }
+
+export type ThreadHydration =
+  | { status: "unloaded" | "loading" | "loadingOlder" | "complete" }
+  | { status: "loaded"; nextCursor: ThreadMessageCursor | null }
+  | {
+      status: "failed";
+      error: string;
+      retry: { kind: "initial" } | { kind: "older"; nextCursor: ThreadMessageCursor };
+    };
 
 const initialState: AppState = {
   projects: [],
   threads: [],
   sidebarThreadsById: {},
   threadIdsByProjectId: {},
+  threadSummaryCursorByProjectId: {},
   bootstrapComplete: false,
+  threadHydrationById: {},
 };
 
 // ── Re-exports for consumers ─────────────────────────────────────────
@@ -52,6 +80,13 @@ export {
 
 interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
+  syncBoundedCatalog: (
+    catalog: GetStartupProjectCatalogResult,
+    pages: ReadonlyArray<GetProjectThreadSummariesResult>,
+  ) => void;
+  syncSelectedThreadDetail: (detail: GetSelectedThreadDetailResult, loadingOlder: boolean) => void;
+  appendProjectThreadSummaries: (page: GetProjectThreadSummariesResult) => void;
+  setThreadHydration: (threadId: ThreadId, hydration: ThreadHydration) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
@@ -61,6 +96,12 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
+  syncBoundedCatalog: (catalog, pages) => set((state) => syncBoundedCatalog(state, catalog, pages)),
+  syncSelectedThreadDetail: (detail, loadingOlder) =>
+    set((state) => syncSelectedThreadDetail(state, detail, loadingOlder)),
+  appendProjectThreadSummaries: (page) => set((state) => appendProjectThreadSummaries(state, page)),
+  setThreadHydration: (threadId, hydration) =>
+    set((state) => setThreadHydration(state, threadId, hydration)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),

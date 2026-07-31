@@ -52,6 +52,7 @@ import { WorkspaceEntriesLive } from "../src/workspace/Layers/WorkspaceEntries.t
 import { WorkspacePathsLive } from "../src/workspace/Layers/WorkspacePaths.ts";
 import { BrowserManager } from "../src/browser/Services/BrowserManager.ts";
 import { TerminalManager } from "../src/terminal/Services/Manager.ts";
+import { EntityPurgeTest } from "../src/deletion/Services/EntityPurge.ts";
 
 import {
   initializeGitWorkspace,
@@ -176,6 +177,9 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(gitCoreLayer),
       Layer.provideMerge(textGenerationLayer),
       Layer.provideMerge(serverSettingsLayer),
+      Layer.provide(
+        OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
+      ),
       Layer.provide(persistenceLayer.pipe(Layer.provideMerge(ProjectionThreadWatchRepositoryLive))),
     );
     const checkpointReactorLayer = CheckpointReactorLive.pipe(
@@ -258,6 +262,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(orchestrationReactorLayer),
       Layer.provideMerge(browserLayer),
       Layer.provideMerge(terminalLayer),
+      Layer.provideMerge(EntityPurgeTest),
       Layer.provide(persistenceLayer),
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),

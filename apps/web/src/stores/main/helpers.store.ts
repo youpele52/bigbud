@@ -288,6 +288,7 @@ export function updateThreadState(
   state: AppState,
   threadId: ThreadId,
   updater: (thread: Thread) => Thread,
+  options: { readonly preserveLatestUserMessageAt?: boolean } = {},
 ): AppState {
   const threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
@@ -301,8 +302,13 @@ export function updateThreadState(
     return { ...state, threads };
   }
 
-  const nextSummary = buildSidebarThreadSummary(updatedThread);
   const previousSummary = state.sidebarThreadsById[threadId];
+  const derivedSummary = buildSidebarThreadSummary(updatedThread);
+  const latestUserMessageAt =
+    options.preserveLatestUserMessageAt === false
+      ? derivedSummary.latestUserMessageAt
+      : latestTimestamp(previousSummary?.latestUserMessageAt, derivedSummary.latestUserMessageAt);
+  const nextSummary = { ...derivedSummary, latestUserMessageAt };
   const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
     ? state.sidebarThreadsById
     : {
@@ -322,6 +328,12 @@ export function updateThreadState(
     threads,
     sidebarThreadsById,
   };
+}
+
+function latestTimestamp(left: string | null | undefined, right: string | null): string | null {
+  if (left === null || left === undefined) return right;
+  if (right === null) return left;
+  return left > right ? left : right;
 }
 
 // ── Thread revert state updater ───────────────────────────────────────

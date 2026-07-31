@@ -1,9 +1,8 @@
-import { type ProviderKind, type ServerProvider } from "@bigbud/contracts";
+import { type ProviderKind } from "@bigbud/contracts";
 import { resolveSelectableModel } from "@bigbud/shared/model";
 import { memo, useMemo, useState } from "react";
-import type { VariantProps } from "class-variance-authority";
-import { ChevronDownIcon } from "lucide-react";
-import { Button, buttonVariants } from "../../ui/button";
+import { ChevronDownIcon, LoaderIcon } from "lucide-react";
+import { Button } from "../../ui/button";
 import {
   Menu,
   MenuItem,
@@ -26,9 +25,13 @@ import {
   providerIconClassName,
   providerSupportsSubProviderID,
   PROVIDER_ICON_BY_PROVIDER,
+  getProviderModelAvailability,
   type ModelOption,
   UNAVAILABLE_PROVIDER_OPTIONS,
 } from "./ProviderModelPicker.models";
+import { getProviderDescriptor } from "./providerDescriptors";
+import { useCliProxyActivation } from "../../../hooks/useCliProxyActivation";
+import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
@@ -42,37 +45,21 @@ function providerModelListPopupClassName(options: ReadonlyArray<ModelOption>): s
     : undefined;
 }
 
-export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
-  provider: ProviderKind;
-  model: string;
-  lockedProvider: ProviderKind | null;
-  providers?: ReadonlyArray<ServerProvider>;
-  modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<ModelOption>>;
-  activeProviderIconClassName?: string;
-  compact?: boolean;
-  disabled?: boolean;
-  enableRecentlyUsed?: boolean;
-  triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
-  triggerClassName?: string;
-  popupClassName?: string;
-  subPopupClassName?: string;
-  modelListSearchbarClassName?: string;
-  modelListGroupLabelClassName?: string;
-  modelListItemClassName?: string;
-  modelListItemLabelClassName?: string;
-  onProviderModelChange: (
-    provider: ProviderKind,
-    model: string,
-    subProviderID?: string | undefined,
-  ) => void;
-  /** Called when the user clicks the back-arrow to unlock the provider and return to provider selection. */
-  onProviderUnlock?: () => void;
-}) {
+export const ProviderModelPicker = memo(function ProviderModelPicker(
+  props: ProviderModelPickerProps,
+) {
   const allRecentUsages = useRecentlyUsedModels();
+  const visibleProviderOptions = useMemo(
+    () =>
+      AVAILABLE_PROVIDER_OPTIONS.filter((option) =>
+        getProviderDescriptor(option.value).isVisible(props.providers),
+      ),
+    [props.providers],
+  );
   const recentOptionsByProvider = useMemo(() => {
     if (!props.enableRecentlyUsed || allRecentUsages.length === 0) return {};
     const result: Partial<Record<ProviderKind, ModelOption[]>> = {};
-    for (const opt of AVAILABLE_PROVIDER_OPTIONS) {
+    for (const opt of visibleProviderOptions) {
       const providerOptions = props.modelOptionsByProvider[opt.value];
       if (!providerOptions || providerOptions.length === 0) continue;
       const recent = allRecentUsages
@@ -99,7 +86,13 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       if (uniqueMatched.length > 0) result[opt.value] = uniqueMatched;
     }
     return result;
-  }, [allRecentUsages, props.enableRecentlyUsed, props.modelOptionsByProvider]);
+  }, [
+    allRecentUsages,
+    props.enableRecentlyUsed,
+    props.modelOptionsByProvider,
+    visibleProviderOptions,
+  ]);
+  const { activateCliProxy, isActivatingCliProxy } = useCliProxyActivation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [openedModelProviders, setOpenedModelProviders] = useState<ReadonlySet<ProviderKind>>(
     () => new Set(),
@@ -216,22 +209,30 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               options={props.modelOptionsByProvider[props.lockedProvider]}
               recentOptions={recentOptionsByProvider[props.lockedProvider]}
               loading={
-                props.providers !== undefined &&
-                props.modelOptionsByProvider[props.lockedProvider].length === 0 &&
-                (!activeProviderSnapshot || activeProviderSnapshot.status === "warning")
+                getProviderModelAvailability({
+                  providers: props.providers,
+                  provider: activeProviderSnapshot,
+                  modelCount: props.modelOptionsByProvider[props.lockedProvider].length,
+                }).loading
               }
               unavailableMessage={
-                activeProviderSnapshot &&
-                (!activeProviderSnapshot.enabled
-                  ? "Provider is disabled"
-                  : !activeProviderSnapshot.installed
-                    ? "Provider is not installed"
-                    : activeProviderSnapshot.auth.status === "unauthenticated"
-                      ? "Provider login required"
-                      : activeProviderSnapshot.status === "error"
-                        ? (activeProviderSnapshot.message ?? "Provider unavailable")
-                        : undefined)
+                getProviderModelAvailability({
+                  providers: props.providers,
+                  provider: activeProviderSnapshot,
+                  modelCount: props.modelOptionsByProvider[props.lockedProvider].length,
+                }).unavailableMessage
               }
+              {...(props.lockedProvider === "cliProxy" &&
+              activeProviderSnapshot?.enabled &&
+              activeProviderSnapshot.installed &&
+              props.modelOptionsByProvider[props.lockedProvider].length === 0
+                ? {
+                    activationAction: {
+                      busy: isActivatingCliProxy,
+                      onClick: () => void activateCliProxy(),
+                    },
+                  }
+                : {})}
               onSelect={(value) => handleModelChange(props.lockedProvider!, value)}
               {...(props.onProviderUnlock
                 ? {
@@ -244,7 +245,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             />
           ) : (
             <>
-              {AVAILABLE_PROVIDER_OPTIONS.map((option) => {
+              {visibleProviderOptions.map((option) => {
                 const OptionIcon = PROVIDER_ICON_BY_PROVIDER[option.value];
                 const liveProvider = props.providers
                   ? getProviderSnapshot(props.providers, option.value)
@@ -252,27 +253,17 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 const providerPopupClassName = providerModelListPopupClassName(
                   props.modelOptionsByProvider[option.value],
                 );
-                const isLoadingModels =
-                  props.providers !== undefined &&
-                  props.modelOptionsByProvider[option.value].length === 0 &&
-                  (!liveProvider || liveProvider.status === "warning");
-                const unavailableMessage =
-                  liveProvider && !liveProvider.enabled
-                    ? "Provider is disabled"
-                    : liveProvider && !liveProvider.installed
-                      ? "Provider is not installed"
-                      : liveProvider?.auth.status === "unauthenticated"
-                        ? "Provider login required"
-                        : liveProvider?.status === "error"
-                          ? (liveProvider.message ?? "Provider unavailable")
-                          : undefined;
-                const isUnavailable =
-                  liveProvider !== undefined &&
-                  (!liveProvider.enabled ||
-                    !liveProvider.installed ||
-                    liveProvider.auth.status === "unauthenticated" ||
-                    liveProvider.status === "error");
-                if (isUnavailable) {
+                const availability = getProviderModelAvailability({
+                  providers: props.providers,
+                  provider: liveProvider,
+                  modelCount: props.modelOptionsByProvider[option.value].length,
+                });
+                const {
+                  loading: isLoadingModels,
+                  unavailable: isUnavailable,
+                  unavailableMessage,
+                } = availability;
+                if (isUnavailable && liveProvider) {
                   const unavailableLabel = !liveProvider.enabled
                     ? "Disabled"
                     : !liveProvider.installed
@@ -280,6 +271,36 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                       : liveProvider.auth.status === "unauthenticated"
                         ? "Login required"
                         : "Unavailable";
+                  const canActivateCliProxy =
+                    option.value === "cliProxy" &&
+                    liveProvider.enabled &&
+                    liveProvider.installed &&
+                    props.modelOptionsByProvider[option.value].length === 0;
+                  if (canActivateCliProxy) {
+                    return (
+                      <MenuItem
+                        key={option.value}
+                        disabled={isActivatingCliProxy}
+                        title={liveProvider.message ?? "Start CLIProxyAPI"}
+                        onClick={() => void activateCliProxy()}
+                      >
+                        <OptionIcon
+                          aria-hidden="true"
+                          className={cn(
+                            "size-4 shrink-0 opacity-80",
+                            providerIconClassName(option.value, "text-muted-foreground/70"),
+                          )}
+                        />
+                        <span>{option.label}</span>
+                        <span className="ms-auto inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
+                          {isActivatingCliProxy ? (
+                            <LoaderIcon className="size-3 animate-spin" />
+                          ) : null}
+                          {isActivatingCliProxy ? "Starting" : "Start / retry"}
+                        </span>
+                      </MenuItem>
+                    );
+                  }
                   return (
                     <MenuItem
                       key={option.value}

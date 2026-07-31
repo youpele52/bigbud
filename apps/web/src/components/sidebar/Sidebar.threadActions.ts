@@ -1,9 +1,8 @@
 import { useCallback, type MouseEvent } from "react";
-import { FAVORITE_THREAD_LIMIT, type ThreadId } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import { isMacPlatform } from "../../lib/utils";
 import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
-import { useUpdateSettings } from "../../hooks/useSettings";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
@@ -27,7 +26,6 @@ export function useSidebarThreadActions({
   navigateToThreadRoute,
   cancelProjectRename,
 }: SidebarThreadActionsInput): SidebarThreadActionsOutput {
-  const { updateSettings } = useUpdateSettings();
   const selectedThreadIds = useThreadSelectionStore((s) => s.selectedThreadIds);
   const toggleThreadSelection = useThreadSelectionStore((s) => s.toggleThread);
   const rangeSelectTo = useThreadSelectionStore((s) => s.rangeSelectTo);
@@ -84,28 +82,27 @@ export function useSidebarThreadActions({
 
   const toggleFavoriteThread = useCallback(
     async (threadId: ThreadId) => {
-      const favoriteThreadIds = appSettings.favoriteThreadIds;
-      if (favoriteThreadIds.includes(threadId)) {
-        updateSettings({
-          favoriteThreadIds: favoriteThreadIds.filter((favoriteId) => favoriteId !== threadId),
-        });
-        return;
-      }
+      const pinned = (sidebarThreadsById[threadId]?.pinnedAt ?? null) === null;
 
-      if (favoriteThreadIds.length >= FAVORITE_THREAD_LIMIT) {
+      const api = readNativeApi();
+      if (!api) return;
+      try {
+        await api.server.setThreadPinned({ threadId, pinned });
+      } catch (error) {
+        const description = error instanceof Error ? error.message : "An error occurred.";
+        const limitReached = pinned && description.includes("pin up to");
         toastManager.add({
-          type: "warning",
-          title: "Pinned limit reached",
-          description: `You can pin up to ${FAVORITE_THREAD_LIMIT} threads.`,
+          type: limitReached ? "warning" : "error",
+          title: limitReached
+            ? "Pinned limit reached"
+            : pinned
+              ? "Failed to pin thread"
+              : "Failed to unpin thread",
+          description,
         });
-        return;
       }
-
-      updateSettings({
-        favoriteThreadIds: [threadId, ...favoriteThreadIds],
-      });
     },
-    [appSettings.favoriteThreadIds, updateSettings],
+    [sidebarThreadsById],
   );
 
   const handleBranchThread = useCallback(
@@ -205,7 +202,7 @@ export function useSidebarThreadActions({
       if (!api) return;
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-      const isFavorite = appSettings.favoriteThreadIds.includes(threadId);
+      const isFavorite = (thread.pinnedAt ?? null) !== null;
       const normalizedTitle = normalizeSummaryText(thread.title);
       const normalizedElevatorSummary = normalizeSummaryText(thread.elevatorSummary);
       const hasElevatorSummary =
@@ -288,7 +285,6 @@ export function useSidebarThreadActions({
     },
     [
       cancelProjectRename,
-      appSettings.favoriteThreadIds,
       appSettings.confirmThreadArchive,
       attemptArchiveThread,
       copyElevatorSummaryToClipboard,

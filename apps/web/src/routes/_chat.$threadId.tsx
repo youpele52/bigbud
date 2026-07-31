@@ -7,10 +7,26 @@ import { useComposerDraftStore } from "../stores/composer";
 import { closeDiffRouteSearch, type DiffRouteSearch, parseDiffRouteSearch } from "../utils/diff";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
-import { useStore } from "../stores/main";
+import { type ThreadHydration, useStore } from "../stores/main";
 import { SidebarInset } from "~/components/ui/sidebar";
 import { registerDiffPanelCloseAction } from "../stores/rightPanel/rightPanel.coordinator";
 import { useRightPanelTabsStore } from "../stores/rightPanel/rightPanelTabs.store";
+import { readNativeApi } from "../rpc/nativeApi";
+import { hydrateSelectedThread, runBoundedBootstrap } from "./-__root.bounded-bootstrap";
+
+export function getMissingThreadRouteAction(input: {
+  bootstrapComplete: boolean;
+  routeThreadExists: boolean;
+  hydrationStatus: ThreadHydration["status"];
+}): "bootstrap" | "redirect" | null {
+  if (!input.bootstrapComplete || input.routeThreadExists) {
+    return null;
+  }
+  if (input.hydrationStatus === "unloaded") {
+    return "bootstrap";
+  }
+  return input.hydrationStatus === "failed" ? "redirect" : null;
+}
 
 export function ChatThreadRouteView() {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
@@ -19,6 +35,9 @@ export function ChatThreadRouteView() {
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
   const routeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
+  const hydrationStatus = useStore(
+    (store) => store.threadHydrationById[threadId]?.status ?? "unloaded",
+  );
   const threadTitle =
     routeThread && isVisibleThread(routeThread) ? routeThread.title : "New thread";
   const search = Route.useSearch();
@@ -26,6 +45,11 @@ export function ChatThreadRouteView() {
     Object.hasOwn(store.draftThreadsByThreadId, threadId),
   );
   const routeThreadExists = routeThread ? isVisibleThread(routeThread) : draftThreadExists;
+  const missingThreadRouteAction = getMissingThreadRouteAction({
+    bootstrapComplete,
+    routeThreadExists,
+    hydrationStatus,
+  });
   const diffOpen = search.diff === "1";
   usePageTitle(threadTitle);
 
@@ -51,15 +75,33 @@ export function ChatThreadRouteView() {
   useEffect(() => registerDiffPanelCloseAction(closeDiff), [closeDiff]);
 
   useEffect(() => {
-    if (!bootstrapComplete) {
+    const api = readNativeApi();
+    if (!api || !bootstrapComplete || !routeThread || hydrationStatus !== "unloaded") {
+      return;
+    }
+    void hydrateSelectedThread({ api, threadId });
+  }, [bootstrapComplete, hydrationStatus, routeThread, threadId]);
+
+  useEffect(() => {
+    const api = readNativeApi();
+    if (!api || missingThreadRouteAction !== "bootstrap") {
       return;
     }
 
-    if (!routeThreadExists) {
+    let disposed = false;
+    void runBoundedBootstrap({ api, selectedThreadId: threadId, disposed: () => disposed }).catch(
+      () => undefined,
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [missingThreadRouteAction, threadId]);
+
+  useEffect(() => {
+    if (missingThreadRouteAction === "redirect") {
       void navigate({ to: "/", replace: true });
-      return;
     }
-  }, [bootstrapComplete, navigate, routeThreadExists]);
+  }, [missingThreadRouteAction, navigate]);
 
   if (!bootstrapComplete || !routeThreadExists) {
     return null;

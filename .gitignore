@@ -24,6 +24,7 @@ __screenshots__/
 .codex-snapshots/
 docs/ideas/
 docs/handoff/
+docs/plan/
 build-certs/
 # Local server state can contain per-thread authorization tokens.
 /apps/server/userdata/

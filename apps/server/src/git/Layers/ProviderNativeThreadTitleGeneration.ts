@@ -1,8 +1,4 @@
-import {
-  CopilotClient,
-  type CopilotClientOptions,
-  type PermissionRequestResult,
-} from "@github/copilot-sdk";
+import { CopilotClient, type PermissionRequestResult } from "@github/copilot-sdk";
 import {
   TextGenerationError,
   type CopilotModelSelection,
@@ -18,10 +14,7 @@ import type {
 } from "../Services/TextGeneration.ts";
 import { buildThreadElevatorSummaryPrompt, buildThreadTitlePrompt } from "../Prompts.ts";
 import { limitSection, sanitizeElevatorSummary, sanitizeThreadTitle } from "../Utils.ts";
-import {
-  makeCliRuntimeConnection,
-  makeNodeWrapperCliPath,
-} from "../../provider/Layers/Copilot/Adapter.types.ts";
+import { makeCopilotClientOptions } from "../../provider/Layers/Copilot/Adapter.types.ts";
 import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
 import {
@@ -97,15 +90,10 @@ export const generateCopilotThreadTitleNative = (
       Effect.map((settings) => settings.providers.copilot),
       Effect.catch(() => Effect.void),
     );
-    const binaryPath = copilotSettings?.binaryPath;
-    const useCustomBinary = binaryPath !== undefined && binaryPath !== "copilot";
-    const resolvedCliPath = useCustomBinary ? binaryPath : makeNodeWrapperCliPath();
-    const connection = makeCliRuntimeConnection(resolvedCliPath);
-    const clientOptions: CopilotClientOptions = {
-      ...(connection ? { connection } : {}),
-      ...(input.cwd ? { workingDirectory: input.cwd } : {}),
-      logLevel: "error",
-    };
+    const clientOptions = makeCopilotClientOptions({
+      binaryPath: copilotSettings?.binaryPath ?? "copilot",
+      workingDirectory: input.cwd,
+    });
 
     const prompt = buildCopilotThreadTitlePrompt({
       message: input.message,

@@ -114,6 +114,7 @@ describe("terminalContext", () => {
     expect(deriveDisplayedUserMessageState(prompt)).toEqual({
       visibleText: "Investigate this",
       copyText: prompt,
+      delegatedThreadProvenance: null,
       contextCount: 1,
       previewTitle: "Terminal 1 lines 12-13\n12 | git status\n13 | On branch main",
       contexts: [
@@ -283,6 +284,7 @@ describe("terminalContext", () => {
     expect(deriveDisplayedUserMessageState(prompt)).toEqual({
       visibleText: "Read this document URL and use the extracted contents below.",
       copyText: prompt,
+      delegatedThreadProvenance: null,
       contextCount: 0,
       previewTitle: null,
       contexts: [],

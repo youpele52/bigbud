@@ -43,10 +43,13 @@ interface SidebarRenderedProjectItemThreadListProps {
   shouldShowThreadPanel: boolean;
   showEmptyThreadState: boolean;
   hasHiddenThreads: boolean;
+  hasMoreThreads: boolean;
   isThreadListExpanded: boolean;
+  isLoadingMoreThreads: boolean;
   hiddenThreadCount: number;
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
   projectExpanded: boolean;
 }
 
@@ -82,10 +85,13 @@ export function SidebarRenderedProjectItemThreadList({
   shouldShowThreadPanel,
   showEmptyThreadState,
   hasHiddenThreads,
+  hasMoreThreads,
   isThreadListExpanded,
+  isLoadingMoreThreads,
   hiddenThreadCount,
   expandThreadListForProject,
   collapseThreadListForProject,
+  loadMoreThreadsForProject,
   projectExpanded,
 }: SidebarRenderedProjectItemThreadListProps) {
   return (
@@ -139,7 +145,7 @@ export function SidebarRenderedProjectItemThreadList({
       {projectExpanded && hasHiddenThreads ? (
         <SidebarMenuSubItem className="w-full">
           <SidebarMenuSubButton
-            render={<button type="button" />}
+            render={<button type="button" disabled={isLoadingMoreThreads} />}
             data-thread-selection-safe
             size="sm"
             className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
@@ -158,6 +164,19 @@ export function SidebarRenderedProjectItemThreadList({
                 <span>{`See more (${hiddenThreadCount})`}</span>
               )}
             </span>
+          </SidebarMenuSubButton>
+        </SidebarMenuSubItem>
+      ) : null}
+      {projectExpanded && isThreadListExpanded && hasMoreThreads ? (
+        <SidebarMenuSubItem className="w-full">
+          <SidebarMenuSubButton
+            render={<button type="button" />}
+            data-thread-selection-safe
+            size="sm"
+            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            onClick={() => loadMoreThreadsForProject(projectId)}
+          >
+            <span>{isLoadingMoreThreads ? "Loading..." : "Load more"}</span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       ) : null}

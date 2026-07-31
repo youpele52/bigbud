@@ -220,6 +220,50 @@ export const ComputerUseDiagnostic = Schema.Struct({
 });
 export type ComputerUseDiagnostic = typeof ComputerUseDiagnostic.Type;
 
+export const ComputerUseDeliveryPaths = [
+  "ax",
+  "ax_fg",
+  "atspi",
+  "cgevent",
+  "cgevent_fg",
+  "cgevent_hid",
+  "hid",
+  "key_events",
+  "key_events_fg",
+  "msaa",
+  "pixel",
+  "uia",
+  "uia_expand_collapse",
+  "x11_pixel",
+  "x11_xtest_fg",
+  "SendInput",
+  "SetCursorPos",
+  "post_message",
+] as const;
+export const ComputerUseDeliveryPath = Schema.Literals(ComputerUseDeliveryPaths);
+export type ComputerUseDeliveryPath = typeof ComputerUseDeliveryPath.Type;
+
+export const ComputerUseActionOutcome = Schema.Struct({
+  verified: Schema.optional(Schema.Boolean),
+  effect: Schema.optional(Schema.Literals(["confirmed", "unverifiable", "suspected_noop"])),
+  path: Schema.optional(ComputerUseDeliveryPath),
+  escalation: Schema.optional(
+    Schema.Struct({
+      recommended: Schema.Literals(["px", "foreground", "page"]),
+      reason: TrimmedNonEmptyString,
+    }),
+  ),
+});
+export type ComputerUseActionOutcome = typeof ComputerUseActionOutcome.Type;
+
+export const ComputerUseExecutionStatus = Schema.Literals([
+  "succeeded",
+  "failed",
+  "timed_out",
+  "cancelled",
+]);
+export type ComputerUseExecutionStatus = typeof ComputerUseExecutionStatus.Type;
+
 export const ComputerUseResult = Schema.Struct({
   surface: Surface,
   action: TrimmedNonEmptyString,
@@ -229,6 +273,16 @@ export const ComputerUseResult = Schema.Struct({
   screenshot: Schema.optional(ComputerUseScreenshot),
   treeText: Schema.optional(Schema.String),
   detailsJson: Schema.optional(Schema.String),
+  actionDetailsJson: Schema.optional(Schema.String),
+  captureDetailsJson: Schema.optional(Schema.String),
+  actionOutcome: Schema.optional(ComputerUseActionOutcome),
   diagnostics: Schema.optional(ComputerUseDiagnostic),
+  executionStatus: Schema.optional(ComputerUseExecutionStatus),
+  attachmentPersistence: Schema.optional(
+    Schema.Struct({
+      status: Schema.Literals(["completed", "degraded"]),
+      message: Schema.optional(TrimmedNonEmptyString),
+    }),
+  ),
 });
 export type ComputerUseResult = typeof ComputerUseResult.Type;

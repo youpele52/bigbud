@@ -9,7 +9,6 @@ export type ComposerSlashCommand =
   | "agents"
   | "skill"
   | "skills"
-  | "compact"
   | "read";
 
 export interface ComposerTrigger {
@@ -26,7 +25,6 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "agents",
   "skill",
   "skills",
-  "compact",
   "read",
 ];
 const isInlineTokenSegment = (
@@ -229,9 +227,6 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
     const commandMatch = /^\/(\S*)$/.exec(slashPrefix);
     if (commandMatch) {
       const commandQuery = commandMatch[1] ?? "";
-      if (commandQuery.toLowerCase() === "compact") {
-        return null;
-      }
       if (commandQuery.toLowerCase() === "model") {
         return {
           kind: "slash-model",
@@ -278,12 +273,6 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 
     const providerSlashCommandMatch = /^\/([^\s]+)(?:\s+(.*))?$/.exec(slashPrefix);
     if (providerSlashCommandMatch) {
-      if (
-        providerSlashCommandMatch[1]?.toLowerCase() === "compact" &&
-        (providerSlashCommandMatch[2] ?? "").trim().length === 0
-      ) {
-        return null;
-      }
       return {
         kind: "slash-command",
         query:

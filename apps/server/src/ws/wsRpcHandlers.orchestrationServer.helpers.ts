@@ -1,11 +1,14 @@
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import {
+  FAVORITE_THREAD_LIMIT,
+  OrchestrationDispatchCommandError,
   ProjectDirectoryWatchError,
   ProjectListDirectoryError,
   ProjectReadFilePreviewError,
   ProjectSearchFileContentsError,
   ProjectSearchEntriesError,
   ProjectWriteFileError,
+  ServerCliProxyActivationError,
   ServerExportThreadContextError,
   ServerMobileRemoteError,
   ServerReadDocumentUrlError,
@@ -35,6 +38,21 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         context.providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverActivateCliProxy,
+        context.activateCliProxy().pipe(
+          Effect.map((providers) => ({ providers })),
+          Effect.mapError(
+            (cause) =>
+              new ServerCliProxyActivationError({
+                message: cause instanceof Error ? cause.message : "Failed to activate CLIProxyAPI.",
+                cause,
+              }),
+          ),
+        ),
+        { "rpc.aggregate": "server" },
+      ),
     [WS_METHODS.serverGetSettings]: (_input: unknown) =>
       observeRpcEffect(
         WS_METHODS.serverGetSettings,
@@ -51,6 +69,43 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverUpdateSettings,
         context.serverSettings.updateSettings(input.patch),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverSetThreadPinned]: (input: {
+      readonly threadId: ThreadId;
+      readonly pinned: boolean;
+    }) =>
+      observeRpcEffect(
+        WS_METHODS.serverSetThreadPinned,
+        Effect.gen(function* () {
+          yield* context.dispatchNormalizedCommand({
+            type: input.pinned ? "thread.pin" : "thread.unpin",
+            commandId: context.serverCommandId(input.pinned ? "thread-pin" : "thread-unpin"),
+            threadId: input.threadId,
+          });
+          const readModel = yield* context.orchestrationEngine.getReadModel();
+          const thread = readModel.threads.find((candidate) => candidate.id === input.threadId);
+          const count = readModel.threads.filter(
+            (candidate) => candidate.deletedAt === null && (candidate.pinnedAt ?? null) !== null,
+          ).length;
+          return {
+            threadId: input.threadId,
+            pinned: input.pinned,
+            pinnedAt: thread?.pinnedAt ?? null,
+            count,
+            limit: FAVORITE_THREAD_LIMIT,
+            remaining: FAVORITE_THREAD_LIMIT - count,
+          };
+        }).pipe(
+          Effect.mapError((cause) =>
+            Schema.is(OrchestrationDispatchCommandError)(cause)
+              ? cause
+              : new OrchestrationDispatchCommandError({
+                  message: "Failed to update pinned thread",
+                  cause,
+                }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverReadDocumentUrl]: (input: { readonly url: string }) =>
@@ -92,7 +147,20 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverExportThreadContext,
         Effect.gen(function* () {
-          const snapshot = yield* context.projectionSnapshotQuery.getSnapshot().pipe(
+          const snapshot = yield* (
+            Option.isSome(context.projectionOperationalStateQuery)
+              ? context.projectionOperationalStateQuery.value
+                  .getFullThreadHistory(input.threadId)
+                  .pipe(
+                    Effect.flatMap(
+                      Option.match({
+                        onNone: () => Effect.fail(new Error("Thread was not found.")),
+                        onSome: Effect.succeed,
+                      }),
+                    ),
+                  )
+              : context.projectionSnapshotQuery.getSnapshot()
+          ).pipe(
             Effect.mapError(
               (cause) =>
                 new ServerExportThreadContextError({

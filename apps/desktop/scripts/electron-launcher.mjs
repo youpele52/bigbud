@@ -16,7 +16,8 @@ import { fileURLToPath } from "node:url";
 
 const APP_DISPLAY_NAME = "bigbud";
 const APP_BUNDLE_ID = "ai.bigbud.desktop";
-const LAUNCHER_VERSION = 2;
+const DEV_APP_BUNDLE_ID = "ai.bigbud.desktop.dev";
+const LAUNCHER_VERSION = 3;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const desktopDir = resolve(__dirname, "..");
@@ -40,11 +41,11 @@ function setPlistString(plistPath, key, value) {
   throw new Error(`Failed to update plist key "${key}" at ${plistPath}: ${details}`.trim());
 }
 
-function patchMainBundleInfoPlist(appBundlePath, iconPath) {
+function patchMainBundleInfoPlist(appBundlePath, iconPath, appBundleId) {
   const infoPlistPath = join(appBundlePath, "Contents", "Info.plist");
   setPlistString(infoPlistPath, "CFBundleDisplayName", APP_DISPLAY_NAME);
   setPlistString(infoPlistPath, "CFBundleName", APP_DISPLAY_NAME);
-  setPlistString(infoPlistPath, "CFBundleIdentifier", APP_BUNDLE_ID);
+  setPlistString(infoPlistPath, "CFBundleIdentifier", appBundleId);
   setPlistString(infoPlistPath, "CFBundleIconFile", "icon.icns");
 
   const resourcesDir = join(appBundlePath, "Contents", "Resources");
@@ -52,7 +53,7 @@ function patchMainBundleInfoPlist(appBundlePath, iconPath) {
   copyFileSync(iconPath, join(resourcesDir, "electron.icns"));
 }
 
-function patchHelperBundleInfoPlists(appBundlePath) {
+function patchHelperBundleInfoPlists(appBundlePath, appBundleId) {
   const frameworksDir = join(appBundlePath, "Contents", "Frameworks");
   if (!existsSync(frameworksDir)) {
     return;
@@ -77,8 +78,8 @@ function patchHelperBundleInfoPlists(appBundlePath) {
       : `${APP_DISPLAY_NAME} Helper`;
     const helperIdSuffix = suffix.replace(/[()]/g, "").trim().toLowerCase().replace(/\s+/g, "-");
     const helperBundleId = helperIdSuffix
-      ? `${APP_BUNDLE_ID}.helper.${helperIdSuffix}`
-      : `${APP_BUNDLE_ID}.helper`;
+      ? `${appBundleId}.helper.${helperIdSuffix}`
+      : `${appBundleId}.helper`;
 
     setPlistString(helperPlistPath, "CFBundleDisplayName", helperName);
     setPlistString(helperPlistPath, "CFBundleName", helperName);
@@ -149,7 +150,10 @@ function resolveMacLauncherIcon(isDevelopment, runtimeDir) {
 function buildMacLauncher(electronBinaryPath, isDevelopment = false) {
   const sourceAppBundlePath = resolve(electronBinaryPath, "../../..");
   const runtimeDir = join(desktopDir, ".electron-runtime");
-  const targetAppBundlePath = join(runtimeDir, `${APP_DISPLAY_NAME}.app`);
+  const targetAppBundlePath = join(
+    runtimeDir,
+    isDevelopment ? `${APP_DISPLAY_NAME}-dev.app` : `${APP_DISPLAY_NAME}.app`,
+  );
   const targetBinaryPath = join(targetAppBundlePath, "Contents", "MacOS", "Electron");
   const metadataPath = join(runtimeDir, "metadata.json");
   const iconPath = resolveMacLauncherIcon(isDevelopment, runtimeDir);
@@ -184,8 +188,10 @@ function buildMacLauncher(electronBinaryPath, isDevelopment = false) {
 
   rmSync(targetAppBundlePath, { recursive: true, force: true });
   cpSync(sourceAppBundlePath, targetAppBundlePath, { recursive: true });
-  patchMainBundleInfoPlist(targetAppBundlePath, iconPath);
-  patchHelperBundleInfoPlists(targetAppBundlePath);
+  const appBundleId = isDevelopment ? DEV_APP_BUNDLE_ID : APP_BUNDLE_ID;
+  patchMainBundleInfoPlist(targetAppBundlePath, iconPath, appBundleId);
+  patchHelperBundleInfoPlists(targetAppBundlePath, appBundleId);
+  runIconCommand("codesign", ["--force", "--deep", "--sign", "-", targetAppBundlePath]);
   writeFileSync(metadataPath, `${JSON.stringify(expectedMetadata, null, 2)}\n`);
 
   return targetBinaryPath;

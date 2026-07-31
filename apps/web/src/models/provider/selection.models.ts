@@ -1,11 +1,13 @@
 import {
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  PROVIDER_KINDS,
   type ModelSelection,
   type ProviderKind,
   type ServerProvider,
 } from "@bigbud/contracts";
 import { normalizeModelSlug, resolveSelectableModel } from "@bigbud/shared/model";
 import { getComposerProviderState } from "../../components/chat/provider/composerProviderRegistry";
+import { getProviderDescriptor } from "../../components/chat/provider/providerDescriptors";
 import { UnifiedSettings } from "@bigbud/contracts/settings";
 import { cloneModelSelection, createModelSelection } from "./selection-helpers.models";
 import {
@@ -17,14 +19,6 @@ import {
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
 
-export type ProviderCustomModelConfig = {
-  provider: ProviderKind;
-  title: string;
-  description: string;
-  placeholder: string;
-  example: string;
-};
-
 export interface AppModelOption {
   slug: string;
   name: string;
@@ -34,69 +28,6 @@ export interface AppModelOption {
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Passed through from the server snapshot. */
   subProviderID?: string | undefined;
 }
-
-const PROVIDER_CUSTOM_MODEL_CONFIG: Record<ProviderKind, ProviderCustomModelConfig> = {
-  codex: {
-    provider: "codex",
-    title: "Codex",
-    description: "Save additional Codex model slugs for the picker and `/model` command.",
-    placeholder: "your-codex-model-slug",
-    example: "gpt-6.7-codex-ultra-preview",
-  },
-  claudeAgent: {
-    provider: "claudeAgent",
-    title: "Claude",
-    description: "Save additional Claude model slugs for the picker and `/model` command.",
-    placeholder: "your-claude-model-slug",
-    example: "claude-sonnet-5-0",
-  },
-  copilot: {
-    provider: "copilot",
-    title: "Copilot",
-    description: "Save additional GitHub Copilot model slugs for the picker and `/model` command.",
-    placeholder: "your-copilot-model-slug",
-    example: "gpt-5",
-  },
-  opencode: {
-    provider: "opencode",
-    title: "OpenCode",
-    description: "Save additional OpenCode model slugs for the picker and `/model` command.",
-    placeholder: "your-opencode-model-slug",
-    example: "claude-sonnet-4-6",
-  },
-  kilocode: {
-    provider: "kilocode",
-    title: "KiloCode",
-    description: "Save additional KiloCode model slugs for the picker and `/model` command.",
-    placeholder: "your-kilocode-model-slug",
-    example: "claude-sonnet-4-6",
-  },
-  pi: {
-    provider: "pi",
-    title: "Pi",
-    description: "Save additional Pi model slugs for the picker and `/model` command.",
-    placeholder: "your-pi-model-slug",
-    example: "anthropic/claude-sonnet-4-20250514",
-  },
-  cursor: {
-    provider: "cursor",
-    title: "Cursor",
-    description: "Save additional Cursor model slugs for the picker and `/model` command.",
-    placeholder: "your-cursor-model-slug",
-    example: "claude-sonnet-4-5",
-  },
-  devin: {
-    provider: "devin",
-    title: "Devin",
-    description: "Save additional Devin model slugs for the picker and `/model` command.",
-    placeholder: "your-devin-model-slug",
-    example: "default",
-  },
-};
-
-export const MODEL_PROVIDER_SETTINGS = Object.values(PROVIDER_CUSTOM_MODEL_CONFIG).toSorted(
-  (a, b) => a.title.localeCompare(b.title),
-);
 
 export function normalizeCustomModelSlugs(
   models: Iterable<string | null | undefined>,
@@ -149,7 +80,14 @@ export function getAppModelOptions(
       .map((model) => model.slug),
   );
 
-  const customModels = settings.providers[provider].customModels;
+  const descriptor = getProviderDescriptor(provider);
+  const providerSettings = settings.providers[provider];
+  const customModels =
+    !descriptor.catalogAuthoritative &&
+    "customModels" in providerSettings &&
+    Array.isArray(providerSettings.customModels)
+      ? providerSettings.customModels
+      : [];
   for (const slug of normalizeCustomModelSlugs(customModels, builtInModelSlugs, provider)) {
     if (seen.has(slug)) {
       continue;
@@ -163,20 +101,25 @@ export function getAppModelOptions(
     });
   }
 
-  const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
-  const selectedModelMatchesExistingName =
-    typeof trimmedSelectedModel === "string" &&
-    options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
-  if (
-    normalizedSelectedModel &&
-    !seen.has(normalizedSelectedModel) &&
-    !selectedModelMatchesExistingName
-  ) {
-    options.push({
-      slug: normalizedSelectedModel,
-      name: normalizedSelectedModel,
-      isCustom: true,
-    });
+  // Catalog-authoritative providers (such as CLIProxy) must not turn a stale
+  // persisted model into a synthetic custom option. The user must reselect
+  // from the current server catalog instead.
+  if (!descriptor.catalogAuthoritative) {
+    const normalizedSelectedModel = normalizeModelSlug(selectedModel, provider);
+    const selectedModelMatchesExistingName =
+      typeof trimmedSelectedModel === "string" &&
+      options.some((option) => option.name.toLowerCase() === trimmedSelectedModel);
+    if (
+      normalizedSelectedModel &&
+      !seen.has(normalizedSelectedModel) &&
+      !selectedModelMatchesExistingName
+    ) {
+      options.push({
+        slug: normalizedSelectedModel,
+        name: normalizedSelectedModel,
+        isCustom: true,
+      });
+    }
   }
 
   return options;
@@ -190,10 +133,18 @@ export function resolveAppModelSelection(
 ): string {
   const resolvedProvider = resolveSelectableProvider(providers, provider);
   const options = getAppModelOptions(settings, providers, resolvedProvider, selectedModel);
-  return (
-    resolveSelectableModel(resolvedProvider, selectedModel, options) ??
-    getDefaultServerModel(providers, resolvedProvider)
-  );
+  const resolvedModel = resolveSelectableModel(resolvedProvider, selectedModel, options);
+  if (resolvedModel) return resolvedModel;
+
+  // Keep an unknown catalog-backed selection visible until the user chooses a
+  // model from the refreshed catalog. Do not silently replace it with a
+  // provider default that may route to a different or arbitrary model.
+  if (getProviderDescriptor(resolvedProvider).catalogAuthoritative) {
+    const staleModel = normalizeModelSlug(selectedModel, resolvedProvider);
+    if (staleModel) return staleModel;
+  }
+
+  return getDefaultServerModel(providers, resolvedProvider);
 }
 
 export function getCustomModelOptionsByProvider(
@@ -210,56 +161,17 @@ export function getCustomModelOptionsByProvider(
     subProviderID?: string | undefined;
   }>
 > {
-  return {
-    codex: getAppModelOptions(
-      settings,
-      providers,
-      "codex",
-      selectedProvider === "codex" ? selectedModel : undefined,
-    ),
-    claudeAgent: getAppModelOptions(
-      settings,
-      providers,
-      "claudeAgent",
-      selectedProvider === "claudeAgent" ? selectedModel : undefined,
-    ),
-    copilot: getAppModelOptions(
-      settings,
-      providers,
-      "copilot",
-      selectedProvider === "copilot" ? selectedModel : undefined,
-    ),
-    opencode: getAppModelOptions(
-      settings,
-      providers,
-      "opencode",
-      selectedProvider === "opencode" ? selectedModel : undefined,
-    ),
-    kilocode: getAppModelOptions(
-      settings,
-      providers,
-      "kilocode",
-      selectedProvider === "kilocode" ? selectedModel : undefined,
-    ),
-    pi: getAppModelOptions(
-      settings,
-      providers,
-      "pi",
-      selectedProvider === "pi" ? selectedModel : undefined,
-    ),
-    cursor: getAppModelOptions(
-      settings,
-      providers,
-      "cursor",
-      selectedProvider === "cursor" ? selectedModel : undefined,
-    ),
-    devin: getAppModelOptions(
-      settings,
-      providers,
-      "devin",
-      selectedProvider === "devin" ? selectedModel : undefined,
-    ),
-  };
+  return Object.fromEntries(
+    PROVIDER_KINDS.map((provider) => [
+      provider,
+      getAppModelOptions(
+        settings,
+        providers,
+        provider,
+        selectedProvider === provider ? selectedModel : undefined,
+      ),
+    ]),
+  ) as Record<ProviderKind, ReturnType<typeof getAppModelOptions>>;
 }
 
 export function resolveAppModelSelectionState(

@@ -36,9 +36,7 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof ContextWindowM
   return {
     usage: BASE_USAGE,
     handoffAvailable: true,
-    compactAvailable: true,
     onUseHandoff: vi.fn(),
-    onCompact: vi.fn(),
     ...overrides,
   };
 }

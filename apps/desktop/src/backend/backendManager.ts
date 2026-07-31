@@ -11,13 +11,14 @@ import {
   resolveBackendCwd,
   resolveBackendEntry,
   resolveBackendLauncherPath,
+  resolveBackendNodeExecutable,
   resolvePackagedBundledAgentsDir,
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
 } from "../env/pathResolver";
 import type { RotatingFileSink } from "@bigbud/shared/logging";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
-import { resolveComputerUseRuntimeEnv } from "./cuaDriver";
+import { startCuaDriverDaemon } from "./cuaDriver.daemon";
 
 // ---------------------------------------------------------------------------
 // Windows-safe process termination
@@ -61,6 +62,8 @@ export let backendWsUrl = "";
 export let backendHost = "";
 export let restartAttempt = 0;
 export let restartTimer: ReturnType<typeof setTimeout> | null = null;
+let backendStartPending = false;
+const CUA_DAEMON_BACKEND_START_BUDGET_MS = 12_000;
 
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
 
@@ -76,6 +79,7 @@ interface BackendManagerDeps {
   readonly rootDir: string;
   readonly baseDir: string;
   readonly backendMaxOldSpaceMb: number | null;
+  readonly cuaDriverHostBundleId: string;
   readonly serverSettingsPath: string;
   readonly getIsQuitting: () => boolean;
   readonly getBackendLogSink: () => RotatingFileSink | null;
@@ -124,6 +128,32 @@ function withBackendNodeOptions(
   };
 }
 
+async function resolveComputerUseRuntimeEnv(
+  baseDir: string,
+  hostBundleId: string,
+): Promise<NodeJS.ProcessEnv> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      startCuaDriverDaemon(baseDir, hostBundleId).catch((error) => {
+        console.error(
+          `[desktop] cua-driver startup failed; continuing without it: ${String(error)}`,
+        );
+        return {};
+      }),
+      new Promise<NodeJS.ProcessEnv>((resolve) => {
+        timer = setTimeout(() => {
+          console.error("[desktop] cua-driver startup timed out; continuing without it");
+          resolve({});
+        }, CUA_DAEMON_BACKEND_START_BUDGET_MS);
+        timer.unref();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -153,12 +183,19 @@ export function scheduleBackendRestart(reason: string): void {
 
   restartTimer = setTimeout(() => {
     restartTimer = null;
-    startBackend();
+    void startBackend();
   }, delayMs);
 }
 
-export function startBackend(): void {
+export async function startBackend(): Promise<void> {
   if (!_deps) return;
+  if (_deps.getIsQuitting() || backendProcess || backendStartPending) return;
+  backendStartPending = true;
+  const computerUseRuntimeEnv = await resolveComputerUseRuntimeEnv(
+    _deps.baseDir,
+    _deps.cuaDriverHostBundleId,
+  );
+  backendStartPending = false;
   if (_deps.getIsQuitting() || backendProcess) return;
 
   const backendObservabilitySettings = readPersistedBackendObservabilitySettings(
@@ -176,8 +213,7 @@ export function startBackend(): void {
   const packagedBundledSkillsDir = resolvePackagedBundledSkillsDir();
   const packagedBundledAgentsDir = resolvePackagedBundledAgentsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
-  const computerUseRuntimeEnv = resolveComputerUseRuntimeEnv(_deps.baseDir);
-
+  const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
   // Ensure _modules → node_modules link exists for ESM resolution of
   // external native packages (e.g. @github/copilot-sdk, node-pty).
   ensureBackendModulesPath();
@@ -206,6 +242,7 @@ export function startBackend(): void {
           ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
           : {}),
         ...computerUseRuntimeEnv,
+        BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
         ELECTRON_RUN_AS_NODE: "1",
       },
       _deps.backendMaxOldSpaceMb,

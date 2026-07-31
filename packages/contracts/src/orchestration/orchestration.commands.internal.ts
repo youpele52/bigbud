@@ -6,7 +6,9 @@ import {
   MessageId,
   NonNegativeInt,
   ProjectId,
+  RuntimeTaskId,
   ThreadId,
+  TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
 import {
@@ -14,6 +16,9 @@ import {
   OrchestrationCheckpointStatus,
   OrchestrationProposedPlan,
   OrchestrationSession,
+  OrchestrationTask,
+  OrchestrationTaskFreshness,
+  OrchestrationTaskSource,
   OrchestrationThreadActivity,
 } from "./orchestration.thread";
 
@@ -45,11 +50,27 @@ const ThreadDeleteAbortCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadPinMigrateCommand = Schema.Struct({
+  type: Schema.Literal("thread.pin.migrate"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  pinnedAt: IsoDateTime,
+});
+
 const ThreadSessionSetCommand = Schema.Struct({
   type: Schema.Literal("thread.session.set"),
   commandId: CommandId,
   threadId: ThreadId,
   session: OrchestrationSession,
+  createdAt: IsoDateTime,
+});
+
+const ThreadTurnStartFailedCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn.start.failed"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
+  detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
   createdAt: IsoDateTime,
 });
 
@@ -112,6 +133,25 @@ const ThreadActivityAppendCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadTaskUpsertCommand = Schema.Struct({
+  type: Schema.Literal("thread.task.upsert"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  task: OrchestrationTask,
+  createdAt: IsoDateTime,
+});
+
+const ThreadTaskRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.task.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  taskId: RuntimeTaskId,
+  source: OrchestrationTaskSource,
+  freshness: OrchestrationTaskFreshness,
+  replacement: Schema.optional(Schema.Literals(["snapshot", "explicit"])),
+  createdAt: IsoDateTime,
+});
+
 const ThreadRevertCompleteCommand = Schema.Struct({
   type: Schema.Literal("thread.revert.complete"),
   commandId: CommandId,
@@ -125,13 +165,17 @@ export const InternalOrchestrationCommand = Schema.Union([
   ProjectDeleteAbortCommand,
   ThreadDeleteFinalizeCommand,
   ThreadDeleteAbortCommand,
+  ThreadPinMigrateCommand,
   ThreadSessionSetCommand,
+  ThreadTurnStartFailedCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantReplaceCommand,
   ThreadMessageAssistantCompleteCommand,
   ThreadProposedPlanUpsertCommand,
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
+  ThreadTaskUpsertCommand,
+  ThreadTaskRemoveCommand,
   ThreadRevertCompleteCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

@@ -25,6 +25,7 @@ import {
   completeSideChatClose,
   openSideChat,
   reconcileSideChatSnapshot,
+  toggleSideChat,
 } from "./sideChat.actions";
 
 const mainThreadId = ThreadId.makeUnsafe("main-thread");
@@ -235,6 +236,32 @@ describe("attachSidecarToComposer", () => {
     expect(useSideChatStore.getState().presentation).toBe("creating");
     resolveCreate?.();
     await firstOpen;
+  });
+
+  it("toggles an existing Sidecar between open and minimized", async () => {
+    const mainThread = useStore.getState().threads.find((thread) => thread.id === mainThreadId)!;
+    useSideChatStore.getState().show(sidecarThreadId);
+
+    await toggleSideChat(mainThread);
+    expect(useSideChatStore.getState().presentation).toBe("minimized");
+
+    await toggleSideChat(mainThread);
+    expect(useSideChatStore.getState().presentation).toBe("open");
+    expect(dispatchCommandMock).not.toHaveBeenCalled();
+  });
+
+  it("does not toggle while Sidecar creation or closing is in progress", async () => {
+    const mainThread = useStore.getState().threads.find((thread) => thread.id === mainThreadId)!;
+    useSideChatStore.getState().beginCreate(sidecarThreadId);
+
+    await toggleSideChat(mainThread);
+    expect(useSideChatStore.getState().presentation).toBe("creating");
+
+    useSideChatStore.getState().completeCreate(sidecarThreadId);
+    useSideChatStore.getState().beginClose(sidecarThreadId, "2026-07-12T20:00:00.000Z");
+    await toggleSideChat(mainThread);
+    expect(useSideChatStore.getState().presentation).toBe("closing");
+    expect(dispatchCommandMock).not.toHaveBeenCalled();
   });
 
   it("restores a failed Close from an authoritative snapshot", async () => {

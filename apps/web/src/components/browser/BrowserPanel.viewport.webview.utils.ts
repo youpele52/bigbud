@@ -148,6 +148,19 @@ export function isWebviewReady(webview: ElectronWebview): boolean {
   }
 }
 
+export function runIfReady(
+  webview: ElectronWebview | null,
+  ready: boolean,
+  action: (webview: ElectronWebview) => void,
+): void {
+  if (!webview || !ready) return;
+  try {
+    action(webview);
+  } catch {
+    // Ignore transient webview errors.
+  }
+}
+
 export function normalizeBrowserUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   try {

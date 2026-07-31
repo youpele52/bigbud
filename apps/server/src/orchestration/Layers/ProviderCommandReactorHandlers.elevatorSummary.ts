@@ -10,7 +10,7 @@ import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { sanitizeElevatorSummary } from "../../git/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
-import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.ts";
+import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 
 const THREAD_ELEVATOR_SUMMARY_INITIAL_MESSAGE_COUNT = 5;
 const THREAD_ELEVATOR_SUMMARY_REFRESH_MESSAGE_INTERVAL = 10;

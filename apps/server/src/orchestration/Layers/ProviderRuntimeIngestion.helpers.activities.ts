@@ -1,29 +1,14 @@
-import {
-  type ApprovalRequestId,
-  type OrchestrationThreadActivity,
-  type ProviderRuntimeEvent,
-  type ThreadTokenUsageSnapshot,
-  type TurnId,
-  isToolLifecycleItemType,
-} from "@bigbud/contracts";
+import type { OrchestrationThreadActivity, ProviderRuntimeEvent } from "@bigbud/contracts";
 
-interface RuntimeEventActivityHelpers {
-  readonly toTurnId: (value: TurnId | string | undefined) => TurnId | undefined;
-  readonly toApprovalRequestId: (value: string | undefined) => ApprovalRequestId | undefined;
-  readonly truncateDetail: (value: string, limit?: number) => string;
-  readonly requestKindFromCanonicalRequestType: (
-    requestType: string | undefined,
-  ) => "browser" | "command" | "file-read" | "file-change" | undefined;
-  readonly buildContextWindowActivityPayload: (
-    event: ProviderRuntimeEvent,
-  ) => ThreadTokenUsageSnapshot | undefined;
-}
+import { taskRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tasks.ts";
+import { toolingRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tooling.ts";
+import type { RuntimeEventActivityHelpers } from "./ProviderRuntimeIngestion.helpers.activities.types.ts";
 
 export function runtimeEventToActivitiesFromHelpers(
   event: ProviderRuntimeEvent,
   helpers: RuntimeEventActivityHelpers,
 ): ReadonlyArray<OrchestrationThreadActivity> {
-  const maybeSequence = (() => {
+  const sequence = (() => {
     const eventWithSequence = event as ProviderRuntimeEvent & { sessionSequence?: number };
     return eventWithSequence.sessionSequence !== undefined
       ? { sequence: eventWithSequence.sessionSequence }
@@ -32,9 +17,7 @@ export function runtimeEventToActivitiesFromHelpers(
 
   switch (event.type) {
     case "request.opened": {
-      if (event.payload.requestType === "tool_user_input") {
-        return [];
-      }
+      if (event.payload.requestType === "tool_user_input") return [];
       const requestKind = helpers.requestKindFromCanonicalRequestType(event.payload.requestType);
       return [
         {
@@ -70,15 +53,12 @@ export function runtimeEventToActivitiesFromHelpers(
               : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
     }
-
     case "request.resolved": {
-      if (event.payload.requestType === "tool_user_input") {
-        return [];
-      }
+      if (event.payload.requestType === "tool_user_input") return [];
       const requestKind = helpers.requestKindFromCanonicalRequestType(event.payload.requestType);
       return [
         {
@@ -94,11 +74,10 @@ export function runtimeEventToActivitiesFromHelpers(
             ...(event.payload.decision ? { decision: event.payload.decision } : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
     }
-
     case "runtime.error": {
       const detail =
         event.payload.detail && typeof event.payload.detail === "object"
@@ -116,12 +95,11 @@ export function runtimeEventToActivitiesFromHelpers(
             ...(detail ? { detail: helpers.truncateDetail(detail, 400) } : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
     }
-
-    case "runtime.warning": {
+    case "runtime.warning":
       return [
         {
           id: event.eventId,
@@ -134,12 +112,10 @@ export function runtimeEventToActivitiesFromHelpers(
             ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
-    }
-
-    case "turn.plan.updated": {
+    case "turn.plan.updated":
       return [
         {
           id: event.eventId,
@@ -154,12 +130,10 @@ export function runtimeEventToActivitiesFromHelpers(
               : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
-    }
-
-    case "user-input.requested": {
+    case "user-input.requested":
       return [
         {
           id: event.eventId,
@@ -172,12 +146,10 @@ export function runtimeEventToActivitiesFromHelpers(
             questions: event.payload.questions,
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
-    }
-
-    case "user-input.resolved": {
+    case "user-input.resolved":
       return [
         {
           id: event.eventId,
@@ -190,92 +162,16 @@ export function runtimeEventToActivitiesFromHelpers(
             answers: event.payload.answers,
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
-    }
-
-    case "task.started": {
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "info",
-          kind: "task.started",
-          summary:
-            event.payload.taskType === "plan"
-              ? "Plan task started"
-              : event.payload.taskType
-                ? `${event.payload.taskType} task started`
-                : "Task started",
-          payload: {
-            taskId: event.payload.taskId,
-            ...(event.payload.taskType ? { taskType: event.payload.taskType } : {}),
-            ...(event.payload.description
-              ? { detail: helpers.truncateDetail(event.payload.description) }
-              : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "task.progress": {
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "thinking",
-          kind: "task.progress",
-          summary: "Reasoning update",
-          payload: {
-            taskId: event.payload.taskId,
-            detail: helpers.truncateDetail(event.payload.summary ?? event.payload.description),
-            ...(event.payload.summary
-              ? { summary: helpers.truncateDetail(event.payload.summary) }
-              : {}),
-            ...(event.payload.lastToolName ? { lastToolName: event.payload.lastToolName } : {}),
-            ...(event.payload.usage !== undefined ? { usage: event.payload.usage } : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "task.completed": {
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: event.payload.status === "failed" ? "error" : "info",
-          kind: "task.completed",
-          summary:
-            event.payload.status === "failed"
-              ? "Task failed"
-              : event.payload.status === "stopped"
-                ? "Task stopped"
-                : "Task completed",
-          payload: {
-            taskId: event.payload.taskId,
-            status: event.payload.status,
-            ...(event.payload.summary
-              ? { detail: helpers.truncateDetail(event.payload.summary) }
-              : {}),
-            ...(event.payload.usage !== undefined ? { usage: event.payload.usage } : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "thread.state.changed": {
-      if (event.payload.state !== "compacted") {
-        return [];
-      }
-
+    case "task.started":
+    case "task.progress":
+    case "task.completed":
+    case "task.updated":
+      return taskRuntimeEventToActivities(event, helpers, sequence);
+    case "thread.state.changed":
+      if (event.payload.state !== "compacted") return [];
       return [
         {
           id: event.eventId,
@@ -288,17 +184,12 @@ export function runtimeEventToActivitiesFromHelpers(
             ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
-    }
-
     case "thread.token-usage.updated": {
       const payload = helpers.buildContextWindowActivityPayload(event);
-      if (!payload) {
-        return [];
-      }
-
+      if (!payload) return [];
       return [
         {
           id: event.eventId,
@@ -308,82 +199,20 @@ export function runtimeEventToActivitiesFromHelpers(
           summary: "Context window updated",
           payload,
           turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
+          ...sequence,
         },
       ];
     }
-
-    case "item.updated": {
-      if (!isToolLifecycleItemType(event.payload.itemType)) {
-        return [];
-      }
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "tool.updated",
-          summary: event.payload.title ?? "Tool updated",
-          payload: {
-            itemType: event.payload.itemType,
-            ...(event.payload.status ? { status: event.payload.status } : {}),
-            ...(event.payload.detail
-              ? { detail: helpers.truncateDetail(event.payload.detail) }
-              : {}),
-            ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "item.completed": {
-      if (!isToolLifecycleItemType(event.payload.itemType)) {
-        return [];
-      }
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "tool.completed",
-          summary: event.payload.title ?? "Tool",
-          payload: {
-            itemType: event.payload.itemType,
-            ...(event.payload.detail
-              ? { detail: helpers.truncateDetail(event.payload.detail) }
-              : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
-    case "item.started": {
-      if (!isToolLifecycleItemType(event.payload.itemType)) {
-        return [];
-      }
-      return [
-        {
-          id: event.eventId,
-          createdAt: event.createdAt,
-          tone: "tool",
-          kind: "tool.started",
-          summary: `${event.payload.title ?? "Tool"} started`,
-          payload: {
-            itemType: event.payload.itemType,
-            ...(event.payload.detail
-              ? { detail: helpers.truncateDetail(event.payload.detail) }
-              : {}),
-          },
-          turnId: helpers.toTurnId(event.turnId) ?? null,
-          ...maybeSequence,
-        },
-      ];
-    }
-
+    case "item.updated":
+    case "item.completed":
+    case "item.started":
+    case "hook.started":
+    case "hook.progress":
+    case "hook.completed":
+    case "tool.progress":
+    case "tool.summary":
+    case "mcp.status.updated":
+      return toolingRuntimeEventToActivities(event, helpers, sequence);
     default:
       return [];
   }

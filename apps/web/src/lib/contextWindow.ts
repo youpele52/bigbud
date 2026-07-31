@@ -88,3 +88,10 @@ export function formatContextWindowTokens(value: number | null): string {
   }
   return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
 }
+
+export function getContextWindowWarningRearmTokens(
+  usedTokens: number,
+  warningThreshold: number,
+): number {
+  return usedTokens + warningThreshold * 0.25;
+}

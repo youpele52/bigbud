@@ -16,24 +16,40 @@ export function buildPromptText(input: ProviderSendTurnInput): string {
   return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
 }
 
+export type ClaudeImageMimeType = "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+
+export function isClaudeImageMimeType(value: string): value is ClaudeImageMimeType {
+  return (
+    value === "image/gif" ||
+    value === "image/jpeg" ||
+    value === "image/png" ||
+    value === "image/webp"
+  );
+}
+
+export type ClaudeSdkUserContent = Exclude<SDKUserMessage["message"]["content"], string>;
+export type ClaudeSdkUserContentBlock =
+  ClaudeSdkUserContent extends ReadonlyArray<infer Block> ? Block : never;
+
 export function buildUserMessage(input: {
-  readonly sdkContent: Array<Record<string, unknown>>;
+  readonly sdkContent: ClaudeSdkUserContent;
 }): SDKUserMessage {
   return {
     type: "user",
+    uuid: crypto.randomUUID(),
     session_id: "",
     parent_tool_use_id: null,
     message: {
       role: "user",
-      content: input.sdkContent as unknown as SDKUserMessage["message"]["content"],
+      content: input.sdkContent,
     },
-  } as SDKUserMessage;
+  };
 }
 
 export function buildClaudeImageContentBlock(input: {
-  readonly mimeType: string;
+  readonly mimeType: ClaudeImageMimeType;
   readonly bytes: Uint8Array;
-}): Record<string, unknown> {
+}): ClaudeSdkUserContentBlock {
   return {
     type: "image",
     source: {

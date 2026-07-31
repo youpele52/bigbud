@@ -75,6 +75,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
   const displayedPlanMarkdown = planMarkdown ? stripDisplayedPlanMarkdown(planMarkdown) : null;
   const planTitle = planMarkdown ? proposedPlanTitle(planMarkdown) : null;
   const cardTimestamp = activePlan?.createdAt ?? activeProposedPlan?.createdAt ?? null;
+  const stepKeyCounts = new Map<string, number>();
 
   const handleCopyPlan = useCallback(() => {
     if (!planMarkdown) return;
@@ -182,35 +183,40 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
           {activePlan && activePlan.steps.length > 0 ? (
             <div className="space-y-1.5">
               <p className="mb-2 text-sm font-medium text-foreground/90">Steps</p>
-              {activePlan.steps.map((step) => (
-                <div
-                  key={`${step.status}:${step.step}`}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 transition-colors duration-200",
-                    step.status === "inProgress" &&
-                      "border-border/45 bg-accent/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
-                    step.status === "completed" &&
-                      "border-success/14 bg-muted/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
-                    step.status !== "inProgress" &&
-                      step.status !== "completed" &&
-                      "border-border/35 bg-transparent",
-                  )}
-                >
-                  {stepStatusIcon(step.status)}
-                  <p
+              {activePlan.steps.map((step) => {
+                const stepKey = `${step.status}:${step.step}`;
+                const occurrence = stepKeyCounts.get(stepKey) ?? 0;
+                stepKeyCounts.set(stepKey, occurrence + 1);
+                return (
+                  <div
+                    key={`${stepKey}:${occurrence}`}
                     className={cn(
-                      "text-[13px] leading-5",
-                      step.status === "completed"
-                        ? "text-muted-foreground/52 line-through decoration-muted-foreground/20"
-                        : step.status === "inProgress"
-                          ? "font-medium text-foreground/92"
-                          : "text-muted-foreground/68",
+                      "flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 transition-colors duration-200",
+                      step.status === "inProgress" &&
+                        "border-border/45 bg-accent/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+                      step.status === "completed" &&
+                        "border-success/14 bg-muted/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]",
+                      step.status !== "inProgress" &&
+                        step.status !== "completed" &&
+                        "border-border/35 bg-transparent",
                     )}
                   >
-                    {step.step}
-                  </p>
-                </div>
-              ))}
+                    {stepStatusIcon(step.status)}
+                    <p
+                      className={cn(
+                        "text-[13px] leading-5",
+                        step.status === "completed"
+                          ? "text-muted-foreground/52 line-through decoration-muted-foreground/20"
+                          : step.status === "inProgress"
+                            ? "font-medium text-foreground/92"
+                            : "text-muted-foreground/68",
+                      )}
+                    >
+                      {step.step}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           ) : null}
 

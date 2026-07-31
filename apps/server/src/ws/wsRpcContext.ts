@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import {
   CommandId,
   EventId,
@@ -18,8 +18,12 @@ import { Open, resolveAvailableEditors } from "../utils/open";
 import { normalizeDispatchCommand } from "../orchestration/Normalizer";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
+import { ProjectionCatalogQuery } from "../orchestration/Services/ProjectionCatalogQuery";
+import { ProjectionOperationalStateQuery } from "../orchestration/Services/ProjectionOperationalStateQuery.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
+import { CliProxyLifecycle } from "../provider/Services/CliProxy/Lifecycle.ts";
+import { activateCliProxyRuntime } from "../provider/Layers/CliProxy/RuntimeConfig.ts";
 import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
@@ -41,8 +45,53 @@ import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts"
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 
+class CliProxyActivationEffectError extends Schema.TaggedErrorClass<CliProxyActivationEffectError>()(
+  "CliProxyActivationEffectError",
+  {
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
+function toError(cause: unknown): CliProxyActivationEffectError {
+  return Schema.is(CliProxyActivationEffectError)(cause)
+    ? cause
+    : new CliProxyActivationEffectError({
+        detail: cause instanceof Error ? cause.message : "CLIProxyAPI activation failed.",
+        cause,
+      });
+}
+
+export function makeCoalescedPromiseEffect<A>(operation: () => Effect.Effect<A, Error>) {
+  let inFlight: Promise<A> | undefined;
+  return () => {
+    if (inFlight) {
+      return Effect.tryPromise({
+        try: () => inFlight!,
+        catch: toError,
+      });
+    }
+    const promise = Effect.runPromise(operation()).finally(() => {
+      inFlight = undefined;
+    });
+    inFlight = promise;
+    return Effect.tryPromise({
+      try: () => promise,
+      catch: toError,
+    });
+  };
+}
+
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const projectionCatalogQuery = yield* ProjectionCatalogQuery;
+  const projectionOperationalStateQuery = yield* Effect.serviceOption(
+    ProjectionOperationalStateQuery,
+  );
   const orchestrationEngine = yield* OrchestrationEngineService;
   const checkpointDiffQuery = yield* CheckpointDiffQuery;
   const keybindings = yield* Keybindings;
@@ -58,6 +107,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
+  const cliProxyLifecycleOption = yield* Effect.serviceOption(CliProxyLifecycle);
   const startup = yield* ServerRuntimeStartup;
   const workspaceEntries = yield* WorkspaceEntries;
   const workspaceFileSystem = yield* WorkspaceFileSystem;
@@ -182,6 +232,20 @@ export const makeWsRpcContext = Effect.gen(function* () {
     toDispatchCommandError,
   });
 
+  const activateCliProxy = makeCoalescedPromiseEffect(() =>
+    Effect.gen(function* () {
+      const settings = yield* serverSettings.getSettings;
+      if (Option.isNone(cliProxyLifecycleOption)) {
+        return yield* Effect.fail(new Error("CLIProxyAPI is not available in this server build."));
+      }
+      yield* Effect.tryPromise({
+        try: () => activateCliProxyRuntime({ settings, lifecycle: cliProxyLifecycleOption.value }),
+        catch: toError,
+      });
+      return yield* providerRegistry.refresh("cliProxy");
+    }).pipe(Effect.mapError(toError)),
+  );
+
   const loadServerConfig = Effect.gen(function* () {
     const keybindingsConfig = yield* keybindings.loadConfigState;
     const providers = yield* providerRegistry.getProviders;
@@ -222,6 +286,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
   });
 
   return {
+    activateCliProxy,
     assertLocalGitExecutionTarget,
     automationScheduleRepository,
     checkpointDiffQuery,
@@ -246,10 +311,13 @@ export const makeWsRpcContext = Effect.gen(function* () {
     projectionKanban,
     projectionThreadRepository,
     projectionSnapshotQuery,
+    projectionCatalogQuery,
+    projectionOperationalStateQuery,
     providerRegistry,
     providerService,
     refreshGitStatus,
     schedulerReactor,
+    serverCommandId,
     serverSettings,
     startup,
     terminalManager,

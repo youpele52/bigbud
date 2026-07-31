@@ -7,6 +7,7 @@ import { useChatViewInteractions } from "./chat-view/chat-view-interactions.hook
 import { useChatViewRuntime } from "./chat-view/chat-view-runtime.hooks";
 import { useChatViewThreadDerivedState } from "./chat-view/chat-view-thread-derived.hooks";
 import { useChatViewTimelineState } from "./chat-view/chat-view-timeline.hooks";
+import { usePlanCardToggleShortcut } from "./chat-view/ChatViewPlanCardShortcut";
 import type { ChatViewProps } from "./chat-view/shared";
 
 export default function ChatView({ threadId }: ChatViewProps) {
@@ -24,6 +25,12 @@ export default function ChatView({ threadId }: ChatViewProps) {
   });
 
   useChatViewEffects({ base, composer, thread, runtime });
+  usePlanCardToggleShortcut({
+    enabled: base.isServerThread && base.activeThread !== undefined,
+    keybindings: composer.keybindings,
+    terminalOpen: base.terminalState.terminalOpen,
+    togglePlanCard: runtime.togglePlanCard,
+  });
 
   if (!base.activeThread) {
     return <ChatViewEmptyState />;

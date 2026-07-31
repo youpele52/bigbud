@@ -1,7 +1,6 @@
 import { isBuiltInChatsProject } from "@bigbud/contracts";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { collapseExpandedComposerCursor, detectComposerTrigger } from "~/logic/composer";
 
 import { ContentPanelHeader } from "../../../layout/ContentPanelHeader";
 import { ChatHeader } from "../../common/ChatHeader";
@@ -64,8 +63,6 @@ export function ChatViewContent({
   } = useChatViewContentHandlers({ base, runtime, thread });
 
   const handoffAvailable = base.isServerThread;
-  const compactAvailable = composer.supportsCompact;
-
   const onUseHandoffFromBanner = useCallback(() => {
     const activeThread = base.activeThread;
     if (!activeThread) {
@@ -77,14 +74,6 @@ export function ChatViewContent({
     );
   }, [base.activeThread, interactions]);
 
-  const onCompactFromBanner = useCallback(() => {
-    const nextPrompt = "/compact";
-    base.promptRef.current = nextPrompt;
-    base.setPrompt(nextPrompt);
-    base.setComposerCursor(collapseExpandedComposerCursor(nextPrompt, nextPrompt.length));
-    base.setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
-    interactions.onSend();
-  }, [base, interactions]);
   const projectWorkspaceExecutionTargetId = base.activeProject
     ? resolveWorkspaceExecutionTargetId(base.activeProject)
     : undefined;
@@ -159,11 +148,10 @@ export function ChatViewContent({
 
       <ProviderStatusBanner status={composer.activeProviderStatus} />
       <ContextWindowWarningBanner
+        threadId={base.activeThread!.id}
         usage={thread.activeContextWindow}
         handoffAvailable={handoffAvailable}
-        compactAvailable={compactAvailable}
         onUseHandoff={onUseHandoffFromBanner}
-        onCompact={onCompactFromBanner}
       />
       <ThreadErrorBanner
         error={base.activeThread!.error}

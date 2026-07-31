@@ -144,6 +144,7 @@ describe("ClaudeAdapterLive", () => {
             },
           ],
           toolUseID: "tool-use-1",
+          requestId: "sdk-request-tool-use-1",
         },
       );
 
@@ -158,9 +159,13 @@ describe("ClaudeAdapterLive", () => {
       }
       assert.deepEqual(requested.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-use-1"),
+        providerRequestId: "sdk-request-tool-use-1",
       });
       const runtimeRequestId = requested.value.requestId;
       assert.equal(typeof runtimeRequestId, "string");
+      assert.equal(runtimeRequestId, "sdk-request-tool-use-1");
+      assert.equal(requested.value.payload.sessionApprovalAvailable, true);
+      assert.equal(requested.value.payload.sessionApprovalLabel, "Allow for this session");
       if (runtimeRequestId === undefined) {
         return;
       }
@@ -184,8 +189,14 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(resolved.value.payload.decision, "accept");
       assert.deepEqual(resolved.value.providerRefs, {
         providerItemId: ProviderItemId.makeUnsafe("tool-use-1"),
+        providerRequestId: "sdk-request-tool-use-1",
       });
 
+      yield* adapter.respondToRequest(
+        session.threadId,
+        ApprovalRequestId.makeUnsafe(runtimeRequestId),
+        "accept",
+      );
       const permissionResult = yield* Effect.promise(() => permissionPromise);
       assert.equal((permissionResult as PermissionResult).behavior, "allow");
     }).pipe(
@@ -220,6 +231,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-agent-1",
+          requestId: "sdk-request-agent-1",
         },
       );
 
@@ -244,6 +256,7 @@ describe("ClaudeAdapterLive", () => {
         {
           signal: new AbortController().signal,
           toolUseID: "tool-grep-approval-1",
+          requestId: "sdk-request-grep-1",
         },
       );
 

@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Searchbar } from "../../ui/Searchbar";
 import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../ui/menu";
 import { Spinner } from "../../ui/spinner";
+import { Button } from "../../ui/button";
+import { LoaderIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
@@ -22,6 +24,7 @@ export function ModelList({
   recentOptions,
   loading = false,
   unavailableMessage,
+  activationAction,
   onSelect,
   onBack,
   searchbarClassName,
@@ -35,6 +38,7 @@ export function ModelList({
   recentOptions?: ReadonlyArray<ModelOption> | undefined;
   loading?: boolean;
   unavailableMessage?: string | undefined;
+  activationAction?: { readonly busy: boolean; readonly onClick: () => void } | undefined;
   onSelect: (value: string) => void;
   onBack?: () => void;
   searchbarClassName?: string | undefined;
@@ -150,8 +154,20 @@ export function ModelList({
             </div>
           ) : null}
           {showUnavailableState ? (
-            <div className="px-3 py-4 text-center text-sm text-muted-foreground/70">
-              {unavailableMessage}
+            <div className="flex flex-col items-center gap-2 px-3 py-4 text-center text-sm text-muted-foreground/70">
+              <span>{unavailableMessage}</span>
+              {activationAction ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  disabled={activationAction.busy}
+                  onClick={activationAction.onClick}
+                >
+                  {activationAction.busy ? <LoaderIcon className="size-3 animate-spin" /> : null}
+                  {activationAction.busy ? "Starting..." : "Start / retry"}
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {showRecentOptions && recentOptions ? (

@@ -1,10 +1,10 @@
-import { CommandId, EventId, type ProviderKind, type TurnId } from "@bigbud/contracts";
+import { CommandId, EventId, type TurnId } from "@bigbud/contracts";
 import { makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 import { createHash } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
 import { Effect, FileSystem, Layer, Path, Stream } from "effect";
 
-import { reviewAndUpdateMemory, type SkillReviewContext } from "../../learning/LearningReview.ts";
+import { reviewAndUpdateMemory } from "../../learning/LearningReview.ts";
 import { applyValidatedSkillPatch } from "../../learning/LearningValidation.ts";
 import { resolveSkillMutationPolicy } from "../../learning/SkillMutationPolicy.ts";
 import { MemoryStore } from "../../learning/Services/MemoryStore.ts";
@@ -13,21 +13,12 @@ import type { LearningJob } from "../../persistence/Services/LearningJobs.ts";
 import { SkillChangeProposalRepository } from "../../persistence/Services/SkillChangeProposals.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { supportsProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
-import {
-  countFinalizedUserMessages,
-  resolveLearningModelSelection,
-  shouldScheduleMemoryReview,
-} from "./LearningReactor.logic.ts";
-
-function resolveSkillName(sourceUserMessage: string): string | null {
-  return (
-    /(?:@skill::?|\/skills?\s+)([^\s@]+)/i.exec(sourceUserMessage)?.[1]?.trim().toLowerCase() ??
-    null
-  );
-}
+import * as LearningReactorLogic from "./LearningReactor.logic.ts";
+import { makeResolveSkillContext, resolveSkillName } from "./LearningReactor.skill.ts";
 
 const makeLearningReactor = Effect.gen(function* () {
   const providerService = yield* ProviderService;
@@ -42,57 +33,20 @@ const makeLearningReactor = Effect.gen(function* () {
   const turnModels = new Map<string, string>();
   const activeJobs = new Set<string>();
 
-  const resolveSkillContext = (sourceUserMessage: string, provider: ProviderKind) =>
-    Effect.gen(function* () {
-      const name = resolveSkillName(sourceUserMessage);
-      if (!name) return null;
-      const catalog = yield* discovery.getCatalog;
-      const target = catalog.skills.find(
-        (skill) =>
-          skill.name.toLowerCase() === name &&
-          skill.provider === provider &&
-          (skill.source === "user" || skill.source === "project") &&
-          resolveSkillMutationPolicy(skill) === "approval-required" &&
-          skill.sourcePath,
-      );
-      if (!target?.sourcePath) return null;
-      const content = yield* fs
-        .readFileString(target.sourcePath)
-        .pipe(Effect.orElseSucceed(() => ""));
-      if (!content) return null;
-      const skillsRoot = path.dirname(path.dirname(target.sourcePath));
-      const examples = yield* Effect.forEach(
-        catalog.skills
-          .filter(
-            (skill) =>
-              skill.provider === target.provider &&
-              skill.source === target.source &&
-              skill.sourcePath &&
-              skill.sourcePath !== target.sourcePath &&
-              path.dirname(path.dirname(skill.sourcePath)) === skillsRoot,
-          )
-          .slice(0, 2),
-        (skill) =>
-          fs.readFileString(skill.sourcePath!).pipe(
-            Effect.map((exampleContent) => ({ path: skill.sourcePath!, content: exampleContent })),
-            Effect.orElseSucceed(() => null),
-          ),
-      );
-      return {
-        target,
-        context: {
-          path: target.sourcePath,
-          content,
-          sameProviderExamples: examples.filter(
-            (example): example is NonNullable<typeof example> => example !== null,
-          ),
-        } satisfies SkillReviewContext,
-      };
-    });
+  const resolveSkillContext = makeResolveSkillContext({ discovery, fs, path });
 
   const processJob = Effect.fn("LearningReactor.processJob")(function* (job: LearningJob) {
     if (activeJobs.has(job.jobId)) return;
     activeJobs.add(job.jobId);
+    if (!supportsProviderWorkload(job.provider, "learning")) {
+      yield* learningJobs.setState({
+        jobId: job.jobId,
+        state: "requires-reselection",
+        updatedAt: new Date().toISOString(),
+      });
+      activeJobs.delete(job.jobId);
+      return;
+    }
     yield* learningJobs.setState({
       jobId: job.jobId,
       state: "reviewing",
@@ -265,11 +219,11 @@ const makeLearningReactor = Effect.gen(function* () {
           const sourceUserMessage = thread.messages.find(
             (message) => message.turnId === turnId && message.role === "user",
           )?.text;
-          const userMessageCount = countFinalizedUserMessages(thread.messages);
+          const userMessageCount = LearningReactorLogic.countFinalizedUserMessages(thread.messages);
           const latestMemoryUserMessageCount = yield* learningJobs.getLatestMemoryUserMessageCount({
             threadId: thread.id,
           });
-          const memoryUserMessageCount = shouldScheduleMemoryReview({
+          const memoryUserMessageCount = LearningReactorLogic.shouldScheduleMemoryReview({
             userMessageCount,
             latestMemoryUserMessageCount,
           })
@@ -277,6 +231,7 @@ const makeLearningReactor = Effect.gen(function* () {
             : null;
           if (memoryUserMessageCount === null && !sourceUserMessage?.trim()) return;
           if (memoryUserMessageCount === null && !resolveSkillName(sourceUserMessage ?? "")) return;
+          if (!supportsProviderWorkload(event.provider, "learning")) return;
 
           const job = {
             jobId: `learning:${event.threadId}:${event.turnId}`,
@@ -284,7 +239,7 @@ const makeLearningReactor = Effect.gen(function* () {
             turnId,
             provider: event.provider,
             model,
-            modelSelection: resolveLearningModelSelection({
+            modelSelection: LearningReactorLogic.resolveLearningModelSelection({
               provider: event.provider,
               model,
               selected: thread.modelSelection,
@@ -393,7 +348,20 @@ const makeLearningReactor = Effect.gen(function* () {
         }).pipe(Effect.as([] as ReadonlyArray<LearningJob>)),
       ),
     );
-    yield* Effect.forEach(queued, worker.enqueue, { concurrency: 1 });
+    yield* Effect.forEach(
+      queued,
+      (job) =>
+        supportsProviderWorkload(job.provider, "learning")
+          ? worker.enqueue(job)
+          : learningJobs
+              .setState({
+                jobId: job.jobId,
+                state: "requires-reselection",
+                updatedAt: new Date().toISOString(),
+              })
+              .pipe(Effect.catch(() => Effect.void)),
+      { concurrency: 1 },
+    );
   });
 
   return { start } satisfies LearningReactorShape;

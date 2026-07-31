@@ -204,7 +204,6 @@ bun dist:desktop:win         # Windows NSIS installer
 
 ## Status
 
-This is currently in beta. Expect rough edges and some breaking changes.
-Bugs are few and fixed quickly because bigbud is actively used and maintained. See the [changelog](https://bigbud.app/changelog/) for recent updates.
+bigbud is actively used and maintained. See the [changelog](https://bigbud.app/changelog/) for recent updates.
 
 We're not accepting contributions yet. See [CONTRIBUTING.md](./CONTRIBUTING.md) for details.

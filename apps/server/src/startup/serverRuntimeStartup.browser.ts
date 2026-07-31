@@ -1,5 +1,10 @@
 import { Effect } from "effect";
 
+import {
+  serverStartupPhaseDuration,
+  serverStartupPhasesTotal,
+  withMetrics,
+} from "../observability/Metrics.ts";
 import { Open } from "../utils/open";
 import { ServerConfig } from "./config";
 
@@ -33,6 +38,11 @@ export const maybeOpenBrowser = Effect.gen(function* () {
 
 export const runStartupPhase = <A, E, R>(phase: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
+    withMetrics({
+      counter: serverStartupPhasesTotal,
+      timer: serverStartupPhaseDuration,
+      attributes: { phase },
+    }),
     Effect.annotateSpans({ "startup.phase": phase }),
     Effect.withSpan(`server.startup.${phase}`),
   );

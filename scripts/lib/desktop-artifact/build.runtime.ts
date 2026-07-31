@@ -21,6 +21,7 @@ import {
 // because they are never loaded in the Electron/Node.js desktop runtime.
 const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
   "node-pty",
+  "@github/copilot",
   "@github/copilot-sdk",
   "@earendil-works/pi-coding-agent",
 ]);

@@ -15,6 +15,37 @@ import {
 
 const routing = makeProviderServiceLayer();
 routing.layer("ProviderServiceLive routing", (it) => {
+  it.effect("routes by model selection when the top-level provider is omitted", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const priorCliProxyStarts = routing.cliProxy.startSession.mock.calls.length;
+      const priorCodexStarts = routing.codex.startSession.mock.calls.length;
+      const priorCliProxyTurns = routing.cliProxy.sendTurn.mock.calls.length;
+      const priorCodexTurns = routing.codex.sendTurn.mock.calls.length;
+
+      const session = yield* provider.startSession(asThreadId("thread-cli-proxy"), {
+        threadId: asThreadId("thread-cli-proxy"),
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+      });
+
+      assert.equal(session.provider, "cliProxy");
+      assert.equal(routing.cliProxy.startSession.mock.calls.length, priorCliProxyStarts + 1);
+      assert.equal(routing.codex.startSession.mock.calls.length, priorCodexStarts);
+
+      yield* provider.sendTurn({
+        threadId: session.threadId,
+        input: "follow-up",
+        attachments: [],
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+      });
+
+      assert.equal(routing.cliProxy.sendTurn.mock.calls.length, priorCliProxyTurns + 1);
+      assert.equal(routing.codex.sendTurn.mock.calls.length, priorCodexTurns);
+      yield* provider.stopSession({ threadId: session.threadId });
+    }),
+  );
+
   it.effect("routes provider operations and rollback conversation", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;

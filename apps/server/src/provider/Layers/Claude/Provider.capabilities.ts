@@ -1,5 +1,6 @@
 import type {
   ModelCapabilities,
+  ServerProviderModelDiscovery,
   ServerProviderModel,
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
@@ -21,18 +22,43 @@ export const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = {
   promptInjectedEffortLevels: ["ultrathink"],
 };
 
+export function classifyClaudeModelDiscovery(input: {
+  readonly models: unknown;
+  readonly durationMs: number;
+  readonly source?: string;
+  readonly version?: string;
+}): ServerProviderModelDiscovery {
+  const status =
+    input.models === undefined
+      ? "unavailable"
+      : !Array.isArray(input.models)
+        ? "invalid"
+        : input.models.length === 0
+          ? "empty"
+          : "live";
+  return {
+    status,
+    source: input.source ?? "sdk",
+    ...(input.version ? { version: input.version } : {}),
+    durationMs: Math.max(0, Math.min(Math.trunc(input.durationMs), 60_000)),
+  };
+}
+
 const CLAUDE_LEGACY_MODEL_ALIASES = new Map<string, string>([
   ["default", "default"],
   ["sonnet", "default"],
+  ["sonnet-4.6", "default"],
   ["claude-sonnet-4.6", "default"],
   ["claude-sonnet-4-6", "default"],
   ["claude-sonnet-4-6-20251117", "default"],
   ["opus", "opus"],
+  ["opus-4.6", "opus"],
   ["claude-opus-4.6", "opus"],
   ["claude-opus-4-6", "opus"],
   ["claude-opus-4-6-20251117", "opus"],
   ["claude-opus-4-5", "opus"],
   ["haiku", "haiku"],
+  ["haiku-4.5", "haiku"],
   ["claude-haiku-4.5", "haiku"],
   ["claude-haiku-4-5", "haiku"],
   ["claude-haiku-4-5-20251001", "haiku"],
@@ -158,6 +184,48 @@ export function mapClaudeModel(model: ClaudeModelInfo): ServerProviderModel {
   };
 }
 
+export function dedupeClaudeModels(
+  models: ReadonlyArray<ServerProviderModel>,
+): ReadonlyArray<ServerProviderModel> {
+  const seen = new Set<string>();
+  return models.filter((model) => {
+    const key = model.slug.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function resolveClaudeModelDiscovery(input: {
+  readonly models: unknown;
+  readonly durationMs: number;
+}): {
+  readonly models: ReadonlyArray<ServerProviderModel>;
+  readonly modelDiscovery: ServerProviderModelDiscovery;
+} {
+  const validModels = Array.isArray(input.models)
+    ? input.models.every(
+        (model) =>
+          model !== null &&
+          typeof model === "object" &&
+          typeof (model as { value?: unknown }).value === "string" &&
+          typeof (model as { displayName?: unknown }).displayName === "string",
+      )
+      ? (input.models as ReadonlyArray<ClaudeModelInfo>)
+      : undefined
+    : undefined;
+  const classifiedModels =
+    Array.isArray(input.models) && validModels === undefined ? "invalid" : input.models;
+  return {
+    models: validModels ? dedupeClaudeModels(validModels.map(mapClaudeModel)) : [],
+    modelDiscovery: classifyClaudeModelDiscovery({
+      models: classifiedModels,
+      durationMs: input.durationMs,
+      version: "0.3.219",
+    }),
+  };
+}
+
 const CAPABILITIES_PROBE_TIMEOUT_MS = 8_000;
 
 function nonEmptyProbeString(value: string | undefined | null): string | undefined {
@@ -252,11 +320,16 @@ export const probeClaudeCapabilities = (binaryPath: string) =>
     });
 
     try {
+      const discoveryStartedAt = Date.now();
       const init = await queryRuntime.initializationResult();
+      const modelDiscovery = resolveClaudeModelDiscovery({
+        models: init.models,
+        durationMs: Date.now() - discoveryStartedAt,
+      });
       return {
         subscriptionType: init.account?.subscriptionType,
         slashCommands: parseClaudeInitializationCommands(init.commands),
-        models: (init.models ?? []).map(mapClaudeModel),
+        ...modelDiscovery,
       };
     } finally {
       abortController.abort();

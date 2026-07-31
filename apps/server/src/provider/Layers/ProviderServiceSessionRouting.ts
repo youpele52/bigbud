@@ -5,7 +5,7 @@
  * `makeRecoverSessionForThread` and `makeResolveRoutableSession` are curried
  * factory functions that accept the services they depend on.
  */
-import { type ProviderSession, ThreadId } from "@bigbud/contracts";
+import { type ProviderKind, type ProviderSession, ThreadId } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
 import {
@@ -31,6 +31,7 @@ import {
   supportsProviderExecutionTarget,
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
+import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
 
 export function makeRecoverSessionForThread(
   registry: ProviderAdapterRegistryShape,
@@ -45,6 +46,7 @@ export function makeRecoverSessionForThread(
     },
   ) => Effect.Effect<void, ProviderServiceError>,
   analytics: AnalyticsServiceShape,
+  getProviderCapabilities: ProviderCapabilitiesResolver,
 ) {
   return Effect.fn("recoverSessionForThread")(function* (input: {
     readonly binding: ProviderRuntimeBinding;
@@ -83,6 +85,13 @@ export function makeRecoverSessionForThread(
         }
       }
 
+      if (adapter.capabilities.sessionRecovery === "unsupported") {
+        return yield* toValidationError(
+          input.operation,
+          `Provider '${input.binding.provider}' does not support session recovery.`,
+        );
+      }
+
       if (!hasResumeCursor) {
         return yield* toValidationError(
           input.operation,
@@ -98,10 +107,13 @@ export function makeRecoverSessionForThread(
         executionTargetId: input.binding.executionTargetId,
       });
       if (
-        !supportsProviderExecutionTarget({
-          provider: input.binding.provider,
-          executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
-        })
+        !supportsProviderExecutionTarget(
+          {
+            provider: input.binding.provider,
+            executionTargetId: executionTargets.providerRuntimeExecutionTargetId,
+          },
+          getProviderCapabilities,
+        )
       ) {
         return yield* toValidationError(
           input.operation,
@@ -162,6 +174,7 @@ export function makeResolveRoutableSession(
     },
     ProviderServiceError
   >,
+  isProviderComposed: (provider: ProviderKind) => boolean,
 ) {
   return Effect.fn("resolveRoutableSession")(function* (input: {
     readonly threadId: ThreadId;
@@ -181,6 +194,12 @@ export function makeResolveRoutableSession(
       return yield* toValidationError(
         input.operation,
         `Cannot route thread '${input.threadId}' because no persisted provider binding exists.`,
+      );
+    }
+    if (!isProviderComposed(binding.provider)) {
+      return yield* toValidationError(
+        input.operation,
+        `Provider '${binding.provider}' is unavailable in this bigbud build.`,
       );
     }
     const adapterRaw = yield* registry

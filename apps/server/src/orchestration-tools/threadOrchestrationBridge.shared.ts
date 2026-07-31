@@ -24,8 +24,20 @@ export const RENAME_THREAD_TOOL_DESCRIPTION = "Rename the current BigBud thread.
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 
+export const CREATE_THREAD_TOOL_DESCRIPTION =
+  "Create a standalone bigbud thread in a project and optionally watch it for completion.";
+
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
+
+export const LIST_PINNED_THREADS_TOOL_DESCRIPTION =
+  "List pinned bigbud threads globally across all projects. This is read-only.";
+
+export const PIN_THREAD_TOOL_DESCRIPTION =
+  "Pin a bigbud thread globally. Only use this when the user explicitly asks to pin a thread.";
+
+export const UNPIN_THREAD_TOOL_DESCRIPTION =
+  "Unpin a bigbud thread globally. Only use this when the user explicitly asks to unpin a thread.";
 
 export const BROWSER_TOOL_DESCRIPTION =
   'Control bigbud\'s built-in browsers. Decide whether the visible browser or background browser is better for each task: use target "visible" when the user wants to see or interact with the page in the bigbud desktop app, and target "background" for unattended research or parallel browsing. target "auto" reuses an existing visible agent tab when one exists, otherwise uses the background browser. Use get_page_text to read page content; do not attempt script execution or unsupported actions. Use close_tab only when the user explicitly asks to close that tab; it may interrupt another agent currently using the tab. Normal task completion must release control instead of closing tabs. This capability is part of bigbud and does not require desktop automation permission. Use computer_use only when the user explicitly requests an external browser or another native app.';

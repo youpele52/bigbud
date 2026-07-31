@@ -16,6 +16,7 @@ export {
   ProjectionProjectLookupRowSchema,
   ProjectionStateDbRowSchema,
   ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadTaskDbRowSchema,
   ProjectionThreadCheckpointContextThreadRowSchema,
   ProjectionThreadDbRowSchema,
   ProjectionThreadIdLookupRowSchema,
@@ -35,6 +36,7 @@ import {
   ProjectionProjectLookupRowSchema,
   ProjectionStateDbRowSchema,
   ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadTaskDbRowSchema,
   ProjectionThreadCheckpointContextThreadRowSchema,
   ProjectionThreadDbRowSchema,
   ProjectionThreadIdLookupRowSchema,
@@ -96,13 +98,18 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
@@ -173,6 +180,17 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           created_at ASC,
           activity_id ASC
       `,
+  });
+
+  const listThreadTaskRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectionThreadTaskDbRowSchema,
+    execute: () => sql`
+      SELECT task_id AS "taskId", thread_id AS "threadId", task_json AS "task",
+             created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM projection_thread_tasks
+      ORDER BY thread_id ASC, created_at ASC, task_id ASC
+    `,
   });
 
   const listThreadSessionRows = SqlSchema.findAll({
@@ -363,6 +381,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
     listThreadMessageRows,
     listThreadProposedPlanRows,
     listThreadActivityRows,
+    listThreadTaskRows,
     listThreadSessionRows,
     listCheckpointRows,
     listLatestTurnRows,

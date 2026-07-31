@@ -25,6 +25,7 @@ import {
   BUILT_IN_MODELS,
   DEFAULT_CLAUDE_MODEL_CAPABILITIES,
   dedupeSlashCommands,
+  dedupeClaudeModels,
   getClaudeModelCapabilities,
   probeClaudeCapabilities,
 } from "./Provider.capabilities";
@@ -56,6 +57,7 @@ type ClaudeCapabilitySnapshot = Readonly<{
   subscriptionType: string | undefined;
   slashCommands: ReadonlyArray<ServerProviderSlashCommand>;
   models: ReadonlyArray<ServerProviderModel>;
+  modelDiscovery?: import("@bigbud/contracts").ServerProviderModelDiscovery;
 }>;
 
 function isClaudeCapabilitySnapshot(value: unknown): value is ClaudeCapabilitySnapshot {
@@ -79,11 +81,13 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     Effect.map((settings) => settings.providers.claudeAgent),
   );
   const checkedAt = new Date().toISOString();
-  const fallbackModels = providerModelsFromSettings(
-    BUILT_IN_MODELS,
-    PROVIDER,
-    claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+  const fallbackModels = dedupeClaudeModels(
+    providerModelsFromSettings(
+      BUILT_IN_MODELS,
+      PROVIDER,
+      claudeSettings.customModels,
+      DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+    ),
   );
 
   if (!claudeSettings.enabled) {
@@ -92,6 +96,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: false,
       checkedAt,
       models: fallbackModels,
+      modelDiscovery: {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       probe: {
         installed: false,
         version: null,
@@ -114,6 +124,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: claudeSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      modelDiscovery: {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       probe: {
         installed: !isCommandMissingCause(error),
         version: null,
@@ -132,6 +148,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: claudeSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      modelDiscovery: {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       probe: {
         installed: true,
         version: null,
@@ -152,6 +174,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: claudeSettings.enabled,
       checkedAt,
       models: fallbackModels,
+      modelDiscovery: {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       probe: {
         installed: true,
         version: parsedVersion,
@@ -182,7 +210,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     [];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
   const resolvedModels = runtimeCapabilities?.models?.length
-    ? [
+    ? dedupeClaudeModels([
         ...runtimeCapabilities.models,
         ...providerModelsFromSettings(
           [],
@@ -190,7 +218,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
           claudeSettings.customModels,
           DEFAULT_CLAUDE_MODEL_CAPABILITIES,
         ),
-      ]
+      ])
     : fallbackModels;
 
   // ── Auth check + subscription detection ────────────────────────────
@@ -221,6 +249,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: claudeSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       slashCommands: dedupedSlashCommands,
       probe: {
         installed: true,
@@ -241,6 +275,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
       enabled: claudeSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
+        status: "unavailable",
+        source: "fallback",
+        version: "0.3.219",
+        durationMs: 0,
+      },
       slashCommands: dedupedSlashCommands,
       probe: {
         installed: true,
@@ -259,6 +299,12 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     enabled: claudeSettings.enabled,
     checkedAt,
     models: resolvedModels,
+    modelDiscovery: runtimeCapabilities?.modelDiscovery ?? {
+      status: "unavailable",
+      source: "fallback",
+      version: "0.3.219",
+      durationMs: 0,
+    },
     slashCommands: dedupedSlashCommands,
     probe: {
       installed: true,

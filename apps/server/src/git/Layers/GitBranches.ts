@@ -24,6 +24,7 @@ export interface GitBranchOps {
   checkoutBranch: GitCoreShape["checkoutBranch"];
   createBranch: GitCoreShape["createBranch"];
   renameBranch: GitCoreShape["renameBranch"];
+  deleteBranch: GitCoreShape["deleteBranch"];
   setBranchUpstream: GitCoreShape["setBranchUpstream"];
   listLocalBranchNames: GitCoreShape["listLocalBranchNames"];
   initRepo: GitCoreShape["initRepo"];
@@ -155,7 +156,6 @@ export function makeGitBranchOps(
         return { branch: input.newBranch };
       }
       const targetBranch = yield* resolveAvailableBranchName(input.cwd, input.newBranch);
-
       yield* executeGit(
         "GitCore.renameBranch",
         input.cwd,
@@ -169,6 +169,65 @@ export function makeGitBranchOps(
       return { branch: targetBranch };
     },
   );
+
+  const deleteBranch: GitCoreShape["deleteBranch"] = Effect.fn("deleteBranch")(function* (input) {
+    const [currentBranch, defaultRef, worktreeList] = yield* Effect.all(
+      [
+        executeGit("GitCore.deleteBranch.currentBranch", input.cwd, ["branch", "--show-current"], {
+          timeoutMs: 5_000,
+          allowNonZeroExit: true,
+        }),
+        executeGit(
+          "GitCore.deleteBranch.defaultBranch",
+          input.cwd,
+          ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+          { timeoutMs: 5_000, allowNonZeroExit: true },
+        ),
+        executeGit(
+          "GitCore.deleteBranch.worktreeList",
+          input.cwd,
+          ["worktree", "list", "--porcelain"],
+          {
+            timeoutMs: 5_000,
+            allowNonZeroExit: true,
+          },
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
+
+    if (currentBranch.code === 0 && currentBranch.stdout.trim() === input.branch) {
+      return yield* createGitCommandError(
+        "GitCore.deleteBranch",
+        input.cwd,
+        ["branch", "-d", "--", input.branch],
+        "The current branch cannot be deleted.",
+      );
+    }
+    if (defaultRef.code === 0 && defaultRef.stdout.trim() === `origin/${input.branch}`) {
+      return yield* createGitCommandError(
+        "GitCore.deleteBranch",
+        input.cwd,
+        ["branch", "-d", "--", input.branch],
+        "The default branch cannot be deleted.",
+      );
+    }
+    if (
+      worktreeList.code === 0 &&
+      worktreeList.stdout.split("\n").some((line) => line === `branch refs/heads/${input.branch}`)
+    ) {
+      return yield* createGitCommandError(
+        "GitCore.deleteBranch",
+        input.cwd,
+        ["branch", "-d", "--", input.branch],
+        "A branch checked out in a worktree cannot be deleted.",
+      );
+    }
+    yield* executeGit("GitCore.deleteBranch", input.cwd, ["branch", "-d", "--", input.branch], {
+      timeoutMs: 10_000,
+      fallbackErrorMessage: "git branch delete failed",
+    });
+  });
 
   const createBranch: GitCoreShape["createBranch"] = Effect.fn("createBranch")(function* (input) {
     yield* executeGit("GitCore.createBranch", input.cwd, ["branch", input.branch], {
@@ -243,6 +302,7 @@ export function makeGitBranchOps(
     checkoutBranch,
     createBranch,
     renameBranch,
+    deleteBranch,
     setBranchUpstream,
     listLocalBranchNames,
     initRepo,

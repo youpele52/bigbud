@@ -131,6 +131,16 @@ export const DEFAULT_BINDINGS = compile([
     whenAst: whenNot(whenIdentifier("terminalFocus")),
   },
   {
+    shortcut: modShortcut("s", { shiftKey: true }),
+    command: "sidecar.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("t", { shiftKey: true }),
+    command: "planCard.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
     shortcut: modShortcut("o"),
     command: "project.open",
     whenAst: whenNot(whenIdentifier("terminalFocus")),

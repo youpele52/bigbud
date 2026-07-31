@@ -17,12 +17,12 @@ import {
 } from "../Services/ProjectionPipeline.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { asProjectId, ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 
 describe("OrchestrationEngine", () => {
-  it("bootstraps the in-memory read model from persisted projections", async () => {
+  it("acquires after bootstrap without waiting for canonical compaction", async () => {
     const failOnHistoricalReplayStore: OrchestrationEventStoreShape = {
       append: () =>
         Effect.fail(
@@ -32,6 +32,8 @@ describe("OrchestrationEngine", () => {
           }),
         ),
       readFromSequence: () => Stream.empty,
+      readReplay: () => Effect.die("unused replay"),
+      findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll: () =>
         Stream.fail(
           new PersistenceSqlError({
@@ -92,20 +94,18 @@ describe("OrchestrationEngine", () => {
 
     const layer = OrchestrationEngineLive.pipe(
       Layer.provide(
-        Layer.succeed(ProjectionSnapshotQuery, {
-          getSnapshot: () => Effect.succeed(projectionSnapshot),
-          getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
-          getUsageEntries: () => Effect.succeed([]),
-          getUsageHistoryStatus: () => Effect.succeed("ready"),
-          getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
-          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
-          getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+        Layer.succeed(ProjectionOperationalStateQuery, {
+          getStartupOperationalState: () => Effect.succeed(projectionSnapshot),
+          getThreadOperationalState: () => Effect.succeed(Option.none()),
+          getFullThreadHistory: () => Effect.succeed(Option.none()),
         }),
       ),
       Layer.provide(
         Layer.succeed(OrchestrationProjectionPipeline, {
           bootstrap: Effect.void,
           backfillUsageContributions: Effect.void,
+          ensureVerifiedBaselineThrough: () => Effect.never,
+          compactVerifiedPrefix: () => Effect.never,
           projectEvent: () => Effect.void,
         } satisfies OrchestrationProjectionPipelineShape),
       ),

@@ -4,22 +4,24 @@
  * Providers represent different AI coding assistant backends that can be used
  * for code generation, chat, and other AI-powered features.
  *
- * Order matters for fallback logic in some contexts.
+ * Provider display order is derived alphabetically by name.
  */
-export const PROVIDER_KINDS = [
+const UNSORTED_PROVIDER_KINDS = [
   "codex",
   "claudeAgent",
+  "cliProxy",
   "copilot",
+  "cursor",
+  "devin",
   "kilocode",
   "opencode",
   "pi",
-  "cursor",
-  "devin",
 ] as const;
 
 export const PROVIDER_DISPLAY_NAMES = {
   codex: "Codex",
   claudeAgent: "Claude",
+  cliProxy: "CLIProxyAPI",
   copilot: "Copilot",
   kilocode: "KiloCode",
   opencode: "OpenCode",
@@ -28,6 +30,20 @@ export const PROVIDER_DISPLAY_NAMES = {
   devin: "Devin",
   bigbud: "bigbud",
 } as const;
+
+type ProviderKind = (typeof UNSORTED_PROVIDER_KINDS)[number];
+
+/** Returns provider kinds alphabetized by their display names. */
+export function sortProviderKindsByDisplayName<T extends readonly ProviderKind[]>(
+  providerKinds: T,
+): T {
+  // Sorting preserves the tuple's entries and length, which TypeScript cannot infer.
+  return providerKinds.toSorted((left, right) =>
+    PROVIDER_DISPLAY_NAMES[left].localeCompare(PROVIDER_DISPLAY_NAMES[right]),
+  ) as unknown as T;
+}
+
+export const PROVIDER_KINDS = sortProviderKindsByDisplayName(UNSORTED_PROVIDER_KINDS);
 
 /**
  * Labels that may appear in the `provider` field of a `ServerDiscoveredSkill`

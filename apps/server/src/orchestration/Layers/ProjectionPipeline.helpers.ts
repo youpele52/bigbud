@@ -15,7 +15,6 @@ import { type ProjectionThreadMessage } from "../../persistence/Services/Project
 import { type ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { type ProjectionTurn } from "../../persistence/Services/ProjectionTurns.ts";
 import { ServerConfig } from "../../startup/config.ts";
-import { resolveProjectMemoryDirectoryPath } from "../../learning/Layers/MemoryStore.ts";
 import {
   attachmentRelativePath,
   parseAttachmentIdFromRelativePath,
@@ -33,15 +32,15 @@ export const ORCHESTRATION_PROJECTOR_NAMES = {
   threadMessages: "projection.thread-messages",
   threadProposedPlans: "projection.thread-proposed-plans",
   threadActivities: "projection.thread-activities",
+  threadTasks: "projection.thread-tasks",
   threadSessions: "projection.thread-sessions",
   threadTurns: "projection.thread-turns",
   checkpoints: "projection.checkpoints",
   pendingApprovals: "projection.pending-approvals",
+  pendingUserInputs: "projection.pending-user-inputs",
 } as const;
 
 export interface AttachmentSideEffects {
-  readonly deletedThreadIds: Set<string>;
-  readonly deletedProjectMemoryIds: Set<string>;
   readonly prunedThreadRelativePaths: Map<string, Set<string>>;
 }
 
@@ -221,47 +220,6 @@ export const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(fu
     .readDirectory(attachmentsRootDir, { recursive: false })
     .pipe(Effect.catch(() => Effect.succeed([] as Array<string>)));
 
-  const removeDeletedThreadAttachmentEntry = Effect.fn("removeDeletedThreadAttachmentEntry")(
-    function* (threadSegment: string, entry: string) {
-      const normalizedEntry = entry.replace(/^[/\\]+/, "").replace(/\\/g, "/");
-      if (normalizedEntry.length === 0 || normalizedEntry.includes("/")) {
-        return;
-      }
-      const attachmentId = parseAttachmentIdFromRelativePath(normalizedEntry);
-      if (!attachmentId) {
-        return;
-      }
-      const attachmentThreadSegment = parseThreadSegmentFromAttachmentId(attachmentId);
-      if (!attachmentThreadSegment || attachmentThreadSegment !== threadSegment) {
-        return;
-      }
-      yield* fileSystem.remove(path.join(attachmentsRootDir, normalizedEntry), {
-        force: true,
-      });
-    },
-  );
-
-  const deleteThreadAttachments = Effect.fn("deleteThreadAttachments")(function* (
-    threadId: string,
-  ) {
-    const threadSegment = toSafeThreadAttachmentSegment(threadId);
-    if (!threadSegment) {
-      yield* Effect.logWarning("skipping attachment cleanup for unsafe thread id", {
-        threadId,
-      });
-      return;
-    }
-
-    const entries = yield* readAttachmentRootEntries;
-    yield* Effect.forEach(
-      entries,
-      (entry) => removeDeletedThreadAttachmentEntry(threadSegment, entry),
-      {
-        concurrency: 1,
-      },
-    );
-  });
-
   const pruneThreadAttachmentEntry = Effect.fn("pruneThreadAttachmentEntry")(function* (
     threadSegment: string,
     keptThreadRelativePaths: Set<string>,
@@ -297,10 +255,6 @@ export const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(fu
     threadId: string,
     keptThreadRelativePaths: Set<string>,
   ) {
-    if (sideEffects.deletedThreadIds.has(threadId)) {
-      return;
-    }
-
     const threadSegment = toSafeThreadAttachmentSegment(threadId);
     if (!threadSegment) {
       yield* Effect.logWarning("skipping attachment prune for unsafe thread id", { threadId });
@@ -315,30 +269,10 @@ export const runAttachmentSideEffects = Effect.fn("runAttachmentSideEffects")(fu
     );
   });
 
-  yield* Effect.forEach(sideEffects.deletedThreadIds, deleteThreadAttachments, {
-    concurrency: 1,
-  });
-
   yield* Effect.forEach(
     sideEffects.prunedThreadRelativePaths.entries(),
     ([threadId, keptThreadRelativePaths]) =>
       pruneThreadAttachments(threadId, keptThreadRelativePaths),
-    { concurrency: 1 },
-  );
-
-  yield* Effect.forEach(
-    sideEffects.deletedProjectMemoryIds,
-    (projectId) => {
-      const projectMemoryDirectory = resolveProjectMemoryDirectoryPath({
-        path,
-        stateDir: serverConfig.stateDir,
-        projectId,
-      });
-      if (!projectMemoryDirectory) {
-        return Effect.logWarning("skipping memory cleanup for unsafe project id", { projectId });
-      }
-      return fileSystem.remove(projectMemoryDirectory, { recursive: true, force: true });
-    },
     { concurrency: 1 },
   );
 });

@@ -1,6 +1,7 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
   ThreadId,
+  OrchestrationTask,
   type OrchestrationCheckpointSummary,
   type OrchestrationLatestTurn,
   type OrchestrationMessage,
@@ -10,6 +11,11 @@ import {
   type OrchestrationThread,
   type OrchestrationThreadActivity,
 } from "@bigbud/contracts";
+import {
+  compareTaskOrder,
+  isTaskFreshnessNewer,
+  mergeTaskPatch,
+} from "@bigbud/shared/providerRuntime";
 import { Schema } from "effect";
 
 import {
@@ -18,6 +24,7 @@ import {
   ProjectionProjectDbRowSchema,
   ProjectionStateDbRowSchema,
   ProjectionThreadActivityDbRowSchema,
+  ProjectionThreadTaskDbRowSchema,
   ProjectionThreadDbRowSchema,
   ProjectionThreadMessageDbRowSchema,
   ProjectionThreadProposedPlanDbRowSchema,
@@ -33,6 +40,7 @@ type ProjectionThreadProposedPlanRow = Schema.Schema.Type<
   typeof ProjectionThreadProposedPlanDbRowSchema
 >;
 type ProjectionThreadActivityRow = Schema.Schema.Type<typeof ProjectionThreadActivityDbRowSchema>;
+type ProjectionThreadTaskRow = Schema.Schema.Type<typeof ProjectionThreadTaskDbRowSchema>;
 type ProjectionThreadSessionRow = Schema.Schema.Type<typeof ProjectionThreadSessionDbRowSchema>;
 type ProjectionCheckpointRow = Schema.Schema.Type<typeof ProjectionCheckpointDbRowSchema>;
 type ProjectionLatestTurnRow = Schema.Schema.Type<typeof ProjectionLatestTurnDbRowSchema>;
@@ -141,6 +149,7 @@ function mapThreadRow(
     messagesByThread: Map<string, Array<OrchestrationMessage>>;
     proposedPlansByThread: Map<string, Array<OrchestrationProposedPlan>>;
     activitiesByThread: Map<string, Array<OrchestrationThreadActivity>>;
+    tasksByThread: Map<string, Array<OrchestrationTask>>;
     checkpointsByThread: Map<string, Array<OrchestrationCheckpointSummary>>;
     sessionsByThread: Map<string, OrchestrationSession>;
     latestTurnByThread: Map<string, OrchestrationLatestTurn>;
@@ -168,10 +177,12 @@ function mapThreadRow(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
     messages: groupedRows.messagesByThread.get(row.threadId) ?? [],
     proposedPlans: groupedRows.proposedPlansByThread.get(row.threadId) ?? [],
+    tasks: groupedRows.tasksByThread.get(row.threadId) ?? [],
     activities: groupedRows.activitiesByThread.get(row.threadId) ?? [],
     checkpoints: groupedRows.checkpointsByThread.get(row.threadId) ?? [],
     session: groupedRows.sessionsByThread.get(row.threadId) ?? null,
@@ -186,6 +197,7 @@ export function assembleSnapshotRows(rows: {
   messageRows: ReadonlyArray<ProjectionThreadMessageRow>;
   proposedPlanRows: ReadonlyArray<ProjectionThreadProposedPlanRow>;
   activityRows: ReadonlyArray<ProjectionThreadActivityRow>;
+  taskRows: ReadonlyArray<ProjectionThreadTaskRow>;
   sessionRows: ReadonlyArray<ProjectionThreadSessionRow>;
   checkpointRows: ReadonlyArray<ProjectionCheckpointRow>;
   latestTurnRows: ReadonlyArray<ProjectionLatestTurnRow>;
@@ -195,6 +207,7 @@ export function assembleSnapshotRows(rows: {
   const messagesByThread = new Map<string, Array<OrchestrationMessage>>();
   const proposedPlansByThread = new Map<string, Array<OrchestrationProposedPlan>>();
   const activitiesByThread = new Map<string, Array<OrchestrationThreadActivity>>();
+  const tasksByThread = new Map<string, Array<OrchestrationTask>>();
   const checkpointsByThread = new Map<string, Array<OrchestrationCheckpointSummary>>();
   const sessionsByThread = new Map<string, OrchestrationSession>();
   const latestTurnByThread = new Map<string, OrchestrationLatestTurn>();
@@ -244,6 +257,20 @@ export function assembleSnapshotRows(rows: {
     proposedPlansByThread.set(row.threadId, threadProposedPlans);
   }
 
+  const durableTaskThreads = new Set<string>();
+  for (const row of rows.taskRows) {
+    durableTaskThreads.add(row.threadId);
+    updatedAt = maxIso(updatedAt, row.updatedAt);
+    const tasks = tasksByThread.get(row.threadId) ?? [];
+    const existing = tasks.find((task) => task.id === row.task.id);
+    if (!existing || isTaskFreshnessNewer(row.task.freshness, existing.freshness)) {
+      tasksByThread.set(
+        row.threadId,
+        [...tasks.filter((task) => task.id !== row.task.id), row.task].toSorted(compareTaskOrder),
+      );
+    }
+  }
+
   for (const row of rows.activityRows) {
     updatedAt = maxIso(updatedAt, row.createdAt);
     const threadActivities = activitiesByThread.get(row.threadId) ?? [];
@@ -258,6 +285,30 @@ export function assembleSnapshotRows(rows: {
       createdAt: row.createdAt,
     });
     activitiesByThread.set(row.threadId, threadActivities);
+    if (
+      !durableTaskThreads.has(row.threadId) &&
+      row.kind === "task.updated" &&
+      typeof row.payload === "object" &&
+      row.payload !== null
+    ) {
+      const task = (row.payload as { task?: unknown }).task;
+      if (Schema.is(OrchestrationTask)(task)) {
+        const tasks = tasksByThread.get(row.threadId) ?? [];
+        const current = tasks.find((entry) => entry.id === task.id);
+        if (current && !isTaskFreshnessNewer(task.freshness, current.freshness)) {
+          continue;
+        }
+        const mergedTask = current ? mergeTaskPatch(current, task) : task;
+        tasks.splice(
+          0,
+          tasks.length,
+          ...[...tasks.filter((entry) => entry.id !== task.id), mergedTask].toSorted(
+            compareTaskOrder,
+          ),
+        );
+        tasksByThread.set(row.threadId, tasks);
+      }
+    }
   }
 
   for (const row of rows.checkpointRows) {
@@ -314,6 +365,7 @@ export function assembleSnapshotRows(rows: {
         messagesByThread,
         proposedPlansByThread,
         activitiesByThread,
+        tasksByThread,
         checkpointsByThread,
         sessionsByThread,
         latestTurnByThread,

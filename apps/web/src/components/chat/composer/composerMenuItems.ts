@@ -28,7 +28,6 @@ export interface BuildComposerMenuItemsInput {
   searchableModelOptions: ReadonlyArray<SearchableModelOption>;
   workspaceEntries: ReadonlyArray<ProjectEntry>;
   selectedProvider: ProviderKind;
-  supportsCompact: boolean;
   activeProviderSlashCommands:
     | ReadonlyArray<{
         name: string;
@@ -183,17 +182,6 @@ export function buildComposerMenuItems(input: BuildComposerMenuItemsInput): Comp
         label: "/read",
         description: "Read a remote document or web page URL into the thread",
       },
-      ...(input.supportsCompact
-        ? [
-            {
-              id: `slash:compact:${input.selectedProvider}`,
-              type: "slash-command",
-              command: "compact",
-              label: "/compact",
-              description: `Compact context now using ${input.selectedProvider}`,
-            } satisfies Extract<ComposerCommandItem, { type: "slash-command" }>,
-          ]
-        : []),
       ...providerSlashCommandItems,
     ] satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "slash-command" }>>;
     const query = composerTrigger.query.trim().toLowerCase();

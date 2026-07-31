@@ -23,6 +23,12 @@ export function makeThreadProposedPlansProjector(
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
+      case "thread.deleted":
+        yield* projectionThreadProposedPlanRepository.deleteByThreadId({
+          threadId: event.payload.threadId,
+        });
+        return;
+
       case "thread.proposed-plan-upserted":
         yield* projectionThreadProposedPlanRepository.upsert({
           planId: event.payload.proposedPlan.id,

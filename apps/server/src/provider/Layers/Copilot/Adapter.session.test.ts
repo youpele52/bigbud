@@ -107,6 +107,9 @@ describe("CopilotAdapter remote workspace sessions", () => {
             lastAssistantExcerpt: null,
             updatedAt: new Date().toISOString(),
           }),
+        listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
+        setPinned: ({ threadId, pinned }) =>
+          Effect.succeed({ threadId, pinned, pinnedAt: null, count: 0, limit: 5, remaining: 5 }),
         computerUse: () =>
           Effect.succeed({
             surface: "browser",
@@ -189,6 +192,7 @@ describe("CopilotAdapter remote workspace sessions", () => {
     () => {
       const client = new FakeCopilotClient();
       const renameCalls: string[] = [];
+      const pinnedCalls: string[] = [];
       const layer = makeCopilotAdapterLive({
         clientFactory: () => client as unknown as import("@github/copilot-sdk").CopilotClient,
       }).pipe(
@@ -220,6 +224,21 @@ describe("CopilotAdapter remote workspace sessions", () => {
               lastAssistantExcerpt: null,
               updatedAt: new Date().toISOString(),
             }),
+          listPinned: ({ callerThreadId }) => {
+            pinnedCalls.push(`${callerThreadId}:list`);
+            return Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] });
+          },
+          setPinned: ({ callerThreadId, threadId, pinned }) => {
+            pinnedCalls.push(`${callerThreadId}:${threadId}:${pinned}`);
+            return Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: null,
+              count: 0,
+              limit: 5,
+              remaining: 5,
+            });
+          },
           computerUse: () =>
             Effect.succeed({
               surface: "browser",
@@ -251,28 +270,43 @@ describe("CopilotAdapter remote workspace sessions", () => {
         assert.equal(!!configA && !!configB, true);
         const renameToolA = configA?.tools?.find((tool) => tool.name === "rename_thread");
         const renameToolB = configB?.tools?.find((tool) => tool.name === "rename_thread");
+        const listPinnedToolA = configA?.tools?.find((tool) => tool.name === "list_pinned_threads");
+        const pinToolA = configA?.tools?.find((tool) => tool.name === "pin_thread");
         assert.equal(!!renameToolA && !!renameToolB, true);
+        assert.equal(!!listPinnedToolA && !!pinToolA, true);
         assert.equal(typeof renameToolA?.handler, "function");
         assert.equal(typeof renameToolB?.handler, "function");
         if (
           renameToolA === undefined ||
           renameToolB === undefined ||
+          listPinnedToolA === undefined ||
+          pinToolA === undefined ||
           typeof renameToolA.handler !== "function" ||
-          typeof renameToolB.handler !== "function"
+          typeof renameToolB.handler !== "function" ||
+          typeof listPinnedToolA.handler !== "function" ||
+          typeof pinToolA.handler !== "function"
         ) {
           return;
         }
         const renameToolAHandler = renameToolA.handler;
         const renameToolBHandler = renameToolB.handler;
+        const listPinnedToolAHandler = listPinnedToolA.handler;
+        const pinToolAHandler = pinToolA.handler;
 
         yield* Effect.promise(async () => {
           await renameToolAHandler({ title: "Thread A title" }, {} as never);
           await renameToolBHandler({ title: "Thread B title" }, {} as never);
+          await listPinnedToolAHandler({}, {} as never);
+          await pinToolAHandler({ threadId: "thread-target" }, {} as never);
         });
 
         assert.deepEqual(renameCalls, [
           "thread-copilot-audit-a:Thread A title",
           "thread-copilot-audit-b:Thread B title",
+        ]);
+        assert.deepEqual(pinnedCalls, [
+          "thread-copilot-audit-a:list",
+          "thread-copilot-audit-a:thread-target:true",
         ]);
       }).pipe(Effect.provide(layer));
     },

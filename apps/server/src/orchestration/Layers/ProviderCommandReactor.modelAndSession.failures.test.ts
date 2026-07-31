@@ -2,7 +2,7 @@ import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import { ProviderAdapterProcessError } from "../../provider/Errors.ts";
+import { ProviderAdapterProcessError, ProviderAdapterRequestError } from "../../provider/Errors.ts";
 import {
   asMessageId,
   createHarness,
@@ -205,5 +205,45 @@ describe("ProviderCommandReactor", () => {
         detail: "Failed to start Pi RPC process.",
       },
     });
+  });
+
+  it("retries a context-limit failure once in a fresh session", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    harness.sendTurn.mockImplementation((() =>
+      Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: "codex",
+          method: "turn/start",
+          detail: "maximum context length exceeded",
+        }),
+      )) as unknown as Parameters<typeof harness.sendTurn.mockImplementation>[0]);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-context-limit-recovery"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-context-limit"),
+          role: "user",
+          text: "recover this request",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    await harness.drain();
+
+    expect(harness.startSession.mock.calls.length).toBe(2);
+    expect(harness.stopSession.mock.calls.length).toBe(1);
+    expect(harness.sendTurn.mock.calls.length).toBe(2);
+    const recoveredInput = harness.sendTurn.mock.calls[1]?.[0] as { input?: string };
+    expect(recoveredInput.input).toContain("<bigbud_capability_lp>");
+    expect(recoveredInput.input).toContain("recover this request");
   });
 });

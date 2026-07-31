@@ -23,6 +23,9 @@ import {
   ThreadApprovalResponseRequestedPayload,
   ThreadArchivedPayload,
   ThreadCheckpointRevertRequestedPayload,
+  ThreadPathCheckpointCaptureRequestedPayload,
+  ThreadPathCheckpointRestoreRequestedPayload,
+  ThreadPinnedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadDeletionFailedPayload,
@@ -36,10 +39,14 @@ import {
   ThreadSessionSetPayload,
   ThreadSessionStopRequestedPayload,
   ThreadShellRunRequestedPayload,
+  ThreadTaskRemovedPayload,
+  ThreadTaskUpsertedPayload,
   ThreadTurnDiffCompletedPayload,
   ThreadTurnInterruptRequestedPayload,
+  ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -68,10 +75,15 @@ export {
   ThreadSessionSetPayload,
   ThreadSessionStopRequestedPayload,
   ThreadShellRunRequestedPayload,
+  ThreadTaskRemovedPayload,
+  ThreadTaskUpsertedPayload,
   ThreadTurnDiffCompletedPayload,
   ThreadTurnInterruptRequestedPayload,
+  ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadPinnedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -87,22 +99,29 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.deleted",
   "thread.archived",
   "thread.unarchived",
+  "thread.pinned",
+  "thread.unpinned",
   "thread.meta-updated",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
   "thread.message-sent",
   "thread.turn-start-requested",
+  "thread.turn-start-failed",
   "thread.shell-run-requested",
   "thread.turn-interrupt-requested",
   "thread.approval-response-requested",
   "thread.user-input-response-requested",
   "thread.checkpoint-revert-requested",
+  "thread.path-checkpoint-capture-requested",
+  "thread.path-checkpoint-restore-requested",
   "thread.reverted",
   "thread.session-stop-requested",
   "thread.session-set",
   "thread.proposed-plan-upserted",
   "thread.turn-diff-completed",
   "thread.activity-appended",
+  "thread.task-upserted",
+  "thread.task-removed",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -187,6 +206,16 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.pinned"),
+    payload: ThreadPinnedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.unpinned"),
+    payload: ThreadUnpinnedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.meta-updated"),
     payload: ThreadMetaUpdatedPayload,
   }),
@@ -212,6 +241,11 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.turn-start-failed"),
+    payload: ThreadTurnStartFailedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.shell-run-requested"),
     payload: ThreadShellRunRequestedPayload,
   }),
@@ -234,6 +268,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.checkpoint-revert-requested"),
     payload: ThreadCheckpointRevertRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.path-checkpoint-capture-requested"),
+    payload: ThreadPathCheckpointCaptureRequestedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.path-checkpoint-restore-requested"),
+    payload: ThreadPathCheckpointRestoreRequestedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
@@ -264,6 +308,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.activity-appended"),
     payload: ThreadActivityAppendedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.task-upserted"),
+    payload: ThreadTaskUpsertedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.task-removed"),
+    payload: ThreadTaskRemovedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

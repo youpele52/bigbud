@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import {
   ExecutionTargetId,
   IsoDateTime,
+  NonNegativeInt,
   ThreadId,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
@@ -83,6 +84,14 @@ export type ServerProviderSlashCommand = typeof ServerProviderSlashCommand.Type;
 export const ServerProviderSlashCommands = Schema.Array(ServerProviderSlashCommand);
 export type ServerProviderSlashCommands = typeof ServerProviderSlashCommands.Type;
 
+export const ServerProviderModelDiscovery = Schema.Struct({
+  status: Schema.Literals(["live", "empty", "unavailable", "invalid"]),
+  source: TrimmedNonEmptyString,
+  version: Schema.optional(TrimmedNonEmptyString),
+  durationMs: NonNegativeInt,
+});
+export type ServerProviderModelDiscovery = typeof ServerProviderModelDiscovery.Type;
+
 export const ServerProviderSkill = Schema.Struct({
   name: TrimmedNonEmptyString,
   path: TrimmedNonEmptyString,
@@ -107,6 +116,7 @@ export const ServerProvider = Schema.Struct({
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),
   models: Schema.Array(ServerProviderModel),
+  modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
 });
@@ -388,6 +398,14 @@ export const ServerProviderUpdatedPayload = Schema.Struct({
   providers: ServerProviders,
 });
 export type ServerProviderUpdatedPayload = typeof ServerProviderUpdatedPayload.Type;
+
+export class ServerCliProxyActivationError extends Schema.TaggedErrorClass<ServerCliProxyActivationError>()(
+  "ServerCliProxyActivationError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
 
 export {
   ServerLifecycleReadyPayload,

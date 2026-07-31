@@ -106,6 +106,23 @@ describe("estimateTimelineMessageHeight", () => {
     );
   });
 
+  it("adds a compact closed row without counting delegated provenance as message text", () => {
+    const task = "Implement the delegated task.";
+    const prompt = [
+      "<delegated_thread_provenance>",
+      "Parent thread: Parent task (thread-parent)",
+      "Parent project: project-parent",
+      "Delegation: delegation-1",
+      "</delegated_thread_provenance>",
+      "",
+      task,
+    ].join("\n");
+
+    expect(estimateTimelineMessageHeight({ role: "user", text: prompt })).toBe(
+      estimateTimelineMessageHeight({ role: "user", text: task }) + 24,
+    );
+  });
+
   it("uses narrower width to increase user line wrapping", () => {
     const message = {
       role: "user" as const,

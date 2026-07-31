@@ -3,6 +3,7 @@ import * as Path from "node:path";
 import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
+import { certificateChallengeManager } from "./certificateChallengeManager";
 
 const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
 const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
@@ -92,6 +93,7 @@ export interface CreateWindowDeps {
   readonly desktopScheme: string;
   readonly isDevelopment: boolean;
   readonly desktopDir: string;
+  readonly menuActionChannel: string;
   readonly spellcheckEnabled: boolean;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly getSafeExternalUrl: (url: unknown) => string | null;
@@ -206,6 +208,15 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     Menu.buildFromTemplate(menuTemplate).popup({ window });
   });
 
+  window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
+    certificateChallengeManager.attachGuest(window.webContents, guestWebContents);
+    guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
+      if (input.type === "mouseDown" && input.button === "left") {
+        window.webContents.send(deps.menuActionChannel, "close-browser-context-menu");
+      }
+    });
+  });
+
   window.webContents.setWindowOpenHandler(({ url }) => {
     const externalUrl = deps.getSafeExternalUrl(url);
     if (externalUrl) {
@@ -234,6 +245,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   }
 
   window.on("closed", () => {
+    certificateChallengeManager.closeHost(window.webContents);
     deps.onWindowClosed(window);
   });
 

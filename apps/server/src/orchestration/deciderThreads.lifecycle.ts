@@ -23,6 +23,7 @@ import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import { noteThreadTitleCommand } from "../orchestration-tools/ThreadTitleLock.ts";
+import { decideThreadPinCommand } from "./deciderThreads.pin.ts";
 
 /** Maximum number of seed messages accepted on `thread.create` to prevent write amplification. */
 const MAX_SEED_MESSAGES = 200;
@@ -37,6 +38,9 @@ export type ThreadLifecycleCommand = Extract<
       | "thread.delete.abort"
       | "thread.archive"
       | "thread.unarchive"
+      | "thread.pin"
+      | "thread.unpin"
+      | "thread.pin.migrate"
       | "thread.meta.update"
       | "thread.runtime-mode.set"
       | "thread.interaction-mode.set";
@@ -72,10 +76,13 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           command,
           threadId: command.parentThread.threadId,
         });
-        if (parentThread.projectId !== command.projectId) {
+        if (
+          command.parentThread.projectId === undefined ||
+          parentThread.projectId !== command.parentThread.projectId
+        ) {
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,
-            detail: `Parent thread '${command.parentThread.threadId}' must belong to project '${command.projectId}'.`,
+            detail: `Parent thread '${command.parentThread.threadId}' must belong to referenced project '${command.parentThread.projectId ?? "unknown"}'.`,
           });
         }
       }
@@ -271,6 +278,11 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         },
       };
     }
+
+    case "thread.pin":
+    case "thread.unpin":
+    case "thread.pin.migrate":
+      return yield* decideThreadPinCommand({ command, readModel });
 
     case "thread.meta.update": {
       yield* requireThreadNotDeleting({

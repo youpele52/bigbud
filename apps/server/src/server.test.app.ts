@@ -24,6 +24,10 @@ import {
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SchedulerReactor } from "./orchestration/Services/SchedulerReactor.ts";
+import {
+  ProjectionCatalogQuery,
+  type ProjectionCatalogQueryShape,
+} from "./orchestration/Services/ProjectionCatalogQuery.ts";
 import { ProjectionKanbanRepository } from "./persistence/Services/ProjectionKanban.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import { AutomationScheduleRepository } from "./persistence/Services/AutomationScheduleRepository.ts";
@@ -66,6 +70,7 @@ import {
   workspaceAndProjectServicesLayer,
   makeDefaultOrchestrationReadModel,
   defaultThreadId,
+  defaultProjectId,
 } from "./server.test.fixtures.ts";
 import { ServerSettingsService, type ServerSettingsShape } from "./ws/serverSettings.ts";
 
@@ -86,6 +91,7 @@ export const buildAppUnderTest = (options?: {
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
+    projectionCatalogQuery?: Partial<ProjectionCatalogQueryShape>;
     projectionThreadRepository?: Partial<ProjectionThreadRepositoryShape>;
     checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
     serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
@@ -288,6 +294,39 @@ export const buildAppUnderTest = (options?: {
       ),
       Layer.provide(
         Layer.mergeAll(
+          Layer.mock(ProjectionCatalogQuery)({
+            getStartupProjectCatalog: () => Effect.succeed({ projectionSequence: 0, projects: [] }),
+            getProjectThreadSummaries: ({ projectId }) =>
+              Effect.succeed({ projectionSequence: 0, projectId, threads: [] }),
+            getSelectedThreadDetail: ({ threadId, messageCursor }) =>
+              Effect.succeed({
+                projectionSequence: 0,
+                threadId,
+                projectId: defaultProjectId,
+                activityTurnId: null,
+                messages: [],
+                messageWindow: {
+                  order: "newest-first",
+                  requestedCursor: messageCursor ?? null,
+                  newestCursor: null,
+                  oldestCursor: null,
+                  nextCursor: null,
+                  hasOlder: false,
+                },
+                activities: [],
+                activitiesTruncated: false,
+                pendingApprovals: [],
+                pendingApprovalsTruncated: false,
+                pendingUserInputs: [],
+                pendingUserInputsTruncated: false,
+                activePlan: null,
+                activeTasks: [],
+                activeTasksTruncated: false,
+                checkpoints: [],
+                checkpointsTruncated: false,
+              }),
+            ...options?.layers?.projectionCatalogQuery,
+          }),
           Layer.mock(ProjectionSnapshotQuery)({
             getSnapshot: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
             ...options?.layers?.projectionSnapshotQuery,
@@ -318,6 +357,7 @@ export const buildAppUnderTest = (options?: {
                       createdAt: thread.createdAt,
                       updatedAt: thread.updatedAt,
                       archivedAt: thread.archivedAt,
+                      pinnedAt: thread.pinnedAt ?? null,
                       deletingAt: null,
                       deletedAt: thread.deletedAt,
                     })

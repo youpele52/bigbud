@@ -124,6 +124,21 @@ export const GitCreateBranchInput = Schema.Struct({
 });
 export type GitCreateBranchInput = typeof GitCreateBranchInput.Type;
 
+export const GitRenameBranchInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  oldBranch: TrimmedNonEmptyStringSchema,
+  newBranch: TrimmedNonEmptyStringSchema,
+});
+export type GitRenameBranchInput = typeof GitRenameBranchInput.Type;
+
+export const GitDeleteBranchInput = Schema.Struct({
+  ...ExecutionTargetInputShape,
+  cwd: TrimmedNonEmptyStringSchema,
+  branch: TrimmedNonEmptyStringSchema,
+});
+export type GitDeleteBranchInput = typeof GitDeleteBranchInput.Type;
+
 export const GitCheckoutInput = Schema.Struct({
   ...ExecutionTargetInputShape,
   cwd: TrimmedNonEmptyStringSchema,

@@ -85,6 +85,7 @@ export type DevinModelOptions = typeof DevinModelOptions.Type;
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
+  cliProxy: Schema.optional(Schema.Record(Schema.String, Schema.Never)),
   copilot: Schema.optional(CopilotModelOptions),
   kilocode: Schema.optional(KilocodeModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),

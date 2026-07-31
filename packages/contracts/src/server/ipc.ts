@@ -3,6 +3,9 @@ import type {
   GitCheckoutResult,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
+  GitDeleteBranchInput,
   GitGetCommitDetailsInput,
   GitGetCommitDetailsResult,
   GitPreparePullRequestThreadInput,
@@ -65,6 +68,7 @@ import type {
   NotesUpdateInput,
 } from "./notes";
 import type { TeachListProjectsInput, TeachListProjectsResult } from "./teach";
+import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type {
   ServerConfig,
   ServerReadDocumentUrlInput,
@@ -112,6 +116,7 @@ import type {
   ServerUpdateAutomationInput,
 } from "./automation";
 import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
+import type { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -125,12 +130,19 @@ import type {
 import type { ServerUpsertKeybindingInput } from "./server";
 import type {
   ClientOrchestrationCommand,
+  GetProjectThreadSummariesInput,
+  GetProjectThreadSummariesResult,
+  GetSelectedThreadDetailInput,
+  GetSelectedThreadDetailResult,
+  GetStartupProjectCatalogInput,
+  GetStartupProjectCatalogResult,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
@@ -212,13 +224,12 @@ export interface DesktopTailscaleRemoteAccessStatus {
   error: string | null;
 }
 
-export interface DesktopBridge extends DesktopComputerUseBridge {
+export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
-  /** Returns the absolute filesystem path for a File object (Electron webUtils.getPathForFile). */
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
@@ -313,6 +324,8 @@ export interface NativeApi {
     createWorktree: (input: GitCreateWorktreeInput) => Promise<GitCreateWorktreeResult>;
     removeWorktree: (input: GitRemoveWorktreeInput) => Promise<void>;
     createBranch: (input: GitCreateBranchInput) => Promise<GitCreateBranchResult>;
+    renameBranch: (input: GitRenameBranchInput) => Promise<GitRenameBranchResult>;
+    deleteBranch: (input: GitDeleteBranchInput) => Promise<void>;
     checkout: (input: GitCheckoutInput) => Promise<GitCheckoutResult>;
     init: (input: GitInitInput) => Promise<void>;
     resolvePullRequest: (input: GitPullRequestRefInput) => Promise<GitResolvePullRequestResult>;
@@ -338,6 +351,7 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<ServerConfig>;
     refreshProviders: () => Promise<ServerProviderUpdatedPayload>;
+    activateCliProxy: () => Promise<ServerProviderUpdatedPayload>;
     verifyExecutionTarget: (
       input: ServerVerifyExecutionTargetInput,
     ) => Promise<ServerVerifyExecutionTargetResult>;
@@ -348,6 +362,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSetThreadPinnedResult>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
@@ -381,13 +396,22 @@ export interface NativeApi {
     getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
+    getStartupProjectCatalog: (
+      input: GetStartupProjectCatalogInput,
+    ) => Promise<GetStartupProjectCatalogResult>;
+    getProjectThreadSummaries: (
+      input: GetProjectThreadSummariesInput,
+    ) => Promise<GetProjectThreadSummariesResult>;
+    getSelectedThreadDetail: (
+      input: GetSelectedThreadDetailInput,
+    ) => Promise<GetSelectedThreadDetailResult>;
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
-    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
+    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationReplayEventsResult>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,
       options?: { onResubscribe?: () => void },

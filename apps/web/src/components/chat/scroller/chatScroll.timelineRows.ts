@@ -4,6 +4,8 @@ import { estimateMessagesTimelineRowHeight } from "../messages/MessagesTimeline.
 import { type MessagesTimelineRow } from "../messages/MessagesTimeline.logic";
 import { type ChatScrollAnchorRow, type ChatScrollMessageRow } from "./chatScroll.constants";
 
+const USER_TURN_ANCHOR_PREVIEW_MAX_CHARS = 100;
+
 interface VirtualizerMeasurement {
   index: number;
   start: number;
@@ -131,7 +133,10 @@ export function deriveUserTurnAnchorsFromThreadMessages(
     }
     anchors.push({
       messageId: message.id,
-      label: normalized.length > 42 ? `${normalized.slice(0, 39).trimEnd()}...` : normalized,
+      label:
+        normalized.length > USER_TURN_ANCHOR_PREVIEW_MAX_CHARS
+          ? `${normalized.slice(0, USER_TURN_ANCHOR_PREVIEW_MAX_CHARS - 3).trimEnd()}...`
+          : normalized,
     });
   }
 

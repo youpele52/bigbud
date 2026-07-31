@@ -15,8 +15,6 @@ import {
   ApprovalRequestId,
   ClaudeCodeEffort,
   RuntimeRequestId,
-  type RuntimePlanStepStatus,
-  RUNTIME_PLAN_STEP_STATUSES,
   type ThreadTokenUsageSnapshot,
   ThreadId,
   type TurnId,
@@ -24,9 +22,30 @@ import {
 import { Cause } from "effect";
 
 import type { ClaudeResumeState } from "./Adapter.types.ts";
+import type { ClaudeInterruptReceipt } from "./Adapter.sdk.ts";
 
 export function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/**
+ * Reconcile UUIDs reported by the SDK interrupt receipt with the bounded
+ * client-side queue. Older SDKs return no receipt; in that case we preserve
+ * the queue because the SDK's legacy behavior leaves queued messages alive.
+ */
+export function reconcileClaudeInterruptQueue(
+  queued: ReadonlySet<string>,
+  receipt: ClaudeInterruptReceipt | undefined,
+): { readonly stillQueued: ReadonlyArray<string>; readonly cancelled: ReadonlyArray<string> } {
+  if (!receipt) {
+    return { stillQueued: [...queued], cancelled: [] };
+  }
+  const stillQueued = new Set(receipt.still_queued ?? []);
+  const cancelled = new Set(receipt.cancelled ?? []);
+  return {
+    stillQueued: [...queued].filter((uuid) => stillQueued.has(uuid)),
+    cancelled: [...queued].filter((uuid) => cancelled.has(uuid)),
+  };
 }
 
 export function isSyntheticClaudeThreadId(value: string): boolean {
@@ -97,6 +116,13 @@ export function resultErrorsText(result: SDKResultMessage): string {
 }
 
 export function isInterruptedResult(result: SDKResultMessage): boolean {
+  const structured = result as SDKResultMessage & {
+    aborted?: unknown;
+    stop_reason?: unknown;
+  };
+  if (structured.aborted === true || structured.stop_reason === "interrupted") {
+    return true;
+  }
   const errors = resultErrorsText(result);
   if (errors.includes("interrupt")) {
     return true;
@@ -141,16 +167,17 @@ export function normalizeClaudeTokenUsage(
     (typeof usage.cache_creation_input_tokens === "number" &&
     Number.isFinite(usage.cache_creation_input_tokens)
       ? usage.cache_creation_input_tokens
-      : 0) +
-    (typeof usage.cache_read_input_tokens === "number" &&
+      : 0);
+  const cachedInputTokens =
+    typeof usage.cache_read_input_tokens === "number" &&
     Number.isFinite(usage.cache_read_input_tokens)
       ? usage.cache_read_input_tokens
-      : 0);
+      : 0;
   const outputTokens =
     typeof usage.output_tokens === "number" && Number.isFinite(usage.output_tokens)
       ? usage.output_tokens
       : 0;
-  const derivedTotalProcessedTokens = inputTokens + outputTokens;
+  const derivedTotalProcessedTokens = inputTokens + cachedInputTokens + outputTokens;
   const totalProcessedTokens =
     (typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens)
       ? usage.total_tokens
@@ -171,6 +198,7 @@ export function normalizeClaudeTokenUsage(
     lastUsedTokens: usedTokens,
     ...(totalProcessedTokens > usedTokens ? { totalProcessedTokens } : {}),
     ...(inputTokens > 0 ? { inputTokens } : {}),
+    ...(cachedInputTokens > 0 ? { cachedInputTokens } : {}),
     ...(outputTokens > 0 ? { outputTokens } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(typeof usage.tool_uses === "number" && Number.isFinite(usage.tool_uses)
@@ -215,7 +243,9 @@ export function readClaudeResumeState(resumeCursor: unknown): ClaudeResumeState 
         : undefined;
   const resume = resumeCandidate && isUuid(resumeCandidate) ? resumeCandidate : undefined;
   const resumeSessionAt =
-    typeof cursor.resumeSessionAt === "string" ? cursor.resumeSessionAt : undefined;
+    typeof cursor.resumeSessionAt === "string" && isUuid(cursor.resumeSessionAt)
+      ? cursor.resumeSessionAt
+      : undefined;
   const turnCountValue = typeof cursor.turnCount === "number" ? cursor.turnCount : undefined;
 
   return {
@@ -226,6 +256,29 @@ export function readClaudeResumeState(resumeCursor: unknown): ClaudeResumeState 
       ? { turnCount: turnCountValue }
       : {}),
   };
+}
+
+export type ClaudeResumeBoundaryCheck =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly issue: "invalid" | "unknown" | "busy" };
+
+/** Validates a resume checkpoint before it is used for rewind/recovery. */
+export function validateClaudeResumeBoundary(input: {
+  readonly resumeSessionAt: string | undefined;
+  readonly knownAssistantUuids?: ReadonlySet<string>;
+  readonly pendingRequestCount?: number;
+  readonly sessionIdle?: boolean;
+}): ClaudeResumeBoundaryCheck {
+  if (!input.resumeSessionAt || !isUuid(input.resumeSessionAt)) {
+    return { ok: false, issue: "invalid" };
+  }
+  if (input.knownAssistantUuids && !input.knownAssistantUuids.has(input.resumeSessionAt)) {
+    return { ok: false, issue: "unknown" };
+  }
+  if (input.sessionIdle === false || (input.pendingRequestCount ?? 0) > 0) {
+    return { ok: false, issue: "busy" };
+  }
+  return { ok: true };
 }
 
 export function classifyToolItemType(toolName: string): CanonicalItemType {
@@ -248,6 +301,14 @@ export function classifyToolItemType(toolName: string): CanonicalItemType {
     normalized.includes("terminal")
   ) {
     return "command_execution";
+  }
+  if (
+    normalized === "taskcreate" ||
+    normalized === "taskupdate" ||
+    normalized === "taskget" ||
+    normalized === "tasklist"
+  ) {
+    return "dynamic_tool_call";
   }
   if (
     normalized.includes("edit") ||
@@ -289,29 +350,6 @@ export function isReadOnlyToolName(toolName: string): boolean {
     normalized.includes("glob") ||
     normalized.includes("search")
   );
-}
-
-export function isTodoTool(toolName: string): boolean {
-  return toolName === "TodoWrite";
-}
-
-export function extractPlanStepsFromTodoInput(
-  input: Record<string, unknown>,
-): ReadonlyArray<{ step: string; status: RuntimePlanStepStatus }> {
-  const todos = Array.isArray(input.todos) ? input.todos : [];
-  return todos
-    .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
-    .map((t) => {
-      // Claude SDK uses snake_case "in_progress"; normalize to camelCase before validating
-      const rawStatus = t.status === "in_progress" ? "inProgress" : t.status;
-      return {
-        step:
-          typeof t.content === "string" && t.content.trim().length > 0 ? t.content.trim() : "Task",
-        status: (RUNTIME_PLAN_STEP_STATUSES as readonly string[]).includes(rawStatus as string)
-          ? (rawStatus as RuntimePlanStepStatus)
-          : ("pending" as RuntimePlanStepStatus),
-      };
-    });
 }
 
 export function classifyRequestType(toolName: string): CanonicalRequestType {
@@ -377,6 +415,7 @@ export {
   buildClaudeImageContentBlock,
   buildPromptText,
   buildUserMessage,
+  isClaudeImageMimeType,
 } from "./Adapter.utils.message.ts";
 export { toRequestError, toSessionError } from "./Adapter.utils.errors.ts";
 export {

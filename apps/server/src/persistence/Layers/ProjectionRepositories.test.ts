@@ -154,6 +154,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
+        pinnedAt: null,
         deletingAt: null,
         deletedAt: null,
       });
@@ -184,6 +185,50 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       assert.deepStrictEqual(Option.getOrNull(persisted)?.modelSelection, {
         provider: "claudeAgent",
         model: "claude-opus-4-6",
+      });
+    }),
+  );
+
+  it.effect("round-trips a cross-project parent thread reference", () =>
+    Effect.gen(function* () {
+      const threads = yield* ProjectionThreadRepository;
+
+      yield* threads.upsert({
+        threadId: ThreadId.makeUnsafe("thread-child-project"),
+        projectId: ProjectId.makeUnsafe("project-child"),
+        title: "Child",
+        purpose: "standard",
+        elevatorSummary: "Child",
+        elevatorSummaryMessageCount: 0,
+        providerRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        workspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        executionTargetId: LOCAL_EXECUTION_TARGET_ID,
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        parentThread: {
+          threadId: ThreadId.makeUnsafe("thread-parent-project"),
+          title: "Parent",
+          projectId: ProjectId.makeUnsafe("project-parent"),
+        },
+        latestTurnId: null,
+        createdAt: "2026-03-24T00:00:00.000Z",
+        updatedAt: "2026-03-24T00:00:00.000Z",
+        archivedAt: null,
+        pinnedAt: null,
+        deletingAt: null,
+        deletedAt: null,
+      });
+
+      const persisted = yield* threads.getById({
+        threadId: ThreadId.makeUnsafe("thread-child-project"),
+      });
+      assert.deepStrictEqual(Option.getOrNull(persisted)?.parentThread, {
+        threadId: ThreadId.makeUnsafe("thread-parent-project"),
+        title: "Parent",
+        projectId: ProjectId.makeUnsafe("project-parent"),
       });
     }),
   );
@@ -301,6 +346,31 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       assert.notStrictEqual(created1.noteId, created2.noteId);
       assert.ok(created1.noteId.endsWith(".md"));
       assert.ok(created2.noteId.endsWith(".md"));
+    }),
+  );
+
+  it.effect("reads removed-provider project selections without rewriting them", () =>
+    Effect.gen(function* () {
+      const projects = yield* ProjectionProjectRepository;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id, title, execution_target_id, workspace_root,
+          default_model_selection_json, scripts_json, created_at, updated_at
+        ) VALUES (
+          ${"project-legacy-provider"}, ${"Legacy project"}, ${LOCAL_EXECUTION_TARGET_ID},
+          ${"/tmp/legacy"}, ${JSON.stringify({ provider: "cliProxy", model: "legacy-model" })},
+          ${"[]"}, ${"2026-03-24T00:00:00.000Z"}, ${"2026-03-24T00:00:00.000Z"}
+        )
+      `;
+
+      const result = yield* projects.getById({
+        projectId: ProjectId.makeUnsafe("project-legacy-provider"),
+      });
+      assert.deepStrictEqual(Option.getOrNull(result)?.defaultModelSelection, {
+        provider: "cliProxy",
+        model: "legacy-model",
+      });
     }),
   );
 

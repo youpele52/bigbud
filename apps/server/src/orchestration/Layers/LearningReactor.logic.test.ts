@@ -1,7 +1,11 @@
 import { MessageId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { countFinalizedUserMessages, shouldScheduleMemoryReview } from "./LearningReactor.logic.ts";
+import {
+  countFinalizedUserMessages,
+  resolveLearningModelSelection,
+  shouldScheduleMemoryReview,
+} from "./LearningReactor.logic.ts";
 
 function message(input: {
   readonly role: "user" | "assistant" | "system";
@@ -49,5 +53,22 @@ describe("LearningReactor scheduling", () => {
     expect(
       shouldScheduleMemoryReview({ userMessageCount: 31, latestMemoryUserMessageCount: 15 }),
     ).toBe(true);
+  });
+
+  it("preserves provider identity when resolving learning selections", () => {
+    expect(
+      resolveLearningModelSelection({
+        provider: "cliProxy",
+        model: "gpt-5-codex",
+        selected: { provider: "cliProxy", model: "old-model" },
+      }),
+    ).toEqual({ provider: "cliProxy", model: "gpt-5-codex" });
+    expect(
+      resolveLearningModelSelection({
+        provider: "claudeAgent",
+        model: "sonnet",
+        selected: { provider: "cliProxy", model: "gpt-5-codex" },
+      }),
+    ).toEqual({ provider: "claudeAgent", model: "sonnet" });
   });
 });

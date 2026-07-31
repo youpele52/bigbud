@@ -1,12 +1,15 @@
-import { Cause, Effect, FileSystem } from "effect";
+import { Cause, Effect, FileSystem, Option } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import {
+  PROVIDER_KINDS,
   ServerHandoffJobError,
   type ServerHandoffJob,
   type ServerStartHandoffJobInput,
 } from "@bigbud/contracts";
 
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQuery } from "../orchestration/Services/ProjectionOperationalStateQuery.ts";
+import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { resolveDefaultChatCwd, ServerSettingsService } from "./serverSettings.ts";
 import {
@@ -38,6 +41,19 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
     projectionSnapshotQuery: yield* ProjectionSnapshotQuery,
     serverSettings: yield* ServerSettingsService,
   };
+  const operationalQuery = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
+  const readThreadHistory = (threadId: ServerStartHandoffJobInput["threadId"]) =>
+    Option.isSome(operationalQuery)
+      ? operationalQuery.value.getFullThreadHistory(threadId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(new ServerHandoffJobError({ message: "Source thread was not found." })),
+              onSome: Effect.succeed,
+            }),
+          ),
+        )
+      : deps.projectionSnapshotQuery.getSnapshot();
   const jobs = new Map<string, ServerHandoffJob>();
   const runningJobsByThreadId = new Map<string, string>();
 
@@ -53,7 +69,7 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
         return;
       }
       const settings = yield* deps.serverSettings.getSettings;
-      const snapshot = yield* deps.projectionSnapshotQuery.getSnapshot();
+      const snapshot = yield* readThreadHistory(existing.threadId);
       const thread = snapshot.threads.find((entry) => entry.id === existing.threadId);
       if (!thread) {
         return yield* new ServerHandoffJobError({ message: "Source thread was not found." });
@@ -71,7 +87,37 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
       });
       const sourceMarkdown = buildThreadSnapshotMarkdown(thread);
       const chunks = chunkMarkdown(sourceMarkdown);
-      const generationModel = normalizeHandoffModelSelection(settings.textGenerationModelSelection);
+      const availableProviderKinds = PROVIDER_KINDS.filter(
+        (provider) => settings.providers[provider].enabled,
+      );
+      const resolution = resolveProviderWorkload({
+        requested: settings.textGenerationModelSelection,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds,
+        fallbackOrder: ["codex", "claudeAgent"],
+      });
+      const actualSelection = resolution.actual;
+      if (!actualSelection) {
+        return yield* new ServerHandoffJobError({
+          message: resolution.reason ?? "No supported handoff provider is available.",
+        });
+      }
+      const generationModel = yield* Effect.try({
+        try: () => normalizeHandoffModelSelection(actualSelection, availableProviderKinds),
+        catch: (cause) =>
+          new ServerHandoffJobError({
+            message:
+              cause instanceof Error
+                ? cause.message
+                : "No supported handoff provider is available.",
+            cause,
+          }),
+      });
+      yield* Effect.annotateCurrentSpan({
+        "handoff.requested-provider": resolution.requested.provider,
+        "handoff.actual-provider": generationModel.provider,
+        ...(resolution.reason ? { "handoff.fallback-reason": resolution.reason } : {}),
+      });
       const generateMarkdown = (context: string, mode: "chunk" | "final") =>
         generationModel.provider === "claudeAgent"
           ? generateClaudeHandoff(deps, {
@@ -159,7 +205,7 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
           }
         }
 
-        const snapshot = yield* deps.projectionSnapshotQuery.getSnapshot();
+        const snapshot = yield* readThreadHistory(input.threadId);
         const thread = snapshot.threads.find((entry) => entry.id === input.threadId);
         if (!thread) {
           return yield* new ServerHandoffJobError({ message: "Source thread was not found." });

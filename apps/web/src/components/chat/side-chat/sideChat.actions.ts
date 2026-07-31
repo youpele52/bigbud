@@ -154,6 +154,21 @@ export async function openSideChat(activeThread: Thread): Promise<void> {
   }
 }
 
+export async function toggleSideChat(activeThread: Thread): Promise<void> {
+  const sideChat = useSideChatStore.getState();
+  if (!sideChat.threadId) {
+    return openSideChat(activeThread);
+  }
+  if (sideChat.presentation === "creating" || sideChat.presentation === "closing") {
+    return;
+  }
+  if (sideChat.presentation === "open") {
+    sideChat.minimize();
+    return;
+  }
+  sideChat.restore();
+}
+
 export async function closeSideChat(threadId: Thread["id"]): Promise<void> {
   const api = readNativeApi();
   useSideChatStore.getState().beginClose(threadId, new Date().toISOString());

@@ -121,6 +121,8 @@ export function createWsNativeApi(): NativeApi {
       createWorktree: rpcClient.git.createWorktree,
       removeWorktree: rpcClient.git.removeWorktree,
       createBranch: rpcClient.git.createBranch,
+      renameBranch: rpcClient.git.renameBranch,
+      deleteBranch: rpcClient.git.deleteBranch,
       checkout: rpcClient.git.checkout,
       init: rpcClient.git.init,
       resolvePullRequest: rpcClient.git.resolvePullRequest,
@@ -140,12 +142,14 @@ export function createWsNativeApi(): NativeApi {
     server: {
       getConfig: rpcClient.server.getConfig,
       refreshProviders: rpcClient.server.refreshProviders,
+      activateCliProxy: rpcClient.server.activateCliProxy,
       verifyExecutionTarget: rpcClient.server.verifyExecutionTarget,
       unlockSshKey: rpcClient.server.unlockSshKey,
       unlockSshPassword: rpcClient.server.unlockSshPassword,
       upsertKeybinding: rpcClient.server.upsertKeybinding,
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
+      setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
       startHandoffJob: rpcClient.server.startHandoffJob,
@@ -167,14 +171,15 @@ export function createWsNativeApi(): NativeApi {
       getUsageSummary: rpcClient.server.getUsageSummary,
     },
     orchestration: {
+      getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
+      getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
+      getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
-        rpcClient.orchestration
-          .replayEvents({ fromSequenceExclusive })
-          .then((events) => [...events]),
+        rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
       onDomainEvent: (callback, options) =>
         rpcClient.orchestration.onDomainEvent(callback, options),
       onThinkingDelta: (callback, options) =>

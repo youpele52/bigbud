@@ -13,7 +13,10 @@ export interface ComputerUseIpcHandlerDeps {
   readonly RUN_COMPUTER_USE_DOCTOR_CHANNEL: string;
   readonly getComputerUseRuntimeStatus: () => Promise<DesktopComputerUseRuntimeStatus>;
   readonly getComputerUsePermissionsStatus: () => Promise<DesktopComputerUsePermissionsStatus>;
-  readonly requestComputerUsePermissions: () => Promise<DesktopComputerUsePermissionsStatus>;
+  readonly requestHostAccessibilityPermission: () => boolean | null;
+  readonly requestComputerUsePermissions: (
+    hostAccessibilityTrusted: boolean | null,
+  ) => Promise<DesktopComputerUsePermissionsStatus>;
   readonly installComputerUseRuntime: () => Promise<DesktopComputerUseInstallResult>;
   readonly runComputerUseDoctor: () => Promise<DesktopComputerUseRuntimeStatus>;
 }
@@ -31,7 +34,7 @@ export function registerComputerUseIpcHandlers(deps: ComputerUseIpcHandlerDeps):
 
   ipcMain.removeHandler(deps.REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL);
   ipcMain.handle(deps.REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL, () =>
-    deps.requestComputerUsePermissions(),
+    deps.requestComputerUsePermissions(deps.requestHostAccessibilityPermission()),
   );
 
   ipcMain.removeHandler(deps.INSTALL_COMPUTER_USE_RUNTIME_CHANNEL);

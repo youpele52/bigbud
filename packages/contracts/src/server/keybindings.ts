@@ -48,6 +48,8 @@ const STATIC_KEYBINDING_COMMANDS = [
   "chat.newLocal",
   "editor.openFavorite",
   "notes.toggle",
+  "sidecar.toggle",
+  "planCard.toggle",
   "project.open",
   ...THREAD_KEYBINDING_COMMANDS,
 ] as const;

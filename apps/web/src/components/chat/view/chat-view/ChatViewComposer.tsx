@@ -68,7 +68,6 @@ export function ChatViewComposer({
   const activeReplyTarget = base.composerDraft.replyTarget;
   const {
     insertMention,
-    onCompactFromMeter,
     onMicTranscript,
     onOpenReadDialog,
     onSubmitReadFiles,
@@ -94,7 +93,6 @@ export function ChatViewComposer({
   });
 
   const handoffAvailable = base.isServerThread;
-  const compactAvailable = composer.supportsCompact;
 
   return (
     <form
@@ -286,9 +284,7 @@ export function ChatViewComposer({
                       <ContextWindowMeter
                         usage={thread.activeContextWindow}
                         handoffAvailable={handoffAvailable}
-                        compactAvailable={compactAvailable}
                         onUseHandoff={onUseHandoffFromMeter}
-                        onCompact={onCompactFromMeter}
                       />
                     ) : null}
                     {thread.isPreparingWorktree ? (

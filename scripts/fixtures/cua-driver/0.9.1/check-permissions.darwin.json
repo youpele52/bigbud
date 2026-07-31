@@ -1,0 +1,24 @@
+{
+  "content": [
+    {
+      "text": "❌ Accessibility: NOT granted.\n✅ Screen Recording: granted.\nℹ️  Embedded mode: status reflects the HOST app's TCC grant. If a permission is missing, the host must request it — the driver will not prompt.",
+      "type": "text"
+    }
+  ],
+  "isError": false,
+  "structuredContent": {
+    "accessibility": false,
+    "screen_recording": true,
+    "screen_recording_capturable": true,
+    "source": {
+      "attribution": "host",
+      "disclaim_env": false,
+      "embedded": true,
+      "executable": "/private<TEMP_DIR>/extract/cua-driver-rs-0.9.1-darwin-universal/cua-driver",
+      "host_bundle_id": "ai.bigbud.desktop",
+      "note": "Embedded mode: these booleans reflect the HOST app's TCC grant (the driver is a child in the host's responsibility chain). No separate driver grant exists or is needed. If a permission is NOT granted, the host app must request it — the driver never raises its own prompt.",
+      "pid": 0,
+      "responsible_ppid": 0
+    }
+  }
+}

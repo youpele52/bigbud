@@ -1,40 +1,44 @@
 import { useSettings } from "~/hooks/useSettings";
 import { TriangleAlertIcon, XIcon } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../../ui/alert";
 import { ContextWindowRecoveryActions } from "./ContextWindowRecoveryActions";
-import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
+import {
+  type ContextWindowSnapshot,
+  formatContextWindowTokens,
+  getContextWindowWarningRearmTokens,
+} from "~/lib/contextWindow";
 
 export const ContextWindowWarningBanner = memo(function ContextWindowWarningBanner({
+  threadId,
   usage,
   handoffAvailable,
-  compactAvailable,
   onUseHandoff,
-  onCompact,
 }: {
+  threadId: string;
   usage: ContextWindowSnapshot | null;
   handoffAvailable: boolean;
-  compactAvailable: boolean;
   onUseHandoff: () => void;
-  onCompact: () => void;
 }) {
   const settings = useSettings();
   const warningThreshold = settings.contextWindowWarningThresholdTokens;
-  const [dismissed, setDismissed] = useState(false);
-  const prevKeyRef = useRef<string | null>(null);
+  const [dismissUntilByThreadId, setDismissUntilByThreadId] = useState<Record<string, number>>({});
 
   const isOverThreshold = (usage?.usedTokens ?? 0) >= warningThreshold;
-  const key = usage ? `${usage.usedTokens}:${usage.maxTokens ?? 0}` : null;
+  const dismissUntilTokens = dismissUntilByThreadId[threadId];
+  const isDismissed =
+    dismissUntilTokens !== undefined && usage !== null && usage.usedTokens < dismissUntilTokens;
 
-  // Re-show the banner when the token count changes significantly (crosses the threshold)
   useEffect(() => {
-    if (isOverThreshold && key !== prevKeyRef.current) {
-      setDismissed(false);
-      prevKeyRef.current = key;
+    if (dismissUntilTokens === undefined) {
+      return;
     }
-  }, [key, isOverThreshold]);
+    if (!isOverThreshold || (usage?.usedTokens ?? 0) >= dismissUntilTokens) {
+      setDismissUntilByThreadId(({ [threadId]: _, ...dismissals }) => dismissals);
+    }
+  }, [dismissUntilTokens, isOverThreshold, threadId, usage?.usedTokens]);
 
-  if (!usage || !isOverThreshold || dismissed) {
+  if (!usage || !isOverThreshold || isDismissed) {
     return null;
   }
 
@@ -45,12 +49,10 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
         <AlertTitle>Context window warning</AlertTitle>
         <AlertDescription>
           Some models may start deteriorating past {formatContextWindowTokens(warningThreshold)}{" "}
-          tokens. Consider using handoff or /compact.
+          tokens. Consider using handoff.
           <ContextWindowRecoveryActions
             handoffAvailable={handoffAvailable}
-            compactAvailable={compactAvailable}
             onUseHandoff={onUseHandoff}
-            onCompact={onCompact}
           />
         </AlertDescription>
         <AlertAction>
@@ -58,7 +60,12 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
             type="button"
             aria-label="Dismiss"
             className="inline-flex size-6 items-center justify-center rounded-md text-warning/60 transition-colors hover:text-warning"
-            onClick={() => setDismissed(true)}
+            onClick={() =>
+              setDismissUntilByThreadId((dismissals) => ({
+                ...dismissals,
+                [threadId]: getContextWindowWarningRearmTokens(usage.usedTokens, warningThreshold),
+              }))
+            }
           >
             <XIcon className="size-3.5" />
           </button>

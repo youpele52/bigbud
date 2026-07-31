@@ -11,6 +11,7 @@ import { type EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect, Random } from "effect";
 
 import { nativeProviderRefs } from "./Adapter.utils.ts";
+import { claudeSdkDiagnostic } from "./Adapter.sdk.projections.ts";
 import type { AssistantTextBlockState, ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import {
@@ -89,7 +90,7 @@ export const makeBlockHandlers = (deps: BlockHandlerDeps) => {
     options?: {
       readonly force?: boolean;
       readonly rawMethod?: string;
-      readonly rawPayload?: unknown;
+      readonly rawPayload?: ReturnType<typeof claudeSdkDiagnostic>;
     },
   ) {
     const turnState = context.turnState;
@@ -203,7 +204,7 @@ export const makeBlockHandlers = (deps: BlockHandlerDeps) => {
       if (entry.block.streamClosed && !entry.block.completionEmitted) {
         yield* completeAssistantTextBlock(context, entry.block, {
           rawMethod: "claude/assistant",
-          rawPayload: message,
+          rawPayload: claudeSdkDiagnostic(message),
         });
       }
     }

@@ -235,7 +235,7 @@ describe("mobileModels", () => {
     expect(chatThreadsForMobile(snapshot).map((thread) => thread.id)).toEqual(["chat-thread"]);
   });
 
-  it("sorts pending-approval threads ahead of others", () => {
+  it("sorts threads without user messages by creation time", () => {
     const snapshot = {
       snapshotSequence: 1,
       updatedAt: "2026-06-24T12:00:00.000Z",
@@ -246,7 +246,7 @@ describe("mobileModels", () => {
           workspaceRoot: null,
           defaultModelSelection: { provider: "codex", model: "gpt-5-codex" },
           scripts: [],
-          createdAt: "2026-06-24T12:00:00.000Z",
+          createdAt: "2026-06-24T11:00:00.000Z",
           updatedAt: "2026-06-24T12:00:00.000Z",
           deletingAt: null,
           deletedAt: null,
@@ -294,7 +294,7 @@ describe("mobileModels", () => {
           branch: null,
           worktreePath: null,
           latestTurn: null,
-          createdAt: "2026-06-24T12:00:00.000Z",
+          createdAt: "2026-06-24T11:00:00.000Z",
           updatedAt: "2026-06-24T11:00:00.000Z",
           archivedAt: null,
           deletingAt: null,

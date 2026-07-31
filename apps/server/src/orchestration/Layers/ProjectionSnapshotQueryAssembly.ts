@@ -53,6 +53,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       messageRows,
       proposedPlanRows,
       activityRows,
+      taskRows,
       sessionRows,
       checkpointRows,
       latestTurnRows,
@@ -106,6 +107,16 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
             toPersistenceSqlOrDecodeError(
               "ProjectionSnapshotQuery.getSnapshot:listThreadActivities:query",
               "ProjectionSnapshotQuery.getSnapshot:listThreadActivities:decodeRows",
+            ),
+          ),
+        ),
+      queries
+        .listThreadTaskRows(undefined)
+        .pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionSnapshotQuery.getSnapshot:listThreadTasks:query",
+              "ProjectionSnapshotQuery.getSnapshot:listThreadTasks:decodeRows",
             ),
           ),
         ),
@@ -167,6 +178,7 @@ export function assembleSnapshot(queries: ProjectionSnapshotQuerySql) {
       messageRows,
       proposedPlanRows,
       activityRows,
+      taskRows,
       sessionRows,
       checkpointRows,
       latestTurnRows,

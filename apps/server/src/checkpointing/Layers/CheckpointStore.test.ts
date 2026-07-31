@@ -2,7 +2,7 @@ import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, PlatformError, Scope } from "effect";
+import { Effect, Exit, FileSystem, Layer, PlatformError, Scope } from "effect";
 import { describe, expect } from "vitest";
 
 import {
@@ -168,6 +168,62 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
         expect(diff).toContain("diff --git");
         expect(diff).not.toContain("[truncated]");
         expect(diff).toContain("+line 04999");
+      }),
+    );
+  });
+
+  describe("path checkpoints", () => {
+    it.effect("rejects unsafe paths before invoking Git", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore;
+        const result = yield* Effect.exit(
+          checkpointStore.capturePathCheckpoint({
+            cwd: tmp,
+            checkpointRef: checkpointRefForThreadTurn(ThreadId.makeUnsafe("unsafe-path"), 1),
+            path: "../outside",
+          }),
+        );
+
+        expect(Exit.isFailure(result)).toBe(true);
+      }),
+    );
+
+    it.effect("captures and restores only the literal target path", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        yield* writeTextFile(path.join(tmp, "target.txt"), "initial target\n");
+        yield* writeTextFile(path.join(tmp, "sibling.txt"), "initial sibling\n");
+        yield* git(tmp, ["add", "."]);
+        yield* git(tmp, ["commit", "-m", "add files"]);
+        const checkpointStore = yield* CheckpointStore;
+        const checkpointRef = checkpointRefForThreadTurn(ThreadId.makeUnsafe("path-only"), 1);
+
+        yield* writeTextFile(path.join(tmp, "target.txt"), "checkpoint target\n");
+        yield* checkpointStore.capturePathCheckpoint({
+          cwd: tmp,
+          checkpointRef,
+          path: "target.txt",
+        });
+        yield* writeTextFile(path.join(tmp, "target.txt"), "changed target\n");
+        yield* writeTextFile(path.join(tmp, "sibling.txt"), "changed sibling\n");
+
+        expect(
+          yield* checkpointStore.restorePathCheckpoint({
+            cwd: tmp,
+            checkpointRef,
+            path: "target.txt",
+          }),
+        ).toBe(true);
+        const fileSystem = yield* FileSystem.FileSystem;
+        expect(yield* fileSystem.readFileString(path.join(tmp, "target.txt"))).toBe(
+          "checkpoint target\n",
+        );
+        expect(yield* fileSystem.readFileString(path.join(tmp, "sibling.txt"))).toBe(
+          "changed sibling\n",
+        );
       }),
     );
   });

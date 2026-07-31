@@ -64,6 +64,10 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./providerRuntime": {
+      "types": "./src/providerRuntime.ts",
+      "import": "./src/providerRuntime.ts"
+    },
     "./workLog": {
       "types": "./src/workLog.ts",
       "import": "./src/workLog.ts"
@@ -75,6 +79,30 @@
     "./DevPorts": {
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"
+    },
+    "./releaseChannel": {
+      "types": "./src/releaseChannel.ts",
+      "import": "./src/releaseChannel.ts"
+    },
+    "./cua-driver/release": {
+      "types": "./src/cua-driver/release.ts",
+      "import": "./src/cua-driver/release.ts"
+    },
+    "./cua-driver/childEnvironment": {
+      "types": "./src/cua-driver/childEnvironment.ts",
+      "import": "./src/cua-driver/childEnvironment.ts"
+    },
+    "./cua-driver/invocation": {
+      "types": "./src/cua-driver/invocation.ts",
+      "import": "./src/cua-driver/invocation.ts"
+    },
+    "./cua-driver/manifest": {
+      "types": "./src/cua-driver/manifest.ts",
+      "import": "./src/cua-driver/manifest.ts"
+    },
+    "./cua-driver/policy": {
+      "types": "./src/cua-driver/policy.ts",
+      "import": "./src/cua-driver/policy.ts"
     }
   },
   "scripts": {

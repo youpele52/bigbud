@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { ThreadId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
+import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -21,7 +21,6 @@ import {
   DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
   SIDEBAR_THREAD_SORT_ORDERS,
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
-  FAVORITE_THREAD_LIMIT,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
@@ -145,12 +144,29 @@ export const CodexSettings = Schema.Struct({
 });
 export type CodexSettings = typeof CodexSettings.Type;
 
+export const ClaudeRolloutSettings = Schema.Struct({
+  modernTaskExposure: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  boundedHookProgress: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  forwardedSubagentText: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  mcpControls: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  fileCheckpointRewind: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  nativeFork: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+});
+export type ClaudeRolloutSettings = typeof ClaudeRolloutSettings.Type;
+
 export const ClaudeSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("claude"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
+  rollout: ClaudeRolloutSettings.pipe(Schema.withDecodingDefault(() => ({}))),
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
+
+export const CliProxySettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  configPath: TrimmedString.pipe(Schema.withDecodingDefault(() => "")),
+});
+export type CliProxySettings = typeof CliProxySettings.Type;
 
 export const CopilotSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
@@ -213,9 +229,6 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
-  favoriteThreadIds: Schema.Array(ThreadId)
-    .check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT))
-    .pipe(Schema.withDecodingDefault(() => [])),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
       provider: DEFAULT_PROVIDER_KIND,
@@ -227,6 +240,7 @@ export const ServerSettings = Schema.Struct({
   providers: Schema.Struct({
     codex: CodexSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    cliProxy: CliProxySettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -326,6 +340,10 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(ClaudeModelOptionsPatch),
   }),
   Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("cliProxy")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+  }),
+  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("copilot")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(CopilotModelOptionsPatch),
@@ -364,10 +382,20 @@ const CodexSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+const ClaudeRolloutSettingsPatch = Schema.Struct({
+  modernTaskExposure: Schema.optionalKey(Schema.Boolean),
+  boundedHookProgress: Schema.optionalKey(Schema.Boolean),
+  forwardedSubagentText: Schema.optionalKey(Schema.Boolean),
+  mcpControls: Schema.optionalKey(Schema.Boolean),
+  fileCheckpointRewind: Schema.optionalKey(Schema.Boolean),
+  nativeFork: Schema.optionalKey(Schema.Boolean),
+});
+
 const ClaudeSettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
+  rollout: Schema.optionalKey(ClaudeRolloutSettingsPatch),
 });
 
 const CopilotSettingsPatch = Schema.Struct({
@@ -412,9 +440,6 @@ export const ServerSettingsPatch = Schema.Struct({
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
-  favoriteThreadIds: Schema.optionalKey(
-    Schema.Array(ThreadId).check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT)),
-  ),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({
@@ -435,6 +460,12 @@ export const ServerSettingsPatch = Schema.Struct({
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),
       claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
+      cliProxy: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          configPath: Schema.optionalKey(Schema.String),
+        }),
+      ),
       copilot: Schema.optionalKey(CopilotSettingsPatch),
       kilocode: Schema.optionalKey(KilocodeSettingsPatch),
       opencode: Schema.optionalKey(OpencodeSettingsPatch),

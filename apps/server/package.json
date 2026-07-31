@@ -20,22 +20,26 @@
     "start": "node dist/bin.mjs",
     "prepare": "node -e \"if (process.env.CF_PAGES || process.env.CLOUDFLARE) process.exit(0); process.exit(require('child_process').spawnSync('effect-language-service', ['patch'], { stdio: 'inherit', shell: true }).status ?? 1)\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark:startup-catalog": "BIGBUD_STARTUP_CATALOG_BENCHMARK=1 vitest run src/orchestration/Layers/ProjectionCatalogQuery.scale.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.120",
+    "@anthropic-ai/claude-agent-sdk": "0.3.219",
+    "@anthropic-ai/sdk": "0.115.0",
     "@earendil-works/pi-coding-agent": "^0.80.3",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
-    "@github/copilot-sdk": "1.0.5",
+    "@github/copilot": "1.0.73",
+    "@github/copilot-sdk": "1.0.7",
     "@opencode-ai/sdk": "^1.17.13",
-    "@pierre/diffs": "^1.1.0-beta.16",
+    "@pierre/diffs": "^1.2.12",
     "effect": "catalog:",
     "effect-acp": "workspace:*",
     "node-pty": "^1.1.0",
     "open": "^10.1.0",
-    "playwright": "^1.58.2"
+    "playwright": "^1.58.2",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@bigbud/contracts": "workspace:*",

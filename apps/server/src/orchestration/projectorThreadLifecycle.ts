@@ -22,8 +22,11 @@ import {
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
+  ThreadPinnedPayload,
   ThreadRuntimeModeSetPayload,
+  ThreadTurnStartFailedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnpinnedPayload,
 } from "./Schemas.ts";
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
 
@@ -98,9 +101,17 @@ export function projectThreadCreated(
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,
+        pinnedAt: null,
         deletingAt: null,
         deletedAt: null,
-        ...(payload.parentThread !== undefined ? { parentThread: payload.parentThread } : {}),
+        ...(payload.parentThread !== undefined
+          ? {
+              parentThread: {
+                ...payload.parentThread,
+                projectId: payload.parentThread.projectId ?? payload.projectId,
+              },
+            }
+          : {}),
         messages: [],
         activities: [],
         checkpoints: [],
@@ -149,6 +160,57 @@ export function projectThreadDeletionFailed(
   );
 }
 
+export function projectThreadTurnStartFailed(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.turn-start-failed" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadTurnStartFailedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => {
+      const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+      if (!thread) {
+        return nextBase;
+      }
+
+      const session = thread.session
+        ? {
+            ...thread.session,
+            status: "error" as const,
+            activeTurnId: null,
+            reason: payload.context,
+            lastError: payload.detail,
+            updatedAt: payload.createdAt,
+          }
+        : {
+            threadId: thread.id,
+            status: "error" as const,
+            providerName: thread.modelSelection.provider,
+            runtimeMode: thread.runtimeMode,
+            activeTurnId: null,
+            reason: payload.context,
+            lastError: payload.detail,
+            updatedAt: payload.createdAt,
+          };
+      const latestTurn = thread.latestTurn
+        ? {
+            ...thread.latestTurn,
+            state: "error" as const,
+            startedAt: thread.latestTurn.startedAt ?? payload.createdAt,
+            completedAt: thread.latestTurn.completedAt ?? payload.createdAt,
+          }
+        : null;
+
+      return {
+        ...nextBase,
+        threads: updateThread(nextBase.threads, payload.threadId, {
+          session,
+          latestTurn,
+          updatedAt: payload.createdAt,
+        }),
+      };
+    }),
+  );
+}
+
 export function projectThreadDeleted(
   nextBase: OrchestrationReadModel,
   event: Extract<OrchestrationEvent, { type: "thread.deleted" }>,
@@ -159,7 +221,38 @@ export function projectThreadDeleted(
       threads: updateThread(nextBase.threads, payload.threadId, {
         deletingAt: null,
         deletedAt: payload.deletedAt,
+        pinnedAt: null,
         updatedAt: payload.deletedAt,
+      }),
+    })),
+  );
+}
+
+export function projectThreadPinned(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.pinned" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadPinnedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        pinnedAt: payload.pinnedAt,
+        updatedAt: payload.updatedAt,
+      }),
+    })),
+  );
+}
+
+export function projectThreadUnpinned(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.unpinned" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadUnpinnedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        pinnedAt: null,
+        updatedAt: payload.updatedAt,
       }),
     })),
   );

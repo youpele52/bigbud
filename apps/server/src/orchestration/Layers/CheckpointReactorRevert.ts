@@ -27,6 +27,12 @@ export function makeHandleRevertRequested(
   },
   providerService: {
     listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
+    getCapabilities?: (provider: ProviderSession["provider"]) => Effect.Effect<
+      {
+        readonly conversationRewind?: "transcript-and-files" | "files-only" | "unsupported";
+      },
+      ProviderServiceError
+    >;
     rollbackConversation: (input: {
       readonly threadId: ThreadId;
       readonly numTurns: number;
@@ -91,6 +97,46 @@ export function makeHandleRevertRequested(
       return;
     }
 
+    if (thread.latestTurn?.state === "running" || thread.session?.status === "running") {
+      yield* appendRevertFailureActivity({
+        threadId: event.payload.threadId,
+        turnCount: event.payload.turnCount,
+        detail: "Rewind requires an idle provider session.",
+        createdAt: now,
+      }).pipe(Effect.catch(() => Effect.void));
+      return;
+    }
+
+    if (providerService.getCapabilities) {
+      const activeSession = (yield* providerService.listSessions()).find(
+        (session) => session.threadId === sessionRuntime.value.threadId,
+      );
+      if (!activeSession) {
+        yield* appendRevertFailureActivity({
+          threadId: event.payload.threadId,
+          turnCount: event.payload.turnCount,
+          detail: "No active provider session is available for transcript rewind.",
+          createdAt: now,
+        }).pipe(Effect.catch(() => Effect.void));
+        return;
+      }
+      const capabilities = yield* providerService
+        .getCapabilities(activeSession.provider)
+        .pipe(Effect.orElseSucceed(() => ({ conversationRewind: "unsupported" as const })));
+      if (
+        capabilities.conversationRewind !== undefined &&
+        capabilities.conversationRewind !== "transcript-and-files"
+      ) {
+        yield* appendRevertFailureActivity({
+          threadId: event.payload.threadId,
+          turnCount: event.payload.turnCount,
+          detail: "This provider cannot safely rewind transcript and files together.",
+          createdAt: now,
+        }).pipe(Effect.catch(() => Effect.void));
+        return;
+      }
+    }
+
     const currentTurnCount = thread.checkpoints.reduce(
       (maxTurnCount, checkpoint) => Math.max(maxTurnCount, checkpoint.checkpointTurnCount),
       0,
@@ -123,6 +169,14 @@ export function makeHandleRevertRequested(
       return;
     }
 
+    const rolledBackTurns = Math.max(0, currentTurnCount - event.payload.turnCount);
+    if (rolledBackTurns > 0) {
+      yield* providerService.rollbackConversation({
+        threadId: sessionRuntime.value.threadId,
+        numTurns: rolledBackTurns,
+      });
+    }
+
     const restored = yield* checkpointStore.restoreCheckpoint({
       cwd: sessionRuntime.value.cwd,
       checkpointRef: targetCheckpointRef,
@@ -132,21 +186,13 @@ export function makeHandleRevertRequested(
       yield* appendRevertFailureActivity({
         threadId: event.payload.threadId,
         turnCount: event.payload.turnCount,
-        detail: `Filesystem checkpoint is unavailable for turn ${event.payload.turnCount}.`,
+        detail: `Transcript rewind completed, but the filesystem checkpoint is unavailable for turn ${event.payload.turnCount}.`,
         createdAt: now,
       }).pipe(Effect.catch(() => Effect.void));
       return;
     }
 
     yield* workspaceEntries.invalidate(sessionRuntime.value.cwd);
-
-    const rolledBackTurns = Math.max(0, currentTurnCount - event.payload.turnCount);
-    if (rolledBackTurns > 0) {
-      yield* providerService.rollbackConversation({
-        threadId: sessionRuntime.value.threadId,
-        numTurns: rolledBackTurns,
-      });
-    }
 
     const staleCheckpointRefs = thread.checkpoints
       .filter((checkpoint) => checkpoint.checkpointTurnCount > event.payload.turnCount)

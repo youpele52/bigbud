@@ -1,13 +1,118 @@
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Option, Ref } from "effect";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Deferred, Effect, Fiber, Layer, Metric, Option, Ref, Stream } from "effect";
+import { TestClock } from "effect/testing";
 
+import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
+import { Keybindings } from "../keybindings/keybindings.ts";
+import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor.ts";
+import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService.ts";
+import { Open } from "../utils/open.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ServerLifecycleEvents, ServerLifecycleEventsLive } from "./serverLifecycleEvents.ts";
+import {
+  OrchestrationProjectionPipeline,
+  type OrchestrationProjectionPipelineShape,
+} from "../orchestration/Services/ProjectionPipeline.ts";
+import { ServerConfig } from "./config.ts";
+import { ServerSettingsService } from "../ws/serverSettings.ts";
 import {
   launchStartupHeartbeat,
   makeCommandGate,
   ServerRuntimeStartupError,
+  ServerRuntimeStartup,
+  ServerRuntimeStartupLive,
 } from "./serverRuntimeStartup.ts";
+import { runStartupPhase } from "./serverRuntimeStartup.browser.ts";
+
+const hasMetricSnapshot = (
+  snapshots: ReadonlyArray<Metric.Metric.Snapshot>,
+  id: string,
+  attributes: Readonly<Record<string, string>>,
+) =>
+  snapshots.some(
+    (snapshot) =>
+      snapshot.id === id &&
+      Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
+  );
+
+const startupLayer = (
+  events: Array<string>,
+  projectionPipeline: OrchestrationProjectionPipelineShape = {
+    bootstrap: Effect.void,
+    backfillUsageContributions: Effect.void,
+    ensureVerifiedBaselineThrough: () => Effect.void,
+    compactVerifiedPrefix: () => Effect.void,
+    projectEvent: () => Effect.void,
+  },
+) => {
+  const nodeServices = NodeServices.layer;
+  const serverConfig = ServerConfig.layerTest(process.cwd(), {
+    prefix: "bigbud-startup-order-",
+  }).pipe(Layer.provide(nodeServices));
+
+  return ServerRuntimeStartupLive.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        nodeServices,
+        serverConfig,
+        ServerLifecycleEventsLive,
+        ServerSettingsService.layerTest(),
+        AnalyticsService.layerTest,
+        Layer.succeed(OrchestrationProjectionPipeline, projectionPipeline),
+        Layer.succeed(Keybindings, {
+          start: Effect.void,
+          ready: Effect.void,
+          syncDefaultKeybindingsOnStartup: Effect.void,
+          loadConfigState: Effect.die("keybindings loadConfigState"),
+          getSnapshot: Effect.die("keybindings getSnapshot"),
+          streamChanges: Stream.empty,
+          upsertKeybindingRule: () => Effect.die("keybindings upsertKeybindingRule"),
+        }),
+        Layer.succeed(EntityPurge, {
+          requestThread: () => Effect.die("purge requestThread"),
+          requestProject: () => Effect.die("purge requestProject"),
+          run: () => Effect.die("purge run"),
+          auditAndResume: () => Effect.sync(() => events.push("purge.audit")),
+        }),
+        Layer.succeed(OrchestrationReactor, {
+          start: () => Effect.sync(() => events.push("reactors.start")),
+        }),
+        Layer.succeed(OrchestrationEngineService, {
+          getReadModel: () => Effect.succeed({ projects: [] } as never),
+          readEvents: () => Stream.empty,
+          readReplay: () => Effect.die("engine readReplay"),
+          dispatch: () => Effect.succeed({ sequence: 1 }),
+          streamDomainEvents: Stream.empty,
+        }),
+        Layer.succeed(ProjectionSnapshotQuery, {
+          getSnapshot: () => Effect.die("projection getSnapshot"),
+          getCounts: () => Effect.die("projection getCounts"),
+          getUsageEntries: () => Effect.die("projection getUsageEntries"),
+          getUsageHistoryStatus: () => Effect.die("projection getUsageHistoryStatus"),
+          getActiveProjectByWorkspaceRoot: () =>
+            Effect.die("projection getActiveProjectByWorkspaceRoot"),
+          getFirstActiveThreadIdByProjectId: () =>
+            Effect.die("projection getFirstActiveThreadIdByProjectId"),
+          getThreadCheckpointContext: () => Effect.die("projection getThreadCheckpointContext"),
+        }),
+        Layer.succeed(ProviderRegistry, {
+          getProviders: Effect.succeed([]),
+          refresh: () => Effect.succeed([]),
+          streamChanges: Stream.empty,
+          awaitFirstReadyProvider: Effect.succeed(Option.none()),
+        }),
+        Layer.succeed(Open, {
+          openBrowser: () => Effect.void,
+          openInEditor: () => Effect.void,
+          openPath: () => Effect.void,
+        }),
+      ),
+    ),
+  );
+};
 
 it.effect("enqueueCommand waits for readiness and then drains queued work", () =>
   Effect.scoped(
@@ -82,3 +187,79 @@ it.effect("launchStartupHeartbeat does not block the caller while counts are loa
     }),
   ),
 );
+
+it.effect("runStartupPhase records duration and outcome metrics", () =>
+  Effect.gen(function* () {
+    yield* runStartupPhase("test.phase", Effect.void);
+
+    const snapshots = yield* Metric.snapshot;
+    assert.isTrue(
+      hasMetricSnapshot(snapshots, "t3_server_startup_phases_total", {
+        phase: "test.phase",
+        outcome: "success",
+      }),
+    );
+    assert.isTrue(
+      hasMetricSnapshot(snapshots, "t3_server_startup_phase_duration", {
+        phase: "test.phase",
+      }),
+    );
+  }),
+);
+
+it.effect("defers the purge audit until after readiness", () => {
+  const events: Array<string> = [];
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const startup = yield* ServerRuntimeStartup;
+
+      yield* startup.awaitCommandReady;
+      yield* Effect.yieldNow;
+      assert.deepEqual(events, ["reactors.start"]);
+
+      yield* startup.markHttpListening;
+      yield* Effect.yieldNow;
+      assert.deepEqual(events, ["reactors.start"]);
+
+      yield* TestClock.adjust("1 second");
+      yield* Effect.yieldNow;
+      assert.deepEqual(events, ["reactors.start", "purge.audit"]);
+    }).pipe(Effect.provide(startupLayer(events))),
+  );
+});
+
+it.effect("does not compact canonical events during startup", () => {
+  const events: Array<string> = [];
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const startup = yield* ServerRuntimeStartup;
+      const lifecycleEvents = yield* ServerLifecycleEvents;
+      const readyEvent = yield* lifecycleEvents.stream.pipe(
+        Stream.filter((event) => event.type === "ready"),
+        Stream.runHead,
+        Effect.forkScoped,
+      );
+
+      yield* startup.awaitCommandReady;
+      yield* Effect.yieldNow;
+      assert.notInclude(events, "compaction.start");
+
+      yield* startup.markHttpListening;
+
+      const ready = yield* Fiber.join(readyEvent);
+      assert.isTrue(Option.isSome(ready));
+      yield* TestClock.adjust("2 seconds");
+      assert.notInclude(events, "compaction.start");
+    }).pipe(
+      Effect.provide(
+        startupLayer(events, {
+          bootstrap: Effect.void,
+          backfillUsageContributions: Effect.void,
+          ensureVerifiedBaselineThrough: () => Effect.sync(() => events.push("compaction.start")),
+          compactVerifiedPrefix: () => Effect.sync(() => events.push("compaction.start")),
+          projectEvent: () => Effect.void,
+        }),
+      ),
+    ),
+  );
+});

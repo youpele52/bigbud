@@ -168,6 +168,7 @@ function mapThreadFromCreatedEvent(
     createdAt: event.payload.createdAt,
     updatedAt: event.payload.updatedAt,
     archivedAt: null,
+    pinnedAt: null,
     deletingAt: null,
     deletedAt: null,
     messages: [],
@@ -380,6 +381,28 @@ export function applyOrchestrationEventToThread(
       return {
         ...thread,
         archivedAt: null,
+        updatedAt: event.payload.updatedAt,
+      };
+    }
+
+    case "thread.pinned": {
+      if (event.payload.threadId !== thread.id) {
+        return null;
+      }
+      return {
+        ...thread,
+        pinnedAt: event.payload.pinnedAt,
+        updatedAt: event.payload.updatedAt,
+      };
+    }
+
+    case "thread.unpinned": {
+      if (event.payload.threadId !== thread.id) {
+        return null;
+      }
+      return {
+        ...thread,
+        pinnedAt: null,
         updatedAt: event.payload.updatedAt,
       };
     }

@@ -10,70 +10,41 @@ import { Equal } from "effect";
 import { MAX_CUSTOM_MODEL_LENGTH, resolveAppModelSelectionState } from "../../models/provider";
 import { formatRelativeTime } from "../../utils/timestamp";
 import type { ProviderCardData } from "./ProviderCard";
+import { PROVIDER_DESCRIPTORS } from "../chat/provider/providerDescriptors";
 
 export type InstallProviderSettings = {
   provider: ProviderKind;
   title: string;
   binaryPlaceholder: string;
   binaryDescription: ReactNode;
+  configPath?: boolean;
   homePathKey?: "codexHomePath";
   homePlaceholder?: string;
   homeDescription?: ReactNode;
+  setupUrl?: string;
+  supportsCustomModels: boolean;
+  customModelPlaceholder?: string;
 };
 
-export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = [
-  {
-    provider: "claudeAgent",
-    title: "Claude",
-    binaryPlaceholder: "Claude binary path",
-    binaryDescription: "Path to the Claude binary",
-  },
-  {
-    provider: "codex",
-    title: "Codex",
-    binaryPlaceholder: "Codex binary path",
-    binaryDescription: "Path to the Codex binary",
-    homePathKey: "codexHomePath",
-    homePlaceholder: "CODEX_HOME",
-    homeDescription: "Optional custom Codex home and config directory.",
-  },
-  {
-    provider: "copilot",
-    title: "Copilot",
-    binaryPlaceholder: "Copilot binary path",
-    binaryDescription: "Path to the GitHub Copilot CLI binary",
-  },
-  {
-    provider: "cursor",
-    title: "Cursor",
-    binaryPlaceholder: "Cursor agent binary path",
-    binaryDescription: "Path to the Cursor agent binary (agent CLI)",
-  },
-  {
-    provider: "devin",
-    title: "Devin",
-    binaryPlaceholder: "Devin CLI binary path",
-    binaryDescription: "Path to the Devin CLI binary (devin CLI)",
-  },
-  {
-    provider: "opencode",
-    title: "OpenCode",
-    binaryPlaceholder: "OpenCode binary path",
-    binaryDescription: "Path to the OpenCode binary",
-  },
-  {
-    provider: "kilocode",
-    title: "KiloCode",
-    binaryPlaceholder: "KiloCode binary path",
-    binaryDescription: "Path to the KiloCode binary",
-  },
-  {
-    provider: "pi",
-    title: "Pi",
-    binaryPlaceholder: "Pi binary path",
-    binaryDescription: "Path to the Pi binary",
-  },
-] as const;
+export const PROVIDER_SETTINGS: readonly InstallProviderSettings[] = PROVIDER_DESCRIPTORS.map(
+  (descriptor) => ({
+    provider: descriptor.provider,
+    title: descriptor.label,
+    binaryPlaceholder: descriptor.settings.path.placeholder,
+    binaryDescription: descriptor.settings.path.description,
+    ...(descriptor.settings.path.kind === "config" ? { configPath: true } : {}),
+    ...(descriptor.settings.home
+      ? {
+          homePathKey: descriptor.settings.home.key,
+          homePlaceholder: descriptor.settings.home.placeholder,
+          homeDescription: descriptor.settings.home.description,
+        }
+      : {}),
+    ...(descriptor.settings.setupUrl ? { setupUrl: descriptor.settings.setupUrl } : {}),
+    supportsCustomModels: descriptor.customModels !== null,
+    ...(descriptor.customModels ? { customModelPlaceholder: descriptor.customModels.example } : {}),
+  }),
+);
 
 export const PROVIDER_STATUS_STYLES = {
   disabled: { dot: "bg-amber-400" },
@@ -137,53 +108,40 @@ export function formatProviderLastChecked(lastCheckedAt: string | null) {
   return lastCheckedAt ? formatRelativeTime(lastCheckedAt) : null;
 }
 
-export function createInitialOpenProviderDetails(settings: typeof DEFAULT_UNIFIED_SETTINGS) {
-  return {
-    codex: Boolean(
-      settings.providers.codex.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.binaryPath ||
-      settings.providers.codex.homePath !== DEFAULT_UNIFIED_SETTINGS.providers.codex.homePath ||
-      settings.providers.codex.customModels.length > 0,
-    ),
-    claudeAgent: Boolean(
-      settings.providers.claudeAgent.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.claudeAgent.binaryPath ||
-      settings.providers.claudeAgent.customModels.length > 0,
-    ),
-    copilot: Boolean(
-      settings.providers.copilot.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.copilot.binaryPath ||
-      settings.providers.copilot.customModels.length > 0,
-    ),
-    opencode: Boolean(
-      settings.providers.opencode.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.opencode.binaryPath ||
-      settings.providers.opencode.customModels.length > 0,
-    ),
-    kilocode: Boolean(
-      settings.providers.kilocode.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.kilocode.binaryPath ||
-      settings.providers.kilocode.customModels.length > 0,
-    ),
-    pi: Boolean(
-      settings.providers.pi.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.pi.binaryPath ||
-      settings.providers.pi.customModels.length > 0,
-    ),
-    cursor: Boolean(
-      settings.providers.cursor.binaryPath !==
-        DEFAULT_UNIFIED_SETTINGS.providers.cursor.binaryPath ||
-      settings.providers.cursor.customModels.length > 0,
-    ),
-    devin: Boolean(
-      settings.providers.devin.binaryPath !== DEFAULT_UNIFIED_SETTINGS.providers.devin.binaryPath ||
-      settings.providers.devin.customModels.length > 0,
-    ),
-  };
+export function createInitialOpenProviderDetails(
+  settings: typeof DEFAULT_UNIFIED_SETTINGS,
+): Record<ProviderKind, boolean> {
+  return Object.fromEntries(
+    PROVIDER_DESCRIPTORS.map((descriptor) => {
+      const current = settings.providers[descriptor.provider];
+      const defaults = DEFAULT_UNIFIED_SETTINGS.providers[descriptor.provider];
+      const pathDirty =
+        descriptor.settings.path.kind === "config"
+          ? "configPath" in current &&
+            "configPath" in defaults &&
+            current.configPath !== defaults.configPath
+          : "binaryPath" in current &&
+            "binaryPath" in defaults &&
+            current.binaryPath !== defaults.binaryPath;
+      const homeDirty =
+        descriptor.settings.home !== undefined &&
+        "homePath" in current &&
+        "homePath" in defaults &&
+        current.homePath !== defaults.homePath;
+      const customModelsDirty =
+        descriptor.customModels !== null &&
+        "customModels" in current &&
+        current.customModels.length > 0;
+      return [descriptor.provider, pathDirty || homeDirty || customModelsDirty];
+    }),
+  ) as Record<ProviderKind, boolean>;
 }
 
 export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
   return {
     codex: "",
     claudeAgent: "",
+    cliProxy: "",
     copilot: "",
     opencode: "",
     kilocode: "",
@@ -234,9 +192,13 @@ export function buildProviderCards(input: {
     const defaultProviderConfig = DEFAULT_UNIFIED_SETTINGS.providers[providerSettings.provider];
     const statusKey = liveProvider?.status ?? (providerConfig.enabled ? "warning" : "disabled");
     const summary = getProviderSummary(liveProvider);
+    const customModels =
+      "customModels" in providerConfig
+        ? providerConfig.customModels
+        : ([] as ReadonlyArray<string>);
     const models: ReadonlyArray<ServerProviderModel> =
       liveProvider?.models ??
-      providerConfig.customModels.map((slug) => ({
+      customModels.map((slug) => ({
         slug,
         name: slug,
         isCustom: true,
@@ -248,10 +210,15 @@ export function buildProviderCards(input: {
       title: providerSettings.title,
       binaryPlaceholder: providerSettings.binaryPlaceholder,
       binaryDescription: providerSettings.binaryDescription,
+      configPath: providerSettings.configPath,
       homePathKey: providerSettings.homePathKey,
       homePlaceholder: providerSettings.homePlaceholder,
       homeDescription: providerSettings.homeDescription,
-      binaryPathValue: providerConfig.binaryPath,
+      setupUrl: providerSettings.setupUrl,
+      supportsCustomModels: providerSettings.supportsCustomModels,
+      customModelPlaceholder: providerSettings.customModelPlaceholder,
+      binaryPathValue: "binaryPath" in providerConfig ? providerConfig.binaryPath : "",
+      configPathValue: "configPath" in providerConfig ? providerConfig.configPath : "",
       isDirty: !Equal.equals(providerConfig, defaultProviderConfig),
       models,
       providerConfig,

@@ -135,6 +135,10 @@ describe("configureApplicationMenu", () => {
     expect(viewMenuEntries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          accelerator: "Shift+CmdOrCtrl+C",
+          label: "Browser Context Menu",
+        }),
+        expect.objectContaining({
           accelerator: "CmdOrCtrl+R",
           label: "Reload Browser",
         }),
@@ -152,7 +156,7 @@ describe("configureApplicationMenu", () => {
     );
   });
 
-  it("dispatches browser reload actions through the menu action bridge", () => {
+  it("dispatches browser actions through the menu action bridge", () => {
     menuHarness.buildTemplate = null;
     focusedWindow.webContents.send.mockClear();
 
@@ -167,21 +171,30 @@ describe("configureApplicationMenu", () => {
     });
 
     const viewMenuEntries = getViewMenuEntries();
+    const browserContextMenu = viewMenuEntries.find(
+      (entry) => entry.label === "Browser Context Menu",
+    );
     const reloadBrowser = viewMenuEntries.find((entry) => entry.label === "Reload Browser");
     const reloadIgnoringCache = viewMenuEntries.find(
       (entry) => entry.label === "Reload Browser and Ignore Cache",
     );
 
+    browserContextMenu?.click?.();
     reloadBrowser?.click?.();
     reloadIgnoringCache?.click?.();
 
     expect(focusedWindow.webContents.send).toHaveBeenNthCalledWith(
       1,
       "desktop:menu-action",
-      "reload-browser",
+      "toggle-browser-context-menu",
     );
     expect(focusedWindow.webContents.send).toHaveBeenNthCalledWith(
       2,
+      "desktop:menu-action",
+      "reload-browser",
+    );
+    expect(focusedWindow.webContents.send).toHaveBeenNthCalledWith(
+      3,
       "desktop:menu-action",
       "reload-browser-ignoring-cache",
     );

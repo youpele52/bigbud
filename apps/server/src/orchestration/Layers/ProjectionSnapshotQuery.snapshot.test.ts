@@ -1,4 +1,4 @@
-import { ThreadId } from "@bigbud/contracts";
+import { RuntimeTaskId, ThreadId } from "@bigbud/contracts";
 import { assert } from "@effect/vitest";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -118,6 +118,16 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           'thread-2',
           '2026-02-24T00:00:05.000Z',
           '2026-02-24T00:00:05.500Z'
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_thread_tasks (
+          task_id, thread_id, task_json, created_at, updated_at
+        ) VALUES (
+          'task-1', 'thread-1',
+          '{"id":"task-1","status":"inProgress","subject":"Durable task","source":"observed","freshness":{"sessionEpoch":"epoch-1","sourcePriority":1,"observedOrdinal":1},"createdAt":"2026-02-24T00:00:05.700Z","updatedAt":"2026-02-24T00:00:05.800Z"}',
+          '2026-02-24T00:00:05.700Z', '2026-02-24T00:00:05.800Z'
         )
       `;
 
@@ -286,6 +296,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:02.000Z",
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
+          pinnedAt: null,
           deletingAt: null,
           deletedAt: null,
           messages: [
@@ -308,6 +319,21 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
               implementationThreadId: ThreadId.makeUnsafe("thread-2"),
               createdAt: "2026-02-24T00:00:05.000Z",
               updatedAt: "2026-02-24T00:00:05.500Z",
+            },
+          ],
+          tasks: [
+            {
+              id: RuntimeTaskId.makeUnsafe("task-1"),
+              status: "inProgress",
+              subject: "Durable task",
+              source: "observed",
+              freshness: {
+                sessionEpoch: "epoch-1",
+                sourcePriority: 1,
+                observedOrdinal: 1,
+              },
+              createdAt: "2026-02-24T00:00:05.700Z",
+              updatedAt: "2026-02-24T00:00:05.800Z",
             },
           ],
           activities: [

@@ -33,8 +33,11 @@ import {
   projectThreadDeleted,
   projectThreadInteractionModeSet,
   projectThreadMetaUpdated,
+  projectThreadPinned,
   projectThreadRuntimeModeSet,
+  projectThreadTurnStartFailed,
   projectThreadUnarchived,
+  projectThreadUnpinned,
 } from "./projectorThreadLifecycle.ts";
 import {
   compareThreadActivities,
@@ -42,6 +45,7 @@ import {
   retainThreadMessagesAfterRevert,
   retainThreadProposedPlansAfterRevert,
 } from "./projectorThreadState.ts";
+import { projectThreadTaskEvent } from "./projectorTasks.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -90,6 +94,12 @@ export function projectEvent(
     case "thread.unarchived":
       return projectThreadUnarchived(nextBase, event);
 
+    case "thread.pinned":
+      return projectThreadPinned(nextBase, event);
+
+    case "thread.unpinned":
+      return projectThreadUnpinned(nextBase, event);
+
     case "thread.meta-updated":
       return projectThreadMetaUpdated(nextBase, event);
 
@@ -98,6 +108,9 @@ export function projectEvent(
 
     case "thread.interaction-mode-set":
       return projectThreadInteractionModeSet(nextBase, event);
+
+    case "thread.turn-start-failed":
+      return projectThreadTurnStartFailed(nextBase, event);
 
     case "thread.message-sent":
       return Effect.gen(function* () {
@@ -389,6 +402,10 @@ export function projectEvent(
           };
         }),
       );
+
+    case "thread.task-upserted":
+    case "thread.task-removed":
+      return projectThreadTaskEvent(nextBase, event);
 
     default:
       return Effect.succeed(nextBase);

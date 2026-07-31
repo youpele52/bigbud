@@ -16,6 +16,7 @@ import {
   decideThreadLifecycleCommand,
 } from "./deciderThreads.lifecycle.ts";
 import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThreads.turn.ts";
+import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
 
 const LIFECYCLE_TYPES = new Set([
   "thread.create",
@@ -24,6 +25,9 @@ const LIFECYCLE_TYPES = new Set([
   "thread.delete.abort",
   "thread.archive",
   "thread.unarchive",
+  "thread.pin",
+  "thread.unpin",
+  "thread.pin.migrate",
   "thread.meta.update",
   "thread.runtime-mode.set",
   "thread.interaction-mode.set",
@@ -54,6 +58,9 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
       command: command as ThreadLifecycleCommand,
       readModel,
     });
+  }
+  if (command.type === "thread.task.upsert" || command.type === "thread.task.remove") {
+    return yield* decideThreadTaskCommand({ command, readModel });
   }
   return yield* decideThreadTurnCommand({
     command: command as ThreadTurnCommand,

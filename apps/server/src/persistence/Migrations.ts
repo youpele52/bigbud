@@ -57,6 +57,22 @@ import Migration0041 from "./Migrations/041_LearningJobMemoryUserMessageCount.ts
 import Migration0042 from "./Migrations/042_ProjectionThreadsPurpose.ts";
 import Migration0043 from "./Migrations/043_ProjectionThreadActivityUsageIndex.ts";
 import Migration0044 from "./Migrations/044_ProjectionUsageContributions.ts";
+import Migration0045 from "./Migrations/045_RepairProjectionUsageContributions.ts";
+import Migration0046 from "./Migrations/046_ProjectionThreadTasks.ts";
+import Migration0047 from "./Migrations/047_ProviderSelectionQuarantine.ts";
+import Migration0048 from "./Migrations/048_ThreadDelegations.ts";
+import Migration0049 from "./Migrations/049_ProjectionThreadsParentProject.ts";
+import Migration0050 from "./Migrations/050_ProjectionThreadWatchesUniqueActive.ts";
+import Migration0051 from "./Migrations/051_PurgeJobs.ts";
+import Migration0052 from "./Migrations/052_ProjectionThreadsPinnedAt.ts";
+import Migration0053 from "./Migrations/053_ProjectionCatalogIndexes.ts";
+import Migration0054 from "./Migrations/054_ProjectionThreadDetailIndexes.ts";
+import Migration0055 from "./Migrations/055_ProjectionPendingUserInputs.ts";
+import Migration0056 from "./Migrations/056_ProjectionBaselines.ts";
+import Migration0057 from "./Migrations/057_OrchestrationThreadIdentity.ts";
+import Migration0058 from "./Migrations/058_RepairProjectionNotes.ts";
+import Migration0059 from "./Migrations/059_ResumablePurgeBaseline.ts";
+import Migration0060 from "./Migrations/060_ProjectionCatalogUserMessageIndex.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -113,6 +129,22 @@ export const migrationEntries = [
   [42, "ProjectionThreadsPurpose", Migration0042],
   [43, "ProjectionThreadActivityUsageIndex", Migration0043],
   [44, "ProjectionUsageContributions", Migration0044],
+  [45, "RepairProjectionUsageContributions", Migration0045],
+  [46, "ProjectionThreadTasks", Migration0046],
+  [47, "ProviderSelectionQuarantine", Migration0047],
+  [48, "ThreadDelegations", Migration0048],
+  [49, "ProjectionThreadsParentProject", Migration0049],
+  [50, "ProjectionThreadWatchesUniqueActive", Migration0050],
+  [51, "PurgeJobs", Migration0051],
+  [52, "ProjectionThreadsPinnedAt", Migration0052],
+  [53, "ProjectionCatalogIndexes", Migration0053],
+  [54, "ProjectionThreadDetailIndexes", Migration0054],
+  [55, "ProjectionPendingUserInputs", Migration0055],
+  [56, "ProjectionBaselines", Migration0056],
+  [57, "OrchestrationThreadIdentity", Migration0057],
+  [58, "RepairProjectionNotes", Migration0058],
+  [59, "ResumablePurgeBaseline", Migration0059],
+  [60, "ProjectionCatalogUserMessageIndex", Migration0060],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>

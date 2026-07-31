@@ -1,0 +1,31 @@
+{
+  "sdkVersion": "0.3.219",
+  "redaction": "Synthetic identifiers and descriptions preserve the captured SDK field shapes without user content.",
+  "messages": [
+    {
+      "type": "system",
+      "subtype": "task_updated",
+      "task_id": "task-redacted-1",
+      "patch": {
+        "status": "running",
+        "description": "Redacted task description",
+        "is_backgrounded": true
+      },
+      "uuid": "00000000-0000-4000-8000-000000000001",
+      "session_id": "session-redacted"
+    },
+    {
+      "type": "system",
+      "subtype": "background_tasks_changed",
+      "tasks": [
+        {
+          "task_id": "task-redacted-1",
+          "task_type": "agent",
+          "description": "Redacted background task"
+        }
+      ],
+      "uuid": "00000000-0000-4000-8000-000000000002",
+      "session_id": "session-redacted"
+    }
+  ]
+}

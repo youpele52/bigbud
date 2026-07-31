@@ -1,5 +1,14 @@
 import { Option, Schema } from "effect";
-import { NonNegativeInt, PositiveInt, RuntimeTaskId } from "../core/baseSchemas";
+
+import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+export { McpOauthCompletedPayload, McpStatusUpdatedPayload } from "./providerRuntime.payloads.mcp";
+export {
+  TaskCompletedPayload,
+  TaskProgressPayload,
+  TaskRemovedPayload,
+  TaskStartedPayload,
+  TaskUpdatedPayload,
+} from "./providerRuntime.payloads.tasks";
 import {
   TrimmedNonEmptyStringSchema,
   UnknownRecordSchema,
@@ -131,6 +140,7 @@ export type TurnStartedPayload = typeof TurnStartedPayload.Type;
 export const TurnCompletedPayload = Schema.Struct({
   state: RuntimeTurnState,
   stopReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
+  usageAvailable: Schema.optional(Schema.Boolean),
   usage: Schema.optional(Schema.Unknown),
   modelUsage: Schema.optional(UnknownRecordSchema),
   totalCostUsd: Schema.optional(Schema.Number),
@@ -231,30 +241,6 @@ export const UserInputResolvedPayload = Schema.Struct({
 });
 export type UserInputResolvedPayload = typeof UserInputResolvedPayload.Type;
 
-export const TaskStartedPayload = Schema.Struct({
-  taskId: RuntimeTaskId,
-  description: Schema.optional(TrimmedNonEmptyStringSchema),
-  taskType: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-export type TaskStartedPayload = typeof TaskStartedPayload.Type;
-
-export const TaskProgressPayload = Schema.Struct({
-  taskId: RuntimeTaskId,
-  description: TrimmedNonEmptyStringSchema,
-  summary: Schema.optional(TrimmedNonEmptyStringSchema),
-  usage: Schema.optional(Schema.Unknown),
-  lastToolName: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-export type TaskProgressPayload = typeof TaskProgressPayload.Type;
-
-export const TaskCompletedPayload = Schema.Struct({
-  taskId: RuntimeTaskId,
-  status: Schema.Literals(["completed", "failed", "stopped"]),
-  summary: Schema.optional(TrimmedNonEmptyStringSchema),
-  usage: Schema.optional(Schema.Unknown),
-});
-export type TaskCompletedPayload = typeof TaskCompletedPayload.Type;
-
 export const HookStartedPayload = Schema.Struct({
   hookId: TrimmedNonEmptyStringSchema,
   hookName: TrimmedNonEmptyStringSchema,
@@ -310,18 +296,6 @@ export const AccountRateLimitsUpdatedPayload = Schema.Struct({
   rateLimits: Schema.Unknown,
 });
 export type AccountRateLimitsUpdatedPayload = typeof AccountRateLimitsUpdatedPayload.Type;
-
-export const McpStatusUpdatedPayload = Schema.Struct({
-  status: Schema.Unknown,
-});
-export type McpStatusUpdatedPayload = typeof McpStatusUpdatedPayload.Type;
-
-export const McpOauthCompletedPayload = Schema.Struct({
-  success: Schema.Boolean,
-  name: Schema.optional(TrimmedNonEmptyStringSchema),
-  error: Schema.optional(TrimmedNonEmptyStringSchema),
-});
-export type McpOauthCompletedPayload = typeof McpOauthCompletedPayload.Type;
 
 export const ModelReroutedPayload = Schema.Struct({
   fromModel: TrimmedNonEmptyStringSchema,

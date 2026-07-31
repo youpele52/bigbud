@@ -33,6 +33,7 @@ export const CLAUDE_CODE_EFFORT_OPTIONS = ["low", "medium", "high", "max", "ultr
 export const DEFAULT_MODEL_BY_PROVIDER = {
   codex: "gpt-5.5",
   claudeAgent: "default",
+  cliProxy: "default",
   copilot: "gpt-5",
   kilocode: "claude-sonnet-4-6",
   opencode: "claude-sonnet-4-6",
@@ -50,6 +51,7 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
 export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   codex: "gpt-5.4-mini",
   claudeAgent: "haiku",
+  cliProxy: "default",
   copilot: "gpt-5-mini",
   kilocode: "claude-haiku-4-5",
   opencode: "claude-haiku-4-5",
@@ -92,6 +94,7 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
     "claude-haiku-4-5": "haiku",
     "claude-haiku-4-5-20251001": "haiku",
   },
+  cliProxy: {},
   copilot: {
     "gpt-5.5": "gpt-5",
     "gpt-5.4": "gpt-5",

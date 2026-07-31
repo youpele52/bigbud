@@ -1,5 +1,7 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
+  MessageId,
+  ProjectId,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
   type ProviderSession,
@@ -8,7 +10,6 @@ import {
 } from "@bigbud/contracts";
 import {
   CopilotClient,
-  type CopilotClientOptions,
   type ResumeSessionConfig,
   type SessionConfig,
   type SessionEvent,
@@ -29,14 +30,12 @@ import { resolveProviderExecutionContext } from "../../providerExecutionContext.
 import { type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
 import { createCopilotRemoteWorkspaceBridge } from "./CopilotRemoteWorkspaceBridge.ts";
 import {
-  DEFAULT_BINARY_PATH,
   PROVIDER,
   type ActiveCopilotSession,
   type CopilotAdapterLiveOptions,
   type PendingApprovalRequest,
   type PendingUserInputRequest,
-  makeCliRuntimeConnection,
-  makeNodeWrapperCliPath,
+  makeCopilotClientOptions,
   toMessage,
 } from "./Adapter.types.ts";
 
@@ -124,7 +123,6 @@ export const makeStartSession =
         Effect.map((settings) => settings.providers.copilot),
         Effect.orDie,
       );
-      const useCustomBinary = copilotSettings.binaryPath !== DEFAULT_BINARY_PATH;
       const executionContext = resolveProviderExecutionContext({
         providerRuntimeExecutionTargetId: input.providerRuntimeExecutionTargetId,
         workspaceExecutionTargetId: input.workspaceExecutionTargetId,
@@ -153,21 +151,16 @@ export const makeStartSession =
                 }),
             })
           : undefined;
-      const resolvedCliPath = useCustomBinary
-        ? copilotSettings.binaryPath
-        : makeNodeWrapperCliPath();
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
       const sessionWorkingDirectory =
         remoteWorkspaceBridge?.clientSessionFsConfig.initialCwd ?? input.cwd;
-      const connection = makeCliRuntimeConnection(resolvedCliPath);
-      const clientOptions: CopilotClientOptions = {
-        ...(connection ? { connection } : {}),
+      const clientOptions = makeCopilotClientOptions({
+        binaryPath: copilotSettings.binaryPath,
         ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
         ...(remoteWorkspaceBridge?.clientSessionFsConfig
           ? { sessionFs: remoteWorkspaceBridge.clientSessionFsConfig }
           : {}),
-        logLevel: "error",
-      };
+      });
       const client =
         deps.options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
       const pendingApprovals = new Map<string, PendingApprovalRequest>();
@@ -196,6 +189,22 @@ export const makeStartSession =
               })
               .pipe(Effect.map((status) => status as unknown as Record<string, unknown>)),
           ),
+        listPinnedThreads: () =>
+          Effect.runPromise(
+            dispatcher
+              .listPinned({ callerThreadId: input.threadId })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
+        setThreadPinned: (targetThreadId, pinned) =>
+          Effect.runPromise(
+            dispatcher
+              .setPinned({
+                callerThreadId: input.threadId,
+                threadId: ThreadId.makeUnsafe(targetThreadId),
+                pinned,
+              })
+              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
+          ),
         computerUse: (action) =>
           Effect.runPromise(
             dispatcher
@@ -211,6 +220,25 @@ export const makeStartSession =
               .browser({ threadId: input.threadId, action })
               .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
           ),
+        createThread: ({
+          invocationId,
+          sourceMessageId,
+          title,
+          task,
+          projectId,
+          watchForCompletion,
+        }) =>
+          Effect.runPromise(
+            dispatcher.createThread?.({
+              callerThreadId: input.threadId,
+              sourceMessageId: MessageId.makeUnsafe(sourceMessageId),
+              invocationId,
+              title,
+              task,
+              ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
+              watchForCompletion,
+            }) ?? Effect.fail(new Error("Thread creation is not ready.")),
+          ).then((result) => result as unknown as Record<string, unknown>),
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

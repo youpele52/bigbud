@@ -38,6 +38,7 @@ function makeThread(): OrchestrationThread {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     archivedAt: null,
+    pinnedAt: null,
     deletingAt: null,
     deletedAt: null,
     messages: [],
@@ -78,6 +79,40 @@ function makeMessageSentEvent(
 }
 
 describe("mobileOrchestrationEvents.logic", () => {
+  it("applies pin and unpin events to mobile thread state", () => {
+    const pinnedAt = "2026-01-01T00:00:01.000Z";
+    const pinned = applyOrchestrationEventToThread(makeThread(), {
+      type: "thread.pinned",
+      sequence: 1,
+      occurredAt: pinnedAt,
+      commandId: CommandId.makeUnsafe("command-pin"),
+      eventId: EventId.makeUnsafe("event-pin"),
+      aggregateKind: "thread",
+      aggregateId: threadId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: { threadId, pinnedAt, updatedAt: pinnedAt },
+    });
+    const unpinnedAt = "2026-01-01T00:00:02.000Z";
+    const unpinned = applyOrchestrationEventToThread(pinned!, {
+      type: "thread.unpinned",
+      sequence: 2,
+      occurredAt: unpinnedAt,
+      commandId: CommandId.makeUnsafe("command-unpin"),
+      eventId: EventId.makeUnsafe("event-unpin"),
+      aggregateKind: "thread",
+      aggregateId: threadId,
+      causationEventId: null,
+      correlationId: null,
+      metadata: {},
+      payload: { threadId, updatedAt: unpinnedAt },
+    });
+
+    expect(pinned?.pinnedAt).toBe(pinnedAt);
+    expect(unpinned?.pinnedAt).toBeNull();
+  });
+
   it("appends streaming assistant deltas to the same message", () => {
     const thread = makeThread();
     const first = applyOrchestrationEventToThread(thread, makeMessageSentEvent("Hel", true));

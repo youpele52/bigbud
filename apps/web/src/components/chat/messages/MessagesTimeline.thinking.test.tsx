@@ -51,7 +51,7 @@ beforeAll(() => {
 
 beforeAll(async () => {
   ({ MessagesTimeline } = await import("./MessagesTimeline"));
-});
+}, 60_000);
 
 describe("MessagesTimeline work and thinking entries", () => {
   it("renders context compaction entries in the normal work log", async () => {

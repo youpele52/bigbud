@@ -114,6 +114,29 @@ describe("resolveShortcutCommand", () => {
       "thread.next",
     );
   });
+
+  it("matches Sidecar and plan card shortcuts outside the terminal", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "s", metaKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "sidecar.toggle",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "t", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false },
+      }),
+      "planCard.toggle",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "t", ctrlKey: true, shiftKey: true }), DEFAULT_BINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: true },
+      }),
+    );
+  });
 });
 
 describe("formatShortcutLabel", () => {

@@ -172,6 +172,7 @@ export interface Thread {
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
+  pinnedAt?: string | null;
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
@@ -203,6 +204,7 @@ export interface SidebarThreadSummary {
   session: ThreadSession | null;
   createdAt: string;
   archivedAt: string | null;
+  pinnedAt: string | null;
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
@@ -214,8 +216,10 @@ export interface SidebarThreadSummary {
   hasActionableProposedPlan: boolean;
 }
 
+export type ThreadSessionProvider = ProviderKind | "unknown";
+
 export interface ThreadSession {
-  provider: ProviderKind;
+  provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;
   createdAt: string;

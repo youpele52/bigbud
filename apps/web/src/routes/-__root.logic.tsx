@@ -1,5 +1,6 @@
 import {
   BUILT_IN_CHATS_PROJECT_ID,
+  type ThreadId,
   type ServerLifecycleWelcomePayload,
   type ThinkingActivityDeltaEvent,
 } from "@bigbud/contracts";
@@ -27,11 +28,11 @@ import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer } from "../hooks/useSettings";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
+import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
 export function EventRouter() {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
-  const syncServerReadModel = useStore((store) => store.syncServerReadModel);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
   const syncThreads = useUiStateStore((store) => store.syncThreads);
@@ -56,7 +57,9 @@ export function EventRouter() {
   const startedFreshChatRef = useRef(false);
   const seenServerConfigUpdateIdRef = useRef(getServerConfigUpdatedNotification()?.id ?? 0);
   const disposedRef = useRef(false);
-  const bootstrapFromSnapshotRef = useRef<() => Promise<void>>(async () => undefined);
+  const bootstrapBoundedRef = useRef<(threadId: ThreadId | null) => Promise<void>>(
+    async () => undefined,
+  );
   const serverConfig = useServerConfig();
   const serverSettings = useServerSettings();
   const readThinkingStreamingEnabled = useEffectEvent(() => serverSettings.enableThinkingStreaming);
@@ -66,7 +69,11 @@ export function EventRouter() {
 
     migrateLocalSettingsToServer();
     void (async () => {
-      await bootstrapFromSnapshotRef.current();
+      const selectedThreadId = resolveSelectedThreadIdFromPath(
+        readPathname(),
+        payload.bootstrapThreadId ?? null,
+      );
+      await bootstrapBoundedRef.current(selectedThreadId);
       if (disposedRef.current) {
         return;
       }
@@ -190,7 +197,6 @@ export function EventRouter() {
       clearAllThinkingDeltas,
       reconcileThinkingActivities,
       applyOrchestrationEvents,
-      syncServerReadModel,
       syncProjects,
       syncThreads,
       clearThreadUi,
@@ -219,13 +225,16 @@ export function EventRouter() {
       });
     };
 
-    const bootstrapFromSnapshot = async (): Promise<void> => {
-      await eventRecovery.runSnapshotRecovery("bootstrap", () => disposed);
+    let selectedThreadId: ThreadId | null = null;
+    const bootstrapBounded = async (nextSelectedThreadId: ThreadId | null): Promise<void> => {
+      selectedThreadId = nextSelectedThreadId;
+      await eventRecovery.runBoundedRecovery("bootstrap", selectedThreadId, () => disposed);
     };
-    bootstrapFromSnapshotRef.current = bootstrapFromSnapshot;
+    bootstrapBoundedRef.current = bootstrapBounded;
 
-    const fallbackToSnapshotRecovery = async (): Promise<void> => {
-      await eventRecovery.runSnapshotRecovery("replay-failed", () => disposed);
+    const fallbackToBoundedRecovery = async (): Promise<void> => {
+      selectedThreadId = resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
+      await eventRecovery.runBoundedRecovery("replay-failed", selectedThreadId, () => disposed);
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
       (event) => {
@@ -245,7 +254,7 @@ export function EventRouter() {
             "sequence-gap",
             () => disposed,
             () => {
-              void fallbackToSnapshotRecovery();
+              void fallbackToBoundedRecovery();
             },
           );
         }
@@ -257,7 +266,7 @@ export function EventRouter() {
             "resubscribe",
             () => disposed,
             () => {
-              void fallbackToSnapshotRecovery();
+              void fallbackToBoundedRecovery();
             },
           );
         },
@@ -291,7 +300,6 @@ export function EventRouter() {
     applyTerminalEvents,
     clearThreadUi,
     syncProjects,
-    syncServerReadModel,
     syncThreads,
   ]);
 

@@ -1,6 +1,6 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { ModelSelection, ParentThreadReference } from "@bigbud/contracts";
+import { ParentThreadReference, PersistedModelSelection } from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
@@ -15,7 +15,8 @@ import {
 
 const ProjectionThreadDbRow = ProjectionThread.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    // Keep historical provider selections readable after a provider is removed.
+    modelSelection: Schema.fromJsonString(PersistedModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
   }),
 );
@@ -32,7 +33,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     providerRuntimeExecutionTargetId: row.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: row.workspaceExecutionTargetId,
     executionTargetId: row.executionTargetId,
-    modelSelection: row.modelSelection,
+    modelSelection: row.modelSelection as ProjectionThread["modelSelection"],
     runtimeMode: row.runtimeMode,
     interactionMode: row.interactionMode,
     branch: row.branch,
@@ -42,6 +43,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
   };
@@ -69,12 +71,14 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode,
           branch,
           worktree_path,
-          parent_thread_id,
-          parent_thread_title,
+           parent_thread_id,
+           parent_thread_title,
+           parent_thread_project_id,
           latest_turn_id,
           created_at,
           updated_at,
           archived_at,
+          pinned_at,
           deleting_at,
           deleted_at
         )
@@ -93,12 +97,14 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.interactionMode},
           ${row.branch},
           ${row.worktreePath},
-          ${row.parentThread?.threadId ?? null},
-          ${row.parentThread?.title ?? null},
+           ${row.parentThread?.threadId ?? null},
+           ${row.parentThread?.title ?? null},
+           ${row.parentThread?.projectId ?? row.projectId},
           ${row.latestTurnId},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.archivedAt},
+          ${row.pinnedAt},
           ${row.deletingAt},
           ${row.deletedAt}
         )
@@ -117,12 +123,14 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           interaction_mode = excluded.interaction_mode,
           branch = excluded.branch,
           worktree_path = excluded.worktree_path,
-          parent_thread_id = excluded.parent_thread_id,
-          parent_thread_title = excluded.parent_thread_title,
+           parent_thread_id = excluded.parent_thread_id,
+           parent_thread_title = excluded.parent_thread_title,
+           parent_thread_project_id = excluded.parent_thread_project_id,
           latest_turn_id = excluded.latest_turn_id,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           archived_at = excluded.archived_at,
+          pinned_at = excluded.pinned_at,
           deleting_at = excluded.deleting_at,
           deleted_at = excluded.deleted_at
       `,
@@ -149,13 +157,18 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
@@ -184,13 +197,18 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           branch,
           worktree_path AS "worktreePath",
           CASE
-            WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
-            ELSE json_object('threadId', parent_thread_id, 'title', parent_thread_title)
+             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
+             ELSE json_object(
+               'threadId', parent_thread_id,
+               'title', parent_thread_title,
+               'projectId', COALESCE(parent_thread_project_id, project_id)
+             )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads

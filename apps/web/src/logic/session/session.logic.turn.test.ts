@@ -188,7 +188,7 @@ describe("deriveActiveWorkStartedAt", () => {
 });
 
 describe("PROVIDER_OPTIONS", () => {
-  it("advertises the currently supported providers in alphabetical order", () => {
+  it("advertises providers in the shared provider order", () => {
     const claude = PROVIDER_OPTIONS.find((option) => option.value === "claudeAgent");
     const copilot = PROVIDER_OPTIONS.find((option) => option.value === "copilot");
     const opencode = PROVIDER_OPTIONS.find((option) => option.value === "opencode");
@@ -196,6 +196,7 @@ describe("PROVIDER_OPTIONS", () => {
     const devin = PROVIDER_OPTIONS.find((option) => option.value === "devin");
     expect(PROVIDER_OPTIONS).toEqual([
       { value: "claudeAgent", label: "Claude", available: true },
+      { value: "cliProxy", label: "CLIProxyAPI", available: true },
       { value: "codex", label: "Codex", available: true },
       { value: "copilot", label: "Copilot", available: true },
       { value: "cursor", label: "Cursor", available: true },

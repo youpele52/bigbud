@@ -7,6 +7,7 @@ import {
   MessageId,
   NonNegativeInt,
   ProjectId,
+  RuntimeTaskId,
   ThreadId,
   TrimmedNonEmptyString,
   TurnId,
@@ -29,6 +30,9 @@ import {
   OrchestrationMessageRole,
   OrchestrationProposedPlan,
   OrchestrationSession,
+  OrchestrationTask,
+  OrchestrationTaskFreshness,
+  OrchestrationTaskSource,
   OrchestrationThreadPurpose,
   OrchestrationThreadActivity,
   ParentThreadReference,
@@ -77,6 +81,17 @@ export const ThreadArchivedPayload = Schema.Struct({
 });
 
 export const ThreadUnarchivedPayload = Schema.Struct({
+  threadId: ThreadId,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadPinnedPayload = Schema.Struct({
+  threadId: ThreadId,
+  pinnedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadUnpinnedPayload = Schema.Struct({
   threadId: ThreadId,
   updatedAt: IsoDateTime,
 });
@@ -138,6 +153,14 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+/** Durable terminal state for a provider turn-start attempt. */
+export const ThreadTurnStartFailedPayload = Schema.Struct({
+  threadId: ThreadId,
+  context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
+  detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  createdAt: IsoDateTime,
+});
+
 export const ThreadShellRunRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
@@ -168,6 +191,18 @@ export const ThreadUserInputResponseRequestedPayload = Schema.Struct({
 export const ThreadCheckpointRevertRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   turnCount: NonNegativeInt,
+  createdAt: IsoDateTime,
+});
+
+export const ThreadPathCheckpointCaptureRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+
+export const ThreadPathCheckpointRestoreRequestedPayload = Schema.Struct({
+  threadId: ThreadId,
+  path: TrimmedNonEmptyString,
   createdAt: IsoDateTime,
 });
 
@@ -205,4 +240,17 @@ export const ThreadTurnDiffCompletedPayload = Schema.Struct({
 export const ThreadActivityAppendedPayload = Schema.Struct({
   threadId: ThreadId,
   activity: OrchestrationThreadActivity,
+});
+
+export const ThreadTaskUpsertedPayload = Schema.Struct({
+  threadId: ThreadId,
+  task: OrchestrationTask,
+});
+
+export const ThreadTaskRemovedPayload = Schema.Struct({
+  threadId: ThreadId,
+  taskId: RuntimeTaskId,
+  source: OrchestrationTaskSource,
+  freshness: OrchestrationTaskFreshness,
+  replacement: Schema.optional(Schema.Literals(["snapshot", "explicit"])),
 });

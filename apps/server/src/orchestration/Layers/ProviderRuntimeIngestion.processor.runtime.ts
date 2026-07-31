@@ -1,7 +1,9 @@
-import { CommandId, MessageId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { CommandId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAssistantDeliveryMode } from "./ProviderRuntimeIngestion.assistantDelivery.ts";
+import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGovernor.ts";
+import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.processor.runtime.assistant.ts";
 import {
   STRICT_PROVIDER_LIFECYCLE_GUARD,
   normalizeRuntimeTurnState,
@@ -15,11 +17,15 @@ import {
 import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
-import { makeRuntimeProcessorEventHelpers } from "./ProviderRuntimeIngestion.processor.events.ts";
+import {
+  makeRuntimeProcessorEventHelpers,
+  type TaskRuntimeEvent,
+} from "./ProviderRuntimeIngestion.processor.events.ts";
 import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
+import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
 
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
   CommandId.makeUnsafe(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
@@ -30,6 +36,8 @@ export function makeRuntimeEventProcessor(
   cacheHelpers: RuntimeProcessorCacheHelpers,
 ) {
   const { orchestrationEngine, serverSettingsService } = services;
+  let nextTaskOrdinal = 0;
+  const activityGovernor = new RuntimeActivityGovernor();
   const {
     rememberAssistantMessageId,
     forgetAssistantMessageId,
@@ -53,7 +61,7 @@ export function makeRuntimeEventProcessor(
     finalizeThinkingForTurn,
     finalizeThinkingForThread,
   } = makeThinkingProcessorHelpers(services, cacheHelpers, providerCommandId);
-  const { appendActivities, handleTurnDiffUpdated } = makeRuntimeProcessorEventHelpers({
+  const { appendActivities, handleTurnDiffUpdated, upsertTask } = makeRuntimeProcessorEventHelpers({
     orchestrationEngine,
     serverSettingsService,
     isGitRepoForThread,
@@ -61,6 +69,7 @@ export function makeRuntimeEventProcessor(
   });
 
   return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
+    yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
     const readModel = yield* orchestrationEngine.getReadModel();
     const thread = readModel.threads.find((entry) => entry.id === event.threadId);
     if (!thread) return;
@@ -176,55 +185,27 @@ export function makeRuntimeEventProcessor(
       }
     }
 
-    const assistantDelta =
-      event.type === "content.delta" && event.payload.streamKind === "assistant_text"
-        ? event.payload.delta
-        : undefined;
     const proposedPlanDelta =
       event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
 
-    if (assistantDelta && assistantDelta.length > 0) {
-      const assistantMessageId = MessageId.makeUnsafe(
-        `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-      );
-      const turnId = toTurnId(event.turnId);
-      if (turnId) {
-        yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
-      }
-
-      const assistantDeliveryMode = yield* Effect.map(
-        serverSettingsService.getSettings,
-        (settings) =>
-          resolveAssistantDeliveryMode({
-            provider: event.provider,
-            settings,
-          }),
-      );
-      if (assistantDeliveryMode === "buffered") {
-        const spillChunk = yield* appendBufferedAssistantText(assistantMessageId, assistantDelta);
-        if (spillChunk.length > 0) {
-          yield* orchestrationEngine.dispatch({
-            type: "thread.message.assistant.delta",
-            commandId: providerCommandId(event, "assistant-delta-buffer-spill"),
-            threadId: thread.id,
-            messageId: assistantMessageId,
-            delta: spillChunk,
-            ...(turnId ? { turnId } : {}),
-            createdAt: now,
-          });
-        }
-      } else {
-        yield* orchestrationEngine.dispatch({
-          type: "thread.message.assistant.delta",
-          commandId: providerCommandId(event, "assistant-delta"),
-          threadId: thread.id,
-          messageId: assistantMessageId,
-          delta: assistantDelta,
-          ...(turnId ? { turnId } : {}),
-          createdAt: now,
-        });
-      }
-    }
+    yield* processAssistantRuntimeEvent({
+      event,
+      thread,
+      now,
+      orchestrationEngine,
+      providerCommandId,
+      resolveDeliveryMode: () =>
+        Effect.map(serverSettingsService.getSettings, (settings) =>
+          resolveAssistantDeliveryMode({ provider: event.provider, settings }),
+        ),
+      cacheHelpers: {
+        appendBufferedAssistantText,
+        forgetAssistantMessageId,
+        rememberAssistantMessageId,
+      },
+      processorHelpers: { finalizeAssistantMessage },
+      thinkingHelpers: { finalizeThinkingForItem, finalizeThinkingForTurn },
+    });
 
     yield* appendThinkingDelta(event);
 
@@ -233,15 +214,6 @@ export function makeRuntimeEventProcessor(
       yield* appendBufferedProposedPlan(planId, proposedPlanDelta, now);
     }
 
-    const assistantCompletion =
-      event.type === "item.completed" && event.payload.itemType === "assistant_message"
-        ? {
-            messageId: MessageId.makeUnsafe(
-              `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-            ),
-            fallbackText: event.payload.detail,
-          }
-        : undefined;
     const proposedPlanCompletion =
       event.type === "turn.proposed.completed"
         ? {
@@ -250,41 +222,6 @@ export function makeRuntimeEventProcessor(
             planMarkdown: event.payload.planMarkdown,
           }
         : undefined;
-
-    if (assistantCompletion) {
-      const turnId = toTurnId(event.turnId);
-      if (turnId) {
-        yield* finalizeThinkingForTurn(event, thread.id, turnId);
-      } else if (event.itemId) {
-        yield* finalizeThinkingForItem(event, String(event.itemId));
-      }
-      const assistantMessageId = assistantCompletion.messageId;
-      const existingAssistantMessage = thread.messages.find(
-        (entry) => entry.id === assistantMessageId,
-      );
-      const shouldApplyFallbackCompletionText =
-        !existingAssistantMessage || existingAssistantMessage.text.length === 0;
-      if (turnId) {
-        yield* rememberAssistantMessageId(thread.id, turnId, assistantMessageId);
-      }
-
-      yield* finalizeAssistantMessage({
-        event,
-        threadId: thread.id,
-        messageId: assistantMessageId,
-        ...(turnId ? { turnId } : {}),
-        createdAt: now,
-        commandTag: "assistant-complete",
-        finalDeltaCommandTag: "assistant-delta-finalize",
-        ...(assistantCompletion.fallbackText !== undefined && shouldApplyFallbackCompletionText
-          ? { fallbackText: assistantCompletion.fallbackText }
-          : {}),
-      });
-
-      if (turnId) {
-        yield* forgetAssistantMessageId(thread.id, turnId, assistantMessageId);
-      }
-    }
 
     if (proposedPlanCompletion) {
       yield* finalizeBufferedProposedPlan({
@@ -376,10 +313,46 @@ export function makeRuntimeEventProcessor(
       yield* handleTurnDiffUpdated({ event, thread, now });
     }
 
+    if (event.type === "task.removed") {
+      yield* orchestrationEngine.dispatch({
+        type: "thread.task.remove",
+        commandId: providerCommandId(event, "thread-task-remove"),
+        threadId: thread.id,
+        taskId: event.payload.taskId,
+        source: event.payload.source,
+        freshness: event.payload.freshness,
+        ...(event.payload.replacement ? { replacement: event.payload.replacement } : {}),
+        createdAt: event.createdAt,
+      });
+    } else if (
+      event.type === "task.started" ||
+      event.type === "task.progress" ||
+      event.type === "task.completed" ||
+      event.type === "task.updated"
+    ) {
+      yield* upsertTask({
+        // The generated runtime-event union does not narrow across module boundaries.
+        event: event as unknown as TaskRuntimeEvent,
+        threadId: thread.id,
+        ordinal: nextTaskOrdinal++,
+      });
+    }
+
     const activities = runtimeEventToActivities(event, {
       model: thread.modelSelection.model,
       interactionMode: thread.interactionMode,
     });
-    yield* appendActivities({ event, threadId: thread.id, activities });
+    yield* appendActivities({
+      event,
+      threadId: thread.id,
+      activities: activityGovernor.take({
+        threadId: thread.id,
+        turnId: eventTurnId ?? null,
+        activities,
+      }),
+    });
+    if (event.type === "turn.completed" || event.type === "session.exited") {
+      activityGovernor.clear({ threadId: thread.id, turnId: eventTurnId ?? null });
+    }
   });
 }

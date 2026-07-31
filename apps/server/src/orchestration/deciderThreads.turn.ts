@@ -32,9 +32,14 @@ export type ThreadTurnCommand = Exclude<
       | "thread.delete.abort"
       | "thread.archive"
       | "thread.unarchive"
+      | "thread.pin"
+      | "thread.unpin"
+      | "thread.pin.migrate"
       | "thread.meta.update"
       | "thread.runtime-mode.set"
-      | "thread.interaction-mode.set";
+      | "thread.interaction-mode.set"
+      | "thread.task.upsert"
+      | "thread.task.remove";
   }
 >;
 
@@ -216,6 +221,25 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
       };
     }
 
+    case "thread.path-checkpoint.capture":
+    case "thread.path-checkpoint.restore": {
+      const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+      yield* requireThreadReadyForMutation({ thread, command });
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type:
+          command.type === "thread.path-checkpoint.capture"
+            ? "thread.path-checkpoint-capture-requested"
+            : "thread.path-checkpoint-restore-requested",
+        payload: { threadId: command.threadId, path: command.path, createdAt: command.createdAt },
+      };
+    }
+
     case "thread.session.stop": {
       const thread = yield* requireThread({
         readModel,
@@ -261,6 +285,29 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
         payload: {
           threadId: command.threadId,
           session: command.session,
+        },
+      };
+    }
+
+    case "thread.turn.start.failed": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.turn-start-failed",
+        payload: {
+          threadId: command.threadId,
+          context: command.context,
+          detail: command.detail,
+          createdAt: command.createdAt,
         },
       };
     }

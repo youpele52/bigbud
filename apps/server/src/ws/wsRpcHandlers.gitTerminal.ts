@@ -194,6 +194,18 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext) {
           "rpc.aggregate": "git",
         },
       ),
+    [WS_METHODS.gitRenameBranch]: (input: Parameters<WsRpcContext["git"]["renameBranch"]>[0]) =>
+      observeRpcEffect(
+        WS_METHODS.gitRenameBranch,
+        context.git.renameBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        { "rpc.aggregate": "git" },
+      ),
+    [WS_METHODS.gitDeleteBranch]: (input: Parameters<WsRpcContext["git"]["deleteBranch"]>[0]) =>
+      observeRpcEffect(
+        WS_METHODS.gitDeleteBranch,
+        context.git.deleteBranch(input).pipe(Effect.tap(() => context.refreshGitStatus(input.cwd))),
+        { "rpc.aggregate": "git" },
+      ),
     [WS_METHODS.gitInit]: (input: Parameters<WsRpcContext["git"]["initRepo"]>[0]) =>
       observeRpcEffect(
         WS_METHODS.gitInit,

@@ -10,6 +10,9 @@ import {
   GitExecutionTargetError,
   GitCreateBranchInput,
   GitCreateBranchResult,
+  GitRenameBranchInput,
+  GitRenameBranchResult,
+  GitDeleteBranchInput,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitDiscardChangesInput,
@@ -50,6 +53,7 @@ import {
   TerminalWriteInput,
 } from "../workspace/terminal";
 import {
+  ServerCliProxyActivationError,
   ServerConfig,
   ServerReadDocumentUrlError,
   ServerReadDocumentUrlInput,
@@ -87,6 +91,8 @@ import {
   ServerRevokeMobileRemoteSessionInput,
 } from "./mobile";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
+import { OrchestrationDispatchCommandError } from "../orchestration/orchestration.rpc";
+import { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import { WS_METHODS } from "../constants/websocket.constant";
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -104,6 +110,12 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProviders, {
   payload: Schema.Struct({}),
   success: ServerProviderUpdatedPayload,
+});
+
+export const WsServerActivateCliProxyRpc = Rpc.make(WS_METHODS.serverActivateCliProxy, {
+  payload: Schema.Struct({}),
+  success: ServerProviderUpdatedPayload,
+  error: ServerCliProxyActivationError,
 });
 
 export const WsServerVerifyExecutionTargetRpc = Rpc.make(WS_METHODS.serverVerifyExecutionTarget, {
@@ -134,6 +146,12 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: ServerSettingsError,
+});
+
+export const WsServerSetThreadPinnedRpc = Rpc.make(WS_METHODS.serverSetThreadPinned, {
+  payload: ServerSetThreadPinnedInput,
+  success: ServerSetThreadPinnedResult,
+  error: OrchestrationDispatchCommandError,
 });
 
 export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocumentUrl, {
@@ -279,6 +297,17 @@ export const WsGitRemoveWorktreeRpc = Rpc.make(WS_METHODS.gitRemoveWorktree, {
 export const WsGitCreateBranchRpc = Rpc.make(WS_METHODS.gitCreateBranch, {
   payload: GitCreateBranchInput,
   success: GitCreateBranchResult,
+  error: GitServiceError,
+});
+
+export const WsGitRenameBranchRpc = Rpc.make(WS_METHODS.gitRenameBranch, {
+  payload: GitRenameBranchInput,
+  success: GitRenameBranchResult,
+  error: GitServiceError,
+});
+
+export const WsGitDeleteBranchRpc = Rpc.make(WS_METHODS.gitDeleteBranch, {
+  payload: GitDeleteBranchInput,
   error: GitServiceError,
 });
 

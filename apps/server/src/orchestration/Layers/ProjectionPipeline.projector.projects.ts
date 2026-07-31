@@ -10,16 +10,41 @@ import {
   type AttachmentSideEffects,
 } from "./ProjectionPipeline.helpers.ts";
 import type { ProjectorDefinition, ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
+import { advancesProjectLastUsedAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
 
 export function makeProjectsProjector(
-  deps: Pick<ProjectorDeps, "projectionProjectRepository">,
+  deps: Pick<
+    ProjectorDeps,
+    "findThreadProjectId" | "projectionProjectRepository" | "projectionThreadRepository"
+  >,
 ): ProjectorDefinition {
-  const { projectionProjectRepository } = deps;
+  const { findThreadProjectId, projectionProjectRepository, projectionThreadRepository } = deps;
 
   const apply = Effect.fn("applyProjectsProjection")(function* (
     event: OrchestrationEvent,
-    attachmentSideEffects: AttachmentSideEffects,
+    _attachmentSideEffects: AttachmentSideEffects,
   ) {
+    if (advancesProjectLastUsedAt(event)) {
+      if (event.type === "thread.created") {
+        yield* projectionProjectRepository.touchLastUsedAt({
+          projectId: event.payload.projectId,
+          lastUsedAt: event.occurredAt,
+        });
+      } else {
+        const thread = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        const projectId = Option.isSome(thread)
+          ? thread.value.projectId
+          : Option.getOrUndefined(yield* findThreadProjectId(event.payload.threadId));
+        if (projectId !== undefined) {
+          yield* projectionProjectRepository.touchLastUsedAt({
+            projectId,
+            lastUsedAt: event.occurredAt,
+          });
+        }
+      }
+    }
     switch (event.type) {
       case "project.created":
         yield* projectionProjectRepository.upsert({
@@ -41,6 +66,10 @@ export function makeProjectsProjector(
           updatedAt: event.payload.updatedAt,
           deletingAt: null,
           deletedAt: null,
+        });
+        yield* projectionProjectRepository.touchLastUsedAt({
+          projectId: event.payload.projectId,
+          lastUsedAt: event.payload.updatedAt,
         });
         return;
 
@@ -71,6 +100,10 @@ export function makeProjectsProjector(
             : {}),
           ...(event.payload.scripts !== undefined ? { scripts: event.payload.scripts } : {}),
           updatedAt: event.payload.updatedAt,
+        });
+        yield* projectionProjectRepository.touchLastUsedAt({
+          projectId: event.payload.projectId,
+          lastUsedAt: event.payload.updatedAt,
         });
         return;
       }
@@ -106,19 +139,9 @@ export function makeProjectsProjector(
       }
 
       case "project.deleted": {
-        const existingRow = yield* projectionProjectRepository.getById({
+        yield* projectionProjectRepository.deleteById({
           projectId: event.payload.projectId,
         });
-        if (Option.isNone(existingRow)) {
-          return;
-        }
-        yield* projectionProjectRepository.upsert({
-          ...existingRow.value,
-          deletingAt: null,
-          deletedAt: event.payload.deletedAt,
-          updatedAt: event.payload.deletedAt,
-        });
-        attachmentSideEffects.deletedProjectMemoryIds.add(event.payload.projectId);
         return;
       }
 

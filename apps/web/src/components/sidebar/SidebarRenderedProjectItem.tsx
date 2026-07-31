@@ -34,9 +34,11 @@ export function SidebarRenderedProjectItem({
   projectStatus,
   renderedThreadIds,
   hasHiddenThreads,
+  hasMoreThreads,
   showEmptyThreadState,
   shouldShowThreadPanel,
   isThreadListExpanded,
+  isLoadingMoreThreads,
 
   newThreadShortcutLabel,
   showThreadJumpHints,
@@ -83,6 +85,7 @@ export function SidebarRenderedProjectItem({
   handleNewThread,
   expandThreadListForProject,
   collapseThreadListForProject,
+  loadMoreThreadsForProject,
 }: SidebarRenderedProjectItemProps) {
   const isChatsProject = isChatsSidebarProject(project.id);
   const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(project);
@@ -387,10 +390,13 @@ export function SidebarRenderedProjectItem({
         shouldShowThreadPanel={shouldShowThreadPanel}
         showEmptyThreadState={showEmptyThreadState}
         hasHiddenThreads={hasHiddenThreads}
+        hasMoreThreads={hasMoreThreads}
         isThreadListExpanded={isThreadListExpanded}
+        isLoadingMoreThreads={isLoadingMoreThreads}
         hiddenThreadCount={hiddenThreadCount}
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
+        loadMoreThreadsForProject={loadMoreThreadsForProject}
         projectExpanded={project.expanded}
       />
     </>

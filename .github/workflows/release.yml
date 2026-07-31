@@ -44,6 +44,11 @@ jobs:
             exit 1
           fi
 
+          if [[ "$version" =~ - ]] && [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(beta|preview|nightly)([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsupported release channel in version: $raw" >&2
+            exit 1
+          fi
+
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
           if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

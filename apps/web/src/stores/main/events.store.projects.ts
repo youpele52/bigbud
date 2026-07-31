@@ -124,12 +124,15 @@ export function applyProjectEvent(
 
     case "thread.deleted": {
       const threads = state.threads.filter((thread) => thread.id !== event.payload.threadId);
-      if (threads.length === state.threads.length) {
+      const hadHydration = Object.hasOwn(state.threadHydrationById, event.payload.threadId);
+      if (threads.length === state.threads.length && !hadHydration) {
         return state;
       }
       const deletedThread = state.threads.find((thread) => thread.id === event.payload.threadId);
       const sidebarThreadsById = { ...state.sidebarThreadsById };
       delete sidebarThreadsById[event.payload.threadId];
+      const threadHydrationById = { ...state.threadHydrationById };
+      delete threadHydrationById[event.payload.threadId];
       const threadIdsByProjectId = deletedThread
         ? removeThreadIdByProjectId(
             state.threadIdsByProjectId,
@@ -142,6 +145,7 @@ export function applyProjectEvent(
         threads,
         sidebarThreadsById,
         threadIdsByProjectId,
+        threadHydrationById,
       };
     }
 
@@ -170,6 +174,7 @@ function mapProjectThread(event: Extract<OrchestrationEvent, { type: "thread.cre
     createdAt: event.payload.createdAt,
     updatedAt: event.payload.updatedAt,
     archivedAt: null,
+    pinnedAt: null,
     deletingAt: null,
     deletedAt: null,
     messages: [],

@@ -19,6 +19,7 @@ import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheck
 import { ProjectionProject } from "../../persistence/Services/ProjectionProjects.ts";
 import { ProjectionState } from "../../persistence/Services/ProjectionState.ts";
 import { ProjectionThreadActivity } from "../../persistence/Services/ProjectionThreadActivities.ts";
+import { ProjectionThreadTask } from "../../persistence/Services/ProjectionThreadTasks.ts";
 import { ProjectionThreadMessage } from "../../persistence/Services/ProjectionThreadMessages.ts";
 import { ProjectionThreadProposedPlan } from "../../persistence/Services/ProjectionThreadProposedPlans.ts";
 import { ProjectionThreadSession } from "../../persistence/Services/ProjectionThreadSessions.ts";
@@ -52,6 +53,14 @@ export const ProjectionThreadActivityDbRowSchema = ProjectionThreadActivity.mapF
   Struct.assign({
     payload: Schema.fromJsonString(Schema.Unknown),
     sequence: Schema.NullOr(NonNegativeInt),
+  }),
+);
+
+export const ProjectionThreadTaskDbRowSchema = ProjectionThreadTask.mapFields(
+  Struct.assign({
+    task: Schema.fromJsonString(ProjectionThreadTask.fields.task),
+    createdAt: IsoDateTime,
+    updatedAt: IsoDateTime,
   }),
 );
 

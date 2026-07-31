@@ -18,6 +18,7 @@ export type SidebarProjectSnapshot = Project & {
 
 export interface RenderedProjectEntry {
   hasHiddenThreads: boolean;
+  hasMoreThreads: boolean;
   hiddenThreadStatus: ReturnType<typeof resolveThreadStatusPill>;
   orderedProjectThreadIds: readonly ThreadId[];
   project: SidebarProjectSnapshot;
@@ -26,6 +27,7 @@ export interface RenderedProjectEntry {
   showEmptyThreadState: boolean;
   shouldShowThreadPanel: boolean;
   isThreadListExpanded: boolean;
+  isLoadingMoreThreads: boolean;
 }
 
 /** All props that are passed to each rendered project item. */
@@ -102,6 +104,7 @@ export interface SharedProjectItemProps {
   handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
 
 export interface SidebarRenderedThreadEntry {
@@ -265,6 +268,7 @@ export interface SidebarState {
   // Thread list expand/collapse
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   // Shared props bundle
   sharedProjectItemProps: SharedProjectItemProps;

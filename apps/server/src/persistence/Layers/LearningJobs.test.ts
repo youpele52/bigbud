@@ -1,6 +1,7 @@
 import { ThreadId, TurnId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { LearningJobRepository } from "../Services/LearningJobs.ts";
 import { LearningJobRepositoryLive } from "./LearningJobs.ts";
@@ -45,6 +46,32 @@ it.layer(layer)("LearningJobRepository", (it) => {
         yield* repository.getLatestMemoryUserMessageCount({ threadId: job.threadId }),
         30,
       );
+    }),
+  );
+
+  it.effect("reads legacy provider jobs so the reactor can mark them for reselection", () =>
+    Effect.gen(function* () {
+      const repository = yield* LearningJobRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-07-11T10:00:00.000Z";
+      yield* sql`
+        INSERT INTO learning_jobs (
+          job_id, thread_id, turn_id, provider, model, model_selection_json,
+          memory_user_message_count, state, created_at, updated_at
+        ) VALUES (
+          ${"learning:legacy"}, ${"thread-learning-legacy"}, ${"turn-learning-legacy"},
+          ${"removedProvider"}, ${"legacy-model"},
+          ${JSON.stringify({ provider: "removedProvider", model: "legacy-model" })},
+          ${null}, ${"queued"}, ${now}, ${now}
+        )
+      `;
+
+      const jobs = yield* repository.listQueued();
+      assert.equal(String(jobs.at(-1)?.provider), "removedProvider");
+      assert.deepEqual(jobs.at(-1)?.modelSelection, {
+        provider: "removedProvider",
+        model: "legacy-model",
+      } as unknown as (typeof jobs)[number]["modelSelection"]);
     }),
   );
 

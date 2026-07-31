@@ -159,7 +159,11 @@ export function resolveDesktopRuntimeDependencies(
 
   return resolveCatalogDependencies(
     Object.fromEntries(
-      Object.entries(dependencies).filter(([dependencyName]) => dependencyName !== "electron"),
+      Object.entries(dependencies).filter(
+        ([dependencyName, dependencySpec]) =>
+          dependencyName !== "electron" &&
+          (typeof dependencySpec !== "string" || !dependencySpec.startsWith("workspace:")),
+      ),
     ),
     catalog,
     "apps/desktop",
@@ -200,7 +204,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: "ai.bigbud.desktop",
     productName,
-    artifactName: "bigbud-beta-${version}-${arch}.${ext}",
+    artifactName: "bigbud-${version}-${arch}.${ext}",
     directories: {
       buildResources: buildResourcesDir,
     },

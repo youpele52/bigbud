@@ -53,6 +53,8 @@ export const WS_METHODS = {
   gitCreateWorktree: "git.createWorktree",
   gitRemoveWorktree: "git.removeWorktree",
   gitCreateBranch: "git.createBranch",
+  gitRenameBranch: "git.renameBranch",
+  gitDeleteBranch: "git.deleteBranch",
   gitCheckout: "git.checkout",
   gitInit: "git.init",
   gitFetch: "git.fetch",
@@ -71,12 +73,14 @@ export const WS_METHODS = {
   // Server meta
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
   serverUnlockSshKey: "server.unlockSshKey",
   serverUnlockSshPassword: "server.unlockSshPassword",
   serverUpsertKeybinding: "server.upsertKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverSetThreadPinned: "server.setThreadPinned",
   serverReadDocumentUrl: "server.readDocumentUrl",
   serverWriteHandoffDocument: "server.writeHandoffDocument",
   serverExportThreadContext: "server.exportThreadContext",
@@ -117,6 +121,9 @@ export const WS_METHODS = {
  * turn execution, and event replay.
  */
 export const ORCHESTRATION_WS_METHODS = {
+  getStartupProjectCatalog: "orchestration.getStartupProjectCatalog",
+  getProjectThreadSummaries: "orchestration.getProjectThreadSummaries",
+  getSelectedThreadDetail: "orchestration.getSelectedThreadDetail",
   getSnapshot: "orchestration.getSnapshot",
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",

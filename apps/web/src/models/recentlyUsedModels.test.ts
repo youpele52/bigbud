@@ -4,6 +4,7 @@ import {
   getRecentlyUsedModels,
   clearRecentModels,
   MAX_RECENT_MODELS_PER_PROVIDER,
+  normalizeRecentlyUsedModels,
 } from "./recentlyUsedModels";
 
 beforeEach(() => {
@@ -69,6 +70,67 @@ describe("getRecentlyUsedModels", () => {
     expect(result[0]!.model).toBe("gpt-4.1");
     expect(result[1]!.model).toBe("gpt-4o");
     expect(result[2]!.model).toBe("gpt-5");
+  });
+
+  it("repairs stale and malformed entries without losing valid models", () => {
+    const result = normalizeRecentlyUsedModels([
+      { provider: "codex", model: "gpt-5", lastUsedAt: "2026-07-22T00:00:00.000Z" },
+      { provider: "cliProxy", model: "gpt-5.6", lastUsedAt: "2026-07-22T01:00:00.000Z" },
+      {
+        provider: "opencode",
+        model: "claude",
+        subProviderID: "anthropic",
+        lastUsedAt: "2026-07-22T02:00:00.000Z",
+      },
+      { provider: "codex", model: 42, lastUsedAt: "2026-07-22T03:00:00.000Z" },
+      {
+        provider: "codex",
+        model: "gpt-4.1",
+        subProviderID: "legacy",
+        lastUsedAt: "2026-07-22T04:00:00.000Z",
+      },
+    ]);
+
+    expect(result).toEqual({
+      changed: true,
+      entries: [
+        { provider: "codex", model: "gpt-5", lastUsedAt: "2026-07-22T00:00:00.000Z" },
+        {
+          provider: "cliProxy",
+          model: "gpt-5.6",
+          lastUsedAt: "2026-07-22T01:00:00.000Z",
+        },
+        {
+          provider: "opencode",
+          model: "claude",
+          subProviderID: "anthropic",
+          lastUsedAt: "2026-07-22T02:00:00.000Z",
+        },
+        { provider: "codex", model: "gpt-4.1", lastUsedAt: "2026-07-22T04:00:00.000Z" },
+      ],
+    });
+  });
+
+  it("normalizes model slugs without dropping valid entries", () => {
+    const result = normalizeRecentlyUsedModels([
+      {
+        provider: "cliProxy",
+        model: "  catalog-model  ",
+        lastUsedAt: "2026-07-22T00:00:00.000Z",
+      },
+      { provider: "codex", model: "   ", lastUsedAt: "2026-07-22T01:00:00.000Z" },
+      { provider: "codex", model: "gpt-5.4", lastUsedAt: "2026-07-22T02:00:00.000Z" },
+    ]);
+
+    expect(result.entries).toEqual([
+      {
+        provider: "cliProxy",
+        model: "catalog-model",
+        lastUsedAt: "2026-07-22T00:00:00.000Z",
+      },
+      { provider: "codex", model: "gpt-5.4", lastUsedAt: "2026-07-22T02:00:00.000Z" },
+    ]);
+    expect(result.changed).toBe(true);
   });
 
   it("returns empty array for provider with no usage", () => {

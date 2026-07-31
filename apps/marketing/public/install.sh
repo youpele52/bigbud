@@ -205,12 +205,12 @@ main() {
 
   case "$os/$arch" in
     mac/arm64)
-      asset_url="$(pick_asset_url "$payload" '/bigbud-beta-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
+      asset_url="$(pick_asset_url "$payload" '/bigbud-[^/"]+-arm64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
         fail "Could not find a macOS arm64 DMG in the GitHub release. Visit $RELEASES_PAGE_URL"
       install_macos "$asset_url" "$tmp_dir"
       ;;
     mac/x64)
-      asset_url="$(pick_asset_url "$payload" '/bigbud-beta-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
+      asset_url="$(pick_asset_url "$payload" '/bigbud-[^/"]+-x64\.dmg$' '/bigbud-[^/"]+\.dmg$')" ||
         fail "Could not find a macOS x64 DMG in the GitHub release. Visit $RELEASES_PAGE_URL"
       install_macos "$asset_url" "$tmp_dir"
       ;;

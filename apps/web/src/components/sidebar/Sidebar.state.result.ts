@@ -82,6 +82,7 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     handleNewThread: input.handleNewThread,
     expandThreadListForProject: input.renderedProjectsState.expandThreadListForProject,
     collapseThreadListForProject: input.renderedProjectsState.collapseThreadListForProject,
+    loadMoreThreadsForProject: input.renderedProjectsState.loadMoreThreadsForProject,
     attachThreadListAutoAnimateRef: input.renderedProjectsState.attachThreadListAutoAnimateRef,
     sharedProjectItemProps: input.sharedProjectItemProps,
     updateSettings: input.updateSettings,
