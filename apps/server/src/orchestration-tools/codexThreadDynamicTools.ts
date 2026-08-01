@@ -25,6 +25,7 @@ import {
 import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
 import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.ts";
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
+import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 
 export { createCodexThreadOrchestrationDynamicTools } from "./codexThreadDynamicTools.specs.ts";
 
@@ -73,6 +74,18 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
 
     const dispatcher = requireDispatcher();
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
+
+    if (AGENT_WORKSPACE_TOOL_NAMES.includes(tool as AgentWorkspaceToolName)) {
+      if (!dispatcher.workspace) throw new Error("Workspace tools are not ready.");
+      const result = await Effect.runPromise(
+        dispatcher.workspace({
+          callerThreadId: threadId,
+          tool: tool as AgentWorkspaceToolName,
+          arguments: args && typeof args === "object" ? (args as Record<string, unknown>) : {},
+        }),
+      );
+      return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+    }
 
     switch (tool) {
       case "search_capabilities": {

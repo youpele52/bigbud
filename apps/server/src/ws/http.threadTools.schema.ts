@@ -1,4 +1,5 @@
 import { Data, Schema } from "effect";
+import { AGENT_WORKSPACE_TOOL_NAMES } from "../orchestration-tools/AgentWorkspaceTools.ts";
 
 export const ThreadToolRequest = Schema.Struct({
   action: Schema.Literals([
@@ -15,6 +16,7 @@ export const ThreadToolRequest = Schema.Struct({
     "list_threads",
     "search_capabilities",
     "read_capability_guide",
+    "workspace",
   ]),
   threadId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
@@ -36,6 +38,8 @@ export const ThreadToolRequest = Schema.Struct({
   section: Schema.optional(
     Schema.Literals(["summary", "workflow", "permissions", "examples", "full"]),
   ),
+  workspaceTool: Schema.optional(Schema.Literals(AGENT_WORKSPACE_TOOL_NAMES)),
+  workspaceArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 export class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{

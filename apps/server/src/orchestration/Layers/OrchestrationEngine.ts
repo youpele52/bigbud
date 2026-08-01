@@ -35,6 +35,9 @@ import {
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { setThreadOrchestrationToolDispatcher } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
+import { ProjectionNoteRepository } from "../../persistence/Services/ProjectionNotes.ts";
+import { ProjectionKanbanRepository } from "../../persistence/Services/ProjectionKanban.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
@@ -72,6 +75,8 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const serverSettingsService = yield* ServerSettingsService;
   const threadDelegationRepository = yield* ThreadDelegationRepository;
   const threadWatchRepository = yield* ProjectionThreadWatchRepository;
+  const notes = yield* Effect.serviceOption(ProjectionNoteRepository);
+  const kanban = yield* Effect.serviceOption(ProjectionKanbanRepository);
 
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
@@ -224,6 +229,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   };
 
   setThreadOrchestrationToolDispatcher({
+    ...(Option.isSome(notes) && Option.isSome(kanban)
+      ? {
+          workspace: makeAgentWorkspaceTool({
+            readModel: () => readModel,
+            notes: notes.value,
+            kanban: kanban.value,
+          }),
+        }
+      : {}),
     rename: (input) =>
       renameThreadViaThreadTools({
         orchestrationEngine: engine,

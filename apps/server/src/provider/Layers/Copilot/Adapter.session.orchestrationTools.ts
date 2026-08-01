@@ -20,7 +20,14 @@ export function createCopilotOrchestrationToolSurface(input: {
 }) {
   const { dispatcher, threadId } = input;
   const listThreadsDispatch = dispatcher.listThreads;
+  const workspaceDispatch = dispatcher.workspace;
   return createCopilotThreadOrchestrationTools({
+    ...(workspaceDispatch
+      ? {
+          workspace: (tool, args) =>
+            asRecord(workspaceDispatch({ callerThreadId: threadId, tool, arguments: args })),
+        }
+      : {}),
     renameThread: (title) => Effect.runPromise(dispatcher.rename({ threadId, title })),
     archiveThread: () => Effect.runPromise(dispatcher.archive({ threadId }).pipe(Effect.asVoid)),
     getThreadStatus: (targetThreadId) =>

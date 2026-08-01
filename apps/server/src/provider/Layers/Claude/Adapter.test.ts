@@ -7,6 +7,7 @@ import { Effect, Random } from "effect";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
 import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
+import { AGENT_WORKSPACE_TOOL_NAMES } from "../../../orchestration-tools/AgentWorkspaceTools.ts";
 import {
   THREAD_ID,
   makeDeterministicRandomService,
@@ -75,6 +76,7 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_remote_workspace__grep",
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
+        ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__bigbud_orchestration__${name}`),
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",

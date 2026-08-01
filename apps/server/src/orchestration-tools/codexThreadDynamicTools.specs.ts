@@ -21,11 +21,18 @@ import {
   SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 
 export const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 
 export function createCodexThreadOrchestrationDynamicTools(): ReadonlyArray<CodexDynamicToolSpec> {
   return [
+    ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) => ({
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: spec.name,
+      description: spec.description,
+      inputSchema: spec.inputSchema,
+    })),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "search_capabilities",

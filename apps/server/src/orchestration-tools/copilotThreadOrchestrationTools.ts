@@ -35,6 +35,8 @@ import {
   BIGBUD_PLAN_TRACKING_TOOL_PARAMETERS,
   BIGBUD_PLAN_TRACKING_TOOL_SUCCESS_MESSAGE,
 } from "./threadPlanTrackingTool.shared.ts";
+import type { AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
+import { createCopilotAgentWorkspaceTools } from "./copilotAgentWorkspaceTools.ts";
 
 function successResult(message: string): ToolResultObject {
   return {
@@ -54,6 +56,10 @@ function failureResult(message: string): ToolResultObject {
 }
 
 export function createCopilotThreadOrchestrationTools(input: {
+  readonly workspace?: (
+    tool: AgentWorkspaceToolName,
+    args: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
   readonly renameThread: (title: string) => Promise<{ readonly title: string }>;
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
@@ -85,6 +91,7 @@ export function createCopilotThreadOrchestrationTools(input: {
   const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
   const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
   return [
+    ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
     {
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,

@@ -11,6 +11,7 @@ import {
   SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "../orchestration-tools/AgentWorkspaceToolSpecs.ts";
 import {
   createCapabilityCatalog,
   type CapabilityRisk,
@@ -54,6 +55,23 @@ const threadToolTrack = (input: {
 });
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
+  ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) =>
+    threadToolTrack({
+      id: `workspace.${spec.name.replaceAll("_", ".")}`,
+      displayName: spec.name.replaceAll("_", " "),
+      description: spec.description,
+      triggers: ["The task requires working with global or project notes or kanban cards."],
+      risk:
+        spec.name.startsWith("list_") || spec.name.startsWith("get_")
+          ? "read-only"
+          : "reversible-write",
+      workflow: `Call ${spec.name} with a global item or an item in the current project.`,
+      permissions:
+        "Restricted to global items and the current thread's project. Other projects and deletion are unavailable.",
+      examples: [`Use ${spec.name} for global or current-project workspace items.`],
+      antiPatterns: ["Do not attempt deletion or cross-project access."],
+    }),
+  ),
   threadToolTrack({
     id: "thread.rename",
     displayName: "Rename thread",

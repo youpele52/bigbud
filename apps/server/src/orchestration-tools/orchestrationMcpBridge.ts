@@ -10,6 +10,7 @@ import {
   resolveThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
 import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
+import { AGENT_WORKSPACE_TOOL_NAMES } from "./AgentWorkspaceTools.ts";
 
 export interface ThreadOrchestrationBridgeInput {
   readonly stateDir: string;
@@ -129,6 +130,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       },
     },
     allowedTools: [
+      ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__${bridge.serverName}__${name}`),
       `mcp__${bridge.serverName}__browser`,
       `mcp__${bridge.serverName}__computer_use`,
       `mcp__${bridge.serverName}__rename_thread`,

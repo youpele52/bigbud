@@ -87,6 +87,37 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     const threadId = ThreadId.makeUnsafe(authRecord.threadId);
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
 
+    if (body.action === "workspace") {
+      if (!dispatcher.workspace) {
+        return yield* new ThreadToolRequestError({
+          status: 503,
+          message: "Workspace tools are not ready.",
+        });
+      }
+      if (!body.workspaceTool) {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: "Workspace tool is required.",
+        });
+      }
+      const result = yield* dispatcher
+        .workspace({
+          callerThreadId: threadId,
+          tool: body.workspaceTool,
+          arguments: body.workspaceArguments ?? {},
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new ThreadToolRequestError({
+                status: error.message.includes("not found") ? 404 : 400,
+                message: error.message,
+              }),
+          ),
+        );
+      return yield* HttpServerResponse.json({ ok: true, result });
+    }
+
     if (body.action === "search_capabilities") {
       return yield* HttpServerResponse.json({
         ok: true,

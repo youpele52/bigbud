@@ -27,6 +27,7 @@ import {
 } from "./threadOrchestrationBridge.shared.ts";
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 import {
   READ_CAPABILITY_GUIDE_PARAMETERS,
   READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
@@ -38,6 +39,14 @@ export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  ...AGENT_WORKSPACE_TOOL_SPECS.map(
+    (spec) =>
+      `  ${JSON.stringify({
+        name: spec.name,
+        description: spec.description,
+        inputSchema: spec.inputSchema,
+      })},`,
+  ),
   "  {",
   '    name: "search_capabilities",',
   `    description: ${JSON.stringify(SEARCH_CAPABILITIES_TOOL_DESCRIPTION)},`,
@@ -202,6 +211,7 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "    },",
   "  },",
   "];",
+  `const WORKSPACE_TOOL_NAMES = new Set(${JSON.stringify(AGENT_WORKSPACE_TOOL_SPECS.map(({ name }) => name))});`,
   "",
 ];
 

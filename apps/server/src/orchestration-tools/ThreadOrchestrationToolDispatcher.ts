@@ -21,8 +21,12 @@ import type {
   ListThreadsStatusFilter,
   listThreadsViaOrchestration,
 } from "./ThreadOrchestrationTools.listThreads.ts";
+import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
+  readonly workspace?: (
+    input: AgentWorkspaceToolInput,
+  ) => Effect.Effect<Record<string, unknown>, Error>;
   readonly rename: (input: {
     readonly threadId: ThreadId;
     readonly title: string;

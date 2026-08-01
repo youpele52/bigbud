@@ -25,6 +25,7 @@ import {
   SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
 } from "./capabilityCatalogTool.shared.ts";
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 
 export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttpConfig): string {
   const config = renderThreadOrchestrationConfigLiteral(input);
@@ -45,6 +46,18 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
+    "",
+    `const workspaceToolSpecs = ${JSON.stringify(AGENT_WORKSPACE_TOOL_SPECS)};`,
+    "const workspaceTools = workspaceToolSpecs.map((spec) => defineTool({",
+    "  name: spec.name,",
+    "  label: spec.name,",
+    "  description: spec.description,",
+    "  parameters: spec.inputSchema,",
+    "  async execute(_toolCallId, args) {",
+    "    const result = await callOrchestrationTool({ action: 'workspace', workspaceTool: spec.name, workspaceArguments: args ?? {} });",
+    "    return textResult(JSON.stringify(result.result ?? {}, null, 2));",
+    "  },",
+    "}));",
     "",
     "const searchCapabilitiesTool = defineTool({",
     '  name: "search_capabilities",',
@@ -261,6 +274,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     renderPiBrowserToolSource(),
     "",
     "export default function bigbudOrchestrationBridge(pi) {",
+    "  for (const tool of workspaceTools) pi.registerTool(tool);",
     "  pi.registerTool(searchCapabilitiesTool);",
     "  pi.registerTool(readCapabilityGuideTool);",
     "  pi.registerTool(createThreadTool);",
