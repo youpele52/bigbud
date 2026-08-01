@@ -19,17 +19,46 @@ const thread = {
 const buildInput = (
   state: ReturnType<typeof createProviderCapabilityContextState>,
   memoryContext = "",
+  agentBrowserPreference: "bigbud" | "system" = "bigbud",
 ) =>
   buildCapabilityAwareProviderInput({
     providerInputText: "User prompt",
     catalog: BIGBUD_CAPABILITY_CATALOG,
     thread,
     memoryContext,
+    agentBrowserPreference,
     contextRole: "main",
     state,
   });
 
 describe("provider capability context", () => {
+  it("injects bigbud browser default and explicit override semantics", () => {
+    const result = buildInput(createProviderCapabilityContextState());
+
+    expect(result).toContain("Current default: bigbud browser.");
+    expect(result).toContain("an explicit user request for the other browser always overrides it");
+    expect(result).toContain("Use the `browser` tool for the bigbud browser.");
+    expect(result).toContain('`surface: "desktop"` for the system default browser');
+  });
+
+  it("injects the system browser default", () => {
+    const result = buildInput(createProviderCapabilityContextState(), "", "system");
+
+    expect(result).toContain("Current default: system default browser.");
+    expect(result).toContain("full-access runtime mode");
+  });
+
+  it("refreshes browser guidance when the live preference changes", () => {
+    const state = createProviderCapabilityContextState();
+    buildInput(state, "", "bigbud");
+
+    const result = buildInput(state, "", "system");
+
+    expect(result).toContain("<bigbud_capability_delta>");
+    expect(result).toContain("agent browser preference changed");
+    expect(result).toContain("Current default: system default browser.");
+  });
+
   it("sends one LP and Skits on finalized human prompts 5, 10, and so on", () => {
     const state = createProviderCapabilityContextState();
     const prompts = Array.from({ length: 12 }, () => buildInput(state));
@@ -76,6 +105,7 @@ describe("provider capability context", () => {
       catalog: BIGBUD_CAPABILITY_CATALOG,
       thread: compactedThread,
       memoryContext: "Remember alpha.",
+      agentBrowserPreference: "bigbud",
       contextRole: "main",
       state,
     });
@@ -98,6 +128,7 @@ describe("provider capability context", () => {
       catalog: BIGBUD_CAPABILITY_CATALOG,
       thread: changedThread,
       memoryContext: "",
+      agentBrowserPreference: "bigbud",
       contextRole: "main",
       state,
     });

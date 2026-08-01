@@ -2,6 +2,12 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.102 (1 August, 2026)
+
+### Agent Browser Preferences
+
+- Added a Default agent browser setting in AI preferences. Agents now use bigbud's built-in browser by default, or your system default browser when selected, while explicit browser requests always take priority. System-browser navigation clearly requires the desktop app, full-access mode, and enabled computer use.
+
 ## v0.2.101 (31 July, 2026)
 
 ### Desktop Startup Recovery

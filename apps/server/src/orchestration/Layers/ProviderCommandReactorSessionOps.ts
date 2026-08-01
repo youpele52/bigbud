@@ -284,6 +284,9 @@ const sendTurnAttempt = (services: SessionOpServices) =>
       : (input.providerInputText ?? input.messageText);
     const capabilityContextEnabled =
       process.env.BIGBUD_CAPABILITY_CONTEXT_ENABLED?.trim().toLowerCase() !== "false";
+    const serverSettings = yield* services.serverSettingsService.getSettings.pipe(
+      Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+    );
     const providerInputWithCurrentThread = capabilityContextEnabled
       ? prependCapabilityContextToProviderInput({
           providerInputText: baseInput,
@@ -292,6 +295,7 @@ const sendTurnAttempt = (services: SessionOpServices) =>
           ...(activeSession?.provider ? { provider: activeSession.provider } : {}),
           ...(activeSession?.model ? { model: activeSession.model } : {}),
           memoryContext: input.memoryContext ?? "",
+          agentBrowserPreference: serverSettings.agentBrowserPreference,
           contextRole: bootstrapThread
             ? "branch"
             : thread.parentThread
@@ -306,9 +310,8 @@ const sendTurnAttempt = (services: SessionOpServices) =>
               : baseInput,
           threadId: thread.id,
           threadTitle: thread.title,
-          computerUseEnabled: (yield* services.serverSettingsService.getSettings.pipe(
-            Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
-          )).computerUseEnabled,
+          computerUseEnabled: serverSettings.computerUseEnabled,
+          agentBrowserPreference: serverSettings.agentBrowserPreference,
           serverMode: services.serverConfig.mode,
         });
     const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({

@@ -6,10 +6,80 @@ import { BrowserManager, type BrowserManagerShape } from "../../browser/Services
 import { CuaDriver, type CuaDriverShape } from "../Services/CuaDriver.ts";
 import { ComputerUse } from "../Services/ComputerUse.ts";
 import { ComputerUseLive } from "./ComputerUse.ts";
+import { Open, OpenError, type OpenShape } from "../../utils/open.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-11111111-1111-4111-8111-111111111111");
 
+const open: OpenShape = {
+  openBrowser: () => Effect.void,
+  openInEditor: () => Effect.void,
+  openPath: () => Effect.void,
+};
+
 describe("ComputerUseLive", () => {
+  it("opens desktop navigation in the system browser without using BrowserManager", async () => {
+    const browserNavigate = vi.fn(() => Effect.die("unexpected in-app browser navigate"));
+    const openBrowser = vi.fn(() => Effect.void);
+    const browser = {
+      launch: () => Effect.die("unexpected browser launch"),
+      navigate: browserNavigate,
+    } as unknown as BrowserManagerShape;
+    const driver = {
+      callTool: () => Effect.die("unexpected cua driver call"),
+      dispose: Effect.void,
+    } as unknown as CuaDriverShape;
+    const layer = ComputerUseLive.pipe(
+      Layer.provide(Layer.succeed(BrowserManager, browser)),
+      Layer.provide(Layer.succeed(CuaDriver, driver)),
+      Layer.provide(Layer.succeed(Open, { ...open, openBrowser })),
+    );
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const computerUse = yield* ComputerUse;
+        return yield* computerUse.execute(THREAD_ID, {
+          action: "navigate",
+          surface: "desktop",
+          url: "https://example.com/path",
+          captureAfter: true,
+        });
+      }).pipe(Effect.provide(layer)),
+    );
+
+    expect(openBrowser).toHaveBeenCalledExactlyOnceWith("https://example.com/path");
+    expect(browserNavigate).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      surface: "desktop",
+      action: "navigate",
+      summary:
+        "Opened https://example.com/path in the system default browser. Browser control has not been confirmed.",
+    });
+  });
+
+  it("surfaces system browser opener failures", async () => {
+    const openBrowser = vi.fn(() =>
+      Effect.fail(new OpenError({ message: "Browser auto-open failed" })),
+    );
+    const layer = ComputerUseLive.pipe(
+      Layer.provide(Layer.succeed(BrowserManager, {} as BrowserManagerShape)),
+      Layer.provide(Layer.succeed(CuaDriver, { dispose: Effect.void } as CuaDriverShape)),
+      Layer.provide(Layer.succeed(Open, { ...open, openBrowser })),
+    );
+
+    await expect(
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const computerUse = yield* ComputerUse;
+          return yield* computerUse.execute(THREAD_ID, {
+            action: "navigate",
+            surface: "desktop",
+            url: "https://example.com/failure",
+          });
+        }).pipe(Effect.provide(layer)),
+      ),
+    ).rejects.toThrow("Failed to open the system default browser: Browser auto-open failed");
+  });
+
   it("routes desktop-only actions to the cua driver backend", async () => {
     const browserLaunch = vi.fn(() => Effect.void);
     const callTool = vi.fn(() =>
@@ -49,6 +119,7 @@ describe("ComputerUseLive", () => {
     const layer = ComputerUseLive.pipe(
       Layer.provide(Layer.succeed(BrowserManager, browser)),
       Layer.provide(Layer.succeed(CuaDriver, driver)),
+      Layer.provide(Layer.succeed(Open, open)),
     );
 
     const result = await Effect.runPromise(
@@ -107,6 +178,7 @@ describe("ComputerUseLive", () => {
     const layer = ComputerUseLive.pipe(
       Layer.provide(Layer.succeed(BrowserManager, browser)),
       Layer.provide(Layer.succeed(CuaDriver, driver)),
+      Layer.provide(Layer.succeed(Open, open)),
     );
 
     const result = await Effect.runPromise(

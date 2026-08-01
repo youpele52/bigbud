@@ -183,7 +183,11 @@ const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationInfrastructureLayerLive),
     Layer.provide(
-      ComputerUseLive.pipe(Layer.provide(BrowserManagerLive), Layer.provide(CuaDriverLive)),
+      ComputerUseLive.pipe(
+        Layer.provide(BrowserManagerLive),
+        Layer.provide(CuaDriverLive),
+        Layer.provide(OpenLive),
+      ),
     ),
   ),
 );

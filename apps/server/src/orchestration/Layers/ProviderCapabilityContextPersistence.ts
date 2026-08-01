@@ -25,6 +25,10 @@ const decodeState = (value: unknown): ProviderCapabilityContextState | null => {
   const lastCompactionActivityId = nullableString("lastCompactionActivityId");
   const lastMcpStatusActivityId = nullableString("lastMcpStatusActivityId");
   const lastMemoryHash = nullableString("lastMemoryHash");
+  const lastAgentBrowserPreference =
+    record.lastAgentBrowserPreference === "bigbud" || record.lastAgentBrowserPreference === "system"
+      ? record.lastAgentBrowserPreference
+      : null;
   if (
     lastCatalogRevision === undefined ||
     lastCompactionActivityId === undefined ||
@@ -40,6 +44,7 @@ const decodeState = (value: unknown): ProviderCapabilityContextState | null => {
     lastCompactionActivityId,
     lastMcpStatusActivityId,
     lastMemoryHash,
+    lastAgentBrowserPreference,
     needsLp: record.needsLp,
   };
 };
