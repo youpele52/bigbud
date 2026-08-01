@@ -50,6 +50,7 @@ import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.p
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
 import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
+import { writeStartupStatus } from "../../startup/startupStatus.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
 
@@ -202,7 +203,15 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
 
     const bootstrap: OrchestrationProjectionPipelineShape["bootstrap"] = Effect.andThen(
       restoreBaselineForRetainedGap,
-      Effect.forEach(projectors, bootstrapProjector, { concurrency: 1 }),
+      Effect.gen(function* () {
+        const cursor = yield* projectionStateRepository.minLastAppliedSequence();
+        const replay = yield* eventStore.readReplay(cursor ?? 0, 1);
+        if (replay.events.length > 0) {
+          yield* Effect.sync(() => writeStartupStatus("upgrading"));
+        }
+        yield* Effect.forEach(projectors, bootstrapProjector, { concurrency: 1 });
+        yield* Effect.sync(() => writeStartupStatus("starting"));
+      }),
     ).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
@@ -215,6 +224,9 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       ),
       Effect.catchTag("SqlError", (sqlError) =>
         Effect.fail(toPersistenceSqlError("ProjectionPipeline.bootstrap:query")(sqlError)),
+      ),
+      Effect.tapError(() =>
+        Effect.sync(() => writeStartupStatus("error", "projection_database_initialization_failed")),
       ),
     );
 

@@ -11,6 +11,7 @@ import type {
   DesktopUpdateCheckResult,
   DesktopUpdateState,
 } from "@bigbud/contracts";
+import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 import { showDesktopConfirmDialog } from "./confirmDialog";
 import {
   isDesktopNotificationSupported,
@@ -65,6 +66,8 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly UPDATE_DOWNLOAD_CHANNEL: string;
   readonly UPDATE_INSTALL_CHANNEL: string;
   readonly UPDATE_CHECK_CHANNEL: string;
+  readonly BACKEND_STARTUP_GET_STATE_CHANNEL: string;
+  readonly BACKEND_STARTUP_STATE_CHANNEL: string;
 
   // State/action accessors
   readonly getMainWindow: () => BrowserWindow | null;
@@ -75,6 +78,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly getIsQuitting: () => boolean;
   readonly getUpdateState: () => DesktopUpdateState;
+  readonly getBackendStartupState: () => DesktopBackendStartupState;
   readonly isUpdaterConfigured: () => boolean;
 
   // Update actions
@@ -112,7 +116,16 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,
     UPDATE_CHECK_CHANNEL,
+    BACKEND_STARTUP_GET_STATE_CHANNEL,
   } = deps;
+
+  ipcMain.removeHandler(BACKEND_STARTUP_GET_STATE_CHANNEL);
+  ipcMain.handle(BACKEND_STARTUP_GET_STATE_CHANNEL, (event) => {
+    if (event.sender !== deps.getMainWindow()?.webContents) {
+      throw new Error("Backend startup state is only available to the main renderer.");
+    }
+    return deps.getBackendStartupState();
+  });
 
   ipcMain.removeAllListeners(GET_WS_URL_CHANNEL);
   ipcMain.on(GET_WS_URL_CHANNEL, (event) => {

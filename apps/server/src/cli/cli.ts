@@ -5,6 +5,7 @@ import { Argument, Command, Flag, GlobalFlag } from "effect/unstable/cli";
 import { ServerConfig, RuntimeMode } from "../startup/config";
 import { PortSchema, resolveServerConfig } from "./cli.config.ts";
 import { runServer } from "../server";
+import { writeStartupStatus } from "../startup/startupStatus";
 
 export { resolveServerConfig } from "./cli.config.ts";
 
@@ -84,7 +85,9 @@ const rootCommand = Command.make("bigbud", commandFlags).pipe(
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
       return yield* runServer.pipe(Effect.provideService(ServerConfig, config));
-    }),
+    }).pipe(
+      Effect.tapError(() => Effect.sync(() => writeStartupStatus("error", "bootstrap_failed"))),
+    ),
   ),
 );
 

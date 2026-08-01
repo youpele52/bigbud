@@ -3,6 +3,7 @@ import { AlertTriangle, CloudOff, LoaderCircle, RotateCw } from "lucide-react";
 import { APP_DISPLAY_NAME, APP_SERVER_NAME } from "../config/branding";
 import { type WsConnectionStatus, type WsConnectionUiState } from "../rpc/wsConnectionState";
 import { Button } from "./ui/button";
+import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 const connectionTimeFormatter = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
@@ -91,17 +92,116 @@ function buildConnectionDetails(status: WsConnectionStatus, uiState: WsConnectio
   return details.join("\n");
 }
 
+const startupFailureCopy = {
+  bootstrap_failed: "The local startup configuration could not be applied.",
+  child_exit_before_ready: "The local backend stopped before it was ready.",
+  child_spawn_failed: "The local backend process could not be started.",
+  projection_database_initialization_failed: "Local data could not be initialized.",
+  server_entry_missing: "The local backend installation is incomplete.",
+  server_runtime_startup_failed: "The local backend could not finish starting.",
+  startup_timed_out: "The local backend is taking longer than expected to start.",
+  unknown: "The local backend could not finish starting.",
+} as const;
+
+export function getDesktopStartupFailureDescription(startup: DesktopBackendStartupState): string {
+  return startupFailureCopy[
+    startup.failureReason ?? (startup.status === "timedOut" ? "startup_timed_out" : "unknown")
+  ];
+}
+
+export function buildStartupTechnicalDetails(startup: DesktopBackendStartupState): string | null {
+  const diagnostics = startup.diagnostics;
+  if (
+    (startup.status !== "failed" && startup.status !== "timedOut") ||
+    !startup.failureReason ||
+    !diagnostics
+  ) {
+    return null;
+  }
+  return [
+    `reason: ${startup.failureReason}`,
+    `category: ${diagnostics.category}`,
+    `occurredAt: ${diagnostics.occurredAt}`,
+    ...(diagnostics.errorMessage ? [`error: ${diagnostics.errorMessage}`] : []),
+    ...(diagnostics.exitCode !== undefined ? [`exitCode: ${diagnostics.exitCode}`] : []),
+    ...(diagnostics.exitSignal ? [`exitSignal: ${diagnostics.exitSignal}`] : []),
+    ...(diagnostics.stderrTail ? [`stderr:\n${diagnostics.stderrTail}`] : []),
+    ...(startup.developmentDiagnostics
+      ? [
+          "development crash context:",
+          `startedAt: ${new Date(startup.startedAt).toISOString()}`,
+          `capturedAt: ${startup.developmentDiagnostics.capturedAt}`,
+          ...(startup.developmentDiagnostics.errorName
+            ? [`errorName: ${startup.developmentDiagnostics.errorName}`]
+            : []),
+          ...(startup.developmentDiagnostics.errorMessage
+            ? [`errorMessage: ${startup.developmentDiagnostics.errorMessage}`]
+            : []),
+          ...(startup.developmentDiagnostics.errorCause
+            ? [`errorCause: ${startup.developmentDiagnostics.errorCause}`]
+            : []),
+          ...(startup.developmentDiagnostics.errorStack
+            ? [`errorStack:\n${startup.developmentDiagnostics.errorStack}`]
+            : []),
+          ...(startup.developmentDiagnostics.exitCode !== undefined
+            ? [`exitCode: ${startup.developmentDiagnostics.exitCode}`]
+            : []),
+          ...(startup.developmentDiagnostics.exitSignal
+            ? [`exitSignal: ${startup.developmentDiagnostics.exitSignal}`]
+            : []),
+          ...(startup.developmentDiagnostics.stderrTail
+            ? [`stderr:\n${startup.developmentDiagnostics.stderrTail}`]
+            : []),
+        ]
+      : []),
+  ].join("\n");
+}
+
 export function WebSocketBlockingState({
   status,
   uiState,
+  desktopStartup,
 }: {
   readonly status: WsConnectionStatus;
   readonly uiState: WsConnectionUiState;
+  readonly desktopStartup: DesktopBackendStartupState | null;
 }) {
-  const copy = buildBlockingCopy(uiState, status);
+  const technicalDetails = desktopStartup ? buildStartupTechnicalDetails(desktopStartup) : null;
+  const copy =
+    desktopStartup?.status === "failed"
+      ? {
+          description: `${getDesktopStartupFailureDescription(desktopStartup)} Reload the app to try again.`,
+          eyebrow: "Startup Failed",
+          title: "Local backend stopped during startup",
+        }
+      : desktopStartup?.status === "timedOut"
+        ? {
+            description: `${getDesktopStartupFailureDescription(desktopStartup)} bigbud will reconnect automatically if it becomes ready.`,
+            eyebrow: "Startup Timed Out",
+            title: "Local backend startup is taking too long",
+          }
+        : desktopStartup?.status === "upgrading"
+          ? {
+              description: "Upgrading local data, please wait",
+              eyebrow: "Starting Session",
+              title: "Upgrading local data, please wait",
+            }
+          : desktopStartup?.status === "starting"
+            ? {
+                description: "Starting bigbud",
+                eyebrow: "Starting Session",
+                title: "Starting bigbud",
+              }
+            : buildBlockingCopy(uiState, status);
   const disconnectedAt = formatConnectionMoment(status.disconnectedAt ?? status.lastErrorAt);
   const Icon =
-    uiState === "connecting" ? LoaderCircle : uiState === "offline" ? CloudOff : AlertTriangle;
+    desktopStartup?.status === "failed" || desktopStartup?.status === "timedOut"
+      ? AlertTriangle
+      : uiState === "connecting"
+        ? LoaderCircle
+        : uiState === "offline"
+          ? CloudOff
+          : AlertTriangle;
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
@@ -119,7 +219,15 @@ export function WebSocketBlockingState({
             <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{copy.title}</h1>
           </div>
           <div className="rounded-2xl border border-border/70 bg-background/80 p-3 text-foreground shadow-sm">
-            <Icon className={uiState === "connecting" ? "size-5 animate-spin" : "size-5"} />
+            <Icon
+              className={
+                uiState === "connecting" &&
+                desktopStartup?.status !== "failed" &&
+                desktopStartup?.status !== "timedOut"
+                  ? "size-5 animate-spin"
+                  : "size-5"
+              }
+            />
           </div>
         </div>
 
@@ -162,6 +270,17 @@ export function WebSocketBlockingState({
             {buildConnectionDetails(status, uiState)}
           </pre>
         </details>
+        {technicalDetails ? (
+          <details className="group mt-3 overflow-hidden rounded-lg border border-border/70 bg-background/55">
+            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground">
+              <span className="group-open:hidden">Show technical details</span>
+              <span className="hidden group-open:inline">Hide technical details</span>
+            </summary>
+            <pre className="max-h-56 overflow-auto border-t border-border/70 bg-background/80 px-3 py-2 text-xs text-foreground/85">
+              {technicalDetails}
+            </pre>
+          </details>
+        ) : null}
       </section>
     </div>
   );

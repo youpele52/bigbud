@@ -148,6 +148,25 @@ import type {
 import { EditorId } from "../workspace/editor";
 import { type DesktopWindowMaterial, ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+import type { DesktopBackendStartupState } from "./ipc.desktop";
+import type {
+  DesktopRuntimeArch,
+  DesktopRuntimeInfo,
+  DesktopRuntimePlatform,
+  DesktopUpdateActionResult,
+  DesktopUpdateCheckResult,
+  DesktopUpdateState,
+  DesktopUpdateStatus,
+} from "./ipc.desktop";
+export type {
+  DesktopRuntimeArch,
+  DesktopRuntimeInfo,
+  DesktopRuntimePlatform,
+  DesktopUpdateActionResult,
+  DesktopUpdateCheckResult,
+  DesktopUpdateState,
+  DesktopUpdateStatus,
+} from "./ipc.desktop";
 export * from "./ipc.desktopComputerUse";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -157,57 +176,7 @@ export interface ContextMenuItem<T extends string = string> {
   disabled?: boolean;
 }
 
-export type DesktopUpdateStatus =
-  | "disabled"
-  | "idle"
-  | "checking"
-  | "up-to-date"
-  | "available"
-  | "downloading"
-  | "downloaded"
-  | "installing"
-  | "error";
-
-export type DesktopRuntimeArch = "arm64" | "x64" | "other";
-export type DesktopRuntimePlatform = "darwin" | "linux" | "win32" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
-
-export interface DesktopRuntimeInfo {
-  platform: DesktopRuntimePlatform;
-  hostArch: DesktopRuntimeArch;
-  appArch: DesktopRuntimeArch;
-  runningUnderArm64Translation: boolean;
-  isCodeSigned: boolean;
-}
-
-export interface DesktopUpdateState {
-  enabled: boolean;
-  status: DesktopUpdateStatus;
-  currentVersion: string;
-  platform: DesktopRuntimePlatform;
-  hostArch: DesktopRuntimeArch;
-  appArch: DesktopRuntimeArch;
-  runningUnderArm64Translation: boolean;
-  isCodeSigned: boolean;
-  availableVersion: string | null;
-  downloadedVersion: string | null;
-  downloadPercent: number | null;
-  checkedAt: string | null;
-  message: string | null;
-  errorContext: "check" | "download" | "install" | null;
-  canRetry: boolean;
-}
-
-export interface DesktopUpdateActionResult {
-  accepted: boolean;
-  completed: boolean;
-  state: DesktopUpdateState;
-}
-
-export interface DesktopUpdateCheckResult {
-  checked: boolean;
-  state: DesktopUpdateState;
-}
 
 export interface DesktopNotificationInput {
   title: string;
@@ -227,6 +196,8 @@ export interface DesktopTailscaleRemoteAccessStatus {
 export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
+  getBackendStartupState: () => Promise<DesktopBackendStartupState>;
+  onBackendStartupState: (listener: (state: DesktopBackendStartupState) => void) => () => void;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;

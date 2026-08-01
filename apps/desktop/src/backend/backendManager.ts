@@ -1,9 +1,10 @@
 import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
-
 import {
   backendChildEnv,
   captureBackendOutput,
+  type LogSink,
+  writeBackendLifecycleEvent,
   writeBackendSessionBoundary,
 } from "../logging/logging";
 import {
@@ -16,45 +17,21 @@ import {
   resolvePackagedBundledSkillsDir,
   resolvePackagedOpencodeBinaryDir,
 } from "../env/pathResolver";
-import type { RotatingFileSink } from "@bigbud/shared/logging";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
-import { startCuaDriverDaemon } from "./cuaDriver.daemon";
-
-// ---------------------------------------------------------------------------
-// Windows-safe process termination
-// ---------------------------------------------------------------------------
-
-/**
- * Kills a child process in a platform-safe way.
- *
- * On Windows, `child.kill()` only terminates the top-level process — it does
- * NOT kill the process tree.  If the child was spawned with `shell: true` it
- * also leaves the real process running behind a `cmd.exe` wrapper.
- * `taskkill /T /F` terminates the entire tree reliably on all Windows versions.
- *
- * On POSIX we fall back to standard signal delivery.
- */
-function killBackendProcess(
-  child: ChildProcess.ChildProcess,
-  signal: NodeJS.Signals = "SIGTERM",
-): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    try {
-      ChildProcess.spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-        stdio: "ignore",
-      });
-      return;
-    } catch {
-      // taskkill unavailable — fall through to direct kill.
-    }
-  }
-  child.kill(signal);
-}
-
-// ---------------------------------------------------------------------------
-// Module-level state
-// ---------------------------------------------------------------------------
-
+import { killBackendProcess } from "./backendProcess";
+import { stopBackendChild, stopBackendChildAndWait } from "./backendShutdown";
+import {
+  beginBackendStartup,
+  recordBackendStartupDevelopmentDiagnostics,
+  recordBackendStartupFailure,
+} from "./backendStartupState";
+import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
+import { withBackendNodeOptions } from "./backendEnv";
+import {
+  createBackendStartupDiagnostics,
+  createDevelopmentBackendDiagnostics,
+} from "./backendStartupDiagnostics";
+import { resolveComputerUseRuntimeEnv } from "./backendRuntimeEnv";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
@@ -63,18 +40,12 @@ export let backendHost = "";
 export let restartAttempt = 0;
 export let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let backendStartPending = false;
-const CUA_DAEMON_BACKEND_START_BUDGET_MS = 12_000;
 
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
 
 /** No-op handler for pipe errors from a dying backend child.
  *  Keeps these errors from becoming uncaught exceptions in the main process. */
 const swallowPipeError = () => {};
-
-// ---------------------------------------------------------------------------
-// Dependencies (injected once via init)
-// ---------------------------------------------------------------------------
-
 interface BackendManagerDeps {
   readonly rootDir: string;
   readonly baseDir: string;
@@ -82,12 +53,12 @@ interface BackendManagerDeps {
   readonly cuaDriverHostBundleId: string;
   readonly serverSettingsPath: string;
   readonly getIsQuitting: () => boolean;
-  readonly getBackendLogSink: () => RotatingFileSink | null;
+  readonly getBackendLogSink: () => LogSink | null;
+  readonly isDevelopmentDiagnostics: boolean;
   readonly runId: string;
 }
 
 let _deps: BackendManagerDeps | null = null;
-
 export function initBackendManager(deps: BackendManagerDeps): void {
   _deps = deps;
   backendPort = 0;
@@ -97,67 +68,15 @@ export function initBackendManager(deps: BackendManagerDeps): void {
   restartAttempt = 0;
   restartTimer = null;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function logBackendBoundary(phase: "START" | "END", details: string): void {
   if (!_deps) return;
   writeBackendSessionBoundary(phase, details, _deps.getBackendLogSink(), _deps.runId);
 }
 
-function withBackendNodeOptions(
-  env: NodeJS.ProcessEnv,
-  backendMaxOldSpaceMb: number | null,
-): NodeJS.ProcessEnv {
-  if (!backendMaxOldSpaceMb) {
-    return env;
-  }
-
-  const nextFlag = `--max-old-space-size=${backendMaxOldSpaceMb}`;
-  const existingNodeOptions = env.NODE_OPTIONS?.trim();
-
-  if (existingNodeOptions?.includes("--max-old-space-size=")) {
-    return env;
-  }
-
-  return {
-    ...env,
-    NODE_OPTIONS: existingNodeOptions ? `${existingNodeOptions} ${nextFlag}` : nextFlag,
-  };
+function logBackendLifecycle(event: string, details: string): void {
+  if (!_deps) return;
+  writeBackendLifecycleEvent(event, details, _deps.getBackendLogSink(), _deps.runId);
 }
-
-async function resolveComputerUseRuntimeEnv(
-  baseDir: string,
-  hostBundleId: string,
-): Promise<NodeJS.ProcessEnv> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      startCuaDriverDaemon(baseDir, hostBundleId).catch((error) => {
-        console.error(
-          `[desktop] cua-driver startup failed; continuing without it: ${String(error)}`,
-        );
-        return {};
-      }),
-      new Promise<NodeJS.ProcessEnv>((resolve) => {
-        timer = setTimeout(() => {
-          console.error("[desktop] cua-driver startup timed out; continuing without it");
-          resolve({});
-        }, CUA_DAEMON_BACKEND_START_BUDGET_MS);
-        timer.unref();
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Set the resolved port/auth/url (called from bootstrap after port reservation).
  */
@@ -179,6 +98,10 @@ export function scheduleBackendRestart(reason: string): void {
 
   const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
   restartAttempt += 1;
+  logBackendLifecycle(
+    "restart_scheduled",
+    `attempt=${restartAttempt} delayMs=${delayMs} reason=${reason}`,
+  );
   console.error(`[desktop] backend exited unexpectedly (${reason}); restarting in ${delayMs}ms`);
 
   restartTimer = setTimeout(() => {
@@ -197,12 +120,23 @@ export async function startBackend(): Promise<void> {
   );
   backendStartPending = false;
   if (_deps.getIsQuitting() || backendProcess) return;
+  const startupGeneration = beginBackendStartup();
+  logBackendLifecycle("startup_requested", `generation=${startupGeneration}`);
 
   const backendObservabilitySettings = readPersistedBackendObservabilitySettings(
     _deps.serverSettingsPath,
   );
   const backendEntry = resolveBackendEntry(_deps.rootDir);
   if (!FS.existsSync(backendEntry)) {
+    logBackendLifecycle(
+      "server_entry_missing",
+      `generation=${startupGeneration} entry=${backendEntry}`,
+    );
+    recordBackendStartupFailure(
+      startupGeneration,
+      "server_entry_missing",
+      createBackendStartupDiagnostics({ category: "bootstrap" }),
+    );
     scheduleBackendRestart(`missing server entry at ${backendEntry}`);
     return;
   }
@@ -214,75 +148,102 @@ export async function startBackend(): Promise<void> {
   const packagedBundledAgentsDir = resolvePackagedBundledAgentsDir();
   const backendLauncherPath = resolveBackendLauncherPath();
   const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
-  // Ensure _modules → node_modules link exists for ESM resolution of
-  // external native packages (e.g. @github/copilot-sdk, node-pty).
   ensureBackendModulesPath();
-
-  // Always pipe stderr so we can capture crash output for diagnostics,
-  // regardless of whether a log sink is configured.
-  const child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
-    cwd: resolveBackendCwd(_deps.rootDir),
-    // In packaged Linux AppImages, process.execPath can point at the outer
-    // AppImage launcher. Prefer the mounted in-image executable when available
-    // so backend restarts do not re-enter the AppImage runtime.
-    env: withBackendNodeOptions(
-      {
-        ...backendChildEnv(),
-        ...(packagedOpencodeBinDir
-          ? {
-              PATH: [packagedOpencodeBinDir, process.env.PATH]
-                .filter((entry): entry is string => Boolean(entry && entry.length > 0))
-                .join(process.platform === "win32" ? ";" : ":"),
-            }
-          : {}),
-        ...(packagedBundledSkillsDir
-          ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
-          : {}),
-        ...(packagedBundledAgentsDir
-          ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
-          : {}),
-        ...computerUseRuntimeEnv,
-        BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
-        ELECTRON_RUN_AS_NODE: "1",
-      },
-      _deps.backendMaxOldSpaceMb,
-    ),
-    stdio: captureBackendLogs
-      ? ["ignore", "pipe", "pipe", "pipe"]
-      : ["ignore", "inherit", "pipe", "pipe"],
-  });
-
-  // Swallow pipe errors on stdio streams. When the backend child exits
-  // abruptly (e.g. permission denied, immediate crash) the pipe endpoints
-  // emit 'error' with ECONNRESET / EPIPE. Without handlers these become
-  // uncaught exceptions in the main process. The 'exit' / 'error' handlers
-  // on the child process capture the real reason and schedule a restart.
-  if (child.stdout) {
-    child.stdout.on("error", swallowPipeError);
+  let child: ChildProcess.ChildProcess;
+  try {
+    child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
+      cwd: resolveBackendCwd(_deps.rootDir),
+      env: withBackendNodeOptions(
+        {
+          ...backendChildEnv(),
+          ...(packagedOpencodeBinDir
+            ? {
+                PATH: [packagedOpencodeBinDir, process.env.PATH]
+                  .filter((entry): entry is string => Boolean(entry && entry.length > 0))
+                  .join(process.platform === "win32" ? ";" : ":"),
+              }
+            : {}),
+          ...(packagedBundledSkillsDir
+            ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
+            : {}),
+          ...(packagedBundledAgentsDir
+            ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
+            : {}),
+          ...computerUseRuntimeEnv,
+          BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
+          ELECTRON_RUN_AS_NODE: "1",
+          BIGBUD_STARTUP_STATUS_FD: "4",
+        },
+        _deps.backendMaxOldSpaceMb,
+      ),
+      stdio: captureBackendLogs
+        ? ["ignore", "pipe", "pipe", "pipe", "pipe"]
+        : ["ignore", "inherit", "pipe", "pipe", "pipe"],
+    });
+  } catch (error) {
+    logBackendLifecycle(
+      "child_spawn_threw",
+      `generation=${startupGeneration} error=${String(error)}`,
+    );
+    recordBackendStartupFailure(
+      startupGeneration,
+      "child_spawn_failed",
+      createBackendStartupDiagnostics({ category: "process", errorMessage: String(error) }),
+    );
+    scheduleBackendRestart("backend child spawn failed");
+    return;
   }
-  if (child.stderr) {
-    child.stderr.on("error", swallowPipeError);
+  logBackendLifecycle(
+    "child_spawned",
+    `generation=${startupGeneration} pid=${child.pid ?? "unknown"} launcher=${backendLauncherPath} entry=${backendEntry}`,
+  );
+  if (child.stdout)
+    child.stdout.on("error", (error) => {
+      logBackendLifecycle("stdout_error", `generation=${startupGeneration} error=${error.message}`);
+      swallowPipeError();
+    });
+  if (child.stderr)
+    child.stderr.on("error", (error) => {
+      logBackendLifecycle("stderr_error", `generation=${startupGeneration} error=${error.message}`);
+      swallowPipeError();
+    });
+  const statusStream = child.stdio[4];
+  if (statusStream && "on" in statusStream) {
+    statusStream.on("error", (error) => {
+      logBackendLifecycle("fd4_error", `generation=${startupGeneration} error=${error.message}`);
+      swallowPipeError();
+    });
+    listenForBackendStartupStatus(
+      statusStream as import("node:stream").Readable,
+      startupGeneration,
+      (detail) =>
+        logBackendLifecycle("fd4_invalid_record", `generation=${startupGeneration} ${detail}`),
+    );
   }
 
-  // Buffer the last 2 KB of stderr for crash diagnostics.
-  const stderrTail: string[] = [];
-  const MAX_STDERR_TAIL = 2048;
-  let stderrTailLength = 0;
+  let stderrTail = "";
+  const MAX_STDERR_TAIL = 8_192;
   if (child.stderr) {
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
-      stderrTail.push(chunk);
-      stderrTailLength += chunk.length;
-      // Trim oldest chunks when buffer exceeds limit.
-      while (stderrTailLength > MAX_STDERR_TAIL && stderrTail.length > 1) {
-        const removed = stderrTail.shift();
-        stderrTailLength -= removed?.length ?? 0;
+      stderrTail = `${stderrTail}${chunk}`.slice(-MAX_STDERR_TAIL);
+      if (_deps?.isDevelopmentDiagnostics) {
+        recordBackendStartupDevelopmentDiagnostics(
+          startupGeneration,
+          createDevelopmentBackendDiagnostics({ stderrTail }),
+        );
       }
     });
   }
   const bootstrapStream = child.stdio[3];
   if (bootstrapStream && "write" in bootstrapStream) {
-    bootstrapStream.on("error", swallowPipeError);
+    bootstrapStream.on("error", (error) => {
+      logBackendLifecycle(
+        "bootstrap_fd3_error",
+        `generation=${startupGeneration} error=${error.message}`,
+      );
+      swallowPipeError();
+    });
     bootstrapStream.write(
       `${JSON.stringify({
         mode: "desktop",
@@ -301,6 +262,12 @@ export async function startBackend(): Promise<void> {
     );
     bootstrapStream.end();
   } else {
+    logBackendLifecycle("bootstrap_pipe_missing", `generation=${startupGeneration}`);
+    recordBackendStartupFailure(
+      startupGeneration,
+      "bootstrap_failed",
+      createBackendStartupDiagnostics({ category: "bootstrap" }),
+    );
     killBackendProcess(child);
     scheduleBackendRestart("missing desktop bootstrap pipe");
     return;
@@ -323,6 +290,28 @@ export async function startBackend(): Promise<void> {
   });
 
   child.on("error", (error) => {
+    logBackendLifecycle(
+      "child_error",
+      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} error=${error.stack ?? error.message} stderr=${stderrTail}`,
+    );
+    recordBackendStartupFailure(
+      startupGeneration,
+      "child_spawn_failed",
+      createBackendStartupDiagnostics({
+        category: "process",
+        errorMessage: error.message,
+        stderrTail,
+      }),
+      _deps?.isDevelopmentDiagnostics
+        ? createDevelopmentBackendDiagnostics({ error, stderrTail })
+        : undefined,
+    );
+    if (_deps?.isDevelopmentDiagnostics) {
+      recordBackendStartupDevelopmentDiagnostics(
+        startupGeneration,
+        createDevelopmentBackendDiagnostics({ error, stderrTail }),
+      );
+    }
     const wasExpected = expectedBackendExitChildren.has(child);
     if (backendProcess === child) {
       backendProcess = null;
@@ -335,6 +324,29 @@ export async function startBackend(): Promise<void> {
   });
 
   child.on("exit", (code, signal) => {
+    logBackendLifecycle(
+      "child_exit",
+      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"} stderr=${stderrTail}`,
+    );
+    recordBackendStartupFailure(
+      startupGeneration,
+      "child_exit_before_ready",
+      createBackendStartupDiagnostics({
+        category: "process",
+        exitCode: code,
+        exitSignal: signal,
+        stderrTail,
+      }),
+      _deps?.isDevelopmentDiagnostics
+        ? createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail })
+        : undefined,
+    );
+    if (_deps?.isDevelopmentDiagnostics) {
+      recordBackendStartupDevelopmentDiagnostics(
+        startupGeneration,
+        createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail }),
+      );
+    }
     const wasExpected = expectedBackendExitChildren.has(child);
     if (backendProcess === child) {
       backendProcess = null;
@@ -343,7 +355,7 @@ export async function startBackend(): Promise<void> {
       `pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`,
     );
     if (_deps?.getIsQuitting() || wasExpected) return;
-    const crashDetail = stderrTail.join("").trim().slice(-512).replace(/\n/g, " ↵ ");
+    const crashDetail = stderrTail.trim().slice(-512).replace(/\n/g, " ↵ ");
     const reason = `code=${code ?? "null"} signal=${signal ?? "null"}${crashDetail ? ` stderr=${crashDetail}` : ""}`;
     scheduleBackendRestart(reason);
   });
@@ -359,15 +371,7 @@ export function stopBackend(): void {
   backendProcess = null;
   if (!child) return;
 
-  if (child.exitCode === null && child.signalCode === null) {
-    expectedBackendExitChildren.add(child);
-    killBackendProcess(child);
-    setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) {
-        killBackendProcess(child, "SIGKILL");
-      }
-    }, 2_000).unref();
-  }
+  stopBackendChild(child, expectedBackendExitChildren);
 }
 
 export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
@@ -379,45 +383,5 @@ export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void
   const child = backendProcess;
   backendProcess = null;
   if (!child) return;
-  const backendChild = child;
-  if (backendChild.exitCode !== null || backendChild.signalCode !== null) return;
-  expectedBackendExitChildren.add(backendChild);
-
-  await new Promise<void>((resolve) => {
-    let settled = false;
-    let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
-    let exitTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function settle(): void {
-      if (settled) return;
-      settled = true;
-      backendChild.off("exit", onExit);
-      if (forceKillTimer) {
-        clearTimeout(forceKillTimer);
-      }
-      if (exitTimeoutTimer) {
-        clearTimeout(exitTimeoutTimer);
-      }
-      resolve();
-    }
-
-    function onExit(): void {
-      settle();
-    }
-
-    backendChild.once("exit", onExit);
-    killBackendProcess(backendChild);
-
-    forceKillTimer = setTimeout(() => {
-      if (backendChild.exitCode === null && backendChild.signalCode === null) {
-        killBackendProcess(backendChild, "SIGKILL");
-      }
-    }, 2_000);
-    forceKillTimer.unref();
-
-    exitTimeoutTimer = setTimeout(() => {
-      settle();
-    }, timeoutMs);
-    exitTimeoutTimer.unref();
-  });
+  await stopBackendChildAndWait(child, expectedBackendExitChildren, timeoutMs);
 }

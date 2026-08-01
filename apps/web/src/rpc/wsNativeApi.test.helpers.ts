@@ -202,6 +202,8 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
   return {
     getWsUrl: () => null,
     getMobileBackendBaseUrl: () => null,
+    getBackendStartupState: async () => ({ generation: 0, startedAt: 0, status: "idle" }),
+    onBackendStartupState: () => () => {},
     getComputerUseRuntimeStatus: async () => ({
       available: false,
       ready: false,

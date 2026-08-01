@@ -4,7 +4,6 @@ import * as Path from "node:path";
 
 import { app, BrowserWindow, dialog } from "electron";
 
-import type { RotatingFileSink } from "@bigbud/shared/logging";
 import { releaseChannelLabel, resolveReleaseChannel } from "@bigbud/shared/releaseChannel";
 import {
   clearUpdatePollTimer,
@@ -46,8 +45,21 @@ import {
 import { requestHostAccessibilityPermission } from "./backend/cuaHostPermissions";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
+  configureBackendStartupState,
+  getBackendStartupState,
+  recordBackendStartupDevelopmentDiagnostics,
+  recordBackendStartupFailure,
+} from "./backend/backendStartupState";
+import {
+  createBackendStartupDiagnostics,
+  createDevelopmentBackendDiagnostics,
+} from "./backend/backendStartupDiagnostics";
+import {
   formatErrorMessage,
+  formatErrorDiagnostics,
   initializePackagedLogging,
+  type QueuedLogSink,
+  resolveDesktopLogDir,
   writeDesktopLogHeader,
 } from "./logging/logging";
 import {
@@ -103,6 +115,8 @@ const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
 const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
 const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
 const REQUEST_FILE_ACCESS_CHANNEL = "desktop:request-file-access";
+const BACKEND_STARTUP_STATE_CHANNEL = "desktop:backend-startup-state";
+const BACKEND_STARTUP_GET_STATE_CHANNEL = "desktop:backend-startup-get-state";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -116,6 +130,8 @@ const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const DESKTOP_SCHEME = "bigbud";
 const ROOT_DIR = Path.resolve(__dirname, "../../..");
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
+// Unlike the dev-server presentation flag above, this is an Electron runtime trust boundary.
+const isDevelopmentDiagnostics = !app.isPackaged;
 const CUA_DRIVER_HOST_BUNDLE_ID = resolveCuaDriverHostBundleId(app.isPackaged);
 const releaseChannel = resolveReleaseChannel(app.getVersion());
 const APP_DISPLAY_NAME = isDevelopment
@@ -131,7 +147,6 @@ const USER_DATA_DIR_NAME = isDevelopment ? "bigbud-dev" : "bigbud";
 // from older T3 Code builds continue to migrate their existing desktop data.
 // Remove this once the legacy Alpha-to-Beta upgrade window is no longer needed.
 const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
-const LOG_DIR = Path.join(STATE_DIR, "logs");
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 const LOG_FILE_MAX_FILES = 10;
 const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
@@ -145,8 +160,8 @@ const LINUX_GPU_FALLBACK_MARKER_PATH = resolveLinuxGpuFallbackMarkerPath(STATE_D
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let desktopProtocolRegistered = false;
-let desktopLogSink: RotatingFileSink | null = null;
-let backendLogSink: RotatingFileSink | null = null;
+let desktopLogSink: QueuedLogSink | null = null;
+let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let mobileBackendBaseUrl = "";
 let localMobileBackendBaseUrl = "";
@@ -183,6 +198,17 @@ const desktopAppIdentity = {
   userDataDirName: USER_DATA_DIR_NAME,
 } as const;
 
+// Must happen before logging initialization so packaged crash logs follow the
+// Electron user-data location (including legacy-profile migration).
+app.setPath(
+  "userData",
+  resolveUserDataPath({
+    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+    userDataDirName: USER_DATA_DIR_NAME,
+  }),
+);
+const LOG_DIR = resolveDesktopLogDir(app.getPath("userData"));
+
 // ---------------------------------------------------------------------------
 // Logging convenience wrapper
 // ---------------------------------------------------------------------------
@@ -191,8 +217,31 @@ function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
 }
 
+function flushDiagnosticLogs(): void {
+  desktopLogSink?.flush();
+  backendLogSink?.flush();
+}
+
 function formatHostForUrl(host: string): string {
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+function recordMainProcessCrash(error: unknown): void {
+  const startup = getBackendStartupState();
+  if (startup.generation === 0) return;
+  const developmentDiagnostics = isDevelopmentDiagnostics
+    ? createDevelopmentBackendDiagnostics({ error })
+    : undefined;
+  if (startup.status === "starting" || startup.status === "upgrading") {
+    recordBackendStartupFailure(
+      startup.generation,
+      "unknown",
+      createBackendStartupDiagnostics({ category: "runtime" }),
+      developmentDiagnostics,
+    );
+  } else if (developmentDiagnostics) {
+    recordBackendStartupDevelopmentDiagnostics(startup.generation, developmentDiagnostics);
+  }
 }
 
 installDesktopSingleInstanceLock(app, () => mainWindow);
@@ -200,10 +249,11 @@ installDesktopSingleInstanceLock(app, () => mainWindow);
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
 function handleFatalStartupError(stage: string, error: unknown): void {
+  recordMainProcessCrash(error);
   const message = formatErrorMessage(error);
   const detail =
     error instanceof Error && typeof error.stack === "string" ? `\n${error.stack}` : "";
-  logHeader(`fatal startup error stage=${stage} message=${message}`);
+  logHeader(`fatal startup error stage=${stage} error=${formatErrorDiagnostics(error)}`);
   console.error(`[desktop] fatal startup error (${stage})`, error);
   if (!isQuitting) {
     isQuitting = true;
@@ -212,6 +262,7 @@ function handleFatalStartupError(stage: string, error: unknown): void {
   stopBackend();
   stopCuaDriverDaemon();
   restoreStdIoCapture?.();
+  flushDiagnosticLogs();
   app.quit();
 }
 
@@ -239,35 +290,26 @@ process.on("uncaughtException", (error) => {
     return;
   }
 
-  logHeader(`uncaughtException: ${formatErrorMessage(error)}`);
+  logHeader(`uncaughtException: ${formatErrorDiagnostics(error)}`);
   console.error("[desktop] uncaughtException", error);
+  recordMainProcessCrash(error);
   if (!isQuitting) {
     isQuitting = true;
     dialog.showErrorBox("bigbud encountered an unexpected error", formatErrorMessage(error));
     stopBackend();
     stopCuaDriverDaemon();
     restoreStdIoCapture?.();
+    flushDiagnosticLogs();
     app.quit();
   }
 });
 
 process.on("unhandledRejection", (reason) => {
-  logHeader(`unhandledRejection: ${formatErrorMessage(reason)}`);
+  logHeader(`unhandledRejection: ${formatErrorDiagnostics(reason)}`);
   console.error("[desktop] unhandledRejection", reason);
 });
 
 applyLinuxRuntimeSwitches(app, LINUX_WM_CLASS, desktopLinuxRuntimeConfig);
-
-// Override Electron's userData path before the `ready` event so that
-// Chromium session data uses a filesystem-friendly directory name.
-// Must be called synchronously at the top level — before `app.whenReady()`.
-app.setPath(
-  "userData",
-  resolveUserDataPath({
-    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
-    userDataDirName: USER_DATA_DIR_NAME,
-  }),
-);
 
 configureAppIdentity({
   ...desktopAppIdentity,
@@ -352,10 +394,13 @@ async function bootstrap(): Promise<void> {
     UPDATE_DOWNLOAD_CHANNEL,
     UPDATE_INSTALL_CHANNEL,
     UPDATE_CHECK_CHANNEL,
+    BACKEND_STARTUP_STATE_CHANNEL,
+    BACKEND_STARTUP_GET_STATE_CHANNEL,
     getMainWindow: () => mainWindow,
     getBackendWsUrl: () => backendWsUrl,
     getIsQuitting: () => isQuitting,
     getUpdateState,
+    getBackendStartupState,
     isUpdaterConfigured: () => updaterConfigured,
     checkForUpdates,
     downloadAvailableUpdate,
@@ -439,6 +484,7 @@ function prepareForAppQuit(reason: string): void {
   stopBackend();
   stopCuaDriverDaemon();
   restoreStdIoCapture?.();
+  flushDiagnosticLogs();
 }
 
 app.on("before-quit", () => {
@@ -455,6 +501,9 @@ app
       linuxGpuFallbackMarkerPath: LINUX_GPU_FALLBACK_MARKER_PATH,
       log: logHeader,
     });
+    app.on("render-process-gone", (_event, _webContents, details) => {
+      logHeader(`renderer process gone reason=${details.reason} exitCode=${details.exitCode}`);
+    });
 
     initBackendManager({
       rootDir: ROOT_DIR,
@@ -464,8 +513,10 @@ app
       serverSettingsPath: SERVER_SETTINGS_PATH,
       getIsQuitting: () => isQuitting,
       getBackendLogSink: () => backendLogSink,
+      isDevelopmentDiagnostics,
       runId: APP_RUN_ID,
     });
+    configureBackendStartupState(BACKEND_STARTUP_STATE_CHANNEL, isDevelopmentDiagnostics);
 
     configureAppIdentity(desktopAppIdentity);
     desktopProtocolRegistered = registerDesktopProtocol({

@@ -69,6 +69,9 @@ export function registerDesktopRuntimeMonitoring(options: {
     logDesktopGpuFeatureStatus(options.appInstance, options.log);
   });
   options.appInstance.on("child-process-gone", (_event, details) => {
+    options.log(
+      `child process gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`,
+    );
     if (
       process.platform === "linux" &&
       details.type === "GPU" &&

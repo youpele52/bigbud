@@ -24,6 +24,7 @@ import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
 import { cleanupHandoffDocumentFiles } from "../ws/wsHandoffDocument.ts";
 import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
 import { runLegacyPinnedThreadSettingsMigration } from "./LegacyPinnedThreadSettingsMigration.ts";
+import { writeStartupStatus } from "./startupStatus.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -229,6 +230,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
     Effect.gen(function* () {
       const startupExit = yield* Effect.exit(startup);
       if (Exit.isFailure(startupExit)) {
+        yield* Effect.sync(() => writeStartupStatus("error", "server_runtime_startup_failed"));
         const error = new ServerRuntimeStartupError({
           message: "Server runtime startup failed before command readiness.",
           cause: startupExit.cause,
@@ -242,6 +244,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       yield* commandGate.signalCommandReady;
       yield* Effect.logDebug("startup phase: waiting for http listener");
       yield* runStartupPhase("http.wait", Deferred.await(httpListening));
+      yield* Effect.sync(() => writeStartupStatus("ready"));
       yield* Effect.logDebug("startup phase: publishing ready event");
       yield* runStartupPhase(
         "ready.publish",
