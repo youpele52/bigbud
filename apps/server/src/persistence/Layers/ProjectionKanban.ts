@@ -1,4 +1,5 @@
-import { Effect, FileSystem, Layer, Option, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Semaphore } from "effect";
+import { utimes } from "node:fs/promises";
 import { KanbanCardId, type KanbanStatus, ProjectId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../../startup/config.ts";
@@ -15,7 +16,10 @@ import { makePlaceCard } from "./ProjectionKanban.placement.ts";
 import {
   ProjectionKanbanRepository,
   type ListProjectionKanbanCardsInput,
+  type MoveProjectionKanbanCardInput,
   type ProjectionKanbanRepositoryShape,
+  type ReorderProjectionKanbanCardInput,
+  type UpdateProjectionKanbanCardInput,
 } from "../Services/ProjectionKanban.ts";
 
 const resolveMtime = (stat: { mtime: Date | Option.Option<Date> }): Date =>
@@ -24,13 +28,11 @@ const resolveMtime = (stat: { mtime: Date | Option.Option<Date> }): Date =>
 const resolveLatestUpdatedAt = (input: {
   readonly metadataUpdatedAt: string;
   readonly markdownMtime: Date;
-  readonly metadataMtime: Date;
 }): string => {
   const metadataUpdatedAtTime = Date.parse(input.metadataUpdatedAt);
   const latestTime = Math.max(
     Number.isNaN(metadataUpdatedAtTime) ? 0 : metadataUpdatedAtTime,
     input.markdownMtime.getTime(),
-    input.metadataMtime.getTime(),
   );
   return new Date(latestTime).toISOString();
 };
@@ -41,6 +43,8 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
   const config = yield* ServerConfig;
 
   const kanbanBaseDir = path.join(config.stateDir, KANBAN_DIR_SEGMENT);
+  const mutationSemaphore = yield* Semaphore.make(1);
+  const serializeMutation = mutationSemaphore.withPermits(1);
 
   const resolveTargetDir = (projectId: ProjectId | null) =>
     projectId ? path.join(kanbanBaseDir, projectId) : path.join(kanbanBaseDir, "global");
@@ -72,8 +76,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
     }
 
     const markdownStat = yield* fs.stat(absolutePath).pipe(Effect.option);
-    const metadataStat = yield* fs.stat(metadataPath).pipe(Effect.option);
-    if (Option.isNone(markdownStat) || Option.isNone(metadataStat)) {
+    if (Option.isNone(markdownStat)) {
       return Option.none<StoredKanbanCard>();
     }
 
@@ -90,7 +93,6 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       updatedAt: resolveLatestUpdatedAt({
         metadataUpdatedAt: metadata.updatedAt,
         markdownMtime: resolveMtime(markdownStat.value),
-        metadataMtime: resolveMtime(metadataStat.value),
       }),
       position: metadata.position,
     });
@@ -202,6 +204,10 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
           fileSystemError("create.writeMetadata", "Failed to write kanban metadata file", cause),
         ),
       );
+    yield* Effect.tryPromise({
+      try: () => utimes(absolutePath, new Date(input.updatedAt), new Date(input.updatedAt)),
+      catch: (cause) => fileSystemError("create.utimes", "Failed to persist card timestamp", cause),
+    });
 
     const cardId = path.relative(config.stateDir, absolutePath) as KanbanCardId;
     return {
@@ -216,13 +222,19 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
     };
   });
 
-  const update: ProjectionKanbanRepositoryShape["update"] = Effect.fn(
-    "ProjectionKanbanRepository.update",
-  )(function* (input) {
+  const updateUnlocked = Effect.fn("ProjectionKanbanRepository.update")(function* (
+    input: UpdateProjectionKanbanCardInput,
+  ) {
     const absolutePath = path.join(config.stateDir, input.cardId);
     const card = yield* tryReadCard(absolutePath);
     if (Option.isNone(card)) {
       return yield* fileSystemError("update", "Kanban card not found");
+    }
+    if (input.expectedUpdatedAt && input.expectedUpdatedAt !== card.value.updatedAt) {
+      return yield* fileSystemError(
+        "update",
+        "Item changed since it was read. Reload and try again.",
+      );
     }
 
     yield* fs
@@ -248,6 +260,10 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
           fileSystemError("update.writeMetadata", "Failed to write kanban metadata", cause),
         ),
       );
+    yield* Effect.tryPromise({
+      try: () => utimes(absolutePath, new Date(input.updatedAt), new Date(input.updatedAt)),
+      catch: (cause) => fileSystemError("update.utimes", "Failed to persist card timestamp", cause),
+    });
 
     return {
       cardId: card.value.cardId,
@@ -260,10 +276,12 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       updatedAt: input.updatedAt,
     };
   });
+  const update: ProjectionKanbanRepositoryShape["update"] = (input) =>
+    serializeMutation(updateUnlocked(input));
 
-  const move: ProjectionKanbanRepositoryShape["move"] = Effect.fn(
-    "ProjectionKanbanRepository.move",
-  )(function* (input) {
+  const moveUnlocked = Effect.fn("ProjectionKanbanRepository.move")(function* (
+    input: MoveProjectionKanbanCardInput,
+  ) {
     const absolutePath = path.join(config.stateDir, input.cardId);
     const card = yield* tryReadCard(absolutePath);
     if (Option.isNone(card)) {
@@ -285,32 +303,38 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       status: input.status,
       targetIndex,
       updatedAt: input.updatedAt,
+      expectedUpdatedAt: input.expectedUpdatedAt,
     });
   });
+  const move: ProjectionKanbanRepositoryShape["move"] = (input) =>
+    serializeMutation(moveUnlocked(input));
 
-  const reorderWithinStatus: ProjectionKanbanRepositoryShape["reorderWithinStatus"] = Effect.fn(
-    "ProjectionKanbanRepository.reorderWithinStatus",
-  )(function* (input) {
-    const absolutePath = path.join(config.stateDir, input.cardId);
-    const card = yield* tryReadCard(absolutePath);
-    if (Option.isNone(card)) {
-      return yield* fileSystemError("reorderWithinStatus", "Kanban card not found");
-    }
+  const reorderWithinStatusUnlocked = Effect.fn("ProjectionKanbanRepository.reorderWithinStatus")(
+    function* (input: ReorderProjectionKanbanCardInput) {
+      const absolutePath = path.join(config.stateDir, input.cardId);
+      const card = yield* tryReadCard(absolutePath);
+      if (Option.isNone(card)) {
+        return yield* fileSystemError("reorderWithinStatus", "Kanban card not found");
+      }
 
-    if (card.value.status !== input.status) {
-      return yield* fileSystemError(
-        "reorderWithinStatus",
-        "Kanban card is not in the requested status",
-      );
-    }
+      if (card.value.status !== input.status) {
+        return yield* fileSystemError(
+          "reorderWithinStatus",
+          "Kanban card is not in the requested status",
+        );
+      }
 
-    return yield* placeCard({
-      cardId: input.cardId,
-      status: input.status,
-      targetIndex: input.targetIndex,
-      updatedAt: input.updatedAt,
-    });
-  });
+      return yield* placeCard({
+        cardId: input.cardId,
+        status: input.status,
+        targetIndex: input.targetIndex,
+        updatedAt: input.updatedAt,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+      });
+    },
+  );
+  const reorderWithinStatus: ProjectionKanbanRepositoryShape["reorderWithinStatus"] = (input) =>
+    serializeMutation(reorderWithinStatusUnlocked(input));
 
   const deleteById: ProjectionKanbanRepositoryShape["deleteById"] = Effect.fn(
     "ProjectionKanbanRepository.deleteById",

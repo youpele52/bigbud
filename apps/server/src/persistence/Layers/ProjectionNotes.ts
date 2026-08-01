@@ -1,5 +1,5 @@
 import { utimes } from "node:fs/promises";
-import { Effect, FileSystem, Layer, Option, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Semaphore } from "effect";
 import { NoteId, ProjectId } from "@bigbud/contracts";
 import { ServerConfig } from "../../startup/config.ts";
 import {
@@ -53,6 +53,14 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
   const config = yield* ServerConfig;
 
   const notesBaseDir = path.join(config.stateDir, NOTES_DIR_SEGMENT);
+  const mutationSemaphore = yield* Semaphore.make(1);
+  const serializeMutation = mutationSemaphore.withPermits(1);
+
+  const projectIdFromNoteId = (noteId: NoteId): ProjectId | null => {
+    const segments = noteId.split("/");
+    if (segments.length !== 3 || segments[0] !== NOTES_DIR_SEGMENT) return null;
+    return segments[1] === "global" ? null : ProjectId.makeUnsafe(segments[1]!);
+  };
 
   const list: ProjectionNoteRepositoryShape["list"] = Effect.fn("ProjectionNoteRepository.list")(
     function* (input: {
@@ -147,7 +155,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
       .pipe(Effect.orElseSucceed(() => ({ mtime: new Date() }) as { mtime: Date }));
     const mtime = resolveMtime(stat);
 
-    const projectId = input.noteId.includes("/global/") ? null : null;
+    const projectId = projectIdFromNoteId(input.noteId);
 
     return Option.some({
       noteId: input.noteId,
@@ -223,17 +231,29 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     };
   });
 
-  const update: ProjectionNoteRepositoryShape["update"] = Effect.fn(
-    "ProjectionNoteRepository.update",
-  )(function* (input: {
+  const updateUnlocked = Effect.fn("ProjectionNoteRepository.update")(function* (input: {
     readonly noteId: NoteId;
     readonly title: string;
     readonly content: string;
+    readonly updatedAt: string;
+    readonly expectedUpdatedAt?: string | undefined;
   }) {
     const absolutePath = path.join(config.stateDir, input.noteId);
     const exists = yield* fs.exists(absolutePath).pipe(Effect.orElseSucceed(() => false));
     if (!exists) {
       return yield* fileSystemError("update", "Note not found");
+    }
+
+    const current = yield* getById({ noteId: input.noteId });
+    if (
+      input.expectedUpdatedAt &&
+      Option.isSome(current) &&
+      input.expectedUpdatedAt !== current.value.updatedAt
+    ) {
+      return yield* fileSystemError(
+        "update",
+        "Item changed since it was read. Reload and try again.",
+      );
     }
 
     yield* fs
@@ -244,6 +264,15 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
         ),
       );
 
+    const updatedAt = parseTimestamp(input.updatedAt);
+    if (updatedAt) {
+      yield* Effect.tryPromise({
+        try: () => utimes(absolutePath, updatedAt, updatedAt),
+        catch: (cause) =>
+          fileSystemError("update.utimes", "Failed to persist note timestamp", cause),
+      });
+    }
+
     return yield* getById({ noteId: input.noteId }).pipe(
       Effect.flatMap((note) =>
         Option.match(note, {
@@ -253,6 +282,8 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
       ),
     );
   });
+  const update: ProjectionNoteRepositoryShape["update"] = (input) =>
+    serializeMutation(updateUnlocked(input));
 
   const deleteById: ProjectionNoteRepositoryShape["deleteById"] = Effect.fn(
     "ProjectionNoteRepository.deleteById",

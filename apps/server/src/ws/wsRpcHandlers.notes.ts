@@ -113,42 +113,24 @@ export function makeWsRpcNotesHandlers(context: WsRpcContext) {
     [WS_METHODS.notesUpdate]: (input: NotesUpdateInput) =>
       observeRpcEffect(
         WS_METHODS.notesUpdate,
-        Effect.gen(function* () {
-          const existing = yield* context.projectionNotes.getById({
+        context.projectionNotes
+          .update({
             noteId: input.noteId,
-          });
-          const note = yield* Option.match(existing, {
-            onNone: () =>
-              Effect.fail(
-                new NotesUpdateError({
-                  message: "Note not found",
-                }),
-              ),
-            onSome: (value) => Effect.succeed(value),
-          });
-
-          if (input.expectedUpdatedAt && input.expectedUpdatedAt !== note.updatedAt) {
-            return yield* new NotesUpdateError({
-              message: "Note changed since you opened it. Reload the note and try again.",
-            });
-          }
-
-          return yield* context.projectionNotes.update({
-            noteId: note.noteId,
             title: input.title ?? deriveNoteTitle(input.content),
             content: input.content,
             updatedAt: new Date().toISOString(),
-          });
-        }).pipe(
-          Effect.mapError((cause) =>
-            Schema.is(NotesUpdateError)(cause)
-              ? cause
-              : new NotesUpdateError({
-                  message: "Failed to update note",
-                  cause,
-                }),
+            expectedUpdatedAt: input.expectedUpdatedAt,
+          })
+          .pipe(
+            Effect.mapError((cause) =>
+              Schema.is(NotesUpdateError)(cause)
+                ? cause
+                : new NotesUpdateError({
+                    message: "Failed to update note",
+                    cause,
+                  }),
+            ),
           ),
-        ),
         { "rpc.aggregate": "notes" },
       ),
     [WS_METHODS.notesDelete]: (input: NotesDeleteInput) =>

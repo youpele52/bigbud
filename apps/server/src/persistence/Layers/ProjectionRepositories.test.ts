@@ -379,7 +379,6 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
   it.effect("derives title from H1 in content, not from filename", () =>
     Effect.gen(function* () {
       const notes = yield* ProjectionNoteRepository;
-
       const created = yield* notes.create({
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Ignored Title",
@@ -391,6 +390,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       const byId = yield* notes.getById({ noteId: created.noteId });
       assert.ok(Option.isSome(byId));
       assert.strictEqual(Option.getOrNull(byId)?.title, "Real Title");
+      assert.strictEqual(Option.getOrNull(byId)?.projectId, "project-null-options");
     }),
   );
 });
