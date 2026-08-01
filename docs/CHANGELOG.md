@@ -4,9 +4,17 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.2.102 (1 August, 2026)
 
+### Recent and Pinned Threads
+
+- Fixed a bug where recent and pinned chats could disappear after restart. They are now restored from the durable projection, including pinned threads outside the initially loaded project list, while sidebar membership stays bounded and synchronized through replay and live updates.
+
 ### Agent Browser Preferences
 
 - Added a Default agent browser setting in AI preferences. Agents now use bigbud's built-in browser by default, or your system default browser when selected, while explicit browser requests always take priority. System-browser navigation clearly requires the desktop app, full-access mode, and enabled computer use.
+
+### Clearer Computer Use Notifications
+
+- Removed diagnostic emoji from Computer Use permission and repair messages. Each status now appears on its own clean line in toast notifications, while Settings keeps familiar icons to show whether individual permissions are granted.
 
 ## v0.2.101 (31 July, 2026)
 
