@@ -16,6 +16,11 @@ import type {
   setThreadPinnedViaOrchestration,
   createThreadViaOrchestration,
 } from "./ThreadOrchestrationTools.ts";
+import type { sendThreadMessageViaOrchestration } from "./ThreadOrchestrationTools.sendMessage.ts";
+import type {
+  ListThreadsStatusFilter,
+  listThreadsViaOrchestration,
+} from "./ThreadOrchestrationTools.listThreads.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
   readonly rename: (input: {
@@ -55,6 +60,20 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly projectId?: ProjectId;
     readonly watchForCompletion: boolean;
   }) => ReturnType<typeof createThreadViaOrchestration>;
+  readonly sendMessage?: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly threadId: ThreadId;
+    readonly message: string;
+    readonly delivery: "auto" | "queue";
+    readonly invocationId: string;
+  }) => ReturnType<typeof sendThreadMessageViaOrchestration>;
+  readonly listThreads?: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly projectId?: ProjectId | undefined;
+    readonly status?: ListThreadsStatusFilter | undefined;
+    readonly limit?: number | undefined;
+    readonly includeExcerpt?: boolean | undefined;
+  }) => ReturnType<typeof listThreadsViaOrchestration>;
 }
 
 let dispatcher: ThreadOrchestrationToolDispatcherShape | null = null;

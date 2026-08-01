@@ -13,8 +13,10 @@ import {
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+  LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import {
@@ -22,6 +24,11 @@ import {
   COPILOT_COMPUTER_USE_PARAMETERS,
 } from "./orchestrationComputerUseTool.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
+import {
+  LIST_THREADS_MAX_LIMIT,
+  normalizeListThreadsStatus,
+  type ListThreadsStatusFilter,
+} from "./ThreadOrchestrationTools.listThreads.ts";
 import {
   BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
   BIGBUD_PLAN_TRACKING_TOOL_NAME,
@@ -51,6 +58,12 @@ export function createCopilotThreadOrchestrationTools(input: {
   readonly archiveThread: () => Promise<void>;
   readonly getThreadStatus: (threadId: string) => Promise<Record<string, unknown>>;
   readonly listPinnedThreads: () => Promise<Record<string, unknown>>;
+  readonly listThreads?: (input: {
+    readonly projectId?: string;
+    readonly status: ListThreadsStatusFilter;
+    readonly limit?: number;
+    readonly includeExcerpt: boolean;
+  }) => Promise<Record<string, unknown>>;
   readonly setThreadPinned: (threadId: string, pinned: boolean) => Promise<Record<string, unknown>>;
   readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
   readonly browser: (action: BrowserActionType) => Promise<Record<string, unknown>>;
@@ -61,6 +74,12 @@ export function createCopilotThreadOrchestrationTools(input: {
     readonly task: string;
     readonly projectId?: string;
     readonly watchForCompletion: boolean;
+  }) => Promise<Record<string, unknown>>;
+  readonly sendThreadMessage?: (input: {
+    threadId: string;
+    message: string;
+    delivery: "auto" | "queue";
+    invocationId: string;
   }) => Promise<Record<string, unknown>>;
 }): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
   const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
@@ -145,6 +164,52 @@ export function createCopilotThreadOrchestrationTools(input: {
           return successResult(JSON.stringify(result, null, 2));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to create thread.";
+          return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "list_threads",
+      description: LIST_THREADS_TOOL_DESCRIPTION,
+      parameters: {
+        type: "object",
+        properties: {
+          projectId: { type: "string", description: "Project ID; defaults to the current project" },
+          status: {
+            type: "string",
+            enum: ["active", "archived", "all"],
+            description: "Thread status filter; defaults to active",
+          },
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: LIST_THREADS_MAX_LIMIT,
+            description: "Maximum threads to return",
+          },
+          includeExcerpt: {
+            type: "boolean",
+            description: "Include a short excerpt of each thread's last assistant message",
+          },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+      handler: async (args) => {
+        const listThreads = input.listThreads;
+        if (!listThreads) {
+          return failureResult("Thread listing is not ready.");
+        }
+        try {
+          const projectId = typeof args.projectId === "string" ? args.projectId.trim() : "";
+          const result = await listThreads({
+            ...(projectId ? { projectId } : {}),
+            status: normalizeListThreadsStatus(args.status),
+            ...(typeof args.limit === "number" ? { limit: args.limit } : {}),
+            includeExcerpt: args.includeExcerpt === true,
+          });
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to list threads.";
           return failureResult(message);
         }
       },
@@ -243,6 +308,41 @@ export function createCopilotThreadOrchestrationTools(input: {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Computer-use action failed.";
           return failureResult(message);
+        }
+      },
+    },
+    {
+      name: "send_thread_message",
+      description: SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
+      parameters: {
+        type: "object",
+        properties: {
+          threadId: { type: "string" },
+          message: { type: "string" },
+          delivery: { type: "string", enum: ["auto", "queue"] },
+        },
+        required: ["threadId", "message"],
+        additionalProperties: false,
+      },
+      handler: async ({ threadId, message, delivery }, invocation) => {
+        try {
+          if (!input.sendThreadMessage) throw new Error("Thread messaging is not ready.");
+          return successResult(
+            JSON.stringify(
+              await input.sendThreadMessage({
+                threadId: String(threadId ?? ""),
+                message: String(message ?? ""),
+                delivery: delivery === "queue" ? "queue" : "auto",
+                invocationId: invocation.toolCallId,
+              }),
+              null,
+              2,
+            ),
+          );
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "Failed to send thread message.",
+          );
         }
       },
     },

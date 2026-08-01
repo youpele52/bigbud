@@ -30,8 +30,14 @@ export const CREATE_THREAD_TOOL_DESCRIPTION =
 export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a BigBud thread in the current project. Use this to check whether another thread's agent is still working before starting dependent work.";
 
+export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION =
+  "Send a follow-up message to an existing bigbud thread. Starts it when safely idle or queues it durably while busy.";
+
 export const LIST_PINNED_THREADS_TOOL_DESCRIPTION =
   "List pinned bigbud threads globally across all projects. This is read-only.";
+
+export const LIST_THREADS_TOOL_DESCRIPTION =
+  "List the bigbud threads in a project with their live workflow status. Defaults to the current project and to threads that are not archived. This is read-only. Results are ordered by most recently updated and are capped, so check hasMore before reporting a total.";
 
 export const PIN_THREAD_TOOL_DESCRIPTION =
   "Pin a bigbud thread globally. Only use this when the user explicitly asks to pin a thread.";

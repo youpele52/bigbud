@@ -1,4 +1,4 @@
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
 import {
@@ -21,46 +21,16 @@ import {
   type CapabilityGuideSection,
 } from "../capabilities/CapabilityCatalog.operations.ts";
 import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
+import { ThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
+import {
+  handleGetThreadStatusAction,
+  handleListPinnedThreadsAction,
+  handleListThreadsAction,
+} from "./http.threadTools.reads.ts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
 const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
-
-const ThreadToolRequest = Schema.Struct({
-  action: Schema.Literals([
-    "rename",
-    "archive",
-    "get_status",
-    "list_pinned",
-    "pin",
-    "unpin",
-    "computer_use",
-    "browser",
-    "create_thread",
-    "search_capabilities",
-    "read_capability_guide",
-  ]),
-  threadId: Schema.optional(Schema.String),
-  title: Schema.optional(Schema.String),
-  computerUseAction: Schema.optional(Schema.Unknown),
-  browserAction: Schema.optional(Schema.Unknown),
-  task: Schema.optional(Schema.String),
-  projectId: Schema.optional(Schema.String),
-  watchForCompletion: Schema.optional(Schema.Boolean),
-  invocationId: Schema.optional(Schema.String),
-  sourceMessageId: Schema.optional(Schema.String),
-  workspacePath: Schema.optional(Schema.String),
-  query: Schema.optional(Schema.String),
-  capabilityId: Schema.optional(Schema.String),
-  section: Schema.optional(
-    Schema.Literals(["summary", "workflow", "permissions", "examples", "full"]),
-  ),
-});
-
-class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{
-  readonly status: number;
-  readonly message: string;
-}> {}
 
 export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
   "POST",
@@ -199,17 +169,54 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       return yield* HttpServerResponse.json({ ok: true, result });
     }
 
-    if (body.action === "list_pinned") {
-      const result = yield* dispatcher.listPinned({ callerThreadId: threadId }).pipe(
-        Effect.mapError(
-          (error) =>
-            new ThreadToolRequestError({
-              status: 400,
-              message: error instanceof Error ? error.message : "Failed to list pinned threads.",
-            }),
-        ),
-      );
+    if (body.action === "send_thread_message") {
+      if (!dispatcher.sendMessage) {
+        return yield* new ThreadToolRequestError({
+          status: 503,
+          message: "Thread messaging is not ready.",
+        });
+      }
+      const targetThreadId = body.threadId?.trim() ?? "";
+      const invocationId = body.invocationId?.trim() ?? "";
+      if (!targetThreadId || !invocationId) {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: "threadId and invocationId are required.",
+        });
+      }
+      const result = yield* dispatcher
+        .sendMessage({
+          callerThreadId: threadId,
+          threadId: ThreadId.makeUnsafe(targetThreadId),
+          message: body.message ?? "",
+          delivery: body.delivery ?? "auto",
+          invocationId,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new ThreadToolRequestError({
+                status: error.message.includes("not found") ? 404 : 400,
+                message: error.message,
+              }),
+          ),
+        );
       return yield* HttpServerResponse.json({ ok: true, result });
+    }
+
+    if (
+      body.action === "list_pinned" ||
+      body.action === "get_status" ||
+      body.action === "list_threads"
+    ) {
+      const readAction = { dispatcher, callerThreadId: threadId, body };
+      if (body.action === "list_pinned") {
+        return yield* handleListPinnedThreadsAction(readAction);
+      }
+      if (body.action === "get_status") {
+        return yield* handleGetThreadStatusAction(readAction);
+      }
+      return yield* handleListThreadsAction(readAction);
     }
 
     if (body.action === "pin" || body.action === "unpin") {
@@ -260,33 +267,6 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         ),
       );
       return yield* HttpServerResponse.json({ ok: true, title: result.title });
-    }
-
-    if (body.action === "get_status") {
-      const targetThreadId = body.threadId?.trim() ?? "";
-      if (targetThreadId.length === 0) {
-        return yield* new ThreadToolRequestError({
-          status: 400,
-          message: "Thread ID is required.",
-        });
-      }
-      const status = yield* dispatcher
-        .getStatus({
-          callerThreadId: threadId,
-          threadId: ThreadId.makeUnsafe(targetThreadId),
-        })
-        .pipe(
-          Effect.mapError((error) => {
-            const message =
-              error instanceof Error ? error.message : "Failed to read thread status.";
-            const statusCode = message.includes("not found") ? 404 : 400;
-            return new ThreadToolRequestError({
-              status: statusCode,
-              message,
-            });
-          }),
-        );
-      return yield* HttpServerResponse.json({ ok: true, status });
     }
 
     if (body.action === "computer_use") {

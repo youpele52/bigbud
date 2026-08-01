@@ -35,12 +35,14 @@ describe("createCopilotThreadOrchestrationTools", () => {
       "rename_thread",
       "archive_thread",
       "create_thread",
+      "list_threads",
       "list_pinned_threads",
       "pin_thread",
       "unpin_thread",
       BIGBUD_PLAN_TRACKING_TOOL_NAME,
       "browser",
       "computer_use",
+      "send_thread_message",
       "get_thread_status",
     ]);
     expect(tools.find((tool) => tool.name === "computer_use")?.description).toBe(
@@ -134,5 +136,48 @@ describe("createCopilotThreadOrchestrationTools", () => {
         watchForCompletion: true,
       },
     ]);
+  });
+
+  it("forwards send arguments with the stable SDK tool-call ID", async () => {
+    const sendThreadMessage = vi.fn(async () => ({ delivery: "queued", queuePosition: 2 }));
+    const tool = makeTools({ sendThreadMessage }).find(
+      (candidate) => candidate.name === "send_thread_message",
+    );
+    const invocation = {
+      sessionId: "session-1",
+      toolCallId: "copilot-send-call-1",
+      toolName: "send_thread_message",
+      arguments: {},
+    };
+    const result = await tool?.handler?.(
+      { threadId: "target-1", message: "Follow up", delivery: "queue" },
+      invocation,
+    );
+
+    expect(sendThreadMessage).toHaveBeenCalledWith({
+      threadId: "target-1",
+      message: "Follow up",
+      delivery: "queue",
+      invocationId: "copilot-send-call-1",
+    });
+    expect(result).toMatchObject({ resultType: "success" });
+  });
+
+  it("returns a failure result when sending fails", async () => {
+    const tool = makeTools({
+      sendThreadMessage: async () => {
+        throw new Error("send rejected");
+      },
+    }).find((candidate) => candidate.name === "send_thread_message");
+    const result = await tool?.handler?.(
+      { threadId: "target-1", message: "Follow up" },
+      {
+        sessionId: "session-1",
+        toolCallId: "copilot-send-call-2",
+        toolName: "send_thread_message",
+        arguments: {},
+      },
+    );
+    expect(result).toMatchObject({ resultType: "failure", error: "send rejected" });
   });
 });

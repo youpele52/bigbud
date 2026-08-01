@@ -22,6 +22,7 @@ import {
   readThreadOrchestrationToolAuth,
   writeThreadOrchestrationToolAuth,
 } from "./ThreadOrchestrationToolAuth.ts";
+import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 
 function parseMcpMessages(buffer: Buffer): Array<unknown> {
   const messages: unknown[] = [];
@@ -66,6 +67,8 @@ describe("orchestrationMcpBridge", () => {
     expect(source).toContain("rename_thread");
     expect(source).toContain("archive_thread");
     expect(source).toContain("create_thread");
+    expect(source).toContain("send_thread_message");
+    expect(source).toContain('enum: ["auto", "queue"]');
     expect(source).toContain("maxLength: 200");
     expect(source).toContain("maxLength: 32000");
     expect(source).toContain("invocationId: `mcp:${String(requestId)}`");
@@ -74,6 +77,9 @@ describe("orchestrationMcpBridge", () => {
     expect(source).not.toContain('name: "invocationId"');
     expect(source).not.toContain('name: "sourceMessageId"');
     expect(source).toContain("get_thread_status");
+    expect(source).toContain("list_threads");
+    expect(source).toContain("action: 'list_threads'");
+    expect(source).toContain('enum: ["active", "archived", "all"]');
     expect(source).toContain("list_pinned_threads");
     expect(source).toContain("pin_thread");
     expect(source).toContain("unpin_thread");
@@ -150,6 +156,12 @@ describe("orchestrationMcpBridge", () => {
           tools: expect.arrayContaining([
             expect.objectContaining({ name: "rename_thread" }),
             expect.objectContaining({ name: "create_thread" }),
+            expect.objectContaining({
+              name: "send_thread_message",
+              inputSchema: expect.objectContaining({
+                required: ["threadId", "message"],
+              }),
+            }),
             expect.objectContaining({ name: "browser" }),
             expect.objectContaining({ name: "computer_use" }),
             expect.objectContaining({ name: "list_pinned_threads" }),
@@ -194,6 +206,7 @@ describe("orchestrationMcpBridge", () => {
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
+        "mcp__bigbud_orchestration__send_thread_message",
         "mcp__bigbud_orchestration__get_thread_status",
         "mcp__bigbud_orchestration__list_pinned_threads",
         "mcp__bigbud_orchestration__pin_thread",
@@ -217,7 +230,7 @@ describe("orchestrationMcpBridge", () => {
       name: "bigbud_orchestration",
       config: {
         type: "local",
-        command: [process.execPath, bridge.serverPath],
+        command: [resolveNodeExecutable(), bridge.serverPath],
         cwd: bridge.bridgeDir,
         enabled: true,
         timeout: 10_000,
@@ -238,7 +251,7 @@ describe("orchestrationMcpBridge", () => {
     expect(acp.mcpServers).toEqual([
       {
         name: "bigbud_orchestration",
-        command: process.execPath,
+        command: resolveNodeExecutable(),
         args: [bridge.serverPath],
         env: [],
       },
