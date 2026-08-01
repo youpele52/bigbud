@@ -85,6 +85,8 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Active sessions", section: "Remote", to: "/settings/remote" },
   { label: "Archived threads", section: "Archive", to: "/settings/archived" },
   { label: "About", section: "About", to: "/settings/about" },
+  { label: "Version", section: "About", to: "/settings/about" },
   { label: "Changelog", section: "About", to: "/settings/about" },
+  { label: "Links", section: "About", to: "/settings/about" },
   { label: "Diagnostics", section: "About", to: "/settings/about" },
 ];

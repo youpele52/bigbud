@@ -100,7 +100,11 @@ describe("AboutSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByText("About")).toBeInTheDocument();
+    await expect.element(page.getByRole("heading", { name: "Application" })).toBeInTheDocument();
+    await expect.element(page.getByRole("img", { name: "bigbud" })).toBeInTheDocument();
+    await expect.element(page.getByRole("heading", { name: "Links" })).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Website" })).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "GitHub" })).toBeInTheDocument();
     await expect.element(page.getByText("Diagnostics")).toBeInTheDocument();
     await expect.element(page.getByText("Open logs folder")).toBeInTheDocument();
     await expect

@@ -1,216 +1,30 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
-import { APP_VERSION } from "../../config/branding";
-import {
-  canCheckForUpdate,
-  getDesktopUpdateButtonTooltip,
-  getDesktopUpdateInstallConfirmationMessage,
-  isDesktopUpdateButtonDisabled,
-  resolveDesktopUpdateButtonAction,
-} from "../../components/layout/desktopUpdate.logic";
 import { resolveAndPersistPreferredEditor } from "../../models/editor";
-import { isElectron } from "../../config/env";
-import {
-  setDesktopUpdateStateQueryData,
-  useDesktopUpdateState,
-} from "../../lib/desktopUpdateReactQuery";
-import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { ABOUT_CHANGELOG_URL, ABOUT_LINKS } from "./AboutSettingsSection.links";
+import { AboutManualInstallRow, AboutVersionRow } from "./AboutSettingsSection.version";
 
-function AboutVersionTitle() {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span>Version</span>
-      <code className="text-[11px] font-medium text-muted-foreground">{APP_VERSION}</code>
-    </span>
-  );
-}
+function useOpenAboutExternalUrl() {
+  const navigate = useNavigate();
 
-function getManualInstallCommand(platform: string): string {
-  if (platform === "win32") {
-    return `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.ps1 | iex"`;
-  }
-  return `curl -fsSL https://raw.githubusercontent.com/youpele52/bigbud/main/apps/marketing/public/install.sh | sh`;
-}
-
-function AboutVersionSection() {
-  const queryClient = useQueryClient();
-  const updateStateQuery = useDesktopUpdateState();
-
-  const updateState = updateStateQuery.data ?? null;
-
-  const handleButtonClick = useCallback(() => {
-    const bridge = window.desktopBridge;
-    if (!bridge) return;
-
-    const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
-
-    if (action === "download") {
-      void bridge
-        .downloadUpdate()
-        .then((result) => {
-          setDesktopUpdateStateQueryData(queryClient, result.state);
-        })
-        .catch((error: unknown) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not download update",
-            description: error instanceof Error ? error.message : "Download failed.",
-          });
-        });
-      return;
-    }
-
-    if (action === "install") {
-      const confirmed = window.confirm(
-        getDesktopUpdateInstallConfirmationMessage(
-          updateState ?? { availableVersion: null, downloadedVersion: null },
-        ),
-      );
-      if (!confirmed) return;
-      void bridge
-        .installUpdate()
-        .then((result) => {
-          setDesktopUpdateStateQueryData(queryClient, result.state);
-        })
-        .catch((error: unknown) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not install update",
-            description: error instanceof Error ? error.message : "Install failed.",
-          });
-        });
-      return;
-    }
-
-    if (typeof bridge.checkForUpdate !== "function") return;
-    void bridge
-      .checkForUpdate()
-      .then((result) => {
-        setDesktopUpdateStateQueryData(queryClient, result.state);
-        if (!result.checked) {
-          toastManager.add({
-            type: "error",
-            title: "Could not check for updates",
-            description:
-              result.state.message ?? "Automatic updates are not available in this build.",
-          });
-        }
-      })
-      .catch((error: unknown) => {
-        toastManager.add({
-          type: "error",
-          title: "Could not check for updates",
-          description: error instanceof Error ? error.message : "Update check failed.",
-        });
-      });
-  }, [queryClient, updateState]);
-
-  const action = updateState ? resolveDesktopUpdateButtonAction(updateState) : "none";
-  const buttonTooltip = updateState ? getDesktopUpdateButtonTooltip(updateState) : null;
-  const buttonDisabled =
-    action === "none"
-      ? !canCheckForUpdate(updateState)
-      : isDesktopUpdateButtonDisabled(updateState);
-
-  const actionLabel: Record<string, string> = { download: "Download", install: "Install" };
-  const statusLabel: Record<string, string> = {
-    checking: "Checking…",
-    downloading: "Downloading…",
-    "up-to-date": "Up to Date",
-  };
-  const buttonLabel =
-    actionLabel[action] ?? statusLabel[updateState?.status ?? ""] ?? "Check for Updates";
-  const description =
-    action === "download" || action === "install"
-      ? "Update available."
-      : "Current version of the application.";
-
-  return (
-    <SettingsRow
-      title={<AboutVersionTitle />}
-      description={description}
-      control={
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="xs"
-                variant={action === "install" ? "default" : "outline"}
-                disabled={buttonDisabled}
-                onClick={handleButtonClick}
-              >
-                {buttonLabel}
-              </Button>
-            }
-          />
-          {buttonTooltip ? <TooltipPopup>{buttonTooltip}</TooltipPopup> : null}
-        </Tooltip>
-      }
-    />
-  );
-}
-
-function ManualInstallRow() {
-  const updateStateQuery = useDesktopUpdateState();
-  const updateState = updateStateQuery.data ?? null;
-  const { copyToClipboard, isCopied } = useCopyToClipboard({
-    onCopy: () => {
-      toastManager.add({
-        type: "success",
-        title: "Copied",
-        description: "Install command copied to clipboard.",
+  return useCallback(
+    (url: string) => {
+      void navigate({ to: "/" }).then(() => {
+        openBrowserPanel({ url });
       });
     },
-  });
-
-  if (!updateState || updateState.isCodeSigned || updateState.platform === "linux") {
-    return null;
-  }
-
-  const command = getManualInstallCommand(updateState.platform);
-
-  return (
-    <SettingsRow
-      title="Manual Install"
-      description="This unsigned build cannot auto-install updates. Run the command below in your terminal to install the latest version."
-      status={
-        <span className="block break-all font-mono text-[11px] text-foreground">{command}</span>
-      }
-      control={
-        <Button
-          size="xs"
-          variant="outline"
-          onClick={() => copyToClipboard(command)}
-          aria-label={isCopied ? "Copied" : "Copy install command"}
-        >
-          {isCopied ? (
-            <>
-              <CheckIcon className="size-3.5" />
-              <span>Copied</span>
-            </>
-          ) : (
-            <>
-              <CopyIcon className="size-3.5" />
-              <span>Copy</span>
-            </>
-          )}
-        </Button>
-      }
-    />
+    [navigate],
   );
 }
 
 export function AboutSettingsSection() {
-  const navigate = useNavigate();
+  const openExternalUrl = useOpenAboutExternalUrl();
   const observability = useServerObservability();
   const availableEditors = useServerAvailableEditors();
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
@@ -255,34 +69,36 @@ export function AboutSettingsSection() {
   }, [logsDirectoryPath, availableEditors]);
 
   return (
-    <SettingsSection title="About">
-      {isElectron ? (
-        <AboutVersionSection />
-      ) : (
-        <SettingsRow
-          title={<AboutVersionTitle />}
-          description="Current version of the application."
-        />
-      )}
+    <SettingsSection title="Application">
+      <AboutVersionRow />
       <SettingsRow
         title="Changelog"
         description="See what changed in recent updates."
         control={
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => {
-              void navigate({ to: "/" }).then(() => {
-                openBrowserPanel({ url: "https://bigbud.app/changelog/" });
-              });
-            }}
-          >
+          <Button size="xs" variant="outline" onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}>
             View changelog
             <ExternalLinkIcon className="size-3.5" />
           </Button>
         }
       />
-      {isElectron && <ManualInstallRow />}
+      <AboutManualInstallRow />
+      <SettingsRow title="Links" description="Website, docs, source code, and community.">
+        <ul className="mt-3 flex flex-col items-start">
+          {ABOUT_LINKS.map(({ label, url }) => (
+            <li key={url}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-2.5 gap-1.5 text-muted-foreground text-xs"
+                onClick={() => openExternalUrl(url)}
+              >
+                <ExternalLinkIcon className="size-3" />
+                {label}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </SettingsRow>
       <SettingsRow
         title="Diagnostics"
         description={diagnosticsDescription}
