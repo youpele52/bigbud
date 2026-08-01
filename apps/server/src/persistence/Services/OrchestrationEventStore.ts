@@ -10,6 +10,7 @@
  * @module OrchestrationEventStore
  */
 import {
+  CommandId,
   OrchestrationEvent,
   type OrchestrationReplayEventsResult,
   ThreadId,
@@ -55,6 +56,11 @@ export interface OrchestrationEventStoreShape {
     sequenceExclusive: number,
     limit?: number,
   ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
+
+  /** Read the ordered event set committed for one durable command receipt. */
+  readonly readByCommandId?: (
+    commandId: CommandId,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
   /** Delete at most one bounded canonical prefix covered by a verified baseline. */
   readonly compactVerifiedPrefix?: (batchSize?: number) => Effect.Effect<

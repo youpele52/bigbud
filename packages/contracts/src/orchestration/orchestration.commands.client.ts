@@ -195,6 +195,34 @@ export const ThreadTurnStartCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+export const ThreadMessageSubmitCommand = Schema.Struct({
+  type: Schema.Literal("thread.message.submit"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  message: Schema.Struct({ messageId: MessageId, text: TrimmedNonEmptyString }),
+  delivery: Schema.Literals(["auto", "queue"]).pipe(
+    Schema.withDecodingDefault(() => "auto" as const),
+  ),
+  createdAt: IsoDateTime,
+});
+
+export const ThreadQueuedPromptRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.queued-prompt.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  createdAt: IsoDateTime,
+});
+
+export const ThreadQueuedPromptFlushCommand = Schema.Struct({
+  type: Schema.Literal("thread.queued-prompt.flush"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageIds: Schema.Array(MessageId),
+  messageId: MessageId,
+  createdAt: IsoDateTime,
+});
+
 export const ThreadShellRunCommand = Schema.Struct({
   type: Schema.Literal("thread.shell.run"),
   commandId: CommandId,
@@ -317,6 +345,9 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ThreadTurnStartCommand,
+  ThreadMessageSubmitCommand,
+  ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptFlushCommand,
   ThreadShellRunCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
@@ -343,6 +374,9 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
+  ThreadMessageSubmitCommand,
+  ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptFlushCommand,
   ClientThreadShellRunCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,

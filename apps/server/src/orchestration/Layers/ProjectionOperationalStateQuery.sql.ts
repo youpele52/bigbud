@@ -43,6 +43,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         AND d.state NOT IN ('completed', 'compensated', 'failed')
     )
     OR t.pinned_at IS NOT NULL
+    OR json_array_length(t.queued_prompts_json) > 0
   `;
 
   const listOperationalThreadRows = SqlSchema.findAll({
@@ -63,6 +64,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           'projectId', COALESCE(t.parent_thread_project_id, t.project_id)
         ) END AS "parentThread",
         t.latest_turn_id AS "latestTurnId", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
+        t.queued_prompts_json AS "queuedPrompts",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t

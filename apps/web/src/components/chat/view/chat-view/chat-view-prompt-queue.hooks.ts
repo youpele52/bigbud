@@ -54,7 +54,6 @@ export function useChatViewPromptQueue({
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
   const queueComposerPromptRef = useRef<(prompt: string) => QueuePromptResult>(() => "full");
-  const forceSendQueuedPromptRef = useRef(false);
   const activeTurnInProgress = isPromptQueueTurnInProgress({
     activeSessionTurnRunning: thread.activeSessionTurnRunning,
     isSendBusy: thread.isSendBusy,
@@ -63,7 +62,7 @@ export function useChatViewPromptQueue({
   });
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
     isWorking: activeTurnInProgress,
-    forceSendQueuedPrompt: forceSendQueuedPromptRef.current,
+    forceSendQueuedPrompt: false,
   });
 
   const onSend = useOnSend({
@@ -74,8 +73,8 @@ export function useChatViewPromptQueue({
     isLocalDraftThread: base.isLocalDraftThread,
     isSendBusy: thread.isSendBusy,
     isConnecting: base.isConnecting,
-    shouldQueuePrompt: () => shouldQueuePrompts && !forceSendQueuedPromptRef.current,
-    isForceSend: () => forceSendQueuedPromptRef.current,
+    shouldQueuePrompt: () => shouldQueuePrompts,
+    isForceSend: () => false,
     sendInFlightRef: base.sendInFlightRef,
     promptRef: base.promptRef,
     composerImages: base.composerImages,
@@ -133,21 +132,10 @@ export function useChatViewPromptQueue({
 
   const promptQueue = usePromptQueue({
     threadId: base.threadId,
-    promptRef: base.promptRef,
+    projectedPrompts: base.activeThread?.queuedPrompts ?? [],
     activeTurnInProgress,
-    canAutoFlush: !thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode,
-    setPrompt: base.setPrompt,
-    setComposerShellMode: base.setComposerShellMode,
-    setComposerCursor: base.setComposerCursor,
-    setComposerTrigger: base.setComposerTrigger,
-    collapseExpandedComposerCursor: base.collapseExpandedComposerCursor,
-    detectComposerTrigger: base.detectComposerTrigger,
-    onSend,
     onInterrupt: runtime.turnActions.onInterrupt,
-    setForceSendQueuedPrompt: (force) => {
-      forceSendQueuedPromptRef.current = force;
-    },
-    scheduleComposerFocus: runtime.scheduleComposerFocus,
+    onError: (message) => runtime.setThreadError(base.threadId, message),
     newId: base.randomUUID,
   });
 

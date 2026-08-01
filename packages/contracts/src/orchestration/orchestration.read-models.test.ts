@@ -8,6 +8,7 @@ import {
   OrchestrationLatestTurn,
   OrchestrationProposedPlan,
   OrchestrationSession,
+  OrchestrationThread,
 } from "./orchestration.thread";
 
 const decodeTurnDiffInput = Schema.decodeUnknownEffect(OrchestrationGetTurnDiffInput);
@@ -15,6 +16,37 @@ const decodeThreadTurnDiff = Schema.decodeUnknownEffect(ThreadTurnDiff);
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
+const decodeOrchestrationThread = Schema.decodeUnknownEffect(OrchestrationThread);
+
+it.effect("defaults queued prompts when decoding an older thread snapshot", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationThread({
+      id: "thread-legacy",
+      projectId: "project-1",
+      title: "Legacy",
+      elevatorSummary: null,
+      elevatorSummaryMessageCount: 0,
+      modelSelection: { provider: "codex", model: "gpt-5.4" },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      tasks: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+      watchingThreads: [],
+    });
+    assert.deepStrictEqual(parsed.queuedPrompts, []);
+  }),
+);
 
 it.effect("parses turn diff input when fromTurnCount <= toTurnCount", () =>
   Effect.gen(function* () {

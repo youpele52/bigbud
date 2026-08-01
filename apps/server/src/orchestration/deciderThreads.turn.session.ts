@@ -1,0 +1,135 @@
+import type {
+  OrchestrationCommand,
+  OrchestrationEvent,
+  OrchestrationReadModel,
+} from "@bigbud/contracts";
+import { Effect } from "effect";
+
+import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { requireThread } from "./commandInvariants.ts";
+import { withEventBase } from "./deciderHelpers.ts";
+import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
+
+type ThreadSessionCommand = Extract<
+  OrchestrationCommand,
+  | { type: "thread.turn.interrupt" }
+  | { type: "thread.approval.respond" }
+  | { type: "thread.user-input.respond" }
+  | { type: "thread.session.stop" }
+  | { type: "thread.session.set" }
+  | { type: "thread.turn.start.failed" }
+>;
+
+export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand")(
+  function* (input: {
+    readonly command: ThreadSessionCommand;
+    readonly readModel: OrchestrationReadModel;
+  }): Effect.fn.Return<Omit<OrchestrationEvent, "sequence">, OrchestrationCommandInvariantError> {
+    const { command, readModel } = input;
+    const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+    switch (command.type) {
+      case "thread.turn.interrupt":
+        if (thread.deletedAt !== null) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
+          });
+        }
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.turn-interrupt-requested",
+          payload: {
+            threadId: command.threadId,
+            ...(command.turnId !== undefined ? { turnId: command.turnId } : {}),
+            createdAt: command.createdAt,
+          },
+        };
+      case "thread.approval.respond":
+        yield* requireThreadReadyForMutation({ thread, command });
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+            metadata: { requestId: command.requestId },
+          }),
+          type: "thread.approval-response-requested",
+          payload: {
+            threadId: command.threadId,
+            requestId: command.requestId,
+            decision: command.decision,
+            createdAt: command.createdAt,
+          },
+        };
+      case "thread.user-input.respond":
+        yield* requireThreadReadyForMutation({ thread, command });
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+            metadata: { requestId: command.requestId },
+          }),
+          type: "thread.user-input-response-requested",
+          payload: {
+            threadId: command.threadId,
+            requestId: command.requestId,
+            answers: command.answers,
+            createdAt: command.createdAt,
+          },
+        };
+      case "thread.session.stop":
+        if (thread.deletedAt !== null) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
+          });
+        }
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.session-stop-requested",
+          payload: { threadId: command.threadId, createdAt: command.createdAt },
+        };
+      case "thread.session.set":
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+            metadata: {},
+          }),
+          type: "thread.session-set",
+          payload: { threadId: command.threadId, session: command.session },
+        };
+      case "thread.turn.start.failed":
+        return {
+          ...withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          }),
+          type: "thread.turn-start-failed",
+          payload: {
+            threadId: command.threadId,
+            context: command.context,
+            detail: command.detail,
+            createdAt: command.createdAt,
+          },
+        };
+    }
+  },
+);

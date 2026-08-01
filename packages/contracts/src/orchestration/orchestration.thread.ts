@@ -250,6 +250,13 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
+export const OrchestrationQueuedPrompt = Schema.Struct({
+  id: MessageId,
+  text: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -268,6 +275,9 @@ export const OrchestrationThread = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
+  queuedPrompts: Schema.optional(Schema.Array(OrchestrationQueuedPrompt)).pipe(
+    Schema.withDecodingDefault(() => []),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

@@ -321,6 +321,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
               updatedAt: "2026-02-24T00:00:05.500Z",
             },
           ],
+          queuedPrompts: [],
           tasks: [
             {
               id: RuntimeTaskId.makeUnsafe("task-1"),

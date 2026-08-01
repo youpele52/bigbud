@@ -470,18 +470,14 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     }
 
     await client.dispatchCommand({
-      type: "thread.turn.start",
+      type: "thread.message.submit",
       commandId: newCommandId(),
       threadId,
-      runtimeMode: thread.runtimeMode,
-      interactionMode: thread.interactionMode,
       createdAt,
-      modelSelection: selectedModelSelection,
+      delivery: "auto",
       message: {
         messageId,
-        role: "user",
         text: trimmedPrompt,
-        attachments: [],
       },
     });
     setPrompt("");

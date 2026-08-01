@@ -97,6 +97,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           interaction_mode AS "interactionMode",
           branch,
           worktree_path AS "worktreePath",
+          queued_prompts_json AS "queuedPrompts",
           CASE
              WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
              ELSE json_object(

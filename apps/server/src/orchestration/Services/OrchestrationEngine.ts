@@ -12,6 +12,7 @@
  */
 import type {
   OrchestrationCommand,
+  CommandId,
   OrchestrationEvent,
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
@@ -53,6 +54,11 @@ export interface OrchestrationEngineShape {
   readonly readReplay: (
     fromSequenceExclusive: number,
   ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
+
+  /** Internal keyed lookup for the event set committed by one command. */
+  readonly readEventsByCommandId?: (
+    commandId: CommandId,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
   /**
    * Dispatch a validated orchestration command.

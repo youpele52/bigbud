@@ -6,7 +6,6 @@ import {
   OrchestrationActorKind,
   OrchestrationAggregateKind,
   OrchestrationEvent,
-  OrchestrationEventMetadata,
   OrchestrationEventType,
   ProjectId,
   ThreadId,
@@ -25,14 +24,17 @@ import {
   type OrchestrationEventStoreShape,
 } from "../Services/OrchestrationEventStore.ts";
 import { makeCompactVerifiedPrefix } from "./OrchestrationEventStore.compaction.ts";
+import { makeReadByCommandId } from "./OrchestrationEventStore.commandEvents.ts";
+import {
+  EventMetadataFromJsonString,
+  OrchestrationEventPersistedRowSchema,
+  UnknownFromJsonString,
+} from "./OrchestrationEventStore.schemas.ts";
 import {
   decodeEventCompat,
   inferActorKind,
   toPersistenceSqlOrDecodeError,
 } from "./OrchestrationEventStore.utils.ts";
-
-const UnknownFromJsonString = Schema.fromJsonString(Schema.Unknown);
-const EventMetadataFromJsonString = Schema.fromJsonString(OrchestrationEventMetadata);
 
 const AppendEventRequestSchema = Schema.Struct({
   eventId: EventId,
@@ -46,20 +48,6 @@ const AppendEventRequestSchema = Schema.Struct({
   commandId: Schema.NullOr(CommandId),
   payloadJson: UnknownFromJsonString,
   metadataJson: EventMetadataFromJsonString,
-});
-
-const OrchestrationEventPersistedRowSchema = Schema.Struct({
-  sequence: NonNegativeInt,
-  eventId: EventId,
-  type: OrchestrationEventType,
-  aggregateKind: OrchestrationAggregateKind,
-  aggregateId: Schema.Union([ProjectId, ThreadId]),
-  occurredAt: IsoDateTime,
-  commandId: Schema.NullOr(CommandId),
-  causationEventId: Schema.NullOr(EventId),
-  correlationId: Schema.NullOr(CommandId),
-  payload: UnknownFromJsonString,
-  metadata: EventMetadataFromJsonString,
 });
 
 const ReadFromSequenceRequestSchema = Schema.Struct({
@@ -384,11 +372,13 @@ const makeEventStore = Effect.gen(function* () {
     );
 
   const compactVerifiedPrefix = makeCompactVerifiedPrefix(sql);
+  const readByCommandId = makeReadByCommandId(sql);
 
   return {
     append,
     compactVerifiedPrefix,
     readFromSequence,
+    readByCommandId,
     readReplay,
     findThreadProjectId,
     readAll: () => readFromSequence(0, Number.MAX_SAFE_INTEGER),
