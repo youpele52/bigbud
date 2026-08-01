@@ -2,7 +2,12 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
-## v0.2.102 (1 August, 2026)
+## v0.2.102 (2 August, 2026)
+
+### Agent Notes and Kanban
+
+- Added provider-neutral tools that let agents list, read, create, and update global notes and Kanban cards alongside items from the current project. Every result identifies its scope, while cross-project access and agent-driven deletion remain structurally unavailable.
+- Added safe Kanban move and reorder tools with optimistic concurrency protection, exact content preservation, and shared support across Codex, Claude, Copilot, OpenCode, Pi, and bridge-based providers.
 
 ### Agent Thread Coordination
 
