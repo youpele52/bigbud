@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import { Virtualizer } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import { CopilotClient, type PermissionRequestResult } from "@github/copilot-sdk";
 import {
   TextGenerationError,

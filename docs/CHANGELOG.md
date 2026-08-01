@@ -4,6 +4,23 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.2.102 (1 August, 2026)
 
+### Agent Thread Coordination
+
+- Agents can now list threads across supported providers, with filtering, pagination, optional excerpts, and deleted-thread exclusion, making it easier to find and continue relevant work without leaving the active conversation.
+- Agents can send a follow-up message to another thread in the same project, either starting it when idle or deliberately adding the message to its queue, so multi-thread work can stay coordinated without unsafe cross-project access.
+
+### Durable Queued Prompts
+
+- Rebuilt queued prompts as durable orchestration state shared by desktop and mobile. Queued messages now survive refreshes and restarts, can be removed or flushed predictably, and automatically resume when a thread becomes ready, so work-in-progress instructions are less likely to be lost.
+
+### Refined Application Settings
+
+- Refreshed the About settings page with a clearer application header, direct links to bigbud resources, and a searchable version entry while keeping update checks, diagnostics, and manual installation guidance close at hand.
+
+### Reliability & Maintenance
+
+- Split large orchestration, provider-tool, settings, and picker modules into focused files, with regression coverage for queued-prompt recovery and provider-specific tool registration, keeping the codebase within its maintainability limits without changing established behavior.
+
 ### Recent and Pinned Threads
 
 - Fixed a bug where recent and pinned chats could disappear after restart. They are now restored from the durable projection, including pinned threads outside the initially loaded project list, while sidebar membership stays bounded and synchronized through replay and live updates.

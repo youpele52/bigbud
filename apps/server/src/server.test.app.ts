@@ -354,6 +354,7 @@ export const buildAppUnderTest = (options?: {
                       branch: thread.branch,
                       worktreePath: thread.worktreePath,
                       latestTurnId: null,
+                      queuedPrompts: [],
                       createdAt: thread.createdAt,
                       updatedAt: thread.updatedAt,
                       archivedAt: thread.archivedAt,

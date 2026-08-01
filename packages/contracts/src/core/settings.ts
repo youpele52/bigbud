@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";

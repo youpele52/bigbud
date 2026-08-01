@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } from "effect";

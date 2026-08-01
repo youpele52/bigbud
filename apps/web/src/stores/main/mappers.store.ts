@@ -200,6 +200,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
     session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
+    queuedPrompts: [...(thread.queuedPrompts ?? [])],
     error: unknownProviderError ?? sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
