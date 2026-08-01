@@ -11,6 +11,7 @@ import {
   getComputerUsePermissionsToastDescription,
   getComputerUsePermissionsToastTitle,
 } from "./computerUsePlatformCopy";
+import { normalizeComputerUsePermissionMessage } from "./computerUsePermissionMessage";
 
 interface EnableComputerUseOptions {
   readonly queryClient: QueryClient;
@@ -57,8 +58,9 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
         toastManager.add({
           type: "error",
           title: "Computer Use setup failed",
-          description:
-            installResult.status.message ?? "bigbud could not install the desktop runtime.",
+          description: installResult.status.message
+            ? normalizeComputerUsePermissionMessage(installResult.status.message)
+            : "bigbud could not install the desktop runtime.",
         });
         return;
       }
@@ -68,10 +70,11 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
       toastManager.add({
         type: "error",
         title: "Computer Use runtime is not ready",
-        description:
-          runtimeStatus.lastError ??
-          runtimeStatus.message ??
-          "The desktop automation daemon is not ready.",
+        description: runtimeStatus.lastError
+          ? normalizeComputerUsePermissionMessage(runtimeStatus.lastError)
+          : runtimeStatus.message
+            ? normalizeComputerUsePermissionMessage(runtimeStatus.message)
+            : "The desktop automation daemon is not ready.",
       });
       return;
     }
@@ -92,13 +95,18 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
     toastManager.add({
       type: "info",
       title: getComputerUsePermissionsToastTitle(platform),
-      description: permissions.message ?? getComputerUsePermissionsToastDescription(platform),
+      description: permissions.message
+        ? normalizeComputerUsePermissionMessage(permissions.message)
+        : getComputerUsePermissionsToastDescription(platform),
     });
   } catch (error) {
     toastManager.add({
       type: "error",
       title: "Computer Use setup failed",
-      description: error instanceof Error ? error.message : "Computer Use could not be enabled.",
+      description:
+        error instanceof Error
+          ? normalizeComputerUsePermissionMessage(error.message)
+          : "Computer Use could not be enabled.",
     });
   } finally {
     void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.status() });

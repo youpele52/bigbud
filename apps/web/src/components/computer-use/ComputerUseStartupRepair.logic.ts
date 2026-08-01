@@ -2,6 +2,7 @@ import type {
   DesktopComputerUsePermissionsStatus,
   DesktopComputerUseRuntimeStatus,
 } from "@bigbud/contracts";
+import { normalizeComputerUsePermissionMessage } from "./computerUsePermissionMessage";
 
 export interface ComputerUseStartupRepairNotice {
   readonly title: string;
@@ -29,8 +30,9 @@ export function getComputerUseStartupRuntimeNotice(
   return {
     type: "error",
     title: "Computer Use needs repair",
-    description:
-      status.message ?? "The desktop automation runtime is not ready. Open Settings to repair it.",
+    description: status.message
+      ? normalizeComputerUsePermissionMessage(status.message)
+      : "The desktop automation runtime is not ready. Open Settings to repair it.",
   };
 }
 
@@ -42,9 +44,9 @@ export function getComputerUseStartupPermissionsNotice(
     return {
       type: "error",
       title: "Computer Use needs repair",
-      description:
-        status.message ??
-        "bigbud could not check desktop permissions. Open Settings to repair Computer Use.",
+      description: status.message
+        ? normalizeComputerUsePermissionMessage(status.message)
+        : "bigbud could not check desktop permissions. Open Settings to repair Computer Use.",
     };
   }
 
@@ -52,9 +54,11 @@ export function getComputerUseStartupPermissionsNotice(
   return {
     type: "warning",
     title: "Desktop permissions needed",
-    description:
-      missingPermissions
-        .map((permission) => `${formatPermissionName(permission.name)}: not granted.`)
-        .join("\n") || "Approve the required desktop permissions to finish enabling Computer Use.",
+    description: status.message
+      ? normalizeComputerUsePermissionMessage(status.message)
+      : missingPermissions
+          .map((permission) => `${formatPermissionName(permission.name)}: not granted.`)
+          .join("\n") ||
+        "Approve the required desktop permissions to finish enabling Computer Use.",
   };
 }

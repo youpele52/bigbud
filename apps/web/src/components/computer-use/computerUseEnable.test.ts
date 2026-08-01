@@ -160,7 +160,8 @@ describe("enableComputerUseInBackground", () => {
       runtimeAvailable: true,
       granted: false,
       pendingHostAccessibilityApproval: true,
-      message: "Approve Accessibility, then check access again.",
+      message:
+        "❌ Accessibility: not granted. ✅ Screen Recording: granted. ℹ️ Approve Accessibility, then check access again.",
       permissions: [{ name: "accessibility", granted: false }],
     });
 
@@ -187,7 +188,8 @@ describe("enableComputerUseInBackground", () => {
     expect(addToast).toHaveBeenCalledWith({
       type: "info",
       title: "Finish macOS permissions",
-      description: "Approve Accessibility, then check access again.",
+      description:
+        "Accessibility: not granted.\nScreen Recording: granted.\nApprove Accessibility, then check access again.",
     });
   });
 
