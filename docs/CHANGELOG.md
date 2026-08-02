@@ -2,6 +2,13 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## What's new?
+
+- Orchestra now lets agents manage notes and Kanban, send follow-ups across threads, pin important chats, and coordinate work across providers.
+- Claudex is now in bigbud. Connect your existing CLIProxyAPI setup and bigbud automatically discovers its live Claude-compatible model catalog in the provider picker.
+- Agents now browse where you want—inside bigbud by default or through your system browser when selected.
+- Queued prompts survive refreshes and restarts, then resume automatically when a thread is ready.
+
 ## v0.2.102 (2 August, 2026)
 
 ### Agent Notes and Kanban
