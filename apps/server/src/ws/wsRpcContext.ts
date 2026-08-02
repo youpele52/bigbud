@@ -18,6 +18,8 @@ import { Open, resolveAvailableEditors } from "../utils/open";
 import { normalizeDispatchCommand } from "../orchestration/Normalizer";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
+import { ProjectionCatalogQuery } from "../orchestration/Services/ProjectionCatalogQuery";
+import { ProjectionOperationalStateQuery } from "../orchestration/Services/ProjectionOperationalStateQuery.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry";
 import { ProviderService } from "../provider/Services/ProviderService.ts";
 import { CliProxyLifecycle } from "../provider/Services/CliProxy/Lifecycle.ts";
@@ -86,6 +88,10 @@ export function makeCoalescedPromiseEffect<A>(operation: () => Effect.Effect<A, 
 
 export const makeWsRpcContext = Effect.gen(function* () {
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+  const projectionCatalogQuery = yield* ProjectionCatalogQuery;
+  const projectionOperationalStateQuery = yield* Effect.serviceOption(
+    ProjectionOperationalStateQuery,
+  );
   const orchestrationEngine = yield* OrchestrationEngineService;
   const checkpointDiffQuery = yield* CheckpointDiffQuery;
   const keybindings = yield* Keybindings;
@@ -305,10 +311,13 @@ export const makeWsRpcContext = Effect.gen(function* () {
     projectionKanban,
     projectionThreadRepository,
     projectionSnapshotQuery,
+    projectionCatalogQuery,
+    projectionOperationalStateQuery,
     providerRegistry,
     providerService,
     refreshGitStatus,
     schedulerReactor,
+    serverCommandId,
     serverSettings,
     startup,
     terminalManager,

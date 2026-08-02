@@ -78,13 +78,13 @@ describe("sortThreadsForSidebar", () => {
     ]);
   });
 
-  it("falls back to thread timestamps when there is no user message", () => {
+  it("falls back to creation time when there is no user message", () => {
     const sorted = sortThreadsForSidebar(
       [
         makeThread({
           id: ThreadId.makeUnsafe("thread-1"),
           createdAt: "2026-03-09T10:00:00.000Z",
-          updatedAt: "2026-03-09T10:01:00.000Z",
+          updatedAt: "2026-03-09T11:00:00.000Z",
           messages: [
             {
               id: "message-1" as never,

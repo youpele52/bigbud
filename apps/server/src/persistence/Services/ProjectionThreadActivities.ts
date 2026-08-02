@@ -122,6 +122,10 @@ export interface ProjectionThreadActivityRepositoryShape {
     input: DeleteProjectionThreadActivitiesInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 
+  readonly deleteUsageByThreadId: (
+    input: DeleteProjectionThreadActivitiesInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
   /**
    * Insert or replace a projected usage contribution row.
    */

@@ -5,7 +5,6 @@ import { useThreadSelectionStore } from "../../stores/thread";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useSidebar } from "../ui/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
-import { applySettingsUpdated } from "../../rpc/serverState";
 import { toastManager } from "../ui/toast";
 import { useSidebarThreadDeleteActions } from "./Sidebar.threadActions.delete";
 import { useSidebarThreadClipboardActions } from "./Sidebar.threadActions.clipboard";
@@ -83,14 +82,12 @@ export function useSidebarThreadActions({
 
   const toggleFavoriteThread = useCallback(
     async (threadId: ThreadId) => {
-      const favoriteThreadIds = appSettings.favoriteThreadIds;
-      const pinned = !favoriteThreadIds.includes(threadId);
+      const pinned = (sidebarThreadsById[threadId]?.pinnedAt ?? null) === null;
 
       const api = readNativeApi();
       if (!api) return;
       try {
-        const settings = await api.server.setThreadPinned({ threadId, pinned });
-        applySettingsUpdated(settings);
+        await api.server.setThreadPinned({ threadId, pinned });
       } catch (error) {
         const description = error instanceof Error ? error.message : "An error occurred.";
         const limitReached = pinned && description.includes("pin up to");
@@ -105,7 +102,7 @@ export function useSidebarThreadActions({
         });
       }
     },
-    [appSettings.favoriteThreadIds],
+    [sidebarThreadsById],
   );
 
   const handleBranchThread = useCallback(
@@ -205,7 +202,7 @@ export function useSidebarThreadActions({
       if (!api) return;
       const thread = sidebarThreadsById[threadId];
       if (!thread) return;
-      const isFavorite = appSettings.favoriteThreadIds.includes(threadId);
+      const isFavorite = (thread.pinnedAt ?? null) !== null;
       const normalizedTitle = normalizeSummaryText(thread.title);
       const normalizedElevatorSummary = normalizeSummaryText(thread.elevatorSummary);
       const hasElevatorSummary =
@@ -288,7 +285,6 @@ export function useSidebarThreadActions({
     },
     [
       cancelProjectRename,
-      appSettings.favoriteThreadIds,
       appSettings.confirmThreadArchive,
       attemptArchiveThread,
       copyElevatorSummaryToClipboard,

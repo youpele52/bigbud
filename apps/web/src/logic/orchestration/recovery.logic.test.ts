@@ -52,6 +52,21 @@ describe("createOrchestrationRecoveryCoordinator", () => {
     });
   });
 
+  it("does not advance past an unavailable replay range", () => {
+    const coordinator = createOrchestrationRecoveryCoordinator();
+    coordinator.beginSnapshotRecovery("bootstrap");
+    coordinator.completeSnapshotRecovery(3);
+    coordinator.classifyDomainEvent(6);
+    coordinator.beginReplayRecovery("sequence-gap");
+
+    expect(coordinator.markEventBatchApplied([{ sequence: 5 }, { sequence: 6 }])).toEqual([]);
+    expect(coordinator.getState()).toMatchObject({
+      latestSequence: 3,
+      highestObservedSequence: 6,
+      pendingReplay: true,
+    });
+  });
+
   it("requests another replay when deferred events arrive during replay recovery", () => {
     const coordinator = createOrchestrationRecoveryCoordinator();
 

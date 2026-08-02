@@ -24,6 +24,15 @@ export function makeThreadActivitiesProjector(
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
+      case "thread.deleted":
+        yield* projectionThreadActivityRepository.deleteByThreadId({
+          threadId: event.payload.threadId,
+        });
+        yield* projectionThreadActivityRepository.deleteUsageByThreadId({
+          threadId: event.payload.threadId,
+        });
+        return;
+
       case "thread.activity-appended":
         yield* projectionThreadActivityRepository.upsert({
           activityId: event.payload.activity.id,

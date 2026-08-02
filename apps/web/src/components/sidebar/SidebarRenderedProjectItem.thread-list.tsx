@@ -3,6 +3,7 @@ import { type MouseEvent } from "react";
 
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
+import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 
 interface SidebarRenderedProjectItemThreadListProps {
   projectId: ProjectId;
@@ -43,10 +44,13 @@ interface SidebarRenderedProjectItemThreadListProps {
   shouldShowThreadPanel: boolean;
   showEmptyThreadState: boolean;
   hasHiddenThreads: boolean;
+  hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   isThreadListExpanded: boolean;
-  hiddenThreadCount: number;
+  isLoadingMoreThreads: boolean;
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
   projectExpanded: boolean;
 }
 
@@ -82,10 +86,13 @@ export function SidebarRenderedProjectItemThreadList({
   shouldShowThreadPanel,
   showEmptyThreadState,
   hasHiddenThreads,
+  hasMoreThreads,
+  threadCounts,
   isThreadListExpanded,
-  hiddenThreadCount,
+  isLoadingMoreThreads,
   expandThreadListForProject,
   collapseThreadListForProject,
+  loadMoreThreadsForProject,
   projectExpanded,
 }: SidebarRenderedProjectItemThreadListProps) {
   return (
@@ -139,7 +146,7 @@ export function SidebarRenderedProjectItemThreadList({
       {projectExpanded && hasHiddenThreads ? (
         <SidebarMenuSubItem className="w-full">
           <SidebarMenuSubButton
-            render={<button type="button" />}
+            render={<button type="button" disabled={isLoadingMoreThreads} />}
             data-thread-selection-safe
             size="sm"
             className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
@@ -155,8 +162,31 @@ export function SidebarRenderedProjectItemThreadList({
               {isThreadListExpanded ? (
                 <span>Show less</span>
               ) : (
-                <span>{`See more (${hiddenThreadCount})`}</span>
+                <span>
+                  {threadCounts.collapsedHiddenCount === null
+                    ? "See more"
+                    : `See more (${threadCounts.collapsedHiddenCount})`}
+                </span>
               )}
+            </span>
+          </SidebarMenuSubButton>
+        </SidebarMenuSubItem>
+      ) : null}
+      {projectExpanded && isThreadListExpanded && hasMoreThreads ? (
+        <SidebarMenuSubItem className="w-full">
+          <SidebarMenuSubButton
+            render={<button type="button" />}
+            data-thread-selection-safe
+            size="sm"
+            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            onClick={() => loadMoreThreadsForProject(projectId)}
+          >
+            <span>
+              {isLoadingMoreThreads
+                ? "Loading..."
+                : threadCounts.unloadedCount === null
+                  ? "Load more"
+                  : `Load more (${threadCounts.unloadedCount})`}
             </span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>

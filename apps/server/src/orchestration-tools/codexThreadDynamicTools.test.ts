@@ -1,4 +1,4 @@
-import { MessageId, ThreadId, TurnId } from "@bigbud/contracts";
+import { MessageId, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 import { Effect } from "effect";
 
@@ -33,6 +33,26 @@ describe("codexThreadDynamicTools", () => {
         expect.objectContaining({
           namespace: "bigbud_orchestration",
           name: "get_thread_status",
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "send_thread_message",
+          inputSchema: expect.objectContaining({
+            required: ["threadId", "message"],
+            properties: expect.objectContaining({
+              delivery: expect.objectContaining({ enum: ["auto", "queue"] }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          namespace: "bigbud_orchestration",
+          name: "list_threads",
+          inputSchema: expect.objectContaining({
+            required: [],
+            properties: expect.objectContaining({
+              status: expect.objectContaining({ enum: ["active", "archived", "all"] }),
+            }),
+          }),
         }),
         expect.objectContaining({
           namespace: "bigbud_orchestration",
@@ -97,11 +117,25 @@ describe("codexThreadDynamicTools", () => {
         calls.push({ kind: "list_pinned", ...input });
         return Effect.succeed({ count: 1, limit: 5, remaining: 4, threads: [] });
       },
+      listThreads: (input) => {
+        calls.push({ kind: "list_threads", ...input });
+        return Effect.succeed({
+          projectId: ProjectId.makeUnsafe("project-1"),
+          projectTitle: "Project one",
+          status: input.status ?? "active",
+          limit: 50,
+          totalCount: 0,
+          returnedCount: 0,
+          hasMore: false,
+          threads: [],
+        });
+      },
       setPinned: (input) => {
         calls.push({ kind: "set_pinned", ...input });
         return Effect.succeed({
           threadId: input.threadId,
           pinned: input.pinned,
+          pinnedAt: input.pinned ? new Date().toISOString() : null,
           count: input.pinned ? 1 : 0,
           limit: 5,
           remaining: input.pinned ? 4 : 5,
@@ -131,6 +165,10 @@ describe("codexThreadDynamicTools", () => {
           watchForCompletion: input.watchForCompletion,
           observedStatus: null,
         });
+      },
+      sendMessage: (input) => {
+        calls.push({ kind: "send_message", ...input });
+        return Effect.succeed({ delivery: "queued" as const, queuePosition: 1 });
       },
     };
 
@@ -183,24 +221,39 @@ describe("codexThreadDynamicTools", () => {
         }),
       );
 
+      const sendResult = await handler({
+        namespace: "bigbud_orchestration",
+        tool: "send_thread_message",
+        requestId: 20,
+        arguments: { threadId: "thread-other", message: "Follow up", delivery: "queue" },
+      });
+      expect(sendResult.success).toBe(true);
+
       await handler({
         namespace: "bigbud_orchestration",
         tool: "list_pinned_threads",
-        requestId: 20,
+        requestId: 21,
         arguments: {},
       });
 
       await handler({
         namespace: "bigbud_orchestration",
+        tool: "list_threads",
+        requestId: 24,
+        arguments: { projectId: " project-other ", status: "bogus", limit: 5 },
+      });
+
+      await handler({
+        namespace: "bigbud_orchestration",
         tool: "pin_thread",
-        requestId: 21,
+        requestId: 22,
         arguments: { threadId: "thread-pinned" },
       });
 
       await handler({
         namespace: "bigbud_orchestration",
         tool: "browser",
-        requestId: 22,
+        requestId: 23,
         arguments: { action: "capture" },
       });
 
@@ -225,8 +278,25 @@ describe("codexThreadDynamicTools", () => {
           threadId: ThreadId.makeUnsafe("thread-other"),
         },
         {
+          kind: "send_message",
+          callerThreadId: threadId,
+          threadId: ThreadId.makeUnsafe("thread-other"),
+          message: "Follow up",
+          delivery: "queue",
+          invocationId: "20",
+        },
+        {
           kind: "list_pinned",
           callerThreadId: threadId,
+        },
+        {
+          kind: "list_threads",
+          callerThreadId: threadId,
+          projectId: ProjectId.makeUnsafe("project-other"),
+          // An unrecognized status filter degrades to the default.
+          status: "active",
+          limit: 5,
+          includeExcerpt: false,
         },
         {
           kind: "set_pinned",

@@ -25,6 +25,10 @@ import {
   ThreadCheckpointRevertRequestedPayload,
   ThreadPathCheckpointCaptureRequestedPayload,
   ThreadPathCheckpointRestoreRequestedPayload,
+  ThreadPinnedPayload,
+  ThreadPromptQueuedPayload,
+  ThreadQueuedPromptRemovedPayload,
+  ThreadQueuedPromptsFlushedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadDeletionFailedPayload,
@@ -45,6 +49,7 @@ import {
   ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -80,6 +85,11 @@ export {
   ThreadTurnStartFailedPayload,
   ThreadTurnStartRequestedPayload,
   ThreadUnarchivedPayload,
+  ThreadPinnedPayload,
+  ThreadPromptQueuedPayload,
+  ThreadQueuedPromptRemovedPayload,
+  ThreadQueuedPromptsFlushedPayload,
+  ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 
@@ -95,10 +105,15 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.deleted",
   "thread.archived",
   "thread.unarchived",
+  "thread.pinned",
+  "thread.unpinned",
   "thread.meta-updated",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
   "thread.message-sent",
+  "thread.prompt-queued",
+  "thread.queued-prompt-removed",
+  "thread.queued-prompts-flushed",
   "thread.turn-start-requested",
   "thread.turn-start-failed",
   "thread.shell-run-requested",
@@ -200,6 +215,16 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("thread.pinned"),
+    payload: ThreadPinnedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.unpinned"),
+    payload: ThreadUnpinnedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.meta-updated"),
     payload: ThreadMetaUpdatedPayload,
   }),
@@ -217,6 +242,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.message-sent"),
     payload: ThreadMessageSentPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.prompt-queued"),
+    payload: ThreadPromptQueuedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.queued-prompt-removed"),
+    payload: ThreadQueuedPromptRemovedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.queued-prompts-flushed"),
+    payload: ThreadQueuedPromptsFlushedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

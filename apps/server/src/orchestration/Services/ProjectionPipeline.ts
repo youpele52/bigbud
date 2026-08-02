@@ -26,6 +26,16 @@ export interface OrchestrationProjectionPipelineShape {
   /** Backfill historical canonical usage in bounded, resumable batches. */
   readonly backfillUsageContributions: Effect.Effect<void, ProjectionRepositoryError>;
 
+  /** Ensure a verified baseline covers the specified canonical sequence. */
+  readonly ensureVerifiedBaselineThrough: (
+    sequence: number,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Delete at most one bounded canonical prefix covered by a verified baseline. */
+  readonly compactVerifiedPrefix: (
+    batchSize?: number,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
   /**
    * Project a single orchestration event into projection repositories.
    *

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatQueuedPromptText,
   MAX_QUEUED_PROMPTS,
+  promptQueueErrorMessage,
   type QueuedPrompt,
 } from "./ChatView.promptQueue.logic";
 
@@ -32,5 +33,12 @@ describe("formatQueuedPromptText", () => {
 describe("MAX_QUEUED_PROMPTS", () => {
   it("caps queued prompts at five", () => {
     expect(MAX_QUEUED_PROMPTS).toBe(5);
+  });
+});
+
+describe("promptQueueErrorMessage", () => {
+  it("uses command error messages and a stable fallback", () => {
+    expect(promptQueueErrorMessage(new Error("Queue rejected"))).toBe("Queue rejected");
+    expect(promptQueueErrorMessage("rejected")).toBe("Failed to update the prompt queue.");
   });
 });

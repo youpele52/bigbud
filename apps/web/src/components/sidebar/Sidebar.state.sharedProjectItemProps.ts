@@ -23,7 +23,10 @@ interface BuildSharedProjectItemPropsInput {
   readonly handleNewThread: SharedProjectItemProps["handleNewThread"];
   readonly renderedProjectsState: Pick<
     SidebarRenderedProjectsOutput,
-    "attachThreadListAutoAnimateRef" | "expandThreadListForProject" | "collapseThreadListForProject"
+    | "attachThreadListAutoAnimateRef"
+    | "expandThreadListForProject"
+    | "collapseThreadListForProject"
+    | "loadMoreThreadsForProject"
   >;
 }
 
@@ -77,5 +80,6 @@ export function buildSharedProjectItemProps(
     handleNewThread: input.handleNewThread,
     expandThreadListForProject: input.renderedProjectsState.expandThreadListForProject,
     collapseThreadListForProject: input.renderedProjectsState.collapseThreadListForProject,
+    loadMoreThreadsForProject: input.renderedProjectsState.loadMoreThreadsForProject,
   };
 }

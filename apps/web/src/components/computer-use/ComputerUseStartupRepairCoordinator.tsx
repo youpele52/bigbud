@@ -12,6 +12,7 @@ import {
   getComputerUseStartupPermissionsNotice,
   getComputerUseStartupRuntimeNotice,
 } from "./ComputerUseStartupRepair.logic";
+import { normalizeComputerUsePermissionMessage } from "./computerUsePermissionMessage";
 
 export function ComputerUseStartupRepairCoordinator() {
   const settings = useSettings();
@@ -67,7 +68,7 @@ export function ComputerUseStartupRepairCoordinator() {
           title: "Computer Use needs repair",
           description:
             error instanceof Error
-              ? error.message
+              ? normalizeComputerUsePermissionMessage(error.message)
               : "bigbud could not check the Computer Use runtime.",
         });
       }

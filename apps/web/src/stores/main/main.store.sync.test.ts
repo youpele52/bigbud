@@ -2,12 +2,15 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   ProjectId,
   ThreadId,
+  type ThreadSummary,
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { syncServerReadModel } from "./helpers.store";
+import { syncBoundedCatalog } from "./helpers.lazy.store";
+import { syncServerReadModel } from "./helpers.snapshot.store";
 import { type AppState } from "./main.store";
+import { buildSidebarThreadSummary } from "./mappers.store";
 import {
   makeReadModel,
   makeReadModelProject,
@@ -165,7 +168,11 @@ describe("store read model sync", () => {
       threads: [],
       sidebarThreadsById: {},
       threadIdsByProjectId: {},
+      threadSummaryCursorByProjectId: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
       bootstrapComplete: true,
+      threadHydrationById: {},
     };
     const readModel: OrchestrationReadModel = {
       snapshotSequence: 2,
@@ -193,5 +200,85 @@ describe("store read model sync", () => {
     const next = syncServerReadModel(initialState, readModel);
 
     expect(next.projects.map((project) => project.id)).toEqual([project1, project2, project3]);
+  });
+
+  it("preserves richer hydrated fields while reconciling a bounded summary", () => {
+    const threadId = ThreadId.makeUnsafe("hydrated-thread");
+    const turnId = "turn-completed" as never;
+    const latestTurn = {
+      turnId,
+      state: "completed" as const,
+      requestedAt: "2026-02-27T00:00:00.000Z",
+      startedAt: "2026-02-27T00:00:01.000Z",
+      completedAt: "2026-02-27T00:01:00.000Z",
+      assistantMessageId: null,
+    };
+    const session = {
+      provider: "codex" as const,
+      status: "error" as const,
+      orchestrationStatus: "error" as const,
+      createdAt: "2026-02-27T00:00:00.000Z",
+      updatedAt: "2026-02-27T00:01:00.000Z",
+      lastError: "Keep the hydrated error",
+    };
+    const thread = makeThread({
+      id: threadId,
+      latestTurn,
+      session,
+      error: "Keep the hydrated error",
+      elevatorSummaryMessageCount: 7,
+    });
+    const summary: ThreadSummary = {
+      id: threadId,
+      projectId: thread.projectId,
+      title: "Updated summary title",
+      purpose: "standard",
+      elevatorSummary: "Updated summary",
+      modelSelection: thread.modelSelection,
+      runtimeMode: thread.runtimeMode,
+      interactionMode: thread.interactionMode,
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
+      branch: null,
+      worktreePath: null,
+      createdAt: thread.createdAt,
+      updatedAt: "2026-02-27T00:02:00.000Z",
+      latestUserMessageAt: null,
+      pinnedAt: null,
+      sessionStatus: "ready",
+      providerName: "codex",
+      activeTurnId: null,
+      latestTurnState: "completed",
+      isWatching: false,
+      isWatched: false,
+      isDelegated: false,
+      isAwaitingApproval: false,
+    };
+    const initialState: AppState = {
+      ...makeState(thread),
+      sidebarThreadsById: { [threadId]: buildSidebarThreadSummary(thread) },
+    };
+
+    const next = syncBoundedCatalog(
+      initialState,
+      { projectionSequence: 1, projects: [] },
+      { projectionSequence: 1, threads: [summary], recentThreadIds: [], pinnedThreadIds: [] },
+      [],
+    );
+
+    expect(next.threads[0]).toMatchObject({
+      title: "Updated summary title",
+      latestTurn,
+      session,
+      error: "Keep the hydrated error",
+      elevatorSummaryMessageCount: 7,
+    });
+    expect(next.sidebarThreadsById[threadId]).toMatchObject({
+      title: "Updated summary title",
+      latestTurn,
+      session,
+      elevatorSummaryMessageCount: 7,
+    });
   });
 });

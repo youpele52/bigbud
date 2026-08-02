@@ -56,6 +56,7 @@ import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProviderCommandReactor } from "../Services/ProviderCommandReactor.ts";
 import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
+import { EntityPurgeLive } from "../../deletion/Layers/EntityPurge.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
@@ -328,7 +329,6 @@ export async function createHarness(input?: {
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
-    Layer.provide(SqlitePersistenceMemory),
     Layer.provideMerge(ComputerUseDisabledTestLayer),
   );
   const layer = ProviderCommandReactorLive.pipe(
@@ -368,8 +368,13 @@ export async function createHarness(input?: {
     ),
     Layer.provideMerge(Layer.succeed(BrowserManager, browserService)),
     Layer.provideMerge(Layer.succeed(TerminalManager, terminalService)),
+    Layer.provideMerge(EntityPurgeLive),
+    Layer.provide(
+      OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
+    ),
     Layer.provideMerge(ServerSettingsService.layerTest(input?.serverSettingsOverrides ?? {})),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
+    Layer.provideMerge(SqlitePersistenceMemory),
     Layer.provideMerge(WorkspacePathsLive),
     Layer.provideMerge(NodeServices.layer),
   );

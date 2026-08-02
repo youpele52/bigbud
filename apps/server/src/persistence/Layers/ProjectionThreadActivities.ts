@@ -118,6 +118,12 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
       `,
   });
 
+  const deleteProjectionUsageContributionRows = SqlSchema.void({
+    Request: DeleteProjectionThreadActivitiesInput,
+    execute: ({ threadId }) =>
+      sql`DELETE FROM projection_usage_contributions WHERE thread_id = ${threadId}`,
+  });
+
   const upsertProjectionUsageContributionRow = SqlSchema.void({
     Request: ProjectionUsageContribution,
     execute: (row) =>
@@ -293,6 +299,15 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
       ),
     );
 
+  const deleteUsageByThreadId: ProjectionThreadActivityRepositoryShape["deleteUsageByThreadId"] = (
+    input,
+  ) =>
+    deleteProjectionUsageContributionRows(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlError("ProjectionThreadActivityRepository.deleteUsageByThreadId:query"),
+      ),
+    );
+
   const upsertUsageContribution: ProjectionThreadActivityRepositoryShape["upsertUsageContribution"] =
     (row) =>
       upsertProjectionUsageContributionRow(row).pipe(
@@ -351,6 +366,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
     upsert,
     listByThreadId,
     deleteByThreadId,
+    deleteUsageByThreadId,
     upsertUsageContribution,
     getUsageBackfillState,
     listUsageBackfillBatch,

@@ -21,8 +21,12 @@
       "require": "./src/core/settings.ts"
     },
     "./constants/*": "./src/constants/*",
+    "./constants/project.constant": "./src/constants/project.constant.ts",
+    "./constants/settings.constant": "./src/constants/settings.constant.ts",
+    "./core/baseSchemas": "./src/core/baseSchemas.ts",
     "./core/*": "./src/core/*",
     "./orchestration/*": "./src/orchestration/*",
+    "./orchestration/orchestration.catalog": "./src/orchestration/orchestration.catalog.ts",
     "./server/mobile": {
       "types": "./src/server/mobile.ts",
       "import": "./src/server/mobile.ts",

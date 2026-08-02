@@ -1,5 +1,5 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { ThreadId } from "@bigbud/contracts";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { afterEach, describe, expect, vi } from "vitest";
@@ -43,7 +43,7 @@ describe("thread orchestration pinned tools route", () => {
               {
                 threadId: ThreadId.makeUnsafe(TARGET_THREAD_ID),
                 title: "Other project thread",
-                projectId: null,
+                projectId: ProjectId.makeUnsafe("project-pinned-other"),
                 projectTitle: null,
                 archived: false,
                 available: true,
@@ -52,7 +52,14 @@ describe("thread orchestration pinned tools route", () => {
           }),
         );
         const setPinned = vi.fn(({ threadId, pinned }) =>
-          Effect.succeed({ threadId, pinned, count: 1, limit: 5 as const, remaining: 4 }),
+          Effect.succeed({
+            threadId,
+            pinned,
+            pinnedAt: pinned ? new Date().toISOString() : null,
+            count: 1,
+            limit: 5 as const,
+            remaining: 4,
+          }),
         );
         setThreadOrchestrationToolDispatcher({
           rename: () => Effect.succeed({ title: "Renamed" }),

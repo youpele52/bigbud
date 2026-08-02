@@ -109,7 +109,7 @@ describe("CopilotAdapter remote workspace sessions", () => {
           }),
         listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
         setPinned: ({ threadId, pinned }) =>
-          Effect.succeed({ threadId, pinned, count: 0, limit: 5, remaining: 5 }),
+          Effect.succeed({ threadId, pinned, pinnedAt: null, count: 0, limit: 5, remaining: 5 }),
         computerUse: () =>
           Effect.succeed({
             surface: "browser",
@@ -230,7 +230,14 @@ describe("CopilotAdapter remote workspace sessions", () => {
           },
           setPinned: ({ callerThreadId, threadId, pinned }) => {
             pinnedCalls.push(`${callerThreadId}:${threadId}:${pinned}`);
-            return Effect.succeed({ threadId, pinned, count: 0, limit: 5, remaining: 5 });
+            return Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: null,
+              count: 0,
+              limit: 5,
+              remaining: 5,
+            });
           },
           computerUse: () =>
             Effect.succeed({

@@ -13,13 +13,12 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
-import type { ServerSettingsShape } from "../ws/serverSettings.ts";
 import { lockThreadTitle } from "./ThreadTitleLock.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`agent:${tag}:${crypto.randomUUID()}`);
 
-const stableId = (prefix: string, value: string): string =>
+export const stableThreadToolId = (prefix: string, value: string): string =>
   `${prefix}:${createHash("sha256").update(value).digest("hex")}`;
 
 const delegationError = (error: unknown): Error =>
@@ -69,9 +68,9 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     }
 
     const identity = `${input.callerThreadId}\n${input.sourceMessageId}\n${invocationId}`;
-    const delegationId = stableId("delegation", identity);
-    const childThreadId = ThreadId.makeUnsafe(stableId("thread", identity));
-    const childTurnId = TurnId.makeUnsafe(stableId("turn", identity));
+    const delegationId = stableThreadToolId("delegation", identity);
+    const childThreadId = ThreadId.makeUnsafe(stableThreadToolId("thread", identity));
+    const childTurnId = TurnId.makeUnsafe(stableThreadToolId("turn", identity));
     const now = new Date().toISOString();
     const existing = yield* input.threadDelegationRepository
       .getByInvocation({
@@ -144,7 +143,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     const createResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.create",
-        commandId: CommandId.makeUnsafe(stableId("command", `${identity}:create`)),
+        commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:create`)),
         threadId: delegation.childThreadId,
         projectId: targetProjectId,
         title,
@@ -165,7 +164,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     const turnResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe(stableId("command", `${identity}:turn`)),
+        commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:turn`)),
         threadId: delegation.childThreadId,
         message: {
           messageId: input.sourceMessageId,
@@ -322,7 +321,6 @@ const requireCallerThread = Effect.fn("requirePinnedThreadToolCaller")(function*
 export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrchestration")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
-    readonly serverSettings: ServerSettingsShape;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly pinned: boolean;
@@ -342,16 +340,24 @@ export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrch
       }
     }
 
-    const settings = yield* input.serverSettings.setThreadPinned({
+    yield* input.orchestrationEngine.dispatch({
+      type: input.pinned ? "thread.pin" : "thread.unpin",
+      commandId: agentThreadCommandId(input.pinned ? "thread-pin" : "thread-unpin"),
       threadId: input.threadId,
-      pinned: input.pinned,
     });
+    const nextReadModel = yield* input.orchestrationEngine.getReadModel();
+    const pinnedThreads = nextReadModel.threads.filter(
+      (thread) => thread.deletedAt === null && (thread.pinnedAt ?? null) !== null,
+    );
+    const pinnedAt =
+      nextReadModel.threads.find((thread) => thread.id === input.threadId)?.pinnedAt ?? null;
     return {
       threadId: input.threadId,
       pinned: input.pinned,
-      count: settings.favoriteThreadIds.length,
+      pinnedAt,
+      count: pinnedThreads.length,
       limit: FAVORITE_THREAD_LIMIT,
-      remaining: FAVORITE_THREAD_LIMIT - settings.favoriteThreadIds.length,
+      remaining: FAVORITE_THREAD_LIMIT - pinnedThreads.length,
     } as const;
   },
 );
@@ -359,26 +365,27 @@ export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrch
 export const listPinnedThreadsViaOrchestration = Effect.fn("listPinnedThreadsViaOrchestration")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
-    readonly serverSettings: ServerSettingsShape;
     readonly callerThreadId: ThreadId;
   }) {
     const readModel = yield* requireCallerThread(input);
-    const settings = yield* input.serverSettings.getSettings;
-
-    const threads = settings.favoriteThreadIds.map((threadId) => {
-      const thread = readModel.threads.find((candidate) => candidate.id === threadId);
-      const project = thread
-        ? readModel.projects.find((candidate) => candidate.id === thread.projectId)
-        : undefined;
-      return {
-        threadId,
-        title: thread?.title ?? null,
-        projectId: thread?.projectId ?? null,
-        projectTitle: project?.title ?? null,
-        archived: thread ? thread.archivedAt !== null : null,
-        available: Boolean(thread && thread.deletedAt === null),
-      };
-    });
+    const threads = readModel.threads
+      .filter((thread) => thread.deletedAt === null && (thread.pinnedAt ?? null) !== null)
+      .toSorted(
+        (left, right) =>
+          (right.pinnedAt ?? "").localeCompare(left.pinnedAt ?? "") ||
+          left.id.localeCompare(right.id),
+      )
+      .map((thread) => {
+        const project = readModel.projects.find((candidate) => candidate.id === thread.projectId);
+        return {
+          threadId: thread.id,
+          title: thread.title,
+          projectId: thread.projectId,
+          projectTitle: project?.title ?? null,
+          archived: thread.archivedAt !== null,
+          available: true,
+        };
+      });
 
     return {
       count: threads.length,

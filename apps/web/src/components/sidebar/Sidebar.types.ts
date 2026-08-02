@@ -11,6 +11,7 @@ import type { RemoteProjectDraft } from "./Sidebar.projects.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -18,6 +19,8 @@ export type SidebarProjectSnapshot = Project & {
 
 export interface RenderedProjectEntry {
   hasHiddenThreads: boolean;
+  hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   hiddenThreadStatus: ReturnType<typeof resolveThreadStatusPill>;
   orderedProjectThreadIds: readonly ThreadId[];
   project: SidebarProjectSnapshot;
@@ -26,6 +29,7 @@ export interface RenderedProjectEntry {
   showEmptyThreadState: boolean;
   shouldShowThreadPanel: boolean;
   isThreadListExpanded: boolean;
+  isLoadingMoreThreads: boolean;
 }
 
 /** All props that are passed to each rendered project item. */
@@ -102,6 +106,7 @@ export interface SharedProjectItemProps {
   handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
 
 export interface SidebarRenderedThreadEntry {
@@ -265,6 +270,7 @@ export interface SidebarState {
   // Thread list expand/collapse
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   // Shared props bundle
   sharedProjectItemProps: SharedProjectItemProps;

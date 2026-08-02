@@ -102,6 +102,18 @@ const ThreadUnarchiveCommand = Schema.Struct({
   threadId: ThreadId,
 });
 
+export const ThreadPinCommand = Schema.Struct({
+  type: Schema.Literal("thread.pin"),
+  commandId: CommandId,
+  threadId: ThreadId,
+});
+
+export const ThreadUnpinCommand = Schema.Struct({
+  type: Schema.Literal("thread.unpin"),
+  commandId: CommandId,
+  threadId: ThreadId,
+});
+
 const ThreadMetaUpdateCommand = Schema.Struct({
   type: Schema.Literal("thread.meta.update"),
   commandId: CommandId,
@@ -180,6 +192,34 @@ export const ThreadTurnStartCommand = Schema.Struct({
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  createdAt: IsoDateTime,
+});
+
+export const ThreadMessageSubmitCommand = Schema.Struct({
+  type: Schema.Literal("thread.message.submit"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  message: Schema.Struct({ messageId: MessageId, text: TrimmedNonEmptyString }),
+  delivery: Schema.Literals(["auto", "queue"]).pipe(
+    Schema.withDecodingDefault(() => "auto" as const),
+  ),
+  createdAt: IsoDateTime,
+});
+
+export const ThreadQueuedPromptRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.queued-prompt.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  createdAt: IsoDateTime,
+});
+
+export const ThreadQueuedPromptFlushCommand = Schema.Struct({
+  type: Schema.Literal("thread.queued-prompt.flush"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageIds: Schema.Array(MessageId),
+  messageId: MessageId,
   createdAt: IsoDateTime,
 });
 
@@ -299,10 +339,15 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
+  ThreadPinCommand,
+  ThreadUnpinCommand,
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ThreadTurnStartCommand,
+  ThreadMessageSubmitCommand,
+  ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptFlushCommand,
   ThreadShellRunCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
@@ -323,10 +368,15 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
+  ThreadPinCommand,
+  ThreadUnpinCommand,
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
   ClientThreadTurnStartCommand,
+  ThreadMessageSubmitCommand,
+  ThreadQueuedPromptRemoveCommand,
+  ThreadQueuedPromptFlushCommand,
   ClientThreadShellRunCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,

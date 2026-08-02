@@ -91,7 +91,8 @@ import {
   ServerRevokeMobileRemoteSessionInput,
 } from "./mobile";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "../core/settings";
-import { ServerSetThreadPinnedInput } from "./pinnedThreads";
+import { OrchestrationDispatchCommandError } from "../orchestration/orchestration.rpc";
+import { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import { WS_METHODS } from "../constants/websocket.constant";
 
 export const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -149,8 +150,8 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
 
 export const WsServerSetThreadPinnedRpc = Rpc.make(WS_METHODS.serverSetThreadPinned, {
   payload: ServerSetThreadPinnedInput,
-  success: ServerSettings,
-  error: ServerSettingsError,
+  success: ServerSetThreadPinnedResult,
+  error: OrchestrationDispatchCommandError,
 });
 
 export const WsServerReadDocumentUrlRpc = Rpc.make(WS_METHODS.serverReadDocumentUrl, {

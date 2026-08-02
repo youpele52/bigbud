@@ -1,6 +1,7 @@
 import "../../index.css";
 
 import { DEFAULT_SERVER_SETTINGS, type NativeApi, type ServerConfig } from "@bigbud/contracts";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
@@ -63,6 +64,19 @@ function createBaseServerConfig(): ServerConfig {
   };
 }
 
+function renderAiSettingsPanel() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AppAtomRegistryProvider>
+        <AiSettingsPanel />
+      </AppAtomRegistryProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe("AboutSettingsPanel observability", () => {
   beforeEach(() => {
     resetServerStateForTests();
@@ -86,7 +100,11 @@ describe("AboutSettingsPanel observability", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByText("About")).toBeInTheDocument();
+    await expect.element(page.getByRole("heading", { name: "Application" })).toBeInTheDocument();
+    await expect.element(page.getByRole("img", { name: "bigbud" })).toBeInTheDocument();
+    await expect.element(page.getByRole("heading", { name: "Links" })).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Website" })).toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "GitHub" })).toBeInTheDocument();
     await expect.element(page.getByText("Diagnostics")).toBeInTheDocument();
     await expect.element(page.getByText("Open logs folder")).toBeInTheDocument();
     await expect
@@ -141,11 +159,7 @@ describe("AiSettingsPanel defaults", () => {
   it("renders stream replies and stream thinking enabled by default", async () => {
     setServerConfigSnapshot(createBaseServerConfig());
 
-    await render(
-      <AppAtomRegistryProvider>
-        <AiSettingsPanel />
-      </AppAtomRegistryProvider>,
-    );
+    await renderAiSettingsPanel();
 
     await expect
       .element(page.getByLabelText("Stream replies"))
@@ -153,5 +167,35 @@ describe("AiSettingsPanel defaults", () => {
     await expect
       .element(page.getByLabelText("Stream thinking"))
       .toHaveAttribute("aria-checked", "true");
+  });
+
+  it("renders, updates, and resets the default agent browser preference", async () => {
+    const updateSettings = vi.fn().mockResolvedValue(undefined);
+    window.nativeApi = {
+      server: { updateSettings },
+    } as unknown as NativeApi;
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    await renderAiSettingsPanel();
+
+    const trigger = page.getByLabelText("Default agent browser");
+    await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
+    await expect
+      .element(
+        page.getByText(
+          "Explicit prompts override this preference. System-browser interaction requires the desktop app, full-access mode, and enabled computer use.",
+        ),
+      )
+      .toBeInTheDocument();
+
+    await trigger.click();
+    await page.getByText("System default browser", { exact: true }).click();
+
+    expect(updateSettings).toHaveBeenCalledWith({ agentBrowserPreference: "system" });
+    await expect.element(trigger).toHaveTextContent("System default browser");
+
+    await page.getByLabelText("Reset default agent browser to default").click();
+    expect(updateSettings).toHaveBeenLastCalledWith({ agentBrowserPreference: "bigbud" });
+    await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
   });
 });

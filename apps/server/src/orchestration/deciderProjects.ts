@@ -44,17 +44,19 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
 > {
   switch (command.type) {
     case "project.create": {
-      yield* requireProjectAbsent({
-        readModel,
-        command,
-        projectId: command.projectId,
-      });
       const executionTargets = resolveProviderSessionExecutionTargets({
         providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
         workspaceExecutionTargetId: command.workspaceExecutionTargetId,
         executionTargetId: command.executionTargetId,
         defaultProviderRuntimeExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
         defaultWorkspaceExecutionTargetId: LOCAL_EXECUTION_TARGET_ID,
+      });
+      yield* requireProjectAbsent({
+        readModel,
+        command,
+        projectId: command.projectId,
+        workspaceRoot: command.workspaceRoot,
+        workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId,
       });
 
       return {

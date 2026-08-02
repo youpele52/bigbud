@@ -1,7 +1,8 @@
+// TODO: Split by concern when this file is next touched.
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { ThreadId, TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
+import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -21,7 +22,6 @@ import {
   DEFAULT_SIDEBAR_PROJECT_SORT_ORDER,
   SIDEBAR_THREAD_SORT_ORDERS,
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
-  FAVORITE_THREAD_LIMIT,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
@@ -124,6 +124,9 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 
 export const ThreadEnvMode = Schema.Literals(THREAD_ENV_MODES);
 export type ThreadEnvMode = typeof ThreadEnvMode.Type;
+
+export const AgentBrowserPreference = Schema.Literals(["bigbud", "system"]);
+export type AgentBrowserPreference = typeof AgentBrowserPreference.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -230,9 +233,6 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
-  favoriteThreadIds: Schema.Array(ThreadId)
-    .check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT))
-    .pipe(Schema.withDecodingDefault(() => [])),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(() => ({
       provider: DEFAULT_PROVIDER_KIND,
@@ -254,6 +254,9 @@ export const ServerSettings = Schema.Struct({
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  agentBrowserPreference: AgentBrowserPreference.pipe(
+    Schema.withDecodingDefault(() => "bigbud" as const satisfies AgentBrowserPreference),
+  ),
   computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   computerUseCheckInIntervalMs: ComputerUseCheckInIntervalMs.pipe(
@@ -444,9 +447,6 @@ export const ServerSettingsPatch = Schema.Struct({
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
-  favoriteThreadIds: Schema.optionalKey(
-    Schema.Array(ThreadId).check(Schema.isMaxLength(FAVORITE_THREAD_LIMIT)),
-  ),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({
@@ -459,6 +459,7 @@ export const ServerSettingsPatch = Schema.Struct({
       enabled: Schema.optionalKey(Schema.Boolean),
     }),
   ),
+  agentBrowserPreference: Schema.optionalKey(AgentBrowserPreference),
   computerUseEnabled: Schema.optionalKey(Schema.Boolean),
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),

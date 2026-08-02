@@ -200,9 +200,11 @@ export function mapThread(thread: OrchestrationThread): Thread {
     session,
     messages: thread.messages.map(mapMessage),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
+    queuedPrompts: [...(thread.queuedPrompts ?? [])],
     error: unknownProviderError ?? sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
+    pinnedAt: thread.pinnedAt ?? null,
     deletingAt: thread.deletingAt ?? null,
     updatedAt: thread.updatedAt,
     latestTurn: thread.latestTurn,
@@ -276,6 +278,7 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
     session: thread.session,
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
+    pinnedAt: thread.pinnedAt ?? null,
     deletingAt: thread.deletingAt ?? null,
     updatedAt: thread.updatedAt,
     latestTurn: thread.latestTurn,
@@ -308,6 +311,7 @@ export function sidebarThreadSummariesEqual(
     left.session === right.session &&
     left.createdAt === right.createdAt &&
     left.archivedAt === right.archivedAt &&
+    left.pinnedAt === right.pinnedAt &&
     left.updatedAt === right.updatedAt &&
     left.latestTurn === right.latestTurn &&
     left.branch === right.branch &&

@@ -98,6 +98,7 @@ function buildSharedProjectItemProps(): SharedProjectItemProps {
     handleNewThread: vi.fn(async () => {}),
     expandThreadListForProject: vi.fn(),
     collapseThreadListForProject: vi.fn(),
+    loadMoreThreadsForProject: vi.fn(),
   };
 }
 

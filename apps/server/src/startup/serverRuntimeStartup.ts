@@ -1,4 +1,5 @@
 import {
+  Cause,
   Data,
   Deferred,
   Effect,
@@ -21,6 +22,9 @@ import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
 import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
 import { cleanupHandoffDocumentFiles } from "../ws/wsHandoffDocument.ts";
+import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
+import { runLegacyPinnedThreadSettingsMigration } from "./LegacyPinnedThreadSettingsMigration.ts";
+import { writeStartupStatus } from "./startupStatus.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -141,7 +145,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const orchestrationReactor = yield* OrchestrationReactor;
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
-
+  const entityPurge = yield* EntityPurge;
   const commandGate = yield* makeCommandGate;
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
@@ -178,6 +182,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
         Effect.forkScoped,
       ),
     );
+    yield* runStartupPhase("settings.ready", serverSettings.ready);
 
     yield* Effect.logDebug("startup phase: starting handoff document cleanup");
     yield* runStartupPhase(
@@ -186,6 +191,9 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
         Effect.forkScoped,
       ),
     );
+
+    yield* Effect.logDebug("startup phase: migrating legacy pinned threads");
+    yield* runStartupPhase("pins.migrate", runLegacyPinnedThreadSettingsMigration());
 
     yield* Effect.logDebug("startup phase: starting orchestration reactors");
     yield* runStartupPhase(
@@ -222,6 +230,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
     Effect.gen(function* () {
       const startupExit = yield* Effect.exit(startup);
       if (Exit.isFailure(startupExit)) {
+        yield* Effect.sync(() => writeStartupStatus("error", "server_runtime_startup_failed"));
         const error = new ServerRuntimeStartupError({
           message: "Server runtime startup failed before command readiness.",
           cause: startupExit.cause,
@@ -235,6 +244,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       yield* commandGate.signalCommandReady;
       yield* Effect.logDebug("startup phase: waiting for http listener");
       yield* runStartupPhase("http.wait", Deferred.await(httpListening));
+      yield* Effect.sync(() => writeStartupStatus("ready"));
       yield* Effect.logDebug("startup phase: publishing ready event");
       yield* runStartupPhase(
         "ready.publish",
@@ -243,6 +253,19 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
           type: "ready",
           payload: { at: new Date().toISOString() },
         }),
+      );
+
+      yield* Effect.forkScoped(
+        Effect.sleep("1 second").pipe(
+          Effect.andThen(entityPurge.auditAndResume()),
+          Effect.catchCause((cause) =>
+            Cause.hasInterruptsOnly(cause)
+              ? Effect.void
+              : Effect.logWarning("entity purge audit failed", {
+                  cause,
+                }),
+          ),
+        ),
       );
 
       yield* Effect.logDebug("startup phase: recording startup heartbeat");

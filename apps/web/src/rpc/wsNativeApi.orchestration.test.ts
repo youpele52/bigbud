@@ -101,4 +101,51 @@ describe("wsNativeApi — orchestration", () => {
       toTurnCount: 1,
     });
   });
+
+  it("forwards bounded catalog and selected-detail requests", async () => {
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+    const projectId = ProjectId.makeUnsafe("project-1");
+    const threadId = ThreadId.makeUnsafe("thread-1");
+
+    await api.orchestration.getSidebarThreadCatalog();
+    await api.orchestration.getStartupProjectCatalog({ limit: 2, priorityProjectId: projectId });
+    await api.orchestration.getProjectThreadSummaries({
+      projectId,
+      limit: 5,
+      priorityThreadId: threadId,
+    });
+    await api.orchestration.getSelectedThreadDetail({ threadId });
+
+    expect(rpcClientMock.orchestration.getSidebarThreadCatalog).toHaveBeenCalledWith({});
+    expect(rpcClientMock.orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      limit: 2,
+      priorityProjectId: projectId,
+    });
+    expect(rpcClientMock.orchestration.getProjectThreadSummaries).toHaveBeenCalledWith({
+      projectId,
+      limit: 5,
+      priorityThreadId: threadId,
+    });
+    expect(rpcClientMock.orchestration.getSelectedThreadDetail).toHaveBeenCalledWith({ threadId });
+  });
+
+  it("preserves typed replay range metadata", async () => {
+    const replay = {
+      requestedFromSequenceExclusive: 4,
+      retainedFromSequenceExclusive: 0,
+      earliestAvailableSequence: 1,
+      latestSequence: 4,
+      availability: "available" as const,
+      complete: true,
+      events: [],
+    };
+    rpcClientMock.orchestration.replayEvents.mockResolvedValue(replay);
+    const { createWsNativeApi } = await import("./wsNativeApi");
+
+    await expect(createWsNativeApi().orchestration.replayEvents(4)).resolves.toEqual(replay);
+    expect(rpcClientMock.orchestration.replayEvents).toHaveBeenCalledWith({
+      fromSequenceExclusive: 4,
+    });
+  });
 });

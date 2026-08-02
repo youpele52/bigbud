@@ -38,6 +38,8 @@ describe("OrchestrationEngine", () => {
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
       backfillUsageContributions: Effect.void,
+      ensureVerifiedBaselineThrough: () => Effect.void,
+      compactVerifiedPrefix: () => Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailRequestedProjection &&
@@ -177,6 +179,8 @@ describe("OrchestrationEngine", () => {
       readFromSequence(sequenceExclusive) {
         return Stream.fromIterable(events.filter((event) => event.sequence > sequenceExclusive));
       },
+      readReplay: () => Effect.die("unused replay"),
+      findThreadProjectId: () => Effect.die("unused thread project lookup"),
       readAll() {
         return Stream.fromIterable(events);
       },
@@ -186,6 +190,8 @@ describe("OrchestrationEngine", () => {
     const flakyProjectionPipeline: OrchestrationProjectionPipelineShape = {
       bootstrap: Effect.void,
       backfillUsageContributions: Effect.void,
+      ensureVerifiedBaselineThrough: () => Effect.void,
+      compactVerifiedPrefix: () => Effect.void,
       projectEvent: (event) => {
         if (
           shouldFailProjection &&

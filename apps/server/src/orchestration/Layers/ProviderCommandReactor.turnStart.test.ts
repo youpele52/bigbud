@@ -94,7 +94,11 @@ describe("ProviderCommandReactor", () => {
 
     await waitFor(async () => {
       const readModel = await Effect.runPromise(harness.engine.getReadModel());
-      return readModel.threads[0]?.session?.status === "error";
+      const thread = readModel.threads[0];
+      return (
+        thread?.session?.status === "error" &&
+        thread.activities.some((activity) => activity.kind === "provider.turn.start.failed")
+      );
     });
 
     const readModel = await Effect.runPromise(harness.engine.getReadModel());

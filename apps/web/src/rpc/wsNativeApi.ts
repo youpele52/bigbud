@@ -171,14 +171,16 @@ export function createWsNativeApi(): NativeApi {
       getUsageSummary: rpcClient.server.getUsageSummary,
     },
     orchestration: {
+      getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),
+      getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
+      getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
+      getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
       getSnapshot: rpcClient.orchestration.getSnapshot,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
-        rpcClient.orchestration
-          .replayEvents({ fromSequenceExclusive })
-          .then((events) => [...events]),
+        rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
       onDomainEvent: (callback, options) =>
         rpcClient.orchestration.onDomainEvent(callback, options),
       onThinkingDelta: (callback, options) =>

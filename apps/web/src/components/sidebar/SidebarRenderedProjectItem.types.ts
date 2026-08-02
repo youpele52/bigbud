@@ -7,8 +7,15 @@ import { type ThreadPr } from "./SidebarThreadRow";
 
 type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusPill>>;
 
+export interface SidebarThreadCountState {
+  collapsedHiddenCount: number | null;
+  unloadedCount: number | null;
+}
+
 export interface RenderedProjectData {
   hasHiddenThreads: boolean;
+  hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   hiddenThreadStatus: ProjectStatusIndicator | null;
   orderedProjectThreadIds: readonly ThreadId[];
   project: {
@@ -23,6 +30,7 @@ export interface RenderedProjectData {
   showEmptyThreadState: boolean;
   shouldShowThreadPanel: boolean;
   isThreadListExpanded: boolean;
+  isLoadingMoreThreads: boolean;
 }
 
 export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
@@ -103,6 +111,7 @@ export interface SidebarRenderedProjectItemProps extends RenderedProjectData {
   ) => Promise<void>;
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
 
 export function isChatsSidebarProject(projectId: ProjectId) {

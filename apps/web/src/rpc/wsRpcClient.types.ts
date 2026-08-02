@@ -253,6 +253,18 @@ export interface WsRpcClient {
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };
   readonly orchestration: {
+    readonly getSidebarThreadCatalog: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog
+    >;
+    readonly getStartupProjectCatalog: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getStartupProjectCatalog
+    >;
+    readonly getProjectThreadSummaries: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
+    >;
+    readonly getSelectedThreadDetail: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
+    >;
     readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;

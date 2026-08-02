@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { AgentBrowserPreference } from "@bigbud/contracts/settings";
 import {
   ServerExportThreadContextError,
   type ChatAttachment,
@@ -22,6 +23,7 @@ export function prependThreadContextToProviderInput(input: {
   readonly threadId: string;
   readonly threadTitle: string;
   readonly computerUseEnabled?: boolean;
+  readonly agentBrowserPreference?: AgentBrowserPreference;
   readonly serverMode?: "web" | "desktop";
 }): string {
   const computerUseLines =
@@ -40,6 +42,13 @@ export function prependThreadContextToProviderInput(input: {
             "Use the `browser` tool for bigbud's built-in visible or background browser.",
             "Use `check_permissions` or `doctor` first if desktop automation fails.",
           ];
+  const browserPreference = input.agentBrowserPreference ?? "bigbud";
+  const browserPreferenceLines = [
+    `The default agent browser is the ${browserPreference === "bigbud" ? "bigbud browser" : "system default browser"}. This is a preference, not a restriction; an explicit user request for the other browser always overrides it.`,
+    'Use the `browser` tool for the bigbud browser. Use `computer_use` with `action: "navigate"` and `surface: "desktop"` for the system default browser.',
+    "System-browser interaction requires the desktop app, full-access runtime mode, and enabled desktop computer use; surface the existing tool error when unavailable.",
+    "Provider-native web search is separate and unaffected.",
+  ];
 
   const contextBlock = [
     "Current thread context:",
@@ -60,6 +69,7 @@ export function prependThreadContextToProviderInput(input: {
     BIGBUD_PLAN_TRACKING_TOOL_INSTRUCTION,
     "If your harness exposes MCP tools with provider-specific prefixes, use the available tool whose name ends with `rename_thread`, `archive_thread`, `get_thread_status`, `list_pinned_threads`, `pin_thread`, or `unpin_thread`.",
     ...computerUseLines,
+    ...browserPreferenceLines,
     "You must not delete threads.",
   ].join("\n");
   if (!input.providerInputText) {

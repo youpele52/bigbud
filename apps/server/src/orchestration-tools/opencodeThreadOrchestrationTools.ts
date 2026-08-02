@@ -2,10 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
+  LIST_THREADS_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   renderCallOrchestrationToolSource,
   renderResolveCurrentThreadIdSource,
   renderThreadOrchestrationConfigLiteral,
@@ -30,7 +33,7 @@ function renderOrchestrationToolSource(input: {
     "  args: {",
     input.argsSource,
     "  },",
-    "  async execute(args) {",
+    "  async execute(args, context) {",
     ...input.executeBody.map((line) => `    ${line}`),
     "  },",
     "});",
@@ -68,6 +71,34 @@ export function renderOpencodeGetThreadStatusToolSource(): string {
       "});",
       "return result.message;",
     ],
+  });
+}
+
+export function renderOpencodeSendThreadMessageToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
+    argsSource: [
+      '    threadId: tool.schema.string().describe("Target thread ID"),',
+      '    message: tool.schema.string().describe("Follow-up message"),',
+      '    delivery: tool.schema.enum(["auto", "queue"]).optional(),',
+    ].join("\n"),
+    executeBody: [
+      "const result = await runtime.sendThreadMessage({ ...args, invocationId: `opencode:${context.sessionID}:${context.messageID}:${String(args.threadId ?? '')}:${String(args.message ?? '')}` });",
+      "return result.message;",
+    ],
+  });
+}
+
+export function renderOpencodeListThreadsToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: LIST_THREADS_TOOL_DESCRIPTION,
+    argsSource: [
+      '    projectId: tool.schema.string().optional().describe("Project ID; defaults to the current project"),',
+      '    status: tool.schema.enum(["active", "archived", "all"]).optional().describe("Thread status filter; defaults to active"),',
+      `    limit: tool.schema.number().optional().describe("Maximum threads to return (max ${LIST_THREADS_MAX_LIMIT})"),`,
+      '    includeExcerpt: tool.schema.boolean().optional().describe("Include a short excerpt of each thread\'s last assistant message"),',
+    ].join("\n"),
+    executeBody: ["const result = await runtime.listThreads(args);", "return result.message;"],
   });
 }
 
@@ -137,6 +168,26 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "  return { message: JSON.stringify(result.status ?? {}, null, 2) };",
     "}",
     "",
+    "export async function sendThreadMessage(input) {",
+    "  const threadId = String(input.threadId ?? '').trim();",
+    "  const message = String(input.message ?? '').trim();",
+    "  if (!threadId || !message) throw new Error('Thread ID and message are required.');",
+    "  const result = await callOrchestrationTool({ action: 'send_thread_message', threadId, message, delivery: input.delivery === 'queue' ? 'queue' : 'auto', invocationId: input.invocationId });",
+    "  return { message: JSON.stringify(result.result ?? {}, null, 2) };",
+    "}",
+    "",
+    "export async function listThreads(input) {",
+    "  const projectId = String(input.projectId ?? '').trim();",
+    "  const result = await callOrchestrationTool({",
+    "    action: 'list_threads',",
+    "    ...(projectId ? { projectId } : {}),",
+    "    ...(input.status ? { status: input.status } : {}),",
+    "    ...(Number.isFinite(input.limit) ? { limit: Number(input.limit) } : {}),",
+    "    includeExcerpt: input.includeExcerpt === true,",
+    "  });",
+    "  return { message: JSON.stringify(result.result ?? {}, null, 2) };",
+    "}",
+    "",
     "export async function searchCapabilities(input) {",
     "  const result = await callOrchestrationTool({",
     "    action: 'search_capabilities',",
@@ -198,6 +249,16 @@ export async function writeOpencodeOrchestrationTools(input: {
       "utf8",
     ),
     writeFile(
+      path.join(toolsDir, "send_thread_message.ts"),
+      renderOpencodeSendThreadMessageToolSource(),
+      "utf8",
+    ),
+    writeFile(
+      path.join(toolsDir, "list_threads.ts"),
+      renderOpencodeListThreadsToolSource(),
+      "utf8",
+    ),
+    writeFile(
       path.join(toolsDir, "search_capabilities.ts"),
       renderOpencodeSearchCapabilitiesToolSource(),
       "utf8",
@@ -219,6 +280,8 @@ export const OPENCODE_ORCHESTRATION_TOOL_FILES = {
   ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource,
   ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource,
   ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource,
+  ".opencode/tools/send_thread_message.ts": renderOpencodeSendThreadMessageToolSource,
+  ".opencode/tools/list_threads.ts": renderOpencodeListThreadsToolSource,
   ".opencode/tools/search_capabilities.ts": renderOpencodeSearchCapabilitiesToolSource,
   ".opencode/tools/read_capability_guide.ts": renderOpencodeReadCapabilityGuideToolSource,
 } as const;
@@ -230,6 +293,8 @@ export function renderOpencodeOrchestrationBridgeFiles(
     ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource(),
     ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource(),
     ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource(),
+    ".opencode/tools/send_thread_message.ts": renderOpencodeSendThreadMessageToolSource(),
+    ".opencode/tools/list_threads.ts": renderOpencodeListThreadsToolSource(),
     ".opencode/tools/search_capabilities.ts": renderOpencodeSearchCapabilitiesToolSource(),
     ".opencode/tools/read_capability_guide.ts": renderOpencodeReadCapabilityGuideToolSource(),
     ".bigbud/opencode-orchestration-runtime.ts": renderOpencodeOrchestrationRuntimeSource(input),

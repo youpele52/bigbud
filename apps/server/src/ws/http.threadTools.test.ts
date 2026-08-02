@@ -68,7 +68,14 @@ describe("thread orchestration tools route", () => {
             }),
           listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
           setPinned: ({ threadId, pinned }) =>
-            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
+            Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: pinned ? new Date().toISOString() : null,
+              count: pinned ? 1 : 0,
+              limit: 5,
+              remaining: 4,
+            }),
           computerUse,
           browser: () => Effect.succeed({ action: "capture", summary: "Captured browser." }),
         });
@@ -143,7 +150,14 @@ describe("thread orchestration tools route", () => {
             }),
           listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
           setPinned: ({ threadId, pinned }) =>
-            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
+            Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: pinned ? new Date().toISOString() : null,
+              count: pinned ? 1 : 0,
+              limit: 5,
+              remaining: 4,
+            }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,
@@ -215,7 +229,14 @@ describe("thread orchestration tools route", () => {
           getStatus,
           listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
           setPinned: ({ threadId, pinned }) =>
-            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
+            Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: pinned ? new Date().toISOString() : null,
+              count: pinned ? 1 : 0,
+              limit: 5,
+              remaining: 4,
+            }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,
@@ -294,7 +315,14 @@ describe("thread orchestration tools route", () => {
             }),
           listPinned: () => Effect.succeed({ count: 0, limit: 5, remaining: 5, threads: [] }),
           setPinned: ({ threadId, pinned }) =>
-            Effect.succeed({ threadId, pinned, count: pinned ? 1 : 0, limit: 5, remaining: 4 }),
+            Effect.succeed({
+              threadId,
+              pinned,
+              pinnedAt: pinned ? new Date().toISOString() : null,
+              count: pinned ? 1 : 0,
+              limit: 5,
+              remaining: 4,
+            }),
           computerUse: () =>
             Effect.succeed({
               surface: "browser" as const,

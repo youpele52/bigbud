@@ -116,7 +116,7 @@ import type {
   ServerUpdateAutomationInput,
 } from "./automation";
 import type { ServerGetUsageSummaryInput, ServerUsageSummaryResult } from "./usage";
-import type { ServerSetThreadPinnedInput } from "./pinnedThreads";
+import type { ServerSetThreadPinnedInput, ServerSetThreadPinnedResult } from "./pinnedThreads";
 import type {
   TerminalClearInput,
   TerminalCloseInput,
@@ -130,17 +130,44 @@ import type {
 import type { ServerUpsertKeybindingInput } from "./server";
 import type {
   ClientOrchestrationCommand,
+  GetProjectThreadSummariesInput,
+  GetProjectThreadSummariesResult,
+  GetSelectedThreadDetailInput,
+  GetSelectedThreadDetailResult,
+  GetSidebarThreadCatalogResult,
+  GetStartupProjectCatalogInput,
+  GetStartupProjectCatalogResult,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import { EditorId } from "../workspace/editor";
 import { type DesktopWindowMaterial, ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+import type { DesktopBackendStartupState } from "./ipc.desktop";
+import type {
+  DesktopRuntimeArch,
+  DesktopRuntimeInfo,
+  DesktopRuntimePlatform,
+  DesktopUpdateActionResult,
+  DesktopUpdateCheckResult,
+  DesktopUpdateState,
+  DesktopUpdateStatus,
+} from "./ipc.desktop";
+export type {
+  DesktopRuntimeArch,
+  DesktopRuntimeInfo,
+  DesktopRuntimePlatform,
+  DesktopUpdateActionResult,
+  DesktopUpdateCheckResult,
+  DesktopUpdateState,
+  DesktopUpdateStatus,
+} from "./ipc.desktop";
 export * from "./ipc.desktopComputerUse";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -150,57 +177,7 @@ export interface ContextMenuItem<T extends string = string> {
   disabled?: boolean;
 }
 
-export type DesktopUpdateStatus =
-  | "disabled"
-  | "idle"
-  | "checking"
-  | "up-to-date"
-  | "available"
-  | "downloading"
-  | "downloaded"
-  | "installing"
-  | "error";
-
-export type DesktopRuntimeArch = "arm64" | "x64" | "other";
-export type DesktopRuntimePlatform = "darwin" | "linux" | "win32" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
-
-export interface DesktopRuntimeInfo {
-  platform: DesktopRuntimePlatform;
-  hostArch: DesktopRuntimeArch;
-  appArch: DesktopRuntimeArch;
-  runningUnderArm64Translation: boolean;
-  isCodeSigned: boolean;
-}
-
-export interface DesktopUpdateState {
-  enabled: boolean;
-  status: DesktopUpdateStatus;
-  currentVersion: string;
-  platform: DesktopRuntimePlatform;
-  hostArch: DesktopRuntimeArch;
-  appArch: DesktopRuntimeArch;
-  runningUnderArm64Translation: boolean;
-  isCodeSigned: boolean;
-  availableVersion: string | null;
-  downloadedVersion: string | null;
-  downloadPercent: number | null;
-  checkedAt: string | null;
-  message: string | null;
-  errorContext: "check" | "download" | "install" | null;
-  canRetry: boolean;
-}
-
-export interface DesktopUpdateActionResult {
-  accepted: boolean;
-  completed: boolean;
-  state: DesktopUpdateState;
-}
-
-export interface DesktopUpdateCheckResult {
-  checked: boolean;
-  state: DesktopUpdateState;
-}
 
 export interface DesktopNotificationInput {
   title: string;
@@ -220,6 +197,8 @@ export interface DesktopTailscaleRemoteAccessStatus {
 export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
+  getBackendStartupState: () => Promise<DesktopBackendStartupState>;
+  onBackendStartupState: (listener: (state: DesktopBackendStartupState) => void) => () => void;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
@@ -355,7 +334,7 @@ export interface NativeApi {
     upsertKeybinding: (input: ServerUpsertKeybindingInput) => Promise<ServerUpsertKeybindingResult>;
     getSettings: () => Promise<ServerSettings>;
     updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
-    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSettings>;
+    setThreadPinned: (input: ServerSetThreadPinnedInput) => Promise<ServerSetThreadPinnedResult>;
     readDocumentUrl: (input: ServerReadDocumentUrlInput) => Promise<ServerReadDocumentUrlResult>;
     writeHandoffDocument: (
       input: ServerWriteHandoffDocumentInput,
@@ -389,13 +368,23 @@ export interface NativeApi {
     getUsageSummary: (input: ServerGetUsageSummaryInput) => Promise<ServerUsageSummaryResult>;
   };
   orchestration: {
+    getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;
+    getStartupProjectCatalog: (
+      input: GetStartupProjectCatalogInput,
+    ) => Promise<GetStartupProjectCatalogResult>;
+    getProjectThreadSummaries: (
+      input: GetProjectThreadSummariesInput,
+    ) => Promise<GetProjectThreadSummariesResult>;
+    getSelectedThreadDetail: (
+      input: GetSelectedThreadDetailInput,
+    ) => Promise<GetSelectedThreadDetailResult>;
     getSnapshot: () => Promise<OrchestrationReadModel>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
-    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationEvent[]>;
+    replayEvents: (fromSequenceExclusive: number) => Promise<OrchestrationReplayEventsResult>;
     onDomainEvent: (
       callback: (event: OrchestrationEvent) => void,
       options?: { onResubscribe?: () => void },

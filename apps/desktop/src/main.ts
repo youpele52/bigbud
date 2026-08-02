@@ -1,11 +1,7 @@
 import * as Crypto from "node:crypto";
-import * as OS from "node:os";
-import * as Path from "node:path";
 
 import { app, BrowserWindow, dialog } from "electron";
 
-import type { RotatingFileSink } from "@bigbud/shared/logging";
-import { releaseChannelLabel, resolveReleaseChannel } from "@bigbud/shared/releaseChannel";
 import {
   clearUpdatePollTimer,
   checkForUpdates,
@@ -38,7 +34,6 @@ import {
   runComputerUseDoctor,
 } from "./backend/cuaDriver";
 import { stopCuaDriverDaemon } from "./backend/cuaDriver.daemon";
-import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
 import {
   makeCuaDriverLifecycle,
   requestCuaDriverPermissionsAfterHostPreflight,
@@ -46,8 +41,21 @@ import {
 import { requestHostAccessibilityPermission } from "./backend/cuaHostPermissions";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
+  configureBackendStartupState,
+  getBackendStartupState,
+  recordBackendStartupDevelopmentDiagnostics,
+  recordBackendStartupFailure,
+} from "./backend/backendStartupState";
+import {
+  createBackendStartupDiagnostics,
+  createDevelopmentBackendDiagnostics,
+} from "./backend/backendStartupDiagnostics";
+import {
   formatErrorMessage,
+  formatErrorDiagnostics,
   initializePackagedLogging,
+  type QueuedLogSink,
+  resolveDesktopLogDir,
   writeDesktopLogHeader,
 } from "./logging/logging";
 import {
@@ -55,98 +63,50 @@ import {
   getSafeExternalUrl,
   makeResolveIconPath,
 } from "./window/menuManager";
-import { resolveDesktopRuntimeInfo } from "./env/runtimeArch";
 import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
 import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
 import { resolveDesktopMobileRemoteNetwork } from "./backend/mobileRemoteNetwork";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
-import {
-  readLinuxGpuFallbackMarker,
-  resolveLinuxDesktopRuntimeConfig,
-  resolveLinuxGpuFallbackMarkerPath,
-} from "./main.linuxRuntime";
 import { registerDesktopProtocol, registerDesktopSchemeAsPrivileged } from "./main.protocol";
 import {
   applyLinuxRuntimeSwitches,
   installDesktopSingleInstanceLock,
   registerDesktopRuntimeMonitoring,
 } from "./main.runtime";
+import { desktopIpcChannels } from "./main.channels";
+import { resolveDesktopMainConfig } from "./main.config";
 
-// ---------------------------------------------------------------------------
-// IPC channel names (kept in main.ts per spec)
-// ---------------------------------------------------------------------------
+const channels = desktopIpcChannels;
 
-const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
-const CONFIRM_CHANNEL = "desktop:confirm";
-const SET_THEME_CHANNEL = "desktop:set-theme";
-const SET_WINDOW_MATERIAL_CHANNEL = "desktop:set-window-material";
-const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
-const OPEN_EXTERNAL_CHANNEL = "desktop:open-external";
-const MENU_ACTION_CHANNEL = "desktop:menu-action";
-const UPDATE_STATE_CHANNEL = "desktop:update-state";
-const UPDATE_GET_STATE_CHANNEL = "desktop:update-get-state";
-const UPDATE_DOWNLOAD_CHANNEL = "desktop:update-download";
-const UPDATE_INSTALL_CHANNEL = "desktop:update-install";
-const UPDATE_CHECK_CHANNEL = "desktop:update-check";
-const GET_WS_URL_CHANNEL = "desktop:get-ws-url";
-const GET_MOBILE_BACKEND_BASE_URL_CHANNEL = "desktop:get-mobile-backend-base-url";
-const GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL = "desktop:get-computer-use-runtime-status";
-const GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL = "desktop:get-computer-use-permissions-status";
-const REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL = "desktop:request-computer-use-permissions";
-const INSTALL_COMPUTER_USE_RUNTIME_CHANNEL = "desktop:install-computer-use-runtime";
-const RUN_COMPUTER_USE_DOCTOR_CHANNEL = "desktop:run-computer-use-doctor";
-const GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL = "desktop:get-tailscale-remote-access-status";
-const ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:enable-tailscale-remote-access";
-const DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL = "desktop:disable-tailscale-remote-access";
-const NOTIFICATIONS_IS_SUPPORTED_CHANNEL = "desktop:notifications-is-supported";
-const NOTIFICATIONS_SHOW_CHANNEL = "desktop:notifications-show";
-const COPY_TO_CLIPBOARD_CHANNEL = "desktop:copy-to-clipboard";
-const REQUEST_FILE_ACCESS_CHANNEL = "desktop:request-file-access";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const BASE_DIR =
-  process.env.BIGBUD_HOME?.trim() ||
-  process.env.T3CODE_HOME?.trim() ||
-  Path.join(OS.homedir(), ".bigbud");
-const STATE_DIR = Path.join(BASE_DIR, "userdata");
-const DESKTOP_SCHEME = "bigbud";
-const ROOT_DIR = Path.resolve(__dirname, "../../..");
-const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
-const CUA_DRIVER_HOST_BUNDLE_ID = resolveCuaDriverHostBundleId(app.isPackaged);
-const releaseChannel = resolveReleaseChannel(app.getVersion());
-const APP_DISPLAY_NAME = isDevelopment
-  ? "bigbud (Dev)"
-  : releaseChannel
-    ? `bigbud (${releaseChannelLabel(releaseChannel)})`
-    : "bigbud";
-const APP_USER_MODEL_ID = "ai.bigbud.desktop";
-const LINUX_DESKTOP_ENTRY_NAME = isDevelopment ? "bigbud-dev.desktop" : "bigbud.desktop";
-const LINUX_WM_CLASS = isDevelopment ? "bigbud-dev" : "bigbud";
-const USER_DATA_DIR_NAME = isDevelopment ? "bigbud-dev" : "bigbud";
-// Intentionally keep the legacy Alpha-era directory name here so packaged users
-// from older T3 Code builds continue to migrate their existing desktop data.
-// Remove this once the legacy Alpha-to-Beta upgrade window is no longer needed.
-const LEGACY_USER_DATA_DIR_NAME = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
-const LOG_DIR = Path.join(STATE_DIR, "logs");
+const mainConfig = resolveDesktopMainConfig(app, __dirname);
+const {
+  appDisplayName: APP_DISPLAY_NAME,
+  appUserModelId: APP_USER_MODEL_ID,
+  baseDir: BASE_DIR,
+  cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
+  desktopLinuxRuntimeConfig,
+  desktopRuntimeInfo,
+  desktopScheme: DESKTOP_SCHEME,
+  isDevelopment,
+  isDevelopmentDiagnostics,
+  legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+  linuxDesktopEntryName: LINUX_DESKTOP_ENTRY_NAME,
+  linuxGpuFallbackMarkerPath: LINUX_GPU_FALLBACK_MARKER_PATH,
+  linuxWmClass: LINUX_WM_CLASS,
+  rootDir: ROOT_DIR,
+  serverSettingsPath: SERVER_SETTINGS_PATH,
+  userDataDirName: USER_DATA_DIR_NAME,
+} = mainConfig;
 const LOG_FILE_MAX_BYTES = 10 * 1024 * 1024;
 const LOG_FILE_MAX_FILES = 10;
 const APP_RUN_ID = Crypto.randomBytes(6).toString("hex");
-const SERVER_SETTINGS_PATH = Path.join(STATE_DIR, "settings.json");
-const LINUX_GPU_FALLBACK_MARKER_PATH = resolveLinuxGpuFallbackMarkerPath(STATE_DIR);
-
-// ---------------------------------------------------------------------------
-// App-lifecycle state
-// ---------------------------------------------------------------------------
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let desktopProtocolRegistered = false;
-let desktopLogSink: RotatingFileSink | null = null;
-let backendLogSink: RotatingFileSink | null = null;
+let desktopLogSink: QueuedLogSink | null = null;
+let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let mobileBackendBaseUrl = "";
 let localMobileBackendBaseUrl = "";
@@ -162,15 +122,6 @@ async function syncMobileBackendBaseUrlFromTailscaleRemoteAccess(): Promise<void
     status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
 }
 
-const desktopRuntimeInfo = resolveDesktopRuntimeInfo({
-  platform: process.platform,
-  processArch: process.arch,
-  runningUnderArm64Translation: app.runningUnderARM64Translation === true,
-});
-const desktopLinuxRuntimeConfig = resolveLinuxDesktopRuntimeConfig({
-  gpuFallbackMarkerArmed: readLinuxGpuFallbackMarker(LINUX_GPU_FALLBACK_MARKER_PATH),
-});
-
 // Resolved once after logging init.
 const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "", isDevelopment);
 const desktopAppIdentity = {
@@ -183,16 +134,48 @@ const desktopAppIdentity = {
   userDataDirName: USER_DATA_DIR_NAME,
 } as const;
 
-// ---------------------------------------------------------------------------
+// Must happen before logging initialization so packaged crash logs follow the
+// Electron user-data location (including legacy-profile migration).
+app.setPath(
+  "userData",
+  resolveUserDataPath({
+    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
+    userDataDirName: USER_DATA_DIR_NAME,
+  }),
+);
+const LOG_DIR = resolveDesktopLogDir(app.getPath("userData"));
+
 // Logging convenience wrapper
-// ---------------------------------------------------------------------------
 
 function logHeader(message: string): void {
   writeDesktopLogHeader(message, desktopLogSink, APP_RUN_ID);
 }
 
+function flushDiagnosticLogs(): void {
+  desktopLogSink?.flush();
+  backendLogSink?.flush();
+}
+
 function formatHostForUrl(host: string): string {
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+function recordMainProcessCrash(error: unknown): void {
+  const startup = getBackendStartupState();
+  if (startup.generation === 0) return;
+  const developmentDiagnostics = isDevelopmentDiagnostics
+    ? createDevelopmentBackendDiagnostics({ error })
+    : undefined;
+  if (startup.status === "starting" || startup.status === "upgrading") {
+    recordBackendStartupFailure(
+      startup.generation,
+      "unknown",
+      createBackendStartupDiagnostics({ category: "runtime" }),
+      developmentDiagnostics,
+    );
+  } else if (developmentDiagnostics) {
+    recordBackendStartupDevelopmentDiagnostics(startup.generation, developmentDiagnostics);
+  }
 }
 
 installDesktopSingleInstanceLock(app, () => mainWindow);
@@ -200,10 +183,11 @@ installDesktopSingleInstanceLock(app, () => mainWindow);
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
 function handleFatalStartupError(stage: string, error: unknown): void {
+  recordMainProcessCrash(error);
   const message = formatErrorMessage(error);
   const detail =
     error instanceof Error && typeof error.stack === "string" ? `\n${error.stack}` : "";
-  logHeader(`fatal startup error stage=${stage} message=${message}`);
+  logHeader(`fatal startup error stage=${stage} error=${formatErrorDiagnostics(error)}`);
   console.error(`[desktop] fatal startup error (${stage})`, error);
   if (!isQuitting) {
     isQuitting = true;
@@ -212,12 +196,11 @@ function handleFatalStartupError(stage: string, error: unknown): void {
   stopBackend();
   stopCuaDriverDaemon();
   restoreStdIoCapture?.();
+  flushDiagnosticLogs();
   app.quit();
 }
 
-// ---------------------------------------------------------------------------
 // Packaged logging initialisation (runs synchronously at module load)
-// ---------------------------------------------------------------------------
 
 const loggingResult = initializePackagedLogging(
   LOG_DIR,
@@ -239,43 +222,32 @@ process.on("uncaughtException", (error) => {
     return;
   }
 
-  logHeader(`uncaughtException: ${formatErrorMessage(error)}`);
+  logHeader(`uncaughtException: ${formatErrorDiagnostics(error)}`);
   console.error("[desktop] uncaughtException", error);
+  recordMainProcessCrash(error);
   if (!isQuitting) {
     isQuitting = true;
     dialog.showErrorBox("bigbud encountered an unexpected error", formatErrorMessage(error));
     stopBackend();
     stopCuaDriverDaemon();
     restoreStdIoCapture?.();
+    flushDiagnosticLogs();
     app.quit();
   }
 });
 
 process.on("unhandledRejection", (reason) => {
-  logHeader(`unhandledRejection: ${formatErrorMessage(reason)}`);
+  logHeader(`unhandledRejection: ${formatErrorDiagnostics(reason)}`);
   console.error("[desktop] unhandledRejection", reason);
 });
 
 applyLinuxRuntimeSwitches(app, LINUX_WM_CLASS, desktopLinuxRuntimeConfig);
 
-// Override Electron's userData path before the `ready` event so that
-// Chromium session data uses a filesystem-friendly directory name.
-// Must be called synchronously at the top level — before `app.whenReady()`.
-app.setPath(
-  "userData",
-  resolveUserDataPath({
-    legacyUserDataDirName: LEGACY_USER_DATA_DIR_NAME,
-    userDataDirName: USER_DATA_DIR_NAME,
-  }),
-);
-
 configureAppIdentity({
   ...desktopAppIdentity,
 });
 
-// ---------------------------------------------------------------------------
 // Window factory (thin wrapper that closes over main.ts state)
-// ---------------------------------------------------------------------------
 
 function makeWindow(): BrowserWindow {
   return createWindow({
@@ -283,7 +255,7 @@ function makeWindow(): BrowserWindow {
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
     desktopDir: __dirname,
-    menuActionChannel: MENU_ACTION_CHANNEL,
+    menuActionChannel: channels.menuAction,
     spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
     resolveIconPath,
     getSafeExternalUrl,
@@ -294,9 +266,7 @@ function makeWindow(): BrowserWindow {
   });
 }
 
-// ---------------------------------------------------------------------------
 // Bootstrap
-// ---------------------------------------------------------------------------
 
 async function bootstrap(): Promise<void> {
   logHeader("bootstrap start");
@@ -328,34 +298,37 @@ async function bootstrap(): Promise<void> {
   );
 
   registerIpcHandlers({
-    PICK_FOLDER_CHANNEL,
-    CONFIRM_CHANNEL,
-    SET_THEME_CHANNEL,
-    SET_WINDOW_MATERIAL_CHANNEL,
-    CONTEXT_MENU_CHANNEL,
-    OPEN_EXTERNAL_CHANNEL,
-    GET_WS_URL_CHANNEL,
-    GET_MOBILE_BACKEND_BASE_URL_CHANNEL,
-    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL,
-    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL,
-    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL,
-    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL,
-    RUN_COMPUTER_USE_DOCTOR_CHANNEL,
-    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
-    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
-    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
-    NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
-    NOTIFICATIONS_SHOW_CHANNEL,
-    COPY_TO_CLIPBOARD_CHANNEL,
-    REQUEST_FILE_ACCESS_CHANNEL,
-    UPDATE_GET_STATE_CHANNEL,
-    UPDATE_DOWNLOAD_CHANNEL,
-    UPDATE_INSTALL_CHANNEL,
-    UPDATE_CHECK_CHANNEL,
+    PICK_FOLDER_CHANNEL: channels.pickFolder,
+    CONFIRM_CHANNEL: channels.confirm,
+    SET_THEME_CHANNEL: channels.setTheme,
+    SET_WINDOW_MATERIAL_CHANNEL: channels.setWindowMaterial,
+    CONTEXT_MENU_CHANNEL: channels.contextMenu,
+    OPEN_EXTERNAL_CHANNEL: channels.openExternal,
+    GET_WS_URL_CHANNEL: channels.getWsUrl,
+    GET_MOBILE_BACKEND_BASE_URL_CHANNEL: channels.getMobileBackendBaseUrl,
+    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL: channels.getComputerUseRuntimeStatus,
+    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL: channels.getComputerUsePermissionsStatus,
+    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL: channels.requestComputerUsePermissions,
+    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL: channels.installComputerUseRuntime,
+    RUN_COMPUTER_USE_DOCTOR_CHANNEL: channels.runComputerUseDoctor,
+    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: channels.getTailscaleRemoteAccessStatus,
+    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.enableTailscaleRemoteAccess,
+    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.disableTailscaleRemoteAccess,
+    NOTIFICATIONS_IS_SUPPORTED_CHANNEL: channels.notificationsIsSupported,
+    NOTIFICATIONS_SHOW_CHANNEL: channels.notificationsShow,
+    COPY_TO_CLIPBOARD_CHANNEL: channels.copyToClipboard,
+    REQUEST_FILE_ACCESS_CHANNEL: channels.requestFileAccess,
+    UPDATE_GET_STATE_CHANNEL: channels.updateGetState,
+    UPDATE_DOWNLOAD_CHANNEL: channels.updateDownload,
+    UPDATE_INSTALL_CHANNEL: channels.updateInstall,
+    UPDATE_CHECK_CHANNEL: channels.updateCheck,
+    BACKEND_STARTUP_STATE_CHANNEL: channels.backendStartupState,
+    BACKEND_STARTUP_GET_STATE_CHANNEL: channels.backendStartupGetState,
     getMainWindow: () => mainWindow,
     getBackendWsUrl: () => backendWsUrl,
     getIsQuitting: () => isQuitting,
     getUpdateState,
+    getBackendStartupState,
     isUpdaterConfigured: () => updaterConfigured,
     checkForUpdates,
     downloadAvailableUpdate,
@@ -402,7 +375,7 @@ async function bootstrap(): Promise<void> {
   mainWindow = makeWindow();
   logHeader("bootstrap main window created");
   configureAutoUpdater({
-    updateStateChannel: UPDATE_STATE_CHANNEL,
+    updateStateChannel: channels.updateState,
     runtimeInfo: desktopRuntimeInfo,
     isDevelopment,
     getIsQuitting: () => isQuitting,
@@ -422,9 +395,7 @@ async function bootstrap(): Promise<void> {
   logHeader("bootstrap backend start requested");
 }
 
-// ---------------------------------------------------------------------------
 // App event handlers
-// ---------------------------------------------------------------------------
 
 /**
  * Shared teardown path called from both `before-quit` and `before-quit-for-update`.
@@ -439,6 +410,7 @@ function prepareForAppQuit(reason: string): void {
   stopBackend();
   stopCuaDriverDaemon();
   restoreStdIoCapture?.();
+  flushDiagnosticLogs();
 }
 
 app.on("before-quit", () => {
@@ -455,6 +427,9 @@ app
       linuxGpuFallbackMarkerPath: LINUX_GPU_FALLBACK_MARKER_PATH,
       log: logHeader,
     });
+    app.on("render-process-gone", (_event, _webContents, details) => {
+      logHeader(`renderer process gone reason=${details.reason} exitCode=${details.exitCode}`);
+    });
 
     initBackendManager({
       rootDir: ROOT_DIR,
@@ -464,8 +439,10 @@ app
       serverSettingsPath: SERVER_SETTINGS_PATH,
       getIsQuitting: () => isQuitting,
       getBackendLogSink: () => backendLogSink,
+      isDevelopmentDiagnostics,
       runId: APP_RUN_ID,
     });
+    configureBackendStartupState(channels.backendStartupState, isDevelopmentDiagnostics);
 
     configureAppIdentity(desktopAppIdentity);
     desktopProtocolRegistered = registerDesktopProtocol({
@@ -475,7 +452,7 @@ app
       rootDir: ROOT_DIR,
     });
     configureApplicationMenu({
-      menuActionChannel: MENU_ACTION_CHANNEL,
+      menuActionChannel: channels.menuAction,
       getMainWindow: () => mainWindow,
       setMainWindow: (w) => {
         mainWindow = w;

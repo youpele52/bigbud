@@ -138,6 +138,7 @@ export interface TurnDiffSummary {
 export interface Project {
   id: ProjectId;
   name: string;
+  activeThreadCount?: number;
   providerRuntimeExecutionTargetId?: ExecutionTargetId;
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
@@ -169,9 +170,11 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  queuedPrompts?: Array<{ id: MessageId; text: string; createdAt: string }>;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
+  pinnedAt?: string | null;
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
@@ -203,6 +206,7 @@ export interface SidebarThreadSummary {
   session: ThreadSession | null;
   createdAt: string;
   archivedAt: string | null;
+  pinnedAt: string | null;
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;

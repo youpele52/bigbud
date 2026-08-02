@@ -2,6 +2,7 @@ import type { ComputerUseAction } from "@bigbud/contracts";
 import { Effect, Layer } from "effect";
 
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
+import { Open } from "../../utils/open.ts";
 import { executeBrowserComputerUse } from "./ComputerUse.browser.ts";
 import { executeDesktopComputerUse } from "./ComputerUse.desktop.ts";
 import { CuaDriver } from "../Services/CuaDriver.ts";
@@ -31,10 +32,11 @@ export const ComputerUseLive = Layer.effect(
   Effect.gen(function* () {
     const browser = yield* BrowserManager;
     const cuaDriver = yield* CuaDriver;
+    const { openBrowser } = yield* Open;
 
     const execute: ComputerUseShape["execute"] = (threadId, action) =>
       resolveSurface(action) === "desktop"
-        ? executeDesktopComputerUse(threadId, cuaDriver, action)
+        ? executeDesktopComputerUse(threadId, cuaDriver, action, openBrowser)
         : executeBrowserComputerUse(browser, threadId, action);
 
     return { execute, dispose: cuaDriver.dispose };

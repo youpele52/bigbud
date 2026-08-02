@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../../stores/main";
@@ -8,6 +8,8 @@ import { selectThreadTerminalState } from "../../stores/terminal";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { shortcutLabelForCommand, threadJumpCommandForIndex } from "../../models/keybindings";
 import { useSettings } from "../../hooks/useSettings";
+import { readNativeApi } from "../../rpc/nativeApi";
+import { loadMoreProjectThreadSummaries } from "../../routes/-__root.bounded-bootstrap";
 import {
   getVisibleSidebarThreadIds,
   getVisibleThreadsForProject,
@@ -18,6 +20,10 @@ import {
 } from "./Sidebar.logic";
 import { useSidebarKeyboardNav } from "./Sidebar.keyboardNav.logic";
 import type { SidebarThreadSummary } from "../../models/types";
+import {
+  getRemainingSidebarThreadCount,
+  indexActiveSidebarThreadIdsByProject,
+} from "../../logic/thread/sidebarThreadCount.logic";
 import type { RenderedProjectEntry, SidebarProjectSnapshot } from "./Sidebar.types";
 
 const THREAD_PREVIEW_LIMIT = 4;
@@ -39,6 +45,7 @@ export interface SidebarRenderedProjectsOutput {
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
   newThreadShortcutLabel: string | null | undefined;
+  loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
 
 /** Encapsulates rendered-projects derivation, expand/collapse state, jump hints, and keyboard nav. */
@@ -50,7 +57,11 @@ export function useSidebarRenderedProjects({
   platform,
 }: SidebarRenderedProjectsInput): SidebarRenderedProjectsOutput {
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
+  const threads = useStore((store) => store.threads);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
+  const threadSummaryCursorByProjectId = useStore(
+    (store) => store.threadSummaryCursorByProjectId ?? {},
+  );
   const { threadLastVisitedAtById } = useUiStateStore(
     useShallow((store) => ({
       threadLastVisitedAtById: store.threadLastVisitedAtById,
@@ -78,8 +89,16 @@ export function useSidebarRenderedProjects({
   const [expandedThreadListsByProject, setExpandedThreadListsByProject] = useState<
     ReadonlySet<ProjectId>
   >(() => new Set());
+  const [loadingThreadPagesByProject, setLoadingThreadPagesByProject] = useState<
+    ReadonlySet<ProjectId>
+  >(() => new Set());
 
   const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
+
+  const loadedActiveThreadIdsByProject = useMemo(
+    () => indexActiveSidebarThreadIdsByProject(threads),
+    [threads],
+  );
 
   const renderedProjects = useMemo(
     () =>
@@ -104,25 +123,46 @@ export function useSidebarRenderedProjects({
         const activeThreadId = routeThreadId ?? undefined;
         const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
         const shouldShowThreadPanel = project.expanded;
-        const {
-          hasHiddenThreads,
-          hiddenThreads,
-          visibleThreads: visibleProjectThreads,
-        } = getVisibleThreadsForProject({
+        const preview = getVisibleThreadsForProject({
           threads: projectThreads,
           activeThreadId,
-          isThreadListExpanded,
+          isThreadListExpanded: false,
           previewLimit: THREAD_PREVIEW_LIMIT,
         });
+        const visibleProjectThreads = isThreadListExpanded
+          ? projectThreads
+          : preview.visibleThreads;
         const hiddenThreadStatus = resolveProjectStatusIndicator(
-          hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
+          preview.hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
         );
+        const cursorHasMoreThreads = threadSummaryCursorByProjectId[project.id] !== null;
         const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
         const renderedThreadIds = visibleProjectThreads.map((thread) => thread.id);
-        const showEmptyThreadState = project.expanded && projectThreads.length === 0;
+        const collapsedHiddenCount = getRemainingSidebarThreadCount({
+          authoritativeActiveThreadCount: project.activeThreadCount,
+          representedThreadIds: preview.visibleThreads.map((thread) => thread.id),
+        });
+        const unloadedCount = getRemainingSidebarThreadCount({
+          authoritativeActiveThreadCount: project.activeThreadCount,
+          representedThreadIds: loadedActiveThreadIdsByProject.get(project.id) ?? [],
+        });
+        const hasHiddenThreads =
+          collapsedHiddenCount === null
+            ? preview.hasHiddenThreads || cursorHasMoreThreads
+            : collapsedHiddenCount > 0;
+        const hasMoreThreads =
+          cursorHasMoreThreads && (unloadedCount === null || unloadedCount > 0);
+        const showEmptyThreadState =
+          project.expanded &&
+          projectThreads.length === 0 &&
+          Object.hasOwn(threadSummaryCursorByProjectId, project.id) &&
+          (project.activeThreadCount === 0 ||
+            (project.activeThreadCount === undefined && !cursorHasMoreThreads));
 
         return {
           hasHiddenThreads,
+          hasMoreThreads,
+          threadCounts: { collapsedHiddenCount, unloadedCount },
           hiddenThreadStatus,
           orderedProjectThreadIds,
           project,
@@ -131,6 +171,7 @@ export function useSidebarRenderedProjects({
           showEmptyThreadState,
           shouldShowThreadPanel,
           isThreadListExpanded,
+          isLoadingMoreThreads: loadingThreadPagesByProject.has(project.id),
         };
       }),
     [
@@ -139,8 +180,11 @@ export function useSidebarRenderedProjects({
       routeThreadId,
       sortedProjects,
       sidebarThreadsById,
+      threadSummaryCursorByProjectId,
       threadIdsByProjectId,
       threadLastVisitedAtById,
+      loadingThreadPagesByProject,
+      loadedActiveThreadIdsByProject,
     ],
   );
 
@@ -212,6 +256,41 @@ export function useSidebarRenderedProjects({
     });
   }, []);
 
+  const loadMoreThreadsForProject = useCallback(
+    (projectId: ProjectId) => {
+      const api = readNativeApi();
+      if (!api || loadingThreadPagesByProject.has(projectId)) {
+        return;
+      }
+      setLoadingThreadPagesByProject((current) => new Set(current).add(projectId));
+      void loadMoreProjectThreadSummaries({ api, projectId }).finally(() => {
+        setLoadingThreadPagesByProject((current) => {
+          const next = new Set(current);
+          next.delete(projectId);
+          return next;
+        });
+      });
+    },
+    [loadingThreadPagesByProject],
+  );
+
+  useEffect(() => {
+    for (const project of sortedProjects) {
+      if (
+        project.expanded &&
+        !Object.hasOwn(threadSummaryCursorByProjectId, project.id) &&
+        !loadingThreadPagesByProject.has(project.id)
+      ) {
+        loadMoreThreadsForProject(project.id);
+      }
+    }
+  }, [
+    loadMoreThreadsForProject,
+    loadingThreadPagesByProject,
+    sortedProjects,
+    threadSummaryCursorByProjectId,
+  ]);
+
   const animatedThreadListsRef = useRef(new WeakSet<HTMLElement>());
   const attachThreadListAutoAnimateRef = useCallback((node: HTMLElement | null) => {
     if (!node || animatedThreadListsRef.current.has(node)) {
@@ -229,5 +308,6 @@ export function useSidebarRenderedProjects({
     showThreadJumpHints,
     threadJumpLabelById,
     newThreadShortcutLabel,
+    loadMoreThreadsForProject,
   };
 }

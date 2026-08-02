@@ -6,6 +6,43 @@ import { app } from "electron";
 
 import { RotatingFileSink } from "@bigbud/shared/logging";
 import { parsePersistedServerObservabilitySettings } from "@bigbud/shared/serverSettings";
+import { sanitizeLocalBackendDiagnosticText } from "../backend/backendStartupDiagnostics";
+
+export interface LogSink {
+  write: (chunk: string | Buffer) => void;
+}
+
+export function resolveDesktopLogDir(userDataPath: string): string {
+  return Path.join(userDataPath, "logs");
+}
+
+/** Queues writes around the shared rotating sink so lifecycle logging cannot delay startup. */
+export class QueuedLogSink implements LogSink {
+  private readonly chunks: Array<string | Buffer> = [];
+  private scheduled = false;
+
+  constructor(private readonly sink: LogSink) {}
+
+  write(chunk: string | Buffer): void {
+    this.chunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : chunk);
+    if (this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask(() => this.flush());
+  }
+
+  flush(): void {
+    this.scheduled = false;
+    while (this.chunks.length > 0) {
+      const chunk = this.chunks.shift();
+      if (chunk === undefined) continue;
+      try {
+        this.sink.write(chunk);
+      } catch {
+        // Diagnostic persistence must never alter application recovery.
+      }
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Timestamp / scope helpers
@@ -20,7 +57,7 @@ export function logScope(scope: string, runId: string): string {
 }
 
 export function sanitizeLogValue(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return sanitizeLocalBackendDiagnosticText(value).replace(/\s+/g, " ").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -64,23 +101,37 @@ export function backendChildEnv(): NodeJS.ProcessEnv {
 
 export function writeDesktopLogHeader(
   message: string,
-  desktopLogSink: RotatingFileSink | null,
+  desktopLogSink: LogSink | null,
   runId: string,
 ): void {
   if (!desktopLogSink) return;
-  desktopLogSink.write(`[${logTimestamp()}] [${logScope("desktop", runId)}] ${message}\n`);
+  desktopLogSink.write(
+    `[${logTimestamp()}] [${logScope("desktop", runId)}] ${sanitizeLocalBackendDiagnosticText(message)}\n`,
+  );
 }
 
 export function writeBackendSessionBoundary(
   phase: "START" | "END",
   details: string,
-  backendLogSink: RotatingFileSink | null,
+  backendLogSink: LogSink | null,
   runId: string,
 ): void {
   if (!backendLogSink) return;
   const normalizedDetails = sanitizeLogValue(details);
   backendLogSink.write(
     `[${logTimestamp()}] ---- APP SESSION ${phase} run=${runId} ${normalizedDetails} ----\n`,
+  );
+}
+
+export function writeBackendLifecycleEvent(
+  event: string,
+  details: string,
+  backendLogSink: LogSink | null,
+  runId: string,
+): void {
+  if (!backendLogSink) return;
+  backendLogSink.write(
+    `[${logTimestamp()}] [${logScope("backend", runId)}] event=${sanitizeLogValue(event)} ${sanitizeLocalBackendDiagnosticText(details)}\n`,
   );
 }
 
@@ -91,11 +142,17 @@ export function formatErrorMessage(error: unknown): string {
   return String(error);
 }
 
+export function formatErrorDiagnostics(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const cause = error.cause instanceof Error ? ` cause=${formatErrorDiagnostics(error.cause)}` : "";
+  return `${error.stack ?? error.message}${cause}`;
+}
+
 export function writeDesktopStreamChunk(
   streamName: "stdout" | "stderr",
   chunk: unknown,
   encoding: BufferEncoding | undefined,
-  desktopLogSink: RotatingFileSink | null,
+  desktopLogSink: LogSink | null,
   runId: string,
 ): void {
   if (!desktopLogSink) return;
@@ -103,8 +160,9 @@ export function writeDesktopStreamChunk(
     ? chunk
     : Buffer.from(String(chunk), typeof chunk === "string" ? encoding : undefined);
   desktopLogSink.write(`[${logTimestamp()}] [${logScope(streamName, runId)}] `);
-  desktopLogSink.write(buffer);
-  if (buffer.length === 0 || buffer[buffer.length - 1] !== 0x0a) {
+  const sanitized = sanitizeLocalBackendDiagnosticText(buffer.toString(encoding ?? "utf8"));
+  desktopLogSink.write(sanitized);
+  if (!sanitized.endsWith("\n")) {
     desktopLogSink.write("\n");
   }
 }
@@ -120,7 +178,7 @@ export function writeDesktopStreamChunk(
  * active, not packaged, or sink missing).
  */
 export function installStdIoCapture(
-  desktopLogSink: RotatingFileSink | null,
+  desktopLogSink: LogSink | null,
   runId: string,
   alreadyActive: boolean,
 ): (() => void) | null {
@@ -166,8 +224,8 @@ export function installStdIoCapture(
 // ---------------------------------------------------------------------------
 
 interface PackagedLoggingResult {
-  readonly desktopLogSink: RotatingFileSink | null;
-  readonly backendLogSink: RotatingFileSink | null;
+  readonly desktopLogSink: QueuedLogSink | null;
+  readonly backendLogSink: QueuedLogSink | null;
   /** Call this to undo the stdio patch, or `null` if capture wasn't installed. */
   readonly restoreStdIoCapture: (() => void) | null;
 }
@@ -188,18 +246,26 @@ export function initializePackagedLogging(
   }
 
   try {
-    const desktopLogSink = new RotatingFileSink({
-      filePath: Path.join(logDir, "desktop-main.log"),
-      maxBytes: logFileMaxBytes,
-      maxFiles: logFileMaxFiles,
-    });
-    const backendLogSink = new RotatingFileSink({
-      filePath: Path.join(logDir, "server-child.log"),
-      maxBytes: logFileMaxBytes,
-      maxFiles: logFileMaxFiles,
-    });
+    const desktopLogSink = new QueuedLogSink(
+      new RotatingFileSink({
+        filePath: Path.join(logDir, "desktop-main.log"),
+        maxBytes: logFileMaxBytes,
+        maxFiles: logFileMaxFiles,
+      }),
+    );
+    const backendLogSink = new QueuedLogSink(
+      new RotatingFileSink({
+        filePath: Path.join(logDir, "server-child.log"),
+        maxBytes: logFileMaxBytes,
+        maxFiles: logFileMaxFiles,
+      }),
+    );
     const restoreStdIoCapture = installStdIoCapture(desktopLogSink, runId, false);
-    writeDesktopLogHeader(`runtime log capture enabled logDir=${logDir}`, desktopLogSink, runId);
+    writeDesktopLogHeader(
+      `session start version=${app.getVersion()} platform=${process.platform} arch=${process.arch} pid=${process.pid} ppid=${process.ppid} logDir=${logDir}`,
+      desktopLogSink,
+      runId,
+    );
     return { desktopLogSink, backendLogSink, restoreStdIoCapture };
   } catch (error) {
     // Logging setup should never block app startup.
@@ -215,7 +281,7 @@ export function initializePackagedLogging(
 /** Pipes backend stderr to the terminal in development and captures output in packaged builds. */
 export function captureBackendOutput(
   child: ChildProcess.ChildProcess,
-  backendLogSink: RotatingFileSink | null,
+  backendLogSink: LogSink | null,
 ): void {
   if (!app.isPackaged) {
     child.stderr?.pipe(process.stderr);
@@ -224,8 +290,8 @@ export function captureBackendOutput(
   if (backendLogSink === null) return;
   const writeChunk = (chunk: unknown): void => {
     if (!backendLogSink) return;
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
-    backendLogSink.write(buffer);
+    const value = Buffer.isBuffer(chunk) ? chunk.toString("utf8") : String(chunk);
+    backendLogSink.write(`${sanitizeLocalBackendDiagnosticText(value)}\n`);
   };
   child.stdout?.on("data", writeChunk);
   child.stderr?.on("data", writeChunk);

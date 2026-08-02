@@ -21,6 +21,13 @@ export function makeThreadSessionsProjector(
     event: OrchestrationEvent,
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
+    if (event.type === "thread.deleted") {
+      yield* projectionThreadSessionRepository.deleteByThreadId({
+        threadId: event.payload.threadId,
+      });
+      return;
+    }
+
     if (event.type === "thread.session-set") {
       yield* projectionThreadSessionRepository.upsert({
         threadId: event.payload.threadId,

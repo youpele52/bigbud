@@ -22,6 +22,12 @@ export function makeThreadTurnsProjector(
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
+      case "thread.deleted":
+        yield* projectionTurnRepository.deleteByThreadId({
+          threadId: event.payload.threadId,
+        });
+        return;
+
       case "thread.turn-start-requested": {
         yield* projectionTurnRepository.replacePendingTurnStart({
           threadId: event.payload.threadId,

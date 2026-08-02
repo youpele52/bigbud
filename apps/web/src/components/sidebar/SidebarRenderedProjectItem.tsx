@@ -11,7 +11,6 @@ import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Side
 import { useCallback, type MouseEvent } from "react";
 
 import {
-  getHiddenSidebarThreadCount,
   resolveSidebarNewThreadEnvMode,
   resolveSidebarNewThreadSeedContext,
 } from "./Sidebar.logic";
@@ -34,9 +33,12 @@ export function SidebarRenderedProjectItem({
   projectStatus,
   renderedThreadIds,
   hasHiddenThreads,
+  hasMoreThreads,
+  threadCounts,
   showEmptyThreadState,
   shouldShowThreadPanel,
   isThreadListExpanded,
+  isLoadingMoreThreads,
 
   newThreadShortcutLabel,
   showThreadJumpHints,
@@ -83,6 +85,7 @@ export function SidebarRenderedProjectItem({
   handleNewThread,
   expandThreadListForProject,
   collapseThreadListForProject,
+  loadMoreThreadsForProject,
 }: SidebarRenderedProjectItemProps) {
   const isChatsProject = isChatsSidebarProject(project.id);
   const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(project);
@@ -94,11 +97,6 @@ export function SidebarRenderedProjectItem({
   });
 
   const visibleThreadIds = renderedThreadIds;
-  const hiddenThreadCount = getHiddenSidebarThreadCount({
-    totalThreadCount: orderedProjectThreadIds.length,
-    renderedThreadCount: renderedThreadIds.length,
-  });
-
   const handleProjectDeleteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -387,10 +385,13 @@ export function SidebarRenderedProjectItem({
         shouldShowThreadPanel={shouldShowThreadPanel}
         showEmptyThreadState={showEmptyThreadState}
         hasHiddenThreads={hasHiddenThreads}
+        hasMoreThreads={hasMoreThreads}
+        threadCounts={threadCounts}
         isThreadListExpanded={isThreadListExpanded}
-        hiddenThreadCount={hiddenThreadCount}
+        isLoadingMoreThreads={isLoadingMoreThreads}
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
+        loadMoreThreadsForProject={loadMoreThreadsForProject}
         projectExpanded={project.expanded}
       />
     </>

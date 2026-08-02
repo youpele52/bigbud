@@ -34,6 +34,7 @@ import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteThreadActivation } from "./Sidebar.remoteThreadActivation";
 import { buildSidebarProjectSnapshots } from "./Sidebar.state.projectSnapshots";
 import { buildSharedProjectItemProps } from "./Sidebar.state.sharedProjectItemProps";
+import { useSidebarVisibleThreads } from "./Sidebar.state.visibleThreads";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
 import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
@@ -47,6 +48,8 @@ export function useSidebarState(): SidebarState {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
+  const sidebarRecentThreadIds = useStore((store) => store.sidebarRecentThreadIds);
+  const sidebarPinnedThreadIds = useStore((store) => store.sidebarPinnedThreadIds);
   const { favouritesExpanded, projectExpandedById, projectOrder, setFavouritesExpanded } =
     useUiStateStore(
       useShallow((store) => ({
@@ -159,15 +162,11 @@ export function useSidebarState(): SidebarState {
   const suppressProjectClickAfterDragRef = useRef(false);
   const suppressProjectClickForContextMenuRef = useRef(false);
 
-  const visibleThreads = useMemo(
-    () =>
-      sidebarThreads.filter((thread) => thread.archivedAt === null && thread.deletingAt === null),
-    [sidebarThreads],
-  );
-  const visibleChatThreads = useMemo(
-    () => visibleThreads.filter((thread) => isBuiltInChatsProject(thread.projectId)),
-    [visibleThreads],
-  );
+  const { visibleThreads, visibleChatThreads } = useSidebarVisibleThreads({
+    sidebarThreads,
+    sidebarThreadsById,
+    sidebarRecentThreadIds,
+  });
   const sortedProjects = useMemo(
     () =>
       sortProjectsForSidebar(sidebarProjects, visibleThreads, appSettings.sidebarProjectSortOrder),
@@ -283,10 +282,9 @@ export function useSidebarState(): SidebarState {
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
-
   const { favoriteThreadIds, renderedFavorites, renderedChats, visibleChatThreadIdsForJumpHints } =
     useSidebarRecentSections({
-      favoriteThreadIds: appSettings.favoriteThreadIds,
+      favoriteThreadIds: sidebarPinnedThreadIds,
       sidebarThreadsById,
       visibleChatThreads,
       sidebarChatsSortOrder: appSettings.sidebarChatsSortOrder,

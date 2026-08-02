@@ -156,6 +156,10 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     subscribeLifecycle: vi.fn(),
   },
   orchestration: {
+    getSidebarThreadCatalog: vi.fn(),
+    getStartupProjectCatalog: vi.fn(),
+    getProjectThreadSummaries: vi.fn(),
+    getSelectedThreadDetail: vi.fn(),
     getSnapshot: vi.fn(),
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
@@ -199,6 +203,8 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
   return {
     getWsUrl: () => null,
     getMobileBackendBaseUrl: () => null,
+    getBackendStartupState: async () => ({ generation: 0, startedAt: 0, status: "idle" }),
+    onBackendStartupState: () => () => {},
     getComputerUseRuntimeStatus: async () => ({
       available: false,
       ready: false,

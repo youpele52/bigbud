@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import "../../index.css";
 
 import {
@@ -136,6 +137,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
         archivedAt: null,
+        pinnedAt: null,
         deletedAt: null,
         messages: [
           {

@@ -319,9 +319,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                     : "text-muted-foreground/70"
                 }`}
               >
-                {formatRelativeTimeLabel(
-                  thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
-                )}
+                {formatRelativeTimeLabel(thread.latestUserMessageAt ?? thread.createdAt)}
               </span>
             )}
           </span>

@@ -13,7 +13,6 @@ const makeStubSettingsLayer = () =>
     ready: Effect.void,
     getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
     updateSettings: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
-    setThreadPinned: () => Effect.succeed(DEFAULT_SERVER_SETTINGS),
     streamChanges: Stream.empty,
   });
 

@@ -7,3 +7,5 @@ export * from "./orchestration.thinking";
 export * from "./orchestration.commands";
 export * from "./orchestration.events";
 export * from "./orchestration.rpc";
+export * from "./orchestration.catalog";
+export * from "./orchestration.detail";

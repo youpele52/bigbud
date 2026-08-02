@@ -1,6 +1,10 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { ParentThreadReference, PersistedModelSelection } from "@bigbud/contracts";
+import {
+  OrchestrationQueuedPrompt,
+  ParentThreadReference,
+  PersistedModelSelection,
+} from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
@@ -18,6 +22,7 @@ const ProjectionThreadDbRow = ProjectionThread.mapFields(
     // Keep historical provider selections readable after a provider is removed.
     modelSelection: Schema.fromJsonString(PersistedModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
+    queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
@@ -40,9 +45,11 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     worktreePath: row.worktreePath,
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
     latestTurnId: row.latestTurnId,
+    queuedPrompts: row.queuedPrompts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
+    pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
     deletedAt: row.deletedAt,
   };
@@ -74,9 +81,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_title,
            parent_thread_project_id,
           latest_turn_id,
+          queued_prompts_json,
           created_at,
           updated_at,
           archived_at,
+          pinned_at,
           deleting_at,
           deleted_at
         )
@@ -99,9 +108,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            ${row.parentThread?.title ?? null},
            ${row.parentThread?.projectId ?? row.projectId},
           ${row.latestTurnId},
+          ${JSON.stringify(row.queuedPrompts)},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.archivedAt},
+          ${row.pinnedAt},
           ${row.deletingAt},
           ${row.deletedAt}
         )
@@ -124,9 +135,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_title = excluded.parent_thread_title,
            parent_thread_project_id = excluded.parent_thread_project_id,
           latest_turn_id = excluded.latest_turn_id,
+          queued_prompts_json = excluded.queued_prompts_json,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           archived_at = excluded.archived_at,
+          pinned_at = excluded.pinned_at,
           deleting_at = excluded.deleting_at,
           deleted_at = excluded.deleted_at
       `,
@@ -161,9 +174,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
              )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
+          queued_prompts_json AS "queuedPrompts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads
@@ -200,9 +215,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
              )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
+          queued_prompts_json AS "queuedPrompts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
           deleted_at AS "deletedAt"
         FROM projection_threads

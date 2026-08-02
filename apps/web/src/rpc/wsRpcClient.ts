@@ -248,6 +248,20 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         ),
     },
     orchestration: {
+      getSidebarThreadCatalog: () =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]({})),
+      getStartupProjectCatalog: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog](input),
+        ),
+      getProjectThreadSummaries: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getProjectThreadSummaries](input),
+        ),
+      getSelectedThreadDetail: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getSelectedThreadDetail](input),
+        ),
       getSnapshot: () =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
       dispatchCommand: (input) =>
@@ -257,9 +271,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getFullThreadDiff: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getFullThreadDiff](input)),
       replayEvents: (input) =>
-        transport
-          .request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input))
-          .then((events) => [...events]),
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.replayEvents](input)),
       onDomainEvent: (listener, options) =>
         subscribeEmptyInput(
           transport,

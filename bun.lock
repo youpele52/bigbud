@@ -88,6 +88,7 @@
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
+        "@github/copilot": "1.0.73",
         "@github/copilot-sdk": "1.0.7",
         "@opencode-ai/sdk": "^1.17.13",
         "@pierre/diffs": "^1.2.12",

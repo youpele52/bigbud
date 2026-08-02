@@ -17,13 +17,17 @@ import {
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+  LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
   renderThreadOrchestrationConfigLiteral,
   type ThreadOrchestrationHttpConfig,
 } from "./threadOrchestrationBridge.shared.ts";
+import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 import {
   READ_CAPABILITY_GUIDE_PARAMETERS,
   READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
@@ -35,6 +39,14 @@ export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  ...AGENT_WORKSPACE_TOOL_SPECS.map(
+    (spec) =>
+      `  ${JSON.stringify({
+        name: spec.name,
+        description: spec.description,
+        inputSchema: spec.inputSchema,
+      })},`,
+  ),
   "  {",
   '    name: "search_capabilities",',
   `    description: ${JSON.stringify(SEARCH_CAPABILITIES_TOOL_DESCRIPTION)},`,
@@ -158,6 +170,35 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "    },",
   "  },",
   "  {",
+  '    name: "send_thread_message",',
+  `    description: ${JSON.stringify(SEND_THREAD_MESSAGE_TOOL_DESCRIPTION)},`,
+  "    inputSchema: {",
+  '      type: "object",',
+  "      properties: {",
+  '        threadId: { type: "string" },',
+  '        message: { type: "string", maxLength: 32000 },',
+  '        delivery: { type: "string", enum: ["auto", "queue"] },',
+  "      },",
+  '      required: ["threadId", "message"],',
+  "      additionalProperties: false,",
+  "    },",
+  "  },",
+  "  {",
+  '    name: "list_threads",',
+  `    description: ${JSON.stringify(LIST_THREADS_TOOL_DESCRIPTION)},`,
+  "    inputSchema: {",
+  '      type: "object",',
+  "      properties: {",
+  '        projectId: { type: "string", description: "Project ID; defaults to the current project" },',
+  '        status: { type: "string", enum: ["active", "archived", "all"], description: "Thread status filter; defaults to active" },',
+  `        limit: { type: "integer", minimum: 1, maximum: ${LIST_THREADS_MAX_LIMIT}, description: "Maximum threads to return" },`,
+  '        includeExcerpt: { type: "boolean", description: "Include a short excerpt of each thread\'s last assistant message" },',
+  "      },",
+  "      required: [],",
+  "      additionalProperties: false,",
+  "    },",
+  "  },",
+  "  {",
   '    name: "get_thread_status",',
   `    description: ${JSON.stringify(GET_THREAD_STATUS_TOOL_DESCRIPTION)},`,
   "    inputSchema: {",
@@ -170,6 +211,7 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "    },",
   "  },",
   "];",
+  `const WORKSPACE_TOOL_NAMES = new Set(${JSON.stringify(AGENT_WORKSPACE_TOOL_SPECS.map(({ name }) => name))});`,
   "",
 ];
 

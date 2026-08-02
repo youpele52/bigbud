@@ -231,7 +231,7 @@ export const OrchestrationTask = Schema.Struct({
 });
 export type OrchestrationTask = typeof OrchestrationTask.Type;
 
-const OrchestrationLatestTurnState = Schema.Literals([
+export const OrchestrationLatestTurnState = Schema.Literals([
   "running",
   "interrupted",
   "completed",
@@ -249,6 +249,13 @@ export const OrchestrationLatestTurn = Schema.Struct({
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
+
+export const OrchestrationQueuedPrompt = Schema.Struct({
+  id: MessageId,
+  text: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
@@ -268,9 +275,15 @@ export const OrchestrationThread = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   latestTurn: Schema.NullOr(OrchestrationLatestTurn),
+  queuedPrompts: Schema.optional(Schema.Array(OrchestrationQueuedPrompt)).pipe(
+    Schema.withDecodingDefault(() => []),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
+  pinnedAt: Schema.optional(Schema.NullOr(IsoDateTime)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   deletingAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   parentThread: Schema.optional(ParentThreadReference),

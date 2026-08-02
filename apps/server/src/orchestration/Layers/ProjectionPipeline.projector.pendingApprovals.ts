@@ -40,6 +40,12 @@ export function makePendingApprovalsProjector(
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
+      case "thread.deleted":
+        yield* projectionPendingApprovalRepository.deleteByThreadId({
+          threadId: event.payload.threadId,
+        });
+        return;
+
       case "thread.activity-appended": {
         const requestId =
           extractActivityRequestId(event.payload.activity.payload) ??

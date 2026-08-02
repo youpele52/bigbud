@@ -12,11 +12,15 @@
  */
 import type {
   OrchestrationCommand,
+  CommandId,
   OrchestrationEvent,
   OrchestrationReadModel,
+  OrchestrationReplayEventsResult,
+  OrchestrationThread,
+  ThreadId,
 } from "@bigbud/contracts";
-import { ServiceMap } from "effect";
-import type { Effect, Stream } from "effect";
+import { Effect, ServiceMap } from "effect";
+import type { Stream } from "effect";
 
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
@@ -32,6 +36,11 @@ export interface OrchestrationEngineShape {
    */
   readonly getReadModel: () => Effect.Effect<OrchestrationReadModel, never, never>;
 
+  readonly ensureThreadState?: (
+    threadId: ThreadId,
+    level: "operational" | "history",
+  ) => Effect.Effect<OrchestrationThread | undefined>;
+
   /**
    * Replay persisted orchestration events from an exclusive sequence cursor.
    *
@@ -41,6 +50,15 @@ export interface OrchestrationEngineShape {
   readonly readEvents: (
     fromSequenceExclusive: number,
   ) => Stream.Stream<OrchestrationEvent, OrchestrationEventStoreError, never>;
+
+  readonly readReplay: (
+    fromSequenceExclusive: number,
+  ) => Effect.Effect<OrchestrationReplayEventsResult, OrchestrationEventStoreError>;
+
+  /** Internal keyed lookup for the event set committed by one command. */
+  readonly readEventsByCommandId?: (
+    commandId: CommandId,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
   /**
    * Dispatch a validated orchestration command.
@@ -61,6 +79,18 @@ export interface OrchestrationEngineShape {
    * This is a hot runtime stream (new events only), not a historical replay.
    */
   readonly streamDomainEvents: Stream.Stream<OrchestrationEvent>;
+}
+
+export function ensureOrchestrationThreadState(
+  engine: OrchestrationEngineShape,
+  threadId: ThreadId,
+  level: "operational" | "history",
+) {
+  return engine.ensureThreadState
+    ? engine.ensureThreadState(threadId, level)
+    : engine
+        .getReadModel()
+        .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === threadId)));
 }
 
 /**

@@ -52,7 +52,7 @@ export function makeThreadsProjector(
 
   const apply = Effect.fn("applyThreadsProjection")(function* (
     event: OrchestrationEvent,
-    attachmentSideEffects: AttachmentSideEffects,
+    _attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
       case "thread.created":
@@ -81,9 +81,11 @@ export function makeThreadsProjector(
             ? { parentThread: event.payload.parentThread }
             : {}),
           latestTurnId: null,
+          queuedPrompts: [],
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
           archivedAt: null,
+          pinnedAt: null,
           deletingAt: null,
           deletedAt: null,
         });
@@ -144,6 +146,32 @@ export function makeThreadsProjector(
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
           archivedAt: null,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
+
+      case "thread.pinned": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) return;
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          pinnedAt: event.payload.pinnedAt,
+          updatedAt: event.payload.updatedAt,
+        });
+        return;
+      }
+
+      case "thread.unpinned": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) return;
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          pinnedAt: null,
           updatedAt: event.payload.updatedAt,
         });
         return;
@@ -223,18 +251,8 @@ export function makeThreadsProjector(
       }
 
       case "thread.deleted": {
-        attachmentSideEffects.deletedThreadIds.add(event.payload.threadId);
-        const existingRow = yield* projectionThreadRepository.getById({
+        yield* projectionThreadRepository.deleteById({
           threadId: event.payload.threadId,
-        });
-        if (Option.isNone(existingRow)) {
-          return;
-        }
-        yield* projectionThreadRepository.upsert({
-          ...existingRow.value,
-          deletingAt: null,
-          deletedAt: event.payload.deletedAt,
-          updatedAt: event.payload.deletedAt,
         });
         return;
       }
@@ -250,6 +268,30 @@ export function makeThreadsProjector(
         }
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
+          updatedAt: event.occurredAt,
+        });
+        return;
+      }
+
+      case "thread.prompt-queued":
+      case "thread.queued-prompt-removed":
+      case "thread.queued-prompts-flushed": {
+        const existingRow = yield* projectionThreadRepository.getById({
+          threadId: event.payload.threadId,
+        });
+        if (Option.isNone(existingRow)) return;
+        const current = existingRow.value.queuedPrompts;
+        const queuedPrompts =
+          event.type === "thread.prompt-queued"
+            ? current.some((prompt) => prompt.id === event.payload.prompt.id)
+              ? current
+              : [...current, event.payload.prompt]
+            : event.type === "thread.queued-prompt-removed"
+              ? current.filter((prompt) => prompt.id !== event.payload.messageId)
+              : current.filter((prompt) => !event.payload.messageIds.includes(prompt.id));
+        yield* projectionThreadRepository.upsert({
+          ...existingRow.value,
+          queuedPrompts,
           updatedAt: event.occurredAt,
         });
         return;

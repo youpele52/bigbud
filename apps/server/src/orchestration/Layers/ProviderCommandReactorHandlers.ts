@@ -14,6 +14,7 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
+import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
 import { registerThreadWatchesFromAttachments } from "../ThreadWatch.logic.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { resolveDefaultChatCwd, ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -104,8 +105,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       .pipe(Effect.asVoid);
 
   const resolveThread = Effect.fn("resolveThread")(function* (threadId: ThreadId) {
-    const readModel = yield* orchestrationEngine.getReadModel();
-    return readModel.threads.find((entry) => entry.id === threadId);
+    return yield* ensureOrchestrationThreadState(orchestrationEngine, threadId, "history");
   });
 
   const { resolveProject, resolveThreadsByProject } =

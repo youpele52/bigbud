@@ -1,4 +1,5 @@
 import { getWsConnectionUiState, type WsConnectionStatus } from "../rpc/wsConnectionState";
+import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 export type WsAutoReconnectTrigger = "focus" | "online";
 
@@ -33,5 +34,30 @@ export function shouldRestartStalledReconnect(
     status.nextRetryAt === expectedNextRetryAt &&
     status.online &&
     status.hasConnected
+  );
+}
+
+export function shouldShowDesktopStartupBlockingState(
+  startup: DesktopBackendStartupState | null,
+): boolean {
+  return startup?.status === "failed" || startup?.status === "timedOut";
+}
+
+export function shouldContinueDesktopStartupReconnect(
+  startup: DesktopBackendStartupState | null,
+): boolean {
+  return startup?.status === "starting" || startup?.status === "upgrading";
+}
+
+export function shouldReconnectAfterTimedOutDesktopStartup(
+  isDesktop: boolean,
+  previous: DesktopBackendStartupState | null,
+  current: DesktopBackendStartupState | null,
+): boolean {
+  return (
+    isDesktop &&
+    previous?.status === "timedOut" &&
+    current?.status === "ready" &&
+    previous.generation === current.generation
   );
 }

@@ -118,20 +118,6 @@ export function makeMutableServerSettingsService(
           yield* PubSub.publish(changes, next);
           return next;
         }),
-      setThreadPinned: ({ threadId, pinned }) =>
-        Effect.gen(function* () {
-          const current = yield* Ref.get(settingsRef);
-          const withoutThread = current.favoriteThreadIds.filter(
-            (favoriteId) => favoriteId !== threadId,
-          );
-          const next = {
-            ...current,
-            favoriteThreadIds: pinned ? [threadId, ...withoutThread] : withoutThread,
-          };
-          yield* Ref.set(settingsRef, next);
-          yield* PubSub.publish(changes, next);
-          return next;
-        }),
       get streamChanges() {
         return Stream.fromPubSub(changes);
       },

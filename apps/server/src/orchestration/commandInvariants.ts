@@ -1,4 +1,6 @@
+import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 import type {
+  ExecutionTargetId,
   OrchestrationCommand,
   OrchestrationProject,
   OrchestrationReadModel,
@@ -97,16 +99,36 @@ export function requireProjectAbsent(input: {
   readonly readModel: OrchestrationReadModel;
   readonly command: OrchestrationCommand;
   readonly projectId: ProjectId;
+  readonly workspaceRoot?: string | null;
+  readonly workspaceExecutionTargetId?: ExecutionTargetId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (!findProjectById(input.readModel, input.projectId)) {
+  if (findProjectById(input.readModel, input.projectId)) {
+    return Effect.fail(
+      invariantError(
+        input.command.type,
+        `Project '${input.projectId}' already exists and cannot be created twice.`,
+      ),
+    );
+  }
+  if (input.workspaceRoot === null || input.workspaceRoot === undefined) {
     return Effect.void;
   }
-  return Effect.fail(
-    invariantError(
-      input.command.type,
-      `Project '${input.projectId}' already exists and cannot be created twice.`,
-    ),
+  const existing = input.readModel.projects.find(
+    (project) =>
+      project.deletedAt === null &&
+      project.workspaceRoot === input.workspaceRoot &&
+      (project.workspaceExecutionTargetId ??
+        project.executionTargetId ??
+        LOCAL_EXECUTION_TARGET_ID) === input.workspaceExecutionTargetId,
   );
+  return existing
+    ? Effect.fail(
+        invariantError(
+          input.command.type,
+          `A project already exists for workspace '${input.workspaceRoot}'.`,
+        ),
+      )
+    : Effect.void;
 }
 
 export function requireThread(input: {

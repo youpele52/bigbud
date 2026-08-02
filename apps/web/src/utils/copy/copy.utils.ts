@@ -14,6 +14,7 @@ export const SPINNER_VERBS = [
   "Beaming",
   "Beboppin'",
   "Befuddling",
+  "bigbuding",
   "Billowing",
   "Branching",
   "Bloviating",

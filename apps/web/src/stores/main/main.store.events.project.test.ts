@@ -3,10 +3,37 @@ import { describe, expect, it } from "vitest";
 
 import { applyOrchestrationEvent } from "./events.store";
 import { type AppState } from "./main.store";
+import { buildSidebarThreadSummary } from "./mappers.store";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE } from "../../models/types";
 import { makeEvent, makeState, makeThread } from "./main.store.test.helpers";
 
 describe("incremental orchestration updates", () => {
+  it("preserves a lazy thread's catalog user-message timestamp through metadata updates", () => {
+    const thread = makeThread();
+    const state = {
+      ...makeState(thread),
+      sidebarThreadsById: {
+        [thread.id]: {
+          ...buildSidebarThreadSummary(thread),
+          latestUserMessageAt: "2026-02-01T00:00:00.000Z",
+        },
+      },
+    };
+
+    const next = applyOrchestrationEvent(
+      state,
+      makeEvent("thread.pinned", {
+        threadId: thread.id,
+        pinnedAt: "2026-02-27T00:00:00.000Z",
+        updatedAt: "2026-02-27T00:00:00.000Z",
+      }),
+    );
+
+    expect(next.sidebarThreadsById[thread.id]?.latestUserMessageAt).toBe(
+      "2026-02-01T00:00:00.000Z",
+    );
+  });
+
   it("updates the existing project title when project.meta-updated arrives", () => {
     const projectId = ProjectId.makeUnsafe("project-1");
     const state = makeState(makeThread({ projectId }));
@@ -86,7 +113,11 @@ describe("incremental orchestration updates", () => {
       threads: [],
       sidebarThreadsById: {},
       threadIdsByProjectId: {},
+      threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -145,7 +176,11 @@ describe("incremental orchestration updates", () => {
       threads: [],
       sidebarThreadsById: {},
       threadIdsByProjectId: {},
+      threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -190,7 +225,11 @@ describe("incremental orchestration updates", () => {
       threads: [],
       sidebarThreadsById: {},
       threadIdsByProjectId: {},
+      threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -255,7 +294,11 @@ describe("incremental orchestration updates", () => {
       threadIdsByProjectId: {
         [originalProjectId]: [threadId],
       },
+      threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(

@@ -41,7 +41,7 @@ function getLatestUserMessageTimestamp(thread: SidebarThreadSortInput): number {
     return latestUserMessageTimestamp;
   }
 
-  return toSortableTimestamp(thread.updatedAt ?? thread.createdAt) ?? Number.NEGATIVE_INFINITY;
+  return toSortableTimestamp(thread.createdAt) ?? Number.NEGATIVE_INFINITY;
 }
 
 function getThreadSortTimestamp(

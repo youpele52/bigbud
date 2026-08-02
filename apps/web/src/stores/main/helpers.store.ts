@@ -1,11 +1,5 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
-import { type OrchestrationReadModel } from "@bigbud/contracts";
-import {
-  buildSidebarThreadSummary,
-  mapProject,
-  mapThread,
-  sidebarThreadSummariesEqual,
-} from "./mappers.store";
+import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
 import { type AppState } from "./main.store";
 import {
   type ChatMessage,
@@ -288,6 +282,7 @@ export function updateThreadState(
   state: AppState,
   threadId: ThreadId,
   updater: (thread: Thread) => Thread,
+  options: { readonly preserveLatestUserMessageAt?: boolean } = {},
 ): AppState {
   const threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
@@ -301,8 +296,13 @@ export function updateThreadState(
     return { ...state, threads };
   }
 
-  const nextSummary = buildSidebarThreadSummary(updatedThread);
   const previousSummary = state.sidebarThreadsById[threadId];
+  const derivedSummary = buildSidebarThreadSummary(updatedThread);
+  const latestUserMessageAt =
+    options.preserveLatestUserMessageAt === false
+      ? derivedSummary.latestUserMessageAt
+      : latestTimestamp(previousSummary?.latestUserMessageAt, derivedSummary.latestUserMessageAt);
+  const nextSummary = { ...derivedSummary, latestUserMessageAt };
   const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
     ? state.sidebarThreadsById
     : {
@@ -322,6 +322,12 @@ export function updateThreadState(
     threads,
     sidebarThreadsById,
   };
+}
+
+function latestTimestamp(left: string | null | undefined, right: string | null): string | null {
+  if (left === null || left === undefined) return right;
+  if (right === null) return left;
+  return left > right ? left : right;
 }
 
 // ── Thread revert state updater ───────────────────────────────────────
@@ -376,25 +382,5 @@ export function applyThreadReverted(
             assistantMessageId: latestCheckpoint.assistantMessageId ?? null,
           },
     updatedAt: payload.occurredAt,
-  };
-}
-
-// ── Pure state sync ───────────────────────────────────────────────────
-
-export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
-  const projects = readModel.projects
-    .filter((project) => project.deletedAt === null)
-    .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
-  const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
-  const sidebarThreadsById = buildSidebarThreadsById(visibleThreads);
-  const threadIdsByProjectId = buildThreadIdsByProjectId(visibleThreads);
-  return {
-    ...state,
-    projects,
-    threads,
-    sidebarThreadsById,
-    threadIdsByProjectId,
-    bootstrapComplete: true,
   };
 }

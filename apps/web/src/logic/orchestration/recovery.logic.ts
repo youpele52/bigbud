@@ -121,6 +121,10 @@ export function createOrchestrationRecoveryCoordinator() {
       return snapshotState();
     },
 
+    observeReplayTarget(sequence: number): void {
+      observeSequence(sequence);
+    },
+
     classifyDomainEvent(sequence: number): "ignore" | "defer" | "recover" | "apply" {
       observeSequence(sequence);
       if (sequence <= state.latestSequence) {
@@ -138,13 +142,26 @@ export function createOrchestrationRecoveryCoordinator() {
     },
 
     markEventBatchApplied<T extends SequencedEvent>(events: ReadonlyArray<T>): ReadonlyArray<T> {
-      const nextEvents = events
+      const candidates = events
         .filter((event) => event.sequence > state.latestSequence)
         .toSorted((left, right) => left.sequence - right.sequence);
-      if (nextEvents.length === 0) {
+      if (candidates.length === 0) {
         return [];
       }
-
+      const nextEvents: T[] = [];
+      let expectedSequence = state.latestSequence + 1;
+      for (const event of candidates) {
+        if (event.sequence < expectedSequence) {
+          continue;
+        }
+        if (event.sequence > expectedSequence) {
+          state.pendingReplay = true;
+          observeSequence(event.sequence);
+          break;
+        }
+        nextEvents.push(event);
+        expectedSequence += 1;
+      }
       state.latestSequence = nextEvents.at(-1)?.sequence ?? state.latestSequence;
       state.highestObservedSequence = Math.max(state.highestObservedSequence, state.latestSequence);
       return nextEvents;

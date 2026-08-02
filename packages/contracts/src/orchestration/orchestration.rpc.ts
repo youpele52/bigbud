@@ -14,6 +14,18 @@ import { OrchestrationEvent } from "./orchestration.events";
 import { OrchestrationReadModel } from "./orchestration.thread";
 import { OrchestrationCheckpointFile, OrchestrationCheckpointStatus } from "./orchestration.thread";
 import { OrchestrationThread } from "./orchestration.thread";
+import {
+  GetProjectThreadSummariesInput,
+  GetProjectThreadSummariesResult,
+  GetSidebarThreadCatalogInput,
+  GetSidebarThreadCatalogResult,
+  GetStartupProjectCatalogInput,
+  GetStartupProjectCatalogResult,
+} from "./orchestration.catalog";
+import {
+  GetSelectedThreadDetailInput,
+  GetSelectedThreadDetailResult,
+} from "./orchestration.detail";
 
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
@@ -115,10 +127,37 @@ export const OrchestrationReplayEventsInput = Schema.Struct({
 });
 export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInput.Type;
 
-const OrchestrationReplayEventsResult = Schema.Array(OrchestrationEvent);
+export const OrchestrationReplayAvailability = Schema.Literals(["available", "gap"]);
+export type OrchestrationReplayAvailability = typeof OrchestrationReplayAvailability.Type;
+
+const OrchestrationReplayEventsResult = Schema.Struct({
+  requestedFromSequenceExclusive: NonNegativeInt,
+  retainedFromSequenceExclusive: NonNegativeInt,
+  earliestAvailableSequence: Schema.NullOr(NonNegativeInt),
+  latestSequence: NonNegativeInt,
+  availability: OrchestrationReplayAvailability,
+  complete: Schema.Boolean,
+  events: Schema.Array(OrchestrationEvent),
+});
 export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
 
 export const OrchestrationRpcSchemas = {
+  getSidebarThreadCatalog: {
+    input: GetSidebarThreadCatalogInput,
+    output: GetSidebarThreadCatalogResult,
+  },
+  getStartupProjectCatalog: {
+    input: GetStartupProjectCatalogInput,
+    output: GetStartupProjectCatalogResult,
+  },
+  getProjectThreadSummaries: {
+    input: GetProjectThreadSummariesInput,
+    output: GetProjectThreadSummariesResult,
+  },
+  getSelectedThreadDetail: {
+    input: GetSelectedThreadDetailInput,
+    output: GetSelectedThreadDetailResult,
+  },
   getSnapshot: {
     input: OrchestrationGetSnapshotInput,
     output: OrchestrationGetSnapshotResult,
@@ -144,6 +183,38 @@ export const OrchestrationRpcSchemas = {
     output: OrchestrationReplayEventsResult,
   },
 } as const;
+
+export class OrchestrationGetStartupProjectCatalogError extends Schema.TaggedErrorClass<OrchestrationGetStartupProjectCatalogError>()(
+  "OrchestrationGetStartupProjectCatalogError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetSidebarThreadCatalogError extends Schema.TaggedErrorClass<OrchestrationGetSidebarThreadCatalogError>()(
+  "OrchestrationGetSidebarThreadCatalogError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetProjectThreadSummariesError extends Schema.TaggedErrorClass<OrchestrationGetProjectThreadSummariesError>()(
+  "OrchestrationGetProjectThreadSummariesError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetSelectedThreadDetailError extends Schema.TaggedErrorClass<OrchestrationGetSelectedThreadDetailError>()(
+  "OrchestrationGetSelectedThreadDetailError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
 
 export class OrchestrationGetSnapshotError extends Schema.TaggedErrorClass<OrchestrationGetSnapshotError>()(
   "OrchestrationGetSnapshotError",

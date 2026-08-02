@@ -6,8 +6,8 @@
  *
  * @module ProjectionPipeline.projectors
  */
-import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { type OrchestrationEvent, type ProjectId, type ThreadId } from "@bigbud/contracts";
+import { Effect, Option } from "effect";
 
 import { type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import { type ProjectionProjectRepositoryShape } from "../../persistence/Services/ProjectionProjects.ts";
@@ -19,6 +19,7 @@ import { type ProjectionThreadTaskRepositoryShape } from "../../persistence/Serv
 import { type ProjectionThreadSessionRepositoryShape } from "../../persistence/Services/ProjectionThreadSessions.ts";
 import { type ProjectionTurnRepositoryShape } from "../../persistence/Services/ProjectionTurns.ts";
 import { type ProjectionPendingApprovalRepositoryShape } from "../../persistence/Services/ProjectionPendingApprovals.ts";
+import { type ProjectionPendingUserInputRepositoryShape } from "../../persistence/Services/ProjectionPendingUserInputs.ts";
 import {
   type AttachmentSideEffects,
   ORCHESTRATION_PROJECTOR_NAMES,
@@ -32,6 +33,7 @@ import { makeThreadTasksProjector } from "./ProjectionPipeline.projector.tasks.t
 import { makeThreadSessionsProjector } from "./ProjectionPipeline.projector.threadSessions.ts";
 import { makeThreadTurnsProjector } from "./ProjectionPipeline.projector.threadTurns.ts";
 import { makePendingApprovalsProjector } from "./ProjectionPipeline.projector.pendingApprovals.ts";
+import { makePendingUserInputsProjector } from "./ProjectionPipeline.projector.pendingUserInputs.ts";
 
 export type ProjectorApplyFn = (
   event: OrchestrationEvent,
@@ -44,6 +46,9 @@ export interface ProjectorDefinition {
 }
 
 export interface ProjectorDeps {
+  readonly findThreadProjectId: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<ProjectId>, ProjectionRepositoryError>;
   readonly projectionProjectRepository: ProjectionProjectRepositoryShape;
   readonly projectionThreadRepository: ProjectionThreadRepositoryShape;
   readonly projectionThreadMessageRepository: ProjectionThreadMessageRepositoryShape;
@@ -53,9 +58,10 @@ export interface ProjectorDeps {
   readonly projectionThreadSessionRepository: ProjectionThreadSessionRepositoryShape;
   readonly projectionTurnRepository: ProjectionTurnRepositoryShape;
   readonly projectionPendingApprovalRepository: ProjectionPendingApprovalRepositoryShape;
+  readonly projectionPendingUserInputRepository: ProjectionPendingUserInputRepositoryShape;
 }
 
-/** Build all 9 projector definitions from their repository dependencies. */
+/** Build all projector definitions from their repository dependencies. */
 export function makeProjectors(deps: ProjectorDeps): ReadonlyArray<ProjectorDefinition> {
   return [
     makeProjectsProjector(deps),
@@ -67,6 +73,7 @@ export function makeProjectors(deps: ProjectorDeps): ReadonlyArray<ProjectorDefi
     makeThreadTurnsProjector(deps),
     { name: ORCHESTRATION_PROJECTOR_NAMES.checkpoints, apply: () => Effect.void },
     makePendingApprovalsProjector(deps),
+    makePendingUserInputsProjector(deps),
     makeThreadsProjector(deps),
   ];
 }

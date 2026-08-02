@@ -9,6 +9,7 @@ import {
   GetProjectionProjectInput,
   ProjectionProject,
   ProjectionProjectRepository,
+  TouchProjectionProjectLastUsedInput,
   type ProjectionProjectRepositoryShape,
 } from "../Services/ProjectionProjects.ts";
 
@@ -132,6 +133,18 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
       `,
   });
 
+  const touchProjectionProjectLastUsed = SqlSchema.void({
+    Request: TouchProjectionProjectLastUsedInput,
+    execute: ({ projectId, lastUsedAt }) =>
+      sql`
+        UPDATE projection_projects
+        SET last_used_at = ${lastUsedAt}
+        WHERE project_id = ${projectId}
+          AND deleted_at IS NULL
+          AND (last_used_at IS NULL OR last_used_at < ${lastUsedAt})
+      `,
+  });
+
   const upsert: ProjectionProjectRepositoryShape["upsert"] = (row) =>
     upsertProjectionProjectRow(row).pipe(
       Effect.mapError(toPersistenceSqlError("ProjectionProjectRepository.upsert:query")),
@@ -154,11 +167,17 @@ const makeProjectionProjectRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionProjectRepository.deleteById:query")),
     );
 
+  const touchLastUsedAt: ProjectionProjectRepositoryShape["touchLastUsedAt"] = (input) =>
+    touchProjectionProjectLastUsed(input).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionProjectRepository.touchLastUsedAt:query")),
+    );
+
   return {
     upsert,
     getById,
     listAll,
     deleteById,
+    touchLastUsedAt,
   } satisfies ProjectionProjectRepositoryShape;
 });
 

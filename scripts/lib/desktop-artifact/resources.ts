@@ -159,7 +159,11 @@ export function resolveDesktopRuntimeDependencies(
 
   return resolveCatalogDependencies(
     Object.fromEntries(
-      Object.entries(dependencies).filter(([dependencyName]) => dependencyName !== "electron"),
+      Object.entries(dependencies).filter(
+        ([dependencyName, dependencySpec]) =>
+          dependencyName !== "electron" &&
+          (typeof dependencySpec !== "string" || !dependencySpec.startsWith("workspace:")),
+      ),
     ),
     catalog,
     "apps/desktop",

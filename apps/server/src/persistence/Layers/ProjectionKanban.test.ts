@@ -1,10 +1,13 @@
 import { utimes } from "node:fs/promises";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, Exit, FileSystem, Layer, Option } from "effect";
+import { ProjectId } from "@bigbud/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
 import { ProjectionKanbanRepositoryLive } from "./ProjectionKanban.ts";
+import { ProjectionNoteRepositoryLive } from "./ProjectionNotes.ts";
 import { ProjectionKanbanRepository } from "../Services/ProjectionKanban.ts";
+import { ProjectionNoteRepository } from "../Services/ProjectionNotes.ts";
 import { ServerConfig } from "../../startup/config.ts";
 
 const makeServerConfigLayer = (tempDir: string) =>
@@ -54,7 +57,7 @@ const projectionKanbanLayer = it.layer(
       const fs = yield* FileSystem.FileSystem;
       const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-kanban-test-" });
       const serverConfigLayer = makeServerConfigLayer(tempDir);
-      return ProjectionKanbanRepositoryLive.pipe(
+      return Layer.mergeAll(ProjectionKanbanRepositoryLive, ProjectionNoteRepositoryLive).pipe(
         Layer.provideMerge(NodeServices.layer),
         Layer.provideMerge(serverConfigLayer),
       );
@@ -172,6 +175,101 @@ projectionKanbanLayer("ProjectionKanban repository", (it) => {
 
       assert.equal(refreshed.content, "# Edited by agent\n");
       assert.equal(refreshed.updatedAt, "2027-06-23T00:05:00.000Z");
+    }),
+  );
+
+  it.effect("preserves project card content and rejects stale concurrent mutations", () =>
+    Effect.gen(function* () {
+      const kanban = yield* ProjectionKanbanRepository;
+      const projectId = ProjectId.makeUnsafe("project-agent-kanban");
+      const content = "  indented  \n```ts\n  code();\n```\n";
+      const created = yield* kanban.create({
+        projectId,
+        title: "Exact",
+        content,
+        status: "backlog",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        updatedAt: "2026-06-23T00:00:00.000Z",
+      });
+      const loaded = yield* kanban.getById({ cardId: created.cardId });
+      assert.equal(Option.getOrThrow(loaded).content, content);
+
+      const update = (updatedAt: string) =>
+        kanban.update({
+          cardId: created.cardId,
+          title: "Changed",
+          content,
+          expectedUpdatedAt: created.updatedAt,
+          updatedAt,
+        });
+      const exits = yield* Effect.all(
+        [
+          Effect.exit(update("2026-06-23T00:01:00.000Z")),
+          Effect.exit(update("2026-06-23T00:02:00.000Z")),
+        ],
+        { concurrency: "unbounded" },
+      );
+      assert.equal(exits.filter(Exit.isSuccess).length, 1);
+      assert.equal(exits.filter(Exit.isFailure).length, 1);
+
+      const current = Option.getOrThrow(yield* kanban.getById({ cardId: created.cardId }));
+      const staleMove = yield* Effect.exit(
+        kanban.move({
+          cardId: created.cardId,
+          status: "todo",
+          expectedUpdatedAt: created.updatedAt,
+          updatedAt: "2026-06-23T00:03:00.000Z",
+        }),
+      );
+      const staleReorder = yield* Effect.exit(
+        kanban.reorderWithinStatus({
+          cardId: created.cardId,
+          status: current.status,
+          targetIndex: 0,
+          expectedUpdatedAt: created.updatedAt,
+          updatedAt: "2026-06-23T00:04:00.000Z",
+        }),
+      );
+      assert.ok(Exit.isFailure(staleMove));
+      assert.ok(Exit.isFailure(staleReorder));
+    }),
+  );
+
+  it.effect("round-trips project notes exactly and rejects a stale update", () =>
+    Effect.gen(function* () {
+      const notes = yield* ProjectionNoteRepository;
+      const projectId = ProjectId.makeUnsafe("project-agent-notes");
+      const content = "  # Exact note  \n\n```ts\n  code();\n```\n";
+      const created = yield* notes.create({
+        projectId,
+        title: "Exact note",
+        content,
+        createdAt: "2026-06-23T00:00:00.000Z",
+        updatedAt: "2026-06-23T00:00:00.000Z",
+      });
+      const listed = yield* notes.list({ projectId, scope: "project" });
+      const loaded = Option.getOrThrow(yield* notes.getById({ noteId: created.noteId }));
+      assert.equal(listed[0]?.noteId, created.noteId);
+      assert.equal(loaded.projectId, projectId);
+      assert.equal(loaded.content, content);
+
+      yield* notes.update({
+        noteId: created.noteId,
+        title: "Updated",
+        content,
+        expectedUpdatedAt: loaded.updatedAt,
+        updatedAt: "2026-06-23T00:01:00.000Z",
+      });
+      const stale = yield* Effect.exit(
+        notes.update({
+          noteId: created.noteId,
+          title: "Stale",
+          content: "must not win",
+          expectedUpdatedAt: loaded.updatedAt,
+          updatedAt: "2026-06-23T00:02:00.000Z",
+        }),
+      );
+      assert.ok(Exit.isFailure(stale));
     }),
   );
 });

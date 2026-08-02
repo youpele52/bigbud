@@ -22,9 +22,11 @@ import {
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
+  ThreadPinnedPayload,
   ThreadRuntimeModeSetPayload,
   ThreadTurnStartFailedPayload,
   ThreadUnarchivedPayload,
+  ThreadUnpinnedPayload,
 } from "./Schemas.ts";
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
 
@@ -96,9 +98,11 @@ export function projectThreadCreated(
         branch: payload.branch,
         worktreePath: payload.worktreePath,
         latestTurn: null,
+        queuedPrompts: [],
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,
+        pinnedAt: null,
         deletingAt: null,
         deletedAt: null,
         ...(payload.parentThread !== undefined
@@ -218,7 +222,38 @@ export function projectThreadDeleted(
       threads: updateThread(nextBase.threads, payload.threadId, {
         deletingAt: null,
         deletedAt: payload.deletedAt,
+        pinnedAt: null,
         updatedAt: payload.deletedAt,
+      }),
+    })),
+  );
+}
+
+export function projectThreadPinned(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.pinned" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadPinnedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        pinnedAt: payload.pinnedAt,
+        updatedAt: payload.updatedAt,
+      }),
+    })),
+  );
+}
+
+export function projectThreadUnpinned(
+  nextBase: OrchestrationReadModel,
+  event: Extract<OrchestrationEvent, { type: "thread.unpinned" }>,
+): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
+  return decodeForEvent(ThreadUnpinnedPayload, event.payload, event.type, "payload").pipe(
+    Effect.map((payload) => ({
+      ...nextBase,
+      threads: updateThread(nextBase.threads, payload.threadId, {
+        pinnedAt: null,
+        updatedAt: payload.updatedAt,
       }),
     })),
   );

@@ -25,6 +25,12 @@ export function makeThreadMessagesProjector(
     attachmentSideEffects: AttachmentSideEffects,
   ) {
     switch (event.type) {
+      case "thread.deleted":
+        yield* projectionThreadMessageRepository.deleteByThreadId({
+          threadId: event.payload.threadId,
+        });
+        return;
+
       case "thread.message-sent": {
         const existingMessage = yield* projectionThreadMessageRepository.getByMessageId({
           messageId: event.payload.messageId,

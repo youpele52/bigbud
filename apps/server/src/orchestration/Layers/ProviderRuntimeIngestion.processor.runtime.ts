@@ -25,6 +25,7 @@ import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
+import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
 
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
   CommandId.makeUnsafe(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
@@ -68,6 +69,7 @@ export function makeRuntimeEventProcessor(
   });
 
   return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
+    yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
     const readModel = yield* orchestrationEngine.getReadModel();
     const thread = readModel.threads.find((entry) => entry.id === event.threadId);
     if (!thread) return;

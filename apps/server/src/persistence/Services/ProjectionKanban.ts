@@ -42,6 +42,7 @@ export const UpdateProjectionKanbanCardInput = Schema.Struct({
   title: Schema.String,
   content: Schema.String,
   updatedAt: Schema.String,
+  expectedUpdatedAt: Schema.optional(Schema.String),
 });
 export type UpdateProjectionKanbanCardInput = typeof UpdateProjectionKanbanCardInput.Type;
 
@@ -50,6 +51,7 @@ export const MoveProjectionKanbanCardInput = Schema.Struct({
   status: Schema.Literals(["backlog", "todo", "ongoing", "done"]),
   targetIndex: Schema.optional(Schema.Number),
   updatedAt: Schema.String,
+  expectedUpdatedAt: Schema.optional(Schema.String),
 });
 export type MoveProjectionKanbanCardInput = typeof MoveProjectionKanbanCardInput.Type;
 
@@ -58,6 +60,7 @@ export const ReorderProjectionKanbanCardInput = Schema.Struct({
   status: Schema.Literals(["backlog", "todo", "ongoing", "done"]),
   targetIndex: Schema.Number,
   updatedAt: Schema.String,
+  expectedUpdatedAt: Schema.optional(Schema.String),
 });
 export type ReorderProjectionKanbanCardInput = typeof ReorderProjectionKanbanCardInput.Type;
 

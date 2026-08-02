@@ -6,6 +6,8 @@ import { Effect, Random } from "effect";
 
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { ClaudeAdapter } from "../../Services/Claude/Adapter.ts";
+import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
+import { AGENT_WORKSPACE_TOOL_NAMES } from "../../../orchestration-tools/AgentWorkspaceTools.ts";
 import {
   THREAD_ID,
   makeDeterministicRandomService,
@@ -74,11 +76,14 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_remote_workspace__grep",
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
+        ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__bigbud_orchestration__${name}`),
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
         "mcp__bigbud_orchestration__archive_thread",
+        "mcp__bigbud_orchestration__send_thread_message",
         "mcp__bigbud_orchestration__get_thread_status",
+        "mcp__bigbud_orchestration__list_threads",
         "mcp__bigbud_orchestration__list_pinned_threads",
         "mcp__bigbud_orchestration__pin_thread",
         "mcp__bigbud_orchestration__unpin_thread",
@@ -96,7 +101,7 @@ describe("ClaudeAdapterLive", () => {
       ) {
         return;
       }
-      assert.equal(remoteWorkspaceServer.command, process.execPath);
+      assert.equal(remoteWorkspaceServer.command, resolveNodeExecutable());
       assert.deepEqual(remoteWorkspaceServer.args, [
         path.join(createInput?.options.cwd ?? "", ".bigbud/remote-workspace-mcp-server.mjs"),
       ]);
