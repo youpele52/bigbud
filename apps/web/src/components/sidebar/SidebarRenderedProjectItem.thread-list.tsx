@@ -3,6 +3,7 @@ import { type MouseEvent } from "react";
 
 import { SidebarThreadRow } from "./SidebarThreadRow";
 import { SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
+import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 
 interface SidebarRenderedProjectItemThreadListProps {
   projectId: ProjectId;
@@ -44,9 +45,9 @@ interface SidebarRenderedProjectItemThreadListProps {
   showEmptyThreadState: boolean;
   hasHiddenThreads: boolean;
   hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   isThreadListExpanded: boolean;
   isLoadingMoreThreads: boolean;
-  hiddenThreadCount: number;
   expandThreadListForProject: (projectId: ProjectId) => void;
   collapseThreadListForProject: (projectId: ProjectId) => void;
   loadMoreThreadsForProject: (projectId: ProjectId) => void;
@@ -86,9 +87,9 @@ export function SidebarRenderedProjectItemThreadList({
   showEmptyThreadState,
   hasHiddenThreads,
   hasMoreThreads,
+  threadCounts,
   isThreadListExpanded,
   isLoadingMoreThreads,
-  hiddenThreadCount,
   expandThreadListForProject,
   collapseThreadListForProject,
   loadMoreThreadsForProject,
@@ -161,7 +162,11 @@ export function SidebarRenderedProjectItemThreadList({
               {isThreadListExpanded ? (
                 <span>Show less</span>
               ) : (
-                <span>{`See more (${hiddenThreadCount})`}</span>
+                <span>
+                  {threadCounts.collapsedHiddenCount === null
+                    ? "See more"
+                    : `See more (${threadCounts.collapsedHiddenCount})`}
+                </span>
               )}
             </span>
           </SidebarMenuSubButton>
@@ -176,7 +181,13 @@ export function SidebarRenderedProjectItemThreadList({
             className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
             onClick={() => loadMoreThreadsForProject(projectId)}
           >
-            <span>{isLoadingMoreThreads ? "Loading..." : "Load more"}</span>
+            <span>
+              {isLoadingMoreThreads
+                ? "Loading..."
+                : threadCounts.unloadedCount === null
+                  ? "Load more"
+                  : `Load more (${threadCounts.unloadedCount})`}
+            </span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       ) : null}

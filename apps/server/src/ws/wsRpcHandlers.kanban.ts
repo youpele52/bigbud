@@ -120,30 +120,22 @@ export function makeWsRpcKanbanHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.kanbanUpdate,
         Effect.gen(function* () {
-          const existing = yield* context.projectionKanban.getById({
-            cardId: input.cardId,
-          });
+          const existing = yield* context.projectionKanban.getById({ cardId: input.cardId });
           const card = yield* Option.match(existing, {
-            onNone: () =>
-              Effect.fail(
-                new KanbanUpdateError({
-                  message: "Kanban card not found",
-                }),
-              ),
-            onSome: (value) => Effect.succeed(value),
+            onNone: () => Effect.fail(new KanbanUpdateError({ message: "Kanban card not found" })),
+            onSome: Effect.succeed,
           });
-
           if (input.expectedUpdatedAt && input.expectedUpdatedAt !== card.updatedAt) {
             return yield* new KanbanUpdateError({
               message: "Kanban card changed since you opened it. Reload and try again.",
             });
           }
-
           return yield* context.projectionKanban.update({
             cardId: input.cardId,
             title: input.title,
             content: input.content,
             updatedAt: new Date().toISOString(),
+            expectedUpdatedAt: input.expectedUpdatedAt,
           });
         }).pipe(
           Effect.mapError((cause) =>

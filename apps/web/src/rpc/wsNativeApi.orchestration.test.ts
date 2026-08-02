@@ -108,6 +108,7 @@ describe("wsNativeApi — orchestration", () => {
     const projectId = ProjectId.makeUnsafe("project-1");
     const threadId = ThreadId.makeUnsafe("thread-1");
 
+    await api.orchestration.getSidebarThreadCatalog();
     await api.orchestration.getStartupProjectCatalog({ limit: 2, priorityProjectId: projectId });
     await api.orchestration.getProjectThreadSummaries({
       projectId,
@@ -116,6 +117,7 @@ describe("wsNativeApi — orchestration", () => {
     });
     await api.orchestration.getSelectedThreadDetail({ threadId });
 
+    expect(rpcClientMock.orchestration.getSidebarThreadCatalog).toHaveBeenCalledWith({});
     expect(rpcClientMock.orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
       limit: 2,
       priorityProjectId: projectId,

@@ -23,6 +23,7 @@ describe("ProviderCapabilityContextPersistence", () => {
         lastCompactionActivityId: "compaction-activity",
         lastMcpStatusActivityId: "mcp-activity",
         lastMemoryHash: "memory-hash",
+        lastAgentBrowserPreference: "system" as const,
         needsLp: false,
       };
 

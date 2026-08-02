@@ -59,6 +59,22 @@ export const ThreadCreatedPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
+export const ThreadPromptQueuedPayload = Schema.Struct({
+  threadId: ThreadId,
+  prompt: Schema.Struct({ id: MessageId, text: TrimmedNonEmptyString, createdAt: IsoDateTime }),
+  // Recorded at decision time so idempotent callers can report the original
+  // position even after later queue mutations.
+  queuePosition: Schema.optional(NonNegativeInt),
+});
+export const ThreadQueuedPromptRemovedPayload = Schema.Struct({
+  threadId: ThreadId,
+  messageId: MessageId,
+});
+export const ThreadQueuedPromptsFlushedPayload = Schema.Struct({
+  threadId: ThreadId,
+  messageIds: Schema.Array(MessageId),
+});
+
 export const ThreadDeletedPayload = Schema.Struct({
   threadId: ThreadId,
   deletedAt: IsoDateTime,

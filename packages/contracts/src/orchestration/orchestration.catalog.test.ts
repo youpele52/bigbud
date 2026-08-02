@@ -4,10 +4,25 @@ import { Effect, Schema } from "effect";
 
 import {
   GetProjectThreadSummariesResult,
+  GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
 } from "./orchestration.catalog";
 import { OrchestrationRpcSchemas } from "./orchestration.rpc";
+
+it.effect("decodes sidebar catalog membership", () =>
+  Effect.gen(function* () {
+    const result = yield* Schema.decodeUnknownEffect(GetSidebarThreadCatalogResult)({
+      projectionSequence: 1,
+      threads: [],
+      recentThreadIds: ["recent-thread"],
+      pinnedThreadIds: ["pinned-thread"],
+    });
+
+    assert.deepEqual(result.recentThreadIds.map(String), ["recent-thread"]);
+    assert.deepEqual(result.pinnedThreadIds.map(String), ["pinned-thread"]);
+  }),
+);
 
 it.effect("decodes structured catalog cursors", () =>
   Effect.gen(function* () {

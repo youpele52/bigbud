@@ -116,6 +116,8 @@ describe("incremental orchestration updates", () => {
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
       threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -177,6 +179,8 @@ describe("incremental orchestration updates", () => {
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
       threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -224,6 +228,8 @@ describe("incremental orchestration updates", () => {
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
       threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(
@@ -291,6 +297,8 @@ describe("incremental orchestration updates", () => {
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
       threadHydrationById: {},
+      sidebarRecentThreadIds: [],
+      sidebarPinnedThreadIds: [],
     };
 
     const next = applyOrchestrationEvent(

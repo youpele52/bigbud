@@ -1,11 +1,5 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
-import { type OrchestrationReadModel } from "@bigbud/contracts";
-import {
-  buildSidebarThreadSummary,
-  mapProject,
-  mapThread,
-  sidebarThreadSummariesEqual,
-} from "./mappers.store";
+import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
 import { type AppState } from "./main.store";
 import {
   type ChatMessage,
@@ -388,25 +382,5 @@ export function applyThreadReverted(
             assistantMessageId: latestCheckpoint.assistantMessageId ?? null,
           },
     updatedAt: payload.occurredAt,
-  };
-}
-
-// ── Pure state sync ───────────────────────────────────────────────────
-
-export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
-  const projects = readModel.projects
-    .filter((project) => project.deletedAt === null)
-    .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
-  const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
-  const sidebarThreadsById = buildSidebarThreadsById(visibleThreads);
-  const threadIdsByProjectId = buildThreadIdsByProjectId(visibleThreads);
-  return {
-    ...state,
-    projects,
-    threads,
-    sidebarThreadsById,
-    threadIdsByProjectId,
-    bootstrapComplete: true,
   };
 }

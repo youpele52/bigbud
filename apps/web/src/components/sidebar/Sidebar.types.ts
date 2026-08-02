@@ -11,6 +11,7 @@ import type { RemoteProjectDraft } from "./Sidebar.projects.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -19,6 +20,7 @@ export type SidebarProjectSnapshot = Project & {
 export interface RenderedProjectEntry {
   hasHiddenThreads: boolean;
   hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   hiddenThreadStatus: ReturnType<typeof resolveThreadStatusPill>;
   orderedProjectThreadIds: readonly ThreadId[];
   project: SidebarProjectSnapshot;

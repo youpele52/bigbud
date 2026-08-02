@@ -8,14 +8,16 @@ import {
   type ThreadSummaryCursor,
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
+import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 import { create } from "zustand";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.store";
-import { syncServerReadModel } from "./helpers.store";
+import { syncServerReadModel } from "./helpers.snapshot.store";
 import {
   setThreadHydration,
   appendProjectThreadSummaries,
   syncBoundedCatalog,
+  syncSidebarCatalog,
   syncSelectedThreadDetail,
 } from "./helpers.lazy.store";
 import {
@@ -37,6 +39,8 @@ export interface AppState {
   sidebarThreadsById: Record<string, SidebarThreadSummary>;
   threadIdsByProjectId: Record<string, ThreadId[]>;
   threadSummaryCursorByProjectId?: Record<string, ThreadSummaryCursor | null>;
+  sidebarRecentThreadIds: ThreadId[];
+  sidebarPinnedThreadIds: ThreadId[];
   bootstrapComplete: boolean;
   threadHydrationById: Record<string, ThreadHydration>;
 }
@@ -56,6 +60,8 @@ const initialState: AppState = {
   sidebarThreadsById: {},
   threadIdsByProjectId: {},
   threadSummaryCursorByProjectId: {},
+  sidebarRecentThreadIds: [],
+  sidebarPinnedThreadIds: [],
   bootstrapComplete: false,
   threadHydrationById: {},
 };
@@ -82,8 +88,10 @@ interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
   syncBoundedCatalog: (
     catalog: GetStartupProjectCatalogResult,
+    sidebarCatalog: GetSidebarThreadCatalogResult,
     pages: ReadonlyArray<GetProjectThreadSummariesResult>,
   ) => void;
+  syncSidebarCatalog: (sidebarCatalog: GetSidebarThreadCatalogResult) => void;
   syncSelectedThreadDetail: (detail: GetSelectedThreadDetailResult, loadingOlder: boolean) => void;
   appendProjectThreadSummaries: (page: GetProjectThreadSummariesResult) => void;
   setThreadHydration: (threadId: ThreadId, hydration: ThreadHydration) => void;
@@ -96,7 +104,9 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
-  syncBoundedCatalog: (catalog, pages) => set((state) => syncBoundedCatalog(state, catalog, pages)),
+  syncBoundedCatalog: (catalog, sidebarCatalog, pages) =>
+    set((state) => syncBoundedCatalog(state, catalog, sidebarCatalog, pages)),
+  syncSidebarCatalog: (sidebarCatalog) => set((state) => syncSidebarCatalog(state, sidebarCatalog)),
   syncSelectedThreadDetail: (detail, loadingOlder) =>
     set((state) => syncSelectedThreadDetail(state, detail, loadingOlder)),
   appendProjectThreadSummaries: (page) => set((state) => appendProjectThreadSummaries(state, page)),

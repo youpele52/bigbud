@@ -2,6 +2,42 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.102 (2 August, 2026)
+
+### Agent Notes and Kanban
+
+- Added provider-neutral tools that let agents list, read, create, and update global notes and Kanban cards alongside items from the current project. Every result identifies its scope, while cross-project access and agent-driven deletion remain structurally unavailable.
+- Added safe Kanban move and reorder tools with optimistic concurrency protection, exact content preservation, and shared support across Codex, Claude, Copilot, OpenCode, Pi, and bridge-based providers.
+
+### Agent Thread Coordination
+
+- Agents can now list threads across supported providers, with filtering, pagination, optional excerpts, and deleted-thread exclusion, making it easier to find and continue relevant work without leaving the active conversation.
+- Agents can send a follow-up message to another thread in the same project, either starting it when idle or deliberately adding the message to its queue, so multi-thread work can stay coordinated without unsafe cross-project access.
+
+### Durable Queued Prompts
+
+- Rebuilt queued prompts as durable orchestration state shared by desktop and mobile. Queued messages now survive refreshes and restarts, can be removed or flushed predictably, and automatically resume when a thread becomes ready, so work-in-progress instructions are less likely to be lost.
+
+### Refined Application Settings
+
+- Refreshed the About settings page with a clearer application header, direct links to bigbud resources, and a searchable version entry while keeping update checks, diagnostics, and manual installation guidance close at hand.
+
+### Reliability & Maintenance
+
+- Split large orchestration, provider-tool, settings, and picker modules into focused files, with regression coverage for queued-prompt recovery and provider-specific tool registration, keeping the codebase within its maintainability limits without changing established behavior.
+
+### Recent and Pinned Threads
+
+- Fixed a bug where recent and pinned chats could disappear after restart. They are now restored from the durable projection, including pinned threads outside the initially loaded project list, while sidebar membership stays bounded and synchronized through replay and live updates.
+
+### Agent Browser Preferences
+
+- Added a Default agent browser setting in AI preferences. Agents now use bigbud's built-in browser by default, or your system default browser when selected, while explicit browser requests always take priority. System-browser navigation clearly requires the desktop app, full-access mode, and enabled computer use.
+
+### Clearer Computer Use Notifications
+
+- Removed diagnostic emoji from Computer Use permission and repair messages. Each status now appears on its own clean line in toast notifications, while Settings keeps familiar icons to show whether individual permissions are granted.
+
 ## v0.2.101 (31 July, 2026)
 
 ### Desktop Startup Recovery

@@ -73,4 +73,17 @@ describe("prependThreadContextToProviderInput", () => {
     );
     expect(result).not.toContain("Use `check_permissions` or `doctor` first");
   });
+
+  it("carries the system browser preference through fallback context", () => {
+    const result = prependThreadContextToProviderInput({
+      ...baseInput,
+      computerUseEnabled: true,
+      serverMode: "desktop",
+      agentBrowserPreference: "system",
+    });
+
+    expect(result).toContain("default agent browser is the system default browser");
+    expect(result).toContain("an explicit user request for the other browser always overrides it");
+    expect(result).toContain('`action: "navigate"` and `surface: "desktop"`');
+  });
 });

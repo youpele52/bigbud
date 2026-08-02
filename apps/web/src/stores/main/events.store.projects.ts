@@ -1,4 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
+import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 
 import {
   buildSidebarThreadSummary,
@@ -15,6 +16,8 @@ import {
   updateProject,
 } from "./helpers.store";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { prependSidebarRecentThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
+import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
 
 export function applyProjectEvent(
   state: AppState,
@@ -45,12 +48,20 @@ export function applyProjectEvent(
         deletingAt: null,
         deletedAt: null,
       });
+      const activeThreadCount =
+        existingIndex >= 0 && state.projects[existingIndex]?.id === nextProject.id
+          ? state.projects[existingIndex]?.activeThreadCount
+          : 0;
+      const projectWithThreadCount = {
+        ...nextProject,
+        ...(activeThreadCount === undefined ? {} : { activeThreadCount }),
+      };
       const projects =
         existingIndex >= 0
           ? state.projects.map((project, index) =>
-              index === existingIndex ? nextProject : project,
+              index === existingIndex ? projectWithThreadCount : project,
             )
-          : [...state.projects, nextProject];
+          : [...state.projects, projectWithThreadCount];
       return { ...state, projects };
     }
 
@@ -91,11 +102,12 @@ export function applyProjectEvent(
     case "thread.created": {
       const existing = state.threads.find((thread) => thread.id === event.payload.threadId);
       const nextThread = mapProjectThread(event);
+      const projects = applyActiveThreadCountTransition(state.projects, existing, nextThread);
       const threads = existing
         ? state.threads.map((thread) => (thread.id === nextThread.id ? nextThread : thread))
         : [...state.threads, nextThread];
       if (nextThread.purpose === "side-chat") {
-        return { ...state, threads };
+        return { ...state, projects, threads };
       }
       const nextSummary = buildSidebarThreadSummary(nextThread);
       const previousSummary = state.sidebarThreadsById[nextThread.id];
@@ -116,9 +128,13 @@ export function applyProjectEvent(
       );
       return {
         ...state,
+        projects,
         threads,
         sidebarThreadsById,
         threadIdsByProjectId,
+        sidebarRecentThreadIds: isBuiltInChatsProject(nextThread.projectId)
+          ? prependSidebarRecentThreadId(state.sidebarRecentThreadIds, nextThread.id)
+          : state.sidebarRecentThreadIds,
       };
     }
 
@@ -129,6 +145,7 @@ export function applyProjectEvent(
         return state;
       }
       const deletedThread = state.threads.find((thread) => thread.id === event.payload.threadId);
+      const projects = applyActiveThreadCountTransition(state.projects, deletedThread, undefined);
       const sidebarThreadsById = { ...state.sidebarThreadsById };
       delete sidebarThreadsById[event.payload.threadId];
       const threadHydrationById = { ...state.threadHydrationById };
@@ -142,10 +159,19 @@ export function applyProjectEvent(
         : state.threadIdsByProjectId;
       return {
         ...state,
+        projects,
         threads,
         sidebarThreadsById,
         threadIdsByProjectId,
         threadHydrationById,
+        sidebarRecentThreadIds: removeSidebarThreadId(
+          state.sidebarRecentThreadIds,
+          event.payload.threadId,
+        ),
+        sidebarPinnedThreadIds: removeSidebarThreadId(
+          state.sidebarPinnedThreadIds,
+          event.payload.threadId,
+        ),
       };
     }
 

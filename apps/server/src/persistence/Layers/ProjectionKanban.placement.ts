@@ -31,11 +31,18 @@ export const makePlaceCard = (deps: PlacementDeps) =>
     readonly status: KanbanStatus;
     readonly targetIndex: number;
     readonly updatedAt: string;
+    readonly expectedUpdatedAt?: string | undefined;
   }) {
     const absolutePath = deps.path.join(deps.stateDir, input.cardId);
     const card = yield* deps.tryReadCard(absolutePath);
     if (Option.isNone(card)) {
       return yield* fileSystemError("placeCard", "Kanban card not found");
+    }
+    if (input.expectedUpdatedAt && input.expectedUpdatedAt !== card.value.updatedAt) {
+      return yield* fileSystemError(
+        "placeCard",
+        "Item changed since it was read. Reload and try again.",
+      );
     }
 
     const scopeInput: ListProjectionKanbanCardsInput = {

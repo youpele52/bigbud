@@ -20,6 +20,10 @@ import {
 } from "./Sidebar.logic";
 import { useSidebarKeyboardNav } from "./Sidebar.keyboardNav.logic";
 import type { SidebarThreadSummary } from "../../models/types";
+import {
+  getRemainingSidebarThreadCount,
+  indexActiveSidebarThreadIdsByProject,
+} from "../../logic/thread/sidebarThreadCount.logic";
 import type { RenderedProjectEntry, SidebarProjectSnapshot } from "./Sidebar.types";
 
 const THREAD_PREVIEW_LIMIT = 4;
@@ -53,6 +57,7 @@ export function useSidebarRenderedProjects({
   platform,
 }: SidebarRenderedProjectsInput): SidebarRenderedProjectsOutput {
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
+  const threads = useStore((store) => store.threads);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
   const threadSummaryCursorByProjectId = useStore(
     (store) => store.threadSummaryCursorByProjectId ?? {},
@@ -90,6 +95,11 @@ export function useSidebarRenderedProjects({
 
   const { showThreadJumpHints, updateThreadJumpHintsVisibility } = useThreadJumpHintVisibility();
 
+  const loadedActiveThreadIdsByProject = useMemo(
+    () => indexActiveSidebarThreadIdsByProject(threads),
+    [threads],
+  );
+
   const renderedProjects = useMemo(
     () =>
       sortedProjects.map((project) => {
@@ -113,30 +123,46 @@ export function useSidebarRenderedProjects({
         const activeThreadId = routeThreadId ?? undefined;
         const isThreadListExpanded = expandedThreadListsByProject.has(project.id);
         const shouldShowThreadPanel = project.expanded;
-        const {
-          hasHiddenThreads,
-          hiddenThreads,
-          visibleThreads: visibleProjectThreads,
-        } = getVisibleThreadsForProject({
+        const preview = getVisibleThreadsForProject({
           threads: projectThreads,
           activeThreadId,
-          isThreadListExpanded,
+          isThreadListExpanded: false,
           previewLimit: THREAD_PREVIEW_LIMIT,
         });
+        const visibleProjectThreads = isThreadListExpanded
+          ? projectThreads
+          : preview.visibleThreads;
         const hiddenThreadStatus = resolveProjectStatusIndicator(
-          hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
+          preview.hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
         );
-        const hasMoreThreads = threadSummaryCursorByProjectId[project.id] !== null;
+        const cursorHasMoreThreads = threadSummaryCursorByProjectId[project.id] !== null;
         const orderedProjectThreadIds = projectThreads.map((thread) => thread.id);
         const renderedThreadIds = visibleProjectThreads.map((thread) => thread.id);
+        const collapsedHiddenCount = getRemainingSidebarThreadCount({
+          authoritativeActiveThreadCount: project.activeThreadCount,
+          representedThreadIds: preview.visibleThreads.map((thread) => thread.id),
+        });
+        const unloadedCount = getRemainingSidebarThreadCount({
+          authoritativeActiveThreadCount: project.activeThreadCount,
+          representedThreadIds: loadedActiveThreadIdsByProject.get(project.id) ?? [],
+        });
+        const hasHiddenThreads =
+          collapsedHiddenCount === null
+            ? preview.hasHiddenThreads || cursorHasMoreThreads
+            : collapsedHiddenCount > 0;
+        const hasMoreThreads =
+          cursorHasMoreThreads && (unloadedCount === null || unloadedCount > 0);
         const showEmptyThreadState =
           project.expanded &&
           projectThreads.length === 0 &&
-          Object.hasOwn(threadSummaryCursorByProjectId, project.id);
+          Object.hasOwn(threadSummaryCursorByProjectId, project.id) &&
+          (project.activeThreadCount === 0 ||
+            (project.activeThreadCount === undefined && !cursorHasMoreThreads));
 
         return {
           hasHiddenThreads,
           hasMoreThreads,
+          threadCounts: { collapsedHiddenCount, unloadedCount },
           hiddenThreadStatus,
           orderedProjectThreadIds,
           project,
@@ -158,6 +184,7 @@ export function useSidebarRenderedProjects({
       threadIdsByProjectId,
       threadLastVisitedAtById,
       loadingThreadPagesByProject,
+      loadedActiveThreadIdsByProject,
     ],
   );
 

@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
@@ -123,6 +124,9 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 
 export const ThreadEnvMode = Schema.Literals(THREAD_ENV_MODES);
 export type ThreadEnvMode = typeof ThreadEnvMode.Type;
+
+export const AgentBrowserPreference = Schema.Literals(["bigbud", "system"]);
+export type AgentBrowserPreference = typeof AgentBrowserPreference.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -250,6 +254,9 @@ export const ServerSettings = Schema.Struct({
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  agentBrowserPreference: AgentBrowserPreference.pipe(
+    Schema.withDecodingDefault(() => "bigbud" as const satisfies AgentBrowserPreference),
+  ),
   computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   computerUseCheckInIntervalMs: ComputerUseCheckInIntervalMs.pipe(
@@ -452,6 +459,7 @@ export const ServerSettingsPatch = Schema.Struct({
       enabled: Schema.optionalKey(Schema.Boolean),
     }),
   ),
+  agentBrowserPreference: Schema.optionalKey(AgentBrowserPreference),
   computerUseEnabled: Schema.optionalKey(Schema.Boolean),
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),

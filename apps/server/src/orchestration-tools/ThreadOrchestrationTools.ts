@@ -18,7 +18,7 @@ import { lockThreadTitle } from "./ThreadTitleLock.ts";
 export const agentThreadCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`agent:${tag}:${crypto.randomUUID()}`);
 
-const stableId = (prefix: string, value: string): string =>
+export const stableThreadToolId = (prefix: string, value: string): string =>
   `${prefix}:${createHash("sha256").update(value).digest("hex")}`;
 
 const delegationError = (error: unknown): Error =>
@@ -68,9 +68,9 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     }
 
     const identity = `${input.callerThreadId}\n${input.sourceMessageId}\n${invocationId}`;
-    const delegationId = stableId("delegation", identity);
-    const childThreadId = ThreadId.makeUnsafe(stableId("thread", identity));
-    const childTurnId = TurnId.makeUnsafe(stableId("turn", identity));
+    const delegationId = stableThreadToolId("delegation", identity);
+    const childThreadId = ThreadId.makeUnsafe(stableThreadToolId("thread", identity));
+    const childTurnId = TurnId.makeUnsafe(stableThreadToolId("turn", identity));
     const now = new Date().toISOString();
     const existing = yield* input.threadDelegationRepository
       .getByInvocation({
@@ -143,7 +143,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     const createResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.create",
-        commandId: CommandId.makeUnsafe(stableId("command", `${identity}:create`)),
+        commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:create`)),
         threadId: delegation.childThreadId,
         projectId: targetProjectId,
         title,
@@ -164,7 +164,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     const turnResult = yield* input.orchestrationEngine
       .dispatch({
         type: "thread.turn.start",
-        commandId: CommandId.makeUnsafe(stableId("command", `${identity}:turn`)),
+        commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:turn`)),
         threadId: delegation.childThreadId,
         message: {
           messageId: input.sourceMessageId,

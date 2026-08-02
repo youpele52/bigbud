@@ -7,9 +7,15 @@ import { type ThreadPr } from "./SidebarThreadRow";
 
 type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusPill>>;
 
+export interface SidebarThreadCountState {
+  collapsedHiddenCount: number | null;
+  unloadedCount: number | null;
+}
+
 export interface RenderedProjectData {
   hasHiddenThreads: boolean;
   hasMoreThreads: boolean;
+  threadCounts: SidebarThreadCountState;
   hiddenThreadStatus: ProjectStatusIndicator | null;
   orderedProjectThreadIds: readonly ThreadId[];
   project: {

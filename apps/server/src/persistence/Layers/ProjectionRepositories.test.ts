@@ -151,6 +151,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
         branch: null,
         worktreePath: null,
         latestTurnId: null,
+        queuedPrompts: [],
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
@@ -214,6 +215,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
           projectId: ProjectId.makeUnsafe("project-parent"),
         },
         latestTurnId: null,
+        queuedPrompts: [],
         createdAt: "2026-03-24T00:00:00.000Z",
         updatedAt: "2026-03-24T00:00:00.000Z",
         archivedAt: null,
@@ -377,7 +379,6 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
   it.effect("derives title from H1 in content, not from filename", () =>
     Effect.gen(function* () {
       const notes = yield* ProjectionNoteRepository;
-
       const created = yield* notes.create({
         projectId: ProjectId.makeUnsafe("project-null-options"),
         title: "Ignored Title",
@@ -389,6 +390,7 @@ projectionRepositoriesLayer("Projection repositories", (it) => {
       const byId = yield* notes.getById({ noteId: created.noteId });
       assert.ok(Option.isSome(byId));
       assert.strictEqual(Option.getOrNull(byId)?.title, "Real Title");
+      assert.strictEqual(Option.getOrNull(byId)?.projectId, "project-null-options");
     }),
   );
 });

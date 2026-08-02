@@ -7,26 +7,19 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import { deriveWorkLogEntries } from "@bigbud/shared/workLog";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { deriveActiveWorkStartedAt } from "~/logic/session/session.logic";
 import {
   derivePendingUserInputProgress,
   type PendingUserInputDraftAnswer,
-  setPendingUserInputCustomAnswer,
-  togglePendingUserInputOptionSelection,
 } from "~/logic/user-input";
 
-import { MobileWorkingIndicator } from "../components/threads/thread/composer/MobileWorkingIndicator";
 import { MobileStartupSplash } from "../components/shell/MobileStartupSplash";
 import {
   applyMobileUserInputCustomAnswer,
-  MobileComposer,
   resolveMobileUserInputAnswers,
 } from "../components/threads/thread/composer/MobileComposer";
-import { MobileMessages } from "../components/threads/thread/MobileMessages";
-import { MobileReaderOutline } from "../components/threads/thread/MobileReaderOutline";
-import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { useMobileServerConfig } from "../hooks/useMobileServerConfig";
 import { useMobileSnapshot } from "../hooks/useMobileSnapshot";
 import { useMobileThread } from "../hooks/useMobileThread";
@@ -49,15 +42,13 @@ import {
   resolveThreadWorkspaceRoot,
 } from "../lib/mobileModels";
 import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic";
-import {
-  deriveMobileReaderPosition,
-  deriveUserTurnAnchorsFromThreadMessages,
-  readerPositionEquals,
-  type ChatReaderPosition,
-} from "../logic/mobileReaderPosition.logic";
+import { deriveUserTurnAnchorsFromThreadMessages } from "../logic/mobileReaderPosition.logic";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useMobileSessionState } from "../context/MobileSessionContext";
+import { useMobileThreadScroll } from "./MobileThread.scroll";
+import { MobileThreadView } from "./MobileThread.view";
+import { createMobileUserInputHandlers } from "./MobileThread.userInput";
 
 function newId() {
   return crypto.randomUUID();
@@ -95,15 +86,6 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const [isRespondingToUserInput, setIsRespondingToUserInput] = useState(false);
   const [pendingModelSelection, setPendingModelSelection] = useState<ModelSelection | null>(null);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
-  const [readerPosition, setReaderPosition] = useState<ChatReaderPosition>({
-    currentAnchorMessageId: null,
-    visibleMessageIds: [],
-  });
-
-  const messagesScrollRef = useRef<HTMLDivElement | null>(null);
-  const lastScrolledThreadIdRef = useRef<ThreadId | null>(null);
-  const lastMessageFingerprintRef = useRef<string | null>(null);
-
   const draftThread = useMemo(() => getMobileDraftThread(threadId), [threadId]);
 
   const snapshotThread = useMemo(
@@ -189,92 +171,18 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const lockedProvider =
     isLocked && !providerUnlocked ? resolveMobileLockedProvider(thread, draftThread) : null;
 
-  useLayoutEffect(() => {
-    if (lastScrolledThreadIdRef.current === threadId) {
-      return;
-    }
-    if (!thread) {
-      return;
-    }
-    const scrollContainer = messagesScrollRef.current;
-    if (!scrollContainer) {
-      return;
-    }
-    scrollContainer.scrollTop = scrollContainer.scrollHeight;
-    lastScrolledThreadIdRef.current = threadId;
-    const timeoutId = window.setTimeout(() => {
-      const container = messagesScrollRef.current;
-      if (container && container.isConnected) {
-        container.scrollTop = container.scrollHeight;
-      }
-    }, 96);
-    return () => window.clearTimeout(timeoutId);
-  }, [threadId, thread]);
-
-  useLayoutEffect(() => {
-    if (!thread) {
-      return;
-    }
-    const lastMessage = thread.messages.at(-1);
-    const fingerprint = lastMessage
-      ? `${lastMessage.id}:${lastMessage.text.length}:${lastMessage.streaming ? 1 : 0}`
-      : `empty:${thread.messages.length}`;
-    if (lastMessageFingerprintRef.current === fingerprint) {
-      return;
-    }
-    lastMessageFingerprintRef.current = fingerprint;
-
-    const scrollContainer = messagesScrollRef.current;
-    if (!scrollContainer) {
-      return;
-    }
-    const distanceFromBottom =
-      scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-    if (isRunning || distanceFromBottom < 120) {
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
-    }
-  }, [isRunning, thread]);
-
   const userTurnAnchors = useMemo(
     () => deriveUserTurnAnchorsFromThreadMessages(thread?.messages ?? []),
     [thread?.messages],
   );
 
-  useLayoutEffect(() => {
-    const scrollContainer = messagesScrollRef.current;
-    if (!scrollContainer || userTurnAnchors.length === 0) {
-      setReaderPosition((current) =>
-        current.currentAnchorMessageId === null && current.visibleMessageIds.length === 0
-          ? current
-          : { currentAnchorMessageId: null, visibleMessageIds: [] },
-      );
-      return;
-    }
-
-    const publishReaderPosition = () => {
-      const next = deriveMobileReaderPosition(scrollContainer);
-      setReaderPosition((current) => (readerPositionEquals(current, next) ? current : next));
-    };
-
-    publishReaderPosition();
-    scrollContainer.addEventListener("scroll", publishReaderPosition, { passive: true });
-    const frameId = window.requestAnimationFrame(publishReaderPosition);
-    return () => {
-      scrollContainer.removeEventListener("scroll", publishReaderPosition);
-      window.cancelAnimationFrame(frameId);
-    };
-  }, [thread?.messages, userTurnAnchors.length]);
-
-  const scrollToMessage = useCallback((messageId: MessageId) => {
-    const scrollContainer = messagesScrollRef.current;
-    if (!scrollContainer) {
-      return;
-    }
-    const element = scrollContainer.querySelector<HTMLElement>(
-      `[data-message-id="${CSS.escape(messageId)}"]`,
-    );
-    element?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, []);
+  const { messagesScrollRef, readerPosition, scrollToMessage } = useMobileThreadScroll({
+    isRunning,
+    messages: thread?.messages ?? [],
+    threadId,
+    threadLoaded: thread !== null,
+    userTurnAnchorCount: userTurnAnchors.length,
+  });
 
   const interruptTurn = useCallback(async () => {
     if (!client) {
@@ -470,18 +378,14 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     }
 
     await client.dispatchCommand({
-      type: "thread.turn.start",
+      type: "thread.message.submit",
       commandId: newCommandId(),
       threadId,
-      runtimeMode: thread.runtimeMode,
-      interactionMode: thread.interactionMode,
       createdAt,
-      modelSelection: selectedModelSelection,
+      delivery: "auto",
       message: {
         messageId,
-        role: "user",
         text: trimmedPrompt,
-        attachments: [],
       },
     });
     setPrompt("");
@@ -506,135 +410,60 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     await Promise.all([snapshotQuery.refetch(), threadQuery.refetch()]);
   }
 
-  function handleToggleUserInputOption(questionId: string, optionLabel: string) {
-    if (!activePendingUserInput) {
-      return;
-    }
-    const question = activePendingUserInput.questions.find((entry) => entry.id === questionId);
-    if (!question) {
-      return;
-    }
-    setUserInputAnswersByRequestId((existing) => ({
-      ...existing,
-      [activePendingUserInput.requestId]: {
-        ...existing[activePendingUserInput.requestId],
-        [questionId]: togglePendingUserInputOptionSelection(
-          question,
-          existing[activePendingUserInput.requestId]?.[questionId],
-          optionLabel,
-        ),
-      },
-    }));
-    setPrompt("");
-  }
-
-  function handleChangeUserInputCustomAnswer(questionId: string, value: string) {
-    if (!activePendingUserInput) {
-      return;
-    }
-    setUserInputAnswersByRequestId((existing) => ({
-      ...existing,
-      [activePendingUserInput.requestId]: {
-        ...existing[activePendingUserInput.requestId],
-        [questionId]: setPendingUserInputCustomAnswer(
-          existing[activePendingUserInput.requestId]?.[questionId],
-          value,
-        ),
-      },
-    }));
-  }
-
-  function handleAdvanceUserInput() {
-    if (!activePendingUserInput) {
-      return;
-    }
-    const progress = derivePendingUserInputProgress(
-      activePendingUserInput.questions,
-      activeUserInputAnswers,
-      activeUserInputQuestionIndex,
-    );
-    if (progress.isLastQuestion) {
-      void sendPrompt();
-      return;
-    }
-    if (progress.canAdvance) {
-      setUserInputQuestionIndexByRequestId((existing) => ({
-        ...existing,
-        [activePendingUserInput.requestId]: activeUserInputQuestionIndex + 1,
-      }));
-      setPrompt("");
-    }
-  }
-
-  function handlePreviousUserInputQuestion() {
-    if (!activePendingUserInput) {
-      return;
-    }
-    setUserInputQuestionIndexByRequestId((existing) => ({
-      ...existing,
-      [activePendingUserInput.requestId]: Math.max(activeUserInputQuestionIndex - 1, 0),
-    }));
-  }
+  const userInputHandlers = createMobileUserInputHandlers({
+    activeAnswers: activeUserInputAnswers,
+    activePendingUserInput,
+    activeQuestionIndex: activeUserInputQuestionIndex,
+    sendPrompt,
+    setAnswersByRequestId: setUserInputAnswersByRequestId,
+    setPrompt,
+    setQuestionIndexByRequestId: setUserInputQuestionIndexByRequestId,
+  });
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          ref={messagesScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-44 [scrollbar-gutter:stable]"
-        >
-          {workLogEntries.length > 0 ? (
-            <div className="pt-3">
-              <MobileWorkLog entries={workLogEntries} />
-            </div>
-          ) : null}
-          <MobileMessages cwd={workspaceRoot} messages={messages} />
-        </div>
-        {showWorkingIndicator ? (
-          <MobileWorkingIndicator
-            activeWorkStartedAt={activeWorkStartedAt}
-            nowIso={nowIso}
-            verb={workingVerb}
-          />
-        ) : null}
-        <div className="pointer-events-none absolute top-0 right-0 bottom-[calc(11rem+env(safe-area-inset-bottom))] z-20 flex w-7 items-center justify-center">
-          <MobileReaderOutline
-            anchors={userTurnAnchors}
-            currentAnchorMessageId={readerPosition.currentAnchorMessageId}
-            onJumpToMessage={scrollToMessage}
-          />
-        </div>
-      </div>
-
-      <MobileComposer
-        availableProviders={providers}
-        isRespondingToUserInput={isRespondingToUserInput}
-        isRunning={isRunning}
-        lockedProvider={lockedProvider}
-        modelSelection={selectedModelSelection}
-        onAdvanceUserInput={handleAdvanceUserInput}
-        onChange={setPrompt}
-        onChangeUserInputCustomAnswer={handleChangeUserInputCustomAnswer}
-        onModelSelectionChange={handleModelSelectionChange}
-        onPreviousUserInputQuestion={handlePreviousUserInputQuestion}
-        onProviderUnlock={() => setProviderUnlocked(true)}
-        onRespondToApproval={(requestId, decision) => void respondToApproval(requestId, decision)}
-        onSend={() => void sendPrompt()}
-        onStop={() => void interruptTurn()}
-        onToggleUserInputOption={handleToggleUserInputOption}
-        pendingApproval={activePendingApproval}
-        pendingUserInput={activePendingUserInput}
-        placeholder="Ask anything, @tag files/folders, or use / commands"
-        projectTitle={projectTitle}
-        isGitRepo={gitStatusQuery.data?.isRepo ?? false}
-        activeThreadBranch={thread?.branch ?? draftThread?.branch ?? null}
-        activeWorktreePath={thread?.worktreePath ?? draftThread?.worktreePath ?? null}
-        currentGitBranch={gitStatusQuery.data?.branch ?? null}
-        userInputAnswers={activeUserInputAnswers}
-        userInputQuestionIndex={activeUserInputQuestionIndex}
-        value={prompt}
-        workingVerb={workingVerb}
-      />
-    </div>
+    <MobileThreadView
+      activeWorkStartedAt={activeWorkStartedAt}
+      messages={messages}
+      messagesScrollRef={messagesScrollRef}
+      nowIso={nowIso}
+      readerOutlineProps={{
+        anchors: userTurnAnchors,
+        currentAnchorMessageId: readerPosition.currentAnchorMessageId,
+        onJumpToMessage: scrollToMessage,
+      }}
+      showWorkingIndicator={showWorkingIndicator}
+      workingVerb={workingVerb}
+      workLogEntries={workLogEntries}
+      workspaceRoot={workspaceRoot}
+      composerProps={{
+        availableProviders: providers,
+        isRespondingToUserInput: isRespondingToUserInput,
+        isRunning,
+        lockedProvider,
+        modelSelection: selectedModelSelection,
+        onAdvanceUserInput: userInputHandlers.advance,
+        onChange: setPrompt,
+        onChangeUserInputCustomAnswer: userInputHandlers.changeCustomAnswer,
+        onModelSelectionChange: handleModelSelectionChange,
+        onPreviousUserInputQuestion: userInputHandlers.previous,
+        onProviderUnlock: () => setProviderUnlocked(true),
+        onRespondToApproval: (requestId, decision) => void respondToApproval(requestId, decision),
+        onSend: () => void sendPrompt(),
+        onStop: () => void interruptTurn(),
+        onToggleUserInputOption: userInputHandlers.toggleOption,
+        pendingApproval: activePendingApproval,
+        pendingUserInput: activePendingUserInput,
+        placeholder: "Ask anything, @tag files/folders, or use / commands",
+        projectTitle,
+        isGitRepo: gitStatusQuery.data?.isRepo ?? false,
+        activeThreadBranch: thread?.branch ?? draftThread?.branch ?? null,
+        activeWorktreePath: thread?.worktreePath ?? draftThread?.worktreePath ?? null,
+        currentGitBranch: gitStatusQuery.data?.branch ?? null,
+        userInputAnswers: activeUserInputAnswers,
+        userInputQuestionIndex: activeUserInputQuestionIndex,
+        value: prompt,
+        workingVerb,
+      }}
+    />
   );
 }

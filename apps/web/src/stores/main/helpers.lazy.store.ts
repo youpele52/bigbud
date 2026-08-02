@@ -4,6 +4,9 @@ import type {
   GetStartupProjectCatalogResult,
   ThreadId,
 } from "@bigbud/contracts";
+import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
+import { FAVORITE_THREAD_LIMIT } from "@bigbud/contracts/constants/settings.constant";
+import { SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { AppState, ThreadHydration } from "./main.store";
 import {
@@ -12,6 +15,50 @@ import {
   mapThreadSummary,
   mergeThreadDetail,
 } from "./mappers.lazy.store";
+import { normalizeSidebarThreadIds } from "./helpers.sidebar.store";
+import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
+
+function mergeThreadSummary(
+  thread: AppState["threads"][number],
+  summary: Parameters<typeof mapThreadSummary>[0],
+): AppState["threads"][number] {
+  const mapped = mapThreadSummary(summary);
+  return {
+    ...thread,
+    ...mapped,
+    session: thread.session ?? mapped.session,
+    latestTurn: thread.latestTurn ?? mapped.latestTurn,
+    error: thread.error ?? mapped.error,
+    elevatorSummaryMessageCount:
+      thread.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
+    archivedAt: thread.archivedAt,
+    ...(thread.deletingAt !== undefined ? { deletingAt: thread.deletingAt } : {}),
+    messages: thread.messages,
+    activities: thread.activities,
+    proposedPlans: thread.proposedPlans,
+    turnDiffSummaries: thread.turnDiffSummaries,
+    ...(thread.pendingSourceProposedPlan !== undefined
+      ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
+      : {}),
+  };
+}
+
+function mergeSidebarThreadSummary(
+  previous: AppState["sidebarThreadsById"][string] | undefined,
+  summary: Parameters<typeof mapSidebarThreadSummary>[0],
+): AppState["sidebarThreadsById"][string] {
+  const mapped = mapSidebarThreadSummary(summary);
+  if (!previous) return mapped;
+  return {
+    ...mapped,
+    session: previous.session ?? mapped.session,
+    latestTurn: previous.latestTurn ?? mapped.latestTurn,
+    elevatorSummaryMessageCount:
+      previous.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
+    archivedAt: previous.archivedAt,
+    ...(previous.deletingAt !== undefined ? { deletingAt: previous.deletingAt } : {}),
+  };
+}
 
 export function setThreadHydration(
   state: AppState,
@@ -27,28 +74,55 @@ export function setThreadHydration(
 export function syncBoundedCatalog(
   state: AppState,
   catalog: GetStartupProjectCatalogResult,
+  sidebarCatalog: GetSidebarThreadCatalogResult,
   pages: ReadonlyArray<GetProjectThreadSummariesResult>,
 ): AppState {
-  const summaries = pages.flatMap((page) => page.threads);
+  const summaries = [
+    ...new Map(
+      [...sidebarCatalog.threads, ...pages.flatMap((page) => page.threads)].map((summary) => [
+        summary.id,
+        summary,
+      ]),
+    ).values(),
+  ];
   const previousThreads = new Map(state.threads.map((thread) => [thread.id, thread]));
-  const threads = summaries.map(
-    (summary) => previousThreads.get(summary.id) ?? mapThreadSummary(summary),
-  );
-  const sidebarThreadsById = Object.fromEntries(
-    summaries.map((summary) => [summary.id, mapSidebarThreadSummary(summary)]),
-  );
-  const threadIdsByProjectId = Object.fromEntries(
-    pages.map((page) => [page.projectId, page.threads.map((thread) => thread.id)]),
-  );
-  const threadSummaryCursorByProjectId = Object.fromEntries(
-    pages.map((page) => [page.projectId, page.nextCursor ?? null]),
-  );
-  const threadHydrationById: AppState["threadHydrationById"] = Object.fromEntries(
-    summaries.map((summary) => [
-      summary.id,
-      state.threadHydrationById[summary.id] ?? ({ status: "unloaded" } as const),
-    ]),
-  );
+  const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
+  const threads = state.threads
+    .map((thread) => {
+      const summary = summaryById.get(thread.id);
+      if (!summary) return thread;
+      return mergeThreadSummary(thread, summary);
+    })
+    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+  const sidebarThreadsById = {
+    ...state.sidebarThreadsById,
+    ...Object.fromEntries(
+      summaries.map((summary) => [
+        summary.id,
+        mergeSidebarThreadSummary(state.sidebarThreadsById[summary.id], summary),
+      ]),
+    ),
+  };
+  const threadIdsByProjectId = {
+    ...state.threadIdsByProjectId,
+    ...Object.fromEntries(
+      pages.map((page) => [page.projectId, page.threads.map((thread) => thread.id)]),
+    ),
+  };
+  const threadSummaryCursorByProjectId = {
+    ...state.threadSummaryCursorByProjectId,
+    ...Object.fromEntries(pages.map((page) => [page.projectId, page.nextCursor ?? null])),
+  };
+  const threadHydrationById: AppState["threadHydrationById"] = {
+    ...state.threadHydrationById,
+    ...Object.fromEntries(
+      summaries.map((summary) => [
+        summary.id,
+        state.threadHydrationById[summary.id] ?? ({ status: "unloaded" } as const),
+      ]),
+    ),
+  };
+  const availableThreadIds = new Set(summaries.map((summary) => summary.id));
   return {
     ...state,
     projects: catalog.projects.map(mapProjectSummary),
@@ -57,7 +131,70 @@ export function syncBoundedCatalog(
     threadIdsByProjectId,
     threadSummaryCursorByProjectId,
     threadHydrationById,
+    sidebarRecentThreadIds: normalizeSidebarThreadIds(
+      sidebarCatalog.recentThreadIds,
+      availableThreadIds,
+      SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS,
+    ),
+    sidebarPinnedThreadIds: normalizeSidebarThreadIds(
+      sidebarCatalog.pinnedThreadIds,
+      availableThreadIds,
+      FAVORITE_THREAD_LIMIT,
+    ),
     bootstrapComplete: true,
+  };
+}
+
+export function syncSidebarCatalog(
+  state: AppState,
+  sidebarCatalog: GetSidebarThreadCatalogResult,
+): AppState {
+  const summaries = sidebarCatalog.threads;
+  const previousThreads = new Map(state.threads.map((thread) => [thread.id, thread]));
+  const threads = state.threads
+    .map((thread) => {
+      const summary = summaries.find((candidate) => candidate.id === thread.id);
+      return summary ? mergeThreadSummary(thread, summary) : thread;
+    })
+    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+  const sidebarThreadsById = {
+    ...state.sidebarThreadsById,
+    ...Object.fromEntries(
+      summaries.map((summary) => [
+        summary.id,
+        mergeSidebarThreadSummary(state.sidebarThreadsById[summary.id], summary),
+      ]),
+    ),
+  };
+  const threadHydrationById: AppState["threadHydrationById"] = {
+    ...state.threadHydrationById,
+    ...Object.fromEntries(
+      summaries.map((summary) => [
+        summary.id,
+        state.threadHydrationById[summary.id] ?? ({ status: "unloaded" } as const),
+      ]),
+    ),
+  };
+  const availableThreadIds = new Set(summaries.map((summary) => summary.id));
+  return {
+    ...state,
+    projects: applyAuthoritativeProjectThreadCounts(
+      state.projects,
+      sidebarCatalog.projectThreadCounts,
+    ),
+    threads,
+    sidebarThreadsById,
+    threadHydrationById,
+    sidebarRecentThreadIds: normalizeSidebarThreadIds(
+      sidebarCatalog.recentThreadIds,
+      availableThreadIds,
+      SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS,
+    ),
+    sidebarPinnedThreadIds: normalizeSidebarThreadIds(
+      sidebarCatalog.pinnedThreadIds,
+      availableThreadIds,
+      FAVORITE_THREAD_LIMIT,
+    ),
   };
 }
 
@@ -77,9 +214,7 @@ export function appendProjectThreadSummaries(
     threads: state.threads
       .map((thread) => {
         const summary = summaryById.get(thread.id);
-        return summary
-          ? { ...thread, ...mapThreadSummary(summary), messages: thread.messages }
-          : thread;
+        return summary ? mergeThreadSummary(thread, summary) : thread;
       })
       .concat(
         page.threads
@@ -89,7 +224,10 @@ export function appendProjectThreadSummaries(
     sidebarThreadsById: {
       ...state.sidebarThreadsById,
       ...Object.fromEntries(
-        page.threads.map((summary) => [summary.id, mapSidebarThreadSummary(summary)]),
+        page.threads.map((summary) => [
+          summary.id,
+          mergeSidebarThreadSummary(state.sidebarThreadsById[summary.id], summary),
+        ]),
       ),
     },
     threadIdsByProjectId: { ...state.threadIdsByProjectId, [page.projectId]: nextIds },

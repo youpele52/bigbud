@@ -1,3 +1,4 @@
+// TODO: Split by concern when this file is next touched.
 import path from "node:path";
 import { Effect, Layer } from "effect";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
@@ -183,7 +184,11 @@ const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationInfrastructureLayerLive),
     Layer.provide(
-      ComputerUseLive.pipe(Layer.provide(BrowserManagerLive), Layer.provide(CuaDriverLive)),
+      ComputerUseLive.pipe(
+        Layer.provide(BrowserManagerLive),
+        Layer.provide(CuaDriverLive),
+        Layer.provide(OpenLive),
+      ),
     ),
   ),
 );

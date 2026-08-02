@@ -67,6 +67,7 @@ describe("orchestration projector — thread lifecycle", () => {
         deletedAt: null,
         messages: [],
         proposedPlans: [],
+        queuedPrompts: [],
         tasks: [],
         activities: [],
         checkpoints: [],

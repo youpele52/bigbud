@@ -138,6 +138,7 @@ export interface TurnDiffSummary {
 export interface Project {
   id: ProjectId;
   name: string;
+  activeThreadCount?: number;
   providerRuntimeExecutionTargetId?: ExecutionTargetId;
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
@@ -169,6 +170,7 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  queuedPrompts?: Array<{ id: MessageId; text: string; createdAt: string }>;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;

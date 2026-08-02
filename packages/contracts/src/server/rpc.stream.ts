@@ -26,14 +26,25 @@ import { ServerSettingsError } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
   GetProjectThreadSummariesInput,
+  GetSidebarThreadCatalogInput,
   GetStartupProjectCatalogInput,
 } from "../orchestration/orchestration.catalog";
 import { GetSelectedThreadDetailInput } from "../orchestration/orchestration.detail";
 import {
   OrchestrationGetProjectThreadSummariesError,
+  OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetStartupProjectCatalogError,
   OrchestrationGetSelectedThreadDetailError,
 } from "../orchestration/orchestration.rpc";
+
+export const WsOrchestrationGetSidebarThreadCatalogRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog,
+  {
+    payload: GetSidebarThreadCatalogInput,
+    success: OrchestrationRpcSchemas.getSidebarThreadCatalog.output,
+    error: OrchestrationGetSidebarThreadCatalogError,
+  },
+);
 
 export const WsOrchestrationGetStartupProjectCatalogRpc = Rpc.make(
   ORCHESTRATION_WS_METHODS.getStartupProjectCatalog,

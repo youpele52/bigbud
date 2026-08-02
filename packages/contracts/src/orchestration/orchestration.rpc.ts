@@ -17,6 +17,8 @@ import { OrchestrationThread } from "./orchestration.thread";
 import {
   GetProjectThreadSummariesInput,
   GetProjectThreadSummariesResult,
+  GetSidebarThreadCatalogInput,
+  GetSidebarThreadCatalogResult,
   GetStartupProjectCatalogInput,
   GetStartupProjectCatalogResult,
 } from "./orchestration.catalog";
@@ -140,6 +142,10 @@ const OrchestrationReplayEventsResult = Schema.Struct({
 export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
 
 export const OrchestrationRpcSchemas = {
+  getSidebarThreadCatalog: {
+    input: GetSidebarThreadCatalogInput,
+    output: GetSidebarThreadCatalogResult,
+  },
   getStartupProjectCatalog: {
     input: GetStartupProjectCatalogInput,
     output: GetStartupProjectCatalogResult,
@@ -180,6 +186,14 @@ export const OrchestrationRpcSchemas = {
 
 export class OrchestrationGetStartupProjectCatalogError extends Schema.TaggedErrorClass<OrchestrationGetStartupProjectCatalogError>()(
   "OrchestrationGetStartupProjectCatalogError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationGetSidebarThreadCatalogError extends Schema.TaggedErrorClass<OrchestrationGetSidebarThreadCatalogError>()(
+  "OrchestrationGetSidebarThreadCatalogError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

@@ -1,14 +1,6 @@
 import { useCallback } from "react";
-import {
-  BotIcon,
-  CheckIcon,
-  ExternalLinkIcon,
-  InfoIcon,
-  ShieldAlertIcon,
-  XIcon,
-} from "lucide-react";
+import { BotIcon, ExternalLinkIcon, InfoIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { DesktopComputerUsePermissionItem } from "@bigbud/contracts";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -22,8 +14,10 @@ import {
   useDesktopComputerUseStatus,
 } from "../../lib/desktopComputerUseReactQuery";
 import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
+import { PermissionStatusGrid } from "./ComputerUseAccessSettingsSection.permissions";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { enableComputerUseInBackground } from "../computer-use/computerUseEnable";
+import { normalizeComputerUsePermissionMessage } from "../computer-use/computerUsePermissionMessage";
 import {
   getComputerUseLimitedCapabilityDescription,
   getComputerUsePermissionsDescription,
@@ -44,64 +38,6 @@ function formatStatusLabel(source: string | undefined): string {
     default:
       return "Not installed yet.";
   }
-}
-
-function formatPermissionLabel(name: string): string {
-  switch (name) {
-    case "accessibility":
-      return "Accessibility";
-    case "screen_recording":
-      return "Screen Recording";
-    case "screen_recording_capturable":
-      return "Screen contents capturable";
-    default:
-      return name.replaceAll("_", " ");
-  }
-}
-
-export function formatComputerUsePermissionMessage(message: string): string {
-  const parts = message
-    .split(/(?=✅|❌|ℹ️)/u)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const informationalParts = parts.filter((part) => part.startsWith("ℹ️"));
-
-  return (informationalParts.length > 0 ? informationalParts : parts)
-    .map((part) => part.replace(/^(?:✅|❌|ℹ️)\s*/u, ""))
-    .join("\n");
-}
-
-function PermissionStatusGrid({
-  permissions,
-}: {
-  permissions: ReadonlyArray<DesktopComputerUsePermissionItem>;
-}) {
-  if (permissions.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        Permission status is unavailable until the Computer Use runtime is installed.
-      </p>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {permissions.map((permission) => (
-        <div
-          key={permission.name}
-          className="flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs"
-        >
-          <ShieldAlertIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="flex-1 truncate">{formatPermissionLabel(permission.name)}</span>
-          {permission.granted ? (
-            <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
-          ) : (
-            <XIcon className="size-3.5 shrink-0 text-destructive" />
-          )}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function ComputerUseAccessSettingsSection() {
@@ -129,14 +65,19 @@ export function ComputerUseAccessSettingsSection() {
       toastManager.add({
         type: result.ok ? "success" : "error",
         title: result.ok ? "Computer Use runtime ready" : "Computer Use install failed",
-        description: result.status.message ?? undefined,
+        description: result.status.message
+          ? normalizeComputerUsePermissionMessage(result.status.message)
+          : undefined,
       });
     },
     onError: (error) => {
       toastManager.add({
         type: "error",
         title: "Computer Use install failed",
-        description: error instanceof Error ? error.message : "Install failed.",
+        description:
+          error instanceof Error
+            ? normalizeComputerUsePermissionMessage(error.message)
+            : "Install failed.",
       });
     },
   });
@@ -154,14 +95,19 @@ export function ComputerUseAccessSettingsSection() {
       toastManager.add({
         type: nextStatus.ready ? "success" : nextStatus.repairRequired ? "error" : "warning",
         title: "Computer Use health check completed",
-        description: nextStatus.message ?? undefined,
+        description: nextStatus.message
+          ? normalizeComputerUsePermissionMessage(nextStatus.message)
+          : undefined,
       });
     },
     onError: (error) => {
       toastManager.add({
         type: "error",
         title: "Computer Use diagnostics failed",
-        description: error instanceof Error ? error.message : "Diagnostics failed.",
+        description:
+          error instanceof Error
+            ? normalizeComputerUsePermissionMessage(error.message)
+            : "Diagnostics failed.",
       });
     },
   });
@@ -179,14 +125,19 @@ export function ComputerUseAccessSettingsSection() {
       toastManager.add({
         type: nextStatus.granted ? "success" : "info",
         title: nextStatus.granted ? "Desktop permissions granted" : "Desktop permissions needed",
-        description: nextStatus.message ?? getComputerUsePermissionsRequestFallback(platform),
+        description: nextStatus.message
+          ? normalizeComputerUsePermissionMessage(nextStatus.message)
+          : getComputerUsePermissionsRequestFallback(platform),
       });
     },
     onError: (error) => {
       toastManager.add({
         type: "error",
         title: "Permission request failed",
-        description: error instanceof Error ? error.message : "Request failed.",
+        description:
+          error instanceof Error
+            ? normalizeComputerUsePermissionMessage(error.message)
+            : "Request failed.",
       });
     },
   });
@@ -286,7 +237,7 @@ export function ComputerUseAccessSettingsSection() {
                 <div className="space-y-1">
                   {permissions.message ? (
                     <p className="whitespace-pre-line">
-                      {formatComputerUsePermissionMessage(permissions.message)}
+                      {normalizeComputerUsePermissionMessage(permissions.message)}
                     </p>
                   ) : null}
                   {permissions.pendingHostAccessibilityApproval ? (
@@ -341,8 +292,16 @@ export function ComputerUseAccessSettingsSection() {
                 Policy: {status.policyVersion ?? "missing"}
                 {status.policySha256 ? ` (${status.policySha256.slice(0, 12)}…)` : ""}.
               </div>
-              {status.lastError ? <div>Last error: {status.lastError}</div> : null}
-              {status.message ? <div>{status.message}</div> : null}
+              {status.lastError ? (
+                <div className="whitespace-pre-line">
+                  Last error: {normalizeComputerUsePermissionMessage(status.lastError)}
+                </div>
+              ) : null}
+              {status.message ? (
+                <div className="whitespace-pre-line">
+                  {normalizeComputerUsePermissionMessage(status.message)}
+                </div>
+              ) : null}
             </div>
           ) : statusQuery.isLoading ? (
             "Checking runtime status."

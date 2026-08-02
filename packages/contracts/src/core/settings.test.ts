@@ -59,6 +59,7 @@ describe("DEFAULT_SERVER_SETTINGS", () => {
   });
 
   test("defaults desktop computer use to disabled until the user opts in", () => {
+    expect(DEFAULT_SERVER_SETTINGS.agentBrowserPreference).toBe("bigbud");
     expect(DEFAULT_SERVER_SETTINGS.computerUseEnabled).toBe(false);
     expect(DEFAULT_SERVER_SETTINGS.hasSeenComputerUsePrompt).toBe(false);
   });
@@ -161,6 +162,30 @@ it.effect("rejects out-of-range computer use limits", () =>
   }),
 );
 
+it.effect("accepts supported agent browser preferences and rejects invalid values", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeServerSettings({ agentBrowserPreference: "system" });
+    assert.strictEqual(parsed.agentBrowserPreference, "system");
+
+    const invalidSettings = yield* Effect.exit(
+      decodeServerSettings({ agentBrowserPreference: "provider-native" }),
+    );
+    const invalidPatch = yield* Effect.exit(
+      Schema.decodeUnknownEffect(ServerSettingsPatch)({
+        agentBrowserPreference: "provider-native",
+      }),
+    );
+    assert.strictEqual(invalidSettings._tag, "Failure");
+    assert.strictEqual(invalidPatch._tag, "Failure");
+  }),
+);
+
+test("decodes an agent browser preference patch", () => {
+  expect(
+    Schema.decodeUnknownSync(ServerSettingsPatch)({ agentBrowserPreference: "system" }),
+  ).toEqual({ agentBrowserPreference: "system" });
+});
+
 test("decodes a narrow Claude rollout settings patch", () => {
   const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
   expect(
@@ -219,4 +244,5 @@ test("decodes historical settings without CLIProxyAPI fields", () => {
   });
 
   expect(decoded.providers.cliProxy).toEqual({ enabled: true, configPath: "" });
+  expect(decoded.agentBrowserPreference).toBe("bigbud");
 });

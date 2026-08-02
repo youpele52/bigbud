@@ -174,6 +174,7 @@ function mapThreadRow(
     branch: row.branch,
     worktreePath: row.worktreePath,
     latestTurn: groupedRows.latestTurnByThread.get(row.threadId) ?? null,
+    queuedPrompts: row.queuedPrompts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,

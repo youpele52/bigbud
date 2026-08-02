@@ -193,4 +193,57 @@ layer("ProjectionCatalogQuery", (it) => {
       assert.equal(result.threads[0]?.createdAt, "2026-01-01");
     }),
   );
+
+  it.effect("returns bounded global recent chats and pins with deduplicated summaries", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionCatalogQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM projection_thread_messages`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* Effect.forEach(
+        Array.from({ length: 7 }, (_, index) => index),
+        (index) => sql`
+          INSERT INTO projection_threads (
+            thread_id, project_id, title, purpose, model_selection_json, runtime_mode,
+            interaction_mode, created_at, updated_at, archived_at, pinned_at, deleting_at, deleted_at
+          ) VALUES (
+            ${`chat-${index}`}, '__chats__', ${`Chat ${index}`}, 'standard',
+            '{"provider":"codex","model":"gpt-5-codex"}', 'full-access', 'default',
+            ${`2026-01-0${index + 1}`}, ${`2026-01-0${index + 1}`}, NULL,
+            ${index === 0 ? "2026-02-01" : null}, NULL, NULL
+          )
+        `,
+        { discard: true },
+      );
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id, project_id, title, purpose, model_selection_json, runtime_mode,
+          interaction_mode, created_at, updated_at, archived_at, pinned_at, deleting_at, deleted_at
+        ) VALUES
+          ('project-pin', 'project-outside-page', 'Pinned', 'standard',
+           '{"provider":"codex","model":"gpt-5-codex"}', 'full-access', 'default',
+           '2025-01-01', '2025-01-01', NULL, '2026-02-02', NULL, NULL),
+          ('deleting-pin', 'project-a', 'Deleting', 'standard',
+           '{"provider":"codex","model":"gpt-5-codex"}', 'full-access', 'default',
+           '2026-01-01', '2026-01-01', NULL, '2026-02-03', '2026-02-04', NULL)
+      `;
+      yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('old-chat-new-message', 'chat-0', 'user', 'Recent', 0,
+          '2026-03-01', '2026-03-01')
+      `;
+
+      const result = yield* query.getSidebarThreadCatalog();
+
+      assert.equal(result.recentThreadIds.includes(ThreadId.makeUnsafe("chat-0")), true);
+      assert.equal(result.recentThreadIds.includes(ThreadId.makeUnsafe("chat-6")), true);
+      assert.deepEqual(result.pinnedThreadIds.map(String), ["project-pin", "chat-0"]);
+      assert.equal(result.threads.filter((thread) => thread.id === "chat-0").length, 1);
+      assert.equal(
+        result.threads.some((thread) => thread.id === "deleting-pin"),
+        false,
+      );
+    }),
+  );
 });

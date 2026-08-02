@@ -40,6 +40,7 @@ export const UpdateProjectionNoteInput = Schema.Struct({
   title: Schema.String,
   content: Schema.String,
   updatedAt: Schema.String,
+  expectedUpdatedAt: Schema.optional(Schema.String),
 });
 export type UpdateProjectionNoteInput = typeof UpdateProjectionNoteInput.Type;
 

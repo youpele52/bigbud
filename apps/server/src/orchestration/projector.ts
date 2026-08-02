@@ -1,14 +1,9 @@
 import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contracts";
-import {
-  OrchestrationCheckpointSummary,
-  OrchestrationMessage,
-  OrchestrationSession,
-} from "@bigbud/contracts";
+import { OrchestrationCheckpointSummary, OrchestrationSession } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
-  MessageSentPayloadSchema,
   ThreadActivityAppendedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRevertedPayload,
@@ -46,6 +41,8 @@ import {
   retainThreadProposedPlansAfterRevert,
 } from "./projectorThreadState.ts";
 import { projectThreadTaskEvent } from "./projectorTasks.ts";
+import { projectThreadMessageSent } from "./projectorThreadMessages.ts";
+import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
@@ -112,69 +109,13 @@ export function projectEvent(
     case "thread.turn-start-failed":
       return projectThreadTurnStartFailed(nextBase, event);
 
+    case "thread.prompt-queued":
+    case "thread.queued-prompt-removed":
+    case "thread.queued-prompts-flushed":
+      return projectThreadQueuedPromptEvent(nextBase, event);
+
     case "thread.message-sent":
-      return Effect.gen(function* () {
-        const payload = yield* decodeForEvent(
-          MessageSentPayloadSchema,
-          event.payload,
-          event.type,
-          "payload",
-        );
-        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-        if (!thread) {
-          return nextBase;
-        }
-
-        const message: OrchestrationMessage = yield* decodeForEvent(
-          OrchestrationMessage,
-          {
-            id: payload.messageId,
-            role: payload.role,
-            text: payload.text,
-            ...(payload.attachments !== undefined ? { attachments: payload.attachments } : {}),
-            turnId: payload.turnId,
-            streaming: payload.streaming,
-            createdAt: payload.createdAt,
-            updatedAt: payload.updatedAt,
-          },
-          event.type,
-          "message",
-        );
-
-        const existingMessage = thread.messages.find((entry) => entry.id === message.id);
-        const messages = existingMessage
-          ? thread.messages.map((entry) =>
-              entry.id === message.id
-                ? {
-                    ...entry,
-                    text:
-                      event.payload.replace === true
-                        ? message.text
-                        : message.streaming
-                          ? `${entry.text}${message.text}`
-                          : message.text.length > 0
-                            ? message.text
-                            : entry.text,
-                    streaming: message.streaming,
-                    updatedAt: message.updatedAt,
-                    turnId: message.turnId,
-                    ...(message.attachments !== undefined
-                      ? { attachments: message.attachments }
-                      : {}),
-                  }
-                : entry,
-            )
-          : [...thread.messages, message];
-        const cappedMessages = messages.slice(-MAX_THREAD_MESSAGES);
-
-        return {
-          ...nextBase,
-          threads: updateThread(nextBase.threads, payload.threadId, {
-            messages: cappedMessages,
-            updatedAt: event.occurredAt,
-          }),
-        };
-      });
+      return projectThreadMessageSent(nextBase, event);
 
     case "thread.session-set":
       return Effect.gen(function* () {

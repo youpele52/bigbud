@@ -7,6 +7,7 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationMessageReply,
   OrchestrationProposedPlanId,
+  OrchestrationQueuedPrompt,
   ParentThreadReference,
   ProjectId,
   ProjectScript,
@@ -46,6 +47,7 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
+    queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
   }),
 );
 

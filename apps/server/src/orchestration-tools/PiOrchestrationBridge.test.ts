@@ -20,6 +20,10 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain('name: "rename_thread"');
     expect(source).toContain('name: "archive_thread"');
     expect(source).toContain('name: "create_thread"');
+    expect(source).toContain('name: "send_thread_message"');
+    expect(source).toContain("Type.Literal('auto')");
+    expect(source).toContain("delivery: delivery === 'queue' ? 'queue' : 'auto'");
+    expect(source).toContain("invocationId: toolCallId");
     expect(source).toContain(
       "async execute(toolCallId, { title, task, projectId, workspacePath, watchForCompletion })",
     );
@@ -32,6 +36,9 @@ describe("PiOrchestrationBridge", () => {
     expect(source).toContain('name: "get_thread_status"');
     expect(source).toContain('name: "search_capabilities"');
     expect(source).toContain('name: "read_capability_guide"');
+    expect(source).toContain('name: "list_threads"');
+    expect(source).toContain("action: 'list_threads'");
+    expect(source).toContain("pi.registerTool(listThreadsTool);");
     expect(source).toContain('name: "list_pinned_threads"');
     expect(source).toContain("name: 'pin_thread'");
     expect(source).toContain("name: 'unpin_thread'");
@@ -46,6 +53,7 @@ describe("PiOrchestrationBridge", () => {
     );
     expect(source).toContain("/api/internal/thread-tools");
     expect(source).toContain("token-1");
+    expect(source).toContain("thread-1");
   });
 
   it("renders JavaScript-safe Pi bridge source", () => {

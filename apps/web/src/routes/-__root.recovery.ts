@@ -32,6 +32,11 @@ import {
   shouldFlushOrchestrationEventImmediately,
 } from "./-__root.orchestration-events";
 import { runBoundedBootstrap } from "./-__root.bounded-bootstrap";
+import {
+  createSidebarCatalogRefresher,
+  getHighestSequence,
+  shouldRefreshSidebarCatalog,
+} from "./-__root.sidebar-catalog";
 
 export const REPLAY_RECOVERY_RETRY_DELAY_MS = 100;
 export const MAX_NO_PROGRESS_REPLAY_RETRIES = 3;
@@ -55,6 +60,7 @@ interface OrchestrationRecoveryInput {
 
 export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
   const recovery = createOrchestrationRecoveryCoordinator();
+  const sidebarCatalogRefresher = createSidebarCatalogRefresher(input.api);
   let replayRetryTracker: ReplayRetryTracker | null = null;
   let needsProviderInvalidation = false;
   const pendingDomainEvents: OrchestrationEvent[] = [];
@@ -102,7 +108,11 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     },
   );
 
-  const applyAcceptedEventBatch = (nextEvents: ReadonlyArray<OrchestrationEvent>) => {
+  const applyAcceptedEventBatch = (
+    nextEvents: ReadonlyArray<OrchestrationEvent>,
+    disposed: () => boolean = () => false,
+    refresh = true,
+  ) => {
     if (nextEvents.length === 0) {
       return;
     }
@@ -139,6 +149,10 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       );
     }
 
+    if (refresh && nextEvents.some(shouldRefreshSidebarCatalog)) {
+      void sidebarCatalogRefresher.refresh(disposed, getHighestSequence(nextEvents));
+    }
+
     const draftStore = useComposerDraftStore.getState();
     for (const threadId of batchEffects.clearPromotedDraftThreadIds) {
       clearPromotedDraftThread(threadId);
@@ -158,20 +172,26 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     }
   };
 
-  const applyEventBatch = (events: ReadonlyArray<OrchestrationEvent>) => {
+  const applyEventBatch = (
+    events: ReadonlyArray<OrchestrationEvent>,
+    options: { readonly disposed?: (() => boolean) | undefined; readonly refresh?: boolean } = {},
+  ) => {
     const nextEvents = recovery.markEventBatchApplied(events);
-    applyAcceptedEventBatch(
-      nextEvents.filter((event) => !threadHydrationEventBuffer.bufferEvent(event)),
+    const acceptedEvents = nextEvents.filter(
+      (event) => !threadHydrationEventBuffer.bufferEvent(event),
     );
+    applyAcceptedEventBatch(acceptedEvents, options.disposed, options.refresh !== false);
   };
-  setThreadHydrationEventApplier(applyAcceptedEventBatch);
+  setThreadHydrationEventApplier((events) => applyAcceptedEventBatch(events));
 
   const flushPendingDomainEvents = (disposed: boolean) => {
     flushPendingDomainEventsScheduled = false;
     if (disposed || pendingDomainEvents.length === 0) {
       return;
     }
-    applyEventBatch(pendingDomainEvents.splice(0, pendingDomainEvents.length));
+    applyEventBatch(pendingDomainEvents.splice(0, pendingDomainEvents.length), {
+      disposed: () => disposed,
+    });
   };
   const schedulePendingDomainEventFlush = (disposed: () => boolean) => {
     if (flushPendingDomainEventsScheduled) {
@@ -208,7 +228,21 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       recovery.observeReplayTarget(replay.latestSequence);
       if (!disposed()) {
         input.clearAllThinkingDeltas();
-        applyEventBatch(replay.events);
+        applyEventBatch(replay.events, { disposed, refresh: false });
+        if (replay.events.some(shouldRefreshSidebarCatalog)) {
+          const refreshed = await sidebarCatalogRefresher.refresh(
+            disposed,
+            getHighestSequence(replay.events),
+          );
+          if (!refreshed) {
+            replayRetryTracker = null;
+            recovery.failReplayRecovery();
+            if (!disposed()) {
+              fallbackToBoundedRecovery();
+            }
+            return;
+          }
+        }
       }
     } catch {
       replayRetryTracker = null;
@@ -311,6 +345,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
       needsProviderInvalidation = false;
       flushPendingDomainEventsScheduled = false;
       pendingDomainEvents.length = 0;
+      sidebarCatalogRefresher.cancel();
       queryInvalidationThrottler.cancel();
       threadHydrationEventBuffer.clear();
       setThreadHydrationEventApplier(null);

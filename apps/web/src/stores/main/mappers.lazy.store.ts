@@ -18,6 +18,7 @@ export function mapProjectSummary(project: ProjectSummary): Project {
   return {
     id: project.id,
     name: project.title,
+    activeThreadCount: project.threadCount,
     providerRuntimeExecutionTargetId: project.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: project.workspaceExecutionTargetId,
     executionTargetId: project.executionTargetId,

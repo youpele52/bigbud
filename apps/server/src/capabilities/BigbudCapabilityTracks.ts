@@ -5,10 +5,13 @@ import {
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   LIST_PINNED_THREADS_TOOL_DESCRIPTION,
+  LIST_THREADS_TOOL_DESCRIPTION,
   PIN_THREAD_TOOL_DESCRIPTION,
   RENAME_THREAD_TOOL_DESCRIPTION,
+  SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import { AGENT_WORKSPACE_TOOL_SPECS } from "../orchestration-tools/AgentWorkspaceToolSpecs.ts";
 import {
   createCapabilityCatalog,
   type CapabilityRisk,
@@ -52,6 +55,23 @@ const threadToolTrack = (input: {
 });
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
+  ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) =>
+    threadToolTrack({
+      id: `workspace.${spec.name.replaceAll("_", ".")}`,
+      displayName: spec.name.replaceAll("_", " "),
+      description: spec.description,
+      triggers: ["The task requires working with global or project notes or kanban cards."],
+      risk:
+        spec.name.startsWith("list_") || spec.name.startsWith("get_")
+          ? "read-only"
+          : "reversible-write",
+      workflow: `Call ${spec.name} with a global item or an item in the current project.`,
+      permissions:
+        "Restricted to global items and the current thread's project. Other projects and deletion are unavailable.",
+      examples: [`Use ${spec.name} for global or current-project workspace items.`],
+      antiPatterns: ["Do not attempt deletion or cross-project access."],
+    }),
+  ),
   threadToolTrack({
     id: "thread.rename",
     displayName: "Rename thread",
@@ -91,6 +111,19 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     relatedCapabilityIds: ["thread.status"],
   }),
   threadToolTrack({
+    id: "thread.message.send",
+    displayName: "Send thread message",
+    description: SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
+    triggers: ["An agent needs to follow up in another thread in the current project."],
+    risk: "mutating",
+    workflow:
+      "Call send_thread_message with the target thread ID and message. Use delivery queue only when explicitly desired.",
+    permissions: "The caller and target must exist in the same project.",
+    examples: ["Send the audit thread an additional constraint."],
+    antiPatterns: ["Do not use this to steer or restart a running provider turn."],
+    relatedCapabilityIds: ["thread.status"],
+  }),
+  threadToolTrack({
     id: "thread.status",
     displayName: "Get thread status",
     description: GET_THREAD_STATUS_TOOL_DESCRIPTION,
@@ -101,6 +134,26 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     examples: ["Check whether the delegated audit is complete."],
     antiPatterns: ["Do not infer completion from thread creation acceptance."],
     relatedCapabilityIds: ["thread.create"],
+  }),
+  threadToolTrack({
+    id: "thread.list",
+    displayName: "List project threads",
+    description: LIST_THREADS_TOOL_DESCRIPTION,
+    summary: "List the threads in a bigbud project with their live workflow status.",
+    triggers: [
+      "The user asks which threads exist in a project.",
+      "A thread ID must be discovered before coordinating with another thread.",
+    ],
+    risk: "read-only",
+    workflow:
+      "Call list_threads for the current project, then narrow with status or limit. Use get_thread_status for live detail on a single thread.",
+    permissions: "Read-only. Returns thread metadata only, never transcripts.",
+    examples: ["Show the active threads in this project."],
+    antiPatterns: [
+      "Do not report a total without checking hasMore; results are capped.",
+      "Do not poll this to wait for another thread; use get_thread_status.",
+    ],
+    relatedCapabilityIds: ["thread.status", "thread.pins.list"],
   }),
   threadToolTrack({
     id: "thread.pins.list",

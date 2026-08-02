@@ -1,6 +1,8 @@
 import {
   ProjectSummary,
+  ProjectThreadCount,
   ThreadSummary,
+  type ThreadSummary as ThreadSummaryType,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
 import { ModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import { NonNegativeInt } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -25,6 +27,8 @@ export const ProjectCatalogDbRow = ProjectSummary.mapFields(
 );
 export type ProjectCatalogDbRow = typeof ProjectCatalogDbRow.Type;
 
+export const ProjectThreadCountDbRow = ProjectThreadCount;
+
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
@@ -35,6 +39,25 @@ export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   }),
 );
 export type ThreadSummaryDbRow = typeof ThreadSummaryDbRow.Type;
+
+export function normalizeThreadSummary(row: ThreadSummaryDbRow): ThreadSummaryType {
+  return {
+    ...row,
+    modelSelection: row.modelSelection as ThreadSummaryType["modelSelection"],
+    isWatching: row.isWatching === 1,
+    isWatched: row.isWatched === 1,
+    isDelegated: row.isDelegated === 1,
+    isAwaitingApproval: row.isAwaitingApproval === 1,
+  };
+}
+
+export const SidebarThreadSummaryDbRow = ThreadSummaryDbRow.mapFields(
+  Struct.assign({
+    isRecent: Schema.Number,
+    isPinned: Schema.Number,
+  }),
+);
+export type SidebarThreadSummaryDbRow = typeof SidebarThreadSummaryDbRow.Type;
 
 export const ProjectionSequenceDbRow = Schema.Struct({
   projectionSequence: Schema.NullOr(NonNegativeInt),

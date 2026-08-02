@@ -98,6 +98,7 @@ export function projectThreadCreated(
         branch: payload.branch,
         worktreePath: payload.worktreePath,
         latestTurn: null,
+        queuedPrompts: [],
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,

@@ -56,6 +56,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
           'projectId', COALESCE(parent_thread_project_id, project_id)
         ) END AS "parentThread",
         latest_turn_id AS "latestTurnId", created_at AS "createdAt", updated_at AS "updatedAt",
+        queued_prompts_json AS "queuedPrompts",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads

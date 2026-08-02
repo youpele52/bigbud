@@ -1,7 +1,5 @@
 import {
   LOCAL_EXECUTION_TARGET_ID,
-  MessageId,
-  ProjectId,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
   type ProviderSession,
@@ -18,8 +16,8 @@ import { Effect } from "effect";
 
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { createCopilotThreadOrchestrationTools } from "../../../orchestration-tools/copilotThreadOrchestrationTools.ts";
 import { getThreadOrchestrationToolDispatcher } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { createCopilotOrchestrationToolSurface } from "./Adapter.session.orchestrationTools.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterSessionNotFoundError,
@@ -175,70 +173,9 @@ export const makeStartSession =
           detail: "Thread orchestration tools are not ready.",
         });
       }
-      const orchestrationTools = createCopilotThreadOrchestrationTools({
-        renameThread: (title) =>
-          Effect.runPromise(dispatcher.rename({ threadId: input.threadId, title })),
-        archiveThread: () =>
-          Effect.runPromise(dispatcher.archive({ threadId: input.threadId }).pipe(Effect.asVoid)),
-        getThreadStatus: (targetThreadId) =>
-          Effect.runPromise(
-            dispatcher
-              .getStatus({
-                callerThreadId: input.threadId,
-                threadId: ThreadId.makeUnsafe(targetThreadId),
-              })
-              .pipe(Effect.map((status) => status as unknown as Record<string, unknown>)),
-          ),
-        listPinnedThreads: () =>
-          Effect.runPromise(
-            dispatcher
-              .listPinned({ callerThreadId: input.threadId })
-              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
-          ),
-        setThreadPinned: (targetThreadId, pinned) =>
-          Effect.runPromise(
-            dispatcher
-              .setPinned({
-                callerThreadId: input.threadId,
-                threadId: ThreadId.makeUnsafe(targetThreadId),
-                pinned,
-              })
-              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
-          ),
-        computerUse: (action) =>
-          Effect.runPromise(
-            dispatcher
-              .computerUse({
-                threadId: input.threadId,
-                action,
-              })
-              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
-          ),
-        browser: (action) =>
-          Effect.runPromise(
-            dispatcher
-              .browser({ threadId: input.threadId, action })
-              .pipe(Effect.map((result) => result as unknown as Record<string, unknown>)),
-          ),
-        createThread: ({
-          invocationId,
-          sourceMessageId,
-          title,
-          task,
-          projectId,
-          watchForCompletion,
-        }) =>
-          Effect.runPromise(
-            dispatcher.createThread?.({
-              callerThreadId: input.threadId,
-              sourceMessageId: MessageId.makeUnsafe(sourceMessageId),
-              invocationId,
-              title,
-              task,
-              ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
-              watchForCompletion,
-            }) ?? Effect.fail(new Error("Thread creation is not ready.")),
-          ).then((result) => result as unknown as Record<string, unknown>),
+      const orchestrationTools = createCopilotOrchestrationToolSurface({
+        dispatcher,
+        threadId: input.threadId,
       });
       const remoteSessionConfig = remoteWorkspaceBridge?.sessionConfig;
       const sessionConfig = deps.buildSessionConfig(

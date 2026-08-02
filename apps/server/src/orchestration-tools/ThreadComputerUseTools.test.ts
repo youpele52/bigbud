@@ -120,10 +120,9 @@ describe("computerUseViaOrchestration", () => {
     const dispatched: OrchestrationCommand[] = [];
     const execute = vi.fn(() =>
       Effect.succeed({
-        surface: "browser" as const,
-        action: "click" as const,
-        summary: "clicked",
-        page: { url: "https://example.com", title: "Example" },
+        surface: "desktop" as const,
+        action: "navigate" as const,
+        summary: "Opened system browser.",
       }),
     );
 
@@ -146,7 +145,11 @@ describe("computerUseViaOrchestration", () => {
             path,
             serverMode: "desktop",
             threadId: THREAD_ID,
-            action: { action: "click", x: 1, y: 2 },
+            action: {
+              action: "navigate",
+              surface: "desktop",
+              url: "https://example.com",
+            },
           });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),
@@ -284,7 +287,7 @@ describe("computerUseViaOrchestration", () => {
   it("blocks desktop actions in web server mode", async () => {
     const dispatched: OrchestrationCommand[] = [];
     const execute = vi.fn(() =>
-      Effect.succeed({ surface: "desktop" as const, action: "doctor" as const, summary: "" }),
+      Effect.succeed({ surface: "desktop" as const, action: "navigate" as const, summary: "" }),
     );
 
     await expect(
@@ -306,7 +309,11 @@ describe("computerUseViaOrchestration", () => {
             path,
             serverMode: "web",
             threadId: THREAD_ID,
-            action: { action: "doctor" },
+            action: {
+              action: "navigate",
+              surface: "desktop",
+              url: "https://example.com",
+            },
           });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),

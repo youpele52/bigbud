@@ -44,10 +44,8 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
-import {
-  ComputerUseAccessSettingsSection,
-  formatComputerUsePermissionMessage,
-} from "./ComputerUseAccessSettingsSection";
+import { ComputerUseAccessSettingsSection } from "./ComputerUseAccessSettingsSection";
+import { normalizeComputerUsePermissionMessage } from "../computer-use/computerUsePermissionMessage";
 
 describe("ComputerUseAccessSettingsSection", () => {
   beforeEach(() => {
@@ -148,11 +146,13 @@ describe("ComputerUseAccessSettingsSection", () => {
     expect(markup).not.toContain("System Settings");
   });
 
-  it("keeps only informational permission guidance when permission cards provide the status", () => {
+  it("keeps every driver permission status alongside informational guidance", () => {
     expect(
-      formatComputerUsePermissionMessage(
+      normalizeComputerUsePermissionMessage(
         "✅ Accessibility: granted. ✅ Screen Recording: granted. ℹ️ Embedded mode: status reflects the HOST app's TCC grant.",
       ),
-    ).toBe("Embedded mode: status reflects the HOST app's TCC grant.");
+    ).toBe(
+      "Accessibility: granted.\nScreen Recording: granted.\nEmbedded mode: status reflects the HOST app's TCC grant.",
+    );
   });
 });
