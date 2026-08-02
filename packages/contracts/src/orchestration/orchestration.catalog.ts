@@ -70,6 +70,12 @@ export const ThreadSummary = Schema.Struct({
 });
 export type ThreadSummary = typeof ThreadSummary.Type;
 
+export const ProjectThreadCount = Schema.Struct({
+  projectId: ProjectId,
+  threadCount: NonNegativeInt,
+});
+export type ProjectThreadCount = typeof ProjectThreadCount.Type;
+
 export const ProjectCatalogCursor = Schema.Struct({
   lastUsedAt: IsoDateTime,
   projectId: ProjectId,
@@ -120,5 +126,6 @@ export const GetSidebarThreadCatalogResult = Schema.Struct({
   threads: Schema.Array(ThreadSummary),
   recentThreadIds: Schema.Array(ThreadId),
   pinnedThreadIds: Schema.Array(ThreadId),
+  projectThreadCounts: Schema.optional(Schema.Array(ProjectThreadCount)),
 });
 export type GetSidebarThreadCatalogResult = typeof GetSidebarThreadCatalogResult.Type;

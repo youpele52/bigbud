@@ -8,6 +8,7 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import type { ProjectionCatalogQueryShape } from "../Services/ProjectionCatalogQuery.ts";
 import {
+  ProjectThreadCountDbRow,
   SidebarThreadSummaryDbRow,
   normalizeThreadSummary,
 } from "./ProjectionCatalogQuery.schemas.ts";
@@ -95,16 +96,34 @@ export function makeGetSidebarThreadCatalog(
     `,
   });
 
+  const readProjectThreadCounts = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ProjectThreadCountDbRow,
+    execute: () => sql`
+      SELECT p.project_id AS "projectId", COUNT(t.thread_id) AS "threadCount"
+      FROM projection_projects p
+      LEFT JOIN projection_threads t
+        ON t.project_id = p.project_id
+        AND t.purpose = 'standard'
+        AND t.deleted_at IS NULL
+        AND t.archived_at IS NULL
+        AND t.deleting_at IS NULL
+      WHERE p.deleted_at IS NULL
+      GROUP BY p.project_id
+    `,
+  });
+
   return () =>
     sql
       .withTransaction(
         Effect.all({
           sequence: readProjectionSequence(),
           rows: readSidebarThreads(undefined),
+          projectThreadCounts: readProjectThreadCounts(undefined),
         }),
       )
       .pipe(
-        Effect.map(({ rows, sequence }) => ({
+        Effect.map(({ projectThreadCounts, rows, sequence }) => ({
           projectionSequence: sequence,
           threads: rows.map(({ isRecent: _, isPinned: __, ...thread }) =>
             normalizeThreadSummary(thread),
@@ -118,6 +137,7 @@ export function makeGetSidebarThreadCatalog(
                 left.id.localeCompare(right.id),
             )
             .map((row) => row.id),
+          projectThreadCounts,
         })),
         Effect.mapError(toPersistenceSqlError("ProjectionCatalogQuery.getSidebarThreadCatalog")),
       );

@@ -47,7 +47,7 @@ function makeThreadSummary(id: ThreadId, projectId: ProjectId, pinnedAt: string 
   };
 }
 
-function makeProject(id: ProjectId, title: string) {
+function makeProject(id: ProjectId, title: string, threadCount = 0) {
   return {
     id,
     title,
@@ -58,7 +58,7 @@ function makeProject(id: ProjectId, title: string) {
     lastUsedAt: "2026-07-30T00:00:00.000Z",
     updatedAt: "2026-07-30T00:00:00.000Z",
     deletingAt: null,
-    threadCount: 0,
+    threadCount,
     exceptionalThreadCount: 0,
     hasExceptionalThreads: false,
   };
@@ -76,7 +76,7 @@ function makeApi() {
     ),
     getStartupProjectCatalog: vi.fn(),
     getProjectThreadSummaries: vi.fn(
-      async ({ projectId }) =>
+      async ({ projectId }): Promise<GetProjectThreadSummariesResult> =>
         ({
           projectionSequence: 11,
           projectId,
@@ -137,7 +137,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [makeProject(project1, "Project 1")],
+        projects: [makeProject(project1, "Project 1", 94)],
         nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
@@ -156,6 +156,7 @@ describe("bounded project catalog bootstrap", () => {
     expect(useStore.getState().projects[1]).toMatchObject({
       workspaceExecutionTargetId: "ssh:workspace",
     });
+    expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
     expect(useStore.getState().threadSummaryCursorByProjectId?.[project2]).toBeUndefined();
   });
 
@@ -168,6 +169,33 @@ describe("bounded project catalog bootstrap", () => {
       projectId: project2,
       limit: 5,
     });
+  });
+
+  it("preserves the authoritative total while appending a thread summary page", async () => {
+    const { api, orchestration } = makeApi();
+    orchestration.getStartupProjectCatalog.mockResolvedValue({
+      projectionSequence: 10,
+      projects: [makeProject(project1, "Project 1", 94)],
+    } satisfies GetStartupProjectCatalogResult);
+    await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
+
+    const cursor = {
+      updatedAt: "2026-07-29T00:00:00.000Z",
+      threadId: ThreadId.makeUnsafe("thread-cursor"),
+    };
+    useStore.setState({ threadSummaryCursorByProjectId: { [project1]: cursor } });
+    orchestration.getProjectThreadSummaries.mockResolvedValueOnce({
+      projectionSequence: 12,
+      projectId: project1,
+      threads: [makeThreadSummary(ThreadId.makeUnsafe("thread-next"), project1)],
+    });
+
+    await loadMoreProjectThreadSummaries({ api, projectId: project1 });
+
+    expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
+    expect(useStore.getState().threadIdsByProjectId[project1]).toEqual([
+      ThreadId.makeUnsafe("thread-next"),
+    ]);
   });
 
   it("does not duplicate a prioritized project from a later catalog page", async () => {

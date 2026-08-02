@@ -138,6 +138,7 @@ export interface TurnDiffSummary {
 export interface Project {
   id: ProjectId;
   name: string;
+  activeThreadCount?: number;
   providerRuntimeExecutionTargetId?: ExecutionTargetId;
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;

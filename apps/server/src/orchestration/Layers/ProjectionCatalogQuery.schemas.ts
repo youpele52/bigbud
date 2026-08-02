@@ -1,5 +1,6 @@
 import {
   ProjectSummary,
+  ProjectThreadCount,
   ThreadSummary,
   type ThreadSummary as ThreadSummaryType,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
@@ -25,6 +26,8 @@ export const ProjectCatalogDbRow = ProjectSummary.mapFields(
   }),
 );
 export type ProjectCatalogDbRow = typeof ProjectCatalogDbRow.Type;
+
+export const ProjectThreadCountDbRow = ProjectThreadCount;
 
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({

@@ -1,4 +1,3 @@
-// TODO: Split by concern when this file is next touched.
 import {
   ChevronRightIcon,
   FolderIcon,
@@ -12,7 +11,6 @@ import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Side
 import { useCallback, type MouseEvent } from "react";
 
 import {
-  getHiddenSidebarThreadCount,
   resolveSidebarNewThreadEnvMode,
   resolveSidebarNewThreadSeedContext,
 } from "./Sidebar.logic";
@@ -36,6 +34,7 @@ export function SidebarRenderedProjectItem({
   renderedThreadIds,
   hasHiddenThreads,
   hasMoreThreads,
+  threadCounts,
   showEmptyThreadState,
   shouldShowThreadPanel,
   isThreadListExpanded,
@@ -98,11 +97,6 @@ export function SidebarRenderedProjectItem({
   });
 
   const visibleThreadIds = renderedThreadIds;
-  const hiddenThreadCount = getHiddenSidebarThreadCount({
-    totalThreadCount: orderedProjectThreadIds.length,
-    renderedThreadCount: renderedThreadIds.length,
-  });
-
   const handleProjectDeleteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -392,9 +386,9 @@ export function SidebarRenderedProjectItem({
         showEmptyThreadState={showEmptyThreadState}
         hasHiddenThreads={hasHiddenThreads}
         hasMoreThreads={hasMoreThreads}
+        threadCounts={threadCounts}
         isThreadListExpanded={isThreadListExpanded}
         isLoadingMoreThreads={isLoadingMoreThreads}
-        hiddenThreadCount={hiddenThreadCount}
         expandThreadListForProject={expandThreadListForProject}
         collapseThreadListForProject={collapseThreadListForProject}
         loadMoreThreadsForProject={loadMoreThreadsForProject}

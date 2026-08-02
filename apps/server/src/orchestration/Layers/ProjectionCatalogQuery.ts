@@ -24,6 +24,7 @@ import {
 } from "./ProjectionCatalogQuery.schemas.ts";
 import { makeGetSelectedThreadDetail } from "./ProjectionCatalogQuery.detail.ts";
 import { makeGetSidebarThreadCatalog } from "./ProjectionCatalogQuery.sidebar.ts";
+import { makeListThreads } from "./ProjectionCatalogQuery.listThreads.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
   limit: Schema.Number,
@@ -106,8 +107,10 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         FROM page p
         LEFT JOIN projection_threads t
           ON t.project_id = p.project_id
+          AND t.purpose = 'standard'
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
+          AND t.deleting_at IS NULL
         GROUP BY p.project_id
       )
       SELECT
@@ -182,6 +185,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       LEFT JOIN projection_turns turn
         ON turn.thread_id = t.thread_id AND turn.turn_id = t.latest_turn_id
       WHERE t.project_id = ${projectId}
+        AND t.purpose = 'standard'
         AND t.deleted_at IS NULL
         AND t.archived_at IS NULL
         AND t.deleting_at IS NULL
@@ -285,8 +289,10 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionCatalogQuery.getSidebarThreadCatalog")),
     ),
   );
+  const listThreads = makeListThreads(sql);
 
   return {
+    listThreads,
     getSidebarThreadCatalog,
     getStartupProjectCatalog,
     getProjectThreadSummaries,

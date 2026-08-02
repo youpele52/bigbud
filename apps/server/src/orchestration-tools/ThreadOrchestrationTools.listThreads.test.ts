@@ -7,10 +7,14 @@ import {
   type OrchestrationReadModel,
   type OrchestrationThread,
 } from "@bigbud/contracts";
-import { Effect, Stream } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import type {
+  ListCatalogThreadsInput,
+  ProjectionCatalogQueryShape,
+} from "../orchestration/Services/ProjectionCatalogQuery.ts";
+import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import {
   LIST_THREADS_MAX_LIMIT,
   listThreadsViaOrchestration,
@@ -54,6 +58,7 @@ function makeThread(input: {
   readonly title?: string;
   readonly updatedAt?: string;
   readonly archivedAt?: string | null;
+  readonly deletingAt?: string | null;
   readonly deletedAt?: string | null;
   readonly messages?: ReadonlyArray<OrchestrationMessage>;
 }): OrchestrationThread {
@@ -72,6 +77,7 @@ function makeThread(input: {
     createdAt: NOW,
     updatedAt: input.updatedAt ?? NOW,
     archivedAt: input.archivedAt ?? null,
+    deletingAt: input.deletingAt ?? null,
     pinnedAt: null,
     deletedAt: input.deletedAt ?? null,
     messages: input.messages ?? [],
@@ -93,14 +99,78 @@ function makeHarness(threads: ReadonlyArray<OrchestrationThread>) {
     threads: [makeThread({ id: CALLER_THREAD_ID, title: "Caller thread" }), ...threads],
     updatedAt: NOW,
   };
-  const orchestrationEngine: OrchestrationEngineShape = {
-    getReadModel: () => Effect.succeed(readModel),
-    readEvents: () => Stream.empty,
-    readReplay: () => Effect.die("unused replay"),
-    dispatch: () => Effect.die("list_threads must not dispatch commands"),
-    streamDomainEvents: Stream.empty,
-  };
-  return { orchestrationEngine };
+  const projectionCatalogQuery = {
+    listThreads: (input: ListCatalogThreadsInput) => {
+      const caller = readModel.threads.find((thread) => thread.id === input.callerThreadId);
+      if (!caller || caller.deletedAt) {
+        return Effect.succeed({
+          callerResolved: false,
+          projectId: null,
+          projectTitle: null,
+          totalCount: 0,
+          threads: [],
+        });
+      }
+      const projectId = input.projectId ?? caller.projectId;
+      const project = readModel.projects.find(
+        (candidate) => candidate.id === projectId && !candidate.deletedAt,
+      );
+      if (!project) {
+        return Effect.succeed({
+          callerResolved: true,
+          projectId: null,
+          projectTitle: null,
+          totalCount: 0,
+          threads: [],
+        });
+      }
+      const matching = readModel.threads
+        .filter(
+          (thread) =>
+            thread.projectId === projectId &&
+            !thread.deletedAt &&
+            (input.status === "all" ||
+              (input.status === "archived"
+                ? thread.archivedAt
+                : !thread.archivedAt && !thread.deletingAt)),
+        )
+        .toSorted(
+          (left, right) =>
+            right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id),
+        );
+      return Effect.succeed({
+        callerResolved: true,
+        projectId,
+        projectTitle: project.title,
+        totalCount: matching.length,
+        threads: matching.slice(0, input.limit).map((thread) => {
+          const status = resolveThreadWorkflowStatus(thread);
+          const row = {
+            threadId: thread.id,
+            title: thread.title,
+            workflowStatus: status.workflowStatus,
+            isAgentActive: status.isAgentActive,
+            isWorkflowComplete: status.isWorkflowComplete,
+            archived: thread.archivedAt !== null,
+            pinned: thread.pinnedAt !== null,
+            deleting: Boolean(thread.deletingAt),
+            purpose: thread.purpose ?? "standard",
+            parentThreadId: thread.parentThread?.threadId ?? null,
+            latestTurnState: status.latestTurnState,
+            hasPendingApprovals: status.hasPendingApprovals,
+            hasPendingUserInput: status.hasPendingUserInput,
+            messageCount: thread.messages.length,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+          };
+          return input.includeExcerpt
+            ? Object.assign(row, { lastAssistantExcerpt: status.lastAssistantExcerpt })
+            : row;
+        }),
+      });
+    },
+  } as unknown as ProjectionCatalogQueryShape;
+  return { projectionCatalogQuery };
 }
 
 describe("normalizeListThreadsLimit", () => {
@@ -147,6 +217,7 @@ describe("listThreadsViaOrchestration", () => {
       makeThread({ id: "thread-active" }),
       makeThread({ id: "thread-archived", archivedAt: NOW }),
       makeThread({ id: "thread-deleted", deletedAt: NOW }),
+      makeThread({ id: "thread-deleting", deletingAt: NOW }),
     ];
 
     const archived = await Effect.runPromise(
@@ -170,6 +241,7 @@ describe("listThreadsViaOrchestration", () => {
     expect(all.threads.map((thread) => thread.threadId)).toEqual([
       "thread-active",
       "thread-archived",
+      "thread-deleting",
       CALLER_THREAD_ID,
     ]);
   });

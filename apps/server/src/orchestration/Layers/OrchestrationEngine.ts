@@ -18,6 +18,7 @@ import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } f
 import { createEmptyReadModel } from "../projectorReadModel.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { ProjectionOperationalStateQuery } from "../Services/ProjectionOperationalStateQuery.ts";
+import { ProjectionCatalogQuery } from "../Services/ProjectionCatalogQuery.ts";
 import {
   OrchestrationEngineService,
   type OrchestrationEngineShape,
@@ -66,6 +67,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const eventStore = yield* OrchestrationEventStore;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const operationalQueryOption = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
+  const projectionCatalogQuery = yield* Effect.serviceOption(ProjectionCatalogQuery);
   const computerUse = yield* ComputerUse;
   const browser = yield* BrowserManager;
   const visibleBrowser = yield* VisibleBrowserControl;
@@ -261,7 +263,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
         orchestrationEngine: engine,
         callerThreadId: input.callerThreadId,
       }),
-    listThreads: (input) => listThreadsViaOrchestration({ orchestrationEngine: engine, ...input }),
+    ...(Option.isSome(projectionCatalogQuery)
+      ? {
+          listThreads: (input) =>
+            listThreadsViaOrchestration({
+              projectionCatalogQuery: projectionCatalogQuery.value,
+              ...input,
+            }),
+        }
+      : {}),
     setPinned: (input) =>
       setThreadPinnedViaThreadTools({
         orchestrationEngine: engine,

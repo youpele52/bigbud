@@ -16,6 +16,7 @@ import {
   mergeThreadDetail,
 } from "./mappers.lazy.store";
 import { normalizeSidebarThreadIds } from "./helpers.sidebar.store";
+import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 
 function mergeThreadSummary(
   thread: AppState["threads"][number],
@@ -177,6 +178,10 @@ export function syncSidebarCatalog(
   const availableThreadIds = new Set(summaries.map((summary) => summary.id));
   return {
     ...state,
+    projects: applyAuthoritativeProjectThreadCounts(
+      state.projects,
+      sidebarCatalog.projectThreadCounts,
+    ),
     threads,
     sidebarThreadsById,
     threadHydrationById,
