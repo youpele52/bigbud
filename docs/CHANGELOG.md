@@ -9,6 +9,23 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Agents now browse where you want—inside bigbud by default or through your system browser when selected.
 - Queued prompts survive refreshes and restarts, then resume automatically when a thread is ready.
 
+## v0.2.103 (3 August, 2026)
+
+### More Reliable Data Recovery
+
+- Hardened local data recovery after migrations, restarts, and cleanup. bigbud now validates required data before reusing a recovery workspace, rebuilds stale workspaces when needed, and removes temporary SQLite artifacts after verification.
+- Prevented concurrent recovery checks from repeating the same work and added a bounded cooldown after failed verification, so repeated startup or maintenance attempts fail predictably instead of compounding the original problem.
+- Improved deletion cleanup by checking the full batch's recovery requirements before purging, reducing the risk of cleanup running against an unverified local state.
+
+### Changelog and Help
+
+- Added a What's New overview at the top of the changelog with quick highlights for Orchestra, Claudex, agent browser preferences, and durable queued prompts, making the latest improvements easier to scan.
+- Updated the Help menu's **What's new?** item to open that overview directly, so users reach the latest highlights without scrolling through the full release history.
+
+### Marketing Site Reliability
+
+- Removed an obsolete marketing CSS configuration that could make clean Cloudflare Pages builds depend on an undeclared locally hoisted package. Marketing deployments now rely on the declared Vite integration and can build consistently from a clean install.
+
 ## v0.2.102 (2 August, 2026)
 
 ### Agent Notes and Kanban
