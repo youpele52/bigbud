@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
 
 import { type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import type { OrchestrationEventStoreShape } from "../../persistence/Services/OrchestrationEventStore.ts";
@@ -16,25 +16,63 @@ export function makeProjectionBaselineOperations(input: {
     source: Option.Option<ProjectionBaseline>,
   ) => Effect.Effect<boolean, ProjectionRepositoryError>;
 }) {
-  const verify = Effect.fn("verifyProjectionBaseline")(function* (candidate: ProjectionBaseline) {
-    if (candidate.verificationStatus === "verified") return true;
-    const previousOption = yield* input.baselines.latestVerified();
-    const previous = Option.getOrUndefined(previousOption);
-    if (previous && previous.sequence >= candidate.sequence) return false;
+  const reject = (candidate: ProjectionBaseline, detail: string) =>
+    Effect.uninterruptible(
+      Effect.exit(input.baselines.markRejected(candidate.baselineId, detail)).pipe(
+        Effect.flatMap((exit) =>
+          Exit.isSuccess(exit)
+            ? Effect.void
+            : Effect.logWarning("projection baseline candidate cleanup failed", {
+                candidateId: candidate.baselineId,
+                sequence: candidate.sequence,
+                cleanup: "reject",
+                cause: exit.cause,
+              }),
+        ),
+      ),
+    );
 
-    const matches = yield* input.verifyCandidate(candidate, previousOption);
+  const verify = Effect.fn("verifyProjectionBaseline")(function* (
+    candidate: ProjectionBaseline,
+  ): Effect.fn.Return<boolean, ProjectionRepositoryError, never> {
+    if (candidate.verificationStatus === "verified") return true;
+    const verificationExit = yield* Effect.exit(
+      Effect.gen(function* () {
+        const previousOption = yield* input.baselines.latestVerified();
+        const previous = Option.getOrUndefined(previousOption);
+        if (previous && previous.sequence >= candidate.sequence) return false;
+        return yield* input.verifyCandidate(candidate, previousOption);
+      }),
+    );
+    if (Exit.isFailure(verificationExit)) {
+      if (Cause.hasInterruptsOnly(verificationExit.cause)) {
+        return yield* Effect.failCause(verificationExit.cause);
+      }
+      yield* reject(candidate, "terminal projection baseline verification failure");
+      return yield* Effect.failCause(verificationExit.cause);
+    }
+
+    const matches = verificationExit.value;
     if (!matches) {
-      yield* input.baselines.markRejected(
-        candidate.baselineId,
+      yield* reject(
+        candidate,
         `normalized replay hash mismatch: expected ${candidate.payloadHash}`,
       );
       return false;
     }
-    yield* input.baselines.markVerified(
-      candidate.baselineId,
-      candidate.sequence,
-      new Date().toISOString(),
+    const markVerifiedExit = yield* Effect.exit(
+      input.baselines.markVerified(
+        candidate.baselineId,
+        candidate.sequence,
+        new Date().toISOString(),
+      ),
     );
+    if (Exit.isFailure(markVerifiedExit)) {
+      if (!Cause.hasInterruptsOnly(markVerifiedExit.cause)) {
+        yield* reject(candidate, "terminal projection baseline finalization failure");
+      }
+      return yield* Effect.failCause(markVerifiedExit.cause);
+    }
     return true;
   });
 

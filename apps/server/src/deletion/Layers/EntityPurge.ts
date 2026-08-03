@@ -7,7 +7,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { attachmentRelativePath } from "../../attachments/attachmentStore.ts";
 import { resolveAttachmentRelativePath } from "../../attachments/attachmentPaths.ts";
-import { isPersistenceError, toPersistenceSqlError } from "../../persistence/Errors.ts";
+import {
+  isPersistenceError,
+  toPersistenceSqlError,
+  type ProjectionRepositoryError,
+} from "../../persistence/Errors.ts";
 import { PurgeJobRepositoryLive } from "../../persistence/Layers/PurgeJobRepository.ts";
 import {
   type PurgeJob,
@@ -189,7 +193,10 @@ const makeEntityPurge = Effect.gen(function* () {
       Effect.mapError(mapPurgeError("EntityPurge.verifyResources")),
     );
 
-  const run: EntityPurgeShape["run"] = Effect.fn("EntityPurge.run")(function* (job: PurgeJob) {
+  const runInternal = Effect.fn("EntityPurge.runInternal")(function* (
+    job: PurgeJob,
+    baselinePreflighted = false,
+  ): Effect.fn.Return<void, ProjectionRepositoryError, never> {
     return yield* Effect.gen(function* () {
       const entityId =
         job.entityKind === "thread"
@@ -214,7 +221,9 @@ const makeEntityPurge = Effect.gen(function* () {
         });
         const marker = markers[0];
         if (marker === undefined) return;
-        yield* projectionPipeline.ensureVerifiedBaselineThrough(marker.deletionSequence);
+        if (!baselinePreflighted) {
+          yield* projectionPipeline.ensureVerifiedBaselineThrough(marker.deletionSequence);
+        }
         phase = "database";
         yield* updateJob(job, phase);
       }
@@ -226,7 +235,10 @@ const makeEntityPurge = Effect.gen(function* () {
           const threads = yield* queries.listProjectThreadIds({ projectId });
           yield* Effect.forEach(
             threads,
-            ({ threadId }) => requestThread(threadId).pipe(Effect.flatMap(run)),
+            ({ threadId }) =>
+              requestThread(threadId).pipe(
+                Effect.flatMap((threadJob) => runInternal(threadJob, baselinePreflighted)),
+              ),
             { concurrency: 1, discard: true },
           );
           yield* queries.deleteProjectDependents({ projectId });
@@ -303,16 +315,65 @@ const makeEntityPurge = Effect.gen(function* () {
     );
   });
 
+  const run: EntityPurgeShape["run"] = (job) => runInternal(job);
+
+  const highestBaselineSequence = Effect.fn("EntityPurge.highestBaselineSequence")(function* (
+    jobsInBatch: ReadonlyArray<PurgeJob>,
+  ) {
+    let highest = 0;
+    for (const job of jobsInBatch) {
+      const entityId =
+        job.entityKind === "thread"
+          ? ThreadId.makeUnsafe(job.entityId)
+          : ProjectId.makeUnsafe(job.entityId);
+      const marker = (yield* queries.readDeletionMarker({
+        entityKind: job.entityKind,
+        entityId,
+      }))[0];
+      highest = Math.max(highest, marker?.deletionSequence ?? 0);
+      if (job.entityKind === "project") {
+        const threads = yield* queries.listProjectThreadIds({ projectId: entityId as ProjectId });
+        for (const thread of threads) {
+          const threadMarker = (yield* queries.readDeletionMarker({
+            entityKind: "thread",
+            entityId: thread.threadId,
+          }))[0];
+          highest = Math.max(highest, threadMarker?.deletionSequence ?? 0);
+        }
+      }
+    }
+    return highest;
+  });
+
   const auditAndResume: EntityPurgeShape["auditAndResume"] = Effect.fn(
     "EntityPurge.auditAndResume",
-  )(function* (requestedLimit: number = 100) {
+  )(function* (
+    requestedLimit: number = 100,
+  ): Effect.fn.Return<void, ProjectionRepositoryError, never> {
     return yield* Effect.gen(function* () {
       const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
       const incomplete = yield* jobs.listIncomplete(limit);
+      const deletedThreads = yield* queries.listDeletedThreads({ limit });
+      const deletedProjects = yield* queries.listDeletedProjects({ limit });
+      const batchJobs = new Map<string, PurgeJob>();
+      for (const job of incomplete) batchJobs.set(job.jobId, job);
+      for (const { threadId } of deletedThreads) {
+        const job = yield* requestThread(threadId);
+        batchJobs.set(job.jobId, job);
+      }
+      for (const { projectId } of deletedProjects) {
+        const job = yield* requestProject(projectId);
+        batchJobs.set(job.jobId, job);
+      }
+      const jobsInBatch = [...batchJobs.values()];
+      const requiredSequence = yield* highestBaselineSequence(jobsInBatch);
+      if (requiredSequence > 0) {
+        yield* projectionPipeline.ensureVerifiedBaselineThrough(requiredSequence);
+      }
       yield* Effect.forEach(
-        incomplete,
+        jobsInBatch,
         (job) =>
-          run(job).pipe(
+          runInternal(job, true).pipe(
             Effect.catchCause((cause) =>
               Effect.logWarning("entity purge audit job failed", {
                 jobId: job.jobId,
@@ -326,19 +387,6 @@ const makeEntityPurge = Effect.gen(function* () {
         { concurrency: 1, discard: true },
       );
       yield* queries.deleteOrphanRows(limit);
-
-      const deletedThreads = yield* queries.listDeletedThreads({ limit });
-      yield* Effect.forEach(
-        deletedThreads,
-        ({ threadId }) => requestThread(threadId).pipe(Effect.flatMap(run)),
-        { concurrency: 1, discard: true },
-      );
-      const deletedProjects = yield* queries.listDeletedProjects({ limit });
-      yield* Effect.forEach(
-        deletedProjects,
-        ({ projectId }) => requestProject(projectId).pipe(Effect.flatMap(run)),
-        { concurrency: 1, discard: true },
-      );
     }).pipe(Effect.mapError(mapPurgeError("EntityPurge.auditAndResume")));
   });
 

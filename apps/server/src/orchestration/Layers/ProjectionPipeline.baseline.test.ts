@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
@@ -160,6 +162,58 @@ baselineRepositoryLayer("ProjectionBaselineRepository", (it) => {
       assert.deepEqual(watches, [
         { watcherThreadId: "watcher-baseline", watchedThreadId: "watched-baseline" },
       ]);
+    }),
+  );
+
+  it.effect("does not reject a candidate after it has become verified", () =>
+    Effect.gen(function* () {
+      const baselines = yield* ProjectionBaselineRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const payloadJson = yield* baselines.capturePayload();
+      const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
+      const createdAt = "2026-08-03T00:00:00.000Z";
+      const inserted = yield* sql<{ readonly baselineId: number }>`
+        INSERT INTO projection_baselines (
+          sequence, format_version, payload_json, payload_hash,
+          verification_status, verification_detail, created_at, verified_at
+        ) VALUES (0, 1, ${payloadJson}, ${payloadHash}, 'candidate', NULL, ${createdAt}, NULL)
+        RETURNING baseline_id AS "baselineId"
+      `;
+      const baselineId = inserted[0]?.baselineId;
+      assert.isNumber(baselineId);
+
+      yield* baselines.markVerified(baselineId as number, 0, createdAt);
+      yield* baselines.markRejected(baselineId as number, "stale verification failure");
+
+      const verified = yield* baselines.latestVerified();
+      assert.equal(verified._tag, "Some");
+      if (verified._tag === "Some") assert.equal(verified.value.baselineId, baselineId);
+    }),
+  );
+});
+
+it.layer(
+  Layer.fresh(ProjectionBaselineRepositoryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory))),
+)("projection baseline candidate reuse", (it) => {
+  it.effect("reuses an existing candidate without recapturing projection tables", () =>
+    Effect.gen(function* () {
+      const baselines = yield* ProjectionBaselineRepository;
+      const sql = yield* SqlClient.SqlClient;
+      const payloadJson = yield* baselines.capturePayload();
+      const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
+      yield* sql`
+        INSERT INTO projection_baselines (
+          sequence, format_version, payload_json, payload_hash,
+          verification_status, verification_detail, created_at, verified_at
+        ) VALUES (
+          0, 1, ${payloadJson}, ${payloadHash}, 'candidate', NULL,
+          '2026-08-03T00:00:00.000Z', NULL
+        )
+      `;
+      yield* sql`DROP TABLE projection_usage_contributions`;
+
+      const existing = yield* baselines.createCandidate([]);
+      assert.equal(existing._tag, "Some");
     }),
   );
 });
