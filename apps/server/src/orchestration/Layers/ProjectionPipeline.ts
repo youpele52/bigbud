@@ -7,10 +7,10 @@
  * @module ProjectionPipeline
  */
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Option, Path, Semaphore, Stream } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { toPersistenceSqlError } from "../../persistence/Errors.ts";
+import { isPersistenceError, toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import { ProjectionBaselineRepository } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
@@ -49,10 +49,16 @@ import {
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
+import {
+  makeProjectionBaselineCoordinator,
+  PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
+} from "./ProjectionPipeline.baseline.coordination.ts";
 import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
 import { writeStartupStatus } from "../../startup/startupStatus.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
+
+export { PROJECTION_BASELINE_FAILURE_COOLDOWN_MS };
 
 const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjectionPipeline")(
   function* () {
@@ -138,10 +144,17 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           Effect.provideService(FileSystem.FileSystem, fileSystem),
           Effect.provideService(Path.Path, path),
           Effect.provideService(ServerConfig, serverConfig),
-          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.verify:workspace")),
+          Effect.mapError((error) =>
+            isPersistenceError(error)
+              ? error
+              : toPersistenceSqlError("ProjectionPipeline.verify:workspace")(error),
+          ),
         ),
     });
-    const baselineSemaphore = yield* Semaphore.make(1);
+    const ensureVerifiedBaselineThrough = yield* makeProjectionBaselineCoordinator({
+      baselines: projectionBaselineRepository,
+      compact: baselineOperations.compact(),
+    });
 
     const bootstrapProjector = (projector: ProjectorDefinition) =>
       projectionStateRepository
@@ -234,24 +247,6 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       runUsageContributionBackfill({
         repository: projectionThreadActivityRepository,
       });
-
-    const ensureVerifiedBaselineThrough = (sequence: number) =>
-      baselineSemaphore
-        .withPermits(1)(
-          projectionBaselineRepository
-            .latestVerified()
-            .pipe(
-              Effect.flatMap((verified) =>
-                Option.isSome(verified) && verified.value.sequence >= sequence
-                  ? Effect.void
-                  : baselineOperations.compact(),
-              ),
-            ),
-        )
-        .pipe(
-          Effect.asVoid,
-          Effect.mapError(toPersistenceSqlError("ProjectionPipeline.ensureBaseline:query")),
-        );
 
     const compactVerifiedPrefix = (batchSize?: number) =>
       eventStore.compactVerifiedPrefix

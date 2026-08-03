@@ -4,6 +4,7 @@ import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceDecodeCauseError, toPersistenceSqlError } from "../Errors.ts";
+import { PROJECTION_BASELINE_TABLES } from "../ProjectionBaselineSchema.ts";
 import {
   ProjectionBaselineRepository,
   type ProjectionBaseline,
@@ -11,20 +12,6 @@ import {
 } from "../Services/ProjectionBaselines.ts";
 
 export const PROJECTION_BASELINE_FORMAT_VERSION = 1;
-
-const TABLES = [
-  "projection_projects",
-  "projection_threads",
-  "projection_thread_messages",
-  "projection_thread_activities",
-  "projection_thread_proposed_plans",
-  "projection_thread_tasks",
-  "projection_thread_sessions",
-  "projection_turns",
-  "projection_pending_approvals",
-  "projection_pending_user_inputs",
-  "projection_usage_contributions",
-] as const;
 
 type BaselinePayload = {
   readonly tables: Record<string, ReadonlyArray<Record<string, unknown>>>;
@@ -77,7 +64,7 @@ function parsePayload(payloadJson: string): BaselinePayload {
   if (typeof tables !== "object" || tables === null) {
     throw new Error("baseline payload tables are invalid");
   }
-  for (const table of TABLES) {
+  for (const table of PROJECTION_BASELINE_TABLES) {
     if (!Array.isArray((tables as Record<string, unknown>)[table])) {
       throw new Error(`baseline payload is missing ${table}`);
     }
@@ -101,7 +88,7 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
 
   const capturePayloadUnsafe = Effect.gen(function* () {
     const tables: Record<string, ReadonlyArray<Record<string, unknown>>> = {};
-    for (const table of TABLES) {
+    for (const table of PROJECTION_BASELINE_TABLES) {
       const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM ${table}`);
       const baselineRows =
         table === "projection_projects"
@@ -146,14 +133,14 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
           if (eventRanges[0]?.latestSequence !== sequence) {
             return Option.none<ProjectionBaseline>();
           }
-          const payloadJson = yield* capturePayloadUnsafe;
-          const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
-          const createdAt = new Date().toISOString();
           const existing = yield* sql.unsafe<BaselineRow>(
             `${selectBaseline} WHERE sequence = ? LIMIT 1`,
             [sequence],
           );
           if (existing[0]) return Option.some(validateBaseline(existing[0]));
+          const payloadJson = yield* capturePayloadUnsafe;
+          const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
+          const createdAt = new Date().toISOString();
           const inserted = yield* sql.unsafe<BaselineRow>(
             `INSERT INTO projection_baselines (
               sequence, format_version, payload_json, payload_hash,
@@ -183,14 +170,14 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
       Effect.flatMap((payload) =>
         sql.withTransaction(
           Effect.gen(function* () {
-            for (const table of TABLES.toReversed()) {
+            for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
               yield* sql.unsafe(
                 table === "projection_projects"
                   ? `DELETE FROM ${table} WHERE project_id <> '__chats__'`
                   : `DELETE FROM ${table}`,
               );
             }
-            for (const table of TABLES) {
+            for (const table of PROJECTION_BASELINE_TABLES) {
               const allowedColumns = new Set(
                 (yield* sql.unsafe<{ name: string }>(`PRAGMA table_info(${table})`)).map(
                   (column) => column.name,
@@ -304,7 +291,10 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
 
   const markRejected: ProjectionBaselineRepositoryShape["markRejected"] = (baselineId, _detail) =>
     sql
-      .unsafe("DELETE FROM projection_baselines WHERE baseline_id = ?", [baselineId])
+      .unsafe(
+        "DELETE FROM projection_baselines WHERE baseline_id = ? AND verification_status = 'candidate'",
+        [baselineId],
+      )
       .pipe(
         Effect.asVoid,
         Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.markRejected")),
