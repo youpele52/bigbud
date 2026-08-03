@@ -25,8 +25,8 @@ const helpMenuItems = [
   },
   {
     icon: NewspaperIcon,
-    label: "What's new",
-    url: "https://bigbud.app/changelog/",
+    label: "What's new?",
+    url: "https://bigbud.app/changelog/#whats-new",
   },
   {
     icon: KeyboardIcon,

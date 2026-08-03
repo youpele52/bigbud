@@ -151,6 +151,8 @@ export const migrationEntries = [
   [62, "ProjectionThreadQueuedPrompts", Migration0062],
 ] as const;
 
+export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
+
 export const makeMigrationLoader = (throughId?: number) =>
   Migrator.fromRecord(
     Object.fromEntries(

@@ -16,7 +16,7 @@ import { SidebarHelpMenu } from "./SidebarHelpMenu";
 const helpDestinations = [
   ["Getting started", "https://bigbud.app/docs/#getting-started"],
   ["Using bigbud", "https://bigbud.app/docs/#using-bigbud"],
-  ["What's new", "https://bigbud.app/changelog/"],
+  ["What's new?", "https://bigbud.app/changelog/#whats-new"],
   ["Keyboard shortcuts", "https://bigbud.app/docs/#6-keyboard-shortcuts"],
   ["Tutorials", "https://www.youtube.com/@bigbudapp"],
   ["Follow bigbud on X", "https://x.com/bigbudapp"],
