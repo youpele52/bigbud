@@ -109,6 +109,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          last_activity_at AS "lastActivityAt",
           archived_at AS "archivedAt",
           pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",

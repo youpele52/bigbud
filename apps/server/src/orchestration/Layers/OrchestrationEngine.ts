@@ -47,7 +47,6 @@ import {
   setVisibleBrowserControl,
   VisibleBrowserControl,
 } from "../../browser/Services/VisibleBrowserControl.ts";
-import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
@@ -55,6 +54,8 @@ import { ThreadDelegationRepository } from "../../persistence/Services/ThreadDel
 import { ThreadDelegationRepositoryLive } from "../../persistence/Layers/ThreadDelegations.ts";
 import { ProjectionThreadWatchRepository } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../../persistence/Layers/ProjectionThreadWatches.ts";
+import { ThreadRetentionRepositoryLive } from "../../persistence/Layers/ThreadRetentionRepository.ts";
+import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
 import { makeQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
 import {
@@ -362,4 +363,5 @@ export const OrchestrationEngineLive = Layer.effect(
   Layer.provide(VisibleBrowserControlLive),
   Layer.provide(ThreadDelegationRepositoryLive),
   Layer.provide(ProjectionThreadWatchRepositoryLive),
+  Layer.provide(ThreadRetentionRepositoryLive),
 );

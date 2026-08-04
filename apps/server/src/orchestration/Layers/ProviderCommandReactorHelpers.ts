@@ -206,11 +206,28 @@ export function buildResumedTurnInput(input: {
   const previousMessages = input.transcriptThread.messages.filter(
     (message): message is OrchestrationMessage => message.role !== "system",
   );
-  const transcriptMessages =
+  const latestRequestIsPersisted =
     previousMessages.at(-1)?.role === "user" &&
-    previousMessages.at(-1)?.text === input.latestTranscriptMessageText
-      ? previousMessages.slice(0, -1)
-      : previousMessages;
+    previousMessages.at(-1)?.text === input.latestTranscriptMessageText;
+  let transcriptMessages = latestRequestIsPersisted
+    ? previousMessages.slice(0, -1)
+    : previousMessages;
+  const latestTurn = input.transcriptThread.latestTurn;
+  if (!latestRequestIsPersisted && latestTurn && latestTurn.state !== "completed") {
+    while (transcriptMessages.at(-1)?.turnId === latestTurn.turnId) {
+      transcriptMessages = transcriptMessages.slice(0, -1);
+    }
+  }
+  // A lost provider session can leave the last user message, or a streaming
+  // assistant message, persisted without a completed turn. Do not replay that
+  // uncertain turn into a fresh provider session.
+  while (
+    transcriptMessages.at(-1)?.role === "user" ||
+    transcriptMessages.at(-1)?.streaming === true
+  ) {
+    transcriptMessages = transcriptMessages.slice(0, -1);
+  }
+
   return buildBootstrapInput(
     transcriptMessages,
     input.latestProviderInputText,

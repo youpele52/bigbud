@@ -230,19 +230,18 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
         ...inputActivity,
       });
     };
-    yield* appendComputerUseActivity({
-      orchestrationEngine: input.orchestrationEngine,
-      operationId,
-      threadId: input.threadId,
-      createdAt,
-      kind: "tool.started",
-      summary: "Computer use started",
-      detail: summarizeRequestedAction(input.action),
-      data: { action: input.action },
-    });
-
     const actionTimeoutMs = input.actionTimeoutMs ?? DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS;
     const operation = Effect.gen(function* () {
+      yield* appendComputerUseActivity({
+        orchestrationEngine: input.orchestrationEngine,
+        operationId,
+        threadId: input.threadId,
+        createdAt,
+        kind: "tool.started",
+        summary: "Computer use started",
+        detail: summarizeRequestedAction(input.action),
+        data: { action: input.action },
+      });
       const executed = yield* input.computerUse.execute(input.threadId, input.action).pipe(
         Effect.timeoutOption(actionTimeoutMs),
         Effect.flatMap((result) =>
@@ -287,7 +286,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
       return result;
     });
 
-    return yield* operation.pipe(
+    const recordedOperation = operation.pipe(
       Effect.onExit((exit) => {
         if (Exit.isSuccess(exit)) return Effect.void;
         const cancelled = Cause.hasInterrupts(exit.cause);
@@ -305,5 +304,6 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
         });
       }),
     );
+    return yield* recordedOperation;
   },
 );

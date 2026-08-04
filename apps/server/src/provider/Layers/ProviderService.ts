@@ -7,6 +7,7 @@ import {
   ProviderStopSessionInput,
   type ProviderKind,
   type ProviderRuntimeEvent,
+  type ThreadId,
 } from "@bigbud/contracts";
 import { Effect, Layer, PubSub, Stream } from "effect";
 
@@ -54,6 +55,7 @@ export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogger?: EventNdjsonLogger;
   readonly getProviderCapabilities?: ProviderCapabilitiesResolver;
   readonly isProviderComposed?: (provider: ProviderKind) => boolean;
+  readonly settleThreadLogs?: (threadId: ThreadId) => Effect.Effect<void>;
 }
 
 const makeProviderService = Effect.fn("makeProviderService")(function* (
@@ -340,6 +342,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         if (routed.isActive) {
           yield* routed.adapter.stopSession(routed.threadId);
         }
+        yield* options?.settleThreadLogs?.(input.threadId) ?? Effect.void;
         yield* directory.remove(input.threadId);
         yield* analytics.record("provider.session.stopped", { provider: routed.adapter.provider });
       }).pipe(

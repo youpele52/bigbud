@@ -27,6 +27,7 @@ const baseThread: ProjectionThread = {
   queuedPrompts: [],
   createdAt: now,
   updatedAt: now,
+  lastActivityAt: now,
   archivedAt: null,
   pinnedAt: null,
   deletingAt: null,
@@ -40,6 +41,8 @@ function repository() {
     listByProjectId: () => Effect.succeed([current]),
     upsert: (thread: ProjectionThread) => Effect.sync(() => void (current = thread)),
     deleteById: () => Effect.void,
+    touchActivity: ({ occurredAt }: { readonly occurredAt: string }) =>
+      Effect.sync(() => void (current = { ...current, lastActivityAt: occurredAt })),
     get: () => current,
   };
 }

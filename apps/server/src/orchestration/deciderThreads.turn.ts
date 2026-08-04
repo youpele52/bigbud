@@ -32,6 +32,7 @@ export type ThreadTurnCommand = Exclude<
       | "thread.delete"
       | "thread.delete.finalize"
       | "thread.delete.abort"
+      | "thread.retention-delete"
       | "thread.archive"
       | "thread.unarchive"
       | "thread.pin"
@@ -241,11 +242,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.turn.diff.complete": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
@@ -268,11 +270,12 @@ export const decideThreadTurnCommand = Effect.fn("decideThreadTurnCommand")(func
     }
 
     case "thread.revert.complete": {
-      yield* requireThread({
+      const thread = yield* requireThread({
         readModel,
         command,
         threadId: command.threadId,
       });
+      yield* requireThreadReadyForMutation({ thread, command });
       return {
         ...withEventBase({
           aggregateKind: "thread",
