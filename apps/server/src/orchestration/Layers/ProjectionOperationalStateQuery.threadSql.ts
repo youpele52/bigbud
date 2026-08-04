@@ -171,7 +171,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
         source_proposed_plan_id AS "sourceProposedPlanId"
       FROM projection_turns
-      WHERE thread_id = ${threadId}
+      WHERE thread_id = ${threadId} AND turn_id IS NOT NULL
       ORDER BY requested_at DESC, turn_id DESC
       LIMIT 1
     `,
