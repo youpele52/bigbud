@@ -38,6 +38,7 @@ export const PurgeResourceIdentity = Schema.Struct({
   canonicalPath: Schema.String,
   device: NonNegativeInt,
   inode: NonNegativeInt,
+  changedAtMs: Schema.NullOr(Schema.Number).pipe(Schema.withDecodingDefault(() => null)),
   type: Schema.Literals(["file", "directory"]),
   root: Schema.NullOr(PurgePathIdentity).pipe(Schema.withDecodingDefault(() => null)),
   parent: Schema.NullOr(PurgePathIdentity).pipe(Schema.withDecodingDefault(() => null)),

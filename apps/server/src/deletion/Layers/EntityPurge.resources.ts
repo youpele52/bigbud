@@ -198,6 +198,7 @@ export async function captureResourceIdentity(
     canonicalPath,
     device: stats.dev,
     inode: stats.ino,
+    changedAtMs: stats.ctimeMs,
     type,
     root,
     parent,
@@ -210,6 +211,9 @@ function sameIdentity(left: PurgeResourceIdentity, right: PurgeResourceIdentity)
     left.declaredPath === right.declaredPath &&
     left.device === right.device &&
     left.inode === right.inode &&
+    (left.changedAtMs === null ||
+      right.changedAtMs === null ||
+      left.changedAtMs === right.changedAtMs) &&
     left.type === right.type &&
     left.root !== null &&
     right.root !== null &&
