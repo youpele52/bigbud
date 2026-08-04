@@ -2,6 +2,7 @@ import { type OrchestrationEvent } from "@bigbud/contracts";
 import { type AppState } from "./main.store";
 import { applyProjectEvent } from "./events.store.projects";
 import { applyThreadMetaEvent } from "./events.store.threads.meta";
+import { applyThreadQueueEvent } from "./events.store.threads.queue";
 import { applyThreadRuntimeEvent } from "./events.store.threads.runtime";
 
 export function applyOrchestrationEvent(state: AppState, event: OrchestrationEvent): AppState {
@@ -13,6 +14,11 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
   const threadMetaState = applyThreadMetaEvent(state, event);
   if (threadMetaState !== undefined) {
     return threadMetaState;
+  }
+
+  const threadQueueState = applyThreadQueueEvent(state, event);
+  if (threadQueueState !== undefined) {
+    return threadQueueState;
   }
 
   const threadRuntimeState = applyThreadRuntimeEvent(state, event);
