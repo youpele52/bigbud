@@ -192,11 +192,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
         </MenuTrigger>
         <MenuPopup
           align="start"
-          className={cn(
-            "[--available-height:min(24rem,70vh)]",
-            selectedProviderPopupClassName,
-            props.popupClassName,
-          )}
+          className={cn(selectedProviderPopupClassName, props.popupClassName)}
         >
           {props.lockedProvider !== null && view === "model" ? (
             <ModelList
@@ -346,7 +342,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                     </MenuSubTrigger>
                     <MenuSubPopup
                       className={cn(
-                        "[--available-height:min(24rem,70vh)] !p-0 overflow-hidden",
+                        "!p-0 overflow-hidden",
                         providerPopupClassName,
                         props.subPopupClassName,
                       )}

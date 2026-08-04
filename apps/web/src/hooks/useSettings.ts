@@ -41,6 +41,7 @@ const CLIENT_SETTINGS_LEGACY_KEYS = ["t3code:client-settings:v1"] as const;
 const OLD_SETTINGS_KEY = "t3code:app-settings:v1";
 const TERMINAL_FONT_FAMILY_SET = new Set<string>(TERMINAL_FONT_FAMILIES);
 const TERMINAL_FONT_SIZE_SET = new Set<number>(TERMINAL_FONT_SIZES);
+type GenericSettingsPatch = Partial<Omit<UnifiedSettings, "threadRetentionPolicy">>;
 
 function isTerminalFontFamily(value: unknown): value is ClientSettings["terminalFontFamily"] {
   return typeof value === "string" && TERMINAL_FONT_FAMILY_SET.has(value);
@@ -50,13 +51,16 @@ function isTerminalFontFamily(value: unknown): value is ClientSettings["terminal
 
 const SERVER_SETTINGS_KEYS = new Set<string>(Struct.keys(ServerSettings.fields));
 
-function splitPatch(patch: Partial<UnifiedSettings>): {
+function splitPatch(patch: GenericSettingsPatch): {
   serverPatch: ServerSettingsPatch;
   clientPatch: Partial<ClientSettings>;
 } {
   const serverPatch: Record<string, unknown> = {};
   const clientPatch: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
+    if (key === "threadRetentionPolicy") {
+      continue;
+    }
     if (SERVER_SETTINGS_KEYS.has(key)) {
       serverPatch[key] = value;
     } else {
@@ -113,7 +117,7 @@ export function useUpdateSettings() {
   );
 
   const updateSettings = useCallback(
-    (patch: Partial<UnifiedSettings>) => {
+    (patch: GenericSettingsPatch) => {
       const { serverPatch, clientPatch } = splitPatch(patch);
 
       if (Object.keys(serverPatch).length > 0) {

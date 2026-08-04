@@ -29,6 +29,7 @@ import {
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
+import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { VisibleBrowserControl } from "../../browser/Services/VisibleBrowserControl.ts";
 import { decideOrchestrationCommand } from "../decider.ts";
 import {
@@ -72,6 +73,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
   const visibleBrowser = yield* VisibleBrowserControl;
 
   return (envelope: CommandEnvelope): Effect.Effect<void> => {
@@ -126,9 +128,22 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
         const committedCommand = yield* sql
           .withTransaction(
             Effect.gen(function* () {
+              const retentionClaim =
+                envelope.command.type === "thread.retention-delete" &&
+                Option.isSome(retentionRepository)
+                  ? yield* retentionRepository.value.recheckAndClaimItem({
+                      runId: envelope.command.runId,
+                      threadId: envelope.command.threadId,
+                      expectedLastActivityAt: envelope.command.expectedLastActivityAt,
+                      cutoffAt: envelope.command.cutoffAt,
+                      claimedAt: envelope.command.createdAt,
+                    })
+                  : envelope.command.type === "thread.retention-delete"
+                    ? yield* Effect.die("ThreadRetentionRepository is unavailable")
+                    : null;
               const committedEvents: OrchestrationEvent[] = [];
               let nextReadModel = currentReadModel;
-              for (const nextEvent of eventBases) {
+              for (const nextEvent of retentionClaim?.claimed === false ? [] : eventBases) {
                 const savedEvent = yield* eventStore.append(nextEvent);
                 nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
                 yield* projectionPipeline.projectEvent(savedEvent);

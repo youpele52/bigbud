@@ -129,8 +129,10 @@ function seedOperationalFixture(sql: SqlClient.SqlClient) {
         ('thread-active', 'turn-active', 'running', '2026-01-01T00:04:00.000Z',
          '2026-01-01T00:04:00.000Z', NULL, 1, 'checkpoint-active', 'ready', '[]'),
         ('thread-inactive', 'turn-inactive', 'completed', '2026-01-01T00:04:01.000Z',
-         '2026-01-01T00:04:01.000Z', '2026-01-01T00:04:02.000Z',
-         1, 'checkpoint-inactive', 'ready', '[]')
+          '2026-01-01T00:04:01.000Z', '2026-01-01T00:04:02.000Z',
+          1, 'checkpoint-inactive', 'ready', '[]'),
+        ('thread-inactive', NULL, 'pending', '2026-01-01T00:04:03.000Z',
+          NULL, NULL, NULL, NULL, NULL, '[]')
     `;
     yield* sql`
       INSERT INTO projection_thread_watches (
@@ -207,6 +209,7 @@ operationalStateLayer("ProjectionOperationalStateQuery", (it) => {
       assert.equal(history.value.threads[0]?.activities.length, 110);
       assert.equal(history.value.threads[0]?.proposedPlans.length, 1);
       assert.equal(history.value.threads[0]?.checkpoints.length, 1);
+      assert.equal(history.value.threads[0]?.latestTurn?.turnId, "turn-inactive");
 
       const missing = yield* query.getFullThreadHistory(ThreadId.makeUnsafe("missing"));
       assert(Option.isNone(missing));

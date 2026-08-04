@@ -72,6 +72,7 @@ function toReconciledSession(input: {
 export function buildStartupReconciliationCommands(input: {
   threads: ReadonlyArray<OrchestrationThread>;
   liveSessions: ReadonlyArray<ProviderSession>;
+  deletionOwnedThreadIds?: ReadonlySet<string>;
   occurredAt: string;
 }): ReadonlyArray<OrchestrationCommand> {
   const liveSessionByThreadId = new Map(
@@ -85,6 +86,9 @@ export function buildStartupReconciliationCommands(input: {
     }
 
     if (thread.deletingAt !== null) {
+      if (input.deletionOwnedThreadIds?.has(thread.id)) {
+        continue;
+      }
       commands.push({
         type: "thread.delete.abort",
         commandId: serverCommandId("provider-runtime-stale-thread-delete-abort"),

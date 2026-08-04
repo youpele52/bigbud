@@ -62,9 +62,16 @@ const seedCoveredDeletion = Effect.fn("seedCoveredDeletion")(function* (input: {
   const sql = yield* SqlClient.SqlClient;
   const now = "2026-07-30T00:00:00.000Z";
   yield* sql`
+    INSERT INTO projection_baselines (
+      sequence, format_version, payload_json, payload_hash, verification_status,
+      verification_detail, created_at, verified_at
+    ) VALUES (1, 1, '{}', 'test', 'verified', NULL, ${now}, ${now})
+    ON CONFLICT (sequence) DO NOTHING
+  `;
+  yield* sql`
     INSERT INTO orchestration_deletion_markers (
       entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
-    ) VALUES (${input.entityKind}, ${input.entityId}, 1, ${now}, NULL)
+    ) VALUES (${input.entityKind}, ${input.entityId}, 1, ${now}, 1)
   `;
 });
 
@@ -91,7 +98,6 @@ it.layer(testLayer)("EntityPurge", (it) => {
         workspaceRoot,
         worktreePath,
       });
-      yield* seedCoveredDeletion({ entityKind: "thread", entityId: threadId });
       yield* sql`
         INSERT INTO projection_thread_messages (
           message_id, thread_id, role, text, is_streaming, created_at, updated_at, attachments_json
@@ -118,6 +124,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
           request_id, thread_id, status, questions_json, created_at
         ) VALUES ('input-purge', ${threadId}, 'pending', '[]', '2026-07-30T00:00:00.000Z')
       `;
+      yield* seedCoveredDeletion({ entityKind: "thread", entityId: threadId });
 
       const job = yield* purge.requestThread(threadId);
       yield* purge.run(job);
@@ -211,9 +218,15 @@ it.layer(testLayer)("EntityPurge", (it) => {
         )
       `;
 
-      yield* purge.auditAndResume();
+      const result = yield* Effect.exit(purge.auditAndResume());
 
+      assert.equal(result._tag, "Success");
       assert.isTrue(yield* fs.exists(outsidePath));
+      const failedJobs = yield* sql<{ status: string }>`
+        SELECT status FROM purge_jobs WHERE job_id = 'purge-traversal'
+      `;
+      assert.deepEqual(failedJobs, [{ status: "pending" }]);
+      yield* sql`DELETE FROM purge_jobs WHERE job_id = 'purge-traversal'`;
     }),
   );
 
@@ -303,6 +316,11 @@ it.layer(testLayer)("EntityPurge", (it) => {
         ) VALUES ('command-proof-purge', 'thread', ${threadId}, ${now}, 1, 'accepted', NULL)
       `;
       yield* sql`
+        INSERT INTO projection_thread_messages (
+          message_id, thread_id, role, text, is_streaming, created_at, updated_at
+        ) VALUES ('proof-message', ${threadId}, 'user', 'retain', 0, ${now}, ${now})
+      `;
+      yield* sql`
         INSERT INTO orchestration_deletion_markers (
           entity_kind, entity_id, deletion_sequence, deleted_at, covered_by_baseline_sequence
         ) VALUES ('thread', ${threadId}, 1, ${now}, NULL)
@@ -317,6 +335,10 @@ it.layer(testLayer)("EntityPurge", (it) => {
           (SELECT COUNT(*) FROM orchestration_command_receipts WHERE aggregate_id = ${threadId}) AS receipts
       `;
       assert.deepEqual(retained, [{ events: 1, receipts: 1 }]);
+      assert.deepEqual(
+        yield* sql`SELECT message_id FROM projection_thread_messages WHERE thread_id = ${threadId}`,
+        [{ message_id: "proof-message" }],
+      );
 
       yield* sql`
         UPDATE orchestration_deletion_markers SET covered_by_baseline_sequence = 1
@@ -327,6 +349,7 @@ it.layer(testLayer)("EntityPurge", (it) => {
           sequence, format_version, payload_json, payload_hash, verification_status,
           verification_detail, created_at, verified_at
         ) VALUES (1, 1, '{}', 'test', 'verified', NULL, ${now}, ${now})
+        ON CONFLICT (sequence) DO NOTHING
       `;
       yield* sql`
         INSERT INTO orchestration_events (
@@ -335,9 +358,17 @@ it.layer(testLayer)("EntityPurge", (it) => {
         ) VALUES ('event-after-proof', 'thread', ${threadId}, 1, 'thread.meta-updated', ${now},
           NULL, NULL, NULL, 'server', '{}', '{}')
       `;
+      yield* sql`
+        UPDATE purge_jobs SET updated_at = '2000-01-01T00:00:00.000Z'
+        WHERE job_id = ${job.jobId}
+      `;
       const staleProof = yield* Effect.exit(purge.run(job));
       assert.equal(staleProof._tag, "Failure");
       yield* sql`DELETE FROM orchestration_events WHERE event_id = 'event-after-proof'`;
+      yield* sql`
+        UPDATE purge_jobs SET updated_at = '2000-01-01T00:00:00.000Z'
+        WHERE job_id = ${job.jobId}
+      `;
       yield* purge.run(job);
       const finalized = yield* sql<{
         readonly events: number;

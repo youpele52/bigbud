@@ -12,6 +12,9 @@ export interface EntityPurgeShape {
     projectId: ProjectId,
   ) => Effect.Effect<PurgeJob, ProjectionRepositoryError>;
   readonly run: (job: PurgeJob) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly runBatch: (
+    jobs: ReadonlyArray<PurgeJob>,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
   readonly auditAndResume: (limit?: number) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 
@@ -26,6 +29,8 @@ const noopJob = (entityKind: "thread" | "project", entityId: string): PurgeJob =
   phase: "awaiting-finalization",
   status: "pending",
   resourceManifest: [],
+  manifestDigest: null,
+  manifestSealedAt: null,
   attemptCount: 0,
   lastError: null,
   createdAt: new Date(0).toISOString(),
@@ -37,5 +42,6 @@ export const EntityPurgeTest = Layer.succeed(EntityPurge, {
   requestThread: (threadId) => Effect.succeed(noopJob("thread", threadId)),
   requestProject: (projectId) => Effect.succeed(noopJob("project", projectId)),
   run: () => Effect.void,
+  runBatch: () => Effect.void,
   auditAndResume: () => Effect.void,
 });

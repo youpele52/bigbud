@@ -1,8 +1,9 @@
 import { assert, it as effectIt, vi } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Fiber, Layer, Stream } from "effect";
 
+import { ThreadId } from "@bigbud/contracts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { CliProxyAdapter } from "../../Services/CliProxy/Adapter.ts";
@@ -117,7 +118,7 @@ adapterLayer("CliProxyAdapterLive", (it) => {
       assert.equal(options?.env?.ANTHROPIC_API_KEY, undefined);
       assert.deepEqual(adapter.capabilities, {
         sessionModelSwitch: "unsupported",
-        sessionRecovery: "unsupported",
+        sessionRecovery: "fresh-restart",
         conversationRewind: "unsupported",
         conversationFork: "unsupported",
       });
@@ -194,6 +195,130 @@ adapterLayer("CliProxyAdapterLive", (it) => {
         assert.equal(result.failure._tag, "ProviderAdapterValidationError");
       }
       assert.equal(createQuery.mock.calls.length, beforeQueries);
+      yield* adapter.stopAll();
+    }),
+  );
+
+  it.effect("keeps two normal turns on one persistent delegated query", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CliProxyAdapter;
+      const threadId = ThreadId.makeUnsafe("thread-cli-proxy-two-turns");
+      const beforeQueries = createQuery.mock.calls.length;
+      const session = yield* adapter.startSession({
+        threadId,
+        provider: "cliProxy",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+      } as never);
+      const query = createQuery.mock.results.at(-1)?.value as FakeClaudeQuery;
+
+      const firstTurn = yield* adapter.sendTurn({
+        threadId,
+        input: "first",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        attachments: [],
+      } as never);
+      const firstCompletedFiber = yield* Stream.filter(
+        adapter.streamEvents,
+        (event) => event.type === "turn.completed",
+      ).pipe(Stream.runHead, Effect.forkChild);
+      query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "cli-proxy-session",
+        uuid: "cli-proxy-result-1",
+      } as never);
+      const firstCompleted = yield* Fiber.join(firstCompletedFiber);
+      assert.equal(firstCompleted._tag, "Some");
+
+      const secondTurn = yield* adapter.sendTurn({
+        threadId,
+        input: "second",
+        attachments: [],
+      } as never);
+      const secondCompletedFiber = yield* Stream.filter(
+        adapter.streamEvents,
+        (event) => event.type === "turn.completed",
+      ).pipe(Stream.runHead, Effect.forkChild);
+      query.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "cli-proxy-session",
+        uuid: "cli-proxy-result-2",
+      } as never);
+      const secondCompleted = yield* Fiber.join(secondCompletedFiber);
+
+      assert.equal(secondCompleted._tag, "Some");
+      assert.notEqual(String(firstTurn.turnId), String(secondTurn.turnId));
+      assert.equal(createQuery.mock.calls.length, beforeQueries + 1);
+      assert.equal(yield* adapter.hasSession(session.threadId), true);
+      yield* adapter.stopAll();
+    }),
+  );
+
+  it.effect("drops delegated session ownership before starting a fresh recovery query", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CliProxyAdapter;
+      const threadId = ThreadId.makeUnsafe("thread-cli-proxy-exit-recovery");
+      yield* adapter.startSession({
+        threadId,
+        provider: "cliProxy",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+      } as never);
+      const firstQuery = createQuery.mock.results.at(-1)?.value as FakeClaudeQuery;
+      const exitedFiber = yield* Stream.filter(
+        adapter.streamEvents,
+        (event) => event.type === "session.exited",
+      ).pipe(Stream.runHead, Effect.forkChild);
+
+      firstQuery.finish();
+      const exited = yield* Fiber.join(exitedFiber);
+      assert.equal(exited._tag, "Some");
+      assert.equal(yield* adapter.hasSession(threadId), false);
+      for (
+        let attempt = 0;
+        attempt < 200 && (yield* adapter.listSessions()).length > 0;
+        attempt += 1
+      ) {
+        yield* Effect.yieldNow;
+      }
+      assert.deepEqual(yield* adapter.listSessions(), []);
+
+      yield* adapter.startSession({
+        threadId,
+        provider: "cliProxy",
+        modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        runtimeMode: "full-access",
+      } as never);
+      const secondQuery = createQuery.mock.results.at(-1)?.value as FakeClaudeQuery;
+      assert.equal(yield* adapter.hasSession(threadId), true);
+      assert.equal((yield* adapter.listSessions()).length, 1);
+
+      const turn = yield* adapter.sendTurn({
+        threadId,
+        input: "next request only",
+        attachments: [],
+      } as never);
+      const completedFiber = yield* Stream.filter(
+        adapter.streamEvents,
+        (event) => event.type === "turn.completed",
+      ).pipe(Stream.runHead, Effect.forkChild);
+      secondQuery.emit({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        errors: [],
+        session_id: "cli-proxy-session-recovered",
+        uuid: "cli-proxy-result-recovered",
+      } as never);
+      const completed = yield* Fiber.join(completedFiber);
+      assert.equal(completed._tag, "Some");
+      assert.equal(String(turn.threadId), threadId);
       yield* adapter.stopAll();
     }),
   );

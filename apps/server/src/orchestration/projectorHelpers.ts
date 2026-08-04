@@ -39,7 +39,9 @@ export function updateThread(
   threadId: ThreadId,
   patch: ThreadPatch,
 ): OrchestrationThread[] {
-  return threads.map((thread) => (thread.id === threadId ? { ...thread, ...patch } : thread));
+  return threads.map((thread) =>
+    thread.id === threadId && thread.deletedAt === null ? { ...thread, ...patch } : thread,
+  );
 }
 
 export function decodeForEvent<A>(
@@ -107,7 +109,7 @@ export function projectProjectMetaUpdated(
     Effect.map((payload) => ({
       ...nextBase,
       projects: nextBase.projects.map((project) =>
-        project.id === payload.projectId
+        project.id === payload.projectId && project.deletedAt === null
           ? {
               ...project,
               ...(payload.title !== undefined ? { title: payload.title } : {}),
@@ -143,7 +145,7 @@ export function projectProjectDeleted(
     Effect.map((payload) => ({
       ...nextBase,
       projects: nextBase.projects.map((project) =>
-        project.id === payload.projectId
+        project.id === payload.projectId && project.deletedAt === null
           ? {
               ...project,
               deletingAt: null,
@@ -164,7 +166,7 @@ export function projectProjectDeletionRequested(
     Effect.map((payload) => ({
       ...nextBase,
       projects: nextBase.projects.map((project) =>
-        project.id === payload.projectId
+        project.id === payload.projectId && project.deletedAt === null
           ? {
               ...project,
               deletingAt: payload.deletingAt,

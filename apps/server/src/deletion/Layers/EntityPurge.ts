@@ -1,18 +1,14 @@
-import path from "node:path";
-
-import { ChatAttachment, ProjectId, ThreadId } from "@bigbud/contracts";
-import { decodeJsonResult } from "@bigbud/shared/schemaJson";
-import { Effect, FileSystem, Layer, Result, Schema } from "effect";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
+import { Effect, FileSystem, Layer, Semaphore } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { attachmentRelativePath } from "../../attachments/attachmentStore.ts";
-import { resolveAttachmentRelativePath } from "../../attachments/attachmentPaths.ts";
-import {
-  isPersistenceError,
-  toPersistenceSqlError,
-  type ProjectionRepositoryError,
-} from "../../persistence/Errors.ts";
-import { PurgeJobRepositoryLive } from "../../persistence/Layers/PurgeJobRepository.ts";
+import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
+import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
+import { GitCoreLive } from "../../git/Layers/GitCore.ts";
+import { safeEntitySegment, threadAttachmentRelativePaths } from "./EntityPurge.assets.ts";
+import { makeEntityPurgeCheckpointOps } from "./EntityPurge.checkpoints.ts";
+import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import { PurgeJobRepositoryLive as PurgeJobs } from "../../persistence/Layers/PurgeJobRepository.ts";
 import {
   type PurgeJob,
   PurgeJobRepository,
@@ -20,33 +16,30 @@ import {
 } from "../../persistence/Services/PurgeJobRepository.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
-import { EntityPurge, type EntityPurgeShape } from "../Services/EntityPurge.ts";
+import { EntityPurge, type EntityPurgeShape as PurgeShape } from "../Services/EntityPurge.ts";
+import { makeEntityPurgeMaintenance } from "./EntityPurge.batch.ts";
+import { mapPurgeError, nextPurgeRetryAt } from "./EntityPurge.errors.ts";
+import {
+  exclusiveOwnedLogNames,
+  readOwnedLogDirectory,
+  verifyOwnedLogsAbsent,
+} from "./EntityPurge.logs.ts";
 import { makeEntityPurgeSql } from "./EntityPurge.sql.ts";
-
-const decodeAttachments = decodeJsonResult(Schema.Array(ChatAttachment));
-
-function managedRelativePath(root: string, target: string): string | null {
-  const resolvedRoot = path.resolve(root);
-  const resolvedTarget = path.resolve(target);
-  if (!resolvedTarget.startsWith(`${resolvedRoot}${path.sep}`)) return null;
-  const relativePath = path.relative(resolvedRoot, resolvedTarget);
-  return relativePath.length > 0 && !relativePath.startsWith("..") ? relativePath : null;
-}
-
-function safeEntitySegment(entityId: string): string | null {
-  return entityId.length > 0 &&
-    entityId !== "." &&
-    entityId !== ".." &&
-    !entityId.includes("/") &&
-    !entityId.includes("\\")
-    ? entityId
-    : null;
-}
-
-function mapPurgeError(operation: string) {
-  return (error: unknown) =>
-    isPersistenceError(error) ? error : toPersistenceSqlError(operation)(error);
-}
+import { makeEntityPurgeClaims } from "./EntityPurge.claims.ts";
+import { makePurgeJobTransitions } from "./EntityPurge.jobs.ts";
+import { recordRemovedPurgeResource } from "./EntityPurge.metrics.ts";
+import { verifyCanonicalPurgeProof } from "./EntityPurge.proof.ts";
+import { assertThreadRuntimeQuiescent } from "./EntityPurge.runtime.ts";
+import {
+  assertManifestResourceKind,
+  captureResourceIdentity,
+  deleteResourceAtomically,
+  managedRelativePath,
+  resolvePurgeResource,
+  resourceRoot,
+  verifyResourceAbsent,
+  verifyResourcePresent,
+} from "./EntityPurge.resources.ts";
 
 const makeEntityPurge = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -54,156 +47,201 @@ const makeEntityPurge = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const config = yield* ServerConfig;
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
+  const checkpointStore = yield* CheckpointStore;
   const queries = makeEntityPurgeSql(sql);
+  const maintenanceSemaphore = yield* Semaphore.make(1);
 
-  const updateJob = (job: PurgeJob, phase: PurgeJob["phase"]) =>
-    jobs.update({
-      jobId: job.jobId,
-      phase,
-      status: "running",
-      lastError: null,
-      updatedAt: new Date().toISOString(),
-    });
+  const resourceOperation = <A>(operation: string, run: () => Promise<A>) =>
+    Effect.tryPromise({ try: run, catch: mapPurgeError(operation) });
 
-  const requestThread: EntityPurgeShape["requestThread"] = Effect.fn("EntityPurge.requestThread")(
+  const captureResource = Effect.fn("EntityPurge.captureResource")(function* (
+    kind: PurgeResource["kind"],
+    relativePath: string,
+  ) {
+    const resource = {
+      kind,
+      relativePath,
+      identity: null,
+      quarantineName: `.bigbud-purge-${crypto.randomUUID()}`,
+      action: "delete",
+    } satisfies PurgeResource;
+    yield* fs
+      .makeDirectory(resourceRoot(config, kind), { recursive: true })
+      .pipe(Effect.mapError(mapPurgeError("EntityPurge.captureResourceRoot")));
+    const resolved = resolvePurgeResource(config, resource);
+    const identity = yield* resourceOperation("EntityPurge.captureResource", () =>
+      captureResourceIdentity(resolved),
+    );
+    return { ...resource, identity } satisfies PurgeResource;
+  });
+  const { transitionJob } = makePurgeJobTransitions(jobs);
+  const {
+    assertWorktreeExclusive,
+    assertResourceExclusive,
+    bindLegacyManifest,
+    attachmentIsShared,
+    assertResourceClaims,
+    acquireResourceClaims,
+  } = makeEntityPurgeClaims({ config, queries, captureResource, resourceOperation, jobs, sql });
+  const { captureCheckpointRefs, deleteCheckpointRefs } = makeEntityPurgeCheckpointOps({
+    checkpointStore,
+    queries,
+  });
+
+  const requestThread: PurgeShape["requestThread"] = Effect.fn("EntityPurge.requestThread")(
     function* (threadId: ThreadId) {
       return yield* Effect.gen(function* () {
+        const jobId = crypto.randomUUID();
         const rows = yield* queries.readThreadAssets({ threadId });
         const resources = new Map<string, PurgeResource>();
-        for (const row of rows) {
-          if (row.attachmentsJson) {
-            const decoded = decodeAttachments(row.attachmentsJson);
-            if (Result.isSuccess(decoded)) {
-              for (const attachment of decoded.success) {
-                const relativePath = attachmentRelativePath(attachment);
-                if (relativePath) {
-                  resources.set(`attachment:${relativePath}`, {
-                    kind: "attachment",
-                    relativePath,
-                  });
-                }
-              }
-            }
-          }
-          if (row.worktreePath) {
-            const relativePath = managedRelativePath(config.worktreesDir, row.worktreePath);
-            if (relativePath) {
-              resources.set(`managed-worktree:${relativePath}`, {
-                kind: "managed-worktree",
-                relativePath,
-              });
-            }
+        for (const relativePath of threadAttachmentRelativePaths(rows)) {
+          resources.set(
+            `attachment:${relativePath}`,
+            yield* captureResource("attachment", relativePath),
+          );
+        }
+        const worktreePaths = new Set(
+          rows.flatMap((row) => (row.worktreePath ? [row.worktreePath] : [])),
+        );
+        if (worktreePaths.size > 1)
+          return yield* Effect.fail(new Error("thread worktree ownership is ambiguous"));
+        for (const worktreePath of worktreePaths) {
+          const relativePath = managedRelativePath(config.worktreesDir, worktreePath);
+          if (!relativePath)
+            return yield* Effect.fail(new Error("thread worktree is outside the managed root"));
+          const resource = yield* captureResource("managed-worktree", relativePath);
+          yield* assertWorktreeExclusive(threadId, resource);
+          resources.set(`managed-worktree:${relativePath}`, resource);
+        }
+        const knownThreadIds = (yield* queries.listKnownThreadIds()).map((row) => row.threadId);
+        for (const [kind, directory, type] of [
+          ["provider-log", config.providerLogsDir, "provider"],
+          ["terminal-history", config.terminalLogsDir, "terminal"],
+        ] as const) {
+          const entries = yield* resourceOperation("EntityPurge.readOwnedLogDirectory", () =>
+            readOwnedLogDirectory(directory),
+          );
+          for (const relativePath of exclusiveOwnedLogNames({
+            entries,
+            knownThreadIds,
+            threadId,
+            type,
+          })) {
+            resources.set(`${kind}:${relativePath}`, yield* captureResource(kind, relativePath));
           }
         }
-        return yield* jobs.createOrGet({
-          jobId: crypto.randomUUID(),
+        const job = yield* jobs.createOrGet({
+          jobId,
           entityKind: "thread",
           entityId: threadId,
           resourceManifest: Array.from(resources.values()),
           createdAt: new Date().toISOString(),
         });
+        yield* captureCheckpointRefs(job, rows);
+        return yield* acquireResourceClaims(job);
       }).pipe(Effect.mapError(mapPurgeError("EntityPurge.requestThread")));
     },
   );
 
-  const requestProject: EntityPurgeShape["requestProject"] = Effect.fn(
-    "EntityPurge.requestProject",
-  )(function* (projectId) {
-    const segment = safeEntitySegment(projectId);
-    const resourceManifest: Array<PurgeResource> = segment
-      ? [
-          { kind: "project-memory", relativePath: segment },
-          { kind: "project-notes", relativePath: segment },
-          { kind: "project-kanban", relativePath: segment },
-        ]
-      : [];
-    return yield* jobs.createOrGet({
-      jobId: crypto.randomUUID(),
-      entityKind: "project",
-      entityId: projectId,
-      resourceManifest,
-      createdAt: new Date().toISOString(),
-    });
-  });
-
-  const resolveResourcePath = (resource: PurgeResource): string | null => {
-    switch (resource.kind) {
-      case "attachment":
-        return resolveAttachmentRelativePath({
-          attachmentsDir: config.attachmentsDir,
-          relativePath: resource.relativePath,
-        });
-      case "project-memory":
-        return managedRelativePath(
-          path.join(config.stateDir, "memory", "projects"),
-          path.join(config.stateDir, "memory", "projects", resource.relativePath),
-        )
-          ? path.join(config.stateDir, "memory", "projects", resource.relativePath)
-          : null;
-      case "project-notes":
-        return managedRelativePath(
-          config.notesDir,
-          path.join(config.notesDir, resource.relativePath),
-        )
-          ? path.join(config.notesDir, resource.relativePath)
-          : null;
-      case "project-kanban":
-        return managedRelativePath(
-          config.kanbanDir,
-          path.join(config.kanbanDir, resource.relativePath),
-        )
-          ? path.join(config.kanbanDir, resource.relativePath)
-          : null;
-      case "managed-worktree":
-        return managedRelativePath(
-          config.worktreesDir,
-          path.join(config.worktreesDir, resource.relativePath),
-        )
-          ? path.join(config.worktreesDir, resource.relativePath)
-          : null;
-    }
-  };
+  const requestProject: PurgeShape["requestProject"] = Effect.fn("EntityPurge.requestProject")(
+    function* (projectId) {
+      const segment = safeEntitySegment(projectId);
+      if (!segment)
+        return yield* toPersistenceSqlError("EntityPurge.requestProject")("invalid project id");
+      const resourceManifest = yield* Effect.forEach(
+        ["project-memory", "project-notes", "project-kanban"] as const,
+        (kind) => captureResource(kind, segment),
+      );
+      return yield* jobs.createOrGet({
+        jobId: crypto.randomUUID(),
+        entityKind: "project",
+        entityId: projectId,
+        resourceManifest,
+        createdAt: new Date().toISOString(),
+      });
+    },
+  );
 
   const deleteResources = (job: PurgeJob) =>
     Effect.forEach(
       job.resourceManifest,
-      (resource) => {
-        const target = resolveResourcePath(resource);
-        return target ? fs.remove(target, { recursive: true, force: true }) : Effect.void;
-      },
+      (resource) =>
+        Effect.gen(function* () {
+          yield* assertResourceExclusive(job, resource);
+          const resolved = resolvePurgeResource(config, resource);
+          const retainShared =
+            job.entityKind === "thread" &&
+            resource.kind === "attachment" &&
+            resource.action === "retain-shared" &&
+            (yield* attachmentIsShared(ThreadId.makeUnsafe(job.entityId), resource));
+          if (!retainShared) {
+            const removed = yield* resourceOperation("EntityPurge.deleteResources", () =>
+              deleteResourceAtomically({ jobId: job.jobId, resolved, resource }),
+            );
+            yield* recordRemovedPurgeResource(resource.kind, removed);
+          }
+          yield* Effect.yieldNow;
+        }),
       { concurrency: 1, discard: true },
-    ).pipe(Effect.mapError(mapPurgeError("EntityPurge.deleteResources")));
+    );
 
   const verifyResources = (job: PurgeJob) =>
     Effect.forEach(
       job.resourceManifest,
       (resource) => {
-        const target = resolveResourcePath(resource);
-        return target ? fs.exists(target) : Effect.succeed(false);
+        assertManifestResourceKind(job, resource);
+        return Effect.gen(function* () {
+          const resolved = resolvePurgeResource(config, resource);
+          const retainShared =
+            job.entityKind === "thread" &&
+            resource.kind === "attachment" &&
+            resource.action === "retain-shared" &&
+            (yield* attachmentIsShared(ThreadId.makeUnsafe(job.entityId), resource));
+          yield* resourceOperation("EntityPurge.verifyResources", () =>
+            retainShared
+              ? verifyResourcePresent({ resolved, resource })
+              : verifyResourceAbsent({ jobId: job.jobId, resolved, resource }),
+          );
+        });
       },
-      { concurrency: 1 },
-    ).pipe(
-      Effect.flatMap((results) =>
-        results.some(Boolean)
-          ? Effect.fail(
-              toPersistenceSqlError("EntityPurge.verifyResources")("managed files remain"),
-            )
-          : Effect.void,
-      ),
-      Effect.mapError(mapPurgeError("EntityPurge.verifyResources")),
+      { concurrency: 1, discard: true },
     );
 
   const runInternal = Effect.fn("EntityPurge.runInternal")(function* (
-    job: PurgeJob,
+    inputJob: PurgeJob,
     baselinePreflighted = false,
   ): Effect.fn.Return<void, ProjectionRepositoryError, never> {
+    let failurePhase = inputJob.phase;
     return yield* Effect.gen(function* () {
+      const job =
+        inputJob.phase === "verifying" || inputJob.phase === "root"
+          ? inputJob
+          : yield* bindLegacyManifest(inputJob);
+      if (
+        job.entityKind === "thread" &&
+        (job.phase === "awaiting-finalization" || job.phase === "baseline")
+      ) {
+        yield* captureCheckpointRefs(
+          job,
+          yield* queries.readThreadAssets({ threadId: ThreadId.makeUnsafe(job.entityId) }),
+        );
+      }
       const entityId =
         job.entityKind === "thread"
           ? ThreadId.makeUnsafe(job.entityId)
           : ProjectId.makeUnsafe(job.entityId);
       let phase = job.phase;
-      yield* updateJob(job, phase);
+      let claimedJob = job;
+      if (
+        phase === "awaiting-finalization" ||
+        phase === "baseline" ||
+        phase === "database" ||
+        phase === "files" ||
+        phase === "verifying" ||
+        phase === "root"
+      ) {
+        claimedJob = yield* acquireResourceClaims(job);
+      }
 
       if (phase === "awaiting-finalization") {
         const markers = yield* queries.readDeletionMarker({
@@ -211,8 +249,9 @@ const makeEntityPurge = Effect.gen(function* () {
           entityId,
         });
         if (markers[0] === undefined) return;
+        yield* transitionJob(job, "awaiting-finalization", "baseline");
         phase = "baseline";
-        yield* updateJob(job, phase);
+        failurePhase = phase;
       }
       if (phase === "baseline") {
         const markers = yield* queries.readDeletionMarker({
@@ -224,12 +263,21 @@ const makeEntityPurge = Effect.gen(function* () {
         if (!baselinePreflighted) {
           yield* projectionPipeline.ensureVerifiedBaselineThrough(marker.deletionSequence);
         }
+        yield* verifyCanonicalPurgeProof({
+          queries,
+          entityKind: job.entityKind,
+          entityId,
+        });
+        yield* transitionJob(job, "baseline", "database");
         phase = "database";
-        yield* updateJob(job, phase);
+        failurePhase = phase;
       }
       if (phase === "database") {
         if (job.entityKind === "thread") {
-          yield* queries.deleteThreadDependents({ threadId: entityId as ThreadId });
+          const threadId = entityId as ThreadId;
+          yield* assertThreadRuntimeQuiescent(queries, threadId);
+          yield* queries.deleteThreadDependents({ threadId });
+          yield* assertThreadRuntimeQuiescent(queries, threadId);
         } else {
           const projectId = entityId as ProjectId;
           const threads = yield* queries.listProjectThreadIds({ projectId });
@@ -243,15 +291,24 @@ const makeEntityPurge = Effect.gen(function* () {
           );
           yield* queries.deleteProjectDependents({ projectId });
         }
+        yield* transitionJob(job, "database", "files");
         phase = "files";
-        yield* updateJob(job, phase);
+        failurePhase = phase;
       }
       if (phase === "files") {
-        yield* deleteResources(job);
+        yield* assertResourceClaims(claimedJob);
+        if (job.entityKind === "thread")
+          yield* assertThreadRuntimeQuiescent(queries, entityId as ThreadId);
+        yield* deleteCheckpointRefs(claimedJob);
+        if (job.entityKind === "thread")
+          yield* assertThreadRuntimeQuiescent(queries, entityId as ThreadId);
+        yield* deleteResources(claimedJob);
+        yield* transitionJob(job, "files", "verifying");
         phase = "verifying";
-        yield* updateJob(job, phase);
+        failurePhase = phase;
       }
       if (phase === "verifying") {
+        yield* assertResourceClaims(claimedJob);
         const remaining =
           job.entityKind === "thread"
             ? yield* queries.countThreadRows({ threadId: entityId as ThreadId })
@@ -261,42 +318,50 @@ const makeEntityPurge = Effect.gen(function* () {
             `${remaining.count} owned rows remain`,
           );
         }
-        yield* verifyResources(job);
+        yield* deleteCheckpointRefs(claimedJob);
+        yield* verifyResources(claimedJob);
+        if (job.entityKind === "thread") {
+          const knownThreadIds = (yield* queries.listKnownThreadIds()).map((row) => row.threadId);
+          yield* resourceOperation("EntityPurge.verifyOwnedLogs", () =>
+            verifyOwnedLogsAbsent({
+              providerDirectory: config.providerLogsDir,
+              terminalDirectory: config.terminalLogsDir,
+              knownThreadIds,
+              threadId: job.entityId,
+            }),
+          );
+        }
+        yield* transitionJob(job, "verifying", "root");
         phase = "root";
-        yield* updateJob(job, phase);
+        failurePhase = phase;
       }
       if (phase === "root") {
-        yield* sql.withTransaction(
-          Effect.gen(function* () {
-            const canonicalProofRows = yield* queries.readCanonicalProof({
-              entityKind: job.entityKind,
-              entityId,
-            });
-            const canonicalProof = canonicalProofRows[0] ?? {
-              canonicalCount: 0,
-              coveredByBaselineSequence: null,
-              deletionSequence: null,
-              maxCanonicalSequence: 0,
-            };
-            if (
-              canonicalProof.canonicalCount > 0 &&
-              (canonicalProof.coveredByBaselineSequence === null ||
-                canonicalProof.deletionSequence === null ||
-                canonicalProof.deletionSequence > canonicalProof.coveredByBaselineSequence ||
-                canonicalProof.maxCanonicalSequence > canonicalProof.coveredByBaselineSequence)
-            ) {
-              return yield* toPersistenceSqlError("EntityPurge.verifyCanonicalReplay")(
-                "entity deletion is not covered by a verified projection baseline",
-              );
-            }
-            yield* queries.deleteProvenReceipts({ entityKind: job.entityKind, entityId });
-            if (job.entityKind === "thread") {
-              yield* queries.deleteThreadRoot({ threadId: entityId as ThreadId });
-            } else {
-              yield* queries.deleteProjectRoot({ projectId: entityId as ProjectId });
-            }
-            yield* jobs.complete({ jobId: job.jobId, completedAt: new Date().toISOString() });
-          }),
+        yield* assertResourceClaims(claimedJob);
+        yield* Effect.uninterruptible(
+          sql.withTransaction(
+            Effect.gen(function* () {
+              yield* verifyCanonicalPurgeProof({
+                queries,
+                entityKind: job.entityKind,
+                entityId,
+              });
+              if (job.entityKind === "thread")
+                yield* assertThreadRuntimeQuiescent(queries, entityId as ThreadId);
+              yield* queries.deleteProvenReceipts({ entityKind: job.entityKind, entityId });
+              if (job.entityKind === "thread") {
+                yield* queries.deleteThreadRoot({ threadId: entityId as ThreadId });
+              } else {
+                yield* queries.deleteProjectRoot({ projectId: entityId as ProjectId });
+              }
+              const completed = yield* jobs.complete({
+                jobId: job.jobId,
+                completedAt: new Date().toISOString(),
+              });
+              if (!completed) {
+                return yield* Effect.fail(new Error("purge job completion changed remotely"));
+              }
+            }),
+          ),
         );
       }
     }).pipe(
@@ -304,95 +369,32 @@ const makeEntityPurge = Effect.gen(function* () {
       Effect.catch((error) =>
         jobs
           .update({
-            jobId: job.jobId,
-            phase: job.phase,
+            jobId: inputJob.jobId,
+            phase: failurePhase,
             status: "failed",
             lastError: error.message,
-            updatedAt: new Date().toISOString(),
+            updatedAt: nextPurgeRetryAt(inputJob.attemptCount),
           })
           .pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
       ),
     );
   });
 
-  const run: EntityPurgeShape["run"] = (job) => runInternal(job);
-
-  const highestBaselineSequence = Effect.fn("EntityPurge.highestBaselineSequence")(function* (
-    jobsInBatch: ReadonlyArray<PurgeJob>,
-  ) {
-    let highest = 0;
-    for (const job of jobsInBatch) {
-      const entityId =
-        job.entityKind === "thread"
-          ? ThreadId.makeUnsafe(job.entityId)
-          : ProjectId.makeUnsafe(job.entityId);
-      const marker = (yield* queries.readDeletionMarker({
-        entityKind: job.entityKind,
-        entityId,
-      }))[0];
-      highest = Math.max(highest, marker?.deletionSequence ?? 0);
-      if (job.entityKind === "project") {
-        const threads = yield* queries.listProjectThreadIds({ projectId: entityId as ProjectId });
-        for (const thread of threads) {
-          const threadMarker = (yield* queries.readDeletionMarker({
-            entityKind: "thread",
-            entityId: thread.threadId,
-          }))[0];
-          highest = Math.max(highest, threadMarker?.deletionSequence ?? 0);
-        }
-      }
-    }
-    return highest;
+  const { auditAndResume, run, runBatch } = makeEntityPurgeMaintenance({
+    jobs,
+    maintenanceSemaphore,
+    mapError: mapPurgeError,
+    projectionPipeline,
+    queries,
+    requestProject,
+    requestThread,
+    runInternal,
   });
 
-  const auditAndResume: EntityPurgeShape["auditAndResume"] = Effect.fn(
-    "EntityPurge.auditAndResume",
-  )(function* (
-    requestedLimit: number = 100,
-  ): Effect.fn.Return<void, ProjectionRepositoryError, never> {
-    return yield* Effect.gen(function* () {
-      const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
-      const incomplete = yield* jobs.listIncomplete(limit);
-      const deletedThreads = yield* queries.listDeletedThreads({ limit });
-      const deletedProjects = yield* queries.listDeletedProjects({ limit });
-      const batchJobs = new Map<string, PurgeJob>();
-      for (const job of incomplete) batchJobs.set(job.jobId, job);
-      for (const { threadId } of deletedThreads) {
-        const job = yield* requestThread(threadId);
-        batchJobs.set(job.jobId, job);
-      }
-      for (const { projectId } of deletedProjects) {
-        const job = yield* requestProject(projectId);
-        batchJobs.set(job.jobId, job);
-      }
-      const jobsInBatch = [...batchJobs.values()];
-      const requiredSequence = yield* highestBaselineSequence(jobsInBatch);
-      if (requiredSequence > 0) {
-        yield* projectionPipeline.ensureVerifiedBaselineThrough(requiredSequence);
-      }
-      yield* Effect.forEach(
-        jobsInBatch,
-        (job) =>
-          runInternal(job, true).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("entity purge audit job failed", {
-                jobId: job.jobId,
-                entityKind: job.entityKind,
-                entityId: job.entityId,
-                phase: job.phase,
-                cause,
-              }),
-            ),
-          ),
-        { concurrency: 1, discard: true },
-      );
-      yield* queries.deleteOrphanRows(limit);
-    }).pipe(Effect.mapError(mapPurgeError("EntityPurge.auditAndResume")));
-  });
-
-  return { requestThread, requestProject, run, auditAndResume } satisfies EntityPurgeShape;
+  return { requestThread, requestProject, run, runBatch, auditAndResume } satisfies PurgeShape;
 });
 
 export const EntityPurgeLive = Layer.effect(EntityPurge, makeEntityPurge).pipe(
-  Layer.provide(PurgeJobRepositoryLive),
+  Layer.provide(PurgeJobs),
+  Layer.provide(CheckpointStoreLive.pipe(Layer.provide(GitCoreLive))),
 );

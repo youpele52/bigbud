@@ -240,4 +240,38 @@ describe("EventNdjsonLogger", () => {
       path.join(os.tmpdir(), `t3-missing-provider-log-${crypto.randomUUID()}`),
     ]),
   );
+  it.effect("flushes a settled writer and fails closed before any late rotation", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-log-"));
+      const threadId = ThreadId.makeUnsafe("thread-settled");
+      let allowed = true;
+      try {
+        const logger = yield* makeEventNdjsonLogger(path.join(tempDir, "events.log"), {
+          stream: "canonical",
+          batchWindowMs: 0,
+          maxBytes: 80,
+          authorizeThreadWrite: () => Effect.succeed(allowed),
+        });
+        assert.isDefined(logger);
+        if (!logger) return;
+        yield* logger.write({ id: "before-settlement", payload: "x".repeat(40) }, threadId);
+        yield* logger.closeThread(threadId);
+        const settledFiles = fs
+          .readdirSync(tempDir)
+          .filter((entry) => entry.startsWith("thread-settled.log"))
+          .toSorted();
+        allowed = false;
+        yield* logger.write({ id: "late-event", payload: "x".repeat(200) }, threadId);
+        yield* logger.close();
+        const files = fs
+          .readdirSync(tempDir)
+          .filter((entry) => entry.startsWith("thread-settled.log"))
+          .toSorted();
+        assert.deepEqual(files, settledFiles);
+        assert.notInclude(fs.readFileSync(path.join(tempDir, files[0]!), "utf8"), "late-event");
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }),
+  );
 });

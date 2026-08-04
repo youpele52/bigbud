@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 import { cn } from "~/lib/utils";
 
 import { Button } from "../ui/button";
+import { AlertDialogDescription, AlertDialogTitle } from "../ui/alert-dialog";
 
 interface ConfirmationPanelProps {
   title: ReactNode;
@@ -13,6 +14,8 @@ interface ConfirmationPanelProps {
   onConfirm: () => void;
   confirmVariant?: "default" | "destructive";
   busy?: boolean;
+  confirmDisabled?: boolean;
+  cancelButtonRef?: Ref<HTMLButtonElement>;
   className?: string;
   titleSlot?: ReactNode;
   descriptionSlot?: ReactNode;
@@ -27,24 +30,31 @@ export function ConfirmationPanel({
   onConfirm,
   confirmVariant = "default",
   busy = false,
+  confirmDisabled = false,
+  cancelButtonRef,
   className,
   titleSlot,
   descriptionSlot,
 }: ConfirmationPanelProps) {
   return (
-    <div className={cn("flex flex-col gap-3 p-4 sm:p-5", className)}>
-      <div className="space-y-1.5">
-        {titleSlot ?? <div className="text-sm font-medium text-foreground/90">{title}</div>}
-        {descriptionSlot ?? (
-          <p className="text-[13px] leading-5 font-normal text-muted-foreground">{description}</p>
-        )}
+    <div className={cn("flex max-h-full min-h-0 flex-col gap-3 p-4 sm:p-5", className)}>
+      <div className="min-h-0 space-y-1.5 overflow-y-auto overscroll-contain">
+        <AlertDialogTitle className="text-sm font-medium text-foreground/90">
+          {titleSlot ?? title}
+        </AlertDialogTitle>
+        <AlertDialogDescription
+          render={<div />}
+          className="text-xs leading-5 font-normal text-muted-foreground"
+        >
+          {descriptionSlot ?? description}
+        </AlertDialogDescription>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
         <Button
           size="sm"
           variant={confirmVariant === "destructive" ? "ghost" : confirmVariant}
-          disabled={busy}
+          disabled={busy || confirmDisabled}
           onClick={onConfirm}
           className={
             confirmVariant === "destructive"
@@ -54,7 +64,13 @@ export function ConfirmationPanel({
         >
           {confirmLabel}
         </Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={onCancel}>
+        <Button
+          ref={cancelButtonRef}
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={onCancel}
+        >
           {cancelLabel}
         </Button>
       </div>

@@ -66,6 +66,9 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
   public readonly interruptCalls: Array<void> = [];
   public readonly initializationResultCalls: Array<void> = [];
   public readonly reinitializeCalls: Array<void> = [];
+  public readonly applyFlagSettingsCalls: Array<
+    Parameters<ClaudeQueryRuntime["applyFlagSettings"]>[0]
+  > = [];
   public readonly mcpServerStatusCalls: Array<void> = [];
   public readonly setMcpPermissionModeOverrideCalls: Array<{
     serverName: string;
@@ -174,6 +177,11 @@ export class FakeClaudeQuery implements ClaudeQueryRuntime {
       throw new Error("Fake Claude query reinitialization response was not configured.");
     }
     return this.initializationResponse;
+  };
+
+  readonly applyFlagSettings: ClaudeQueryRuntime["applyFlagSettings"] = async (settings) => {
+    this.applyFlagSettingsCalls.push(settings);
+    this.throwControlFailure("applyFlagSettings");
   };
 
   readonly mcpServerStatus: ClaudeQueryRuntime["mcpServerStatus"] = async () => {

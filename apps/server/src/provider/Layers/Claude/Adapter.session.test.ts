@@ -10,6 +10,7 @@ import {
   THREAD_ID,
   RESUME_THREAD_ID,
 } from "./Adapter.test.helpers.ts";
+import { resolveClaudeModelDiscovery } from "./Provider.capabilities.ts";
 
 describe("ClaudeAdapterLive", () => {
   it.effect("reports explicit recovery and rewind capabilities", () => {
@@ -323,6 +324,49 @@ describe("ClaudeAdapterLive", () => {
       });
 
       assert.deepEqual(harness.query.setModelCalls, ["claude-opus-4-6[1m]", "claude-opus-4-6"]);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("applies changed native effort and Ultracode controls before the turn", () => {
+    resolveClaudeModelDiscovery({
+      durationMs: 1,
+      models: [
+        {
+          value: "claude-opus-4-7",
+          displayName: "Claude Opus 4.7",
+          description: "Opus",
+          supportsEffort: true,
+          supportedEffortLevels: ["high", "xhigh"],
+        },
+      ],
+    });
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: "claudeAgent",
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "coordinate this change",
+        modelSelection: {
+          provider: "claudeAgent",
+          model: "claude-opus-4-7",
+          options: { ultracode: true },
+        },
+        attachments: [],
+      });
+
+      assert.deepEqual(harness.query.applyFlagSettingsCalls, [
+        { effortLevel: "xhigh", ultracode: true },
+      ]);
+      assert.equal(harness.query.reinitializeCalls.length, 0);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),

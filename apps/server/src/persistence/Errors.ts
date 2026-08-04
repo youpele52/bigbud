@@ -33,12 +33,16 @@ export class PersistenceDecodeError extends Schema.TaggedErrorClass<PersistenceD
 }
 
 export function toPersistenceSqlError(operation: string) {
-  return (cause: unknown): PersistenceSqlError =>
-    new PersistenceSqlError({
+  return (cause: unknown): PersistenceSqlError => {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    return new PersistenceSqlError({
       operation,
-      detail: `Failed to execute ${operation}`,
+      detail: causeMessage.includes("thread endpoint is deleting")
+        ? "The thread is being deleted and cannot accept new related work."
+        : `Failed to execute ${operation}`,
       cause,
     });
+  };
 }
 
 export function toPersistenceDecodeError(operation: string) {

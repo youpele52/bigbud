@@ -8,6 +8,8 @@
  */
 import { BROWSER_PAGE_TEXT_MAX_CHARS, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer } from "effect";
+import * as Semaphore from "effect/Semaphore";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
   BrowserManager,
@@ -20,9 +22,19 @@ interface ThreadBrowserContext {
   readonly page: import("playwright").Page;
 }
 
-function makeBrowserManager(): BrowserManagerShape {
+const browserLeaseId = (threadId: ThreadId) => `background-browser:${threadId}`;
+
+const makeBrowserManager = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const contextSemaphore = yield* Semaphore.make(1);
   const contexts = new Map<ThreadId, ThreadBrowserContext>();
   let browser: import("playwright").Browser | null = null;
+  yield* sql`DELETE FROM thread_activity_leases WHERE lease_id LIKE 'background-browser:%'`;
+
+  const releaseLease = (threadId: ThreadId) =>
+    sql`DELETE FROM thread_activity_leases WHERE lease_id = ${browserLeaseId(threadId)}`.pipe(
+      Effect.ignore,
+    );
 
   const getBrowser = (): Effect.Effect<import("playwright").Browser, BrowserManagerError> =>
     Effect.gen(function* () {
@@ -46,7 +58,7 @@ function makeBrowserManager(): BrowserManagerShape {
       return launched;
     });
 
-  const getContext = (
+  const createContext = (
     threadId: ThreadId,
   ): Effect.Effect<ThreadBrowserContext, BrowserManagerError> =>
     Effect.gen(function* () {
@@ -54,21 +66,45 @@ function makeBrowserManager(): BrowserManagerShape {
       if (existing) {
         return existing;
       }
-      const b = yield* getBrowser();
+      yield* sql`
+        INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
+        VALUES (${browserLeaseId(threadId)}, ${threadId}, 'browser', ${new Date().toISOString()})
+      `.pipe(
+        Effect.mapError(
+          (cause) =>
+            new BrowserManagerError({
+              message: "Browser context cannot start while the thread is being deleted.",
+              cause,
+            }),
+        ),
+      );
+      const b = yield* getBrowser().pipe(Effect.tapError(() => releaseLease(threadId)));
       const context = yield* Effect.tryPromise({
         try: () => b.newContext({ viewport: { width: 1280, height: 720 } }),
         catch: (cause) =>
           new BrowserManagerError({ message: "Failed to create browser context.", cause }),
-      });
+      }).pipe(Effect.tapError(() => releaseLease(threadId)));
       const page = yield* Effect.tryPromise({
         try: () => context.newPage(),
         catch: (cause) =>
           new BrowserManagerError({ message: "Failed to create browser page.", cause }),
-      });
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.all(
+            [Effect.promise(() => context.close()).pipe(Effect.ignore), releaseLease(threadId)],
+            {
+              discard: true,
+            },
+          ),
+        ),
+      );
       const record: ThreadBrowserContext = { context, page };
       contexts.set(threadId, record);
       return record;
     });
+
+  const getContext = (threadId: ThreadId) =>
+    contextSemaphore.withPermits(1)(createContext(threadId));
 
   const launch: BrowserManagerShape["launch"] = (threadId) =>
     Effect.map(getContext(threadId), () => undefined);
@@ -233,6 +269,7 @@ function makeBrowserManager(): BrowserManagerShape {
     Effect.gen(function* () {
       const record = contexts.get(threadId);
       if (!record) {
+        yield* releaseLease(threadId);
         return;
       }
       contexts.delete(threadId);
@@ -240,6 +277,7 @@ function makeBrowserManager(): BrowserManagerShape {
         try: () => record.context.close(),
         catch: () => undefined,
       }).pipe(Effect.catch(() => Effect.void));
+      yield* releaseLease(threadId);
     });
 
   const closeAll: BrowserManagerShape["closeAll"] = () =>
@@ -258,6 +296,7 @@ function makeBrowserManager(): BrowserManagerShape {
     });
 
   return {
+    hasContext: (threadId) => Effect.sync(() => contexts.has(threadId)),
     launch,
     navigate,
     screenshot,
@@ -274,10 +313,7 @@ function makeBrowserManager(): BrowserManagerShape {
     reload,
     close,
     closeAll,
-  };
-}
+  } satisfies BrowserManagerShape;
+});
 
-export const BrowserManagerLive = Layer.effect(
-  BrowserManager,
-  Effect.sync(() => makeBrowserManager()),
-);
+export const BrowserManagerLive = Layer.effect(BrowserManager, makeBrowserManager);

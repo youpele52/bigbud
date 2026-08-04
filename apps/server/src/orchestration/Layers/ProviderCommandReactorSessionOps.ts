@@ -266,6 +266,11 @@ const sendTurnAttempt = (services: SessionOpServices) =>
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       restartFreshIfInactive: shouldBootstrapFromTranscript,
     });
+    activeSession = yield* providerService
+      .listSessions()
+      .pipe(
+        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+      );
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }

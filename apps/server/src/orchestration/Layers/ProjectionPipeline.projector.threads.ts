@@ -4,13 +4,15 @@
  * @module ProjectionPipeline.projector.threads
  */
 import { LOCAL_EXECUTION_TARGET_ID, type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
   type AttachmentSideEffects,
 } from "./ProjectionPipeline.helpers.ts";
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
+import { advancesThreadActivityAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
 
 function resolveSyncedElevatorSummary(input: {
   readonly currentTitle: string;
@@ -54,6 +56,12 @@ export function makeThreadsProjector(
     event: OrchestrationEvent,
     _attachmentSideEffects: AttachmentSideEffects,
   ) {
+    if (event.type !== "thread.created" && advancesThreadActivityAt(event)) {
+      yield* projectionThreadRepository.touchActivity({
+        threadId: event.payload.threadId,
+        occurredAt: event.occurredAt,
+      });
+    }
     switch (event.type) {
       case "thread.created":
         yield* projectionThreadRepository.upsert({
@@ -84,6 +92,7 @@ export function makeThreadsProjector(
           queuedPrompts: [],
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
+          lastActivityAt: event.payload.updatedAt,
           archivedAt: null,
           pinnedAt: null,
           deletingAt: null,

@@ -45,6 +45,9 @@ export class PersistentThreadPtyShellRunner {
       readonly baseEnv?: NodeJS.ProcessEnv;
       readonly commandTimeoutMs?: number;
       readonly idleTtlMs?: number;
+      readonly acquireLease?: (input: { threadId: string; cwd: string }) => Promise<void>;
+      readonly releaseLease?: (threadId: string) => Promise<void>;
+      readonly markLeaseStarted?: (threadId: string, processId: number) => Promise<void>;
     },
   ) {}
 
@@ -67,12 +70,18 @@ export class PersistentThreadPtyShellRunner {
   async closeThread(threadId: string): Promise<void> {
     await this.withThreadLock(threadId, async () => {
       this.destroySession(threadId, "SIGKILL");
+      await this.options.releaseLease?.(threadId);
     });
+  }
+
+  isActive(threadId: string): boolean {
+    return this.sessions.has(threadId) || this.threadLocks.has(threadId);
   }
 
   async closeAll(): Promise<void> {
     for (const threadId of this.sessions.keys()) {
       this.destroySession(threadId, "SIGKILL");
+      await this.options.releaseLease?.(threadId);
     }
   }
 
@@ -105,8 +114,16 @@ export class PersistentThreadPtyShellRunner {
       return existing;
     }
 
-    const session = await this.spawnSession(threadId, cwd);
+    await this.options.acquireLease?.({ threadId, cwd });
+    let session: HiddenShellSession;
+    try {
+      session = await this.spawnSession(threadId, cwd);
+    } catch (error) {
+      await this.options.releaseLease?.(threadId).catch(() => undefined);
+      throw error;
+    }
     this.sessions.set(threadId, session);
+    await this.options.markLeaseStarted?.(threadId, session.process.pid);
     return session;
   }
 
@@ -330,8 +347,12 @@ export class PersistentThreadPtyShellRunner {
 
   private handleExit(session: HiddenShellSession, exitCode: number, signal: number | null): void {
     this.clearIdleTimer(session);
-    if (this.sessions.get(session.threadId) === session) {
+    const current = this.sessions.get(session.threadId);
+    if (current === session) {
       this.sessions.delete(session.threadId);
+    }
+    if (current === undefined || current === session) {
+      void this.options.releaseLease?.(session.threadId).catch(() => undefined);
     }
 
     const currentCapture = session.activeCapture;

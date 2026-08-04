@@ -1,7 +1,10 @@
 import { ThreadId } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Option, Schema, Struct } from "effect";
+import { Data, Effect, Layer, Option, Schema, Struct } from "effect";
+
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { captureLocalRuntimePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
 
 import {
   toPersistenceDecodeError,
@@ -23,6 +26,10 @@ const ProviderSessionRuntimeDbRowSchema = ProviderSessionRuntime.mapFields(
 
 const decodeRuntime = Schema.decodeUnknownEffect(ProviderSessionRuntime);
 
+class ProviderWorkspaceIdentityError extends Data.TaggedError("ProviderWorkspaceIdentityError")<{
+  readonly cause: unknown;
+}> {}
+
 const GetRuntimeRequestSchema = Schema.Struct({
   threadId: ThreadId,
 });
@@ -36,8 +43,53 @@ function toPersistenceSqlOrDecodeError(sqlOperation: string, decodeOperation: st
       : toPersistenceSqlError(sqlOperation)(cause);
 }
 
+function runtimeCwd(payload: unknown | null): string | null {
+  return typeof payload === "object" &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    "cwd" in payload &&
+    typeof payload.cwd === "string" &&
+    payload.cwd.length > 0
+    ? payload.cwd
+    : null;
+}
+
+const captureProviderLeaseIdentity = Effect.fn("captureProviderLeaseIdentity")(function* (
+  runtime: typeof ProviderSessionRuntime.Type,
+) {
+  if (!isLocalExecutionTarget(runtime.workspaceExecutionTargetId)) {
+    return null;
+  }
+  const cwd = runtimeCwd(runtime.runtimePayload);
+  if (!cwd) return null;
+  return yield* Effect.tryPromise({
+    try: () => captureLocalRuntimePathIdentity(cwd),
+    catch: (cause) => new ProviderWorkspaceIdentityError({ cause }),
+  }).pipe(
+    Effect.catch((error) =>
+      typeof error.cause === "object" &&
+      error.cause !== null &&
+      "code" in error.cause &&
+      (error.cause.code === "ENOENT" || error.cause.code === "ENOTDIR")
+        ? Effect.succeed(null)
+        : Effect.fail(
+            toPersistenceSqlError("ProviderSessionRuntimeRepository.upsert:workspaceIdentity")(
+              error.cause,
+            ),
+          ),
+    ),
+  );
+});
+
 const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    DELETE FROM worktree_runtime_leases AS lease
+    WHERE lease.runtime_kind = 'provider' AND NOT EXISTS (
+      SELECT 1 FROM provider_session_runtime AS runtime
+      WHERE runtime.thread_id = lease.thread_id AND runtime.status IN ('starting', 'running')
+    )
+  `;
 
   const upsertRuntimeRow = SqlSchema.void({
     Request: ProviderSessionRuntimeDbRowSchema,
@@ -137,15 +189,42 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       `,
   });
 
-  const upsert: ProviderSessionRuntimeRepositoryShape["upsert"] = (runtime) =>
-    upsertRuntimeRow(runtime).pipe(
-      Effect.mapError(
-        toPersistenceSqlOrDecodeError(
-          "ProviderSessionRuntimeRepository.upsert:query",
-          "ProviderSessionRuntimeRepository.upsert:encodeRequest",
+  const upsert: ProviderSessionRuntimeRepositoryShape["upsert"] = Effect.fn(
+    "ProviderSessionRuntimeRepository.upsert",
+  )(function* (runtime) {
+    const active = runtime.status === "starting" || runtime.status === "running";
+    const identity = active ? yield* captureProviderLeaseIdentity(runtime) : null;
+    yield* sql
+      .withTransaction(
+        upsertRuntimeRow(runtime).pipe(
+          Effect.andThen(
+            identity
+              ? sql`
+                  INSERT INTO worktree_runtime_leases (
+                    lease_id, thread_id, runtime_kind, canonical_path, device, inode,
+                    acquired_at, updated_at
+                  ) VALUES (
+                    ${`provider:${runtime.threadId}`}, ${runtime.threadId}, 'provider',
+                    ${identity.canonicalPath}, ${identity.device}, ${identity.inode},
+                    ${runtime.lastSeenAt}, ${runtime.lastSeenAt}
+                  ) ON CONFLICT (lease_id) DO UPDATE SET
+                    canonical_path = excluded.canonical_path, device = excluded.device,
+                    inode = excluded.inode, updated_at = excluded.updated_at
+                `.pipe(Effect.asVoid)
+              : sql`DELETE FROM worktree_runtime_leases
+                  WHERE lease_id = ${`provider:${runtime.threadId}`}`.pipe(Effect.asVoid),
+          ),
         ),
-      ),
-    );
+      )
+      .pipe(
+        Effect.mapError(
+          toPersistenceSqlOrDecodeError(
+            "ProviderSessionRuntimeRepository.upsert:query",
+            "ProviderSessionRuntimeRepository.upsert:encodeRequest",
+          ),
+        ),
+      );
+  });
 
   const getByThreadId: ProviderSessionRuntimeRepositoryShape["getByThreadId"] = (input) =>
     getRuntimeRowByThreadId(input).pipe(
@@ -194,11 +273,18 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
     );
 
   const deleteByThreadId: ProviderSessionRuntimeRepositoryShape["deleteByThreadId"] = (input) =>
-    deleteRuntimeByThreadId(input).pipe(
-      Effect.mapError(
-        toPersistenceSqlError("ProviderSessionRuntimeRepository.deleteByThreadId:query"),
-      ),
-    );
+    sql
+      .withTransaction(
+        sql`DELETE FROM worktree_runtime_leases
+          WHERE lease_id = ${`provider:${input.threadId}`}`.pipe(
+          Effect.andThen(deleteRuntimeByThreadId(input)),
+        ),
+      )
+      .pipe(
+        Effect.mapError(
+          toPersistenceSqlError("ProviderSessionRuntimeRepository.deleteByThreadId:query"),
+        ),
+      );
 
   return {
     upsert,

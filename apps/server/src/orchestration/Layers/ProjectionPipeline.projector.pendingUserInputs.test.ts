@@ -155,27 +155,28 @@ layer("pending user-input projector", (it) => {
 
   it.effect("treats provider user-input response failures as terminal", () =>
     Effect.gen(function* () {
+      const failureThreadId = ThreadId.makeUnsafe("pending-input-failure-thread");
       const eventStore = yield* OrchestrationEventStore;
       const pipeline = yield* OrchestrationProjectionPipeline;
       const sql = yield* SqlClient.SqlClient;
       yield* sql`
         INSERT INTO projection_pending_user_inputs (
           request_id, thread_id, status, questions_json, created_at
-        ) VALUES (${requestId}, ${threadId}, 'pending', '[]', '2026-01-01')
+        ) VALUES (${requestId}, ${failureThreadId}, 'pending', '[]', '2026-01-01')
       `;
       const failedAt = "2026-01-02";
       const failed = yield* eventStore.append({
         type: "thread.activity-appended",
         eventId: EventId.makeUnsafe("pending-input-event-failed"),
         aggregateKind: "thread",
-        aggregateId: threadId,
+        aggregateId: failureThreadId,
         occurredAt: failedAt,
         commandId: CommandId.makeUnsafe("pending-input-command-failed"),
         causationEventId: null,
         correlationId: null,
         metadata: { requestId },
         payload: {
-          threadId,
+          threadId: failureThreadId,
           activity: {
             id: EventId.makeUnsafe("pending-input-activity-failed"),
             tone: "error",

@@ -36,6 +36,7 @@ export type ThreadLifecycleCommand = Extract<
       | "thread.delete"
       | "thread.delete.finalize"
       | "thread.delete.abort"
+      | "thread.retention-delete"
       | "thread.archive"
       | "thread.unarchive"
       | "thread.pin"
@@ -177,6 +178,22 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
         payload: {
           threadId: command.threadId,
           deletingAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.retention-delete": {
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.deletion-requested",
+        payload: {
+          threadId: command.threadId,
+          deletingAt: command.createdAt,
         },
       };
     }

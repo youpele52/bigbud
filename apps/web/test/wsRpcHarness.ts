@@ -1,6 +1,15 @@
-import { Effect, Exit, PubSub, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, PubSub, Scope, Stream } from "effect";
 import { WS_METHODS, WsRpcGroup } from "@bigbud/contracts";
+import { ThreadRetentionMutationAuthorization } from "@bigbud/contracts/server/rpc.retention";
+import type { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import type * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
+
+const allowRetentionMutations: RpcMiddleware.RpcMiddleware<
+  never,
+  ServerThreadRetentionError,
+  never
+> = (effect) => effect;
 
 type RpcServerInstance = RpcServer.RpcServer<any>;
 
@@ -82,7 +91,14 @@ export class BrowserWsRpcHarness {
     this.serverReady = Effect.runPromise(
       Scope.provide(this.scope)(
         RpcServer.makeNoSerialization(WsRpcGroup, this.makeServerOptions()),
-      ).pipe(Effect.provide(this.makeLayer())),
+      ).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            this.makeLayer(),
+            Layer.succeed(ThreadRetentionMutationAuthorization, allowRetentionMutations),
+          ),
+        ),
+      ),
     ) as Promise<RpcServerInstance>;
   }
 

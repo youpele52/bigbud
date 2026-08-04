@@ -313,4 +313,26 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       } as never);
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
+
+  it.effect("rejects generic retention patches and persists dedicated policy changes", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsService;
+      const rejected = yield* Effect.exit(
+        serverSettings.updateSettings({ threadRetentionPolicy: "7-days" } as never),
+      );
+      assert.equal(rejected._tag, "Failure");
+
+      if (!serverSettings.setThreadRetentionPolicy) {
+        return yield* Effect.die("dedicated retention setting operation is unavailable");
+      }
+      const updated = yield* serverSettings.setThreadRetentionPolicy("never");
+      assert.equal(updated.threadRetentionPolicy, "never");
+      const config = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      assert.equal(
+        JSON.parse(yield* fileSystem.readFileString(config.settingsPath)).threadRetentionPolicy,
+        "never",
+      );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
 });

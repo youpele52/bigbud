@@ -187,6 +187,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
     Effect.gen(function* () {
       const provider = yield* ProviderService;
       const threadId = asThreadId("thread-session-timeout");
+      const priorStarts = routing.codex.startSession.mock.calls.length;
       routing.codex.startSession.mockImplementationOnce(() => Effect.never);
       const fiber = yield* provider
         .startSession(threadId, {
@@ -197,6 +198,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         })
         .pipe(Effect.forkScoped);
 
+      while (routing.codex.startSession.mock.calls.length === priorStarts) yield* Effect.yieldNow;
       yield* TestClock.adjust("45 seconds");
       const exit = yield* Effect.result(Fiber.join(fiber));
 

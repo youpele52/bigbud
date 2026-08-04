@@ -1,15 +1,19 @@
 import { ThreadId, TurnId, type VisibleBrowserCommand } from "@bigbud/contracts";
-import { Effect, Fiber, Queue, Stream } from "effect";
+import { Effect, Fiber, Layer, Queue, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { VisibleBrowserControl } from "../Services/VisibleBrowserControl.ts";
 import { VisibleBrowserControlLive } from "./VisibleBrowserControl.ts";
+import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-visible-browser");
 const OTHER_THREAD_ID = ThreadId.makeUnsafe("thread-visible-browser-other");
 const TURN_ID = TurnId.makeUnsafe("turn-visible-browser");
 const NEXT_TURN_ID = TurnId.makeUnsafe("turn-visible-browser-next");
 const RENDERER_ID = "renderer-visible-browser" as const;
+const visibleBrowserLayer = VisibleBrowserControlLive.pipe(
+  Layer.provideMerge(SqlitePersistenceMemory),
+);
 
 describe("VisibleBrowserControlLive", () => {
   it("keeps a visible tab leased through navigation, interaction, and history actions", async () => {
@@ -96,7 +100,7 @@ describe("VisibleBrowserControlLive", () => {
           leasesAfterRelease,
           releaseCommand,
         };
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     );
 
     expect(result.result).toMatchObject({
@@ -175,7 +179,7 @@ describe("VisibleBrowserControlLive", () => {
           }),
         );
         return [yield* Effect.exit(Fiber.join(pending)), subsequent] as const;
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     ).then(([pending, subsequent]) => {
       expect(pending._tag).toBe("Failure");
       expect(subsequent._tag).toBe("Failure");
@@ -248,7 +252,7 @@ describe("VisibleBrowserControlLive", () => {
         });
 
         return [yield* Fiber.join(close), yield* control.getLeases(RENDERER_ID)] as const;
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     ).then(([closeResult, leases]) => {
       expect(closeResult).toMatchObject({ action: "close_tab", target: "visible" });
       expect(leases).toEqual([]);
@@ -313,7 +317,7 @@ describe("VisibleBrowserControlLive", () => {
         });
 
         return [yield* Effect.exit(Fiber.join(pending)), yield* Fiber.join(close)] as const;
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     ).then(([pending, close]) => {
       expect(pending._tag).toBe("Failure");
       expect(close).toMatchObject({ action: "close_tab" });
@@ -349,7 +353,7 @@ describe("VisibleBrowserControlLive", () => {
           },
         });
         return yield* Fiber.join(close);
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     );
 
     expect(result).toMatchObject({ action: "close_tab", tabId: "browser:user-tab" });
@@ -386,7 +390,7 @@ describe("VisibleBrowserControlLive", () => {
         });
         yield* Fiber.join(execution);
         return yield* control.getLeases(RENDERER_ID);
-      }).pipe(Effect.provide(VisibleBrowserControlLive), Effect.scoped),
+      }).pipe(Effect.provide(visibleBrowserLayer), Effect.scoped),
     );
 
     expect(leases).toEqual([]);

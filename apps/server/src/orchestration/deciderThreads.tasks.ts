@@ -8,6 +8,7 @@ import { Effect } from "effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
 import { withEventBase } from "./deciderHelpers.ts";
+import { requireThreadReadyForMutation } from "./deciderThreads.turn.start.ts";
 
 type ThreadTaskCommand = Extract<
   OrchestrationCommand,
@@ -21,7 +22,8 @@ export const decideThreadTaskCommand = Effect.fn("decideThreadTaskCommand")(func
   readonly command: ThreadTaskCommand;
   readonly readModel: OrchestrationReadModel;
 }): Effect.fn.Return<Omit<OrchestrationEvent, "sequence">, OrchestrationCommandInvariantError> {
-  yield* requireThread({ readModel, command, threadId: command.threadId });
+  const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+  yield* requireThreadReadyForMutation({ thread, command });
   const base = withEventBase({
     aggregateKind: "thread",
     aggregateId: command.threadId,

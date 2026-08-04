@@ -29,12 +29,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
     const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
     switch (command.type) {
       case "thread.turn.interrupt":
-        if (thread.deletedAt !== null) {
-          return yield* new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
-          });
-        }
+        yield* requireThreadReadyForMutation({ thread, command });
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -86,12 +81,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           },
         };
       case "thread.session.stop":
-        if (thread.deletedAt !== null) {
-          return yield* new OrchestrationCommandInvariantError({
-            commandType: command.type,
-            detail: `Thread '${command.threadId}' has already been deleted and cannot handle command '${command.type}'.`,
-          });
-        }
+        yield* requireThreadReadyForMutation({ thread, command });
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -103,6 +93,9 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           payload: { threadId: command.threadId, createdAt: command.createdAt },
         };
       case "thread.session.set":
+        if (command.session.status !== "stopped" || thread.deletedAt !== null) {
+          yield* requireThreadReadyForMutation({ thread, command });
+        }
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -115,6 +108,7 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           payload: { threadId: command.threadId, session: command.session },
         };
       case "thread.turn.start.failed":
+        yield* requireThreadReadyForMutation({ thread, command });
         return {
           ...withEventBase({
             aggregateKind: "thread",

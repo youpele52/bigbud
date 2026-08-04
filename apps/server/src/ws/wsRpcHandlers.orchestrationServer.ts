@@ -26,6 +26,7 @@ import {
   makeOrderedOrchestrationDomainEventStream,
   makeThinkingActivityDeltaStream,
 } from "./wsStreams";
+import { makeThreadRetentionWsRpcHandlers } from "./wsRpcHandlers.retention.ts";
 
 export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   const toProjectDirectoryWatchError = (
@@ -212,6 +213,7 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         { "rpc.aggregate": "orchestration" },
       ),
     ...makeServerWsRpcHandlers(context),
+    ...makeThreadRetentionWsRpcHandlers(context),
     ...makeWorkspaceWsRpcHandlers(context, toProjectDirectoryWatchError),
   };
 }

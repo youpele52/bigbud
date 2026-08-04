@@ -178,11 +178,16 @@ export const decideThreadActivityAppendCommand = Effect.fn("decideThreadActivity
     readonly command: ThreadActivityAppendCommand;
     readonly readModel: OrchestrationReadModel;
   }): Effect.fn.Return<Omit<OrchestrationEvent, "sequence">, OrchestrationCommandInvariantError> {
-    yield* requireThread({
+    const thread = yield* requireThread({
       readModel,
       command,
       threadId: command.threadId,
     });
+    if (command.activity.kind !== "thread.delete.failed") {
+      yield* requireThreadReadyForMutation({ thread, command });
+    } else if (thread.deletedAt !== null) {
+      yield* requireThreadReadyForMutation({ thread, command });
+    }
     const requestId =
       typeof command.activity.payload === "object" &&
       command.activity.payload !== null &&

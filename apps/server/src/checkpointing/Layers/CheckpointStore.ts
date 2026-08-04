@@ -19,6 +19,8 @@ import { GitCommandError } from "@bigbud/contracts";
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { CheckpointStore, type CheckpointStoreShape } from "../Services/CheckpointStore.ts";
 import { CheckpointRef } from "@bigbud/contracts";
+import { makeCheckpointRefOps } from "./CheckpointStore.refs.ts";
+import { makeCheckpointIdentityOps } from "./CheckpointStore.identity.ts";
 import {
   CHECKPOINT_COMMIT_MESSAGE_PREFIX,
   checkpointRefCandidates,
@@ -29,6 +31,7 @@ const makeCheckpointStore = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const git = yield* GitCore;
+  const identityOps = makeCheckpointIdentityOps(git);
 
   const resolveHeadCommit = (cwd: string): Effect.Effect<string | null, GitCommandError> =>
     git
@@ -83,19 +86,6 @@ const makeCheckpointStore = Effect.gen(function* () {
           ),
       { concurrency: 1 },
     ).pipe(Effect.map((commits) => commits.find((commit) => commit !== null) ?? null));
-
-  const isGitRepository: CheckpointStoreShape["isGitRepository"] = (cwd) =>
-    git
-      .execute({
-        operation: "CheckpointStore.isGitRepository",
-        cwd,
-        args: ["rev-parse", "--is-inside-work-tree"],
-        allowNonZeroExit: true,
-      })
-      .pipe(
-        Effect.map((result) => result.code === 0 && result.stdout.trim() === "true"),
-        Effect.catch(() => Effect.succeed(false)),
-      );
 
   const captureCheckpoint: CheckpointStoreShape["captureCheckpoint"] = Effect.fn(
     "captureCheckpoint",
@@ -371,33 +361,21 @@ const makeCheckpointStore = Effect.gen(function* () {
     },
   );
 
-  const deleteCheckpointRefs: CheckpointStoreShape["deleteCheckpointRefs"] = Effect.fn(
-    "deleteCheckpointRefs",
-  )(function* (input) {
-    const operation = "CheckpointStore.deleteCheckpointRefs";
-
-    yield* Effect.forEach(
-      input.checkpointRefs,
-      (checkpointRef) =>
-        git.execute({
-          operation,
-          cwd: input.cwd,
-          args: ["update-ref", "-d", checkpointRef],
-          allowNonZeroExit: true,
-        }),
-      { discard: true },
-    );
-  });
+  const { listThreadCheckpointRefs, deleteCheckpointRefs, verifyCheckpointRefsAbsent } =
+    makeCheckpointRefOps(git, identityOps);
 
   return {
-    isGitRepository,
+    captureRepositoryIdentity: identityOps.captureRepositoryIdentity,
+    isGitRepository: identityOps.isGitRepository,
     captureCheckpoint,
     capturePathCheckpoint,
     hasCheckpointRef,
     restoreCheckpoint,
     restorePathCheckpoint,
     diffCheckpoints,
+    listThreadCheckpointRefs,
     deleteCheckpointRefs,
+    verifyCheckpointRefsAbsent,
   } satisfies CheckpointStoreShape;
 });
 
