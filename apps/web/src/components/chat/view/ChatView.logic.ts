@@ -1,6 +1,5 @@
 import {
   ProjectId,
-  type ClaudeCodeEffort,
   type ModelSelection,
   type ProviderKind,
   type ServerProvider,
@@ -309,7 +308,7 @@ export function formatOutgoingPrompt(params: {
 }): string {
   const caps = getProviderModelCapabilities(params.models, params.model, params.provider);
   if (params.effort && caps.promptInjectedEffortLevels.includes(params.effort)) {
-    return applyClaudePromptEffortPrefix(params.text, params.effort as ClaudeCodeEffort | null);
+    return applyClaudePromptEffortPrefix(params.text, params.effort);
   }
   return params.text;
 }

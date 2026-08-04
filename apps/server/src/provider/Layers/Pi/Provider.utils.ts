@@ -1,9 +1,11 @@
 import type {
   ModelCapabilities,
+  PiThinkingLevel,
   ServerProviderModel,
   ServerProviderSkill,
   ServerProviderSlashCommand,
 } from "@bigbud/contracts";
+import { PI_THINKING_LEVEL_OPTIONS } from "@bigbud/contracts";
 
 import { providerModelsFromSettings } from "../../providerSnapshot";
 import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
@@ -18,6 +20,27 @@ export const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
   contextWindowOptions: [],
   promptInjectedEffortLevels: [],
 };
+
+function getPiThinkingLevels(model: PiRpcModel): ReadonlyArray<PiThinkingLevel> {
+  if (model.reasoning !== true) return ["off"];
+
+  return PI_THINKING_LEVEL_OPTIONS.filter((level) => {
+    const mapped = model.thinkingLevelMap?.[level];
+    if (mapped === null) return false;
+    return level !== "xhigh" || mapped !== undefined;
+  });
+}
+
+function getPiModelCapabilities(model: PiRpcModel): ModelCapabilities {
+  return {
+    ...EMPTY_MODEL_CAPABILITIES,
+    reasoningEffortLevels: getPiThinkingLevels(model).map((value) => ({
+      value,
+      label: value === "xhigh" ? "Extra High" : value.charAt(0).toUpperCase() + value.slice(1),
+    })),
+  };
+}
+
 export function buildPiModels(
   models: ReadonlyArray<PiRpcModel>,
   customModels: ReadonlyArray<string>,
@@ -30,7 +53,7 @@ export function buildPiModels(
         isCustom: false,
         group: getSubProviderDisplayName(model.provider),
         subProviderID: model.provider,
-        capabilities: EMPTY_MODEL_CAPABILITIES,
+        capabilities: getPiModelCapabilities(model),
       }) satisfies ServerProviderModel,
   );
 

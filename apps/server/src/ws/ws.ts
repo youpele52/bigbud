@@ -13,6 +13,12 @@ import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
+import {
+  isTrustedRetentionMutationOrigin,
+  makeRetentionMutationAuthorization,
+} from "./wsRetentionMutationAuthorization.ts";
+
+const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
 const WsRpcLayer = WsRpcGroup.toLayer(
   Effect.gen(function* () {
@@ -30,7 +36,11 @@ const WsRpcLayer = WsRpcGroup.toLayer(
     });
   }),
 );
-const WsRpcRuntimeLayer = WsRpcLayer.pipe(Layer.provideMerge(RpcSerialization.layerJson));
+const WsRpcRuntimeLayer = Layer.mergeAll(
+  WsRpcLayer,
+  RpcSerialization.layerJson,
+  retentionMutationAuthorization.layer,
+);
 
 export const websocketRpcRouteLayer = Layer.unwrap(
   Effect.gen(function* () {
@@ -58,7 +68,15 @@ export const websocketRpcRouteLayer = Layer.unwrap(
             return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
           }
         }
-        return yield* rpcWebSocketHttpEffect;
+        const requestWithAuthorization = request.modify({
+          headers: retentionMutationAuthorization.authorizeHeaders(
+            request.headers,
+            config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+          ),
+        });
+        return yield* rpcWebSocketHttpEffect.pipe(
+          Effect.provideService(HttpServerRequest.HttpServerRequest, requestWithAuthorization),
+        );
       }),
     );
   }),

@@ -46,6 +46,7 @@ import { PROVIDER } from "./Adapter.types.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { makeStartSession } from "./Adapter.session.ts";
+import { applyClaudeRuntimeTraits } from "./Adapter.session.traits.ts";
 import { toRequestError } from "./Adapter.utils.ts";
 import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 import { makeClaudeControlOperations } from "./Adapter.controls.ts";
@@ -162,6 +163,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...context.session,
         model: modelSelection.model,
       };
+    }
+
+    if (modelSelection) {
+      yield* applyClaudeRuntimeTraits({ context, modelSelection, threadId: input.threadId });
     }
 
     // Apply interaction mode by switching the SDK's permission mode.

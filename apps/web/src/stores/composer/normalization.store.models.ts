@@ -2,7 +2,6 @@ import {
   DEFAULT_MODEL_BY_PROVIDER,
   PI_THINKING_LEVEL_OPTIONS,
   PROVIDER_KINDS,
-  type ClaudeCodeEffort,
   type CodexReasoningEffort,
   type ModelSelection,
   type PiThinkingLevel,
@@ -75,18 +74,20 @@ export function normalizeProviderModelOptions(
       : claudeCandidate?.thinking === false
         ? false
         : undefined;
-  const claudeEffort: ClaudeCodeEffort | undefined =
-    claudeCandidate?.effort === "low" ||
-    claudeCandidate?.effort === "medium" ||
-    claudeCandidate?.effort === "high" ||
-    claudeCandidate?.effort === "max" ||
-    claudeCandidate?.effort === "ultrathink"
-      ? claudeCandidate.effort
+  const claudeEffort =
+    typeof claudeCandidate?.effort === "string" && claudeCandidate.effort.trim().length > 0
+      ? claudeCandidate.effort.trim()
       : undefined;
   const claudeFastMode =
     claudeCandidate?.fastMode === true
       ? true
       : claudeCandidate?.fastMode === false
+        ? false
+        : undefined;
+  const claudeUltracode =
+    claudeCandidate?.ultracode === true
+      ? true
+      : claudeCandidate?.ultracode === false
         ? false
         : undefined;
   const claudeContextWindow =
@@ -96,11 +97,13 @@ export function normalizeProviderModelOptions(
   const claude =
     claudeThinking !== undefined ||
     claudeEffort !== undefined ||
+    claudeUltracode !== undefined ||
     claudeFastMode !== undefined ||
     claudeContextWindow !== undefined
       ? {
           ...(claudeThinking !== undefined ? { thinking: claudeThinking } : {}),
           ...(claudeEffort !== undefined ? { effort: claudeEffort } : {}),
+          ...(claudeUltracode !== undefined ? { ultracode: claudeUltracode } : {}),
           ...(claudeFastMode !== undefined ? { fastMode: claudeFastMode } : {}),
           ...(claudeContextWindow !== undefined ? { contextWindow: claudeContextWindow } : {}),
         }

@@ -265,6 +265,26 @@ describe("normalize*ModelOptionsWithCapabilities", () => {
     });
   });
 
+  it("preserves a future Claude effort only when advertised by model capabilities", () => {
+    const futureCaps: ModelCapabilities = {
+      ...claudeCaps,
+      reasoningEffortLevels: [
+        { value: "high", label: "High", isDefault: true },
+        { value: "future-depth", label: "Future Depth" },
+      ],
+    };
+
+    expect(
+      normalizeClaudeModelOptionsWithCapabilities(futureCaps, { effort: "future-depth" }),
+    ).toMatchObject({ effort: "future-depth" });
+    expect(
+      normalizeClaudeModelOptionsWithCapabilities(futureCaps, { effort: "not-advertised" }),
+    ).toMatchObject({ effort: "high" });
+    expect(
+      normalizeClaudeModelOptionsWithCapabilities(futureCaps, { effort: "ultrathink" }),
+    ).toMatchObject({ effort: "ultrathink" });
+  });
+
   it("omits unsupported Claude context window options", () => {
     expect(
       normalizeClaudeModelOptionsWithCapabilities(
@@ -284,10 +304,13 @@ describe("normalize*ModelOptionsWithCapabilities", () => {
     });
   });
 
-  it("preserves Pi thinking level as-is", () => {
+  it("preserves only model-supported Pi thinking levels", () => {
     expect(normalizePiModelOptionsWithCapabilities(codexCaps, { thinkingLevel: "high" })).toEqual({
       thinkingLevel: "high",
     });
+    expect(
+      normalizePiModelOptionsWithCapabilities(codexCaps, { thinkingLevel: "medium" }),
+    ).toBeUndefined();
   });
 
   it("normalizes Cursor options against model capabilities", () => {

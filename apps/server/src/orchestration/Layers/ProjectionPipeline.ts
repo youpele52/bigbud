@@ -49,6 +49,7 @@ import {
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
+import { increment, threadRetentionCompactionRows } from "../../observability/Metrics.ts";
 import {
   makeProjectionBaselineCoordinator,
   PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
@@ -250,7 +251,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
 
     const compactVerifiedPrefix = (batchSize?: number) =>
       eventStore.compactVerifiedPrefix
-        ? eventStore.compactVerifiedPrefix(batchSize).pipe(Effect.asVoid)
+        ? eventStore.compactVerifiedPrefix(batchSize).pipe(
+            Effect.tap((result) =>
+              increment(threadRetentionCompactionRows, {}, result.deletedCount),
+            ),
+            Effect.asVoid,
+          )
         : Effect.void;
 
     return {

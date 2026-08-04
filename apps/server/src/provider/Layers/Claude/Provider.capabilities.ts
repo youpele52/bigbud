@@ -63,6 +63,7 @@ const CLAUDE_LEGACY_MODEL_ALIASES = new Map<string, string>([
   ["claude-haiku-4-5", "haiku"],
   ["claude-haiku-4-5-20251001", "haiku"],
 ]);
+const liveCapabilitiesByModel = new Map<string, ModelCapabilities>();
 
 function resolveClaudeCapabilitySlug(model: string | null | undefined): string | null {
   const trimmed = model?.trim();
@@ -128,6 +129,11 @@ export const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
 ];
 
 export function getClaudeModelCapabilities(model: string | null | undefined): ModelCapabilities {
+  const liveModel = model?.trim();
+  if (liveModel) {
+    const liveCapabilities = liveCapabilitiesByModel.get(liveModel);
+    if (liveCapabilities) return liveCapabilities;
+  }
   const slug = resolveClaudeCapabilitySlug(model);
   return (
     BUILT_IN_MODELS.find((candidate) => candidate.slug === slug)?.capabilities ??
@@ -137,7 +143,7 @@ export function getClaudeModelCapabilities(model: string | null | undefined): Mo
 
 function getClaudeDefaultEffort(
   modelSlug: string,
-  levels: ReadonlyArray<NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[number]>,
+  levels: ReadonlyArray<string>,
 ): string | undefined {
   if ((modelSlug === "default" || modelSlug === "opus") && levels.includes("high")) {
     return "high";
@@ -150,7 +156,13 @@ function getClaudeDefaultEffort(
 
 function mapClaudeModelCapabilities(model: ClaudeModelInfo): ModelCapabilities {
   const baseCapabilities = getClaudeModelCapabilities(model.value);
-  const supportedEffortLevels = model.supportsEffort ? (model.supportedEffortLevels ?? []) : [];
+  const advertisedEffortLevels = model.supportedEffortLevels ?? [];
+  const supportedEffortLevels =
+    model.supportsEffort === false
+      ? []
+      : advertisedEffortLevels.length > 0
+        ? advertisedEffortLevels
+        : baseCapabilities.reasoningEffortLevels.map((option) => option.value);
   const defaultEffort = getClaudeDefaultEffort(model.value, supportedEffortLevels);
   return {
     reasoningEffortLevels: supportedEffortLevels.map((value) => {
@@ -167,6 +179,9 @@ function mapClaudeModelCapabilities(model: ClaudeModelInfo): ModelCapabilities {
       }
       return option;
     }),
+    ...(supportedEffortLevels.includes("xhigh")
+      ? { workflowModes: [{ value: "ultracode", label: "Ultracode" }] }
+      : {}),
     supportsFastMode: model.supportsFastMode ?? baseCapabilities.supportsFastMode,
     supportsThinkingToggle:
       model.supportsAdaptiveThinking ?? baseCapabilities.supportsThinkingToggle,
@@ -216,8 +231,20 @@ export function resolveClaudeModelDiscovery(input: {
     : undefined;
   const classifiedModels =
     Array.isArray(input.models) && validModels === undefined ? "invalid" : input.models;
+  if (validModels) liveCapabilitiesByModel.clear();
+  const mappedModels = validModels?.map(mapClaudeModel) ?? [];
+  const models = dedupeClaudeModels(mappedModels);
+  if (validModels) {
+    for (let index = 0; index < validModels.length; index += 1) {
+      const model = validModels[index]!;
+      const capabilities = mappedModels[index]?.capabilities;
+      if (!capabilities) continue;
+      liveCapabilitiesByModel.set(model.value, capabilities);
+      if (model.resolvedModel) liveCapabilitiesByModel.set(model.resolvedModel, capabilities);
+    }
+  }
   return {
-    models: validModels ? dedupeClaudeModels(validModels.map(mapClaudeModel)) : [],
+    models,
     modelDiscovery: classifyClaudeModelDiscovery({
       models: classifiedModels,
       durationMs: input.durationMs,

@@ -1,6 +1,5 @@
 /**
  * ServerSettings - Server-authoritative settings service.
- *
  * Owns persistence, validation, and change notification of settings that affect
  * server-side behavior (binary paths, streaming mode, env mode, custom models,
  * text generation model selection).
@@ -40,20 +39,25 @@ import * as Semaphore from "effect/Semaphore";
 import { ServerConfig } from "../startup/config";
 import { type DeepPartial, deepMerge } from "@bigbud/shared/Struct";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
-import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 import {
   decodeSettingsFieldWise,
+  resolveDefaultChatCwd,
+  resolveTextGenerationProvider,
   stripDefaultServerSettings,
 } from "./serverSettings.persistence.ts";
+export { resolveDefaultChatCwd } from "./serverSettings.persistence.ts";
+import {
+  preserveThreadRetentionPolicy,
+  rawThreadRetentionPolicy,
+  reconcileThreadRetentionPolicy,
+  type ThreadRetentionSettingsOperations,
+} from "./serverSettings.retention.ts";
 
-export interface ServerSettingsShape {
-  /** Start the settings runtime and attach file watching. */
+export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly start: Effect.Effect<void, ServerSettingsError>;
 
-  /** Await settings runtime readiness. */
   readonly ready: Effect.Effect<void, ServerSettingsError>;
 
-  /** Read the current settings. */
   readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
 
   /** Patch settings and persist. Returns the new full settings object. */
@@ -86,6 +90,16 @@ export class ServerSettingsService extends ServiceMap.Service<
               Effect.map((currentSettings) => deepMerge(currentSettings, patch)),
               Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
             ),
+          setThreadRetentionPolicy: (policy) =>
+            Ref.updateAndGet(currentSettingsRef, (settings) => ({
+              ...settings,
+              threadRetentionPolicy: policy,
+            })),
+          initializeThreadRetentionPolicy: (policy, _source) =>
+            Ref.updateAndGet(currentSettingsRef, (settings) => ({
+              ...settings,
+              threadRetentionPolicy: policy,
+            })),
           streamChanges: Stream.empty,
         } satisfies ServerSettingsShape;
       }),
@@ -93,45 +107,6 @@ export class ServerSettingsService extends ServiceMap.Service<
 }
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
-
-function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
-  const selection = settings.textGenerationModelSelection;
-  if (!PROVIDER_KINDS.includes(selection.provider as (typeof PROVIDER_KINDS)[number])) {
-    return settings;
-  }
-  const providerSettings =
-    settings.providers[selection.provider as keyof ServerSettings["providers"]];
-  if (providerSettings?.enabled) return settings;
-  const resolution = resolveProviderWorkload({
-    requested: selection,
-    workload: "unattendedTextGeneration",
-    availableProviderKinds: PROVIDER_KINDS.filter(
-      (provider) => settings.providers[provider].enabled,
-    ),
-  });
-  if (!resolution.actual || resolution.actual.provider === selection.provider) {
-    return settings;
-  }
-  return {
-    ...settings,
-    textGenerationModelSelection: resolution.actual,
-  };
-}
-
-function expandTildePath(input: string): string {
-  if (input === "~") {
-    return `${process.env.HOME ?? process.cwd()}`;
-  }
-  if (input.startsWith("~/")) {
-    return `${process.env.HOME ?? process.cwd()}/${input.slice(2)}`;
-  }
-  return input;
-}
-
-export function resolveDefaultChatCwd(settings: ServerSettings): string {
-  const candidate = settings.defaultChatCwd.trim();
-  return expandTildePath(candidate.length > 0 ? candidate : DEFAULT_SERVER_SETTINGS.defaultChatCwd);
-}
 
 const makeServerSettings = Effect.gen(function* () {
   const { settingsPath } = yield* ServerConfig;
@@ -141,6 +116,9 @@ const makeServerSettings = Effect.gen(function* () {
   const cacheKey = "settings" as const;
   const changesPubSub = yield* PubSub.unbounded<ServerSettings>();
   const startedRef = yield* Ref.make(false);
+  const authorizedRetentionPolicyRef = yield* Ref.make(
+    DEFAULT_SERVER_SETTINGS.threadRetentionPolicy,
+  );
   const startedDeferred = yield* Deferred.make<void, ServerSettingsError>();
   const watcherScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(watcherScope, Exit.void));
@@ -171,13 +149,16 @@ const makeServerSettings = Effect.gen(function* () {
   );
 
   const loadSettingsFromDisk = Effect.gen(function* () {
+    const authorizedPolicy = yield* Ref.get(authorizedRetentionPolicyRef);
     if (!(yield* readConfigExists)) {
-      return DEFAULT_SERVER_SETTINGS;
+      return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
     }
 
     const raw = yield* readRawConfig;
     const decoded = Schema.decodeUnknownExit(ServerSettingsJson)(raw);
-    if (decoded._tag === "Success") return decoded.value;
+    if (decoded._tag === "Success") {
+      return reconcileThreadRetentionPolicy(decoded.value, authorizedPolicy);
+    }
 
     const tolerant = decodeSettingsFieldWise(raw);
     if (tolerant !== null) {
@@ -185,14 +166,14 @@ const makeServerSettings = Effect.gen(function* () {
         path: settingsPath,
         issues: Cause.pretty(decoded.cause),
       });
-      return tolerant;
+      return reconcileThreadRetentionPolicy(tolerant, authorizedPolicy);
     }
 
     yield* Effect.logWarning("failed to parse settings.json, using defaults", {
       path: settingsPath,
       issues: Cause.pretty(decoded.cause),
     });
-    return DEFAULT_SERVER_SETTINGS;
+    return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
   });
 
   const settingsCache = yield* Cache.make<typeof cacheKey, ServerSettings, ServerSettingsError>({
@@ -202,9 +183,19 @@ const makeServerSettings = Effect.gen(function* () {
 
   const getSettingsFromCache = Cache.get(settingsCache, cacheKey);
 
-  const writeSettingsAtomically = (settings: ServerSettings) => {
+  const writeSettingsAtomically = (
+    settings: ServerSettings,
+    options?: { readonly preserveThreadRetentionPolicy?: boolean },
+  ) => {
     const tempPath = `${settingsPath}.${process.pid}.${Date.now()}.tmp`;
-    const sparseSettings = stripDefaultServerSettings(settings, DEFAULT_SERVER_SETTINGS) ?? {};
+    const sparseSettings: Record<string, unknown> =
+      (stripDefaultServerSettings(settings, DEFAULT_SERVER_SETTINGS) as Record<
+        string,
+        unknown
+      > | null) ?? {};
+    if (options?.preserveThreadRetentionPolicy) {
+      preserveThreadRetentionPolicy(sparseSettings, settings);
+    }
 
     return Effect.succeed(`${JSON.stringify(sparseSettings, null, 2)}\n`).pipe(
       Effect.tap(() => fs.makeDirectory(pathService.dirname(settingsPath), { recursive: true })),
@@ -222,9 +213,26 @@ const makeServerSettings = Effect.gen(function* () {
     );
   };
 
-  const persistSettings = (settings: ServerSettings) =>
+  const quarantineUnauthorizedRetention = Effect.gen(function* () {
+    const settings = yield* getSettingsFromCache;
+    const exists = yield* readConfigExists;
+    const rawPolicy = exists ? rawThreadRetentionPolicy(yield* readRawConfig) : "absent";
+    const expected = settings.threadRetentionPolicy;
+    if (rawPolicy === expected || (rawPolicy === "absent" && expected === "never")) return;
+    yield* Effect.logWarning("quarantined unauthorized thread retention settings edit", {
+      path: settingsPath,
+      attemptedPolicy: rawPolicy,
+      authorizedPolicy: expected,
+    });
+    yield* writeSettingsAtomically(settings, { preserveThreadRetentionPolicy: true });
+  });
+
+  const persistSettings = (
+    settings: ServerSettings,
+    options?: { readonly preserveThreadRetentionPolicy?: boolean },
+  ) =>
     Effect.gen(function* () {
-      yield* writeSettingsAtomically(settings);
+      yield* writeSettingsAtomically(settings, options);
       yield* Cache.set(settingsCache, cacheKey, settings);
       yield* emitChange(settings);
       return resolveTextGenerationProvider(settings);
@@ -233,6 +241,7 @@ const makeServerSettings = Effect.gen(function* () {
   const revalidateAndEmit = writeSemaphore.withPermits(1)(
     Effect.gen(function* () {
       yield* Cache.invalidate(settingsCache, cacheKey);
+      yield* quarantineUnauthorizedRetention;
       const settings = yield* getSettingsFromCache;
       yield* emitChange(settings);
     }),
@@ -287,6 +296,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* getSettingsFromCache;
+      yield* quarantineUnauthorizedRetention;
     });
 
     const startupExit = yield* Effect.exit(startup);
@@ -305,6 +315,12 @@ const makeServerSettings = Effect.gen(function* () {
     updateSettings: (patch) =>
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
+          if (Object.prototype.hasOwnProperty.call(patch, "threadRetentionPolicy")) {
+            return yield* new ServerSettingsError({
+              settingsPath: "<memory>",
+              detail: "threadRetentionPolicy must be changed through the dedicated retention RPC",
+            });
+          }
           const current = yield* getSettingsFromCache;
           const merged = deepMerge(current, patch);
           const currentSelection = current.textGenerationModelSelection as unknown;
@@ -332,6 +348,30 @@ const makeServerSettings = Effect.gen(function* () {
             ? ({ ...decoded, textGenerationModelSelection: currentSelection } as ServerSettings)
             : decoded;
           return yield* persistSettings(next);
+        }),
+      ),
+    setThreadRetentionPolicy: (policy) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          const updated = yield* persistSettings(
+            { ...current, threadRetentionPolicy: policy },
+            { preserveThreadRetentionPolicy: true },
+          );
+          yield* Ref.set(authorizedRetentionPolicyRef, policy);
+          return updated;
+        }),
+      ),
+    initializeThreadRetentionPolicy: (policy, _source) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          const updated = yield* persistSettings(
+            { ...current, threadRetentionPolicy: policy },
+            { preserveThreadRetentionPolicy: true },
+          );
+          yield* Ref.set(authorizedRetentionPolicyRef, policy);
+          return updated;
         }),
       ),
     get streamChanges() {

@@ -9,6 +9,7 @@ import {
   CHECKPOINT_COMMIT_MESSAGE_PREFIX,
   checkpointRefForThreadTurn,
   legacyCheckpointRefForThreadTurn,
+  pathCheckpointRefForThreadPath,
 } from "../Utils.ts";
 import { CheckpointStoreLive } from "./CheckpointStore.ts";
 import { CheckpointStore } from "../Services/CheckpointStore.ts";
@@ -227,4 +228,24 @@ it.layer(TestLayer)("CheckpointStoreLive", (it) => {
       }),
     );
   });
+  it.effect("lists, deletes, and verifies current, legacy, and path refs", () =>
+    Effect.gen(function* () {
+      const tmp = yield* makeTmpDir();
+      yield* initRepoWithCommit(tmp);
+      const checkpointStore = yield* CheckpointStore;
+      const threadId = ThreadId.makeUnsafe("thread-ref-retention");
+      const refs = [
+        checkpointRefForThreadTurn(threadId, 1),
+        legacyCheckpointRefForThreadTurn(threadId, 2),
+        pathCheckpointRefForThreadPath(threadId, "src/index.ts"),
+      ];
+      for (const ref of refs) yield* git(tmp, ["update-ref", ref, "HEAD"]);
+      expect(yield* checkpointStore.listThreadCheckpointRefs({ cwd: tmp, threadId })).toEqual(
+        refs.toSorted(),
+      );
+      yield* checkpointStore.deleteCheckpointRefs({ cwd: tmp, checkpointRefs: refs });
+      yield* checkpointStore.verifyCheckpointRefsAbsent({ cwd: tmp, checkpointRefs: refs });
+      expect(yield* checkpointStore.listThreadCheckpointRefs({ cwd: tmp, threadId })).toEqual([]);
+    }),
+  );
 });

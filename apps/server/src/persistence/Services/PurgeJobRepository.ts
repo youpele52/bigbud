@@ -17,18 +17,50 @@ export const PurgeJobPhase = Schema.Literals([
 ]);
 export type PurgeJobPhase = typeof PurgeJobPhase.Type;
 
-export const PurgeJobStatus = Schema.Literals(["pending", "running", "failed", "completed"]);
+export const PurgeJobStatus = Schema.Literals([
+  "pending",
+  "running",
+  "failed",
+  "completed",
+  "manual_recovery_required",
+]);
 export type PurgeJobStatus = typeof PurgeJobStatus.Type;
+
+export const PurgePathIdentity = Schema.Struct({
+  canonicalPath: Schema.String,
+  device: NonNegativeInt,
+  inode: NonNegativeInt,
+});
+export type PurgePathIdentity = typeof PurgePathIdentity.Type;
+
+export const PurgeResourceIdentity = Schema.Struct({
+  declaredPath: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
+  canonicalPath: Schema.String,
+  device: NonNegativeInt,
+  inode: NonNegativeInt,
+  changedAtMs: Schema.NullOr(Schema.Number).pipe(Schema.withDecodingDefault(() => null)),
+  type: Schema.Literals(["file", "directory"]),
+  root: Schema.NullOr(PurgePathIdentity).pipe(Schema.withDecodingDefault(() => null)),
+  parent: Schema.NullOr(PurgePathIdentity).pipe(Schema.withDecodingDefault(() => null)),
+});
+export type PurgeResourceIdentity = typeof PurgeResourceIdentity.Type;
 
 export const PurgeResource = Schema.Struct({
   kind: Schema.Literals([
     "attachment",
+    "provider-log",
+    "terminal-history",
     "project-memory",
     "project-notes",
     "project-kanban",
     "managed-worktree",
   ]),
   relativePath: Schema.String,
+  identity: Schema.NullOr(PurgeResourceIdentity).pipe(Schema.withDecodingDefault(() => null)),
+  quarantineName: Schema.NullOr(Schema.String).pipe(Schema.withDecodingDefault(() => null)),
+  action: Schema.Literals(["delete", "retain-shared"]).pipe(
+    Schema.withDecodingDefault(() => "delete" as const),
+  ),
 });
 export type PurgeResource = typeof PurgeResource.Type;
 
@@ -42,6 +74,8 @@ export const PurgeJob = Schema.Struct({
   phase: PurgeJobPhase,
   status: PurgeJobStatus,
   resourceManifest: Schema.fromJsonString(PurgeResourceManifest),
+  manifestDigest: Schema.NullOr(Schema.String),
+  manifestSealedAt: Schema.NullOr(IsoDateTime),
   attemptCount: NonNegativeInt,
   lastError: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
@@ -64,6 +98,24 @@ export const FindIncompletePurgeJobInput = Schema.Struct({
   entityId: Schema.String,
 });
 export type FindIncompletePurgeJobInput = typeof FindIncompletePurgeJobInput.Type;
+
+export const BindPurgeManifestInput = Schema.Struct({
+  jobId: Schema.String,
+  expectedManifestJson: Schema.String,
+  expectedUpdatedAt: IsoDateTime,
+  resourceManifest: PurgeResourceManifest,
+  updatedAt: IsoDateTime,
+});
+export type BindPurgeManifestInput = typeof BindPurgeManifestInput.Type;
+
+export const ClaimPurgeResourcesInput = Schema.Struct({
+  jobId: Schema.String,
+  entityKind: PurgeEntityKind,
+  entityId: Schema.String,
+  resourceManifest: PurgeResourceManifest,
+  claimedAt: IsoDateTime,
+});
+export type ClaimPurgeResourcesInput = typeof ClaimPurgeResourcesInput.Type;
 
 export const UpdatePurgeJobInput = Schema.Struct({
   jobId: Schema.String,
@@ -88,6 +140,16 @@ export const CompletePurgeJobInput = Schema.Struct({
 });
 export type CompletePurgeJobInput = typeof CompletePurgeJobInput.Type;
 
+export const ClaimPurgeExecutionInput = Schema.Struct({
+  jobId: Schema.String,
+  leaseId: Schema.String,
+  claimedAt: IsoDateTime,
+  expiresAt: IsoDateTime,
+});
+export type ClaimPurgeExecutionInput = typeof ClaimPurgeExecutionInput.Type;
+
+export const PURGE_MAX_ATTEMPTS = 5;
+
 export interface PurgeJobRepositoryShape {
   readonly createOrGet: (
     input: CreatePurgeJobInput,
@@ -95,16 +157,37 @@ export interface PurgeJobRepositoryShape {
   readonly findIncomplete: (
     input: FindIncompletePurgeJobInput,
   ) => Effect.Effect<Option.Option<PurgeJob>, ProjectionRepositoryError>;
+  readonly findById: (
+    jobId: string,
+  ) => Effect.Effect<Option.Option<PurgeJob>, ProjectionRepositoryError>;
   readonly listIncomplete: (
     limit: number,
+    dueAt?: string,
   ) => Effect.Effect<ReadonlyArray<PurgeJob>, ProjectionRepositoryError>;
-  readonly update: (input: UpdatePurgeJobInput) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly countIncomplete: () => Effect.Effect<number, ProjectionRepositoryError>;
+  readonly claimExecution: (
+    input: ClaimPurgeExecutionInput,
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
+  readonly releaseExecution: (
+    jobId: string,
+    leaseId: string,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly bindManifest: (
+    input: BindPurgeManifestInput,
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
+  readonly claimResources: (
+    input: ClaimPurgeResourcesInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly releaseClaims: (jobId: string) => Effect.Effect<void, ProjectionRepositoryError>;
+  readonly update: (
+    input: UpdatePurgeJobInput,
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
   readonly transition: (
     input: TransitionPurgeJobInput,
   ) => Effect.Effect<boolean, ProjectionRepositoryError>;
   readonly complete: (
     input: CompletePurgeJobInput,
-  ) => Effect.Effect<void, ProjectionRepositoryError>;
+  ) => Effect.Effect<boolean, ProjectionRepositoryError>;
 }
 
 export class PurgeJobRepository extends ServiceMap.Service<

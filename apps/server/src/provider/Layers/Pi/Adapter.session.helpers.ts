@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 
-import { type ChatAttachment } from "@bigbud/contracts";
+import {
+  type ChatAttachment,
+  PI_THINKING_LEVEL_OPTIONS,
+  type PiThinkingLevel,
+} from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
@@ -36,9 +40,13 @@ export const refreshSessionState = Effect.fn("refreshSessionState")(function* (
   });
 
   const state = response.data;
+  const thinkingLevel = normalizeString(state?.thinkingLevel);
   session.model = normalizeString(state?.model?.id) ?? session.model;
   session.providerID = normalizeString(state?.model?.provider) ?? session.providerID;
-  session.thinkingLevel = normalizeString(state?.thinkingLevel) ?? session.thinkingLevel;
+  session.thinkingLevel =
+    thinkingLevel && PI_THINKING_LEVEL_OPTIONS.includes(thinkingLevel as PiThinkingLevel)
+      ? (thinkingLevel as PiThinkingLevel)
+      : session.thinkingLevel;
   session.sessionId = normalizeString(state?.sessionId) ?? session.sessionId;
   session.sessionFile = normalizeString(state?.sessionFile) ?? session.sessionFile;
   session.updatedAt = new Date().toISOString();
@@ -109,15 +117,20 @@ export const applyModelSelection = Effect.fn("applyModelSelection")(function* (i
     });
     input.session.model = resolved.modelId;
     input.session.providerID = resolved.provider;
+    yield* refreshSessionState(input.session);
   }
 
   const nextThinkingLevel = normalizeString(input.modelSelection.options?.thinkingLevel);
-  if (nextThinkingLevel && nextThinkingLevel !== input.session.thinkingLevel) {
+  if (
+    nextThinkingLevel &&
+    PI_THINKING_LEVEL_OPTIONS.includes(nextThinkingLevel as PiThinkingLevel) &&
+    nextThinkingLevel !== input.session.thinkingLevel
+  ) {
     yield* Effect.tryPromise({
       try: () =>
         input.session.process.request({
           type: "set_thinking_level",
-          level: nextThinkingLevel,
+          level: nextThinkingLevel as PiThinkingLevel,
         }),
       catch: (cause) =>
         new ProviderAdapterRequestError({
@@ -127,7 +140,7 @@ export const applyModelSelection = Effect.fn("applyModelSelection")(function* (i
           cause,
         }),
     });
-    input.session.thinkingLevel = nextThinkingLevel;
+    yield* refreshSessionState(input.session);
   }
 });
 

@@ -173,4 +173,50 @@ describe("ProviderSendTurnInput", () => {
     expect(parsed.modelSelection.options?.effort).toBe("ultrathink");
     expect(parsed.modelSelection.options?.fastMode).toBe(true);
   });
+
+  it("accepts SDK-native Claude xhigh effort", () => {
+    const parsed = decodeProviderSendTurnInput({
+      threadId: "thread-1",
+      modelSelection: {
+        provider: "claudeAgent",
+        model: "claude-opus-4-7",
+        options: { effort: "xhigh" },
+      },
+    });
+
+    expect(parsed.modelSelection?.provider).toBe("claudeAgent");
+    if (parsed.modelSelection?.provider !== "claudeAgent") {
+      throw new Error("Expected claude modelSelection");
+    }
+    expect(parsed.modelSelection.options?.effort).toBe("xhigh");
+  });
+
+  it("decodes and trims a future Claude effort without a contract constant update", () => {
+    const parsed = decodeModelSelection({
+      provider: "claudeAgent",
+      model: "claude-future",
+      options: { effort: "  future-depth  " },
+    });
+
+    if (parsed.provider !== "claudeAgent") {
+      throw new Error("Expected claude modelSelection");
+    }
+    expect(parsed.options?.effort).toBe("future-depth");
+  });
+
+  it("round-trips Pi thinking levels and Claude Ultracode", () => {
+    const pi = decodeModelSelection({
+      provider: "pi",
+      model: "gpt-5",
+      options: { thinkingLevel: "xhigh" },
+    });
+    const claude = decodeModelSelection({
+      provider: "claudeAgent",
+      model: "claude-opus-4-7",
+      options: { ultracode: true },
+    });
+
+    expect(encodeModelSelection(pi)).toEqual(pi);
+    expect(encodeModelSelection(claude)).toEqual(claude);
+  });
 });

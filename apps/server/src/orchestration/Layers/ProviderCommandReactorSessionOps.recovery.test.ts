@@ -1,7 +1,10 @@
+import { type ProviderSession, ThreadId } from "@bigbud/contracts";
+import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import {
   isProviderContextLimitError,
+  rolloverProviderSessionAtHighWater,
   shouldManagedCapabilityContextRollover,
 } from "./ProviderCommandReactorSessionOps.recovery.ts";
 
@@ -36,5 +39,28 @@ describe("ProviderCommandReactorSessionOps recovery", () => {
         activities,
       }),
     ).toBe(false);
+  });
+
+  it("keeps an active CLIProxy session without resolving core capabilities", async () => {
+    const activeSession = {
+      provider: "cliProxy",
+      status: "ready",
+      runtimeMode: "full-access",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    } satisfies ProviderSession;
+
+    await expect(
+      Effect.runPromise(
+        rolloverProviderSessionAtHighWater({
+          providerService: {} as never,
+          states: new Map(),
+          threadId: activeSession.threadId,
+          activeSession,
+          activities: [],
+        }),
+      ),
+    ).resolves.toBe(activeSession);
   });
 });

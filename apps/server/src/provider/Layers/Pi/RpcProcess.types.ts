@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import type { PiThinkingLevel } from "@bigbud/contracts";
 
 import type { PiOrchestrationBridge } from "../../../orchestration-tools/PiOrchestrationBridge.ts";
 import type { ProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
@@ -15,6 +16,7 @@ export interface PiRpcModel {
   readonly name: string;
   readonly provider: string;
   readonly reasoning?: boolean;
+  readonly thinkingLevelMap?: Partial<Record<PiThinkingLevel, string | null>>;
 }
 
 export interface PiRpcSlashCommand {
@@ -27,7 +29,7 @@ export interface PiRpcSlashCommand {
 
 export interface PiRpcSessionState {
   readonly model?: PiRpcModel | null;
-  readonly thinkingLevel?: string;
+  readonly thinkingLevel?: PiThinkingLevel;
   readonly isStreaming?: boolean;
   readonly isCompacting?: boolean;
   readonly sessionFile?: string;
@@ -41,7 +43,7 @@ export type PiRpcRequestCommand =
   | { readonly type: "get_available_models" }
   | { readonly type: "get_commands" }
   | { readonly type: "set_model"; readonly provider: string; readonly modelId: string }
-  | { readonly type: "set_thinking_level"; readonly level: string }
+  | { readonly type: "set_thinking_level"; readonly level: PiThinkingLevel }
   | {
       readonly type: "prompt";
       readonly message: string;

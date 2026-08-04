@@ -1,9 +1,6 @@
-import type {
-  BrowserResult,
-  VisibleBrowserCommand,
-  VisibleBrowserLeaseSnapshot,
-} from "@bigbud/contracts";
+import type { BrowserResult, VisibleBrowserCommand } from "@bigbud/contracts";
 import { Deferred, Effect, Layer, PubSub, Ref, Stream } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import {
   VisibleBrowserControl,
@@ -11,21 +8,34 @@ import {
   type VisibleBrowserControlShape,
 } from "../Services/VisibleBrowserControl.ts";
 import {
-  type Lease,
   makeVisibleBrowserState,
   type PendingCommand,
-  type ReleasedLeases,
   removeRenderer,
   type VisibleBrowserState as State,
 } from "./VisibleBrowserControl.state.ts";
+import { makeVisibleBrowserRetentionControl } from "./VisibleBrowserControl.retention.ts";
 
 const COMMAND_TIMEOUT = "15 seconds";
+const durableLeaseId = (leaseId: string) => `visible-browser:${leaseId}`;
 
 const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(function* () {
   const commands = yield* PubSub.unbounded<VisibleBrowserCommand>();
   const state = yield* Ref.make<State>(makeVisibleBrowserState());
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`DELETE FROM thread_activity_leases WHERE lease_id LIKE 'visible-browser:%'`;
+
+  const releaseDurableLease = (leaseId: string) =>
+    sql`DELETE FROM thread_activity_leases WHERE lease_id = ${durableLeaseId(leaseId)}`.pipe(
+      Effect.ignore,
+    );
 
   const isAvailable = Ref.get(state).pipe(Effect.map((current) => current.renderers.length > 0));
+  const hasThreadLease: VisibleBrowserControlShape["hasThreadLease"] = (threadId) =>
+    Ref.get(state).pipe(
+      Effect.map((current) =>
+        [...current.leases.values()].some((lease) => lease.threadId === threadId),
+      ),
+    );
 
   const execute: VisibleBrowserControlShape["execute"] = (input) =>
     Effect.gen(function* () {
@@ -80,6 +90,20 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
         turnId: input.turnId,
         action: input.action,
       };
+
+      if (!existingLease && input.action.action !== "close_tab") {
+        yield* sql`
+          INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
+          VALUES (${durableLeaseId(leaseId)}, ${input.threadId}, 'browser', ${new Date().toISOString()})
+        `.pipe(
+          Effect.mapError(
+            () =>
+              new VisibleBrowserControlError({
+                message: "Browser tab cannot be opened while the thread is being deleted.",
+              }),
+          ),
+        );
+      }
 
       const interrupted = yield* Ref.modify(
         state,
@@ -184,25 +208,44 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
     }).pipe(
       Effect.flatMap((pendingEntry) => {
         if (!pendingEntry) return Effect.void;
+        const shouldReleaseLease =
+          input.error !== undefined ||
+          pendingEntry.command.action.action === "close_tab" ||
+          !input.result?.tabId;
+        const release = shouldReleaseLease
+          ? releaseDurableLease(pendingEntry.command.leaseId)
+          : Effect.void;
         if (input.error) {
-          return Deferred.fail(
-            pendingEntry.deferred,
-            new VisibleBrowserControlError({ message: input.error }),
+          return release.pipe(
+            Effect.andThen(
+              Deferred.fail(
+                pendingEntry.deferred,
+                new VisibleBrowserControlError({ message: input.error }),
+              ),
+            ),
           );
         }
         if (!input.result) {
-          return Deferred.fail(
-            pendingEntry.deferred,
-            new VisibleBrowserControlError({
-              message: "Visible browser command returned no result.",
-            }),
+          return release.pipe(
+            Effect.andThen(
+              Deferred.fail(
+                pendingEntry.deferred,
+                new VisibleBrowserControlError({
+                  message: "Visible browser command returned no result.",
+                }),
+              ),
+            ),
           );
         }
-        return Deferred.succeed(pendingEntry.deferred, {
-          ...input.result,
-          target: "visible",
-          leaseId: pendingEntry.command.leaseId,
-        });
+        return release.pipe(
+          Effect.andThen(
+            Deferred.succeed(pendingEntry.deferred, {
+              ...input.result,
+              target: "visible",
+              leaseId: pendingEntry.command.leaseId,
+            }),
+          ),
+        );
       }),
       Effect.asVoid,
     );
@@ -235,159 +278,19 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
       ),
     );
 
-  const reconcileThread: VisibleBrowserControlShape["reconcileThread"] = (input) =>
-    Ref.modify(state, (current): readonly [ReleasedLeases, State] => {
-      const releasedLeaseIds = new Set<string>();
-      for (const lease of current.leases.values()) {
-        if (
-          lease.threadId === input.threadId &&
-          (!input.isRunning || lease.turnId !== input.activeTurnId)
-        ) {
-          releasedLeaseIds.add(lease.leaseId);
-        }
-      }
-      const leases = new Map(current.leases);
-      const releasedLeases: Lease[] = [];
-      for (const leaseId of releasedLeaseIds) {
-        const lease = leases.get(leaseId);
-        if (lease) {
-          releasedLeases.push(lease);
-        }
-        leases.delete(leaseId);
-      }
-      const pending = new Map(current.pending);
-      const releases = new Map(current.releases);
-      const revokedTabs = new Map(current.revokedTabs);
-      const createdTabs = new Map(current.createdTabs);
-      for (const [tabId, revoked] of revokedTabs) {
-        if (
-          revoked.threadId === input.threadId &&
-          (!input.isRunning || revoked.turnId !== input.activeTurnId)
-        ) {
-          revokedTabs.delete(tabId);
-        }
-      }
-      const releasedPending: PendingCommand[] = [];
-      for (const [commandId, entry] of pending) {
-        if (releasedLeaseIds.has(entry.command.leaseId)) {
-          pending.delete(commandId);
-          releasedPending.push(entry);
-        }
-      }
-      const releasedCommands = releasedLeases
-        .filter((lease) => lease.tabId !== null)
-        .map<VisibleBrowserCommand>((lease) => ({
-          commandId: crypto.randomUUID(),
-          leaseId: lease.leaseId,
-          rendererId: lease.rendererId,
-          threadId: lease.threadId,
-          turnId: lease.turnId,
-          action: {
-            action: "release_tab",
-            target: "visible",
-            tabId: lease.tabId!,
-          },
-        }));
-      for (const command of releasedCommands) {
-        releases.set(command.commandId, command);
-      }
-      return [
-        { leases: releasedLeases, pending: releasedPending, releases: releasedCommands },
-        { ...current, leases, pending, releases, revokedTabs, createdTabs },
-      ] as const;
-    }).pipe(
-      Effect.flatMap((released) =>
-        Effect.gen(function* () {
-          yield* Effect.forEach(
-            released.pending,
-            (entry) =>
-              Deferred.fail(
-                entry.deferred,
-                new VisibleBrowserControlError({ message: "Browser lease released." }),
-              ),
-            { discard: true },
-          );
-          yield* Effect.forEach(released.releases, (command) => PubSub.publish(commands, command), {
-            discard: true,
-          });
-        }),
-      ),
-      Effect.asVoid,
-    );
-
-  const revokeLease: VisibleBrowserControlShape["revokeLease"] = (input) =>
-    Ref.modify(state, (current): readonly [ReadonlyArray<PendingCommand>, State] => {
-      const lease = current.leases.get(input.leaseId);
-      if (!lease || lease.rendererId !== input.rendererId || lease.tabId !== input.tabId) {
-        return [[], current] as const;
-      }
-
-      const leases = new Map(current.leases);
-      leases.delete(lease.leaseId);
-      const pending = new Map(current.pending);
-      const revokedPending: PendingCommand[] = [];
-      for (const [commandId, entry] of pending) {
-        if (entry.command.leaseId === lease.leaseId) {
-          pending.delete(commandId);
-          revokedPending.push(entry);
-        }
-      }
-      const releases = new Map(current.releases);
-      for (const [commandId, command] of releases) {
-        if (command.leaseId === lease.leaseId) {
-          releases.delete(commandId);
-        }
-      }
-      const revokedTabs = new Map(current.revokedTabs);
-      revokedTabs.set(input.tabId, { threadId: lease.threadId, turnId: lease.turnId });
-      const createdTabs = new Map(current.createdTabs);
-      createdTabs.delete(input.tabId);
-      return [
-        revokedPending,
-        { ...current, leases, pending, releases, revokedTabs, createdTabs },
-      ] as const;
-    }).pipe(
-      Effect.flatMap((pending) =>
-        Effect.forEach(
-          pending,
-          (entry) =>
-            Deferred.fail(
-              entry.deferred,
-              new VisibleBrowserControlError({ message: "Browser lease revoked by user." }),
-            ),
-          { discard: true },
-        ),
-      ),
-      Effect.asVoid,
-    );
-
-  const getLeases: VisibleBrowserControlShape["getLeases"] = (rendererId) =>
-    Ref.get(state).pipe(
-      Effect.map((current) =>
-        [...current.leases.values()].flatMap(
-          (lease): ReadonlyArray<VisibleBrowserLeaseSnapshot> =>
-            lease.rendererId === rendererId && lease.tabId
-              ? [
-                  {
-                    leaseId: lease.leaseId,
-                    tabId: lease.tabId,
-                    threadId: lease.threadId,
-                    turnId: lease.turnId,
-                  },
-                ]
-              : [],
-        ),
-      ),
-    );
+  const retention = makeVisibleBrowserRetentionControl({
+    state,
+    commands,
+    releaseDurableLease,
+  });
 
   return {
+    hasThreadLease,
     isAvailable,
     execute,
     complete,
     streamCommands,
-    reconcileThread,
-    revokeLease,
-    getLeases,
+    ...retention,
   } satisfies VisibleBrowserControlShape;
 });
 

@@ -1,6 +1,10 @@
-import type { Fiber } from "effect";
+import type { Effect, Fiber } from "effect";
 
-import type { TerminalDropPathMode, TerminalSessionStatus } from "@bigbud/contracts";
+import type {
+  TerminalCwdError,
+  TerminalDropPathMode,
+  TerminalSessionStatus,
+} from "@bigbud/contracts";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
 
@@ -99,4 +103,17 @@ export interface TerminalManagerOptions {
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
+  acquireWorktreeLease?: (input: {
+    threadId: string;
+    terminalId: string;
+    executionTargetId: string;
+    cwd: string;
+    worktreePath: string | null;
+  }) => Effect.Effect<void, TerminalCwdError>;
+  markWorktreeLeaseStarted?: (input: {
+    threadId: string;
+    terminalId: string;
+    processId: number;
+  }) => Effect.Effect<void>;
+  releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
 }

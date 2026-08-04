@@ -64,6 +64,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           'projectId', COALESCE(t.parent_thread_project_id, t.project_id)
         ) END AS "parentThread",
         t.latest_turn_id AS "latestTurnId", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
+        t.last_activity_at AS "lastActivityAt",
         t.queued_prompts_json AS "queuedPrompts",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"

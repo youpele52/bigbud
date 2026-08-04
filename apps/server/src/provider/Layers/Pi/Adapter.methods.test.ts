@@ -259,4 +259,76 @@ describe("PiAdapter methods", () => {
     expect(session.queuedTurnIds).toContain(result.turnId);
     expect(session.turns.map((turn) => turn.id)).toContain(result.turnId);
   });
+
+  it("sets a changed thinking level before prompting and skips unchanged levels", async () => {
+    const calls: string[] = [];
+    const request = vi.fn(async (command: { type: string }) => {
+      calls.push(command.type);
+      return {
+        type: "response" as const,
+        command: command.type,
+        success: true,
+        ...(command.type === "get_state"
+          ? {
+              data: {
+                model: { id: "reasoning", name: "Reasoning", provider: "openai" },
+                thinkingLevel: "high" as const,
+              },
+            }
+          : {}),
+      };
+    }) as unknown as ActivePiSession["process"]["request"];
+    const threadId = asThreadId("thread-thinking");
+    const session = {
+      process: {
+        request,
+        write: vi.fn(),
+        stderrTail: () => "",
+        subscribe: () => () => undefined,
+        stop: async () => undefined,
+        child: {} as never,
+        command: "pi",
+        args: [],
+      },
+      threadId,
+      model: "reasoning",
+      providerID: "openai",
+      thinkingLevel: "medium",
+      turns: [],
+      queuedTurnIds: [],
+      pendingUserInputs: new Map(),
+      currentToolOutputById: new Map(),
+      currentToolInfoById: new Map(),
+      activeTurnId: undefined,
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    } as unknown as ActivePiSession;
+    const methods = makePiAdapterMethods({
+      attachmentsDir: "/tmp",
+      stateDir: "/tmp/bigbud-state",
+      host: "127.0.0.1",
+      port: 3773,
+      emit: () => Effect.void,
+      handleProcessExit: () => Effect.void,
+      handleStdoutEvent: () => Effect.void,
+      makeSyntheticEvent: (() => Effect.die("unused")) as never,
+      runPromise: Effect.runPromise,
+      serverSettings: { getSettings: Effect.die("unused") },
+      sessions: new Map([[threadId, session]]),
+    });
+    const selection = {
+      provider: "pi" as const,
+      model: "reasoning",
+      subProviderID: "openai",
+      options: { thinkingLevel: "high" as const },
+    };
+
+    await Effect.runPromise(
+      methods.sendTurn({ threadId, input: "first", modelSelection: selection } as never),
+    );
+    await Effect.runPromise(
+      methods.sendTurn({ threadId, input: "second", modelSelection: selection } as never),
+    );
+
+    expect(calls).toEqual(["set_thinking_level", "get_state", "prompt", "prompt"]);
+  });
 });

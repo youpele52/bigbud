@@ -41,7 +41,7 @@ export const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
     checkedAt: "2026-01-01T00:00:00.000Z",
     models: [
       {
-        slug: "claude-opus-4-6",
+        slug: "opus",
         name: "Claude Opus 4.6",
         isCustom: false,
         capabilities: {
@@ -59,7 +59,7 @@ export const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
         },
       },
       {
-        slug: "claude-sonnet-4-6",
+        slug: "default",
         name: "Claude Sonnet 4.6",
         isCustom: false,
         capabilities: {
@@ -76,7 +76,7 @@ export const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
         },
       },
       {
-        slug: "claude-haiku-4-5",
+        slug: "haiku",
         name: "Claude Haiku 4.5",
         isCustom: false,
         capabilities: {

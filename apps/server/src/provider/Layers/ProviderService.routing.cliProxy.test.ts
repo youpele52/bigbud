@@ -142,6 +142,33 @@ recoveryUnsupported.layer("ProviderServiceLive CLIProxy recovery capability", (i
   );
 });
 
+const freshRecovery = makeProviderServiceLayer({ cliProxySessionRecovery: "fresh-restart" });
+
+freshRecovery.layer("ProviderServiceLive CLIProxy fresh recovery", (it) => {
+  it.effect("starts a fresh session without forwarding uncertain native resume state", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const directory = yield* ProviderSessionDirectory;
+      const threadId = asThreadId("thread-cli-proxy-fresh-recovery");
+      yield* directory.upsert({
+        provider: "cliProxy",
+        threadId,
+        resumeCursor: { sessionId: "native-claude-state" },
+        runtimePayload: {
+          modelSelection: { provider: "cliProxy", model: "gpt-5-codex" },
+        },
+      });
+
+      yield* provider.sendTurn({ threadId, input: "recover", attachments: [] });
+
+      const startInput = freshRecovery.cliProxy.startSession.mock.calls.at(-1)?.[0];
+      assert.equal(startInput?.resumeCursor, undefined);
+      assert.equal(startInput?.modelSelection?.provider, "cliProxy");
+      assert.equal(startInput?.modelSelection?.model, "gpt-5-codex");
+    }),
+  );
+});
+
 const settingsDisabled = makeProviderServiceLayer({
   settings: {
     providers: {

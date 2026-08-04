@@ -79,6 +79,128 @@ export const serverStartupPhaseDuration = Metric.timer("t3_server_startup_phase_
   description: "Server startup phase duration.",
 });
 
+export const threadRetentionRunsTotal = Metric.counter("bigbud_thread_retention_runs_total", {
+  description: "Thread retention run outcomes by trigger and policy.",
+});
+
+export const threadRetentionItemsTotal = Metric.counter("bigbud_thread_retention_items_total", {
+  description: "Thread retention item outcomes by allowlisted reason.",
+});
+
+export const threadRetentionPreviewDuration = Metric.timer(
+  "bigbud_thread_retention_preview_duration",
+  { description: "Thread retention preview duration." },
+);
+
+export const threadRetentionGroupSize = Metric.histogram("bigbud_thread_retention_group_size", {
+  description: "Distribution of purge jobs in sealed retention groups.",
+  boundaries: [1, 5, 10, 25],
+});
+
+export const threadRetentionGroupDuration = Metric.timer("bigbud_thread_retention_group_duration", {
+  description: "Sealed thread retention purge group duration.",
+});
+
+export const threadRetentionDeferralsTotal = Metric.counter(
+  "bigbud_thread_retention_deferrals_total",
+  { description: "Thread retention deferrals by allowlisted reason." },
+);
+
+export const threadRetentionEligibilityTotal = Metric.counter(
+  "bigbud_thread_retention_eligibility_total",
+  { description: "Thread retention eligibility and exclusion outcomes." },
+);
+export const threadRetentionSelectionDuration = Metric.timer(
+  "bigbud_thread_retention_selection_duration",
+  { description: "Duration of bounded thread retention candidate selection." },
+);
+export const threadRetentionBaselinePreflightTotal = Metric.counter(
+  "bigbud_thread_retention_baseline_preflight_total",
+  { description: "Retention purge baseline preflight outcomes." },
+);
+export const threadRetentionBaselineMaxSequence = Metric.gauge(
+  "bigbud_thread_retention_baseline_max_sequence",
+  { description: "Highest canonical sequence requested by retention baseline preflight." },
+);
+export const threadRetentionManagedResources = Metric.histogram(
+  "bigbud_thread_retention_managed_resources",
+  { description: "Managed resources estimated for retention.", boundaries: [0, 1, 10, 100, 1_000] },
+);
+export const threadRetentionManagedBytes = Metric.histogram(
+  "bigbud_thread_retention_managed_bytes",
+  {
+    description: "Known managed bytes estimated for retention.",
+    boundaries: [0, 1_024, 1_048_576, 104_857_600, 1_073_741_824],
+  },
+);
+export const threadRetentionRemovedResources = Metric.counter(
+  "bigbud_thread_retention_removed_resources_total",
+  { description: "Managed resources actually removed by retention purge." },
+);
+export const threadRetentionRemovedKnownBytes = Metric.counter(
+  "bigbud_thread_retention_removed_known_bytes_total",
+  { description: "Known file bytes actually removed by retention purge." },
+);
+export const threadRetentionPurgeBacklog = Metric.gauge("bigbud_thread_retention_purge_backlog", {
+  description: "Current incomplete purge job backlog.",
+});
+export const threadRetentionRunAge = Metric.gauge("bigbud_thread_retention_run_age_ms", {
+  description: "Age in milliseconds of the oldest recoverable retention run.",
+});
+export const threadRetentionCompactionRows = Metric.histogram(
+  "bigbud_thread_retention_compaction_rows",
+  {
+    description: "Canonical event rows compacted per retention tick.",
+    boundaries: [0, 1, 100, 500],
+  },
+);
+
+const THREAD_RETENTION_ELIGIBILITY_REASONS = new Set([
+  "eligible",
+  "deleting",
+  "pinned",
+  "project_unavailable",
+  "project_deleting",
+  "remote_cleanup_unavailable",
+  "running",
+  "pending_work",
+  "waiting_for_user",
+  "active_task",
+  "watched",
+  "delegated",
+  "scheduled",
+]);
+
+export const threadRetentionEligibilityMetricAttributes = (reason: string) => ({
+  outcome: reason === "eligible" ? "eligible" : "excluded",
+  reason: THREAD_RETENTION_ELIGIBILITY_REASONS.has(reason) ? reason : "unknown",
+});
+
+const THREAD_RETENTION_ITEM_SKIP_REASONS = new Set(["policy_changed", "running"]);
+
+export const threadRetentionItemMetricAttributes = (outcome: string, reason?: string) => ({
+  outcome,
+  ...(outcome === "skipped"
+    ? { reason: reason && THREAD_RETENTION_ITEM_SKIP_REASONS.has(reason) ? reason : "unknown" }
+    : {}),
+});
+
+const THREAD_RETENTION_DEFERRAL_REASONS = new Set([
+  "disabled",
+  "provider_pressure",
+  "recent_failures",
+  "slice_budget",
+  "backlog_limit",
+  "preparation_pending",
+  "preparation_timeout",
+  "purge_deferred",
+  "page_budget",
+]);
+
+export const threadRetentionDeferralMetricAttributes = (reason: string) => ({
+  reason: THREAD_RETENTION_DEFERRAL_REASONS.has(reason) ? reason : "unknown",
+});
+
 /** Low-cardinality counters for the Claude modernization rollout. */
 export const claudeModernizationEventsTotal = Metric.counter(
   "t3_claude_modernization_events_total",

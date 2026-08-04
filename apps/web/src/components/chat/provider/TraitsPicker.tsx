@@ -1,4 +1,9 @@
-import { type ProviderKind, type ServerProviderModel, type ThreadId } from "@bigbud/contracts";
+import {
+  type PiThinkingLevel,
+  type ProviderKind,
+  type ServerProviderModel,
+  type ThreadId,
+} from "@bigbud/contracts";
 import { applyClaudePromptEffortPrefix, getDefaultEffort } from "@bigbud/shared/model";
 import { memo, useCallback, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
@@ -18,10 +23,12 @@ import { useComposerDraftStore } from "../../../stores/composer";
 import { cn } from "~/lib/utils";
 import {
   buildNextOptions,
+  buildNextPiThinkingOptions,
   getSelectedTraits,
   ULTRATHINK_PROMPT_PREFIX,
   type TraitsPickerProviderOptions as ProviderOptions,
 } from "./TraitsPicker.logic";
+import { ClaudeWorkflowMenu } from "./TraitsPicker.workflow";
 
 type TraitsPersistence =
   | {
@@ -75,6 +82,9 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
     caps,
     effort,
     thinkingLevel,
+    thinkingLevels,
+    workflowModes,
+    ultracodeEnabled,
     effortLevels,
     thinkingEnabled,
     fastModeEnabled,
@@ -124,8 +134,9 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
 
   if (
     effort === null &&
-    thinkingLevel === null &&
+    thinkingLevels.length === 0 &&
     thinkingEnabled === null &&
+    workflowModes.length === 0 &&
     contextWindowOptions.length <= 1
   ) {
     return null;
@@ -137,19 +148,22 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         <MenuGroup>
           <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Thinking</div>
           <MenuRadioGroup
-            value={thinkingLevel ?? "medium"}
+            value={thinkingLevel ?? "pi-default"}
             onValueChange={(value) => {
               updateModelOptions(
-                buildNextOptions(provider, modelOptions, { thinkingLevel: value }),
+                buildNextPiThinkingOptions(
+                  modelOptions,
+                  value === "pi-default" ? undefined : (value as PiThinkingLevel),
+                ),
               );
             }}
           >
-            <MenuRadioItem value="off">Off</MenuRadioItem>
-            <MenuRadioItem value="minimal">Minimal</MenuRadioItem>
-            <MenuRadioItem value="low">Low</MenuRadioItem>
-            <MenuRadioItem value="medium">Medium</MenuRadioItem>
-            <MenuRadioItem value="high">High</MenuRadioItem>
-            <MenuRadioItem value="xhigh">Extra High</MenuRadioItem>
+            <MenuRadioItem value="pi-default">Pi default</MenuRadioItem>
+            {thinkingLevels.map((option) => (
+              <MenuRadioItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuRadioItem>
+            ))}
           </MenuRadioGroup>
         </MenuGroup>
       ) : effort ? (
@@ -213,6 +227,13 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
           </MenuGroup>
         </>
       ) : null}
+      {workflowModes.some((mode) => mode.value === "ultracode") ? (
+        <ClaudeWorkflowMenu
+          enabled={ultracodeEnabled}
+          modelOptions={modelOptions}
+          onModelOptionsChange={updateModelOptions}
+        />
+      ) : null}
       {contextWindowOptions.length > 1 ? (
         <>
           <MenuDivider />
@@ -261,6 +282,9 @@ export const TraitsPicker = memo(function TraitsPicker({
     caps,
     effort,
     thinkingLevel,
+    thinkingLevels,
+    workflowModes,
+    ultracodeEnabled,
     effortLevels,
     thinkingEnabled,
     fastModeEnabled,
@@ -283,7 +307,9 @@ export const TraitsPicker = memo(function TraitsPicker({
           high: "High",
           xhigh: "Extra High",
         }[thinkingLevel]
-      : null;
+      : provider === "pi" && thinkingLevels.length > 0
+        ? "Pi default"
+        : null;
   const contextWindowLabel =
     contextWindowOptions.length > 1 && contextWindow !== defaultContextWindow
       ? (contextWindowOptions.find((o) => o.value === contextWindow)?.label ?? null)
@@ -298,6 +324,7 @@ export const TraitsPicker = memo(function TraitsPicker({
           ? null
           : `Thinking ${thinkingEnabled ? "On" : "Off"}`,
     ...(caps.supportsFastMode && fastModeEnabled ? ["Fast"] : []),
+    ...(ultracodeEnabled ? ["Ultracode"] : []),
     ...(contextWindowLabel ? [contextWindowLabel] : []),
   ]
     .filter(Boolean)
@@ -308,8 +335,9 @@ export const TraitsPicker = memo(function TraitsPicker({
   // Hide the traits picker when the model has no configurable traits
   if (
     effort === null &&
-    thinkingLevel === null &&
+    thinkingLevels.length === 0 &&
     thinkingEnabled === null &&
+    workflowModes.length === 0 &&
     contextWindowOptions.length <= 1
   ) {
     return null;

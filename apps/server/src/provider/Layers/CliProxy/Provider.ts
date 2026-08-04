@@ -15,6 +15,8 @@ import { inspectCliProxy } from "./Client.ts";
 import { CliProxyConfigError, resolveCliProxyConfig } from "./config.ts";
 
 const PROVIDER = "cliProxy" as const;
+// The current CLIProxy catalog exposes model IDs and names only. Do not infer
+// effort support from names or mutate persisted IDs until native metadata exists.
 const CAPABILITIES: ModelCapabilities = {
   reasoningEffortLevels: [],
   supportsFastMode: false,

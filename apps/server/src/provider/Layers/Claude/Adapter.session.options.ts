@@ -1,9 +1,13 @@
-import type { OnElicitation, Options as ClaudeQueryOptions } from "@anthropic-ai/claude-agent-sdk";
-import { type ClaudeCodeEffort, type ProviderSessionStartInput } from "@bigbud/contracts";
-import { resolveApiModelId, resolveEffort } from "@bigbud/shared/model";
+import type {
+  ModelInfo as ClaudeModelInfo,
+  OnElicitation,
+  Options as ClaudeQueryOptions,
+} from "@anthropic-ai/claude-agent-sdk";
+import { type ProviderSessionStartInput } from "@bigbud/contracts";
+import { resolveApiModelId, resolveEffort, trimOrNull } from "@bigbud/shared/model";
 
 import { getClaudeModelCapabilities } from "./Provider.ts";
-import { getEffectiveClaudeCodeEffort, CLAUDE_SETTING_SOURCES } from "./Adapter.utils.ts";
+import { CLAUDE_SETTING_SOURCES } from "./Adapter.utils.ts";
 import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
 import { BIGBUD_CAPABILITY_CATALOG_PROTOCOL } from "../../../capabilities/CapabilityCatalog.serialize.ts";
 
@@ -28,35 +32,59 @@ interface BuildClaudeQueryOptionsInput {
   readonly environment?: Readonly<Record<string, string | undefined>>;
 }
 
+type ClaudeNativeEffort = NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[number];
+
+export function resolveClaudeRuntimeTraits(
+  modelSelection: ProviderSessionStartInput["modelSelection"],
+) {
+  const selection = modelSelection?.provider === "claudeAgent" ? modelSelection : undefined;
+  const caps = getClaudeModelCapabilities(selection?.model);
+  const rawEffort = trimOrNull(selection?.options?.effort);
+  const promptInjectedEffort =
+    rawEffort !== null && caps.promptInjectedEffortLevels.includes(rawEffort);
+  const resolvedEffort = promptInjectedEffort ? undefined : resolveEffort(caps, rawEffort);
+  const effectiveEffort = (resolvedEffort ?? null) as ClaudeNativeEffort | null;
+  const ultracode =
+    selection?.options?.ultracode === true &&
+    caps.workflowModes?.some((mode) => mode.value === "ultracode") === true;
+  return {
+    effectiveEffort: ultracode ? ("xhigh" satisfies ClaudeNativeEffort) : effectiveEffort,
+    fastMode: selection?.options?.fastMode === true && caps.supportsFastMode,
+    thinking:
+      typeof selection?.options?.thinking === "boolean" && caps.supportsThinkingToggle
+        ? selection.options.thinking
+        : undefined,
+    ultracode,
+  };
+}
+
 export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
   readonly apiModelId: string | undefined;
-  readonly effectiveEffort: ClaudeCodeEffort | null;
+  readonly effectiveEffort: ClaudeNativeEffort | null;
   readonly fastMode: boolean;
+  readonly thinking: boolean | undefined;
+  readonly ultracode: boolean;
   readonly permissionMode: ReturnType<typeof resolveBasePermissionMode>;
   readonly queryOptions: ClaudeQueryOptions;
 } {
   const modelSelection =
     input.input.modelSelection?.provider === "claudeAgent" ? input.input.modelSelection : undefined;
-  const caps = getClaudeModelCapabilities(modelSelection?.model);
   const apiModelId = modelSelection ? resolveApiModelId(modelSelection) : undefined;
-  const effort = (resolveEffort(caps, modelSelection?.options?.effort) ??
-    null) as ClaudeCodeEffort | null;
-  const fastMode = modelSelection?.options?.fastMode === true && caps.supportsFastMode;
-  const thinking =
-    typeof modelSelection?.options?.thinking === "boolean" && caps.supportsThinkingToggle
-      ? modelSelection.options.thinking
-      : undefined;
-  const effectiveEffort = getEffectiveClaudeCodeEffort(effort);
+  const { effectiveEffort, fastMode, thinking, ultracode } =
+    resolveClaudeRuntimeTraits(modelSelection);
   const permissionMode = resolveBasePermissionMode(input.input.runtimeMode);
   const settings = {
     ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
     ...(fastMode ? { fastMode: true } : {}),
+    ...(ultracode ? { ultracode: true } : {}),
   };
 
   return {
     apiModelId,
     effectiveEffort,
     fastMode,
+    thinking,
+    ultracode,
     permissionMode,
     queryOptions: {
       ...(input.runtimeCwd ? { cwd: input.runtimeCwd } : {}),

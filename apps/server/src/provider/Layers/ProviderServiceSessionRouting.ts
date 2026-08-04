@@ -85,14 +85,15 @@ export function makeRecoverSessionForThread(
         }
       }
 
-      if (adapter.capabilities.sessionRecovery === "unsupported") {
+      const recoveryMode = adapter.capabilities.sessionRecovery;
+      if (recoveryMode === "unsupported") {
         return yield* toValidationError(
           input.operation,
           `Provider '${input.binding.provider}' does not support session recovery.`,
         );
       }
 
-      if (!hasResumeCursor) {
+      if (recoveryMode !== "fresh-restart" && !hasResumeCursor) {
         return yield* toValidationError(
           input.operation,
           `Cannot recover thread '${input.binding.threadId}' because no provider resume state is persisted.`,
@@ -131,7 +132,11 @@ export function makeRecoverSessionForThread(
         ...executionTargets,
         ...(persistedCwd ? { cwd: persistedCwd } : {}),
         ...(persistedModelSelection ? { modelSelection: persistedModelSelection } : {}),
-        ...(hasResumeCursor ? { resumeCursor: input.binding.resumeCursor } : {}),
+        ...(recoveryMode === "fresh-restart"
+          ? {}
+          : hasResumeCursor
+            ? { resumeCursor: input.binding.resumeCursor }
+            : {}),
         runtimeMode: input.binding.runtimeMode ?? "full-access",
       });
       if (resumed.provider !== adapter.provider) {

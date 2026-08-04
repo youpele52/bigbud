@@ -42,6 +42,7 @@ export class BrowserManagerError extends Data.TaggedError("BrowserManagerError")
 }> {}
 
 export interface BrowserManagerShape {
+  readonly hasContext?: (threadId: ThreadId) => Effect.Effect<boolean>;
   /**
    * Launch or attach to a browser context for the given thread.
    */

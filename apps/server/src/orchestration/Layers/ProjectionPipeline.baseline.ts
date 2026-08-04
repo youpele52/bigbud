@@ -1,6 +1,7 @@
 import { Cause, Effect, Exit, Option } from "effect";
 
 import { type ProjectionRepositoryError } from "../../persistence/Errors.ts";
+import { increment, threadRetentionCompactionRows } from "../../observability/Metrics.ts";
 import type { OrchestrationEventStoreShape } from "../../persistence/Services/OrchestrationEventStore.ts";
 import type {
   ProjectionBaseline,
@@ -82,7 +83,8 @@ export function makeProjectionBaselineOperations(input: {
     const verified = yield* verify(candidateOption.value);
     if (!verified) return;
     if (input.eventStore.compactVerifiedPrefix) {
-      yield* input.eventStore.compactVerifiedPrefix(batchSize);
+      const result = yield* input.eventStore.compactVerifiedPrefix(batchSize);
+      yield* increment(threadRetentionCompactionRows, {}, result.deletedCount);
     }
   });
 

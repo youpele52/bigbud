@@ -1,4 +1,9 @@
-import { CommandId, DEFAULT_PROVIDER_INTERACTION_MODE, ThreadId } from "@bigbud/contracts";
+import {
+  CommandId,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  ProjectId,
+  ThreadId,
+} from "@bigbud/contracts";
 import { TextGenerationError } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +13,7 @@ import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTi
 import {
   asMessageId,
   createHarness,
+  makeTrackedTempDir,
   registerProviderCommandReactorTestCleanup,
   waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
@@ -406,16 +412,36 @@ describe("ProviderCommandReactor", () => {
   });
 
   it("generates a worktree branch name for the first turn", async () => {
-    const harness = await createHarness();
+    const baseDir = makeTrackedTempDir("bigbud-title-branch-");
+    const harness = await createHarness({ baseDir });
     const now = new Date().toISOString();
+    const threadId = ThreadId.makeUnsafe("thread-branch-generation");
+    const worktreePath = path.join(baseDir, "worktree");
+    fs.mkdirSync(worktreePath);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.makeUnsafe("cmd-thread-branch-create"),
+        threadId,
+        projectId: ProjectId.makeUnsafe("project-1"),
+        title: "New thread",
+        modelSelection: { provider: "codex", model: "gpt-5-codex" },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        branch: null,
+        worktreePath: null,
+        createdAt: now,
+      }),
+    );
 
     await Effect.runPromise(
       harness.engine.dispatch({
         type: "thread.meta.update",
         commandId: CommandId.makeUnsafe("cmd-thread-branch"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        threadId,
         branch: "bigbud/1234abcd",
-        worktreePath: "/tmp/provider-project-worktree",
+        worktreePath,
       }),
     );
 
@@ -438,7 +464,7 @@ describe("ProviderCommandReactor", () => {
       harness.engine.dispatch({
         type: "thread.turn.start",
         commandId: CommandId.makeUnsafe("cmd-turn-start-branch-model"),
-        threadId: ThreadId.makeUnsafe("thread-1"),
+        threadId,
         message: {
           messageId: asMessageId("user-message-branch-model"),
           role: "user",
@@ -457,3 +483,5 @@ describe("ProviderCommandReactor", () => {
     });
   });
 });
+import fs from "node:fs";
+import path from "node:path";

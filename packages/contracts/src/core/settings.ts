@@ -1,18 +1,7 @@
-// TODO: Split by concern when this file is next touched.
 import { Effect } from "effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
-import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas";
-import {
-  ClaudeModelOptions,
-  CodexModelOptions,
-  CopilotModelOptions,
-  CursorModelOptions,
-  DevinModelOptions,
-  KilocodeModelOptions,
-  OpencodeModelOptions,
-  PiModelOptions,
-} from "./model";
+import { TrimmedString } from "./baseSchemas";
 import { ModelSelection } from "../orchestration/orchestration";
 import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
@@ -25,6 +14,30 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
+import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import {
+  AgentBrowserPreference,
+  ComputerUseActionTimeoutMs,
+  ComputerUseCheckInIntervalMs,
+  DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
+  DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  ThreadEnvMode,
+} from "./settings.serverShared";
+
+export * from "./settings.serverPatch";
+export * from "./settings.threadRetention";
+export {
+  AgentBrowserPreference,
+  COMPUTER_USE_ACTION_TIMEOUT_MS_MAX,
+  COMPUTER_USE_ACTION_TIMEOUT_MS_MIN,
+  COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX,
+  COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN,
+  ComputerUseActionTimeoutMs,
+  ComputerUseCheckInIntervalMs,
+  DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
+  DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  ThreadEnvMode,
+} from "./settings.serverShared";
 
 const DEFAULT_CHAT_CWD = "~/Documents";
 
@@ -57,12 +70,6 @@ export const TERMINAL_FONT_SIZE_MAX = 18;
 export const CONTEXT_WINDOW_WARNING_THRESHOLD_MIN = 60_000;
 export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
 export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
-export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN = 60_000;
-export const COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX = 60 * 60_000;
-export const DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS = 10 * 60_000;
-export const COMPUTER_USE_ACTION_TIMEOUT_MS_MIN = 10_000;
-export const COMPUTER_USE_ACTION_TIMEOUT_MS_MAX = 60 * 60_000;
-export const DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS = 15 * 60_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
@@ -74,12 +81,6 @@ const TerminalFontSize = Schema.Int.check(
 const ContextWindowWarningThreshold = Schema.Int.check(
   Schema.isGreaterThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MIN),
 ).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
-const ComputerUseCheckInIntervalMs = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_CHECK_IN_INTERVAL_MS_MIN),
-).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX));
-const ComputerUseActionTimeoutMs = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MIN),
-).check(Schema.isLessThanOrEqualTo(COMPUTER_USE_ACTION_TIMEOUT_MS_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
@@ -121,12 +122,6 @@ export type ClientSettings = typeof ClientSettingsSchema.Type;
 export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientSettingsSchema)({});
 
 // ── Server Settings (server-authoritative) ────────────────────
-
-export const ThreadEnvMode = Schema.Literals(THREAD_ENV_MODES);
-export type ThreadEnvMode = typeof ThreadEnvMode.Type;
-
-export const AgentBrowserPreference = Schema.Literals(["bigbud", "system"]);
-export type AgentBrowserPreference = typeof AgentBrowserPreference.Type;
 
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
@@ -254,6 +249,9 @@ export const ServerSettings = Schema.Struct({
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  threadRetentionPolicy: ThreadRetentionPolicy.pipe(
+    Schema.withDecodingDefault(() => "never" as const),
+  ),
   agentBrowserPreference: AgentBrowserPreference.pipe(
     Schema.withDecodingDefault(() => "bigbud" as const satisfies AgentBrowserPreference),
   ),
@@ -290,197 +288,3 @@ export const DEFAULT_UNIFIED_SETTINGS: UnifiedSettings = {
   ...DEFAULT_SERVER_SETTINGS,
   ...DEFAULT_CLIENT_SETTINGS,
 };
-
-// ── Server Settings Patch (replace with a Schema.deepPartial if available) ──────────────────────────────────────────
-
-const CodexModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(CodexModelOptions.fields.reasoningEffort),
-  fastMode: Schema.optionalKey(CodexModelOptions.fields.fastMode),
-});
-
-const ClaudeModelOptionsPatch = Schema.Struct({
-  thinking: Schema.optionalKey(ClaudeModelOptions.fields.thinking),
-  effort: Schema.optionalKey(ClaudeModelOptions.fields.effort),
-  fastMode: Schema.optionalKey(ClaudeModelOptions.fields.fastMode),
-  contextWindow: Schema.optionalKey(ClaudeModelOptions.fields.contextWindow),
-});
-
-const CopilotModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(CopilotModelOptions.fields.reasoningEffort),
-});
-
-const OpencodeModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(OpencodeModelOptions.fields.reasoningEffort),
-});
-
-const KilocodeModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(KilocodeModelOptions.fields.reasoningEffort),
-});
-
-const PiModelOptionsPatch = Schema.Struct({
-  thinkingLevel: Schema.optionalKey(PiModelOptions.fields.thinkingLevel),
-});
-
-const CursorModelOptionsPatch = Schema.Struct({
-  reasoning: Schema.optionalKey(CursorModelOptions.fields.reasoning),
-  contextWindow: Schema.optionalKey(CursorModelOptions.fields.contextWindow),
-  fastMode: Schema.optionalKey(CursorModelOptions.fields.fastMode),
-  thinking: Schema.optionalKey(CursorModelOptions.fields.thinking),
-});
-
-const DevinModelOptionsPatch = Schema.Struct({
-  reasoning: Schema.optionalKey(DevinModelOptions.fields.reasoning),
-  contextWindow: Schema.optionalKey(DevinModelOptions.fields.contextWindow),
-  fastMode: Schema.optionalKey(DevinModelOptions.fields.fastMode),
-  thinking: Schema.optionalKey(DevinModelOptions.fields.thinking),
-});
-
-const ModelSelectionPatch = Schema.Union([
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("codex")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(CodexModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("claudeAgent")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(ClaudeModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("cliProxy")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("copilot")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(CopilotModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("opencode")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(OpencodeModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("kilocode")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(KilocodeModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("pi")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(PiModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("cursor")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(CursorModelOptionsPatch),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("devin")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(DevinModelOptionsPatch),
-  }),
-]);
-
-const CodexSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  homePath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const ClaudeRolloutSettingsPatch = Schema.Struct({
-  modernTaskExposure: Schema.optionalKey(Schema.Boolean),
-  boundedHookProgress: Schema.optionalKey(Schema.Boolean),
-  forwardedSubagentText: Schema.optionalKey(Schema.Boolean),
-  mcpControls: Schema.optionalKey(Schema.Boolean),
-  fileCheckpointRewind: Schema.optionalKey(Schema.Boolean),
-  nativeFork: Schema.optionalKey(Schema.Boolean),
-});
-
-const ClaudeSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-  rollout: Schema.optionalKey(ClaudeRolloutSettingsPatch),
-});
-
-const CopilotSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const OpencodeSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const KilocodeSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const PiSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const CursorSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  apiEndpoint: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-const DevinSettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(Schema.String),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
-export const ServerSettingsPatch = Schema.Struct({
-  enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
-  enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
-  defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
-  defaultChatCwd: Schema.optionalKey(Schema.String),
-  textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
-  observability: Schema.optionalKey(
-    Schema.Struct({
-      otlpTracesUrl: Schema.optionalKey(Schema.String),
-      otlpMetricsUrl: Schema.optionalKey(Schema.String),
-    }),
-  ),
-  mobileRemoteControl: Schema.optionalKey(
-    Schema.Struct({
-      enabled: Schema.optionalKey(Schema.Boolean),
-    }),
-  ),
-  agentBrowserPreference: Schema.optionalKey(AgentBrowserPreference),
-  computerUseEnabled: Schema.optionalKey(Schema.Boolean),
-  hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
-  computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
-  computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
-  providers: Schema.optionalKey(
-    Schema.Struct({
-      codex: Schema.optionalKey(CodexSettingsPatch),
-      claudeAgent: Schema.optionalKey(ClaudeSettingsPatch),
-      cliProxy: Schema.optionalKey(
-        Schema.Struct({
-          enabled: Schema.optionalKey(Schema.Boolean),
-          configPath: Schema.optionalKey(Schema.String),
-        }),
-      ),
-      copilot: Schema.optionalKey(CopilotSettingsPatch),
-      kilocode: Schema.optionalKey(KilocodeSettingsPatch),
-      opencode: Schema.optionalKey(OpencodeSettingsPatch),
-      pi: Schema.optionalKey(PiSettingsPatch),
-      cursor: Schema.optionalKey(CursorSettingsPatch),
-      devin: Schema.optionalKey(DevinSettingsPatch),
-    }),
-  ),
-});
-export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;

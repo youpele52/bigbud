@@ -50,6 +50,16 @@ const ThreadDeleteAbortCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadRetentionDeleteCommand = Schema.Struct({
+  type: Schema.Literal("thread.retention-delete"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  runId: TrimmedNonEmptyString,
+  expectedLastActivityAt: IsoDateTime,
+  cutoffAt: IsoDateTime,
+  createdAt: IsoDateTime,
+});
+
 const ThreadPinMigrateCommand = Schema.Struct({
   type: Schema.Literal("thread.pin.migrate"),
   commandId: CommandId,
@@ -165,6 +175,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ProjectDeleteAbortCommand,
   ThreadDeleteFinalizeCommand,
   ThreadDeleteAbortCommand,
+  ThreadRetentionDeleteCommand,
   ThreadPinMigrateCommand,
   ThreadSessionSetCommand,
   ThreadTurnStartFailedCommand,

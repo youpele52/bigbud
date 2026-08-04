@@ -192,6 +192,16 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
       updateSettings: (patch) =>
         transport.request((client) => client[WS_METHODS.serverUpdateSettings]({ patch })),
+      previewThreadRetention: (input) =>
+        transport.request((client) => client[WS_METHODS.serverPreviewThreadRetention](input)),
+      startThreadRetention: (input) =>
+        transport.request((client) => client[WS_METHODS.serverStartThreadRetention](input)),
+      getThreadRetentionRun: (input) =>
+        transport.request((client) => client[WS_METHODS.serverGetThreadRetentionRun](input)),
+      listThreadRetentionRuns: (input = {}) =>
+        transport.request((client) => client[WS_METHODS.serverListThreadRetentionRuns](input)),
+      setThreadRetentionPolicy: (input) =>
+        transport.request((client) => client[WS_METHODS.serverSetThreadRetentionPolicy](input)),
       setThreadPinned: (input) =>
         transport.request((client) => client[WS_METHODS.serverSetThreadPinned](input)),
       readDocumentUrl: (input) =>

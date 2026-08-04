@@ -24,6 +24,7 @@
     "./constants/project.constant": "./src/constants/project.constant.ts",
     "./constants/settings.constant": "./src/constants/settings.constant.ts",
     "./core/baseSchemas": "./src/core/baseSchemas.ts",
+    "./core/settings.threadRetention": "./src/core/settings.threadRetention.ts",
     "./core/*": "./src/core/*",
     "./orchestration/*": "./src/orchestration/*",
     "./orchestration/orchestration.catalog": "./src/orchestration/orchestration.catalog.ts",
@@ -37,6 +38,8 @@
       "import": "./src/server/rpc.mobile.ts",
       "require": "./src/server/rpc.mobile.ts"
     },
+    "./server/rpc.retention": "./src/server/rpc.retention.ts",
+    "./server/threadRetention": "./src/server/threadRetention.ts",
     "./workspace/*": "./src/workspace/*",
     "./server/*": "./src/server/*"
   },

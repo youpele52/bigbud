@@ -52,6 +52,39 @@ describe("buildPiModels", () => {
     expect(models[0]!.group).toBe("OpenAI");
     expect(models[1]!.group).toBe("Google");
   });
+
+  it("derives model-specific thinking levels from Pi metadata", () => {
+    const [reasoning, nonReasoning] = buildPiModels(
+      [
+        {
+          id: "reasoning",
+          name: "Reasoning",
+          provider: "openai",
+          reasoning: true,
+          thinkingLevelMap: { minimal: null, xhigh: "xhigh" },
+        },
+        {
+          id: "plain",
+          name: "Plain",
+          provider: "openai",
+          reasoning: false,
+          thinkingLevelMap: { xhigh: "xhigh" },
+        },
+      ],
+      [],
+    );
+
+    expect(reasoning?.capabilities?.reasoningEffortLevels.map((option) => option.value)).toEqual([
+      "off",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(nonReasoning?.capabilities?.reasoningEffortLevels.map((option) => option.value)).toEqual(
+      ["off"],
+    );
+  });
 });
 
 describe("getSubProviderDisplayName integration", () => {

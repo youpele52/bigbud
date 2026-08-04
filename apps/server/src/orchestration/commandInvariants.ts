@@ -46,8 +46,16 @@ export function requireProject(input: {
   readonly projectId: ProjectId;
 }): Effect.Effect<OrchestrationProject, OrchestrationCommandInvariantError> {
   const project = findProjectById(input.readModel, input.projectId);
-  if (project) {
+  if (project && project.deletedAt === null) {
     return Effect.succeed(project);
+  }
+  if (project) {
+    return Effect.fail(
+      invariantError(
+        input.command.type,
+        `Project '${input.projectId}' has already been deleted and cannot handle command '${input.command.type}'.`,
+      ),
+    );
   }
   return Effect.fail(
     invariantError(
@@ -102,7 +110,8 @@ export function requireProjectAbsent(input: {
   readonly workspaceRoot?: string | null;
   readonly workspaceExecutionTargetId?: ExecutionTargetId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (findProjectById(input.readModel, input.projectId)) {
+  const existingById = findProjectById(input.readModel, input.projectId);
+  if (existingById && existingById.deletedAt === null) {
     return Effect.fail(
       invariantError(
         input.command.type,
@@ -137,8 +146,16 @@ export function requireThread(input: {
   readonly threadId: ThreadId;
 }): Effect.Effect<OrchestrationThread, OrchestrationCommandInvariantError> {
   const thread = findThreadById(input.readModel, input.threadId);
-  if (thread) {
+  if (thread && thread.deletedAt === null) {
     return Effect.succeed(thread);
+  }
+  if (thread) {
+    return Effect.fail(
+      invariantError(
+        input.command.type,
+        `Thread '${input.threadId}' has already been deleted and cannot handle command '${input.command.type}'.`,
+      ),
+    );
   }
   return Effect.fail(
     invariantError(
@@ -229,7 +246,8 @@ export function requireThreadAbsent(input: {
   readonly command: OrchestrationCommand;
   readonly threadId: ThreadId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
-  if (!findThreadById(input.readModel, input.threadId)) {
+  const existing = findThreadById(input.readModel, input.threadId);
+  if (!existing || existing.deletedAt !== null) {
     return Effect.void;
   }
   return Effect.fail(

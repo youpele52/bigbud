@@ -40,15 +40,38 @@ export interface DiffCheckpointsInput {
   readonly fallbackFromToHead?: boolean;
 }
 
+export interface ListThreadCheckpointRefsInput {
+  readonly cwd: string;
+  readonly threadId: string;
+  readonly identity?: CheckpointRepositoryIdentity;
+}
+
+export interface CheckpointPathIdentity {
+  readonly canonicalPath: string;
+  readonly device: number;
+  readonly inode: number;
+}
+
+export interface CheckpointRepositoryIdentity {
+  readonly workspace: CheckpointPathIdentity;
+  readonly gitCommonDir: CheckpointPathIdentity;
+}
+
 export interface DeleteCheckpointRefsInput {
   readonly cwd: string;
   readonly checkpointRefs: ReadonlyArray<CheckpointRef>;
+  readonly identity?: CheckpointRepositoryIdentity;
 }
 
 /**
  * CheckpointStoreShape - Service API for checkpoint capture/restore and diff access.
  */
 export interface CheckpointStoreShape {
+  /** Capture a stable, canonical identity for a workspace and its Git object store. */
+  readonly captureRepositoryIdentity: (
+    cwd: string,
+  ) => Effect.Effect<CheckpointRepositoryIdentity, CheckpointStoreError>;
+
   /**
    * Check whether cwd is inside a Git worktree.
    */
@@ -103,7 +126,15 @@ export interface CheckpointStoreShape {
    *
    * Best-effort delete: missing refs are tolerated.
    */
+  readonly listThreadCheckpointRefs: (
+    input: ListThreadCheckpointRefsInput,
+  ) => Effect.Effect<ReadonlyArray<CheckpointRef>, CheckpointStoreError>;
+
   readonly deleteCheckpointRefs: (
+    input: DeleteCheckpointRefsInput,
+  ) => Effect.Effect<void, CheckpointStoreError>;
+
+  readonly verifyCheckpointRefsAbsent: (
     input: DeleteCheckpointRefsInput,
   ) => Effect.Effect<void, CheckpointStoreError>;
 }

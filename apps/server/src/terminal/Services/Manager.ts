@@ -72,6 +72,7 @@ export interface TerminalStartInput extends TerminalOpenInput {
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
 export interface TerminalManagerShape {
+  readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
   /**
    * Open or attach to a terminal session.
    *

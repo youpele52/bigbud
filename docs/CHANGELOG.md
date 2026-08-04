@@ -5,9 +5,47 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ## What's new?
 
 - bigbud now takes better care of your work during updates and restarts, fixing stale local data automatically so you can get back to work with fewer interruptions.
-- Orchestra now lets agents manage notes and Kanban, send follow-ups across threads, pin important chats, and coordinate work across providers.
-- Claudex is now in bigbud. Connect your existing CLIProxyAPI setup and bigbud automatically discovers its live Claude-compatible model catalog in the provider picker.
-- Queued prompts survive refreshes and restarts, then resume automatically when a thread is ready.
+- More reliable provider workflows, including Claudex (CLIProxy) follow-ups, Pi thinking controls, Claude Ultracode, and stronger session recovery.
+- Automatic thread retention with configurable schedules, previews, confirmation, progress tracking, and safe recovery.
+- Queued prompts and history now remain reliable across refreshes and restarts.
+- Safer cleanup protects attachments and active browser, terminal, shell, computer-use, checkpoint, and provider resources.
+
+## v0.2.104 (4 August, 2026)
+
+### Automatic Thread Retention
+
+- Added configurable automatic retention for inactive, unpinned threads after 7 days, 14 days, 1 month, or 3 months, with **Never** available to disable scheduled cleanup.
+- Added retention previews, one-time confirmation challenges, manual deletion of eligible threads across projects, progress reporting, and recent run history in General settings.
+- Protected existing installations with a safe rollout default and made retention policy state server-authoritative, so malformed or direct settings-file edits cannot silently enable or shorten retention.
+- Added a dedicated retention service and recovery-aware scheduling path, so automatic cleanup can pause, retry, or require manual attention without blocking normal startup.
+
+### Provider Controls and Reliability
+
+- Fixed CLIProxyAPI-backed chats so follow-up messages no longer fail after the first reply when the active session does not need context-window rollover.
+- Added model-aware Pi thinking levels and a Claude **Ultracode** workflow option when supported by the selected model, with persisted model settings applied to provider sessions.
+- Claude effort choices now follow the selected model's available capabilities, while known Claude models retain sensible controls if live capability details are temporarily unavailable.
+- Improved provider session admission and recovery with startup timeouts, stale-session cleanup, explicit recovery modes, safer persistence during races, and fresh CLIProxy sessions when native resume state cannot be trusted.
+- Improved provider, terminal, browser, and computer-use lifecycle persistence so resources are released predictably during deletion, restart, and recovery flows.
+
+### Queued Prompts and History
+
+- Queued-prompt events now update live thread state incrementally and idempotently when prompts are added, removed, or flushed.
+- Fixed history decoding so pending placeholder rows cannot replace a thread's latest real turn.
+
+### Safer Cleanup and Recovery
+
+- Hardened thread deletion with activity tracking, deletion markers, verified projection baselines, bounded retries, execution leases, resource identity checks, and manual-recovery handling.
+- Cleanup now accounts for thread attachments, checkpoints, provider logs, terminal history, project memory, notes, Kanban data, managed worktrees, and active runtime resources while preserving attachments still referenced by retained threads.
+- Added clear deferral and failure handling when threads are active, provider cleanup is under pressure, maintenance is unavailable, or recovery work is incomplete.
+- Added safer cleanup for browser sessions, computer-use work, terminals, shells, and provider logs, ensuring active resources are settled before their associated thread data is removed.
+
+### Refined Dropdown Menus
+
+- Limited dropdown menus, including the model picker and composer settings, to half the window height with internal scrolling, keeping long option lists contained and easier to use.
+
+### Validation
+
+- Added regression coverage for retention policy authority, previews and consent challenges, scheduling and retries, purge manifests and resource claims, attachment sharing, runtime cleanup, provider recovery, Pi and Claude model traits, retention RPCs, settings UI state, queued prompts, and latest-turn projection.
 
 ## v0.2.103 (3 August, 2026)
 

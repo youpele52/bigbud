@@ -23,6 +23,7 @@ const LIFECYCLE_TYPES = new Set([
   "thread.delete",
   "thread.delete.finalize",
   "thread.delete.abort",
+  "thread.retention-delete",
   "thread.archive",
   "thread.unarchive",
   "thread.pin",

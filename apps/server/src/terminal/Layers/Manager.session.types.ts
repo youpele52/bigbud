@@ -45,6 +45,19 @@ export interface SessionApiContext {
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
   snapshot: (session: TerminalSessionState) => TerminalSessionSnapshot;
+  acquireWorktreeLease: (input: {
+    threadId: string;
+    terminalId: string;
+    executionTargetId: string;
+    cwd: string;
+    worktreePath: string | null | undefined;
+  }) => Effect.Effect<void, TerminalCwdError>;
+  markWorktreeLeaseStarted: (input: {
+    threadId: string;
+    terminalId: string;
+    processId: number;
+  }) => Effect.Effect<void>;
+  releaseWorktreeLease: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
   terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
 }
 
