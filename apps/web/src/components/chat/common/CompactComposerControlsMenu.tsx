@@ -39,7 +39,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
       >
         <EllipsisIcon aria-hidden="true" className="size-4" />
       </MenuTrigger>
-      <MenuPopup align="start">
+      <MenuPopup align="start" className="[--available-height:50dvh]">
         {props.traitsMenuContent ? (
           <>
             {props.traitsMenuContent}
