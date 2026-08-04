@@ -36,6 +36,13 @@ import {
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
+  WsServerPreviewThreadRetentionRpc,
+  WsServerSetThreadRetentionPolicyRpc,
+  WsServerStartThreadRetentionRpc,
+} from "./rpc.retention";
+import {
   WsGitCheckoutRpc,
   WsGitCreateBranchRpc,
   WsGitRenameBranchRpc,
@@ -109,6 +116,7 @@ export { WS_METHODS };
 export * from "./rpc.automation";
 export * from "./rpc.browser";
 export * from "./rpc.core";
+export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
 export * from "./rpc.workspace";
@@ -123,6 +131,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerPreviewThreadRetentionRpc,
+  WsServerStartThreadRetentionRpc,
+  WsServerGetThreadRetentionRunRpc,
+  WsServerListThreadRetentionRunsRpc,
+  WsServerSetThreadRetentionPolicyRpc,
   WsServerSetThreadPinnedRpc,
   WsServerReadDocumentUrlRpc,
   WsServerWriteHandoffDocumentRpc,
