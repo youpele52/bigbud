@@ -1,6 +1,6 @@
 // TODO: Split by concern when this file is next touched.
-import path from "node:path";
 import { Effect, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
@@ -22,10 +22,7 @@ import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
-import {
-  cleanupProviderLogDirectories,
-  makeEventNdjsonLogger,
-} from "./provider/Layers/EventNdjsonLogger";
+import { makeProviderLogSecurity } from "./server.providerLogs.ts";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
@@ -99,6 +96,11 @@ import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 import { EntityPurgeLive } from "./deletion/Layers/EntityPurge";
+import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
+import { VisibleBrowserControlLive } from "./browser/Layers/VisibleBrowserControl.ts";
+import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
+import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
+import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -107,42 +109,6 @@ const PtyAdapterLive = Layer.unwrap(
     } else {
       const NodePTY = yield* Effect.promise(() => import("./terminal/Layers/NodePTY"));
       return NodePTY.layer;
-    }
-  }),
-);
-
-const HttpServerLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig;
-    if (typeof Bun !== "undefined") {
-      const BunHttpServer = yield* Effect.promise(
-        () => import("@effect/platform-bun/BunHttpServer"),
-      );
-      return BunHttpServer.layer({
-        port: config.port,
-        ...(config.host ? { hostname: config.host } : {}),
-      });
-    } else {
-      const [NodeHttpServer, NodeHttp] = yield* Effect.all([
-        Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
-        Effect.promise(() => import("node:http")),
-      ]);
-      return NodeHttpServer.layer(NodeHttp.createServer, {
-        host: config.host,
-        port: config.port,
-      });
-    }
-  }),
-);
-
-const PlatformServicesLive = Layer.unwrap(
-  Effect.gen(function* () {
-    if (typeof Bun !== "undefined") {
-      const { layer } = yield* Effect.promise(() => import("@effect/platform-bun/BunServices"));
-      return layer;
-    } else {
-      const { layer } = yield* Effect.promise(() => import("@effect/platform-node/NodeServices"));
-      return layer;
     }
   }),
 );
@@ -177,20 +143,30 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   AutomationInfrastructureLayerLive,
   OrchestrationProjectionPipelineLayerLive,
   EntityPurgeLive.pipe(Layer.provide(OrchestrationProjectionPipelineLayerLive)),
+  ThreadRetentionRepositoryLive,
+  PurgeJobRepositoryLive,
+);
+
+const ComputerUseLayerLive = ComputerUseLive.pipe(
+  Layer.provideMerge(BrowserManagerLive),
+  Layer.provide(CuaDriverLive),
+  Layer.provide(OpenLive),
 );
 
 const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationInfrastructureLayerLive,
+  ComputerUseLayerLive,
+  VisibleBrowserControlLive,
   OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationInfrastructureLayerLive),
-    Layer.provide(
-      ComputerUseLive.pipe(
-        Layer.provide(BrowserManagerLive),
-        Layer.provide(CuaDriverLive),
-        Layer.provide(OpenLive),
-      ),
-    ),
+    Layer.provide(ComputerUseLayerLive),
+    Layer.provide(VisibleBrowserControlLive),
   ),
+);
+
+const ThreadRetentionLayerLive = ThreadRetentionLive.pipe(
+  Layer.provide(OrchestrationLayerLive),
+  Layer.provide(ServerSettingsLive),
 );
 
 const CheckpointingLayerLive = Layer.empty.pipe(
@@ -204,22 +180,9 @@ const makeProviderLayerLive = (
   Layer.unwrap(
     Effect.gen(function* () {
       const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
-      yield* cleanupProviderLogDirectories([
-        path.join(baseDir, "userdata", "logs", "provider"),
-        path.join(baseDir, "dev", "logs", "provider"),
-      ]);
-      const nativeEventLogger =
-        devUrl !== undefined
-          ? yield* makeEventNdjsonLogger(providerEventLogPath, {
-              stream: "native",
-            })
-          : undefined;
-      const canonicalEventLogger =
-        devUrl !== undefined
-          ? yield* makeEventNdjsonLogger(providerEventLogPath, {
-              stream: "canonical",
-            })
-          : undefined;
+      const sql = yield* SqlClient.SqlClient;
+      const { canonicalEventLogger, nativeEventLogger, settleThreadLogs } =
+        yield* makeProviderLogSecurity({ baseDir, devUrl, providerEventLogPath, sql });
       const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(ProviderSessionRuntimeRepositoryLive),
       );
@@ -266,6 +229,7 @@ const makeProviderLayerLive = (
       const getProviderCapabilities = makeProviderCapabilitiesResolver(optionalRegistrations);
       return makeProviderServiceLive({
         ...(canonicalEventLogger ? { canonicalEventLogger } : {}),
+        settleThreadLogs,
         getProviderCapabilities,
         isProviderComposed: (provider) => isProviderRegistered(provider, optionalRegistrations),
       }).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
@@ -331,6 +295,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(CheckpointingLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
+  Layer.provideMerge(ThreadRetentionLayerLive),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
   Layer.provideMerge(TerminalLayerLive),
@@ -338,13 +303,13 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(KeybindingsLive),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
-  Layer.provideMerge(ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive))),
+  Layer.provideMerge(
+    ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive), Layer.provide(PersistenceLayerLive)),
+  ),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
   // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process
   Layer.provideMerge(OpencodeServerManagerLive),
-  // Browser automation for agent-driven web tasks
-  Layer.provideMerge(BrowserManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
   Layer.provideMerge(OpenLive),

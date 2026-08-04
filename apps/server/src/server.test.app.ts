@@ -2,69 +2,32 @@ import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 
-import {
-  CheckpointDiffQuery,
-  type CheckpointDiffQueryShape,
-} from "./checkpointing/Services/CheckpointDiffQuery.ts";
-import { GitCore, type GitCoreShape } from "./git/Services/GitCore.ts";
-import { GitManager, type GitManagerShape } from "./git/Services/GitManager.ts";
+import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
+import { GitCore } from "./git/Services/GitCore.ts";
+import { GitManager } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
-import { Keybindings, type KeybindingsShape } from "./keybindings/keybindings.ts";
-import {
-  MobileRemoteControl,
-  type MobileRemoteControlShape,
-} from "./mobile/Services/MobileRemoteControl.ts";
+import { Keybindings } from "./keybindings/keybindings.ts";
+import { MobileRemoteControl } from "./mobile/Services/MobileRemoteControl.ts";
 import { BrowserTraceCollector } from "./observability/Services/BrowserTraceCollector.ts";
-import {
-  OrchestrationEngineService,
-  type OrchestrationEngineShape,
-} from "./orchestration/Services/OrchestrationEngine.ts";
-import {
-  ProjectionSnapshotQuery,
-  type ProjectionSnapshotQueryShape,
-} from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import { SchedulerReactor } from "./orchestration/Services/SchedulerReactor.ts";
-import {
-  ProjectionCatalogQuery,
-  type ProjectionCatalogQueryShape,
-} from "./orchestration/Services/ProjectionCatalogQuery.ts";
+import { ProjectionCatalogQuery } from "./orchestration/Services/ProjectionCatalogQuery.ts";
 import { ProjectionKanbanRepository } from "./persistence/Services/ProjectionKanban.ts";
 import { ProjectionNoteRepository } from "./persistence/Services/ProjectionNotes.ts";
 import { AutomationScheduleRepository } from "./persistence/Services/AutomationScheduleRepository.ts";
-import {
-  ProjectionThreadRepository,
-  type ProjectionThreadRepositoryShape,
-} from "./persistence/Services/ProjectionThreads.ts";
-import {
-  ProjectSetupScriptRunner,
-  type ProjectSetupScriptRunnerShape,
-} from "./project/Services/ProjectSetupScriptRunner.ts";
-import {
-  DiscoveryRegistry,
-  type DiscoveryRegistryShape,
-} from "./provider/Services/DiscoveryRegistry.ts";
-import {
-  ProviderRegistry,
-  type ProviderRegistryShape,
-} from "./provider/Services/ProviderRegistry.ts";
-import { ProviderService, type ProviderServiceShape } from "./provider/Services/ProviderService.ts";
+import { ProjectionThreadRepository } from "./persistence/Services/ProjectionThreads.ts";
+import { ProjectSetupScriptRunner } from "./project/Services/ProjectSetupScriptRunner.ts";
+import { DiscoveryRegistry } from "./provider/Services/DiscoveryRegistry.ts";
+import { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
+import { ProviderService } from "./provider/Services/ProviderService.ts";
 import { makeRoutesLayer } from "./server.ts";
-import {
-  ThreadShellRunner,
-  type ThreadShellRunnerShape,
-} from "./shell/Services/ThreadShellRunner.ts";
-import type { ServerConfigShape } from "./startup/config.ts";
+import { ThreadShellRunner } from "./shell/Services/ThreadShellRunner.ts";
 import { ServerConfig } from "./startup/config.ts";
-import {
-  ServerLifecycleEvents,
-  type ServerLifecycleEventsShape,
-} from "./startup/serverLifecycleEvents.ts";
-import {
-  ServerRuntimeStartup,
-  type ServerRuntimeStartupShape,
-} from "./startup/serverRuntimeStartup.ts";
-import { TerminalManager, type TerminalManagerShape } from "./terminal/Services/Manager.ts";
-import { Open, type OpenShape } from "./utils/open.ts";
+import { ServerLifecycleEvents } from "./startup/serverLifecycleEvents.ts";
+import { ServerRuntimeStartup } from "./startup/serverRuntimeStartup.ts";
+import { TerminalManager } from "./terminal/Services/Manager.ts";
+import { Open } from "./utils/open.ts";
 import { buildTestServerConfig } from "./server.test.app.config.ts";
 import {
   workspaceAndProjectServicesLayer,
@@ -72,32 +35,10 @@ import {
   defaultThreadId,
   defaultProjectId,
 } from "./server.test.fixtures.ts";
-import { ServerSettingsService, type ServerSettingsShape } from "./ws/serverSettings.ts";
+import { ServerSettingsService } from "./ws/serverSettings.ts";
+import type { BuildAppUnderTestOptions } from "./server.test.app.types.ts";
 
-export const buildAppUnderTest = (options?: {
-  config?: Partial<ServerConfigShape>;
-  layers?: {
-    keybindings?: Partial<KeybindingsShape>;
-    providerRegistry?: Partial<ProviderRegistryShape>;
-    providerService?: Partial<ProviderServiceShape>;
-    discoveryRegistry?: Partial<DiscoveryRegistryShape>;
-    serverSettings?: Partial<ServerSettingsShape>;
-    open?: Partial<OpenShape>;
-    gitCore?: Partial<GitCoreShape>;
-    gitManager?: Partial<GitManagerShape>;
-    projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
-    threadShellRunner?: Partial<ThreadShellRunnerShape>;
-    mobileRemoteControl?: Partial<MobileRemoteControlShape>;
-    terminalManager?: Partial<TerminalManagerShape>;
-    orchestrationEngine?: Partial<OrchestrationEngineShape>;
-    projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
-    projectionCatalogQuery?: Partial<ProjectionCatalogQueryShape>;
-    projectionThreadRepository?: Partial<ProjectionThreadRepositoryShape>;
-    checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
-    serverLifecycleEvents?: Partial<ServerLifecycleEventsShape>;
-    serverRuntimeStartup?: Partial<ServerRuntimeStartupShape>;
-  };
-}) =>
+export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
   Effect.gen(function* () {
     const config = yield* buildTestServerConfig(options);
     const layerConfig = Layer.succeed(ServerConfig, config);
@@ -357,6 +298,7 @@ export const buildAppUnderTest = (options?: {
                       queuedPrompts: [],
                       createdAt: thread.createdAt,
                       updatedAt: thread.updatedAt,
+                      lastActivityAt: thread.updatedAt,
                       archivedAt: thread.archivedAt,
                       pinnedAt: thread.pinnedAt ?? null,
                       deletingAt: null,
@@ -368,6 +310,7 @@ export const buildAppUnderTest = (options?: {
             listByProjectId: () => Effect.succeed([]),
             upsert: () => Effect.void,
             deleteById: () => Effect.void,
+            touchActivity: () => Effect.void,
             ...options?.layers?.projectionThreadRepository,
           }),
           Layer.mock(AutomationScheduleRepository)({

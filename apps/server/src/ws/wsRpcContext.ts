@@ -7,6 +7,7 @@ import {
   GitCommandError,
   type ThreadId,
 } from "@bigbud/contracts";
+import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
 
 import { CheckpointDiffQuery } from "../checkpointing/Services/CheckpointDiffQuery";
 import { ServerConfig } from "../startup/config";
@@ -44,6 +45,7 @@ import { ProjectionThreadRepository } from "../persistence/Services/ProjectionTh
 import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
+import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 
 class CliProxyActivationEffectError extends Schema.TaggedErrorClass<CliProxyActivationEffectError>()(
   "CliProxyActivationEffectError",
@@ -120,6 +122,23 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const mobileRemoteControl = yield* MobileRemoteControl;
   const fileSystem = yield* FileSystem.FileSystem;
   const handoffJobs = yield* makeServerHandoffJobs;
+  const threadRetentionOption = yield* Effect.serviceOption(ThreadRetention);
+  const retentionUnavailable = () =>
+    Effect.fail(
+      new ServerThreadRetentionError({
+        code: "disabled",
+        message: "Thread retention is unavailable in this server runtime.",
+      }),
+    );
+  const threadRetention = Option.getOrElse(threadRetentionOption, () => ({
+    preview: retentionUnavailable,
+    enqueue: retentionUnavailable,
+    getRun: retentionUnavailable,
+    listRuns: retentionUnavailable,
+    setPolicy: retentionUnavailable,
+    runScheduledOnce: retentionUnavailable(),
+    start: Effect.void,
+  }));
 
   const serverCommandId = (tag: string) =>
     CommandId.makeUnsafe(`server:${tag}:${crypto.randomUUID()}`);
@@ -322,6 +341,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     startup,
     terminalManager,
     threadShellRunner,
+    threadRetention,
     toDispatchCommandError,
     workspaceEntries,
     workspaceFileSystem,

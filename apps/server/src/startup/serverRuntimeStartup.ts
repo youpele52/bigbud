@@ -25,6 +25,8 @@ import { cleanupHandoffDocumentFiles } from "../ws/wsHandoffDocument.ts";
 import { EntityPurge } from "../deletion/Services/EntityPurge.ts";
 import { runLegacyPinnedThreadSettingsMigration } from "./LegacyPinnedThreadSettingsMigration.ts";
 import { writeStartupStatus } from "./startupStatus.ts";
+import { runThreadRetentionSettingsMigration } from "./ThreadRetentionSettingsMigration.ts";
+import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -146,6 +148,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
   const lifecycleEvents = yield* ServerLifecycleEvents;
   const serverSettings = yield* ServerSettingsService;
   const entityPurge = yield* EntityPurge;
+  const threadRetention = yield* Effect.serviceOption(ThreadRetention);
   const commandGate = yield* makeCommandGate;
   const httpListening = yield* Deferred.make<void>();
   const reactorScope = yield* Scope.make("sequential");
@@ -183,6 +186,9 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       ),
     );
     yield* runStartupPhase("settings.ready", serverSettings.ready);
+
+    yield* Effect.logDebug("startup phase: migrating thread retention settings");
+    yield* runStartupPhase("retention.settings.migrate", runThreadRetentionSettingsMigration());
 
     yield* Effect.logDebug("startup phase: starting handoff document cleanup");
     yield* runStartupPhase(
@@ -267,9 +273,12 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
           ),
         ),
       );
-
       yield* Effect.logDebug("startup phase: recording startup heartbeat");
       yield* launchStartupHeartbeat;
+      yield* Effect.yieldNow;
+      if (threadRetention._tag === "Some") {
+        yield* Effect.forkScoped(threadRetention.value.start);
+      }
       yield* Effect.logDebug("startup phase: browser open check");
       yield* runStartupPhase("browser.open", maybeOpenBrowser);
       yield* Effect.logDebug("startup phase: complete");

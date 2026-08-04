@@ -30,6 +30,7 @@ import {
   ServerRuntimeStartupLive,
 } from "./serverRuntimeStartup.ts";
 import { runStartupPhase } from "./serverRuntimeStartup.browser.ts";
+import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 
 const hasMetricSnapshot = (
   snapshots: ReadonlyArray<Metric.Metric.Snapshot>,
@@ -52,6 +53,8 @@ const startupLayer = (
     projectEvent: () => Effect.void,
   },
   reactorStart: Effect.Effect<void> = Effect.sync(() => events.push("reactors.start")),
+  retentionStart?: Effect.Effect<void>,
+  analyticsRecord: (name: string) => Effect.Effect<void> = () => Effect.void,
 ) => {
   const nodeServices = NodeServices.layer;
   const serverConfig = ServerConfig.layerTest(process.cwd(), {
@@ -65,7 +68,10 @@ const startupLayer = (
         serverConfig,
         ServerLifecycleEventsLive,
         ServerSettingsService.layerTest(),
-        AnalyticsService.layerTest,
+        Layer.succeed(AnalyticsService, {
+          record: analyticsRecord,
+          flush: Effect.void,
+        }),
         Layer.succeed(OrchestrationProjectionPipeline, projectionPipeline),
         Layer.succeed(Keybindings, {
           start: Effect.void,
@@ -80,6 +86,7 @@ const startupLayer = (
           requestThread: () => Effect.die("purge requestThread"),
           requestProject: () => Effect.die("purge requestProject"),
           run: () => Effect.die("purge run"),
+          runBatch: () => Effect.die("purge runBatch"),
           auditAndResume: () => Effect.sync(() => events.push("purge.audit")),
         }),
         Layer.succeed(OrchestrationReactor, {
@@ -114,6 +121,13 @@ const startupLayer = (
           openInEditor: () => Effect.void,
           openPath: () => Effect.void,
         }),
+        ...(retentionStart
+          ? [
+              Layer.mock(ThreadRetention)({
+                start: retentionStart,
+              }),
+            ]
+          : []),
       ),
     ),
   );
@@ -230,6 +244,37 @@ it.effect("defers the purge audit until after readiness", () => {
       yield* Effect.yieldNow;
       assert.deepEqual(events, ["reactors.start", "purge.audit"]);
     }).pipe(Effect.provide(startupLayer(events))),
+  );
+});
+
+it.effect("starts the heartbeat before thread retention", () => {
+  const events: Array<string> = [];
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const startup = yield* ServerRuntimeStartup;
+      const lifecycleEvents = yield* ServerLifecycleEvents;
+      const readyEvent = yield* lifecycleEvents.stream.pipe(
+        Stream.filter((event) => event.type === "ready"),
+        Stream.runHead,
+        Effect.forkScoped,
+      );
+      yield* startup.awaitCommandReady;
+      yield* startup.markHttpListening;
+      yield* Fiber.join(readyEvent);
+      for (let index = 0; index < 10; index += 1) yield* Effect.yieldNow;
+      assert.isBelow(events.indexOf("heartbeat"), events.indexOf("retention.start"));
+    }).pipe(
+      Effect.provide(
+        startupLayer(
+          events,
+          undefined,
+          undefined,
+          Effect.sync(() => events.push("retention.start")),
+          (name) =>
+            Effect.sync(() => events.push(name === "server.boot.heartbeat" ? "heartbeat" : name)),
+        ),
+      ),
+    ),
   );
 });
 
