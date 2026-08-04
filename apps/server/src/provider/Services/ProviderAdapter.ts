@@ -41,7 +41,11 @@ export interface ProviderMcpOperations<TError> {
 }
 
 export type ProviderSessionModelSwitchMode = "in-session" | "restart-session" | "unsupported";
-export type ProviderSessionRecoveryMode = "reinitialize" | "resume-restart" | "unsupported";
+export type ProviderSessionRecoveryMode =
+  | "reinitialize"
+  | "resume-restart"
+  | "fresh-restart"
+  | "unsupported";
 export type ProviderConversationRewindMode = "transcript-and-files" | "files-only" | "unsupported";
 export type ProviderConversationForkMode = "native" | "resume-copy" | "unsupported";
 

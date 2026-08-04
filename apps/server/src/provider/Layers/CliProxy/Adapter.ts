@@ -1,5 +1,6 @@
 import type {
   ProviderRuntimeEvent,
+  ProviderSession,
   ProviderSendTurnInput,
   ProviderSessionStartInput,
   ThreadId,
@@ -81,6 +82,23 @@ function requireCliProxyModelSelection(
   return Effect.succeed({ provider: PROVIDER, model: candidate.model.trim() });
 }
 
+function requireCliProxySession(
+  sessions: ReadonlyArray<ProviderSession>,
+  threadId: ThreadId,
+): Effect.Effect<ProviderSession, ProviderAdapterSessionNotFoundError> {
+  const session = sessions.find(
+    (candidate) => candidate.threadId === threadId && candidate.status !== "closed",
+  );
+  return session
+    ? Effect.succeed(session)
+    : Effect.fail(
+        new ProviderAdapterSessionNotFoundError({
+          provider: PROVIDER,
+          threadId,
+        }),
+      );
+}
+
 export function toClaudeSendTurnInput(input: ProviderSendTurnInput): ProviderSendTurnInput {
   return {
     ...input,
@@ -147,7 +165,6 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
 ) {
   const settings = yield* ServerSettingsService;
   const lifecycle = yield* CliProxyLifecycle;
-  const sessionModels = new Map<ThreadId, string | undefined>();
   const resolveRuntimeConfig = options?.resolveRuntimeConfig ?? resolveCliProxyRuntimeConfig;
   const claude = yield* makeClaudeAdapter({
     ...(options?.createQuery ? { createQuery: options.createQuery } : {}),
@@ -163,7 +180,10 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "unsupported",
-      sessionRecovery: "unsupported",
+      // CLIProxy's Claude-compatible endpoint does not expose a verified native
+      // resume contract. Recovery is therefore a fresh Claude session whose
+      // transcript is rebuilt by orchestration before the next turn.
+      sessionRecovery: "fresh-restart",
       conversationRewind: "unsupported",
       conversationFork: "unsupported",
     },
@@ -180,37 +200,39 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
                 modelSelection: selection,
               }),
             )
-            .pipe(
-              Effect.map((session) => {
-                sessionModels.set(input.threadId, selection.model);
-                return remapSession(session);
-              }),
-            );
+            .pipe(Effect.map((session) => remapSession(session)));
         }),
         Effect.mapError(remapError),
       ),
     sendTurn: (input) =>
-      requireCliProxyModelSelection(input, "sendTurn").pipe(
-        Effect.flatMap((selection) => {
-          const currentModel = sessionModels.get(input.threadId);
-          if (currentModel === undefined) {
-            return Effect.fail(
-              new ProviderAdapterSessionNotFoundError({
-                provider: PROVIDER,
-                threadId: input.threadId,
-              }),
-            );
-          }
-          if (selection.model !== currentModel) {
-            return Effect.fail(unsupported(input.threadId, "in-session model switching"));
-          }
-          return claude.sendTurn(
-            toClaudeSendTurnInput({
-              ...input,
-              modelSelection: selection,
+      claude.listSessions().pipe(
+        Effect.flatMap((sessions) => requireCliProxySession(sessions, input.threadId)),
+        Effect.flatMap((session) =>
+          (input.modelSelection === undefined
+            ? typeof session.model === "string" && session.model.trim().length > 0
+              ? Effect.succeed({ provider: PROVIDER, model: session.model })
+              : Effect.fail(
+                  new ProviderAdapterValidationError({
+                    provider: PROVIDER,
+                    operation: "sendTurn",
+                    issue: "CLIProxyAPI session has no live model selection.",
+                  }),
+                )
+            : requireCliProxyModelSelection(input, "sendTurn")
+          ).pipe(
+            Effect.flatMap((selection) => {
+              if (selection.model !== session.model) {
+                return Effect.fail(unsupported(input.threadId, "in-session model switching"));
+              }
+              return claude.sendTurn(
+                toClaudeSendTurnInput({
+                  ...input,
+                  modelSelection: selection,
+                }),
+              );
             }),
-          );
-        }),
+          ),
+        ),
         Effect.mapError(remapError),
       ),
     interruptTurn: (threadId, turnId) =>
@@ -219,21 +241,19 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
       claude.respondToRequest(threadId, requestId, decision).pipe(Effect.mapError(remapError)),
     respondToUserInput: (threadId, requestId, answers) =>
       claude.respondToUserInput(threadId, requestId, answers).pipe(Effect.mapError(remapError)),
-    stopSession: (threadId) =>
-      claude.stopSession(threadId).pipe(
-        Effect.tap(() => Effect.sync(() => sessionModels.delete(threadId))),
-        Effect.mapError(remapError),
-      ),
+    stopSession: (threadId) => claude.stopSession(threadId).pipe(Effect.mapError(remapError)),
     listSessions: () =>
-      claude.listSessions().pipe(Effect.map((sessions) => sessions.map(remapSession))),
+      claude
+        .listSessions()
+        .pipe(
+          Effect.map((sessions) =>
+            sessions.filter((session) => session.status !== "closed").map(remapSession),
+          ),
+        ),
     hasSession: claude.hasSession,
     readThread: (threadId) => claude.readThread(threadId).pipe(Effect.mapError(remapError)),
     rollbackThread: (threadId) => Effect.fail(unsupported(threadId, "conversation rewind")),
-    stopAll: () =>
-      claude.stopAll().pipe(
-        Effect.tap(() => Effect.sync(() => sessionModels.clear())),
-        Effect.mapError(remapError),
-      ),
+    stopAll: () => claude.stopAll().pipe(Effect.mapError(remapError)),
     streamEvents: Stream.map(claude.streamEvents, remapEvent),
     ...(claude.mcp ? { mcp: remapMcp(claude.mcp) } : {}),
   } satisfies CliProxyAdapterShape;

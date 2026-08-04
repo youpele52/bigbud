@@ -1,6 +1,7 @@
 import type {
   EventId,
   CanonicalItemType,
+  PiThinkingLevel,
   ProviderRuntimeEvent,
   ProviderSession,
   ThreadId,
@@ -29,7 +30,7 @@ export interface PiAdapterModelSelection {
   readonly provider: "pi";
   readonly model: string;
   readonly options?: {
-    readonly thinkingLevel?: string;
+    readonly thinkingLevel?: PiThinkingLevel;
   };
   readonly subProviderID?: string;
 }
@@ -60,7 +61,7 @@ export interface ActivePiSession {
   cwd: string | undefined;
   model: string | undefined;
   providerID: string | undefined;
-  thinkingLevel: string | undefined;
+  thinkingLevel: PiThinkingLevel | undefined;
   updatedAt: string;
   lastError: string | undefined;
   agentRunning: boolean;

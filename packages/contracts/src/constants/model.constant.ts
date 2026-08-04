@@ -12,17 +12,6 @@
 export const CODEX_REASONING_EFFORT_OPTIONS = ["xhigh", "high", "medium", "low"] as const;
 
 /**
- * Code effort levels available for Claude models.
- *
- * - `ultrathink`: Maximum thinking time for complex problems
- * - `max`: Extended thinking for difficult tasks
- * - `high`: Thorough analysis
- * - `medium`: Balanced effort (recommended)
- * - `low`: Quick responses
- */
-export const CLAUDE_CODE_EFFORT_OPTIONS = ["low", "medium", "high", "max", "ultrathink"] as const;
-
-/**
  * Default model for each provider.
  *
  * These are used when:

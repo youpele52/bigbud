@@ -4,7 +4,7 @@ import {
   type ProviderSession,
   type ThreadId,
 } from "@bigbud/contracts";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Exit, Option } from "effect";
 
 import {
   providerMetricAttributes,
@@ -155,7 +155,8 @@ export function makeStartSessionInternal(input: {
       }
 
       const adapter = yield* input.registry.getByProvider(startInput.provider);
-      const recoveryUnsupported = adapter.capabilities.sessionRecovery === "unsupported";
+      const recoveryMode = adapter.capabilities.sessionRecovery;
+      const recoveryUnsupported = recoveryMode === "unsupported";
       if (startInput.resumeCursor !== undefined && recoveryUnsupported) {
         return yield* toValidationError(
           "ProviderService.startSession",
@@ -163,50 +164,85 @@ export function makeStartSessionInternal(input: {
         );
       }
       const effectiveResumeCursor =
-        startInput.resumeCursor ??
-        (!recoveryUnsupported &&
-        input.options?.reusePersistedResumeCursor !== false &&
-        persistedBinding?.provider === startInput.provider
-          ? persistedBinding.resumeCursor
-          : undefined);
-      const sessionOption = yield* adapter
-        .startSession({
-          ...startInput,
-          ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
-        })
-        .pipe(Effect.timeoutOption(PROVIDER_SESSION_START_TIMEOUT));
-      const session =
-        Option.getOrUndefined(sessionOption) ??
-        (yield* toValidationError(
-          "ProviderService.startSession",
-          `Provider '${startInput.provider}' session startup timed out after ${Duration.toSeconds(PROVIDER_SESSION_START_TIMEOUT)}s before the first turn could be sent.`,
-        ));
-
-      if (session.provider !== adapter.provider) {
-        return yield* toValidationError(
-          "ProviderService.startSession",
-          `Adapter/provider mismatch: requested '${adapter.provider}', received '${session.provider}'.`,
-        );
-      }
-
-      yield* input.stopStaleSessionsForThread({
-        threadId,
-        currentProvider: adapter.provider,
-      });
-      yield* input.upsertSessionBinding(session, threadId, {
-        modelSelection: startInput.modelSelection,
-      });
-      yield* input.analytics.record("provider.session.started", {
-        provider: session.provider,
-        runtimeMode: startInput.runtimeMode,
-        hasResumeCursor: session.resumeCursor !== undefined,
-        hasCwd: typeof startInput.cwd === "string" && startInput.cwd.trim().length > 0,
-        hasModel:
-          typeof startInput.modelSelection?.model === "string" &&
-          startInput.modelSelection.model.trim().length > 0,
+        recoveryMode === "fresh-restart"
+          ? undefined
+          : (startInput.resumeCursor ??
+            (!recoveryUnsupported &&
+            input.options?.reusePersistedResumeCursor !== false &&
+            persistedBinding?.provider === startInput.provider
+              ? persistedBinding.resumeCursor
+              : undefined));
+      let admitted = false;
+      let adapterAttempted = false;
+      const restoreBinding = persistedBinding
+        ? input.directory.upsert(persistedBinding)
+        : input.directory.remove(threadId);
+      const rollbackStart = Effect.gen(function* () {
+        const stopExit = adapterAttempted
+          ? yield* Effect.exit(adapter.stopSession(threadId))
+          : Exit.void;
+        const restoreExit = admitted ? yield* Effect.exit(restoreBinding) : Exit.void;
+        if (Exit.isFailure(stopExit)) return yield* Effect.failCause(stopExit.cause);
+        if (Exit.isFailure(restoreExit)) return yield* Effect.failCause(restoreExit.cause);
       });
 
-      return session;
+      return yield* Effect.gen(function* () {
+        yield* input.directory.upsert({
+          threadId,
+          provider: startInput.provider,
+          providerRuntimeExecutionTargetId: startInput.providerRuntimeExecutionTargetId,
+          workspaceExecutionTargetId: startInput.workspaceExecutionTargetId,
+          executionTargetId: startInput.executionTargetId,
+          runtimeMode: startInput.runtimeMode,
+          status: "starting",
+          runtimePayload: {
+            ...(startInput.cwd ? { cwd: startInput.cwd } : {}),
+            ...(startInput.modelSelection ? { modelSelection: startInput.modelSelection } : {}),
+            lastRuntimeEvent: "provider.startSession.admitted",
+            lastRuntimeEventAt: new Date().toISOString(),
+          },
+        });
+        admitted = true;
+        adapterAttempted = true;
+        const sessionOption = yield* adapter
+          .startSession({
+            ...startInput,
+            ...(effectiveResumeCursor !== undefined ? { resumeCursor: effectiveResumeCursor } : {}),
+          })
+          .pipe(Effect.timeoutOption(PROVIDER_SESSION_START_TIMEOUT));
+        const session =
+          Option.getOrUndefined(sessionOption) ??
+          (yield* toValidationError(
+            "ProviderService.startSession",
+            `Provider '${startInput.provider}' session startup timed out after ${Duration.toSeconds(PROVIDER_SESSION_START_TIMEOUT)}s before the first turn could be sent.`,
+          ));
+
+        if (session.provider !== adapter.provider) {
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            `Adapter/provider mismatch: requested '${adapter.provider}', received '${session.provider}'.`,
+          );
+        }
+
+        yield* input.stopStaleSessionsForThread({
+          threadId,
+          currentProvider: adapter.provider,
+        });
+        yield* input.upsertSessionBinding(session, threadId, {
+          modelSelection: startInput.modelSelection,
+        });
+        yield* input.analytics.record("provider.session.started", {
+          provider: session.provider,
+          runtimeMode: startInput.runtimeMode,
+          hasResumeCursor: session.resumeCursor !== undefined,
+          hasCwd: typeof startInput.cwd === "string" && startInput.cwd.trim().length > 0,
+          hasModel:
+            typeof startInput.modelSelection?.model === "string" &&
+            startInput.modelSelection.model.trim().length > 0,
+        });
+
+        return session;
+      }).pipe(Effect.onError(() => rollbackStart.pipe(Effect.orDie)));
     }).pipe(
       withMetrics({
         counter: providerSessionsTotal,

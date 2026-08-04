@@ -114,6 +114,10 @@ export interface ClaudeSessionContext {
   readonly basePermissionMode: PermissionMode | undefined;
   effectivePermissionMode: PermissionMode | undefined;
   currentApiModelId: string | undefined;
+  currentEffort: ClaudeQueryOptions["effort"] | undefined;
+  currentFastMode: boolean;
+  currentThinking: boolean | undefined;
+  currentUltracode: boolean;
   resumeSessionId: string | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;

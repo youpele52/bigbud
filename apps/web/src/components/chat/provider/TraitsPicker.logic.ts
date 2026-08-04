@@ -34,6 +34,9 @@ export function getRawEffort(
   if (provider === "opencode") {
     return trimOrNull((modelOptions as OpencodeModelOptions | undefined)?.reasoningEffort);
   }
+  if (provider === "pi") {
+    return null;
+  }
   return trimOrNull((modelOptions as ClaudeModelOptions | undefined)?.effort);
 }
 
@@ -73,7 +76,23 @@ export function buildNextOptions(
       ...patch,
     } as OpencodeModelOptions;
   }
+  if (provider === "pi") {
+    return { ...(modelOptions as PiModelOptions | undefined), ...patch } as PiModelOptions;
+  }
   return { ...(modelOptions as ClaudeModelOptions | undefined), ...patch } as ClaudeModelOptions;
+}
+
+export function buildNextPiThinkingOptions(
+  modelOptions: ProviderOptions | null | undefined,
+  thinkingLevel: PiModelOptions["thinkingLevel"] | undefined,
+): PiModelOptions | undefined {
+  const nextOptions = { ...(modelOptions as PiModelOptions | undefined) };
+  if (thinkingLevel === undefined) {
+    delete nextOptions.thinkingLevel;
+  } else {
+    nextOptions.thinkingLevel = thinkingLevel;
+  }
+  return Object.keys(nextOptions).length > 0 ? nextOptions : undefined;
 }
 
 export function getSelectedTraits(
@@ -86,13 +105,26 @@ export function getSelectedTraits(
 ) {
   const caps = getProviderModelCapabilities(models, model, provider);
   const effortLevels = allowPromptInjectedEffort
-    ? caps.reasoningEffortLevels
+    ? [
+        ...caps.reasoningEffortLevels,
+        ...caps.promptInjectedEffortLevels
+          .filter((value) => !caps.reasoningEffortLevels.some((option) => option.value === value))
+          .map((value) => ({
+            value,
+            label: value === "ultrathink" ? "Ultrathink" : value,
+          })),
+      ]
     : caps.reasoningEffortLevels.filter(
         (option) => !caps.promptInjectedEffortLevels.includes(option.value),
       );
   const rawEffort = getRawEffort(provider, modelOptions);
   const effort = resolveEffort(caps, rawEffort) ?? null;
   const thinkingLevel = provider === "pi" ? getRawThinkingLevel(modelOptions) : null;
+  const thinkingLevels = provider === "pi" ? caps.reasoningEffortLevels : [];
+  const workflowModes = provider === "claudeAgent" ? (caps.workflowModes ?? []) : [];
+  const ultracodeEnabled =
+    workflowModes.some((mode) => mode.value === "ultracode") &&
+    (modelOptions as ClaudeModelOptions | undefined)?.ultracode === true;
   const thinkingEnabled = caps.supportsThinkingToggle
     ? ((modelOptions as ClaudeModelOptions | undefined)?.thinking ?? true)
     : null;
@@ -117,6 +149,9 @@ export function getSelectedTraits(
     caps,
     effort,
     thinkingLevel,
+    thinkingLevels,
+    workflowModes,
+    ultracodeEnabled,
     effortLevels,
     thinkingEnabled,
     fastModeEnabled,

@@ -25,6 +25,7 @@ import {
 import type {
   ProviderAdapterCapabilities,
   ProviderAdapterShape,
+  ProviderSessionRecoveryMode,
 } from "../Services/ProviderAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
@@ -252,12 +253,15 @@ export const hasMetricSnapshot = (
 export function makeProviderServiceLayer(options?: {
   readonly getProviderCapabilities?: ProviderCapabilitiesResolver;
   readonly includeCliProxyAdapter?: boolean;
+  readonly cliProxySessionRecovery?: ProviderSessionRecoveryMode;
   readonly isProviderComposed?: (provider: ProviderKind) => boolean;
   readonly settings?: Parameters<typeof ServerSettingsService.layerTest>[0];
 }) {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter("claudeAgent");
-  const cliProxy = makeFakeCodexAdapter("cliProxy", { sessionRecovery: "unsupported" });
+  const cliProxy = makeFakeCodexAdapter("cliProxy", {
+    sessionRecovery: options?.cliProxySessionRecovery ?? "unsupported",
+  });
   const copilot = makeFakeCodexAdapter("copilot");
   const opencode = makeFakeCodexAdapter("opencode");
   const pi = makeFakeCodexAdapter("pi");
@@ -323,6 +327,7 @@ export function makeProviderServiceLayer(options?: {
       directoryLayer,
 
       runtimeRepositoryLayer,
+      SqlitePersistenceMemory,
       NodeServices.layer,
     ),
   );

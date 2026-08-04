@@ -2,7 +2,6 @@ import { Schema } from "effect";
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import {
   CODEX_REASONING_EFFORT_OPTIONS,
-  CLAUDE_CODE_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
@@ -11,7 +10,6 @@ import { PROVIDER_DISPLAY_NAMES } from "../constants/provider.constant";
 
 export {
   CODEX_REASONING_EFFORT_OPTIONS,
-  CLAUDE_CODE_EFFORT_OPTIONS,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
@@ -19,7 +17,7 @@ export {
 };
 
 export type CodexReasoningEffort = (typeof CODEX_REASONING_EFFORT_OPTIONS)[number];
-export type ClaudeCodeEffort = (typeof CLAUDE_CODE_EFFORT_OPTIONS)[number];
+export type ClaudeCodeEffort = string;
 export type ProviderReasoningEffort = CodexReasoningEffort | ClaudeCodeEffort;
 
 export const CodexModelOptions = Schema.Struct({
@@ -30,7 +28,8 @@ export type CodexModelOptions = typeof CodexModelOptions.Type;
 
 export const ClaudeModelOptions = Schema.Struct({
   thinking: Schema.optional(Schema.Boolean),
-  effort: Schema.optional(Schema.Literals(CLAUDE_CODE_EFFORT_OPTIONS)),
+  effort: Schema.optional(TrimmedNonEmptyString),
+  ultracode: Schema.optional(Schema.Boolean),
   fastMode: Schema.optional(Schema.Boolean),
   contextWindow: Schema.optional(Schema.String),
 });
@@ -111,6 +110,7 @@ export type ContextWindowOption = typeof ContextWindowOption.Type;
 
 export const ModelCapabilities = Schema.Struct({
   reasoningEffortLevels: Schema.Array(EffortOption),
+  workflowModes: Schema.optional(Schema.Array(EffortOption)),
   supportsFastMode: Schema.Boolean,
   supportsThinkingToggle: Schema.Boolean,
   contextWindowOptions: Schema.Array(ContextWindowOption),

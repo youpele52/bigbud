@@ -65,6 +65,9 @@ export const rolloverProviderSessionAtHighWater = Effect.fn("rolloverProviderSes
     readonly activities: ReadonlyArray<{ readonly kind: string; readonly payload: unknown }>;
   }) {
     if (!input.activeSession) return undefined;
+    if (HIGH_WATER_MARKS[input.activeSession.provider] === undefined) {
+      return input.activeSession;
+    }
     const capabilities = getProviderCapabilities(input.activeSession.provider);
     if (
       !shouldManagedCapabilityContextRollover({

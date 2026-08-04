@@ -1,7 +1,6 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_SLUG_ALIASES_BY_PROVIDER,
-  type ClaudeCodeEffort,
   type ClaudeModelOptions,
   type CopilotModelOptions,
   type CodexModelOptions,
@@ -111,13 +110,21 @@ export function normalizeClaudeModelOptionsWithCapabilities(
   caps: ModelCapabilities,
   modelOptions: ClaudeModelOptions | null | undefined,
 ): ClaudeModelOptions | undefined {
-  const effort = resolveEffort(caps, modelOptions?.effort);
+  const rawEffort = trimOrNull(modelOptions?.effort);
+  const effort =
+    rawEffort && caps.promptInjectedEffortLevels.includes(rawEffort)
+      ? rawEffort
+      : resolveEffort(caps, rawEffort);
+  const ultracode = caps.workflowModes?.some((mode) => mode.value === "ultracode")
+    ? modelOptions?.ultracode
+    : undefined;
   const thinking = caps.supportsThinkingToggle ? modelOptions?.thinking : undefined;
   const fastMode = caps.supportsFastMode ? modelOptions?.fastMode : undefined;
   const contextWindow = resolveContextWindow(caps, modelOptions?.contextWindow);
   const nextOptions: ClaudeModelOptions = {
     ...(thinking !== undefined ? { thinking } : {}),
     ...(effort ? { effort: effort as ClaudeModelOptions["effort"] } : {}),
+    ...(ultracode !== undefined ? { ultracode } : {}),
     ...(fastMode !== undefined ? { fastMode } : {}),
     ...(contextWindow !== undefined ? { contextWindow } : {}),
   };
@@ -183,11 +190,11 @@ export function normalizeDevinModelOptionsWithCapabilities(
 }
 
 export function normalizePiModelOptionsWithCapabilities(
-  _caps: ModelCapabilities,
+  caps: ModelCapabilities,
   modelOptions: PiModelOptions | null | undefined,
 ): PiModelOptions | undefined {
   const thinkingLevel = trimOrNull(modelOptions?.thinkingLevel);
-  return thinkingLevel ? { thinkingLevel } : undefined;
+  return thinkingLevel && hasEffortLevel(caps, thinkingLevel) ? { thinkingLevel } : undefined;
 }
 
 export function isClaudeUltrathinkPrompt(text: string | null | undefined): boolean {
@@ -298,7 +305,7 @@ export function resolveApiModelId(modelSelection: ModelSelection): string {
 
 export function applyClaudePromptEffortPrefix(
   text: string,
-  effort: ClaudeCodeEffort | null | undefined,
+  effort: string | null | undefined,
 ): string {
   const trimmed = text.trim();
   if (!trimmed) {

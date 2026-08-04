@@ -64,7 +64,7 @@ async function mountClaudePicker(props?: {
   prompt?: string;
   options?: ClaudeModelOptions;
   fallbackModelOptions?: {
-    effort?: "low" | "medium" | "high" | "max" | "ultrathink";
+    effort?: "low" | "medium" | "high" | "xhigh" | "max" | "ultrathink";
     thinking?: boolean;
     fastMode?: boolean;
   } | null;

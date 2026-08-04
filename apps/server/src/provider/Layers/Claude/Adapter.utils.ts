@@ -14,7 +14,6 @@ import {
   type CanonicalItemType,
   type CanonicalRequestType,
   ApprovalRequestId,
-  ClaudeCodeEffort,
   RuntimeRequestId,
   type ThreadTokenUsageSnapshot,
   ThreadId,
@@ -74,15 +73,6 @@ export function normalizeClaudeStreamMessages(cause: Cause.Cause<Error>): Readon
 
   const squashed = toMessage(Cause.squash(cause), "").trim();
   return squashed.length > 0 ? [squashed] : [];
-}
-
-export function getEffectiveClaudeCodeEffort(
-  effort: ClaudeCodeEffort | null | undefined,
-): Exclude<ClaudeCodeEffort, "ultrathink"> | null {
-  if (!effort) {
-    return null;
-  }
-  return effort === "ultrathink" ? null : effort;
 }
 
 export function isClaudeInterruptedMessage(message: string): boolean {
