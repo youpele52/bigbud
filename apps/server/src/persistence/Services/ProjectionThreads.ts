@@ -21,8 +21,10 @@ import {
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
-import { Option, Schema, ServiceMap } from "effect";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as ServiceMap from "effect/ServiceMap";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
 
@@ -46,6 +48,7 @@ export const ProjectionThread = Schema.Struct({
   queuedPrompts: Schema.Array(OrchestrationQueuedPrompt),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+  lastActivityAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime),
   pinnedAt: Schema.NullOr(IsoDateTime),
   deletingAt: Schema.NullOr(IsoDateTime),
@@ -62,6 +65,12 @@ export const DeleteProjectionThreadInput = Schema.Struct({
   threadId: ThreadId,
 });
 export type DeleteProjectionThreadInput = typeof DeleteProjectionThreadInput.Type;
+
+export const TouchProjectionThreadActivityInput = Schema.Struct({
+  threadId: ThreadId,
+  occurredAt: IsoDateTime,
+});
+export type TouchProjectionThreadActivityInput = typeof TouchProjectionThreadActivityInput.Type;
 
 export const ListProjectionThreadsByProjectInput = Schema.Struct({
   projectId: ProjectId,
@@ -98,6 +107,11 @@ export interface ProjectionThreadRepositoryShape {
   /** Physically remove a projected thread row by id. */
   readonly deleteById: (
     input: DeleteProjectionThreadInput,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Advance the authoritative retention clock without moving it backwards. */
+  readonly touchActivity: (
+    input: TouchProjectionThreadActivityInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
 }
 

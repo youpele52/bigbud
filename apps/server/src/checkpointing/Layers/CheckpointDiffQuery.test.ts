@@ -67,6 +67,7 @@ describe("CheckpointDiffQueryLive", () => {
     });
 
     const checkpointStore: CheckpointStoreShape = {
+      captureRepositoryIdentity: () => Effect.die("unused"),
       isGitRepository: () => Effect.succeed(true),
       captureCheckpoint: () => Effect.void,
       capturePathCheckpoint: () => Effect.void,
@@ -82,7 +83,9 @@ describe("CheckpointDiffQueryLive", () => {
           diffCheckpointsCalls.push({ fromCheckpointRef, toCheckpointRef, cwd });
           return "diff patch";
         }),
+      listThreadCheckpointRefs: () => Effect.succeed([]),
       deleteCheckpointRefs: () => Effect.void,
+      verifyCheckpointRefsAbsent: () => Effect.void,
     };
 
     const layer = CheckpointDiffQueryLive.pipe(
@@ -133,6 +136,7 @@ describe("CheckpointDiffQueryLive", () => {
     const threadId = ThreadId.makeUnsafe("thread-missing");
 
     const checkpointStore: CheckpointStoreShape = {
+      captureRepositoryIdentity: () => Effect.die("unused"),
       isGitRepository: () => Effect.succeed(true),
       captureCheckpoint: () => Effect.void,
       capturePathCheckpoint: () => Effect.void,
@@ -140,7 +144,9 @@ describe("CheckpointDiffQueryLive", () => {
       restoreCheckpoint: () => Effect.succeed(true),
       restorePathCheckpoint: () => Effect.succeed(true),
       diffCheckpoints: () => Effect.succeed(""),
+      listThreadCheckpointRefs: () => Effect.succeed([]),
       deleteCheckpointRefs: () => Effect.void,
+      verifyCheckpointRefsAbsent: () => Effect.void,
     };
 
     const layer = CheckpointDiffQueryLive.pipe(

@@ -75,6 +75,14 @@ import Migration0059 from "./Migrations/059_ResumablePurgeBaseline.ts";
 import Migration0060 from "./Migrations/060_ProjectionCatalogUserMessageIndex.ts";
 import Migration0061 from "./Migrations/061_ProjectionChatsCreatedIndex.ts";
 import Migration0062 from "./Migrations/062_ProjectionThreadQueuedPrompts.ts";
+import Migration0063 from "./Migrations/063_ThreadRetentionFoundation.ts";
+import Migration0064 from "./Migrations/064_CheckpointRetentionIdentity.ts";
+import Migration0065 from "./Migrations/065_ThreadRetentionSecurityHardening.ts";
+import Migration0066 from "./Migrations/066_PurgeExecutionLeases.ts";
+import Migration0067 from "./Migrations/067_ThreadRetentionPolicyAuthority.ts";
+import Migration0068 from "./Migrations/068_ThreadRetentionSafetyRecovery.ts";
+import Migration0069 from "./Migrations/069_ThreadRetentionManualRecovery.ts";
+import Migration0070 from "./Migrations/070_ThreadAttachmentReferences.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -149,6 +157,14 @@ export const migrationEntries = [
   [60, "ProjectionCatalogUserMessageIndex", Migration0060],
   [61, "ProjectionChatsCreatedIndex", Migration0061],
   [62, "ProjectionThreadQueuedPrompts", Migration0062],
+  [63, "ThreadRetentionFoundation", Migration0063],
+  [64, "CheckpointRetentionIdentity", Migration0064],
+  [65, "ThreadRetentionSecurityHardening", Migration0065],
+  [66, "PurgeExecutionLeases", Migration0066],
+  [67, "ThreadRetentionPolicyAuthority", Migration0067],
+  [68, "ThreadRetentionSafetyRecovery", Migration0068],
+  [69, "ThreadRetentionManualRecovery", Migration0069],
+  [70, "ThreadAttachmentReferences", Migration0070],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

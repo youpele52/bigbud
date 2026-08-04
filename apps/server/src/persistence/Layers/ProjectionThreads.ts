@@ -5,15 +5,21 @@ import {
   ParentThreadReference,
   PersistedModelSelection,
 } from "@bigbud/contracts";
-import { Effect, Layer, Option, Schema, Struct } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { captureWorktreePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
   ProjectionThread,
   ProjectionThreadRepository,
+  TouchProjectionThreadActivityInput,
   type ProjectionThreadRepositoryShape,
 } from "../Services/ProjectionThreads.ts";
 
@@ -26,6 +32,18 @@ const ProjectionThreadDbRow = ProjectionThread.mapFields(
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
+
+const ProjectionThreadWriteRow = ProjectionThread.mapFields(
+  Struct.assign({
+    worktreeIdentity: Schema.NullOr(
+      Schema.Struct({
+        canonicalPath: Schema.String,
+        device: Schema.Number,
+        inode: Schema.Number,
+      }),
+    ),
+  }),
+);
 
 function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof ProjectionThread.Type {
   return {
@@ -48,6 +66,7 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     queuedPrompts: row.queuedPrompts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    lastActivityAt: row.lastActivityAt,
     archivedAt: row.archivedAt,
     pinnedAt: row.pinnedAt,
     deletingAt: row.deletingAt,
@@ -59,7 +78,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   const upsertProjectionThreadRow = SqlSchema.void({
-    Request: ProjectionThread,
+    Request: ProjectionThreadWriteRow,
     execute: (row) =>
       sql`
         INSERT INTO projection_threads (
@@ -74,9 +93,12 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           execution_target_id,
           model_selection_json,
           runtime_mode,
-          interaction_mode,
-          branch,
-          worktree_path,
+           interaction_mode,
+           branch,
+           worktree_path,
+           worktree_canonical_path,
+           worktree_device,
+           worktree_inode,
            parent_thread_id,
            parent_thread_title,
            parent_thread_project_id,
@@ -84,6 +106,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           queued_prompts_json,
           created_at,
           updated_at,
+          last_activity_at,
           archived_at,
           pinned_at,
           deleting_at,
@@ -101,9 +124,12 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${row.executionTargetId},
           ${JSON.stringify(row.modelSelection)},
           ${row.runtimeMode},
-          ${row.interactionMode},
-          ${row.branch},
-          ${row.worktreePath},
+           ${row.interactionMode},
+           ${row.branch},
+           ${row.worktreePath},
+           ${row.worktreeIdentity?.canonicalPath ?? null},
+           ${row.worktreeIdentity?.device ?? null},
+           ${row.worktreeIdentity?.inode ?? null},
            ${row.parentThread?.threadId ?? null},
            ${row.parentThread?.title ?? null},
            ${row.parentThread?.projectId ?? row.projectId},
@@ -111,6 +137,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           ${JSON.stringify(row.queuedPrompts)},
           ${row.createdAt},
           ${row.updatedAt},
+          ${row.lastActivityAt},
           ${row.archivedAt},
           ${row.pinnedAt},
           ${row.deletingAt},
@@ -129,8 +156,11 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           model_selection_json = excluded.model_selection_json,
           runtime_mode = excluded.runtime_mode,
           interaction_mode = excluded.interaction_mode,
-          branch = excluded.branch,
-          worktree_path = excluded.worktree_path,
+           branch = excluded.branch,
+           worktree_path = excluded.worktree_path,
+           worktree_canonical_path = excluded.worktree_canonical_path,
+           worktree_device = excluded.worktree_device,
+           worktree_inode = excluded.worktree_inode,
            parent_thread_id = excluded.parent_thread_id,
            parent_thread_title = excluded.parent_thread_title,
            parent_thread_project_id = excluded.parent_thread_project_id,
@@ -138,6 +168,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           queued_prompts_json = excluded.queued_prompts_json,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
+          last_activity_at = MAX(projection_threads.last_activity_at, excluded.last_activity_at),
           archived_at = excluded.archived_at,
           pinned_at = excluded.pinned_at,
           deleting_at = excluded.deleting_at,
@@ -177,6 +208,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           queued_prompts_json AS "queuedPrompts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          last_activity_at AS "lastActivityAt",
           archived_at AS "archivedAt",
           pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
@@ -218,6 +250,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
           queued_prompts_json AS "queuedPrompts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
+          last_activity_at AS "lastActivityAt",
           archived_at AS "archivedAt",
           pinned_at AS "pinnedAt",
           deleting_at AS "deletingAt",
@@ -237,10 +270,27 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       `,
   });
 
+  const touchProjectionThreadActivity = SqlSchema.void({
+    Request: TouchProjectionThreadActivityInput,
+    execute: ({ threadId, occurredAt }) => sql`
+      UPDATE projection_threads
+      SET last_activity_at = MAX(last_activity_at, ${occurredAt})
+      WHERE thread_id = ${threadId}
+        AND deleted_at IS NULL
+    `,
+  });
+
   const upsert: ProjectionThreadRepositoryShape["upsert"] = (row) =>
-    upsertProjectionThreadRow(row).pipe(
-      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")),
-    );
+    Effect.gen(function* () {
+      const worktreeIdentity = yield* Effect.tryPromise({
+        try: () =>
+          row.worktreePath === null
+            ? Promise.resolve(null)
+            : captureWorktreePathIdentity(row.worktreePath),
+        catch: () => null,
+      });
+      yield* upsertProjectionThreadRow({ ...row, worktreeIdentity });
+    }).pipe(Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.upsert:query")));
 
   const getById: ProjectionThreadRepositoryShape["getById"] = (input) =>
     getProjectionThreadRow(input).pipe(
@@ -259,11 +309,17 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
     );
 
+  const touchActivity: ProjectionThreadRepositoryShape["touchActivity"] = (input) =>
+    touchProjectionThreadActivity(input).pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.touchActivity:query")),
+    );
+
   return {
     upsert,
     getById,
     listByProjectId,
     deleteById,
+    touchActivity,
   } satisfies ProjectionThreadRepositoryShape;
 });
 
