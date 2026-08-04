@@ -5,7 +5,6 @@ import { Effect, Exit, FileSystem, Option, Scope, Semaphore, SynchronizedRef } f
 
 import { type PtyProcess } from "../Services/PTY";
 import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
-import { historyPath } from "./Manager.history-io";
 import {
   drainProcessEventsWith,
   pollSubprocessActivityWith,
@@ -22,13 +21,12 @@ import {
   type ProcessLifecycleContext,
 } from "./Manager.process-lifecycle";
 import { buildSessionApi } from "./Manager.session";
+import { makeTerminalPersistence } from "./Manager.process.persistence.ts";
 import {
   DEFAULT_HISTORY_LINE_LIMIT,
   DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS,
-  DEFAULT_PERSIST_DEBOUNCE_MS,
   DEFAULT_PROCESS_KILL_GRACE_MS,
   DEFAULT_SUBPROCESS_POLL_INTERVAL_MS,
-  type PersistHistoryRequest,
   type TerminalManagerOptions,
   type TerminalManagerState,
   type TerminalSessionState,
@@ -72,10 +70,6 @@ const startKillEscalation = Effect.fn("terminal.startKillEscalation")(function* 
   yield* registerKillFiberWith(input.lifecycleCtx.modifyManagerState, input.proc, fiber);
 });
 
-// ---------------------------------------------------------------------------
-// Main factory
-// ---------------------------------------------------------------------------
-
 export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWithOptions")(
   function* (options: TerminalManagerOptions) {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -102,6 +96,24 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const terminalEventListeners = new Set<(event: TerminalEvent) => Effect.Effect<void>>();
     const workerScope = yield* Scope.make("sequential");
     yield* Effect.addFinalizer(() => Scope.close(workerScope, Exit.void));
+
+    const acquireWorktreeLease = (input: {
+      threadId: string;
+      terminalId: string;
+      executionTargetId: string;
+      cwd: string;
+      worktreePath: string | null | undefined;
+    }) =>
+      options.acquireWorktreeLease
+        ? options.acquireWorktreeLease({ ...input, worktreePath: input.worktreePath ?? null })
+        : Effect.void;
+    const releaseWorktreeLease = (input: { threadId: string; terminalId: string }) =>
+      options.releaseWorktreeLease?.(input) ?? Effect.void;
+    const markWorktreeLeaseStarted = (input: {
+      threadId: string;
+      terminalId: string;
+      processId: number;
+    }) => options.markWorktreeLeaseStarted?.(input) ?? Effect.void;
 
     const publishEvent = (event: TerminalEvent) =>
       Effect.gen(function* () {
@@ -137,68 +149,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     ): Effect.Effect<A, E, R> =>
       Effect.flatMap(getThreadSemaphore(threadId), (semaphore) => semaphore.withPermit(effect));
 
-    const persistWorker = yield* makeKeyedCoalescingWorker<
-      string,
-      PersistHistoryRequest,
-      never,
-      never
-    >({
-      merge: (current, next) => ({
-        history: next.history,
-        immediate: current.immediate || next.immediate,
-      }),
-      process: Effect.fn("terminal.persistHistoryWorker")(function* (sessionKey, request) {
-        if (!request.immediate) {
-          yield* Effect.sleep(DEFAULT_PERSIST_DEBOUNCE_MS);
-        }
-
-        const [threadId, terminalId] = sessionKey.split("\u0000");
-        if (!threadId || !terminalId) {
-          return;
-        }
-
-        yield* fileSystem
-          .writeFileString(historyPath(logsDir, threadId, terminalId), request.history)
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("failed to persist terminal history", {
-                threadId,
-                terminalId,
-                error: error instanceof Error ? error.message : String(error),
-              }),
-            ),
-          );
-      }),
-    });
-
-    const queuePersist = Effect.fn("terminal.queuePersist")(function* (
-      threadId: string,
-      terminalId: string,
-      history: string,
-    ) {
-      yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
-        history,
-        immediate: false,
-      });
-    });
-
-    const flushPersist = Effect.fn("terminal.flushPersist")(function* (
-      threadId: string,
-      terminalId: string,
-    ) {
-      yield* persistWorker.drainKey(toSessionKey(threadId, terminalId));
-    });
-
-    const persistHistory = Effect.fn("terminal.persistHistory")(function* (
-      threadId: string,
-      terminalId: string,
-      history: string,
-    ) {
-      yield* persistWorker.enqueue(toSessionKey(threadId, terminalId), {
-        history,
-        immediate: true,
-      });
-      yield* flushPersist(threadId, terminalId);
+    const { flushPersist, persistHistory, queuePersist } = yield* makeTerminalPersistence({
+      fileSystem,
+      logsDir,
     });
 
     const ptyOutputWorker = yield* makeKeyedCoalescingWorker<
@@ -286,10 +239,6 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       },
     );
 
-    // ---------------------------------------------------------------------------
-    // Process lifecycle (kill escalation, spawn, drain, stop, start)
-    // ---------------------------------------------------------------------------
-
     const lifecycleCtx: ProcessLifecycleContext = {
       modifyManagerState,
       readManagerState,
@@ -312,7 +261,18 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       clearKillFiberWith(lifecycleCtx.modifyManagerState, proc);
 
     const drainProcessEvents = (session: TerminalSessionState, expectedPid: number) =>
-      drainProcessEventsWith(lifecycleCtx, clearKillFiber, session, expectedPid);
+      drainProcessEventsWith(lifecycleCtx, clearKillFiber, session, expectedPid).pipe(
+        Effect.andThen(
+          Effect.suspend(() =>
+            session.process === null
+              ? releaseWorktreeLease({
+                  threadId: session.threadId,
+                  terminalId: session.terminalId,
+                })
+              : Effect.void,
+          ),
+        ),
+      );
 
     const stopProcess = (session: TerminalSessionState) =>
       stopProcessWith(
@@ -396,6 +356,10 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
             session.threadId,
             session.terminalId,
           );
+          yield* releaseWorktreeLease({
+            threadId: session.threadId,
+            terminalId: session.terminalId,
+          });
         });
 
         yield* Effect.forEach(sessions, cleanupSession, {
@@ -423,6 +387,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       snapshot,
+      acquireWorktreeLease,
+      markWorktreeLeaseStarted,
+      releaseWorktreeLease,
       terminalEventListeners,
     });
   },

@@ -1,23 +1,14 @@
-import {
-  DEFAULT_TERMINAL_ID,
-  TerminalExecutionTargetError,
-  resolveExecutionTargetId,
-} from "@bigbud/contracts";
+import { DEFAULT_TERMINAL_ID, resolveExecutionTargetId } from "@bigbud/contracts";
 import { Effect, Equal, Option } from "effect";
 
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
 import { TerminalNotRunningError } from "../Services/Manager";
 import { defaultTerminalDropPathMode, normalizedRuntimeEnv, toSessionKey } from "./Manager.shell";
 import { DEFAULT_OPEN_COLS, DEFAULT_OPEN_ROWS } from "./Manager.types";
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
-import { assertSshExecutionTargetReady } from "../../ssh/sshVerification.ts";
 import { createTerminalSessionState, resetSessionRuntimeState } from "./Manager.session.state.ts";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
 import { type TerminalSessionState } from "./Manager.types";
-
-// ---------------------------------------------------------------------------
-// API method builders
-// ---------------------------------------------------------------------------
+import { makeAssertExecutionTargetReady } from "./Manager.session.execution.ts";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -38,28 +29,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     assertValidCwd,
     publishEvent,
     snapshot,
+    acquireWorktreeLease,
+    markWorktreeLeaseStarted,
+    releaseWorktreeLease,
     terminalEventListeners,
   } = ctx;
 
-  const assertExecutionTargetReady = (input: {
-    readonly threadId: string;
-    readonly terminalId: string;
-    readonly executionTargetId: string;
-    readonly cwd: string;
-  }) =>
-    isLocalExecutionTarget(input.executionTargetId)
-      ? assertValidCwd(input.cwd)
-      : Effect.try({
-          try: () => assertSshExecutionTargetReady(input.executionTargetId),
-          catch: (cause) =>
-            new TerminalExecutionTargetError({
-              threadId: input.threadId,
-              terminalId: input.terminalId,
-              executionTargetId: input.executionTargetId,
-              detail: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
+  const assertExecutionTargetReady = makeAssertExecutionTargetReady(assertValidCwd);
 
   const open: TerminalManagerShape["open"] = (input) =>
     withThreadLock(
@@ -103,6 +79,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           });
 
           yield* evictInactiveSessionsIfNeeded();
+          yield* acquireWorktreeLease({
+            threadId: input.threadId,
+            terminalId,
+            executionTargetId,
+            cwd: input.cwd,
+            worktreePath: input.worktreePath,
+          });
           yield* startSession(
             session,
             {
@@ -116,7 +99,16 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
               ...(input.env ? { env: input.env } : {}),
             },
             "started",
+          ).pipe(
+            Effect.onError(() => releaseWorktreeLease({ threadId: input.threadId, terminalId })),
           );
+          if (session.pid !== null) {
+            yield* markWorktreeLeaseStarted({
+              threadId: input.threadId,
+              terminalId,
+              processId: session.pid,
+            });
+          }
           return snapshot(session);
         }
 
@@ -149,6 +141,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         }
 
         if (!liveSession.process) {
+          yield* acquireWorktreeLease({
+            threadId: input.threadId,
+            terminalId,
+            executionTargetId,
+            cwd: input.cwd,
+            worktreePath: liveSession.worktreePath,
+          });
           yield* startSession(
             liveSession,
             {
@@ -162,7 +161,16 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
               ...(input.env ? { env: input.env } : {}),
             },
             "started",
+          ).pipe(
+            Effect.onError(() => releaseWorktreeLease({ threadId: input.threadId, terminalId })),
           );
+          if (liveSession.pid !== null) {
+            yield* markWorktreeLeaseStarted({
+              threadId: input.threadId,
+              terminalId,
+              processId: liveSession.pid,
+            });
+          }
           return snapshot(liveSession);
         }
 
@@ -275,6 +283,13 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
         resetSessionRuntimeState(session);
         yield* persistHistory(input.threadId, terminalId, session.history);
+        yield* acquireWorktreeLease({
+          threadId: input.threadId,
+          terminalId,
+          executionTargetId,
+          cwd: input.cwd,
+          worktreePath: session.worktreePath,
+        });
         yield* startSession(
           session,
           {
@@ -288,7 +303,16 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             ...(input.env ? { env: input.env } : {}),
           },
           "restarted",
+        ).pipe(
+          Effect.onError(() => releaseWorktreeLease({ threadId: input.threadId, terminalId })),
         );
+        if (session.pid !== null) {
+          yield* markWorktreeLeaseStarted({
+            threadId: input.threadId,
+            terminalId,
+            processId: session.pid,
+          });
+        }
         return snapshot(session);
       }),
     );
@@ -307,6 +331,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       yield* persistHistory(threadId, terminalId, session.value.history);
     }
 
+    yield* releaseWorktreeLease({ threadId, terminalId });
     yield* flushPersist(threadId, terminalId);
 
     yield* modifyManagerState((state) => {
@@ -346,6 +371,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     );
 
   return {
+    hasActiveThread: (threadId) =>
+      sessionsForThread(threadId).pipe(
+        Effect.map((sessions) =>
+          sessions.some((session) => session.status === "running" || session.hasRunningSubprocess),
+        ),
+      ),
     open,
     write,
     resize,

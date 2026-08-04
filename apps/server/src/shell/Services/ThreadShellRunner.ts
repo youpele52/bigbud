@@ -22,6 +22,7 @@ export class ThreadShellRunnerError extends Schema.TaggedErrorClass<ThreadShellR
 ) {}
 
 export interface ThreadShellRunnerShape {
+  readonly isActive?: (threadId: string) => Effect.Effect<boolean>;
   readonly run: (
     input: ThreadShellRunInput,
   ) => Effect.Effect<ThreadShellRunResult, ThreadShellRunnerError>;

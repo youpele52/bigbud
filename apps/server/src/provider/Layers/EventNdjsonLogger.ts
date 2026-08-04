@@ -26,6 +26,7 @@ export type EventNdjsonStream = "native" | "canonical" | "orchestration";
 export interface EventNdjsonLogger {
   readonly filePath: string;
   write: (event: unknown, threadId: ThreadId | null) => Effect.Effect<void>;
+  closeThread: (threadId: ThreadId) => Effect.Effect<void>;
   close: () => Effect.Effect<void>;
 }
 
@@ -34,6 +35,7 @@ export interface EventNdjsonLoggerOptions {
   readonly maxBytes?: number;
   readonly maxFiles?: number;
   readonly batchWindowMs?: number;
+  readonly authorizeThreadWrite?: (threadId: ThreadId) => Effect.Effect<boolean>;
 }
 
 interface ThreadWriter {
@@ -261,6 +263,13 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
   });
 
   const write = Effect.fn("write")(function* (event: unknown, threadId: ThreadId | null) {
+    if (
+      threadId !== null &&
+      options.authorizeThreadWrite &&
+      !(yield* options.authorizeThreadWrite(threadId))
+    ) {
+      return;
+    }
     const threadSegment = resolveThreadSegment(threadId);
     const message = yield* toLogMessage(event);
     if (!message) {
@@ -273,6 +282,21 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
     }
 
     yield* writer.writeMessage(message);
+  });
+
+  const closeThread = Effect.fn("closeThread")(function* (threadId: ThreadId) {
+    const threadSegment = resolveThreadSegment(threadId);
+    yield* SynchronizedRef.modifyEffect(stateRef, (state) => {
+      const writer = state.threadWriters.get(threadSegment);
+      if (!writer) return Effect.succeed([undefined, state] as const);
+      return writer.close().pipe(
+        Effect.map(() => {
+          const threadWriters = new Map(state.threadWriters);
+          threadWriters.delete(threadSegment);
+          return [undefined, { ...state, threadWriters }] as const;
+        }),
+      );
+    });
   });
 
   const close = Effect.fn("close")(function* () {
@@ -296,6 +320,7 @@ export const makeEventNdjsonLogger = Effect.fn("makeEventNdjsonLogger")(function
   return {
     filePath,
     write,
+    closeThread,
     close,
   } satisfies EventNdjsonLogger;
 });

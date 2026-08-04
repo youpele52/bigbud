@@ -16,6 +16,7 @@ export class VisibleBrowserControlError extends Data.TaggedError("VisibleBrowser
 }> {}
 
 export interface VisibleBrowserControlShape {
+  readonly hasThreadLease?: (threadId: ThreadId) => Effect.Effect<boolean>;
   readonly isAvailable: Effect.Effect<boolean>;
   readonly execute: (input: {
     readonly threadId: ThreadId;

@@ -8,6 +8,11 @@ export class ComputerUseError extends Data.TaggedError("ComputerUseError")<{
 }> {}
 
 export interface ComputerUseShape {
+  readonly isActive?: (threadId: ThreadId) => Effect.Effect<boolean>;
+  readonly withThreadLease?: <A, E, R>(
+    threadId: ThreadId,
+    effect: Effect.Effect<A, E, R>,
+  ) => Effect.Effect<A, E | ComputerUseError, R>;
   readonly execute: (
     threadId: ThreadId,
     action: ComputerUseAction,
