@@ -70,6 +70,16 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 import { Effect, Stream } from "effect";
+import type {
+  ServerGetThreadRetentionRunInput,
+  ServerListThreadRetentionRunsInput,
+  ServerListThreadRetentionRunsResult,
+  ServerPreviewThreadRetentionInput,
+  ServerSetThreadRetentionPolicyInput,
+  ServerStartThreadRetentionInput,
+  ServerThreadRetentionPreview,
+  ServerThreadRetentionRun,
+} from "@bigbud/contracts/server/threadRetention";
 
 import type { WsRpcProtocolClient } from "./protocol";
 
@@ -209,6 +219,21 @@ export interface WsRpcClient {
     readonly updateSettings: (
       patch: ServerSettingsPatch,
     ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverUpdateSettings>>;
+    readonly previewThreadRetention: (
+      input: ServerPreviewThreadRetentionInput,
+    ) => Promise<ServerThreadRetentionPreview>;
+    readonly startThreadRetention: (
+      input: ServerStartThreadRetentionInput,
+    ) => Promise<ServerThreadRetentionRun>;
+    readonly getThreadRetentionRun: (
+      input: ServerGetThreadRetentionRunInput,
+    ) => Promise<ServerThreadRetentionRun>;
+    readonly listThreadRetentionRuns: (
+      input?: ServerListThreadRetentionRunsInput,
+    ) => Promise<ServerListThreadRetentionRunsResult>;
+    readonly setThreadRetentionPolicy: (
+      input: ServerSetThreadRetentionPolicyInput,
+    ) => ReturnType<RpcUnaryMethod<typeof WS_METHODS.serverSetThreadRetentionPolicy>>;
     readonly setThreadPinned: RpcUnaryMethod<typeof WS_METHODS.serverSetThreadPinned>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;

@@ -67,6 +67,83 @@ describe("wsNativeApi — server", () => {
     });
   });
 
+  it("forwards retention consent and run RPCs directly to the RPC client", async () => {
+    const preview = {
+      generatedAt: "2026-08-04T00:00:00.000Z",
+      policy: "7-days" as const,
+      cutoffAt: "2026-07-28T00:00:00.000Z",
+      eligibleCount: 2,
+      oldestEligibleActivityAt: "2026-07-01T00:00:00.000Z",
+      newestEligibleActivityAt: "2026-07-20T00:00:00.000Z",
+      exclusionCounts: [],
+      estimatedAttachmentCount: 2,
+      estimatedResourceCount: 4,
+      estimatedKnownBytes: 128,
+      attachmentEstimateComplete: true,
+      resourceEstimateComplete: true,
+      bytesEstimateComplete: true,
+      maintenanceState: "available" as const,
+      warnings: [],
+      challenge: {
+        token: "challenge-1",
+        trigger: "manual" as const,
+        policy: "7-days" as const,
+        cutoffAt: "2026-07-28T00:00:00.000Z",
+        expiresAt: "2026-08-04T00:05:00.000Z",
+        singleUse: true as const,
+      },
+    };
+    const run = {
+      runId: "run-1",
+      trigger: "manual" as const,
+      policy: "7-days" as const,
+      cutoffAt: preview.cutoffAt,
+      status: "queued" as const,
+      eligibleCount: 2,
+      selectedCount: 0,
+      requestedCount: 0,
+      completedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      createdAt: preview.generatedAt,
+      updatedAt: preview.generatedAt,
+      completedAt: null,
+      deferredReason: null,
+      errorMessage: null,
+    };
+    rpcClientMock.server.previewThreadRetention.mockResolvedValue(preview);
+    rpcClientMock.server.startThreadRetention.mockResolvedValue(run);
+    rpcClientMock.server.getThreadRetentionRun.mockResolvedValue(run);
+    rpcClientMock.server.listThreadRetentionRuns.mockResolvedValue({
+      runs: [run],
+      availability: "available",
+    });
+    rpcClientMock.server.setThreadRetentionPolicy.mockResolvedValue({
+      ...DEFAULT_SERVER_SETTINGS,
+      threadRetentionPolicy: "7-days",
+    });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    const api = createWsNativeApi();
+
+    await expect(
+      api.server.previewThreadRetention({ trigger: "manual", policy: "7-days" }),
+    ).resolves.toEqual(preview);
+    await expect(
+      api.server.startThreadRetention({ challengeToken: "challenge-1" }),
+    ).resolves.toEqual(run);
+    await expect(api.server.getThreadRetentionRun({ runId: "run-1" })).resolves.toEqual(run);
+    await expect(api.server.listThreadRetentionRuns({ limit: 1 })).resolves.toEqual({
+      runs: [run],
+      availability: "available",
+    });
+    await expect(
+      api.server.setThreadRetentionPolicy({
+        policy: "7-days",
+        challengeToken: "challenge-1",
+      }),
+    ).resolves.toMatchObject({ threadRetentionPolicy: "7-days" });
+  });
+
   it("forwards atomic pinned-thread updates directly to the RPC client", async () => {
     const threadId = ThreadId.makeUnsafe("thread-pin");
     const result = {
