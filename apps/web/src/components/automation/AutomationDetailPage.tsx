@@ -18,6 +18,7 @@ import { AutomationDetailActions } from "./AutomationDetailActions";
 import { AutomationDetailPane } from "./AutomationDetailPane";
 import { AutomationDetailPageHeader } from "./AutomationPageHeader";
 import { AutomationPageShell } from "./AutomationPageShell";
+import { StandalonePageContent } from "../standalone/StandalonePageContent";
 import {
   resolveAutomationComposerModelSelection,
   syncAutomationTargetThreadModelSelection,
@@ -206,7 +207,7 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
         />
       ) : (
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+          <StandalonePageContent>
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading automation...</p>
             ) : loadError ? (
@@ -215,7 +216,7 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
                 <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
               </div>
             ) : null}
-          </div>
+          </StandalonePageContent>
         </section>
       )}
     </AutomationPageShell>
