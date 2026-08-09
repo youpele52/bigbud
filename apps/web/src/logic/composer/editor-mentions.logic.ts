@@ -12,7 +12,7 @@ export type ComposerPromptSegment =
       type: "mention";
       rawValue: string;
       displayLabel: string;
-      mentionKind: "path" | "agent" | "skill";
+      mentionKind: "path" | "agent" | "skill" | "plugin";
     }
   | {
       type: "terminal-context";
@@ -33,7 +33,7 @@ function rangeIncludesIndex(start: number, end: number, index: number): boolean 
 function parseMentionToken(rawValue: string): {
   rawValue: string;
   displayLabel: string;
-  mentionKind: "path" | "agent" | "skill";
+  mentionKind: "path" | "agent" | "skill" | "plugin";
 } {
   if (rawValue.startsWith("agent:") || rawValue.startsWith("agent::")) {
     const displayLabel = rawValue.replace(/^agent::?/, "");
@@ -49,6 +49,13 @@ function parseMentionToken(rawValue: string): {
       rawValue,
       displayLabel,
       mentionKind: "skill",
+    };
+  }
+  if (rawValue.startsWith("plugin:") || rawValue.startsWith("plugin::")) {
+    return {
+      rawValue,
+      displayLabel: rawValue.replace(/^plugin::?/, ""),
+      mentionKind: "plugin",
     };
   }
   const pathSegments = rawValue.split(/[\\/]/);

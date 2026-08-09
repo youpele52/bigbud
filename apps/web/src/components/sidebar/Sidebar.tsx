@@ -52,6 +52,10 @@ export default function Sidebar() {
               closeMobileSidebar();
               void navigate({ to: "/automations" });
             }}
+            onOpenPlugins={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/plugins" });
+            }}
             onOpenUsage={() => {
               closeMobileSidebar();
               void navigate({ to: "/usage" });

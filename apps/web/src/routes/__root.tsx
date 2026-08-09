@@ -26,6 +26,7 @@ import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
 import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
+import { PluginUpdateToastCoordinator } from "../components/plugins/PluginUpdateToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
@@ -101,6 +102,7 @@ function RootRouteView() {
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
         <DesktopBackendStartupCoordinator />
+        <PluginUpdateToastCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
