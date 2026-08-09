@@ -17,6 +17,7 @@ import { mobileWebStaticRouteLayer } from "./ws/http.mobileWeb";
 import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools";
 import { fixPath } from "./utils/os-jank";
 import { websocketRpcRouteLayer } from "./ws/ws";
+import { pluginAssetRouteLayer } from "./ws/http.plugins";
 import { mobileWebsocketRpcRouteLayer } from "./ws/ws.mobile";
 import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
@@ -101,6 +102,7 @@ import { VisibleBrowserControlLive } from "./browser/Layers/VisibleBrowserContro
 import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
+import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -302,6 +304,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(KeybindingsLive),
   Layer.provideMerge(DiscoveryRegistryLive),
+  Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(
     ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive), Layer.provide(PersistenceLayerLive)),
@@ -325,6 +328,7 @@ export const makeRoutesLayer = Layer.mergeAll(
   attachmentsRouteLayer,
   otlpTracesProxyRouteLayer,
   projectFaviconRouteLayer,
+  pluginAssetRouteLayer,
   workspacePdfViewerRouteLayer,
   workspaceFilePreviewRouteLayer,
   mobilePairingRoutesLayer,

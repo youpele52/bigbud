@@ -33,3 +33,4 @@ build-certs/
 !.bigbud/skills/
 !.bigbud/skills/**
 .opencode/
+/.firecrawl/

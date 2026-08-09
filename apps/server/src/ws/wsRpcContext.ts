@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema, Stream } from "effect";
 import {
   CommandId,
   EventId,
@@ -46,6 +46,7 @@ import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts"
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
 import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
+import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/PluginRegistry";
 
 class CliProxyActivationEffectError extends Schema.TaggedErrorClass<CliProxyActivationEffectError>()(
   "CliProxyActivationEffectError",
@@ -123,6 +124,29 @@ export const makeWsRpcContext = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const handoffJobs = yield* makeServerHandoffJobs;
   const threadRetentionOption = yield* Effect.serviceOption(ThreadRetention);
+  const pluginRegistryOption = yield* Effect.serviceOption(PluginRegistry);
+  const pluginRegistry: PluginRegistryShape = Option.getOrElse(pluginRegistryOption, () => ({
+    listCatalog: Effect.succeed({
+      revision: "unavailable",
+      sync: { status: "unavailable" as const },
+      items: [],
+      installed: [],
+    }),
+    get: () => Effect.die("Plugin registry is unavailable"),
+    refresh: Effect.succeed({
+      revision: "unavailable",
+      sync: { status: "unavailable" as const },
+      items: [],
+      installed: [],
+    }),
+    install: () => Effect.die("Plugin registry is unavailable"),
+    update: () => Effect.die("Plugin registry is unavailable"),
+    uninstall: () => Effect.die("Plugin registry is unavailable"),
+    streamChanges: Stream.empty,
+    // @effect-diagnostics-next-line effectSucceedWithVoid:off
+    resolveAsset: () => Effect.succeed(undefined),
+    getInstalledSkillRoots: Effect.succeed([]),
+  }));
   const retentionUnavailable = () =>
     Effect.fail(
       new ServerThreadRetentionError({
@@ -325,6 +349,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
     normalizeDispatchCommand,
     open,
     orchestrationEngine,
+    pluginRegistry,
     projectSetupScriptRunner,
     projectionNotes,
     projectionKanban,

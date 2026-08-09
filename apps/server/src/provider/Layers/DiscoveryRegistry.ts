@@ -10,6 +10,7 @@ import {
   Equal,
   FileSystem,
   Layer,
+  Option,
   Path,
   PubSub,
   Ref,
@@ -19,6 +20,7 @@ import {
 
 import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
+import { PluginRegistry } from "../../plugins/Services/PluginRegistry";
 import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/DiscoveryRegistry";
 import {
   buildDiscoveryConfigDescriptors,
@@ -30,6 +32,7 @@ import {
   parseOpencodeConfigAgents,
 } from "./DiscoveryRegistry.parse.ts";
 import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
+import { buildPluginSkillDescriptors, withPluginProvenance } from "./DiscoveryRegistry.plugins.ts";
 
 const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
   agents: [],
@@ -128,6 +131,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
+  const pluginRegistry = yield* Effect.serviceOption(PluginRegistry);
   const fallbackRescanInterval = resolveDiscoveryFallbackRescanInterval();
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerDiscoveryCatalog>(),
@@ -174,9 +178,19 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
 
   const scanDiscoveryFiles = () =>
     Effect.gen(function* () {
-      const descriptors = yield* resolveKnownFileDescriptors();
+      const [descriptors, pluginRoots] = yield* Effect.all(
+        [
+          resolveKnownFileDescriptors(),
+          Option.match(pluginRegistry, {
+            onNone: () => Effect.succeed([]),
+            onSome: (registry) => registry.getInstalledSkillRoots,
+          }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const allDescriptors = [...descriptors, ...buildPluginSkillDescriptors(pluginRoots)];
       const resolvedPaths = yield* Effect.forEach(
-        descriptors,
+        allDescriptors,
         (descriptor) =>
           collectPathsRecursive(fs, descriptor.path, (absolutePath) => {
             if (descriptor.kind === "skill") {
@@ -192,7 +206,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       );
       const flat = resolvedPaths.flat();
       yield* Effect.logInfo(
-        `[DiscoveryRegistry] scanDiscoveryFiles: ${flat.length} files found from ${descriptors.length} descriptors`,
+        `[DiscoveryRegistry] scanDiscoveryFiles: ${flat.length} files found from ${allDescriptors.length} descriptors`,
       );
       return flat;
     });
@@ -208,7 +222,21 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         fileDescriptors,
         (descriptor) =>
           fs.readFileString(descriptor.path).pipe(
-            Effect.map((content) => parseDiscoveryFile({ ...descriptor, content })),
+            Effect.map((content) => {
+              const parsed = parseDiscoveryFile({ ...descriptor, content });
+              return parsed.kind === "skill"
+                ? {
+                    ...parsed,
+                    entry: withPluginProvenance(
+                      parsed.entry,
+                      descriptor as {
+                        readonly pluginId?: string;
+                        readonly pluginRevision?: string;
+                      },
+                    ),
+                  }
+                : parsed;
+            }),
             Effect.catch(() => Effect.succeed(null)),
           ),
         { concurrency: "unbounded" },
@@ -277,6 +305,11 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   yield* Stream.runForEach(serverSettings.streamChanges, () => syncCatalog()).pipe(
     Effect.forkScoped,
   );
+  if (Option.isSome(pluginRegistry)) {
+    yield* Stream.runForEach(pluginRegistry.value.streamChanges, () => syncCatalog()).pipe(
+      Effect.forkScoped,
+    );
+  }
   const watchTargets = yield* resolveWatchTargets();
   yield* Effect.logInfo(
     `[DiscoveryRegistry] watching ${watchTargets.length} roots for auto-discovery changes`,

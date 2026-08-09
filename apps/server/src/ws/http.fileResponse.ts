@@ -6,6 +6,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 export interface LocalFileResponseHeaders {
   readonly "Cache-Control"?: string;
   readonly "Content-Type"?: string;
+  readonly "X-Content-Type-Options"?: string;
 }
 
 export interface ParsedByteRange {
