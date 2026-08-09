@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import { prepareAcpThreadOrchestrationBridge } from "./orchestrationMcpBridge.session.ts";
 
 describe("orchestrationMcpBridge.session", () => {
@@ -20,7 +21,7 @@ describe("orchestrationMcpBridge.session", () => {
       expect(prepared.mcpServers).toEqual([
         {
           name: "bigbud_orchestration",
-          command: process.execPath,
+          command: resolveNodeExecutable(),
           args: [prepared.bridge.serverPath],
           env: [],
         },
