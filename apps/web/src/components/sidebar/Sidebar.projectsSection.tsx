@@ -54,7 +54,6 @@ interface SidebarProjectsSectionProps {
   // Project list
   renderedProjects: RenderedProjectEntry[];
   isManualProjectSorting: boolean;
-  bootstrapComplete: boolean;
   onDragStart: (event: import("@dnd-kit/core").DragStartEvent) => void;
   onDragEnd: (event: import("@dnd-kit/core").DragEndEvent) => void;
   onDragCancel: (event: import("@dnd-kit/core").DragCancelEvent) => void;
@@ -87,7 +86,6 @@ export function SidebarProjectsSection({
   onCancelAdd,
   renderedProjects,
   isManualProjectSorting,
-  bootstrapComplete,
   onDragStart,
   onDragEnd,
   onDragCancel,
@@ -185,7 +183,6 @@ export function SidebarProjectsSection({
         <SidebarProjectList
           renderedProjects={localProjects as unknown as RenderedProject[]}
           isManualSorting={isManualProjectSorting}
-          bootstrapComplete={bootstrapComplete}
           hasProjects={localProjects.length > 0}
           showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
           onDragStart={onDragStart}
@@ -237,7 +234,6 @@ export function SidebarProjectsSection({
           <SidebarProjectList
             renderedProjects={remoteProjects as unknown as RenderedProject[]}
             isManualSorting={isManualProjectSorting}
-            bootstrapComplete={bootstrapComplete}
             hasProjects={remoteProjects.length > 0}
             showEmptyState={false}
             onDragStart={onDragStart}
@@ -252,8 +248,7 @@ export function SidebarProjectsSection({
             )}
           />
 
-          {bootstrapComplete &&
-          remoteProjects.length === 0 &&
+          {remoteProjects.length === 0 &&
           (localProjects.length > 0 || shouldShowProjectPathEntry) ? (
             <div className="px-4 py-2 text-xs text-muted-foreground/60">No remote projects yet</div>
           ) : null}

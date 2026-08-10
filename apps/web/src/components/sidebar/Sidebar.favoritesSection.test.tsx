@@ -42,10 +42,6 @@ vi.mock("../ui/sidebar", () => ({
   }) => <div className={className}>{children}</div>,
 }));
 
-vi.mock("../ui/spinner", () => ({
-  Spinner: ({ className }: { className?: string }) => <div className={className}>spinner</div>,
-}));
-
 vi.mock("./SidebarThreadRow", () => ({
   SidebarThreadRow: ({ threadId }: { threadId: ThreadId }) => <div>thread:{threadId}</div>,
 }));
@@ -106,12 +102,10 @@ function renderFavoritesSection({
   renderedFavorites = [],
   isExpanded = true,
   showAll = false,
-  bootstrapComplete = true,
 }: {
   renderedFavorites?: SidebarRenderedThreadEntry[];
   isExpanded?: boolean;
   showAll?: boolean;
-  bootstrapComplete?: boolean;
 } = {}) {
   return renderToStaticMarkup(
     <SidebarFavoritesSection
@@ -121,7 +115,6 @@ function renderFavoritesSection({
       showAll={showAll}
       onShowAllChange={vi.fn()}
       sharedProjectItemProps={buildSharedProjectItemProps()}
-      bootstrapComplete={bootstrapComplete}
     />,
   );
 }
@@ -197,13 +190,5 @@ describe("SidebarFavoritesSection", () => {
 
     expect(html).toContain("thread:thread-5");
     expect(html).toContain("Show less");
-  });
-
-  it("shows a loading spinner before bootstrap completes", () => {
-    const html = renderFavoritesSection({ bootstrapComplete: false });
-
-    expect(html).toContain("spinner");
-    expect(html).not.toContain("Pinned");
-    expect(html).not.toContain("No pinned threads yet");
   });
 });
