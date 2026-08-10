@@ -40,6 +40,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerSettingsError } from "@bigbud/contracts";
 import { BUILT_IN_MODELS, DEFAULT_CODEX_MODEL_CAPABILITIES } from "./Provider.models";
 import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./Provider.auth";
+import { makeCodexInitialSnapshot } from "./Provider.initialSnapshot";
 
 export { getCodexModelCapabilities } from "./Provider.models";
 export {
@@ -375,6 +376,7 @@ export const CodexProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      initialSnapshot: makeCodexInitialSnapshot,
     });
   }),
 );

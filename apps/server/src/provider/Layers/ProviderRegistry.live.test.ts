@@ -125,7 +125,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             }
             assert.strictEqual(
               initial.find((status) => status.provider === "codex")?.status,
-              "ready",
+              "warning",
             );
 
             yield* serverSettings.updateSettings({
@@ -147,7 +147,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             const updated = yield* registry.getProviders;
             assert.strictEqual(
               updated.find((status) => status.provider === "codex")?.status,
-              "error",
+              "warning",
             );
           }).pipe(Effect.provide(runtimeServices));
         }),
@@ -192,7 +192,11 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             const registry = yield* ProviderRegistry;
 
             const initial = yield* registry.getProviders;
-            assert.deepStrictEqual(initial, []);
+            assert.strictEqual(initial.length, 8);
+            assert.strictEqual(
+              initial.find((provider) => provider.provider === "codex")?.status,
+              "warning",
+            );
 
             for (let attempt = 0; attempt < 20; attempt += 1) {
               const providers = yield* registry.getProviders;
@@ -216,7 +220,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             );
             assert.strictEqual(
               providers.find((provider) => provider.provider === "codex")?.status,
-              "ready",
+              "warning",
             );
             assert.strictEqual(
               providers.find((provider) => provider.provider === "opencode")?.status,
