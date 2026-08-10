@@ -147,7 +147,7 @@ describe("bounded project catalog bootstrap", () => {
 
     await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
 
-    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([[{ limit: 2 }]]);
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([[{ limit: 1 }]]);
     expect(orchestration.getProjectThreadSummaries).not.toHaveBeenCalled();
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
     expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
@@ -198,7 +198,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [makeProject(project1, "Prioritized"), makeProject(project2, "Recent")],
+        projects: [makeProject(project1, "Prioritized")],
         nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
@@ -209,7 +209,7 @@ describe("bounded project catalog bootstrap", () => {
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
 
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(1);
-    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1, project2]);
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
   });
 
   it("restores recent chats outside sampled projects and global pins outside project pages", async () => {

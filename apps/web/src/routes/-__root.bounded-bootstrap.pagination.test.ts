@@ -82,6 +82,20 @@ describe("lazy project catalog pagination", () => {
     expect(useStore.getState().projectCatalogCursor).toBeNull();
   });
 
+  it("loads five projects from the catalog head after a single prioritized project", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.getState().appendProjectCatalogPage(makePage(project1, cursor1));
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api });
+
+    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      limit: 6,
+      priorityProjectId: project1,
+    });
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1, project2]);
+  });
+
   it("preserves the cursor after failure and retries", async () => {
     const { api, orchestration } = makeApi();
     orchestration.getStartupProjectCatalog.mockRejectedValueOnce(new Error("offline"));
