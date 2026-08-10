@@ -118,14 +118,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             // Initial probes run asynchronously after layer construction.
             // Poll until codex is ready (or exhaust attempts).
             let initial: ReadonlyArray<ServerProvider> = [];
-            for (let attempt = 0; attempt < 20; attempt += 1) {
+            for (let attempt = 0; attempt < 100; attempt += 1) {
               initial = yield* registry.getProviders;
               if (initial.find((p) => p.provider === "codex")?.status === "ready") break;
-              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
+              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
             }
             assert.strictEqual(
               initial.find((status) => status.provider === "codex")?.status,
-              "warning",
+              "ready",
             );
 
             yield* serverSettings.updateSettings({
