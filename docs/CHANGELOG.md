@@ -2,6 +2,31 @@
 
 Every bigbud release, in one place. New features, thoughtful improvements, and hard-won bug fixes — all documented here so you can follow the product as it grows. Jump to the latest release below, or browse the full history.
 
+## v0.2.200 (10 August, 2026)
+
+### Plugin Store and Skills
+
+- Added a Plugin Store with searchable catalog and detail pages, artwork, install controls, update notifications, and sidebar navigation.
+- Added secure, provider-neutral skill discovery and installation, so installed plugin skills can be used from the composer, messages, and Orchestra regardless of the selected provider.
+- Protected plugin updates and artwork delivery with validated manifests, immutable installed revisions, and safe asset-path handling.
+
+### More Reliable Workflows
+
+- Added configurable automatic thread retention with previews, confirmation, recovery-aware scheduling, and safe cleanup of eligible inactive threads.
+- Improved provider recovery, queued prompts, thread history, and cleanup of browser, terminal, computer-use, checkpoint, and attachment resources across restarts and deletions.
+- Prevented persisted threads, including delegated parent threads, from being recreated before their stored state has been restored.
+- Kept desktop bridge validation correct when a packaged installation uses its configured Node executable.
+
+### Refined Interface
+
+- Added in-page Settings filtering that preserves the query while navigating, shows matching controls and sections only, and reports when no setting matches.
+- Replaced the text-based scroll-to-bottom control with a compact circular down-arrow button aligned with the send action.
+- Added a shared centered layout for Usage and Scheduled pages, and refined permission, Git action, and pending-approval dialog presentation.
+
+### Validation
+
+- Passed formatting, linting, and type checks, along with focused Settings-search and scroll-control browser coverage.
+
 ## What's new?
 
 - bigbud now takes better care of your work during updates and restarts, fixing stale local data automatically so you can get back to work with fewer interruptions.

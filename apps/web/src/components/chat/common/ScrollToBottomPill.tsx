@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowDownIcon } from "lucide-react";
 
 interface ScrollToBottomPillProps {
   onScrollToBottom: () => void;
@@ -10,10 +10,10 @@ export function ScrollToBottomPill({ onScrollToBottom }: ScrollToBottomPillProps
       <button
         type="button"
         onClick={onScrollToBottom}
-        className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
+        aria-label="Scroll to bottom"
+        className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm transition-all duration-150 hover:scale-105 hover:bg-muted enabled:cursor-pointer sm:h-8 sm:w-8"
       >
-        <ChevronDownIcon className="size-3.5" />
-        Scroll to bottom
+        <ArrowDownIcon className="size-4 sm:size-3.5" />
       </button>
     </div>
   );

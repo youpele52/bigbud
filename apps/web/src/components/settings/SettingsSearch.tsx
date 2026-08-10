@@ -1,24 +1,24 @@
 import { SearchIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
 
 import { Input } from "../ui/input";
-import { SETTINGS_SEARCH_ITEMS } from "./SettingsSidebarNav.items";
+import { getSettingsSearchResults, normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
+import type { SETTINGS_SEARCH_ITEMS } from "./SettingsSidebarNav.items";
 
 const MAX_RESULTS = 6;
 
-export function SettingsSearch() {
+export function SettingsSearch({
+  query,
+  onQueryChange,
+}: {
+  query: string;
+  onQueryChange: (query: string) => void;
+}) {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const results = normalizedQuery
-    ? SETTINGS_SEARCH_ITEMS.filter((item) =>
-        `${item.label} ${item.section}`.toLowerCase().includes(normalizedQuery),
-      ).slice(0, MAX_RESULTS)
-    : [];
+  const normalizedQuery = normalizeSettingsSearchQuery(query);
+  const results = getSettingsSearchResults(query).slice(0, MAX_RESULTS);
 
   const selectResult = (result: (typeof SETTINGS_SEARCH_ITEMS)[number]) => {
-    setQuery("");
     void navigate({ to: result.to, replace: true });
   };
 
@@ -31,16 +31,18 @@ export function SettingsSearch() {
         value={query}
         placeholder="Search settings"
         aria-label="Search settings"
-        aria-controls="settings-search-results"
+        aria-controls={normalizedQuery ? "settings-search-results" : undefined}
+        aria-expanded={Boolean(normalizedQuery)}
         className="bg-background/60 ps-7"
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && results[0]) {
             event.preventDefault();
             selectResult(results[0]);
           }
           if (event.key === "Escape") {
-            setQuery("");
+            event.preventDefault();
+            onQueryChange("");
             event.currentTarget.blur();
           }
         }}
