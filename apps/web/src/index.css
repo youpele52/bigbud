@@ -94,6 +94,14 @@
   animation-duration: 0s !important;
 }
 
+[data-settings-searching] [data-settings-search-section]:not(:has([data-settings-search-match])) {
+  display: none;
+}
+
+[data-settings-searching]:has([data-settings-search-match]) .settings-search-empty {
+  display: none;
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;

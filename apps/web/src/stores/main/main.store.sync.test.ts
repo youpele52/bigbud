@@ -172,6 +172,7 @@ describe("store read model sync", () => {
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],
       bootstrapComplete: true,
+      projectCatalogGeneration: 0,
       threadHydrationById: {},
     };
     const readModel: OrchestrationReadModel = {

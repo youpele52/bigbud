@@ -156,6 +156,8 @@ export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 export const ServerDiscoveredSkill = Schema.Struct({
   ...ServerDiscoveredEntryBase.fields,
   displayName: Schema.optional(TrimmedNonEmptyString),
+  pluginId: Schema.optional(TrimmedNonEmptyString),
+  pluginRevision: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
 

@@ -3,8 +3,9 @@
  *
  * Provider probes are kicked off asynchronously after construction so a
  * missing CLI binary (ENOENT) never blocks server startup.  The registry
- * starts with an empty list and hydrates via the individual providers'
- * `streamChanges` streams, publishing each delta through `changesPubSub`.
+ * starts with immediate provider snapshots and hydrates verified status via
+ * the individual providers' `streamChanges` streams, publishing each delta
+ * through `changesPubSub`.
  *
  * @module ProviderRegistryLive
  */
@@ -82,12 +83,18 @@ const makeProviderRegistryLayer = (
         PubSub.shutdown,
       );
 
-      // Start empty — probes are kicked off asynchronously below.
-      const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>([]);
+      // Every managed provider supplies an immediate snapshot, so the registry
+      // can expose the complete ordered list before background probes finish.
+      const initialProviders = yield* loadProviders(registrations);
+      const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(initialProviders);
 
       // Latches the first provider that becomes ready.  Subsequent ready
       // providers do not override the latched value.
       const firstReadyDeferred = yield* Deferred.make<ServerProvider>();
+      const initiallyReady = findFirstReadyProvider(initialProviders);
+      if (Option.isSome(initiallyReady)) {
+        yield* Deferred.succeed(firstReadyDeferred, initiallyReady.value).pipe(Effect.ignore);
+      }
 
       const syncProviders = Effect.fn("syncProviders")(function* (options?: {
         readonly publish?: boolean;
@@ -109,19 +116,17 @@ const makeProviderRegistryLayer = (
         return providers;
       });
 
-      // Kick off an initial probe for each provider asynchronously — a failure
-      // in any individual probe is contained inside `makeManagedServerProvider`
-      // and will surface as a degraded snapshot, never as a startup failure.
-      yield* syncProviders({ publish: true }).pipe(
-        Effect.ignoreCause({ log: true }),
-        Effect.forkScoped,
-      );
-
       yield* Effect.forEach(registrations, (registration) =>
         Stream.runForEach(registration.service.streamChanges, () => syncProviders()).pipe(
           Effect.forkScoped,
         ),
       ).pipe(Effect.asVoid);
+      // A probe can complete between provider construction and stream subscription.
+      // Re-read the in-memory snapshots to capture that transition without probing.
+      yield* syncProviders({ publish: true }).pipe(
+        Effect.ignoreCause({ log: true }),
+        Effect.forkScoped,
+      );
 
       const refresh = Effect.fn("refresh")(function* (provider?: ProviderKind) {
         if (provider !== undefined) {

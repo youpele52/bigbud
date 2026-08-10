@@ -6,7 +6,6 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogPanel,
   DialogPopup,
   DialogTitle,
 } from "~/components/ui/dialog";
@@ -32,21 +31,19 @@ export function GitActionsControlDialogs(props: {
               permanently lost. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogPanel>
-            <DialogFooter>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={props.discard.onDiscard}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              >
-                Discard changes
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => props.discard.onOpenChange(false)}>
-                Cancel
-              </Button>
-            </DialogFooter>
-          </DialogPanel>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={props.discard.onDiscard}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              Discard changes
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => props.discard.onOpenChange(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
         </DialogPopup>
       </Dialog>
     </>

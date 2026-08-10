@@ -13,7 +13,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly streamSettings: Stream.Stream<Settings>;
   readonly haveSettingsChanged: (previous: Settings, next: Settings) => boolean;
   readonly checkProvider: Effect.Effect<ServerProvider, ServerSettingsError>;
-  readonly initialSnapshot?: ServerProvider | ((settings: Settings) => ServerProvider);
+  readonly initialSnapshot: ServerProvider | ((settings: Settings) => ServerProvider);
   readonly refreshInterval?: Duration.Input;
   readonly enrichSnapshot?: (opts: {
     readonly settings: Settings;
@@ -27,15 +27,10 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     PubSub.shutdown,
   );
   const initialSettings = yield* input.getSettings;
-  let initialSnapshot: ServerProvider;
-  if (input.initialSnapshot !== undefined) {
-    initialSnapshot =
-      typeof input.initialSnapshot === "function"
-        ? input.initialSnapshot(initialSettings)
-        : input.initialSnapshot;
-  } else {
-    initialSnapshot = yield* input.checkProvider;
-  }
+  const initialSnapshot =
+    typeof input.initialSnapshot === "function"
+      ? input.initialSnapshot(initialSettings)
+      : input.initialSnapshot;
   const snapshotRef = yield* Ref.make(initialSnapshot);
   const settingsRef = yield* Ref.make(initialSettings);
 
@@ -82,12 +77,10 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     return yield* applySnapshot(nextSettings, { forceRefresh: true });
   });
 
-  // Seeded providers start with a cheap placeholder snapshot so construction
+  // Providers always start with a cheap placeholder snapshot so construction
   // never blocks on optional external binaries. Kick off the real probe in the
   // background and publish once it completes.
-  if (input.initialSnapshot !== undefined) {
-    yield* refreshSnapshot().pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
-  }
+  yield* refreshSnapshot().pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
 
   yield* Stream.runForEach(input.streamSettings, (nextSettings) =>
     Effect.asVoid(applySnapshot(nextSettings)),

@@ -285,4 +285,95 @@ describe("OrchestrationEngine queued prompt recovery", () => {
       ).toHaveLength(1);
       await second.dispose();
     }));
+
+  it("creates a child from a persisted parent omitted from startup state", () =>
+    withDatabase("bigbud-parent-hydration-", async (dbPath) => {
+      const projectId = ProjectId.makeUnsafe("project-parent-hydration");
+      const parentId = ThreadId.makeUnsafe("thread-parent-hydration");
+      const siblingId = ThreadId.makeUnsafe("thread-operational-sibling");
+      const childId = ThreadId.makeUnsafe("thread-child-hydration");
+      const first = createRuntime(dbPath);
+      const firstEngine = await dispatchAll(first, [
+        ...createCommands(projectId, [parentId, siblingId]),
+      ]);
+      await first.runPromise(
+        firstEngine.dispatch({
+          type: "thread.pin",
+          commandId: CommandId.makeUnsafe("cmd-pin-operational-sibling"),
+          threadId: siblingId,
+        }),
+      );
+      await first.dispose();
+
+      const second = createRuntime(dbPath);
+      const secondEngine = await engineFor(second);
+      const startupState = await second.runPromise(secondEngine.getReadModel());
+      expect(startupState.threads.some((thread) => thread.id === siblingId)).toBe(true);
+      expect(startupState.threads.some((thread) => thread.id === parentId)).toBe(false);
+
+      await second.runPromise(
+        secondEngine.dispatch({
+          type: "thread.create",
+          commandId: CommandId.makeUnsafe("cmd-create-hydrated-child"),
+          threadId: childId,
+          projectId,
+          title: "Hydrated child",
+          modelSelection: { provider: "codex", model: "gpt-5-codex" },
+          interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          parentThread: {
+            threadId: parentId,
+            title: "Persisted parent",
+            projectId,
+          },
+          createdAt,
+        }),
+      );
+
+      const finalState = await second.runPromise(secondEngine.getReadModel());
+      expect(finalState.threads.find((thread) => thread.id === childId)?.parentThread).toEqual({
+        threadId: parentId,
+        title: "Persisted parent",
+        projectId,
+      });
+      await second.dispose();
+    }));
+
+  it("rejects recreation of a persisted thread omitted from startup state", () =>
+    withDatabase("bigbud-create-duplicate-", async (dbPath) => {
+      const projectId = ProjectId.makeUnsafe("project-create-duplicate");
+      const threadId = ThreadId.makeUnsafe("thread-create-duplicate");
+      const siblingId = ThreadId.makeUnsafe("thread-create-duplicate-sibling");
+      const first = createRuntime(dbPath);
+      const firstEngine = await dispatchAll(first, [
+        ...createCommands(projectId, [threadId, siblingId]),
+      ]);
+      await first.runPromise(
+        firstEngine.dispatch({
+          type: "thread.pin",
+          commandId: CommandId.makeUnsafe("cmd-pin-create-duplicate-sibling"),
+          threadId: siblingId,
+        }),
+      );
+      await first.dispose();
+
+      const second = createRuntime(dbPath);
+      const secondEngine = await engineFor(second);
+      expect(
+        (await second.runPromise(secondEngine.getReadModel())).threads.some(
+          (thread) => thread.id === threadId,
+        ),
+      ).toBe(false);
+      await expect(
+        second.runPromise(
+          secondEngine.dispatch({
+            ...createCommands(projectId, [threadId])[1]!,
+            commandId: CommandId.makeUnsafe("cmd-recreate-dormant-thread"),
+          }),
+        ),
+      ).rejects.toThrow("already exists");
+      await second.dispose();
+    }));
 });

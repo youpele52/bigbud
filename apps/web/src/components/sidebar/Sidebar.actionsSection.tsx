@@ -1,4 +1,4 @@
-import { BarChart3Icon, ClockIcon, SearchIcon, SquarePenIcon } from "lucide-react";
+import { BarChart3Icon, ClockIcon, PlugIcon, SearchIcon, SquarePenIcon } from "lucide-react";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
@@ -10,6 +10,7 @@ interface SidebarActionsSectionProps {
   onNewChat: () => void;
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
+  onOpenPlugins?: () => void;
   newThreadShortcutLabel: string | null | undefined;
 }
 
@@ -17,6 +18,7 @@ export function SidebarActionsSection({
   onNewChat,
   onOpenAutomations,
   onOpenUsage,
+  onOpenPlugins,
   newThreadShortcutLabel,
 }: SidebarActionsSectionProps) {
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
@@ -75,6 +77,25 @@ export function SidebarActionsSection({
         <TooltipPopup side="right">
           {searchShortcutLabel ? `Search (${searchShortcutLabel})` : "Search"}
         </TooltipPopup>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Open plugins"
+              className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={onOpenPlugins}
+            />
+          }
+        >
+          <PlugIcon
+            className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
+          />
+          <span className="flex-1">Plugins</span>
+        </TooltipTrigger>
+        <TooltipPopup side="right">Plugins</TooltipPopup>
       </Tooltip>
 
       <Tooltip>

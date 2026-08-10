@@ -33,7 +33,7 @@ export type SerializedComposerMentionNode = Spread<
   {
     rawValue: string;
     displayLabel: string;
-    mentionKind: "path" | "agent" | "skill";
+    mentionKind: "path" | "agent" | "skill" | "plugin";
     type: "composer-mention";
     version: 1;
   },
@@ -65,7 +65,7 @@ export function renderMentionChipDomWithLabel(
   container: HTMLElement,
   pathValue: string,
   labelValue: string,
-  mentionKind: "path" | "agent" | "skill" = "path",
+  mentionKind: "path" | "agent" | "skill" | "plugin" = "path",
 ): void {
   container.textContent = "";
   container.style.setProperty("user-select", "none");
@@ -115,7 +115,7 @@ export function renderMentionChipDomWithLabel(
 export class ComposerMentionNode extends TextNode {
   __rawValue: string;
   __displayLabel: string;
-  __mentionKind: "path" | "agent" | "skill";
+  __mentionKind: "path" | "agent" | "skill" | "plugin";
 
   static override getType(): string {
     return "composer-mention";
@@ -146,7 +146,7 @@ export class ComposerMentionNode extends TextNode {
       | {
           rawValue: string;
           displayLabel?: string;
-          mentionKind?: "path" | "agent" | "skill";
+          mentionKind?: "path" | "agent" | "skill" | "plugin";
         },
     key?: NodeKey,
   ) {
@@ -220,7 +220,7 @@ export function $createComposerMentionNode(
     | {
         rawValue: string;
         displayLabel?: string;
-        mentionKind?: "path" | "agent" | "skill";
+        mentionKind?: "path" | "agent" | "skill" | "plugin";
       },
 ): ComposerMentionNode {
   return $applyNodeReplacement(new ComposerMentionNode(input));

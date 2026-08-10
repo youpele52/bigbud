@@ -114,8 +114,19 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   });
 
   const prepareCommandState = (command: OrchestrationCommand) => {
-    if (threadStateHydrator === null || command.type === "thread.create") {
+    if (threadStateHydrator === null) {
       return Effect.void;
+    }
+    if (command.type === "thread.create") {
+      return Effect.gen(function* () {
+        yield* threadStateHydrator.load(command.threadId, "operational");
+        if (
+          command.parentThread !== undefined &&
+          command.parentThread.threadId !== command.threadId
+        ) {
+          yield* threadStateHydrator.load(command.parentThread.threadId, "operational");
+        }
+      });
     }
     const aggregate = commandToAggregateRef(command);
     if (aggregate.aggregateKind !== "thread") {

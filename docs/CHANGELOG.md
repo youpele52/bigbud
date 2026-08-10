@@ -4,11 +4,48 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- bigbud now takes better care of your work during updates and restarts, fixing stale local data automatically so you can get back to work with fewer interruptions.
-- More reliable provider workflows, including Claudex (CLIProxy) follow-ups, Pi thinking controls, Claude Ultracode, and stronger session recovery.
-- Automatic thread retention with configurable schedules, previews, confirmation, progress tracking, and safe recovery.
-- Queued prompts and history now remain reliable across refreshes and restarts.
-- Safer cleanup protects attachments and active browser, terminal, shell, computer-use, checkpoint, and provider resources.
+- Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
+- Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
+- Keep inactive work tidy with configurable automatic thread retention, previews, confirmation, recovery-aware scheduling, and safe cleanup.
+- Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
+
+## v0.2.200 (10 August, 2026)
+
+### Plugin Store and Skills
+
+- Added a Plugin Store with searchable catalog and detail pages, artwork, install controls, update notifications, and sidebar navigation.
+- Added secure, provider-neutral skill discovery and installation, so installed plugin skills can be used from the composer, messages, and Orchestra regardless of the selected provider.
+- Protected plugin updates and artwork delivery with validated manifests, immutable installed revisions, and safe asset-path handling.
+
+### More Reliable Workflows
+
+- Added configurable automatic thread retention with previews, confirmation, recovery-aware scheduling, and safe cleanup of eligible inactive threads.
+- Improved provider recovery, queued prompts, thread history, and cleanup of browser, terminal, computer-use, checkpoint, and attachment resources across restarts and deletions.
+- Prevented persisted threads, including delegated parent threads, from being recreated before their stored state has been restored.
+- Kept desktop bridge validation correct when a packaged installation uses its configured Node executable.
+
+### Faster Startup and Provider Discovery
+
+- Provider discovery now publishes immediate, provider-specific snapshots for Claude, Codex, and GitHub Copilot, so the registry can expose model choices and availability feedback while optional CLI or SDK checks continue in the background.
+- Mounted the application shell and selected chat route beneath the startup splash as bootstrap work continues, reducing the blank-screen delay while preserving the startup transition.
+
+### Bounded Project Loading
+
+- Limited startup to the first project catalog page and the selected project's thread summaries, keeping initial loading bounded for workspaces with many projects.
+- Added sidebar controls to load five more projects or all remaining projects on demand, with request coalescing, retry feedback, and protection against stale pagination results overwriting newer state.
+- Preserved live project metadata and deletion updates while catalog pages are loading, preventing stale snapshots from resurrecting deleted projects or replacing newer project changes.
+
+### Refined Interface
+
+- Added in-page Settings filtering that preserves the query while navigating, shows matching controls and sections only, and reports when no setting matches.
+- Replaced the text-based scroll-to-bottom control with a compact circular down-arrow button aligned with the send action.
+- Added a shared centered layout for Usage and Scheduled pages, and refined permission, Git action, and pending-approval dialog presentation.
+- Reduced collapsed work-log groups to two entries and kept virtualized timeline sizing correct when expanding and collapsing them.
+
+### Validation
+
+- Added regression coverage for provider initial snapshots, bounded project pagination and stale-result handling, project-event reconciliation, startup rendering, and work-log virtualization.
+- Passed formatting, linting, and type checks, along with focused Settings-search, startup, project-loading, and scroll-control browser coverage.
 
 ## v0.2.104 (4 August, 2026)
 

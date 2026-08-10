@@ -10,6 +10,7 @@ import { Effect, FileSystem } from "effect";
 import type { DiscoveryRegistryShape } from "../../provider/Services/DiscoveryRegistry.ts";
 import type { WorkspacePathsShape } from "../../workspace/Services/WorkspacePaths.ts";
 import { appendTeachSkillRuntimeContext } from "./ProviderCommandReactorInputExpansion.teach.ts";
+import { buildPluginActivationBlock } from "./ProviderCommandReactorInputExpansion.plugin.ts";
 
 const COMPACT_MENTION_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
 const SLASH_SKILL_COMMAND_REGEX = /^\/skills?\s+([^\s]+)(?:\s+[\s\S]*)?$/i;
@@ -20,7 +21,7 @@ const MAX_TEXT_BLOCK_CHARS = 16_000;
 type DiscoveryEntry = ServerDiscoveredAgent | ServerDiscoveredSkill;
 type CompactMention =
   | {
-      readonly kind: "agent" | "skill";
+      readonly kind: "agent" | "skill" | "plugin";
       readonly rawValue: string;
       readonly name: string;
     }
@@ -95,6 +96,11 @@ function collectCompactMentions(messageText: string): Array<CompactMention> {
       }
       continue;
     }
+    if (rawValue.startsWith("plugin:") || rawValue.startsWith("plugin::")) {
+      const name = trimToUndefined(rawValue.replace(/^plugin::?/, ""));
+      if (name) addMention({ kind: "plugin", rawValue, name });
+      continue;
+    }
     addMention({ kind: "path", rawValue, path: rawValue });
   }
 
@@ -131,9 +137,12 @@ function resolveDiscoveryEntry<T extends DiscoveryEntry>(input: {
     return { status: "missing" };
   }
 
-  const bigbudEntry = matching.find((entry) => entry.provider === "bigbud");
-  if (bigbudEntry) {
-    return { status: "resolved", entry: bigbudEntry };
+  const bigbudEntries = matching.filter((entry) => entry.provider === "bigbud");
+  if (bigbudEntries.length === 1) {
+    return { status: "resolved", entry: bigbudEntries[0]! };
+  }
+  if (bigbudEntries.length > 1) {
+    return { status: "ambiguous", entries: bigbudEntries };
   }
 
   const preferredEntry = matching.find((entry) => entry.provider === input.preferredProvider);
@@ -340,6 +349,12 @@ export const expandProviderInputMentions = (
           rawPath: mention.path,
           workspaceRoot: input.workspaceRoot,
         });
+      }
+
+      if (mention.kind === "plugin") {
+        return Effect.succeed(
+          buildPluginActivationBlock({ pluginName: mention.name, skills: catalog.skills }),
+        );
       }
 
       const resolution = resolveDiscoveryEntry({

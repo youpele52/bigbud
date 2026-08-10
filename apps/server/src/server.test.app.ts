@@ -8,6 +8,7 @@ import { GitManager } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
 import { Keybindings } from "./keybindings/keybindings.ts";
 import { MobileRemoteControl } from "./mobile/Services/MobileRemoteControl.ts";
+import { PluginRegistry } from "./plugins/Services/PluginRegistry.ts";
 import { BrowserTraceCollector } from "./observability/Services/BrowserTraceCollector.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -96,15 +97,34 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
         }),
       ),
       Layer.provide(
-        Layer.mock(MobileRemoteControl)({
-          createPairing: () => Effect.die("not implemented"),
-          getPairingStatus: () => Effect.succeed(null),
-          exchangePairing: () => Effect.die("not implemented"),
-          listSessions: Effect.succeed([]),
-          revokeSession: () => Effect.void,
-          validateSessionToken: () => Effect.succeed(null),
-          ...options?.layers?.mobileRemoteControl,
-        }),
+        Layer.mergeAll(
+          Layer.mock(MobileRemoteControl)({
+            createPairing: () => Effect.die("not implemented"),
+            getPairingStatus: () => Effect.succeed(null),
+            exchangePairing: () => Effect.die("not implemented"),
+            listSessions: Effect.succeed([]),
+            revokeSession: () => Effect.void,
+            validateSessionToken: () => Effect.succeed(null),
+            ...options?.layers?.mobileRemoteControl,
+          }),
+          Layer.mock(PluginRegistry)({
+            listCatalog: Effect.succeed({
+              revision: "unavailable",
+              sync: { status: "unavailable" as const },
+              items: [],
+              installed: [],
+            }),
+            get: () => Effect.die("not implemented"),
+            refresh: Effect.die("not implemented"),
+            install: () => Effect.die("not implemented"),
+            update: () => Effect.die("not implemented"),
+            uninstall: () => Effect.die("not implemented"),
+            streamChanges: Stream.empty,
+            resolveAsset: () => Effect.succeed(undefined),
+            getInstalledSkillRoots: Effect.succeed([]),
+            ...options?.layers?.pluginRegistry,
+          }),
+        ),
       ),
       Layer.provide(Layer.mock(Open)({ ...options?.layers?.open })),
       Layer.provide(Layer.mock(GitCore)({ ...options?.layers?.gitCore })),

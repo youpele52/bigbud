@@ -132,6 +132,7 @@ function AboutVersionUpdateRow() {
   return (
     <SettingsRow
       title={<AboutVersionTitle />}
+      searchTerms={["Version"]}
       description={description}
       control={
         <Tooltip>
@@ -210,7 +211,11 @@ export function AboutVersionRow() {
   }
 
   return (
-    <SettingsRow title={<AboutVersionTitle />} description="Current version of the application." />
+    <SettingsRow
+      title={<AboutVersionTitle />}
+      searchTerms={["Version"]}
+      description="Current version of the application."
+    />
   );
 }
 

@@ -130,7 +130,7 @@ export function AssistantMessageBody({
         <div className="my-3 flex items-center gap-3">
           <span className="h-px flex-1 bg-border" />
           <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
-            {completionSummary ? `Response • ${completionSummary}` : "Response"}
+            {completionSummary ?? "Response"}
           </span>
           <span className="h-px flex-1 bg-border" />
         </div>

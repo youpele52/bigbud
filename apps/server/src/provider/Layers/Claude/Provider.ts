@@ -35,6 +35,7 @@ import {
   extractSubscriptionTypeFromOutput,
   parseClaudeAuthStatusFromOutput,
 } from "./ProviderAuth";
+import { makeClaudeInitialSnapshot } from "./Provider.initialSnapshot";
 
 const PROVIDER = "claudeAgent" as const;
 export { getClaudeModelCapabilities } from "./Provider.capabilities";
@@ -349,6 +350,7 @@ export const ClaudeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      initialSnapshot: makeClaudeInitialSnapshot,
     });
   }),
 );

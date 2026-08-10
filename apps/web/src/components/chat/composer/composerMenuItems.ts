@@ -41,7 +41,7 @@ function skillDisplayLabel(skill: ServerDiscoveredSkill): string {
   return skill.displayName ?? skill.name;
 }
 
-function matchesDiscoveryCommand(query: string, command: "skills" | "agents"): boolean {
+function matchesDiscoveryCommand(query: string, command: "skills" | "agents" | "plugins"): boolean {
   return command.startsWith(query) || query === command || query.startsWith(`${command} `);
 }
 
@@ -50,6 +50,34 @@ function extractDiscoverySearchTerm(query: string, command: string): string {
     return "";
   }
   return query.slice(command.length + 1);
+}
+
+function installedPluginItems(
+  skills: ReadonlyArray<ServerDiscoveredSkill>,
+  query: string,
+): ComposerCommandItem[] {
+  const plugins = new Map<string, ServerDiscoveredSkill>();
+  for (const skill of skills)
+    if (skill.source === "plugin" && skill.pluginId) plugins.set(skill.pluginId, skill);
+  const normalized = query.trim().toLowerCase();
+  return [...plugins.entries()]
+    .map(([pluginId, skill]) => ({ pluginId, skill, name: pluginId.split(":").at(-1) ?? pluginId }))
+    .filter(
+      ({ name, skill }) =>
+        !normalized ||
+        name.includes(normalized) ||
+        (skill.displayName ?? "").toLowerCase().includes(normalized) ||
+        (skill.description ?? "").toLowerCase().includes(normalized),
+    )
+    .toSorted((left, right) => left.name.localeCompare(right.name))
+    .map(({ pluginId, skill, name }) => ({
+      id: `plugin:${pluginId}`,
+      type: "plugin" as const,
+      pluginId,
+      name,
+      label: name,
+      description: skill.description ?? "Installed plugin",
+    }));
 }
 
 export function buildComposerMenuItems(input: BuildComposerMenuItemsInput): ComposerCommandItem[] {
@@ -113,7 +141,7 @@ export function buildComposerMenuItems(input: BuildComposerMenuItemsInput): Comp
       label: basenameOfPath(entry.path),
       description: entry.parentPath ?? "",
     })) satisfies ReadonlyArray<Extract<ComposerCommandItem, { type: "path" }>>;
-    return [...agentItems, ...pathItems];
+    return [...installedPluginItems(input.discoveredSkills, query), ...agentItems, ...pathItems];
   }
 
   if (composerTrigger.kind === "slash-command") {
@@ -176,6 +204,13 @@ export function buildComposerMenuItems(input: BuildComposerMenuItemsInput): Comp
         description: `Browse discovered skills (${input.discoveredSkills.length} total)`,
       },
       {
+        id: "slash:plugins",
+        type: "slash-command",
+        command: "plugins",
+        label: "/plugins",
+        description: "Browse installed plugins",
+      },
+      {
         id: "slash:read",
         type: "slash-command",
         command: "read",
@@ -234,6 +269,12 @@ export function buildComposerMenuItems(input: BuildComposerMenuItemsInput): Comp
     }
     if (matchesDiscoveryCommand(query, "skills")) {
       return [...skillItems];
+    }
+    if (matchesDiscoveryCommand(query, "plugins")) {
+      return installedPluginItems(
+        input.discoveredSkills,
+        extractDiscoverySearchTerm(query, "plugins"),
+      );
     }
     return slashCommandItems.filter(
       (item) => item.command.includes(query) || item.label.slice(1).includes(query),

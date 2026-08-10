@@ -228,6 +228,46 @@ export const checkCopilotProviderStatus = Effect.fn("checkCopilotProviderStatus"
   return statusResult.success;
 });
 
+export function makeCopilotInitialSnapshot(copilotSettings: CopilotSettings) {
+  const models = providerModelsFromSettings(
+    BUILT_IN_MODELS,
+    PROVIDER,
+    copilotSettings.customModels,
+    EMPTY_MODEL_CAPABILITIES,
+  );
+  const checkedAt = new Date().toISOString();
+
+  if (!copilotSettings.enabled) {
+    return buildServerProvider({
+      provider: PROVIDER,
+      enabled: false,
+      checkedAt,
+      models,
+      probe: {
+        installed: false,
+        version: null,
+        status: "warning",
+        auth: { status: "unknown" },
+        message: "GitHub Copilot is disabled in bigbud settings.",
+      },
+    });
+  }
+
+  return buildServerProvider({
+    provider: PROVIDER,
+    enabled: true,
+    checkedAt,
+    models,
+    probe: {
+      installed: true,
+      version: null,
+      status: "warning",
+      auth: { status: "unknown" },
+      message: "Checking GitHub Copilot availability...",
+    },
+  });
+}
+
 export const CopilotProviderLive = Layer.effect(
   CopilotProvider,
   Effect.gen(function* () {
@@ -255,6 +295,7 @@ export const CopilotProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      initialSnapshot: makeCopilotInitialSnapshot,
     });
   }),
 );

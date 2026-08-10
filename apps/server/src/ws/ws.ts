@@ -13,6 +13,7 @@ import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
+import { makeWsRpcPluginHandlers } from "./wsRpcHandlers.plugins";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -33,6 +34,7 @@ const WsRpcLayer = WsRpcGroup.toLayer(
       ...makeWsRpcTeachHandlers(context),
       ...makeWsRpcUsageHandlers(context),
       ...makeWsRpcGitTerminalHandlers(context),
+      ...makeWsRpcPluginHandlers(context),
     });
   }),
 );

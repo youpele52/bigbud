@@ -18,6 +18,7 @@ import { toastManager } from "../ui/toast";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { StandaloneChatPageHeader } from "../standalone/StandaloneChatPageHeader";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
+import { StandalonePageContent } from "../standalone/StandalonePageContent";
 import { UsageBreakdownCard, type UsageBreakdownView } from "./UsageBreakdownCard";
 import { UsageDataStatus } from "./UsageDataStatus";
 import { formatCompactNumber } from "./UsagePage.format";
@@ -120,199 +121,197 @@ export function UsagePage() {
           <BigbudLoader />
         </section>
       ) : (
-        <section className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-[56rem] flex-col gap-4 px-4 py-6 sm:px-6">
-            {displaySummary ? (
-              <>
-                <UsageDataStatus summary={displaySummary} />
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <UsageStatCard
-                    icon={SigmaIcon}
-                    label="Total tokens"
-                    value={displaySummary.totals.usedTokens.toLocaleString()}
-                  />
-                  <UsageStatCard
-                    icon={resolveUsageProviderIcon(displaySummary.favoriteProvider?.id ?? null)}
-                    label="Top provider"
-                    value={displaySummary.favoriteProvider?.label ?? "None"}
-                  />
-                  <UsageStatCard
-                    icon={BotIcon}
-                    label="Top model"
-                    value={displaySummary.favoriteModel?.label ?? "None"}
-                  />
-                  <UsageStatCard
-                    icon={FlameIcon}
-                    label="Streak"
-                    value={`${displaySummary.streakDays}d`}
-                  />
-                </div>
+        <StandalonePageContent contentClassName="flex flex-col gap-4">
+          {displaySummary ? (
+            <>
+              <UsageDataStatus summary={displaySummary} />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <UsageStatCard
+                  icon={SigmaIcon}
+                  label="Total tokens"
+                  value={displaySummary.totals.usedTokens.toLocaleString()}
+                />
+                <UsageStatCard
+                  icon={resolveUsageProviderIcon(displaySummary.favoriteProvider?.id ?? null)}
+                  label="Top provider"
+                  value={displaySummary.favoriteProvider?.label ?? "None"}
+                />
+                <UsageStatCard
+                  icon={BotIcon}
+                  label="Top model"
+                  value={displaySummary.favoriteModel?.label ?? "None"}
+                />
+                <UsageStatCard
+                  icon={FlameIcon}
+                  label="Streak"
+                  value={`${displaySummary.streakDays}d`}
+                />
+              </div>
 
-                {displaySummary.buckets.length > 0 ? (
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Token usage</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <ChartContainer className="h-80 min-h-80" config={chartConfig}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={displaySummary.buckets}>
-                              <CartesianGrid
-                                vertical={false}
-                                stroke="var(--border)"
-                                strokeOpacity={0.4}
-                              />
-                              <XAxis
-                                axisLine={false}
-                                dataKey="bucketStart"
-                                minTickGap={24}
-                                tickFormatter={(value) =>
-                                  formatBucketAxisLabel(value, displaySummary.range)
-                                }
-                                tickLine={false}
-                              />
-                              <YAxis
-                                axisLine={false}
-                                tickFormatter={(value) => formatCompactNumber(value)}
-                                tickLine={false}
-                                width={48}
-                              />
-                              <ChartTooltip
-                                cursor={{ fill: "var(--muted)", fillOpacity: 0.35 }}
-                                content={
-                                  <ChartTooltipContent
-                                    labelFormatter={(value) =>
-                                      formatBucketTooltipLabel(value, displaySummary.range)
-                                    }
-                                  />
-                                }
-                              />
-                              <Bar
-                                dataKey="cachedInputTokens"
-                                fill="var(--color-cachedInputTokens)"
-                                name={chartConfig.cachedInputTokens.label}
-                                radius={[2, 2, 0, 0]}
-                                stackId="usage"
-                              />
-                              <Bar
-                                dataKey="inputTokens"
-                                fill="var(--color-inputTokens)"
-                                name={chartConfig.inputTokens.label}
-                                radius={[2, 2, 0, 0]}
-                                stackId="usage"
-                              />
-                              <Bar
-                                dataKey="outputTokens"
-                                fill="var(--color-outputTokens)"
-                                name={chartConfig.outputTokens.label}
-                                radius={[2, 2, 0, 0]}
-                                stackId="usage"
-                              />
-                              <Bar
-                                dataKey="reasoningOutputTokens"
-                                fill="var(--color-reasoningOutputTokens)"
-                                name={chartConfig.reasoningOutputTokens.label}
-                                radius={[2, 2, 0, 0]}
-                                stackId="usage"
-                              />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </ChartContainer>
-                      </CardContent>
-                    </Card>
-                    <UsageTokenMixCard totals={displaySummary.totals} />
-                  </div>
-                ) : (
-                  <Card className="mt-4">
-                    <CardContent className="p-0">
-                      <Empty className="min-h-72">
-                        <EmptyMedia variant="icon">
-                          <BarChart3Icon className="size-4" />
-                        </EmptyMedia>
-                        <EmptyHeader>
-                          <EmptyTitle>No usage yet.</EmptyTitle>
-                          <EmptyDescription>
-                            Run a few turns and the chart will start filling in.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
+              {displaySummary.buckets.length > 0 ? (
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Token usage</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <ChartContainer className="h-80 min-h-80" config={chartConfig}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={displaySummary.buckets}>
+                            <CartesianGrid
+                              vertical={false}
+                              stroke="var(--border)"
+                              strokeOpacity={0.4}
+                            />
+                            <XAxis
+                              axisLine={false}
+                              dataKey="bucketStart"
+                              minTickGap={24}
+                              tickFormatter={(value) =>
+                                formatBucketAxisLabel(value, displaySummary.range)
+                              }
+                              tickLine={false}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickFormatter={(value) => formatCompactNumber(value)}
+                              tickLine={false}
+                              width={48}
+                            />
+                            <ChartTooltip
+                              cursor={{ fill: "var(--muted)", fillOpacity: 0.35 }}
+                              content={
+                                <ChartTooltipContent
+                                  labelFormatter={(value) =>
+                                    formatBucketTooltipLabel(value, displaySummary.range)
+                                  }
+                                />
+                              }
+                            />
+                            <Bar
+                              dataKey="cachedInputTokens"
+                              fill="var(--color-cachedInputTokens)"
+                              name={chartConfig.cachedInputTokens.label}
+                              radius={[2, 2, 0, 0]}
+                              stackId="usage"
+                            />
+                            <Bar
+                              dataKey="inputTokens"
+                              fill="var(--color-inputTokens)"
+                              name={chartConfig.inputTokens.label}
+                              radius={[2, 2, 0, 0]}
+                              stackId="usage"
+                            />
+                            <Bar
+                              dataKey="outputTokens"
+                              fill="var(--color-outputTokens)"
+                              name={chartConfig.outputTokens.label}
+                              radius={[2, 2, 0, 0]}
+                              stackId="usage"
+                            />
+                            <Bar
+                              dataKey="reasoningOutputTokens"
+                              fill="var(--color-reasoningOutputTokens)"
+                              name={chartConfig.reasoningOutputTokens.label}
+                              radius={[2, 2, 0, 0]}
+                              stackId="usage"
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </ChartContainer>
                     </CardContent>
                   </Card>
-                )}
+                  <UsageTokenMixCard totals={displaySummary.totals} />
+                </div>
+              ) : (
+                <Card className="mt-4">
+                  <CardContent className="p-0">
+                    <Empty className="min-h-72">
+                      <EmptyMedia variant="icon">
+                        <BarChart3Icon className="size-4" />
+                      </EmptyMedia>
+                      <EmptyHeader>
+                        <EmptyTitle>No usage yet.</EmptyTitle>
+                        <EmptyDescription>
+                          Run a few turns and the chart will start filling in.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </CardContent>
+                </Card>
+              )}
 
-                <section className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="text-sm font-medium text-foreground">Breakdown</h3>
-                    <ToggleGroup
-                      aria-label="Select breakdown chart view"
-                      size="xs"
-                      variant="toolbar"
-                      value={[breakdownView]}
-                      onValueChange={(value) => {
-                        const nextView = value[0];
-                        if (nextView === "bar" || nextView === "pie") {
-                          setBreakdownView(nextView);
-                        }
-                      }}
-                    >
-                      <Toggle aria-label="Ranking" value="bar">
-                        Ranking
-                      </Toggle>
-                      <Toggle aria-label="Share" value="pie">
-                        Share
-                      </Toggle>
-                    </ToggleGroup>
-                  </div>
-
-                  <div
-                    className={`grid gap-4 ${breakdownView === "pie" ? "grid-cols-1" : "lg:grid-cols-2"}`}
+              <section className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-medium text-foreground">Breakdown</h3>
+                  <ToggleGroup
+                    aria-label="Select breakdown chart view"
+                    size="xs"
+                    variant="toolbar"
+                    value={[breakdownView]}
+                    onValueChange={(value) => {
+                      const nextView = value[0];
+                      if (nextView === "bar" || nextView === "pie") {
+                        setBreakdownView(nextView);
+                      }
+                    }}
                   >
-                    <UsageBreakdownCard
-                      entries={displaySummary.providers}
-                      title="Providers"
-                      totalTokens={displaySummary.totals.usedTokens}
-                      view={breakdownView}
-                    />
-                    <UsageBreakdownCard
-                      entries={displaySummary.models}
-                      title="Models"
-                      totalTokens={displaySummary.totals.usedTokens}
-                      view={breakdownView}
-                    />
-                  </div>
-                </section>
+                    <Toggle aria-label="Ranking" value="bar">
+                      Ranking
+                    </Toggle>
+                    <Toggle aria-label="Share" value="pie">
+                      Share
+                    </Toggle>
+                  </ToggleGroup>
+                </div>
 
-                <section className="mt-24 space-y-4 text-xs text-muted-foreground">
-                  <p>
-                    <span className="mr-1">*</span>
-                    Token counts are reported differently by each provider. bigbud normalizes
-                    available usage fields for comparison, but totals should be treated as
-                    directional rather than billing-accurate.
-                  </p>
-                  <dl className="space-y-2">
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                      <dt className="font-medium text-foreground">Cached:</dt>
-                      <dd>Input tokens reused from a provider cache.</dd>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                      <dt className="font-medium text-foreground">Input:</dt>
-                      <dd>Tokens sent to the model, including your prompt and context.</dd>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                      <dt className="font-medium text-foreground">Output:</dt>
-                      <dd>Tokens generated in the model response.</dd>
-                    </div>
-                    <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-                      <dt className="font-medium text-foreground">Reasoning:</dt>
-                      <dd>Tokens some models use for internal reasoning before answering.</dd>
-                    </div>
-                  </dl>
-                </section>
-              </>
-            ) : null}
-          </div>
-        </section>
+                <div
+                  className={`grid gap-4 ${breakdownView === "pie" ? "grid-cols-1" : "lg:grid-cols-2"}`}
+                >
+                  <UsageBreakdownCard
+                    entries={displaySummary.providers}
+                    title="Providers"
+                    totalTokens={displaySummary.totals.usedTokens}
+                    view={breakdownView}
+                  />
+                  <UsageBreakdownCard
+                    entries={displaySummary.models}
+                    title="Models"
+                    totalTokens={displaySummary.totals.usedTokens}
+                    view={breakdownView}
+                  />
+                </div>
+              </section>
+
+              <section className="mt-24 space-y-4 text-xs text-muted-foreground">
+                <p>
+                  <span className="mr-1">*</span>
+                  Token counts are reported differently by each provider. bigbud normalizes
+                  available usage fields for comparison, but totals should be treated as directional
+                  rather than billing-accurate.
+                </p>
+                <dl className="space-y-2">
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    <dt className="font-medium text-foreground">Cached:</dt>
+                    <dd>Input tokens reused from a provider cache.</dd>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    <dt className="font-medium text-foreground">Input:</dt>
+                    <dd>Tokens sent to the model, including your prompt and context.</dd>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    <dt className="font-medium text-foreground">Output:</dt>
+                    <dd>Tokens generated in the model response.</dd>
+                  </div>
+                  <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                    <dt className="font-medium text-foreground">Reasoning:</dt>
+                    <dd>Tokens some models use for internal reasoning before answering.</dd>
+                  </div>
+                </dl>
+              </section>
+            </>
+          ) : null}
+        </StandalonePageContent>
       )}
     </StandaloneChatPageShell>
   );
