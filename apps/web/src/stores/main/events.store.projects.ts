@@ -18,6 +18,67 @@ import {
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { prependSidebarRecentThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
+import type { Project } from "../../models/types";
+
+function recordProjectEventSequence(state: AppState, projectId: string, sequence: number) {
+  return {
+    ...state.latestProjectEventSequenceById,
+    [projectId]: Math.max(state.latestProjectEventSequenceById?.[projectId] ?? 0, sequence),
+  };
+}
+
+function recordProjectDeletionSequence(state: AppState, projectId: string, sequence: number) {
+  return {
+    ...state.deletedProjectSequenceById,
+    [projectId]: Math.max(state.deletedProjectSequenceById?.[projectId] ?? 0, sequence),
+  };
+}
+
+function clearProjectDeletionSequence(state: AppState, projectId: string, sequence: number) {
+  const deletionSequence = state.deletedProjectSequenceById?.[projectId];
+  if (deletionSequence === undefined || deletionSequence > sequence) {
+    return state.deletedProjectSequenceById ?? {};
+  }
+
+  const deletedProjectSequenceById = { ...state.deletedProjectSequenceById };
+  delete deletedProjectSequenceById[projectId];
+  return deletedProjectSequenceById;
+}
+
+function recordPendingUnloadedProjectPatch(
+  state: AppState,
+  projectId: string,
+  sequence: number,
+  patch: Partial<Omit<Project, "id">>,
+) {
+  const pendingPatches = state.pendingUnloadedProjectPatchById ?? {};
+  if (state.projects.some((project) => project.id === projectId)) {
+    return pendingPatches;
+  }
+
+  const existing = pendingPatches[projectId];
+  if (existing && existing.sequence > sequence) {
+    return pendingPatches;
+  }
+
+  return {
+    ...pendingPatches,
+    [projectId]: {
+      sequence,
+      patch: { ...existing?.patch, ...patch },
+    },
+  };
+}
+
+function clearPendingUnloadedProjectPatch(state: AppState, projectId: string) {
+  if (!state.pendingUnloadedProjectPatchById?.[projectId]) {
+    return state.pendingUnloadedProjectPatchById ?? {};
+  }
+
+  const pendingPatches = { ...state.pendingUnloadedProjectPatchById };
+  delete pendingPatches[projectId];
+  return pendingPatches;
+}
 
 export function applyProjectEvent(
   state: AppState,
@@ -62,12 +123,28 @@ export function applyProjectEvent(
               index === existingIndex ? projectWithThreadCount : project,
             )
           : [...state.projects, projectWithThreadCount];
-      return { ...state, projects };
+      return {
+        ...state,
+        projects,
+        latestProjectEventSequenceById: recordProjectEventSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        deletedProjectSequenceById: clearProjectDeletionSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        pendingUnloadedProjectPatchById: clearPendingUnloadedProjectPatch(
+          state,
+          event.payload.projectId,
+        ),
+      };
     }
 
     case "project.meta-updated": {
-      const projects = updateProject(state.projects, event.payload.projectId, (project) => ({
-        ...project,
+      const patch: Partial<Omit<Project, "id">> = {
         ...(event.payload.title !== undefined ? { name: event.payload.title } : {}),
         ...(event.payload.providerRuntimeExecutionTargetId !== undefined
           ? { providerRuntimeExecutionTargetId: event.payload.providerRuntimeExecutionTargetId }
@@ -90,13 +167,95 @@ export function applyProjectEvent(
           ? { scripts: mapProjectScripts(event.payload.scripts) }
           : {}),
         updatedAt: event.payload.updatedAt,
+      };
+      const projects = updateProject(state.projects, event.payload.projectId, (project) => ({
+        ...project,
+        ...patch,
       }));
-      return projects === state.projects ? state : { ...state, projects };
+      return {
+        ...state,
+        projects,
+        latestProjectEventSequenceById: recordProjectEventSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        pendingUnloadedProjectPatchById: recordPendingUnloadedProjectPatch(
+          state,
+          event.payload.projectId,
+          event.sequence,
+          patch,
+        ),
+      };
+    }
+
+    case "project.deletion-requested": {
+      const patch = {
+        deletingAt: event.payload.deletingAt,
+        updatedAt: event.payload.deletingAt,
+      };
+      return {
+        ...state,
+        projects: updateProject(state.projects, event.payload.projectId, (project) => ({
+          ...project,
+          ...patch,
+        })),
+        latestProjectEventSequenceById: recordProjectEventSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        pendingUnloadedProjectPatchById: recordPendingUnloadedProjectPatch(
+          state,
+          event.payload.projectId,
+          event.sequence,
+          patch,
+        ),
+      };
+    }
+
+    case "project.deletion-failed": {
+      const patch = { deletingAt: null, updatedAt: event.payload.updatedAt };
+      return {
+        ...state,
+        projects: updateProject(state.projects, event.payload.projectId, (project) => ({
+          ...project,
+          ...patch,
+        })),
+        latestProjectEventSequenceById: recordProjectEventSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        pendingUnloadedProjectPatchById: recordPendingUnloadedProjectPatch(
+          state,
+          event.payload.projectId,
+          event.sequence,
+          patch,
+        ),
+      };
     }
 
     case "project.deleted": {
       const projects = state.projects.filter((project) => project.id !== event.payload.projectId);
-      return projects.length === state.projects.length ? state : { ...state, projects };
+      return {
+        ...state,
+        projects,
+        latestProjectEventSequenceById: recordProjectEventSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        deletedProjectSequenceById: recordProjectDeletionSequence(
+          state,
+          event.payload.projectId,
+          event.sequence,
+        ),
+        pendingUnloadedProjectPatchById: clearPendingUnloadedProjectPatch(
+          state,
+          event.payload.projectId,
+        ),
+      };
     }
 
     case "thread.created": {

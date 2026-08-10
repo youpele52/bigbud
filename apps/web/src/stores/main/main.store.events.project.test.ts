@@ -51,19 +51,21 @@ describe("incremental orchestration updates", () => {
     expect(next.projects[0]?.updatedAt).toBe("2026-02-27T00:00:01.000Z");
   });
 
-  it("returns the same state reference when project.meta-updated targets an unknown projectId", () => {
+  it("records a watermark when project.meta-updated targets an unknown projectId", () => {
     const state = makeState(makeThread());
+    const projectId = ProjectId.makeUnsafe("project-missing");
 
     const next = applyOrchestrationEvent(
       state,
       makeEvent("project.meta-updated", {
-        projectId: ProjectId.makeUnsafe("project-missing"),
+        projectId,
         title: "Ghost Project",
         updatedAt: "2026-02-27T00:00:01.000Z",
       }),
     );
 
-    expect(next).toBe(state);
+    expect(next.projects).toBe(state.projects);
+    expect(next.latestProjectEventSequenceById?.[projectId]).toBe(1);
   });
 
   it("applies a partial project.meta-updated (workspaceRoot only) while preserving other fields", () => {
@@ -115,6 +117,7 @@ describe("incremental orchestration updates", () => {
       threadIdsByProjectId: {},
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      projectCatalogGeneration: 0,
       threadHydrationById: {},
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],
@@ -134,14 +137,15 @@ describe("incremental orchestration updates", () => {
     expect(next.projects[0]?.name).toBe("Project 1 Renamed");
   });
 
-  it("preserves state identity for no-op project and thread deletes", () => {
+  it("records a project-delete watermark while preserving no-op thread deletes", () => {
     const thread = makeThread();
     const state = makeState(thread);
+    const projectId = ProjectId.makeUnsafe("project-missing");
 
     const nextAfterProjectDelete = applyOrchestrationEvent(
       state,
       makeEvent("project.deleted", {
-        projectId: ProjectId.makeUnsafe("project-missing"),
+        projectId,
         deletedAt: "2026-02-27T00:00:01.000Z",
       }),
     );
@@ -153,7 +157,8 @@ describe("incremental orchestration updates", () => {
       }),
     );
 
-    expect(nextAfterProjectDelete).toBe(state);
+    expect(nextAfterProjectDelete.projects).toStrictEqual(state.projects);
+    expect(nextAfterProjectDelete.latestProjectEventSequenceById?.[projectId]).toBe(1);
     expect(nextAfterThreadDelete).toBe(state);
   });
 
@@ -178,6 +183,7 @@ describe("incremental orchestration updates", () => {
       threadIdsByProjectId: {},
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      projectCatalogGeneration: 0,
       threadHydrationById: {},
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],
@@ -227,6 +233,7 @@ describe("incremental orchestration updates", () => {
       threadIdsByProjectId: {},
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      projectCatalogGeneration: 0,
       threadHydrationById: {},
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],
@@ -296,6 +303,7 @@ describe("incremental orchestration updates", () => {
       },
       threadSummaryCursorByProjectId: {},
       bootstrapComplete: true,
+      projectCatalogGeneration: 0,
       threadHydrationById: {},
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],

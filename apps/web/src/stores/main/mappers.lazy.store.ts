@@ -25,6 +25,7 @@ export function mapProjectSummary(project: ProjectSummary): Project {
     cwd: project.workspaceRoot,
     defaultModelSelection: null,
     updatedAt: project.updatedAt,
+    deletingAt: project.deletingAt,
     scripts: [],
   };
 }

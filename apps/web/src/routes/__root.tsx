@@ -44,10 +44,10 @@ export const Route = createRootRouteWithContext<{
   }),
 });
 
-function RootRouteView() {
+export function RootRouteView() {
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
-  const [showStartupSplash, setShowStartupSplash] = useState(() => !bootstrapComplete);
-  const [startupSplashVisible, setStartupSplashVisible] = useState(() => !bootstrapComplete);
+  const [showStartupSplash, setShowStartupSplash] = useState(true);
+  const [startupSplashVisible, setStartupSplashVisible] = useState(true);
   const settings = useSettings();
   useWindowMaterial();
   const serverConfig = useServerConfig();
@@ -70,13 +70,6 @@ function RootRouteView() {
   }, [bootstrapComplete, hasLoadedServerConfig, settings.hasSeenFileAccessPrompt]);
 
   useEffect(() => {
-    if (!bootstrapComplete) {
-      setShowStartupSplash(true);
-      setStartupSplashVisible(true);
-      return;
-    }
-
-    setShowStartupSplash(true);
     const animationFrameId = window.requestAnimationFrame(() => {
       setStartupSplashVisible(false);
     });
@@ -88,7 +81,7 @@ function RootRouteView() {
       window.cancelAnimationFrame(animationFrameId);
       window.clearTimeout(timeoutId);
     };
-  }, [bootstrapComplete]);
+  }, []);
 
   if (!readNativeApi()) {
     return <StartupSplash />;
@@ -106,33 +99,29 @@ function RootRouteView() {
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
-          {bootstrapComplete ? (
-            <>
-              <div className="relative h-screen overflow-hidden">
-                <CommandPalette>
-                  <AppSidebarLayout>
-                    <Outlet />
-                  </AppSidebarLayout>
-                </CommandPalette>
+          <>
+            <div className="relative h-screen overflow-hidden">
+              <CommandPalette>
+                <AppSidebarLayout>
+                  <Outlet />
+                </AppSidebarLayout>
+              </CommandPalette>
 
-                {showStartupSplash ? (
-                  <StartupSplash
-                    className={`pointer-events-none absolute inset-0 z-50 transition-opacity duration-[220ms] ease-out ${
-                      startupSplashVisible ? "opacity-100" : "opacity-0"
-                    }`}
-                  />
-                ) : null}
-              </div>
+              {showStartupSplash ? (
+                <StartupSplash
+                  className={`pointer-events-none absolute inset-0 z-50 transition-opacity duration-[220ms] ease-out ${
+                    startupSplashVisible ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              ) : null}
+            </div>
 
-              <FileAccessPermissionDialog
-                open={showFileAccessDialog}
-                onOpenChange={setShowFileAccessDialog}
-              />
-              {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
-            </>
-          ) : (
-            <StartupSplash />
-          )}
+            <FileAccessPermissionDialog
+              open={showFileAccessDialog}
+              onOpenChange={setShowFileAccessDialog}
+            />
+            {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
+          </>
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
     </ToastProvider>

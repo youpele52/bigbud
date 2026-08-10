@@ -236,6 +236,7 @@ export function mapProject(project: OrchestrationReadModel["projects"][number]):
       : null,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
+    deletingAt: project.deletingAt,
     scripts: mapProjectScripts(project.scripts),
   };
 }

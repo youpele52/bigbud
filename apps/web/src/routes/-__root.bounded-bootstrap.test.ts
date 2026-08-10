@@ -176,7 +176,7 @@ beforeEach(() => {
 });
 
 describe("bounded orchestration bootstrap", () => {
-  it("loads two project pages of five summaries and hydrates only the selected thread", async () => {
+  it("loads only the selected project summary page and hydrates its selected thread", async () => {
     const { api, orchestration } = makeApi();
 
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
@@ -190,10 +190,9 @@ describe("bounded orchestration bootstrap", () => {
       limit: 2,
       priorityProjectId: project2,
     });
-    expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(2);
+    expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(1);
     expect(orchestration.getProjectThreadSummaries.mock.calls).toEqual([
       [{ projectId: project2, limit: 5, priorityThreadId: selectedThread }],
-      [{ projectId: project1, limit: 5 }],
     ]);
     expect(orchestration.getSnapshot).not.toHaveBeenCalled();
     expect(useStore.getState().threadHydrationById[selectedThread]).toEqual({
@@ -352,12 +351,12 @@ describe("bounded orchestration bootstrap", () => {
       },
     );
     await vi.waitFor(() => {
-      expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(4);
+      expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(2);
     });
 
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledTimes(2);
     expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(2);
-    expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(4);
+    expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(2);
     expect(orchestration.getSnapshot).not.toHaveBeenCalled();
   });
 
