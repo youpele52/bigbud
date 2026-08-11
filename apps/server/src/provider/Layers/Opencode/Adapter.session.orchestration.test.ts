@@ -28,6 +28,7 @@ describe("Opencode session orchestration MCP", () => {
         }),
         url: "http://127.0.0.1:4098",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({
@@ -102,6 +103,7 @@ describe("Opencode session orchestration MCP", () => {
         }),
         url: "http://127.0.0.1:4100",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({
@@ -178,6 +180,7 @@ describe("Opencode session orchestration MCP", () => {
         }),
         url: "http://127.0.0.1:4099",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({
@@ -254,6 +257,7 @@ describe("Opencode session orchestration MCP", () => {
         client: makeMockOpencodeClient(),
         url: "http://127.0.0.1:4101",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({
@@ -315,6 +319,7 @@ describe("Opencode session orchestration MCP", () => {
         }),
         url: "http://127.0.0.1:4102",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({
@@ -373,6 +378,7 @@ describe("Opencode session orchestration MCP", () => {
         }),
         url: "http://127.0.0.1:4103",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({

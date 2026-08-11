@@ -45,7 +45,10 @@ function buildModel(index: number) {
   } as const;
 }
 
-async function mountLockedProviderPicker(models: ServerProvider["models"]) {
+async function mountLockedProviderPicker(
+  models: ServerProvider["models"],
+  selectedModel = models[0]?.slug ?? "",
+) {
   const host = document.createElement("div");
   document.body.append(host);
   const provider = "codex" as const satisfies ProviderKind;
@@ -54,12 +57,12 @@ async function mountLockedProviderPicker(models: ServerProvider["models"]) {
     DEFAULT_UNIFIED_SETTINGS,
     providers,
     provider,
-    models[0]?.slug ?? "",
+    selectedModel,
   );
   const screen = await render(
     <ProviderModelPicker
       provider={provider}
-      model={models[0]?.slug ?? ""}
+      model={selectedModel}
       lockedProvider={provider}
       providers={providers}
       modelOptionsByProvider={modelOptionsByProvider}
@@ -81,7 +84,7 @@ describe("ProviderModelPicker incremental rendering", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders the first 10 models immediately and appends more on scroll", async () => {
+  it("renders the first 5 models immediately and appends more on scroll", async () => {
     const models = Array.from({ length: 35 }, (_, index) => buildModel(index + 1));
     const mounted = await mountLockedProviderPicker(models);
 
@@ -89,9 +92,9 @@ describe("ProviderModelPicker incremental rendering", () => {
       await page.getByRole("button").click();
 
       await vi.waitFor(() => {
-        expect(document.querySelectorAll('[role="menuitemradio"]')).toHaveLength(10);
-        expect(document.body.textContent ?? "").toContain("Model 10");
-        expect(document.body.textContent ?? "").not.toContain("Model 11");
+        expect(document.querySelectorAll('[role="menuitemradio"]')).toHaveLength(5);
+        expect(document.body.textContent ?? "").toContain("Model 5");
+        expect(document.body.textContent ?? "").not.toContain("Model 6");
       });
 
       const scrollContainer = document.querySelector('[data-testid="provider-model-list-scroll"]');
@@ -103,9 +106,35 @@ describe("ProviderModelPicker incremental rendering", () => {
       scrollContainer.dispatchEvent(new Event("scroll"));
 
       await vi.waitFor(() => {
-        expect(document.querySelectorAll('[role="menuitemradio"]')).toHaveLength(30);
-        expect(document.body.textContent ?? "").toContain("Model 30");
-        expect(document.body.textContent ?? "").not.toContain("Model 31");
+        expect(document.querySelectorAll('[role="menuitemradio"]')).toHaveLength(25);
+        expect(document.body.textContent ?? "").toContain("Model 25");
+        expect(document.body.textContent ?? "").not.toContain("Model 26");
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not render through a far-away selected model on repeated opens", async () => {
+    const models = Array.from({ length: 6_000 }, (_, index) => buildModel(index + 1));
+    const mounted = await mountLockedProviderPicker(models, "model-6000");
+
+    try {
+      const trigger = page.getByRole("button");
+      await trigger.click();
+
+      await vi.waitFor(() => {
+        const renderedModels = [...document.querySelectorAll('[role="menuitemradio"]')];
+        expect(renderedModels).toHaveLength(5);
+        expect(renderedModels.some((entry) => entry.textContent === "Model 6000")).toBe(false);
+      });
+
+      await trigger.click();
+      await trigger.click();
+
+      await vi.waitFor(() => {
+        expect(document.querySelectorAll('[role="menuitemradio"]')).toHaveLength(5);
+        expect(document.body.textContent ?? "").toContain("Model 5");
       });
     } finally {
       await mounted.cleanup();

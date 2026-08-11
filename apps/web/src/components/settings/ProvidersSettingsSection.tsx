@@ -1,6 +1,6 @@
 import { LoaderIcon, RefreshCwIcon } from "lucide-react";
 import { type ProviderKind } from "@bigbud/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -15,19 +15,24 @@ import {
   buildProviderCards,
   createInitialCustomModelInputs,
   createInitialOpenProviderDetails,
+  expandProviderDetails,
   getAddCustomModelError,
   getLatestProviderCheckedAt,
   shouldClearTextGenerationSelection,
 } from "./ProvidersSettingsSection.logic";
 
-export function ProvidersSettingsSection() {
+export function ProvidersSettingsSection({
+  expandedProviders = [],
+}: {
+  readonly expandedProviders?: ReadonlyArray<ProviderKind>;
+}) {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const serverProviders = useServerProviders();
   const { activateCliProxy, isActivatingCliProxy } = useCliProxyActivation();
 
   const [openProviderDetails, setOpenProviderDetails] = useState<Record<ProviderKind, boolean>>(
-    () => createInitialOpenProviderDetails(settings),
+    () => expandProviderDetails(createInitialOpenProviderDetails(settings), expandedProviders),
   );
   const [customModelInputByProvider, setCustomModelInputByProvider] = useState<
     Record<ProviderKind, string>
@@ -40,6 +45,11 @@ export function ProvidersSettingsSection() {
   const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
 
   const codexHomePath = settings.providers.codex.homePath;
+
+  useEffect(() => {
+    if (expandedProviders.length === 0) return;
+    setOpenProviderDetails((previous) => expandProviderDetails(previous, expandedProviders));
+  }, [expandedProviders]);
 
   const refreshProviders = useCallback(() => {
     if (refreshingRef.current) return;

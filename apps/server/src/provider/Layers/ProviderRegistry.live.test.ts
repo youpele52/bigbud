@@ -4,9 +4,14 @@ import { describe, it, assert } from "@effect/vitest";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { checkCodexProviderStatus } from "./Codex/Provider";
-import { haveProvidersChanged, makeProviderRegistryLive } from "./ProviderRegistry";
+import {
+  haveProvidersChanged,
+  makeProviderRegistryLive,
+  selectManualRefreshTargets,
+} from "./ProviderRegistry";
 import { OpencodeServerManager } from "../Services/Opencode/ServerManager";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
+import type { ProviderRegistration } from "../ProviderRegistration";
 import { ServerSettingsService } from "../../ws/serverSettings";
 
 import {
@@ -29,8 +34,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             enabled: true,
             installed: true,
             auth: { status: "authenticated" },
-            checkedAt: "2026-03-25T00:00:00.000Z",
             version: "1.0.0",
+            checkedAt: "2026-03-25T00:00:00.000Z",
             models: [],
             slashCommands: [],
             skills: [],
@@ -41,8 +46,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             enabled: true,
             installed: true,
             auth: { status: "unknown" },
+            version: null,
             checkedAt: "2026-03-25T00:00:00.000Z",
-            version: "1.0.0",
             models: [],
             slashCommands: [],
             skills: [],
@@ -76,6 +81,50 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             },
           ]),
           false,
+        );
+      });
+
+      it("never includes disabled providers in an all-healthy manual refresh", () => {
+        const registrations = [
+          { provider: "codex", service: {} },
+          { provider: "copilot", service: {} },
+        ] as unknown as ReadonlyArray<ProviderRegistration>;
+        const providers = [
+          {
+            provider: "codex",
+            enabled: true,
+            installed: true,
+            status: "ready",
+            auth: { status: "authenticated" },
+            version: "1.0.0",
+            checkedAt: "2026-03-25T00:00:00.000Z",
+            models: [],
+            slashCommands: [],
+            skills: [],
+          },
+          {
+            provider: "copilot",
+            enabled: false,
+            installed: false,
+            status: "disabled",
+            auth: { status: "unknown" },
+            version: null,
+            checkedAt: "2026-03-25T00:00:00.000Z",
+            models: [],
+            slashCommands: [],
+            skills: [],
+          },
+        ] as const satisfies ReadonlyArray<ServerProvider>;
+
+        assert.deepStrictEqual(
+          selectManualRefreshTargets(registrations, providers).map((target) => target.provider),
+          ["codex"],
+        );
+        assert.deepStrictEqual(
+          selectManualRefreshTargets(registrations, providers, "copilot").map(
+            (target) => target.provider,
+          ),
+          [],
         );
       });
 

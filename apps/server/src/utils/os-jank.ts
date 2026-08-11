@@ -11,6 +11,7 @@ export function fixPath(
   options: {
     env?: NodeJS.ProcessEnv;
     platform?: NodeJS.Platform;
+    userShell?: string;
     readPath?: typeof readPathFromLoginShell;
     readLaunchctlPath?: typeof readPathFromLaunchctl;
     logWarning?: (message: string) => void;
@@ -21,7 +22,16 @@ export function fixPath(
 
   const env = options.env ?? process.env;
   const warn = options.logWarning ?? (() => {});
-  const candidates = listLoginShellCandidates(platform, env.SHELL);
+  const userShell =
+    options.userShell ??
+    (() => {
+      try {
+        return OS.userInfo().shell ?? undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+  const candidates = listLoginShellCandidates(platform, env.SHELL, userShell);
 
   for (const shell of candidates) {
     try {

@@ -11,6 +11,7 @@
  */
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
 import { Deferred, Effect, Layer, Option, PubSub, Ref, Stream } from "effect";
+import { randomUUID } from "node:crypto";
 
 import { ClaudeProviderLive } from "./Claude/Provider";
 import { CopilotProviderLive } from "./Copilot/Provider";
@@ -31,6 +32,30 @@ import { PiProvider } from "../Services/Pi/Provider";
 import { ProviderRegistry, type ProviderRegistryShape } from "../Services/ProviderRegistry";
 import type { ProviderRegistration } from "../ProviderRegistration.ts";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
+import { isProviderRetryable, needsProviderRefresh } from "../providerRecovery";
+
+const MANUAL_REFRESH_MAX_ATTEMPTS = 3;
+const MANUAL_REFRESH_DELAYS = ["1 second", "3 seconds"] as const;
+
+export function selectManualRefreshTargets(
+  registrations: ReadonlyArray<ProviderRegistration>,
+  providers: ReadonlyArray<ServerProvider>,
+  provider?: ProviderKind,
+): ReadonlyArray<ProviderRegistration> {
+  if (provider !== undefined) {
+    const snapshot = providers.find((candidate) => candidate.provider === provider);
+    if (!snapshot?.enabled) return [];
+    return registrations.filter((registration) => registration.provider === provider);
+  }
+  const failed = registrations.filter((registration) => {
+    const snapshot = providers.find((candidate) => candidate.provider === registration.provider);
+    return snapshot !== undefined && snapshot.enabled && needsProviderRefresh(snapshot);
+  });
+  if (failed.length > 0) return failed;
+  return registrations.filter((registration) =>
+    providers.some((snapshot) => snapshot.provider === registration.provider && snapshot.enabled),
+  );
+}
 
 const loadProviders = (
   registrations: ReadonlyArray<ProviderRegistration>,
@@ -87,6 +112,7 @@ const makeProviderRegistryLayer = (
       // can expose the complete ordered list before background probes finish.
       const initialProviders = yield* loadProviders(registrations);
       const providersRef = yield* Ref.make<ReadonlyArray<ServerProvider>>(initialProviders);
+      const manualGenerationRef = yield* Ref.make(0);
 
       // Latches the first provider that becomes ready.  Subsequent ready
       // providers do not override the latched value.
@@ -129,17 +155,80 @@ const makeProviderRegistryLayer = (
       );
 
       const refresh = Effect.fn("refresh")(function* (provider?: ProviderKind) {
-        if (provider !== undefined) {
-          const registration = registrations.find((candidate) => candidate.provider === provider);
-          if (registration) {
-            yield* registration.service.refresh;
-          }
-        } else {
+        const currentProviders = yield* Ref.get(providersRef);
+        let targets = selectManualRefreshTargets(registrations, currentProviders, provider);
+        const generation = yield* Ref.updateAndGet(
+          manualGenerationRef,
+          (currentGeneration) => currentGeneration + 1,
+        );
+        const operationId = randomUUID();
+        let operationSuperseded = false;
+
+        yield* Effect.logInfo("provider recovery operation started", {
+          trigger: "manual",
+          generation,
+          operationId,
+          providers: targets.map((target) => target.provider),
+          maxAttempts: MANUAL_REFRESH_MAX_ATTEMPTS,
+        });
+
+        for (let attempt = 1; attempt <= MANUAL_REFRESH_MAX_ATTEMPTS; attempt += 1) {
           yield* Effect.all(
-            registrations.map((registration) => registration.service.refresh),
+            targets.map((registration) =>
+              registration.service.refreshWithRecovery({
+                operationId,
+                attempt,
+                maxAttempts: MANUAL_REFRESH_MAX_ATTEMPTS,
+                trigger: "manual",
+              }),
+            ),
             { concurrency: "unbounded" },
           );
+          const providers = yield* syncProviders();
+          const superseded = targets.filter((registration) => {
+            const snapshot = providers.find(
+              (candidate) => candidate.provider === registration.provider,
+            );
+            return snapshot?.recovery?.operationId !== operationId;
+          });
+          if (superseded.length > 0) {
+            operationSuperseded = true;
+            yield* Effect.logInfo("provider recovery superseded", {
+              trigger: "manual",
+              generation,
+              operationId,
+              providers: superseded.map((target) => target.provider),
+            });
+          }
+          targets = targets.filter((registration) => {
+            const snapshot = providers.find(
+              (candidate) => candidate.provider === registration.provider,
+            );
+            return snapshot?.recovery?.operationId === operationId && isProviderRetryable(snapshot);
+          });
+          if (targets.length === 0 || attempt === MANUAL_REFRESH_MAX_ATTEMPTS) {
+            yield* Effect.logInfo("provider recovery operation completed", {
+              trigger: "manual",
+              generation,
+              operationId,
+              attempt,
+              outcome:
+                targets.length > 0 ? "exhausted" : operationSuperseded ? "superseded" : "recovered",
+            });
+            return providers;
+          }
+          const delay = MANUAL_REFRESH_DELAYS[attempt - 1]!;
+          yield* Effect.logInfo("provider recovery retry scheduled", {
+            trigger: "manual",
+            generation,
+            operationId,
+            providers: targets.map((target) => target.provider),
+            attempt,
+            delay,
+          });
+          yield* Effect.sleep(delay);
         }
+
         return yield* syncProviders();
       });
 
