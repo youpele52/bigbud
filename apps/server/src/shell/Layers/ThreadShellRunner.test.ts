@@ -5,7 +5,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { PtyExitEvent, PtyProcess, PtySpawnInput } from "../../terminal/Services/PTY";
-import { createTerminalSpawnEnv } from "../../terminal/Layers/Manager.shell";
 import { PersistentThreadPtyShellRunner } from "./ThreadShellRunner";
 
 class BunTestPtyProcess implements PtyProcess {
@@ -156,62 +155,6 @@ async function spawnTestPty(input: PtySpawnInput): Promise<PtyProcess> {
   );
 }
 
-async function canRunTestPtyShell(): Promise<boolean> {
-  if (process.platform === "win32") {
-    return true;
-  }
-
-  const cwd = mkdtempSync(path.join(tmpdir(), "bigbud-shell-pty-probe-"));
-  try {
-    writeFileSync(path.join(cwd, ".zshrc"), "");
-    if (typeof Bun === "undefined") {
-      const nodePty = await import("node-pty");
-      return await new Promise((resolve) => {
-        const process = nodePty.spawn("/bin/zsh", ["-o", "nopromptsp"], {
-          cwd,
-          cols: 1,
-          rows: 1,
-          env: createTerminalSpawnEnv({ ...globalThis.process.env, ZDOTDIR: cwd }, null),
-          name: "xterm-256color",
-        });
-        const timeout = setTimeout(() => {
-          process.kill();
-          resolve(false);
-        }, 1_000);
-        process.onExit(({ exitCode }) => {
-          clearTimeout(timeout);
-          resolve(exitCode === 0);
-        });
-        process.write("exit\r");
-      });
-    }
-
-    const subprocess = Bun.spawn(["/bin/zsh", "-o", "nopromptsp"], {
-      cwd,
-      env: createTerminalSpawnEnv({ ...process.env, ZDOTDIR: cwd }, null),
-      terminal: {
-        cols: 1,
-        rows: 1,
-        data: () => undefined,
-      },
-    });
-    subprocess.terminal?.write("exit\r");
-    return await Promise.race([
-      subprocess.exited.then((exitCode) => exitCode === 0),
-      Bun.sleep(1_000).then(() => {
-        subprocess.kill();
-        return false;
-      }),
-    ]);
-  } catch {
-    return false;
-  } finally {
-    rmSync(cwd, { recursive: true, force: true });
-  }
-}
-
-const canRunPtyShell = await canRunTestPtyShell();
-
 const tempDirs = new Set<string>();
 
 afterEach(() => {
@@ -221,7 +164,7 @@ afterEach(() => {
   tempDirs.clear();
 });
 
-describe.skipIf(process.platform === "win32" || !existsSync("/bin/zsh") || !canRunPtyShell)(
+describe.skipIf(process.platform === "win32" || !existsSync("/bin/zsh"))(
   "PersistentThreadPtyShellRunner",
   () => {
     it("loads aliases from interactive zsh config inside the hidden PTY shell", async () => {

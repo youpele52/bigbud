@@ -50,13 +50,13 @@ describe("backend startup diagnostics", () => {
   it("retains useful development crash context while redacting bootstrap credentials", () => {
     const diagnostics = createDevelopmentBackendDiagnostics({
       error: Object.assign(new Error("authToken=bootstrap-secret"), {
-        cause: new Error("password=bootstrap-password"),
+        cause: new Error("password=private"),
       }),
       stderrTail: "line\nauthToken=bootstrap-secret\n".repeat(2_000),
     });
 
     expect(JSON.stringify(diagnostics)).not.toContain("bootstrap-secret");
-    expect(JSON.stringify(diagnostics)).not.toContain("bootstrap-password");
+    expect(JSON.stringify(diagnostics)).not.toContain("private");
     expect(JSON.stringify(diagnostics)).toContain("[REDACTED]");
     expect(
       Object.values(diagnostics)
