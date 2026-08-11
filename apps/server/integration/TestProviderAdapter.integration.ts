@@ -31,6 +31,7 @@ import {
   nowIso,
   sessionNotFound,
 } from "./TestProviderAdapter.integration.session.ts";
+import { makeTestProviderAdapterControls } from "./TestProviderAdapter.integration.controls.ts";
 import type {
   MakeTestProviderAdapterHarnessOptions,
   SessionState,
@@ -54,6 +55,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
     let sessionCount = 0;
     const sessions = new Map<ThreadId, SessionState>();
     const queuedResponsesForNextSession: TestTurnResponse[] = [];
+    const sentTurnInputs: string[] = [];
     const interruptCallsBySession = new Map<ThreadId, Array<TurnId | undefined>>();
     const approvalResponsesBySession = new Map<
       ThreadId,
@@ -113,6 +115,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         }
 
         state.turnCount += 1;
+        sentTurnInputs.push(input.input ?? "");
         const turnCount = state.turnCount;
         const turnId = TurnId.makeUnsafe(`turn-${turnCount}`);
 
@@ -185,7 +188,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
           turns: [...state.snapshot.turns, nextTurn],
         };
 
-        if (deferredTurnCompletedEvents.length === 0) {
+        if (deferredTurnCompletedEvents.length === 0 && !response.deferCompletion) {
           yield* emit({
             type: "turn.completed",
             eventId: EventId.makeUnsafe(randomUUID()),
@@ -249,8 +252,9 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         sessions.delete(threadId);
       });
 
-    const listSessions: ProviderAdapterShape<ProviderAdapterError>["listSessions"] = () =>
-      Effect.sync(() => Array.from(sessions.values(), (state) => state.session));
+    const controls = makeTestProviderAdapterControls(sessions, sentTurnInputs);
+    const listSessions: ProviderAdapterShape<ProviderAdapterError>["listSessions"] =
+      controls.listSessions;
 
     const hasSession: ProviderAdapterShape<ProviderAdapterError>["hasSession"] = (threadId) =>
       Effect.succeed(sessions.has(threadId));
@@ -378,6 +382,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       queueTurnResponse,
       queueTurnResponseForNextSession,
       getStartCount,
+      ...controls,
       getRollbackCalls,
       getInterruptCalls,
       listActiveSessionIds,

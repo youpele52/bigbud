@@ -28,6 +28,7 @@ import {
   OrchestrationCheckpointStatus,
   OrchestrationMessageReply,
   OrchestrationMessageRole,
+  OrchestrationPendingInterruptFlushIntent,
   OrchestrationProposedPlan,
   OrchestrationSession,
   OrchestrationTask,
@@ -187,6 +188,7 @@ export const ThreadShellRunRequestedPayload = Schema.Struct({
 export const ThreadTurnInterruptRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
+  pendingFlushIntent: Schema.optional(OrchestrationPendingInterruptFlushIntent),
   createdAt: IsoDateTime,
 });
 

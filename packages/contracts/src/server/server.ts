@@ -107,6 +107,40 @@ export type ServerProviderSkill = typeof ServerProviderSkill.Type;
 export const ServerProviderSkills = Schema.Array(ServerProviderSkill);
 export type ServerProviderSkills = typeof ServerProviderSkills.Type;
 
+export const ServerProviderRecovery = Schema.Struct({
+  operationId: TrimmedNonEmptyString,
+  generation: NonNegativeInt,
+  attempt: NonNegativeInt,
+  maxAttempts: NonNegativeInt,
+  trigger: Schema.Literals(["startup", "background", "manual"]),
+  status: Schema.Literals(["retrying", "recovered", "exhausted"]),
+});
+export type ServerProviderRecovery = typeof ServerProviderRecovery.Type;
+
+export const ServerProviderFailureClassification = Schema.Literals([
+  "retryable",
+  "user-action-required",
+]);
+export type ServerProviderFailureClassification = typeof ServerProviderFailureClassification.Type;
+
+export const ServerProviderFailureReason = Schema.Literals([
+  "command-not-found",
+  "startup-timeout",
+  "process-failed",
+  "connection-refused",
+  "authentication-required",
+  "unsupported-version",
+  "invalid-binary-path",
+  "configuration-required",
+]);
+export type ServerProviderFailureReason = typeof ServerProviderFailureReason.Type;
+
+export const ServerProviderFailure = Schema.Struct({
+  classification: ServerProviderFailureClassification,
+  reason: ServerProviderFailureReason,
+});
+export type ServerProviderFailure = typeof ServerProviderFailure.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   enabled: Schema.Boolean,
@@ -115,7 +149,10 @@ export const ServerProvider = Schema.Struct({
   status: ServerProviderState,
   auth: ServerProviderAuth,
   checkedAt: IsoDateTime,
+  initialProbeComplete: Schema.optional(Schema.Boolean),
   message: Schema.optional(TrimmedNonEmptyString),
+  recovery: Schema.optional(ServerProviderRecovery),
+  failure: Schema.optional(ServerProviderFailure),
   models: Schema.Array(ServerProviderModel),
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   slashCommands: ServerProviderSlashCommands,

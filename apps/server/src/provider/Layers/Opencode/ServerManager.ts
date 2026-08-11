@@ -18,18 +18,26 @@ import {
   readManagedServerListeningUrl,
   resolveBinaryPath,
   stopSpawnedChild,
+  stopSpawnedChildAndWait,
 } from "./ServerManager.helpers.ts";
+import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
+export { formatMissingOpencodeBinaryDetail } from "./ServerManager.errors.ts";
 export { readManagedServerListeningUrl } from "./ServerManager.helpers.ts";
 
-interface RunningServer {
+export interface RunningManagedServer {
   readonly url: string;
-  close(): void;
+  isRunning?(): boolean;
+  close(): void | Promise<void>;
 }
 
 interface TargetState {
+  readonly targetKey: string;
+  readonly targetIdentity: string;
   refCount: number;
-  startPromise: Promise<RunningServer> | null;
-  serverHandle: RunningServer | null;
+  invalidated: boolean;
+  closed: boolean;
+  startPromise: Promise<RunningManagedServer> | null;
+  serverHandle: RunningManagedServer | null;
 }
 
 const LOCAL_HOST = "127.0.0.1";
@@ -53,74 +61,6 @@ const SERVER_CONFIGS = {
   },
 } as const;
 export type ManagedServerConfig = (typeof SERVER_CONFIGS)[ManagedServerProvider];
-
-export function formatMissingOpencodeBinaryDetail(input: {
-  readonly provider?: ManagedServerProvider;
-  readonly binaryPath: string;
-  readonly executionTargetId: string;
-  readonly detail: string;
-}): string | null {
-  const config = SERVER_CONFIGS[input.provider ?? "opencode"];
-  const normalizedDetail = input.detail.trim();
-  if (
-    normalizedDetail.length === 0 ||
-    !(
-      /exec:\s+.+:\s+not found/i.test(normalizedDetail) ||
-      /\bcommand not found\b/i.test(normalizedDetail) ||
-      /\bspawn\b.+\benoent\b/i.test(normalizedDetail) ||
-      /\bno such file or directory\b/i.test(normalizedDetail)
-    )
-  ) {
-    return null;
-  }
-
-  const remote = input.executionTargetId !== LOCAL_EXECUTION_TARGET_ID;
-  if (input.binaryPath === config.defaultBinary) {
-    return remote
-      ? `Remote ${config.displayName} CLI is not installed or not available on PATH. Install '${config.defaultBinary}' on the remote host or set Providers > ${config.displayName} > Binary path to the remote executable path.`
-      : `${config.displayName} CLI is not installed or not available on PATH. Install '${config.defaultBinary}' locally or set Providers > ${config.displayName} > Binary path to the local executable path.`;
-  }
-
-  return remote
-    ? `Remote ${config.displayName} binary was not found at '${input.binaryPath}'. Update Providers > ${config.displayName} > Binary path to the correct remote executable path.`
-    : `${config.displayName} binary was not found at '${input.binaryPath}'. Update Providers > ${config.displayName} > Binary path to the correct local executable path.`;
-}
-
-function normalizeOpencodeStartError(input: {
-  readonly config: ManagedServerConfig;
-  readonly binaryPath: string;
-  readonly executionTargetId: string;
-  readonly error: unknown;
-  readonly output: string;
-}): Error {
-  if (input.error instanceof Error) {
-    const errnoCode = "code" in input.error ? input.error.code : undefined;
-    if (errnoCode === "ENOENT") {
-      const missingBinaryDetail = formatMissingOpencodeBinaryDetail({
-        provider: input.config.provider,
-        binaryPath: input.binaryPath,
-        executionTargetId: input.executionTargetId,
-        detail: input.error.message,
-      });
-      if (missingBinaryDetail) {
-        return new Error(missingBinaryDetail);
-      }
-    }
-
-    const missingBinaryDetail = formatMissingOpencodeBinaryDetail({
-      provider: input.config.provider,
-      binaryPath: input.binaryPath,
-      executionTargetId: input.executionTargetId,
-      detail: `${input.error.message}\n${input.output}`,
-    });
-    if (missingBinaryDetail) {
-      return new Error(missingBinaryDetail);
-    }
-    return input.error;
-  }
-
-  return new Error(`Failed to start ${input.config.displayName} server: ${String(input.error)}`);
-}
 
 async function allocateLocalPort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -177,7 +117,7 @@ async function waitForOpencodeServer(
       finalize(() => {
         stopSpawnedChild(child);
         reject(
-          normalizeOpencodeStartError({
+          normalizeManagedServerStartError({
             config: input.config,
             binaryPath: input.binaryPath,
             executionTargetId: input.executionTargetId,
@@ -226,7 +166,7 @@ async function waitForOpencodeServer(
 async function startLocalOpencodeServer(
   config: ManagedServerConfig,
   binaryPath: string,
-): Promise<RunningServer> {
+): Promise<RunningManagedServer> {
   const child = spawn(binaryPath, ["serve", `--hostname=${LOCAL_HOST}`, "--port=0"], {
     env: {
       ...process.env,
@@ -243,9 +183,8 @@ async function startLocalOpencodeServer(
   });
   return {
     url,
-    close() {
-      stopSpawnedChild(child);
-    },
+    isRunning: () => child.exitCode === null && child.signalCode === null && !child.killed,
+    close: () => stopSpawnedChildAndWait(child),
   };
 }
 
@@ -253,7 +192,7 @@ async function startRemoteOpencodeServer(
   config: ManagedServerConfig,
   executionTargetId: string,
   binaryPath: string,
-): Promise<RunningServer> {
+): Promise<RunningManagedServer> {
   assertSshExecutionTargetReady(executionTargetId);
   const localPort = await allocateLocalPort();
   const localUrl = `http://${LOCAL_HOST}:${localPort}`;
@@ -287,98 +226,167 @@ async function startRemoteOpencodeServer(
   });
   return {
     url: localUrl,
-    close() {
-      stopSpawnedChild(child);
-    },
+    isRunning: () => child.exitCode === null && child.signalCode === null && !child.killed,
+    close: () => stopSpawnedChildAndWait(child),
   };
 }
 
-function makeOpencodeServerManager(): {
+export interface OpencodeServerManagerFactoryOptions {
+  readonly startServer?: (input: {
+    readonly config: ManagedServerConfig;
+    readonly executionTargetId: string;
+    readonly binaryPath: string;
+  }) => Promise<RunningManagedServer>;
+}
+
+export function makeOpencodeServerManager(options: OpencodeServerManagerFactoryOptions = {}): {
   acquire: (input?: OpencodeServerAcquireInput) => Promise<OpencodeServerHandle>;
+  closeAll: () => Promise<void>;
 } {
   const states = new Map<string, TargetState>();
+  const allStates = new Set<TargetState>();
+  let closing = false;
 
-  const readState = (targetKey: string): TargetState => {
+  const readState = (targetKey: string, targetIdentity: string): TargetState => {
     const existing = states.get(targetKey);
-    if (existing) {
+    if (existing && !existing.invalidated) {
       return existing;
     }
     const initial: TargetState = {
+      targetKey,
+      targetIdentity,
       refCount: 0,
+      invalidated: false,
+      closed: false,
       startPromise: null,
       serverHandle: null,
     };
     states.set(targetKey, initial);
+    allStates.add(initial);
     return initial;
   };
 
+  const closeState = async (
+    state: TargetState,
+    pendingServer?: RunningManagedServer,
+  ): Promise<void> => {
+    if (state.closed) return;
+    state.closed = true;
+    const server = pendingServer ?? state.serverHandle;
+    state.serverHandle = null;
+    state.startPromise = null;
+    state.refCount = 0;
+    if (states.get(state.targetKey) === state) states.delete(state.targetKey);
+    allStates.delete(state);
+    await server?.close();
+  };
+
+  const invalidateState = (state: TargetState): void => {
+    state.invalidated = true;
+    if (states.get(state.targetKey) === state) states.delete(state.targetKey);
+    if (state.refCount === 0 && state.startPromise === null) void closeState(state);
+  };
+
   const acquire = async (input?: OpencodeServerAcquireInput): Promise<OpencodeServerHandle> => {
+    if (closing) throw new Error("OpenCode server manager is shutting down.");
     const config = SERVER_CONFIGS[input?.provider ?? "opencode"];
     const executionTargetId = resolveExecutionTargetId(input?.executionTargetId);
     const binaryPath = resolveBinaryPath(config, input?.binaryPath);
     const targetKey = JSON.stringify([config.provider, executionTargetId, binaryPath]);
-    const state = readState(targetKey);
+    const targetIdentity = JSON.stringify([config.provider, executionTargetId]);
+    for (const previousState of allStates) {
+      if (
+        previousState.targetIdentity === targetIdentity &&
+        previousState.targetKey !== targetKey
+      ) {
+        invalidateState(previousState);
+      }
+    }
+    let state = readState(targetKey, targetIdentity);
 
     if (state.serverHandle !== null) {
-      state.refCount += 1;
-      return makeHandle(state.serverHandle, input?.directory, targetKey, config);
+      if (state.serverHandle.isRunning?.() === false) {
+        invalidateState(state);
+        state = readState(targetKey, targetIdentity);
+      } else {
+        state.refCount += 1;
+        return makeHandle(state.serverHandle, input?.directory, state, config);
+      }
     }
 
     if (state.startPromise === null) {
       state.startPromise = Promise.resolve()
-        .then(() =>
-          executionTargetId === LOCAL_EXECUTION_TARGET_ID
+        .then(() => {
+          if (options.startServer) {
+            return options.startServer({ config, executionTargetId, binaryPath });
+          }
+          return executionTargetId === LOCAL_EXECUTION_TARGET_ID
             ? startLocalOpencodeServer(config, binaryPath)
-            : startRemoteOpencodeServer(config, executionTargetId, binaryPath),
-        )
+            : startRemoteOpencodeServer(config, executionTargetId, binaryPath);
+        })
         .catch((error) => {
           state.startPromise = null;
-          console.error(
-            `[opencode-server-manager] Failed to start ${config.displayName} server for target '${targetKey}':`,
-            error,
-          );
+          if (states.get(targetKey) === state) states.delete(targetKey);
+          allStates.delete(state);
           throw error;
         });
     }
 
     const serverHandle = await state.startPromise;
+    if (closing || state.invalidated) {
+      await closeState(state, serverHandle);
+      throw new Error(`${config.displayName} server start was superseded.`);
+    }
     state.serverHandle = serverHandle;
     state.startPromise = null;
     state.refCount += 1;
-    return makeHandle(serverHandle, input?.directory, targetKey, config);
+    return makeHandle(serverHandle, input?.directory, state, config);
   };
   const makeHandle = (
-    serverHandle: RunningServer,
+    serverHandle: RunningManagedServer,
     directory: string | undefined,
-    targetKey: string,
+    state: TargetState,
     config: ManagedServerConfig,
   ): OpencodeServerHandle => {
     let released = false;
     const client = createOpencodeClient(buildClientOptions(config, serverHandle.url, directory));
 
+    const release = (invalidate: boolean) => {
+      if (released) return;
+      released = true;
+      state.refCount = Math.max(0, state.refCount - 1);
+      if (invalidate) invalidateState(state);
+      else if (state.invalidated && state.refCount === 0) void closeState(state);
+    };
+
     return {
       client,
       url: serverHandle.url,
-      release() {
-        if (released) {
-          return;
-        }
-        released = true;
-        const state = readState(targetKey);
-        state.refCount -= 1;
-        if (state.refCount <= 0 && state.serverHandle !== null) {
-          state.serverHandle.close();
-          state.serverHandle = null;
-          state.refCount = 0;
-        }
-      },
+      release: () => release(false),
+      invalidate: () => release(true),
     };
   };
 
-  return { acquire };
+  const closeAll = async (): Promise<void> => {
+    closing = true;
+    await Promise.all(
+      Array.from(allStates, async (state) => {
+        const server =
+          state.serverHandle ??
+          (state.startPromise ? await state.startPromise.catch(() => null) : null);
+        await closeState(state, server ?? undefined);
+      }),
+    );
+    states.clear();
+    allStates.clear();
+  };
+
+  return { acquire, closeAll };
 }
 
 export const OpencodeServerManagerLive = Layer.effect(
   OpencodeServerManager,
-  Effect.sync(() => makeOpencodeServerManager()),
+  Effect.acquireRelease(Effect.sync(makeOpencodeServerManager), (manager) =>
+    Effect.promise(manager.closeAll),
+  ).pipe(Effect.map(({ acquire }) => ({ acquire }))),
 );

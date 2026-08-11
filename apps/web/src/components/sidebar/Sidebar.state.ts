@@ -41,6 +41,8 @@ import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
 import { buildSidebarStateResult } from "./Sidebar.state.result";
 import { useSidebarRecentSections } from "./Sidebar.state.sections";
 import { useAutomationThreadIds } from "../automation/useAutomationThreadIds";
+import { readNativeApi } from "../../rpc/nativeApi";
+import { loadMoreProjectThreadSummaries } from "../../routes/-__root.bounded-bootstrap";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
 export function useSidebarState(): SidebarState {
@@ -50,6 +52,10 @@ export function useSidebarState(): SidebarState {
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
   const sidebarRecentThreadIds = useStore((store) => store.sidebarRecentThreadIds);
   const sidebarPinnedThreadIds = useStore((store) => store.sidebarPinnedThreadIds);
+  const projectThreadCountsById = useStore((store) => store.projectThreadCountsById);
+  const threadSummaryCursorByProjectId = useStore(
+    (store) => store.threadSummaryCursorByProjectId ?? {},
+  );
   const { favouritesExpanded, projectExpandedById, projectOrder, setFavouritesExpanded } =
     useUiStateStore(
       useShallow((store) => ({
@@ -166,6 +172,7 @@ export function useSidebarState(): SidebarState {
     sidebarThreads,
     sidebarThreadsById,
     sidebarRecentThreadIds,
+    loadedChatThreadIds: threadIdsByProjectId[BUILT_IN_CHATS_PROJECT_ID] ?? [],
   });
   const sortedProjects = useMemo(
     () =>
@@ -282,6 +289,30 @@ export function useSidebarState(): SidebarState {
   const [areChatsExpanded, setAreChatsExpanded] = useState(true);
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
+  const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
+  const chatThreadCount = projectThreadCountsById?.[BUILT_IN_CHATS_PROJECT_ID];
+  const chatThreadCursor = threadSummaryCursorByProjectId[BUILT_IN_CHATS_PROJECT_ID];
+  const hasMoreChats =
+    chatThreadCursor === undefined
+      ? (chatThreadCount ?? 0) > sidebarRecentThreadIds.length
+      : chatThreadCursor !== null;
+  const loadMoreChats = useCallback(() => {
+    const api = readNativeApi();
+    if (!api || isLoadingMoreChats || !hasMoreChats) return;
+    setIsLoadingMoreChats(true);
+    void loadMoreProjectThreadSummaries({
+      api,
+      projectId: BUILT_IN_CHATS_PROJECT_ID,
+    })
+      .catch((error: unknown) => {
+        toastManager.add({
+          type: "error",
+          title: "Failed to load chats",
+          description: error instanceof Error ? error.message : "Unable to load more chats.",
+        });
+      })
+      .finally(() => setIsLoadingMoreChats(false));
+  }, [hasMoreChats, isLoadingMoreChats]);
   const { favoriteThreadIds, renderedFavorites, renderedChats, visibleChatThreadIdsForJumpHints } =
     useSidebarRecentSections({
       favoriteThreadIds: sidebarPinnedThreadIds,
@@ -291,6 +322,13 @@ export function useSidebarState(): SidebarState {
       areChatsExpanded,
       showAllChats,
     });
+  const authoritativeChatCount = chatThreadCount;
+  const collapsedHiddenChatCount =
+    authoritativeChatCount === undefined ? null : Math.max(0, authoritativeChatCount - 4);
+  const unloadedChatCount =
+    authoritativeChatCount === undefined
+      ? null
+      : Math.max(0, authoritativeChatCount - renderedChats.length);
 
   // ── Rendered projects + jump hints + keyboard nav sub-hook ────────────────
   const renderedProjectsState = useSidebarRenderedProjects({
@@ -371,6 +409,11 @@ export function useSidebarState(): SidebarState {
     setAreChatsExpanded,
     showAllChats,
     setShowAllChats,
+    hasMoreChats,
+    collapsedHiddenChatCount,
+    unloadedChatCount,
+    isLoadingMoreChats,
+    loadMoreChats,
     renderedChats,
     renderedProjectsState,
     isManualProjectSorting,

@@ -11,6 +11,7 @@ import {
   createModelSelection,
   getProviderModels,
   resolveSelectableProvider,
+  resolveStartupSelectableProvider,
 } from "../../../../models/provider";
 import { useEffectiveComposerModelState } from "../../../../stores/composer";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../../provider/ProviderModelPicker";
@@ -39,10 +40,10 @@ export function useComposerProviderState(
         : null
       : null;
 
-  const unlockedSelectedProvider = resolveSelectableProvider(
-    providerStatuses,
-    selectedProviderByThreadId ?? threadProvider ?? "codex",
-  );
+  const requestedProvider = selectedProviderByThreadId ?? threadProvider ?? "codex";
+  const unlockedSelectedProvider = hasThreadStarted
+    ? resolveSelectableProvider(providerStatuses, requestedProvider)
+    : resolveStartupSelectableProvider(providerStatuses, requestedProvider);
   const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({

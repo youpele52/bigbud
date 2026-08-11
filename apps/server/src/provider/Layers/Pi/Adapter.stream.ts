@@ -21,6 +21,7 @@ export function makeHandleProcessExit(deps: {
 
     deps.sessions.delete(session.threadId);
     session.lastError = detail;
+    session.missingAgentEndRecoveryToken = undefined;
     session.agentRunning = false;
     session.activeTurnId = undefined;
     session.pendingTurnEnd = undefined;

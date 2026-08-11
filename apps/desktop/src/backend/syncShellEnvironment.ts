@@ -1,6 +1,7 @@
 import {
   readEnvironmentFromLoginShell,
   readEnvironmentFromLoginShellAsync,
+  mergePathEntries,
   resolveLoginShell,
   ShellEnvironmentReader,
   ShellEnvironmentReaderAsync,
@@ -26,7 +27,7 @@ export function syncShellEnvironment(
     ]);
 
     if (shellEnvironment.PATH) {
-      env.PATH = shellEnvironment.PATH;
+      env.PATH = mergePathEntries(shellEnvironment.PATH, env.PATH, platform);
     }
 
     if (!env.SSH_AUTH_SOCK && shellEnvironment.SSH_AUTH_SOCK) {
@@ -57,7 +58,7 @@ export async function syncShellEnvironmentAsync(
     );
 
     if (shellEnvironment.PATH) {
-      env.PATH = shellEnvironment.PATH;
+      env.PATH = mergePathEntries(shellEnvironment.PATH, env.PATH, platform);
     }
 
     if (!env.SSH_AUTH_SOCK && shellEnvironment.SSH_AUTH_SOCK) {

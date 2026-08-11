@@ -1,9 +1,10 @@
 import { EventId, ThreadId, TurnId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
-import { Effect } from "effect";
+import { Effect, ServiceMap } from "effect";
+import { expect } from "vitest";
 
-import { makeHandleEvent } from "./Adapter.stream.ts";
+import { makeHandleEvent, startEventStream } from "./Adapter.stream.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 
 const CREATED_AT = "2026-05-14T00:00:00.000Z";
@@ -166,5 +167,53 @@ it.effect("requires explicit approval for external directories in full-access mo
     assert.equal(emitted.length, 1);
     assert.equal(emitted[0]?.type, "request.opened");
     assert.deepStrictEqual(scheduled, []);
+  });
+});
+
+it("emits a canonical runtime error when the SSE stream disconnects", async () => {
+  let emitted: ReadonlyArray<ProviderRuntimeEvent> = [];
+  const stream = {
+    next: async () => {
+      throw new Error("SSE disconnected");
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  } as unknown as AsyncIterable<never>;
+  const session = {
+    ...makeSession(),
+    client: {
+      event: {
+        subscribe: async () => ({ stream }),
+      },
+    },
+  } as unknown as ActiveOpencodeSession;
+
+  startEventStream(
+    session,
+    () => Effect.void,
+    (threadId, type, payload) =>
+      Effect.succeed({
+        eventId: EventId.makeUnsafe("evt-sse-disconnected"),
+        provider: "opencode",
+        threadId,
+        createdAt: CREATED_AT,
+        type,
+        payload,
+      } as never),
+    (events) => Effect.sync(() => void (emitted = events)),
+    ServiceMap.empty(),
+  );
+
+  const deadline = Date.now() + 1_000;
+  while (emitted.length === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  expect(emitted).toHaveLength(1);
+  expect(emitted[0]).toMatchObject({
+    type: "runtime.error",
+    provider: "opencode",
+    threadId: THREAD_ID,
+    payload: { class: "transport_error", message: "SSE disconnected" },
   });
 });

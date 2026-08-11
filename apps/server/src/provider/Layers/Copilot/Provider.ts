@@ -1,5 +1,5 @@
 import type { CopilotSettings, ModelCapabilities, ServerProviderModel } from "@bigbud/contracts";
-import { Cache, Duration, Effect, Equal, Layer, Result, Stream } from "effect";
+import { Effect, Equal, Layer, Result, Stream } from "effect";
 import { CopilotClient, type ModelInfo } from "@github/copilot-sdk";
 
 import {
@@ -272,16 +272,7 @@ export const CopilotProviderLive = Layer.effect(
   CopilotProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
-    const snapshotCache = yield* Cache.make({
-      capacity: 1,
-      timeToLive: Duration.minutes(1),
-      lookup: () =>
-        checkCopilotProviderStatus().pipe(
-          Effect.provideService(ServerSettingsService, serverSettings),
-        ),
-    });
-
-    const checkProvider = Cache.get(snapshotCache, "copilot").pipe(
+    const checkProvider = checkCopilotProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
     );
 

@@ -17,6 +17,7 @@ import {
   setThreadHydration,
   appendProjectCatalogPage,
   appendProjectThreadSummaries,
+  mergeProjectCatalogPage,
   syncBoundedCatalog,
   syncSidebarCatalog,
   syncSelectedThreadDetail,
@@ -119,6 +120,7 @@ interface AppStore extends AppState {
     generation?: number,
     loading?: boolean,
   ) => void;
+  mergeProjectCatalogPage: (page: GetStartupProjectCatalogResult) => void;
   setProjectCatalogLoading: (loading: boolean, error?: string, generation?: number) => void;
   setThreadHydration: (threadId: ThreadId, hydration: ThreadHydration) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
@@ -138,6 +140,7 @@ export const useStore = create<AppStore>((set) => ({
   appendProjectThreadSummaries: (page) => set((state) => appendProjectThreadSummaries(state, page)),
   appendProjectCatalogPage: (page, generation, loading) =>
     set((state) => appendProjectCatalogPage(state, page, generation, loading)),
+  mergeProjectCatalogPage: (page) => set((state) => mergeProjectCatalogPage(state, page)),
   setProjectCatalogLoading: (loading, error, generation) =>
     set((state) =>
       generation !== undefined && state.projectCatalogGeneration !== generation

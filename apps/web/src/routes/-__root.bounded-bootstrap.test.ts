@@ -187,7 +187,7 @@ describe("bounded orchestration bootstrap", () => {
       threadId: selectedThread,
     });
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
-      limit: 2,
+      limit: 1,
       priorityProjectId: project2,
     });
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(1);

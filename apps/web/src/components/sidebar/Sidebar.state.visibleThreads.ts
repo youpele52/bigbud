@@ -7,6 +7,7 @@ export function useSidebarVisibleThreads(input: {
   sidebarThreads: readonly SidebarThreadSummary[];
   sidebarThreadsById: Record<string, SidebarThreadSummary>;
   sidebarRecentThreadIds: readonly string[];
+  loadedChatThreadIds: readonly string[];
 }) {
   const visibleThreads = useMemo(
     () =>
@@ -17,12 +18,12 @@ export function useSidebarVisibleThreads(input: {
   );
   const visibleChatThreads = useMemo(
     () =>
-      input.sidebarRecentThreadIds
+      [...new Set([...input.sidebarRecentThreadIds, ...input.loadedChatThreadIds])]
         .map((threadId) => input.sidebarThreadsById[threadId])
         .filter((thread): thread is NonNullable<typeof thread> => thread !== undefined)
         .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
         .filter((thread) => isBuiltInChatsProject(thread.projectId)),
-    [input.sidebarRecentThreadIds, input.sidebarThreadsById],
+    [input.loadedChatThreadIds, input.sidebarRecentThreadIds, input.sidebarThreadsById],
   );
 
   return { visibleThreads, visibleChatThreads };

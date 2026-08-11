@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type { Duration } from "effect";
 
 import type { OrchestrationEvent, OrchestrationThread, ProviderKind } from "@bigbud/contracts";
 
@@ -53,10 +54,12 @@ export interface OrchestrationIntegrationHarness {
       timeoutMs?: number,
     ): Effect.Effect<Receipt, never>;
   };
+  readonly advanceClock: (duration: Duration.Input) => Effect.Effect<void, never>;
   readonly dispose: Effect.Effect<void, never>;
 }
 
 export interface MakeOrchestrationIntegrationHarnessOptions {
   readonly provider?: ProviderKind;
   readonly realCodex?: boolean;
+  readonly testClock?: boolean;
 }

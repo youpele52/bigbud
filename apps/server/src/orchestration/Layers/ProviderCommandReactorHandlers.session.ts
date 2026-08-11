@@ -8,6 +8,8 @@ import { Effect } from "effect";
 
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
+import { settleInterruptAfterAcknowledgement } from "./ProviderCommandReactorHandlers.session.settle.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import {
   formatProviderServiceCauseDetail,
@@ -65,13 +67,44 @@ export const makeProcessSessionHandlers = ({
     if (!thread) {
       return;
     }
-    const runtimeSession = yield* providerService
+    let runtimeSession = yield* providerService
       .listSessions()
       .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === thread.id)));
     const boundSession =
       thread.session && thread.session.status !== "stopped" ? thread.session : null;
 
     if (!boundSession && !runtimeSession) {
+      yield* Effect.logWarning("provider turn interrupt could not find a live session", {
+        threadId: thread.id,
+        requestedTurnId: event.payload.turnId ?? null,
+        hasPendingFlushIntent: event.payload.pendingFlushIntent !== undefined,
+        queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+        queuedPromptCount: thread.queuedPrompts?.length ?? 0,
+      });
+      yield* appendProviderFailureActivity({
+        threadId: thread.id,
+        kind: "provider.turn.interrupt.failed",
+        summary: "Provider turn interrupt did not find a live session",
+        detail: "The projected turn was stale; no live provider session was available.",
+        turnId: event.payload.turnId ?? null,
+        createdAt: event.payload.createdAt,
+      });
+      if (event.payload.pendingFlushIntent !== undefined) {
+        yield* setThreadSession({
+          threadId: thread.id,
+          session: {
+            threadId: thread.id,
+            status: "stopped",
+            providerName: null,
+            runtimeMode: thread.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+            activeTurnId: null,
+            reason: "stale-provider-session",
+            lastError: null,
+            updatedAt: event.payload.createdAt,
+          },
+          createdAt: event.payload.createdAt,
+        });
+      }
       return;
     }
 
@@ -79,13 +112,129 @@ export const makeProcessSessionHandlers = ({
       event.payload.turnId !== undefined &&
       event.payload.turnId !== (runtimeSession?.activeTurnId ?? boundSession?.activeTurnId ?? null)
     ) {
+      yield* Effect.logWarning("provider turn interrupt ignored for a stale turn", {
+        threadId: thread.id,
+        projectedActiveTurnId: boundSession?.activeTurnId ?? null,
+        liveActiveTurnId: runtimeSession?.activeTurnId ?? null,
+        requestedTurnId: event.payload.turnId,
+        hasPendingFlushIntent: event.payload.pendingFlushIntent !== undefined,
+        queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+        queuedPromptCount: thread.queuedPrompts?.length ?? 0,
+      });
+      yield* appendProviderFailureActivity({
+        threadId: thread.id,
+        kind: "provider.turn.interrupt.failed",
+        summary: "Provider turn interrupt ignored for a stale turn",
+        detail: `The requested turn does not match the live turn (projected=${boundSession?.activeTurnId ?? "none"}, live=${runtimeSession?.activeTurnId ?? "none"}).`,
+        turnId: event.payload.turnId,
+        createdAt: event.payload.createdAt,
+      });
       return;
+    }
+
+    const projectedTurnFence = boundSession?.activeTurnId ?? thread.latestTurn?.turnId ?? null;
+    if (
+      event.payload.turnId === undefined &&
+      runtimeSession?.activeTurnId != null &&
+      runtimeSession.activeTurnId !== projectedTurnFence
+    ) {
+      yield* Effect.logWarning("provider turn interrupt rejected without a matching turn fence", {
+        threadId: thread.id,
+        projectedActiveTurnId: projectedTurnFence,
+        liveActiveTurnId: runtimeSession.activeTurnId,
+      });
+      yield* appendProviderFailureActivity({
+        threadId: thread.id,
+        kind: "provider.turn.interrupt.failed",
+        summary: "Provider turn interrupt rejected without a matching turn fence",
+        detail: `A live turn exists but the projected turn fence did not match (projected=${projectedTurnFence ?? "none"}, live=${runtimeSession.activeTurnId}).`,
+        turnId: runtimeSession.activeTurnId,
+        createdAt: event.payload.createdAt,
+      });
+      return;
+    }
+
+    if (
+      event.payload.pendingFlushIntent !== undefined &&
+      (runtimeSession?.activeTurnId ?? boundSession?.activeTurnId ?? null) === null
+    ) {
+      const reconciliation = buildThreadReconciliationCommand({
+        thread,
+        liveSession: runtimeSession,
+        occurredAt: event.payload.createdAt,
+      });
+      if (reconciliation?.type === "thread.session.set") {
+        yield* setThreadSession({
+          threadId: thread.id,
+          session: reconciliation.session,
+          createdAt: event.payload.createdAt,
+        });
+      }
+      return;
+    }
+
+    if (!runtimeSession && event.payload.pendingFlushIntent !== undefined) {
+      yield* Effect.sleep("100 millis");
+      runtimeSession = yield* providerService
+        .listSessions()
+        .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === thread.id)));
+      if (!runtimeSession) {
+        const reconciliation = buildThreadReconciliationCommand({
+          thread,
+          liveSession: undefined,
+          occurredAt: event.payload.createdAt,
+        });
+        if (reconciliation?.type === "thread.session.set") {
+          yield* setThreadSession({
+            threadId: thread.id,
+            session: reconciliation.session,
+            createdAt: event.payload.createdAt,
+          });
+        }
+        return;
+      }
+      if (
+        event.payload.turnId !== undefined &&
+        event.payload.turnId !== runtimeSession.activeTurnId
+      ) {
+        yield* Effect.logWarning("provider turn interrupt recheck found a newer turn", {
+          threadId: thread.id,
+          requestedTurnId: event.payload.turnId,
+          liveActiveTurnId: runtimeSession.activeTurnId ?? null,
+        });
+        yield* appendProviderFailureActivity({
+          threadId: thread.id,
+          kind: "provider.turn.interrupt.failed",
+          summary: "Provider turn interrupt preserved a newer turn",
+          detail: `The live provider turn changed during settlement (requested=${event.payload.turnId}, live=${runtimeSession.activeTurnId ?? "none"}).`,
+          turnId: event.payload.turnId,
+          createdAt: event.payload.createdAt,
+        });
+        return;
+      }
     }
 
     yield* providerService.interruptTurn({
       threadId: event.payload.threadId,
       ...(event.payload.turnId !== undefined ? { turnId: event.payload.turnId } : {}),
     });
+    yield* Effect.logInfo("provider turn interrupt acknowledged", {
+      threadId: thread.id,
+      requestedTurnId: event.payload.turnId ?? null,
+      liveActiveTurnId: runtimeSession?.activeTurnId ?? null,
+      queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+      queuedPromptCount: thread.queuedPrompts?.length ?? 0,
+      hasPendingFlushIntent: event.payload.pendingFlushIntent !== undefined,
+    });
+    if (event.payload.pendingFlushIntent !== undefined) {
+      yield* settleInterruptAfterAcknowledgement({
+        event,
+        thread,
+        providerService,
+        setThreadSession,
+      });
+      return;
+    }
     yield* setThreadSession({
       threadId: thread.id,
       session: {

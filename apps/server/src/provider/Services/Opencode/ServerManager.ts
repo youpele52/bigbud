@@ -7,8 +7,10 @@ export interface OpencodeServerHandle {
   readonly client: OpencodeClient;
   /** The URL the server is listening on. */
   readonly url: string;
-  /** Release this handle. When the last handle is released, the server stops. */
+  /** Release this handle. The warm shared server stops when the manager shuts down. */
   release(): void;
+  /** Release and discard an unhealthy shared server so the next acquisition starts a fresh one. */
+  invalidate(): void;
 }
 
 export interface OpencodeServerAcquireInput {
@@ -21,7 +23,7 @@ export interface OpencodeServerAcquireInput {
 export interface OpencodeServerManagerShape {
   /**
    * Acquire a handle to the shared OpenCode server.
-   * Starts the server the first time; subsequent calls reuse the same process.
+   * Starts the server the first time; subsequent calls reuse the warm process.
    * Pass `directory` to bake a working directory into the created client (v2).
    * Call `handle.release()` when you no longer need it.
    */

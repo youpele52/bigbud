@@ -69,6 +69,23 @@ function toReconciledSession(input: {
   return areSessionsEqual(currentSession, nextSession) ? null : nextSession;
 }
 
+export function buildThreadReconciliationCommand(input: {
+  thread: OrchestrationThread;
+  liveSession: ProviderSession | undefined;
+  occurredAt: string;
+}): OrchestrationCommand | null {
+  const nextSession = toReconciledSession(input);
+  if (!nextSession) return null;
+
+  return {
+    type: "thread.session.set",
+    commandId: serverCommandId("provider-runtime-session-reconcile"),
+    threadId: input.thread.id,
+    session: nextSession,
+    createdAt: input.occurredAt,
+  };
+}
+
 export function buildStartupReconciliationCommands(input: {
   threads: ReadonlyArray<OrchestrationThread>;
   liveSessions: ReadonlyArray<ProviderSession>;
@@ -97,22 +114,15 @@ export function buildStartupReconciliationCommands(input: {
       });
     }
 
-    const nextSession = toReconciledSession({
+    const command = buildThreadReconciliationCommand({
       thread,
       liveSession: liveSessionByThreadId.get(thread.id),
       occurredAt: input.occurredAt,
     });
-    if (!nextSession) {
+    if (!command) {
       continue;
     }
-
-    commands.push({
-      type: "thread.session.set",
-      commandId: serverCommandId("provider-runtime-session-reconcile"),
-      threadId: thread.id,
-      session: nextSession,
-      createdAt: input.occurredAt,
-    });
+    commands.push(command);
   }
 
   return commands;

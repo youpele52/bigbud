@@ -31,7 +31,8 @@ export function projectThreadQueuedPromptEvent(
         }),
       });
     }
-    case "thread.queued-prompt-removed":
+    case "thread.queued-prompt-removed": {
+      const thread = model.threads.find((entry) => entry.id === event.payload.threadId);
       return Effect.succeed({
         ...model,
         threads: updateThread(model.threads, event.payload.threadId, {
@@ -39,9 +40,14 @@ export function projectThreadQueuedPromptEvent(
             model.threads
               .find((thread) => thread.id === event.payload.threadId)
               ?.queuedPrompts?.filter((prompt) => prompt.id !== event.payload.messageId) ?? [],
+          pendingInterruptFlushIntent:
+            thread?.pendingInterruptFlushIntent?.queuedPromptIds.includes(event.payload.messageId)
+              ? null
+              : thread?.pendingInterruptFlushIntent,
           updatedAt: event.occurredAt,
         }),
       });
+    }
     case "thread.queued-prompts-flushed": {
       const removed = new Set(event.payload.messageIds);
       const thread = model.threads.find((entry) => entry.id === event.payload.threadId);
@@ -50,6 +56,16 @@ export function projectThreadQueuedPromptEvent(
         ...model,
         threads: updateThread(model.threads, thread.id, {
           queuedPrompts: (thread.queuedPrompts ?? []).filter((prompt) => !removed.has(prompt.id)),
+          pendingInterruptFlushIntent:
+            thread.pendingInterruptFlushIntent !== null &&
+            thread.pendingInterruptFlushIntent !== undefined &&
+            thread.pendingInterruptFlushIntent.queuedPromptIds.length ===
+              event.payload.messageIds.length &&
+            thread.pendingInterruptFlushIntent.queuedPromptIds.every(
+              (id, index) => id === event.payload.messageIds[index],
+            )
+              ? null
+              : thread.pendingInterruptFlushIntent,
           updatedAt: event.occurredAt,
         }),
       });

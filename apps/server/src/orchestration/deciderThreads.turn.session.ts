@@ -30,6 +30,24 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
     switch (command.type) {
       case "thread.turn.interrupt":
         yield* requireThreadReadyForMutation({ thread, command });
+        if (command.queuedPromptIdsAfterSettlement !== undefined) {
+          const prefix = (thread.queuedPrompts ?? []).slice(
+            0,
+            command.queuedPromptIdsAfterSettlement.length,
+          );
+          if (
+            command.queuedPromptIdsAfterSettlement.length === 0 ||
+            prefix.length !== command.queuedPromptIdsAfterSettlement.length ||
+            prefix.some(
+              (prompt, index) => prompt.id !== command.queuedPromptIdsAfterSettlement![index],
+            )
+          ) {
+            return yield* new OrchestrationCommandInvariantError({
+              commandType: command.type,
+              detail: "Queued prompts changed before Send now could be applied.",
+            });
+          }
+        }
         return {
           ...withEventBase({
             aggregateKind: "thread",
@@ -41,6 +59,16 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
           payload: {
             threadId: command.threadId,
             ...(command.turnId !== undefined ? { turnId: command.turnId } : {}),
+            ...(command.queuedPromptIdsAfterSettlement !== undefined
+              ? {
+                  pendingFlushIntent: {
+                    intentId: command.commandId,
+                    ...(command.turnId !== undefined ? { requestedTurnId: command.turnId } : {}),
+                    queuedPromptIds: command.queuedPromptIdsAfterSettlement,
+                    requestedAt: command.createdAt,
+                  },
+                }
+              : {}),
             createdAt: command.createdAt,
           },
         };

@@ -2,6 +2,7 @@ import type {
   ModelCapabilities,
   ServerProvider,
   ServerProviderAuth,
+  ServerProviderFailure,
   ServerProviderModel,
   ServerProviderModelDiscovery,
   ServerProviderSkill,
@@ -29,6 +30,41 @@ export interface ProviderProbeResult {
   readonly status: Exclude<ServerProviderState, "disabled">;
   readonly auth: ServerProviderAuth;
   readonly message?: string;
+  readonly failure?: ServerProviderFailure;
+}
+
+export function classifyProviderFailure(input: {
+  readonly enabled: boolean;
+  readonly probe: ProviderProbeResult;
+}): ServerProviderFailure | undefined {
+  if (!input.enabled || input.probe.status !== "error") return undefined;
+  if (input.probe.failure) return input.probe.failure;
+  if (!input.probe.installed) {
+    return { classification: "user-action-required", reason: "command-not-found" };
+  }
+  if (input.probe.auth.status === "unauthenticated") {
+    return { classification: "user-action-required", reason: "authentication-required" };
+  }
+  return { classification: "retryable", reason: "process-failed" };
+}
+
+export function classifyProviderExecutionFailure(input: {
+  readonly message: string;
+  readonly binaryPath: string;
+  readonly defaultBinaryPath: string;
+}): ServerProviderFailure {
+  const message = input.message.toLowerCase();
+  if (message.includes("enoent") || message.includes("not found")) {
+    return {
+      classification: "user-action-required",
+      reason:
+        input.binaryPath === input.defaultBinaryPath ? "command-not-found" : "invalid-binary-path",
+    };
+  }
+  if (message.includes("econnrefused") || message.includes("connection refused")) {
+    return { classification: "retryable", reason: "connection-refused" };
+  }
+  return { classification: "retryable", reason: "process-failed" };
 }
 
 export function nonEmptyTrimmed(value: string | undefined): string | undefined {
@@ -149,12 +185,38 @@ export function buildServerProvider(input: {
     status: input.enabled ? input.probe.status : "disabled",
     auth: input.probe.auth,
     checkedAt: input.checkedAt,
+    initialProbeComplete: true,
     ...(input.probe.message ? { message: input.probe.message } : {}),
+    ...(classifyProviderFailure(input) ? { failure: classifyProviderFailure(input) } : {}),
     models: input.models,
     ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
   };
+}
+
+export function buildInstalledProviderAvailability(input: {
+  readonly provider: ServerProvider["provider"];
+  readonly version: string;
+  readonly checkedAt: string;
+  readonly models: ReadonlyArray<ServerProviderModel>;
+  readonly message: string;
+  readonly modelDiscovery?: ServerProviderModelDiscovery;
+}): ServerProvider {
+  return buildServerProvider({
+    provider: input.provider,
+    enabled: true,
+    checkedAt: input.checkedAt,
+    models: input.models,
+    ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
+    probe: {
+      installed: true,
+      version: input.version,
+      status: "ready",
+      auth: { status: "unknown" },
+      message: input.message,
+    },
+  });
 }
 
 export const collectStreamAsString = <E>(

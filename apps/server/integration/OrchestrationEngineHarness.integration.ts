@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Exit, FileSystem, Layer, ManagedRuntime, Path, Ref, Scope, Stream } from "effect";
+import { TestClock } from "effect/testing";
 
 import { CheckpointStoreLive } from "../src/checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../src/checkpointing/Services/CheckpointStore.ts";
@@ -257,6 +258,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(threadWatchReactorLayer),
       Layer.provideMerge(learningReactorLayer),
     );
+    const clockLayer = options?.testClock ? TestClock.layer() : Layer.empty;
     const layer = Layer.empty.pipe(
       Layer.provideMerge(runtimeServicesLayer),
       Layer.provideMerge(orchestrationReactorLayer),
@@ -267,6 +269,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(ServerSettingsService.layerTest()),
       Layer.provideMerge(ServerConfig.layerTest(workspaceDir, rootDir)),
       Layer.provideMerge(NodeServices.layer),
+      Layer.provideMerge(clockLayer),
     );
 
     const runtime = ManagedRuntime.make(layer);
@@ -305,7 +308,9 @@ export const makeOrchestrationIntegrationHarness = (
     yield* Stream.runForEach(runtimeReceiptBus.streamEventsForTest, (receipt) =>
       Ref.update(receiptHistory, (history) => [...history, receipt]).pipe(Effect.asVoid),
     ).pipe(Effect.forkIn(scope));
-    yield* Effect.sleep(10);
+    if (!options?.testClock) {
+      yield* Effect.sleep(10);
+    }
 
     const { waitForThread, waitForDomainEvent, waitForPendingApproval, waitForReceipt, dispose } =
       createHarnessRuntimeControls({
@@ -332,6 +337,8 @@ export const makeOrchestrationIntegrationHarness = (
       waitForDomainEvent,
       waitForPendingApproval,
       waitForReceipt,
+      advanceClock: (duration) =>
+        Effect.promise(() => runtime.runPromise(Effect.scoped(TestClock.adjust(duration)))),
       dispose,
     } satisfies OrchestrationIntegrationHarness;
   });

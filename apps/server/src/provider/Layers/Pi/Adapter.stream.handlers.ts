@@ -252,6 +252,9 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
   if (!turnId) {
     return;
   }
+  if (deps.session.completedTurnBoundary) {
+    return;
+  }
 
   const messageRecord = isRecord(deps.message.message) ? deps.message.message : undefined;
   const stopReason = normalizeString(messageRecord?.stopReason);

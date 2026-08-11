@@ -28,6 +28,11 @@ interface SidebarChatsSectionProps {
   onExpandedChange: (expanded: boolean) => void;
   showAll: boolean;
   onShowAllChange: (showAll: boolean) => void;
+  hasMoreChats: boolean;
+  collapsedHiddenChatCount: number | null;
+  unloadedChatCount: number | null;
+  isLoadingMoreChats: boolean;
+  onLoadMoreChats: () => void;
   onNewChat: () => void;
   newThreadShortcutLabel: string | null | undefined;
   sharedProjectItemProps: SharedProjectItemProps;
@@ -41,13 +46,21 @@ export function SidebarChatsSection({
   onExpandedChange,
   showAll,
   onShowAllChange,
+  hasMoreChats,
+  collapsedHiddenChatCount,
+  unloadedChatCount,
+  isLoadingMoreChats,
+  onLoadMoreChats,
   onNewChat,
   newThreadShortcutLabel,
   sharedProjectItemProps,
   chatsSortOrder = "updated_at",
   onChatsSortOrderChange,
 }: SidebarChatsSectionProps) {
-  const hasMoreChats = renderedChats.length > RECENT_CHAT_INITIAL_VISIBLE_COUNT;
+  const hasHiddenChats =
+    collapsedHiddenChatCount === null
+      ? renderedChats.length > RECENT_CHAT_INITIAL_VISIBLE_COUNT || hasMoreChats
+      : collapsedHiddenChatCount > 0;
   const visibleChats = showAll
     ? renderedChats
     : renderedChats.slice(0, RECENT_CHAT_INITIAL_VISIBLE_COUNT);
@@ -165,18 +178,42 @@ export function SidebarChatsSection({
                   />
                 ))}
 
-                {/* See more / Show less button */}
-                {hasMoreChats && (
+                {hasHiddenChats && (
                   <SidebarMenuSubItem className="w-full">
                     <SidebarMenuSubButton
-                      render={<button type="button" />}
+                      render={<button type="button" disabled={isLoadingMoreChats} />}
                       data-thread-selection-safe
                       size="sm"
                       className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
                       onClick={() => onShowAllChange(!showAll)}
                     >
                       <span className="flex min-w-0 flex-1 items-center gap-2">
-                        <span>{showAll ? "Show less" : `See more (${hiddenCount})`}</span>
+                        <span>
+                          {showAll
+                            ? "Show less"
+                            : collapsedHiddenChatCount === null
+                              ? `See more (${hiddenCount})`
+                              : `See more (${collapsedHiddenChatCount})`}
+                        </span>
+                      </span>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                )}
+                {showAll && hasMoreChats && (
+                  <SidebarMenuSubItem className="w-full">
+                    <SidebarMenuSubButton
+                      render={<button type="button" disabled={isLoadingMoreChats} />}
+                      data-thread-selection-safe
+                      size="sm"
+                      className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                      onClick={onLoadMoreChats}
+                    >
+                      <span>
+                        {isLoadingMoreChats
+                          ? "Loading..."
+                          : unloadedChatCount === null
+                            ? "Load more"
+                            : `Load more (${unloadedChatCount})`}
                       </span>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

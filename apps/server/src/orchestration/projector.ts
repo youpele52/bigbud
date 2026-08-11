@@ -114,6 +114,19 @@ export function projectEvent(
     case "thread.queued-prompts-flushed":
       return projectThreadQueuedPromptEvent(nextBase, event);
 
+    case "thread.turn-interrupt-requested": {
+      const thread = nextBase.threads.find((entry) => entry.id === event.payload.threadId);
+      if (!thread || event.payload.pendingFlushIntent === undefined)
+        return Effect.succeed(nextBase);
+      return Effect.succeed({
+        ...nextBase,
+        threads: updateThread(nextBase.threads, thread.id, {
+          pendingInterruptFlushIntent: event.payload.pendingFlushIntent,
+          updatedAt: event.occurredAt,
+        }),
+      });
+    }
+
     case "thread.message-sent":
       return projectThreadMessageSent(nextBase, event);
 

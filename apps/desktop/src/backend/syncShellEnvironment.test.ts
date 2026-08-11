@@ -62,6 +62,20 @@ describe("syncShellEnvironment", () => {
     expect(env.SSH_AUTH_SOCK).toBe("/tmp/inherited.sock");
   });
 
+  it("keeps inherited PATH entries that are absent from the login shell", () => {
+    const env: NodeJS.ProcessEnv = {
+      SHELL: "/bin/zsh",
+      PATH: "/usr/bin:/Users/example/.local/bin",
+    };
+
+    syncShellEnvironment(env, {
+      platform: "darwin",
+      readEnvironment: () => ({ PATH: "/opt/homebrew/bin:/usr/bin" }),
+    });
+
+    expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/Users/example/.local/bin");
+  });
+
   it("hydrates PATH and missing SSH_AUTH_SOCK from the login shell on linux", () => {
     const env: NodeJS.ProcessEnv = {
       SHELL: "/bin/zsh",

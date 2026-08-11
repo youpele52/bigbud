@@ -1,4 +1,4 @@
-import type { MessageId, ThreadId } from "@bigbud/contracts";
+import type { CommandId, MessageId, ThreadId, TurnId } from "@bigbud/contracts";
 import { useCallback, useMemo } from "react";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { newCommandId, newMessageId } from "~/lib/utils";
@@ -25,13 +25,32 @@ interface UsePromptQueueInput {
   threadId: ThreadId;
   projectedPrompts: readonly QueuedPrompt[];
   activeTurnInProgress: boolean;
-  onInterrupt: () => Promise<void>;
+  onInterrupt: (options?: {
+    queuedPromptIdsAfterSettlement?: readonly MessageId[];
+  }) => Promise<void>;
   onError: (message: string) => void;
   newId: () => string;
 }
 
 export function promptQueueErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Failed to update the prompt queue.";
+}
+
+export function buildSendNowInterruptCommand(input: {
+  readonly threadId: ThreadId;
+  readonly turnId: TurnId | undefined;
+  readonly commandId: CommandId;
+  readonly queuedPromptIds: readonly MessageId[];
+  readonly createdAt: string;
+}) {
+  return {
+    type: "thread.turn.interrupt" as const,
+    commandId: input.commandId,
+    threadId: input.threadId,
+    ...(input.turnId !== undefined ? { turnId: input.turnId } : {}),
+    queuedPromptIdsAfterSettlement: input.queuedPromptIds,
+    createdAt: input.createdAt,
+  };
 }
 
 export function usePromptQueue(input: UsePromptQueueInput) {
@@ -89,7 +108,9 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     }
     try {
       if (input.activeTurnInProgress) {
-        await input.onInterrupt();
+        await input.onInterrupt({
+          queuedPromptIdsAfterSettlement: queuedPrompts.map((prompt) => prompt.id as MessageId),
+        });
         return;
       }
       await readNativeApi()?.orchestration.dispatchCommand({

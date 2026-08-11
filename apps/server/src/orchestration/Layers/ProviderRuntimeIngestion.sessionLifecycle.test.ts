@@ -209,6 +209,15 @@ describe("ProviderRuntimeIngestion", () => {
     const harness = await createHarness();
     const seededAt = new Date().toISOString();
 
+    harness.setProviderSession({
+      provider: "claudeAgent",
+      status: "ready",
+      runtimeMode: "approval-required",
+      threadId: ThreadId.makeUnsafe("thread-1"),
+      createdAt: seededAt,
+      updatedAt: seededAt,
+    });
+
     await Effect.runPromise(
       harness.engine.dispatch({
         type: "thread.session.set",

@@ -53,6 +53,23 @@ export function resolveSelectableProvider(
   return PROVIDER_KINDS[0];
 }
 
+/**
+ * Keep explicit choices stable in general, but do not strand an unstarted
+ * composer on a provider that launch recovery has confirmed is unavailable.
+ */
+export function resolveStartupSelectableProvider(
+  providers: ReadonlyArray<ServerProvider>,
+  provider: ProviderKind,
+): ProviderKind {
+  const selected = getProviderSnapshot(providers, provider);
+  const launchRecovery =
+    selected?.initialProbeComplete === false ||
+    selected?.recovery?.trigger === "startup" ||
+    selected?.recovery?.trigger === "background";
+  if (!launchRecovery || selected?.status === "ready") return provider;
+  return getFirstReadyProvider(providers)?.provider ?? provider;
+}
+
 export function getProviderModelCapabilities(
   models: ReadonlyArray<ServerProviderModel>,
   model: string | null | undefined,

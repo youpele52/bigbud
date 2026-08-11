@@ -103,7 +103,7 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.activeTurnId).toBe(asTurnId("turn-2"));
   });
 
-  it("treats interrupts without any bound provider session as a no-op", async () => {
+  it("records interrupts without any bound provider session as failed", async () => {
     const harness = await createHarness();
     const now = new Date().toISOString();
 
@@ -141,7 +141,7 @@ describe("ProviderCommandReactor", () => {
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.makeUnsafe("thread-1"));
     expect(
       thread?.activities.some((activity) => activity.kind === "provider.turn.interrupt.failed"),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("interrupts against a live provider runtime session even when thread session state is stale", async () => {

@@ -279,6 +279,7 @@ const ThreadTurnInterruptCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   turnId: Schema.optional(TurnId),
+  queuedPromptIdsAfterSettlement: Schema.optional(Schema.Array(MessageId)),
   createdAt: IsoDateTime,
 });
 

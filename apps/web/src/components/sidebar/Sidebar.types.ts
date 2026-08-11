@@ -129,6 +129,11 @@ export interface SidebarState {
   setAreChatsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
+  hasMoreChats: boolean;
+  collapsedHiddenChatCount: number | null;
+  unloadedChatCount: number | null;
+  isLoadingMoreChats: boolean;
+  loadMoreChats: () => void;
   renderedChats: SidebarRenderedThreadEntry[];
   renderedProjects: RenderedProjectEntry[];
   isManualProjectSorting: boolean;

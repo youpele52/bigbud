@@ -160,6 +160,40 @@ describe("thread queued prompt decider", () => {
     expect(message?.payload.text).toContain("- one\n- two");
   });
 
+  it("consumes only the durable Send now prefix and leaves later prompts queued", async () => {
+    const queuedPrompts = ["one", "two", "three"].map((text) => ({
+      id: MessageId.makeUnsafe(text),
+      text,
+      createdAt: now,
+    }));
+    const events = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: {
+          type: "thread.queued-prompt.flush",
+          commandId: CommandId.makeUnsafe("flush-intent"),
+          threadId,
+          messageIds: queuedPrompts.slice(0, 2).map((prompt) => prompt.id),
+          messageId: MessageId.makeUnsafe("combined"),
+          createdAt: now,
+        },
+        readModel: readModel({
+          queuedPrompts,
+          pendingInterruptFlushIntent: {
+            intentId: CommandId.makeUnsafe("send-now"),
+            queuedPromptIds: queuedPrompts.slice(0, 2).map((prompt) => prompt.id),
+            requestedAt: now,
+          },
+        }),
+      }),
+    );
+    const flushed = Array.isArray(events)
+      ? events.find((event) => event.type === "thread.queued-prompts-flushed")
+      : undefined;
+    expect(flushed?.payload.messageIds).toEqual(
+      queuedPrompts.slice(0, 2).map((prompt) => prompt.id),
+    );
+  });
+
   it("does not flush a stale or running prefix", async () => {
     const queuedPrompts = [{ id: MessageId.makeUnsafe("one"), text: "one", createdAt: now }];
     const events = await Effect.runPromise(

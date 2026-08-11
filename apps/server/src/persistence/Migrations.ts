@@ -83,6 +83,7 @@ import Migration0067 from "./Migrations/067_ThreadRetentionPolicyAuthority.ts";
 import Migration0068 from "./Migrations/068_ThreadRetentionSafetyRecovery.ts";
 import Migration0069 from "./Migrations/069_ThreadRetentionManualRecovery.ts";
 import Migration0070 from "./Migrations/070_ThreadAttachmentReferences.ts";
+import Migration0071 from "./Migrations/071_ProjectionThreadPendingInterruptFlushIntent.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -165,6 +166,7 @@ export const migrationEntries = [
   [68, "ThreadRetentionSafetyRecovery", Migration0068],
   [69, "ThreadRetentionManualRecovery", Migration0069],
   [70, "ThreadAttachmentReferences", Migration0070],
+  [71, "ProjectionThreadPendingInterruptFlushIntent", Migration0071],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

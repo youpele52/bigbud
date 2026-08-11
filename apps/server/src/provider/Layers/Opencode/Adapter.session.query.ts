@@ -41,7 +41,8 @@ export function makeStopSessionRecord(
           // Best effort — session might already be gone
         }
 
-        // Release the shared server handle (decrements ref-count; shuts down server when last session stops)
+        // Release the session handle. The manager keeps the shared server warm
+        // for later sessions and stops it during application shutdown.
         record.releaseServer();
         await record.cleanupBridge?.();
         sessions.delete(record.threadId);

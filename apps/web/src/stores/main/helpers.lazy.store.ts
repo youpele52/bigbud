@@ -241,6 +241,19 @@ export function appendProjectCatalogPage(
   };
 }
 
+export function mergeProjectCatalogPage(
+  state: AppState,
+  page: GetStartupProjectCatalogResult,
+): AppState {
+  const projectCatalog = mergeProjectCatalog(state, page, state.projectThreadCountsById, true);
+
+  return {
+    ...state,
+    projects: projectCatalog.projects,
+    pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+  };
+}
+
 export function appendProjectThreadSummaries(
   state: AppState,
   page: GetProjectThreadSummariesResult,

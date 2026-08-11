@@ -118,6 +118,8 @@ export async function createHarness(input?: {
   readonly workspaceRoot?: string;
   readonly threadModelSelection?: ModelSelection;
   readonly sessionModelSwitch?: "unsupported" | "in-session";
+  readonly interruptTurnFailure?: string;
+  readonly interruptTurnLeavesSessionActive?: boolean;
   readonly stopSessionFailure?: string;
   readonly browserCloseFailure?: string;
   readonly terminalCloseFailure?: string;
@@ -175,7 +177,36 @@ export async function createHarness(input?: {
       turnId: asTurnId("turn-1"),
     }),
   );
-  const interruptTurn = vi.fn((_: unknown) => Effect.void);
+  const interruptTurn = vi.fn((interruptInput: unknown) => {
+    if (input?.interruptTurnFailure) {
+      return Effect.fail(
+        new ProviderAdapterRequestError({
+          provider: modelSelection.provider,
+          method: "interruptTurn",
+          detail: input.interruptTurnFailure,
+        }),
+      );
+    }
+    if (!input?.interruptTurnLeavesSessionActive) {
+      const threadId =
+        typeof interruptInput === "object" &&
+        interruptInput !== null &&
+        "threadId" in interruptInput
+          ? (interruptInput as { threadId?: ThreadId }).threadId
+          : undefined;
+      const session = runtimeSessions.find((entry) => entry.threadId === threadId);
+      const sessionIndex = runtimeSessions.findIndex((entry) => entry.threadId === threadId);
+      if (session && sessionIndex >= 0) {
+        runtimeSessions[sessionIndex] = {
+          ...session,
+          status: "ready",
+          activeTurnId: undefined,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+    return Effect.void;
+  });
   const respondToRequest = vi.fn<ProviderServiceShape["respondToRequest"]>(() => Effect.void);
   const respondToUserInput = vi.fn<ProviderServiceShape["respondToUserInput"]>(() => Effect.void);
   const stopSession = vi.fn((stopInput: unknown) =>

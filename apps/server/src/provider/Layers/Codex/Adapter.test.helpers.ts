@@ -25,6 +25,15 @@ export const asEventId = (value: string): EventId => EventId.makeUnsafe(value);
 export const asItemId = (value: string): ProviderItemId => ProviderItemId.makeUnsafe(value);
 
 export class FakeCodexManager extends CodexAppServerManager {
+  private readonly sessionSnapshots = new Map<ThreadId, ProviderSession>();
+
+  public setSession(session: ProviderSession): void {
+    this.sessionSnapshots.set(session.threadId, session);
+  }
+
+  public removeSession(threadId: ThreadId): void {
+    this.sessionSnapshots.delete(threadId);
+  }
   public startSessionImpl = vi.fn(
     async (input: CodexAppServerStartSessionInput): Promise<ProviderSession> => {
       const now = new Date().toISOString();
@@ -125,11 +134,11 @@ export class FakeCodexManager extends CodexAppServerManager {
   override stopSession(_threadId: ThreadId): void {}
 
   override listSessions(): ProviderSession[] {
-    return [];
+    return [...this.sessionSnapshots.values()];
   }
 
-  override hasSession(_threadId: ThreadId): boolean {
-    return false;
+  override hasSession(threadId: ThreadId): boolean {
+    return this.sessionSnapshots.has(threadId);
   }
 
   override stopAll(): void {

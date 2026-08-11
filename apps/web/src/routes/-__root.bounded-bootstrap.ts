@@ -3,6 +3,7 @@ import {
   STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
   STARTUP_PROJECT_CATALOG_MAX_LIMIT,
   ThreadId,
+  type ProjectId,
   type GetProjectThreadSummariesResult,
   type GetSelectedThreadDetailResult,
   type GetStartupProjectCatalogResult,
@@ -142,6 +143,7 @@ interface ProjectCatalogPageLoad {
   readonly generation: number;
   readonly limit: number;
   readonly loadAll: boolean;
+  readonly restartProjectId: ProjectId | null;
   promise: Promise<void>;
 }
 
@@ -177,6 +179,10 @@ function loadProjectCatalog(
     generation: state.projectCatalogGeneration,
     limit: options.limit,
     loadAll: options.loadAll,
+    restartProjectId:
+      state.projects.length === 1 && state.projects[0]?.id === cursor.projectId
+        ? state.projects[0].id
+        : null,
     promise: Promise.resolve(),
   };
   useStore.getState().setProjectCatalogLoading(true, undefined, request.generation);
@@ -202,12 +208,17 @@ function loadProjectCatalog(
 
 async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad): Promise<void> {
   let cursor: ProjectCatalogCursor | null = request.cursor;
+  let restartProjectId = request.restartProjectId;
 
   while (cursor !== null) {
-    const page = await api.orchestration.getStartupProjectCatalog({
-      limit: request.limit,
-      cursor,
-    });
+    const page = await api.orchestration.getStartupProjectCatalog(
+      restartProjectId === null
+        ? { limit: request.limit, cursor }
+        : {
+            limit: Math.min(request.limit + 1, STARTUP_PROJECT_CATALOG_MAX_LIMIT),
+            priorityProjectId: restartProjectId,
+          },
+    );
     if (useStore.getState().projectCatalogGeneration !== request.generation) {
       return;
     }
@@ -220,6 +231,7 @@ async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad
       return;
     }
     cursor = page.nextCursor ?? null;
+    restartProjectId = null;
   }
 }
 
