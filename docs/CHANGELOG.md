@@ -6,69 +6,39 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
-- Keep inactive work tidy with configurable automatic thread retention, previews, confirmation, recovery-aware scheduling, and safe cleanup.
+- Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
 - Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
 
 ## v0.2.201 (11 August, 2026)
 
 ### Faster Startup and Reliable New Chats
 
-- Reduced initial project loading to the single most recently used or restored project, lowering startup work while keeping the selected conversation ready.
-- Fixed the first **Load 5 more projects** request after bounded startup so it does not skip projects newer than the initially prioritized project.
 - Fixed newly created chats failing to send when their project was outside the initial catalog. bigbud now loads authoritative project and execution-target details before creating the draft and applying remote-access checks.
-- Kept targeted project lookups from disturbing normal catalog pagination, coalesced simultaneous lookups, and prevented rapid New Chat actions from creating competing drafts.
-- Added clear feedback when a new thread cannot start because bigbud is disconnected, project loading fails, or the requested project is unavailable.
+- Reduced initial project loading to the single most recently used or restored project, and fixed the first **Load 5 more projects** request so it does not skip projects newer than the initially prioritized project.
+- Kept targeted lookups from disturbing catalog pagination, coalesced simultaneous requests, prevented competing drafts, and added clear feedback when a new thread cannot start.
 
 ### More Reliable Provider Recovery
 
-- Added structured provider recovery states and failure classifications, distinguishing temporary launch failures from problems that require installation, configuration, authentication, or an upgrade.
-- Added bounded automatic recovery with two initial launch attempts followed by background retries after 3, 8, and 20 seconds. Missing commands are retried to tolerate delayed desktop environment discovery, while failures requiring user action stop automatically.
-- Added manual provider recovery with short bounded retries, prioritizing failed enabled providers while excluding disabled providers from refreshes.
-- Prevented stale startup, background, Settings, and manual probe results from replacing newer provider state when recovery operations overlap.
-- Limited provider checks to three concurrent probes and started each timeout only after capacity became available, reducing startup pressure without shortening the provider's actual response window.
-- Changed routine provider health checks from every minute to every five minutes and excluded disabled providers and user-action failures from periodic probing.
-- Removed GitHub Copilot's one-minute status cache so explicit and scheduled refreshes report current availability.
-- Added redacted recovery diagnostics for scheduling, attempts, completion, exhaustion, and superseded work without logging configured paths, credentials, tokens, or raw failure messages.
+- Added structured provider recovery states, failure classifications, bounded automatic retries, and short manual retries, distinguishing temporary launch failures from problems requiring installation, configuration, authentication, or an upgrade.
+- Prevented overlapping startup, background, Settings, and manual checks from replacing newer provider state; limited checks to three concurrent probes and moved routine health checks from every minute to every five minutes.
+- Excluded disabled and user-action providers from periodic checks, removed Copilot's stale status cache, and added redacted diagnostics for recovery attempts, scheduling, exhaustion, and superseded work.
 
-### Faster OpenCode and KiloCode Discovery
+### Faster OpenCode and KiloCode Workflows
 
-- Split OpenCode and KiloCode startup into fast availability checks and asynchronous catalog enrichment, allowing installed providers to become ready with fallback models before full live discovery completes.
-- Preserved provider readiness and previously available models when live catalog discovery temporarily fails, while clearly marking model discovery as incomplete and retryable.
-- Added fallback discovery from the local Models.dev cache, retaining a bounded set of current models and their reasoning capabilities, with a small bundled catalog when the cache is unavailable or invalid.
-- Preserved live sub-provider routing and display groups, appended configured custom models to discovered catalogs, and added clearer guidance for missing commands, invalid binary paths, unsupported versions, refused connections, process failures, missing authentication, and missing configuration.
-- Kept KiloCode's installer fallback at `~/.kilo/bin/kilo` while moving binary resolution into focused shared logic.
+- Split OpenCode and KiloCode startup into fast availability checks and asynchronous catalog enrichment, with persistent Models.dev caches and a bundled fallback keeping providers usable while live discovery completes or recovers.
+- Kept healthy shared provider servers warm, shared concurrent starts, invalidated unhealthy processes, and safely restarted them after unexpected exits or binary changes.
+- Preserved sub-provider routing and custom models, improved shutdown of local and remote processes, retained KiloCode's `~/.kilo/bin/kilo` installer fallback, and added clearer recovery guidance.
 
-### Warm Managed Provider Servers
+### Clearer Settings and Desktop Experience
 
-- Kept healthy shared OpenCode and KiloCode servers warm between sessions and health checks, reducing repeated process launches while still stopping them during manager shutdown.
-- Shared concurrent acquisitions through one in-progress server start and invalidated unhealthy servers so the next acquisition launches a clean process.
-- Restarted warm servers after unexpected exits, retired them when configured binaries change, and allowed existing users of replaced servers to finish safely.
-- Improved local and remote shutdown by waiting for managed processes to exit, escalating termination only when necessary, and normalizing missing-binary errors into actionable Settings guidance.
-
-### Clearer Provider Feedback and Settings
-
-- Added a persistent grouped recovery notice that updates in place during launch, background, and manual retries, with distinct messages for active recovery, exhaustion, required user action, and successful recovery.
-- Added **View providers** and **Review providers** actions that open Provider Settings with the affected provider cards expanded.
-- Added validated provider deep links to `/settings/providers`; valid provider IDs expand the matching cards, including when browser history restores the page, while malformed or unknown values are ignored.
-- Made unstarted chats temporarily choose the first ready provider when their selected provider is still being checked or has failed during launch recovery, without overriding explicit choices after a thread starts.
-
-### Faster Model Selection
-
-- Reduced the model picker's initial rendered list from ten entries to five while retaining incremental loading as the user scrolls.
-- Prevented a selected model deep inside a very large catalog from forcing thousands of preceding rows to render when reopening the picker.
-- Preserved providers opened during the picker's lifetime instead of repeating provider-opening work each time the menu closes and reopens.
-
-### Desktop CLI Discovery
-
-- Merged login-shell PATH entries with the inherited desktop application PATH instead of replacing it, preserving launcher-provided CLI locations while keeping shell entries first.
-- Added account login-shell detection when macOS GUI launches do not provide `SHELL`, improving CLI discovery for users with shells outside the default system paths.
+- Added persistent grouped recovery notices with **View providers** and **Review providers** actions, validated Provider Settings deep links, and safer fallback provider selection while a new chat's chosen provider is still recovering.
+- Reduced the model picker's initial rendering from ten entries to five, kept incremental loading bounded for very large catalogs, and retained opened provider catalogs across menu reopenings.
+- Merged login-shell and inherited desktop PATH entries, and detected the account login shell when macOS GUI launches do not provide `SHELL`, improving CLI discovery.
 
 ### Validation
 
-- Added regression coverage for one-project startup, catalog pagination, on-demand project loading, authoritative execution targets, and cursor-safe project merging.
-- Added provider recovery coverage for bounded and manual retries, background transitions, failure classification, stale-result suppression, settings races, disabled providers, periodic checks, diagnostics redaction, catalog enrichment, and probe concurrency.
-- Added lifecycle coverage for warm managed servers, including reuse, concurrent startup, invalidation, unexpected exits, binary replacement, and awaited shutdown.
-- Added browser and unit coverage for grouped recovery notices, Provider Settings deep links, launch-time provider fallback, desktop environment handling, and bounded rendering of very large model catalogs.
+- Added regression coverage for bounded project startup and pagination, on-demand project loading, provider recovery and classification, catalog enrichment, authoritative execution targets, and cursor-safe merging.
+- Added lifecycle, browser, and unit coverage for warm provider servers, recovery notices and Settings links, launch-time provider fallback, desktop environment handling, and bounded rendering of large model catalogs.
 
 ## v0.2.200 (10 August, 2026)
 
