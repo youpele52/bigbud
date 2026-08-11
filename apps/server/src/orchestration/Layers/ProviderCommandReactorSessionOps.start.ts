@@ -19,39 +19,41 @@ export function startProviderSession(input: {
   readonly cwd: string | undefined;
   readonly fresh?: boolean;
   readonly resumeCursor?: unknown;
+  readonly preserveExistingBinding?: boolean;
 }) {
   const executionTargets = resolveProviderSessionExecutionTargets({
     providerRuntimeExecutionTargetId: input.thread.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: input.thread.workspaceExecutionTargetId,
     executionTargetId: input.thread.executionTargetId,
   });
-  return input.services
-    .setThreadSession({
+  const markSessionStarting = input.services.setThreadSession({
+    threadId: input.threadId,
+    session: {
       threadId: input.threadId,
-      session: {
-        threadId: input.threadId,
-        status: "starting",
-        providerName: input.provider,
-        runtimeMode: input.thread.runtimeMode,
-        activeTurnId: null,
-        lastError: null,
-        updatedAt: input.createdAt,
-      },
-      createdAt: input.createdAt,
-    })
-    .pipe(
-      Effect.andThen(() =>
-        (input.fresh
-          ? input.services.providerService.startSessionFresh
-          : input.services.providerService.startSession)(input.threadId, {
-          threadId: input.threadId,
-          provider: input.provider,
-          ...executionTargets,
-          ...(input.cwd ? { cwd: input.cwd } : {}),
-          modelSelection: input.modelSelection,
-          ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-          runtimeMode: input.thread.runtimeMode,
-        }),
-      ),
-    );
+      status: "starting",
+      providerName: input.provider,
+      runtimeMode: input.thread.runtimeMode,
+      activeTurnId: null,
+      lastError: null,
+      updatedAt: input.createdAt,
+    },
+    createdAt: input.createdAt,
+  });
+  const startSession = (
+    input.fresh
+      ? input.services.providerService.startSessionFresh
+      : input.services.providerService.startSession
+  )(input.threadId, {
+    threadId: input.threadId,
+    provider: input.provider,
+    ...executionTargets,
+    ...(input.cwd ? { cwd: input.cwd } : {}),
+    modelSelection: input.modelSelection,
+    ...(input.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+    runtimeMode: input.thread.runtimeMode,
+  });
+
+  return input.preserveExistingBinding
+    ? startSession
+    : markSessionStarting.pipe(Effect.andThen(startSession));
 }

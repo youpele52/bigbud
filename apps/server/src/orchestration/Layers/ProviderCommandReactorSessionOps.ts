@@ -99,7 +99,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         .listSessions()
         .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === tId)));
 
-    const start = (input?: { readonly resumeCursor?: unknown; readonly fresh?: boolean }) =>
+    const start = (input?: {
+      readonly resumeCursor?: unknown;
+      readonly fresh?: boolean;
+      readonly preserveExistingBinding?: boolean;
+    }) =>
       startProviderSession({
         services: { providerService, setThreadSession },
         thread,
@@ -109,6 +113,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         modelSelection: desiredModelSelection,
         cwd: effectiveCwd,
         ...(input?.fresh ? { fresh: true } : {}),
+        ...(input?.preserveExistingBinding ? { preserveExistingBinding: true } : {}),
         ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
       });
 
@@ -182,9 +187,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,
       });
-      const restartedSession = yield* start(
-        resumeCursor !== undefined ? { resumeCursor } : undefined,
-      );
+      const restartedSession = yield* start({
+        preserveExistingBinding: true,
+        ...(resumeCursor !== undefined ? { resumeCursor } : {}),
+      });
       capabilityContextStates.delete(threadId);
       yield* Effect.logInfo("provider command reactor restarted provider session", {
         threadId,

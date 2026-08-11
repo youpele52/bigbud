@@ -322,6 +322,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             },
           ],
           queuedPrompts: [],
+          pendingInterruptFlushIntent: null,
           tasks: [
             {
               id: RuntimeTaskId.makeUnsafe("task-1"),
