@@ -1,6 +1,5 @@
-import { CommandId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
-
 import { resolveAssistantDeliveryMode } from "./ProviderRuntimeIngestion.assistantDelivery.ts";
 import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGovernor.ts";
 import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.processor.runtime.assistant.ts";
@@ -14,6 +13,10 @@ import {
   sameId,
   toTurnId,
 } from "./ProviderRuntimeIngestion.helpers.ts";
+import {
+  isProviderLifecycleEvent,
+  resolveProviderLifecycleGuard,
+} from "./ProviderRuntimeIngestion.lifecycle.ts";
 import { isThreadTitleLocked } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
@@ -26,11 +29,9 @@ import type {
   RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
 import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
-
-const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
-  CommandId.makeUnsafe(`provider:${event.eventId}:${tag}:${crypto.randomUUID()}`);
-
-/** Factory that creates a `processRuntimeEvent` Effect function from its dependencies. */
+import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
+import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
+import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
 export function makeRuntimeEventProcessor(
   services: RuntimeProcessorServices,
   cacheHelpers: RuntimeProcessorCacheHelpers,
@@ -47,7 +48,6 @@ export function makeRuntimeEventProcessor(
     appendBufferedProposedPlan,
     clearTurnStateForSession,
   } = cacheHelpers;
-
   const {
     isGitRepoForThread,
     finalizeAssistantMessage,
@@ -67,45 +67,35 @@ export function makeRuntimeEventProcessor(
     isGitRepoForThread,
     providerCommandId,
   });
-
   return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
     yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === event.threadId);
+    const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
+      (entry) => entry.id === event.threadId,
+    );
     if (!thread) return;
-
     const now = event.createdAt;
     const eventTurnId = toTurnId(event.turnId);
     const activeTurnId = thread.session?.activeTurnId ?? null;
+    const isLifecycleEvent = isProviderLifecycleEvent(event);
+    const usesLiveSessionFence = isLifecycleEvent || event.type === "runtime.error";
+    const liveSession = usesLiveSessionFence
+      ? yield* lookupLiveSessionBestEffort({
+          providerService: services.providerService,
+          thread,
+          event,
+        })
+      : undefined;
 
-    const conflictsWithActiveTurn =
-      activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
-    const missingTurnForActiveTurn = activeTurnId !== null && eventTurnId === undefined;
-
-    const shouldApplyThreadLifecycle = (() => {
-      if (!STRICT_PROVIDER_LIFECYCLE_GUARD) {
-        return true;
-      }
-      switch (event.type) {
-        case "session.exited":
-          return true;
-        case "session.started":
-        case "thread.started":
-          return true;
-        case "turn.started":
-          return !conflictsWithActiveTurn;
-        case "turn.completed":
-          if (conflictsWithActiveTurn || missingTurnForActiveTurn) {
-            return false;
-          }
-          if (activeTurnId !== null && eventTurnId !== undefined) {
-            return sameId(activeTurnId, eventTurnId);
-          }
-          return true;
-        default:
-          return true;
-      }
-    })();
+    const lifecycleGuard = usesLiveSessionFence
+      ? resolveProviderLifecycleGuard({
+          event,
+          thread,
+          liveSession,
+          activeTurnId,
+          eventTurnId,
+        })
+      : null;
+    const shouldApplyThreadLifecycle = lifecycleGuard?.shouldApply ?? true;
     const acceptedTurnStartedSourcePlan =
       event.type === "turn.started" && shouldApplyThreadLifecycle
         ? yield* getSourceProposedPlanReferenceForAcceptedTurnStart(thread.id, eventTurnId)
@@ -182,6 +172,37 @@ export function makeRuntimeEventProcessor(
           },
           createdAt: now,
         });
+      } else {
+        const reconciliation = buildThreadReconciliationCommand({
+          thread,
+          liveSession,
+          occurredAt: now,
+        });
+        yield* Effect.logWarning("provider lifecycle event rejected and thread was reconciled", {
+          eventId: event.eventId,
+          eventType: event.type,
+          eventProvider: event.provider,
+          liveProvider: liveSession?.provider ?? null,
+          projectedActiveTurnId: activeTurnId,
+          eventTurnId: eventTurnId ?? null,
+          liveActiveTurnId: liveSession?.activeTurnId ?? null,
+          queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+          queuedPromptCount: thread.queuedPrompts?.length ?? 0,
+          rejectionReason: lifecycleGuard?.rejectionReason ?? "strict-lifecycle-guard",
+        });
+        const liveSessionSettledAfterProjection =
+          liveSession !== undefined &&
+          liveSession.activeTurnId == null &&
+          activeTurnId !== null &&
+          liveSession.updatedAt > (thread.session?.updatedAt ?? "");
+        if (
+          reconciliation &&
+          (activeTurnId === null ||
+            liveSessionSettledAfterProjection ||
+            liveSession?.activeTurnId != null)
+        ) {
+          yield* orchestrationEngine.dispatch(reconciliation).pipe(Effect.asVoid);
+        }
       }
     }
 
@@ -206,7 +227,6 @@ export function makeRuntimeEventProcessor(
       processorHelpers: { finalizeAssistantMessage },
       thinkingHelpers: { finalizeThinkingForItem, finalizeThinkingForTurn },
     });
-
     yield* appendThinkingDelta(event);
 
     if (proposedPlanDelta && proposedPlanDelta.length > 0) {
@@ -277,7 +297,10 @@ export function makeRuntimeEventProcessor(
 
       const shouldApplyRuntimeError = !STRICT_PROVIDER_LIFECYCLE_GUARD
         ? true
-        : activeTurnId === null || eventTurnId === undefined || sameId(activeTurnId, eventTurnId);
+        : !lifecycleGuard?.providerConflictsWithLiveSession &&
+          !lifecycleGuard?.conflictsWithLiveTurn &&
+          !lifecycleGuard?.missingTurnForLiveTurn &&
+          (activeTurnId === null || eventTurnId === undefined || sameId(activeTurnId, eventTurnId));
 
       if (shouldApplyRuntimeError) {
         yield* orchestrationEngine.dispatch({
@@ -295,6 +318,26 @@ export function makeRuntimeEventProcessor(
           },
           createdAt: now,
         });
+      } else {
+        const reconciliation = buildThreadReconciliationCommand({
+          thread,
+          liveSession,
+          occurredAt: now,
+        });
+        yield* Effect.logWarning("provider runtime error rejected and thread was reconciled", {
+          eventId: event.eventId,
+          eventProvider: event.provider,
+          liveProvider: liveSession?.provider ?? null,
+          projectedActiveTurnId: activeTurnId,
+          eventTurnId: eventTurnId ?? null,
+          liveActiveTurnId: liveSession?.activeTurnId ?? null,
+          queuedPromptIds: (thread.queuedPrompts ?? []).map((prompt) => prompt.id),
+          queuedPromptCount: thread.queuedPrompts?.length ?? 0,
+          rejectionReason: lifecycleGuard?.rejectionReason ?? "strict-lifecycle-guard",
+        });
+        if (reconciliation) {
+          yield* orchestrationEngine.dispatch(reconciliation).pipe(Effect.asVoid);
+        }
       }
     }
 
@@ -331,7 +374,6 @@ export function makeRuntimeEventProcessor(
       event.type === "task.updated"
     ) {
       yield* upsertTask({
-        // The generated runtime-event union does not narrow across module boundaries.
         event: event as unknown as TaskRuntimeEvent,
         threadId: thread.id,
         ordinal: nextTaskOrdinal++,

@@ -9,7 +9,6 @@ import { Effect, Equal, Schema } from "effect";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
-import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { OrchestrationCommandInvariantError } from "../Errors.ts";
@@ -33,6 +32,7 @@ import {
   rolloverProviderSessionAtHighWater,
   withOneShotContextLimitRecovery,
 } from "./ProviderCommandReactorSessionOps.recovery.ts";
+import { startProviderSession } from "./ProviderCommandReactorSessionOps.start.ts";
 import type {
   SendTurnForThreadInput,
   SessionOpServices,
@@ -99,29 +99,18 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         .listSessions()
         .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === tId)));
 
-    const startProviderSession = (input?: {
-      readonly resumeCursor?: unknown;
-      readonly provider?: import("@bigbud/contracts").ProviderKind;
-      readonly fresh?: boolean;
-    }) => {
-      const executionTargets = resolveProviderSessionExecutionTargets({
-        providerRuntimeExecutionTargetId: thread.providerRuntimeExecutionTargetId,
-        workspaceExecutionTargetId: thread.workspaceExecutionTargetId,
-        executionTargetId: thread.executionTargetId,
-      });
-      return (input?.fresh ? providerService.startSessionFresh : providerService.startSession)(
+    const start = (input?: { readonly resumeCursor?: unknown; readonly fresh?: boolean }) =>
+      startProviderSession({
+        services: { providerService, setThreadSession },
+        thread,
         threadId,
-        {
-          threadId,
-          ...(preferredProvider ? { provider: preferredProvider } : {}),
-          ...executionTargets,
-          ...(effectiveCwd ? { cwd: effectiveCwd } : {}),
-          modelSelection: desiredModelSelection,
-          ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
-          runtimeMode: desiredRuntimeMode,
-        },
-      );
-    };
+        createdAt,
+        provider: preferredProvider,
+        modelSelection: desiredModelSelection,
+        cwd: effectiveCwd,
+        ...(input?.fresh ? { fresh: true } : {}),
+        ...(input?.resumeCursor !== undefined ? { resumeCursor: input.resumeCursor } : {}),
+      });
 
     const bindSessionToThread = (session: ProviderSession) =>
       setThreadSession({
@@ -147,7 +136,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         requestedModelSelection !== undefined &&
         requestedModelSelection.provider !== currentProvider;
       if (!activeSession && options?.restartFreshIfInactive) {
-        const restartedSession = yield* startProviderSession({ fresh: true });
+        const restartedSession = yield* start({ fresh: true });
         capabilityContextStates.delete(threadId);
         yield* bindSessionToThread(restartedSession);
         return restartedSession.threadId;
@@ -193,7 +182,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         shouldRestartForModelSelectionChange,
         hasResumeCursor: resumeCursor !== undefined,
       });
-      const restartedSession = yield* startProviderSession(
+      const restartedSession = yield* start(
         resumeCursor !== undefined ? { resumeCursor } : undefined,
       );
       capabilityContextStates.delete(threadId);
@@ -208,7 +197,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       return restartedSession.threadId;
     }
 
-    const startedSession = yield* startProviderSession(
+    const startedSession = yield* start(
       options?.restartFreshIfInactive ? { fresh: true } : undefined,
     );
     capabilityContextStates.delete(threadId);

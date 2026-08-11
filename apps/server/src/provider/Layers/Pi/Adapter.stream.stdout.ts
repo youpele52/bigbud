@@ -19,7 +19,6 @@ import {
   appendTurnItem,
   eventBase,
   extractTextContent,
-  isRecord,
   normalizeString,
   normalizeUsage,
 } from "./Adapter.utils.ts";
@@ -32,6 +31,8 @@ import {
   handleToolExecutionUpdate,
   handleTurnEnd,
 } from "./Adapter.stream.handlers.ts";
+import { settlePiAgentEnd } from "./Adapter.stream.agentLifecycle.ts";
+import { recoverMissingPiAgentEnd } from "./Adapter.stream.missingAgentEnd.ts";
 import { handleRuntimeStatusEvent } from "./Adapter.stream.stdout.runtimeEvents.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
@@ -86,6 +87,8 @@ export function makeHandleStdoutEvent(deps: {
       case "agent_start": {
         session.updatedAt = createdAt;
         session.agentRunning = true;
+        session.completedTurnBoundary = undefined;
+        session.missingAgentEndRecoveryToken = undefined;
         return yield* deps.emit([
           yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
             state: "running",
@@ -240,12 +243,33 @@ export function makeHandleStdoutEvent(deps: {
             return;
           }
           session.pendingTurnEnd = undefined;
-          return yield* handleTurnEnd({
+          yield* handleTurnEnd({
             emit: deps.emit,
             session,
             stamp: pendingTurnEnd.stamp,
             raw: pendingTurnEnd.raw,
             message: pendingTurnEnd.message,
+          });
+          return yield* recoverMissingPiAgentEnd({
+            session,
+            settle: () =>
+              settlePiAgentEnd({
+                emit: deps.emit,
+                makeSyntheticEvent: deps.makeSyntheticEvent,
+                session,
+              }),
+            reportExhausted: (recovery) =>
+              deps
+                .makeSyntheticEvent(session.threadId, "runtime.error", {
+                  message: "Pi completion recovery exhausted",
+                  class: "provider_error",
+                  detail: {
+                    turnId: recovery.turnId ?? null,
+                    attempts: recovery.attempts,
+                    class: recovery.class,
+                  },
+                })
+                .pipe(Effect.flatMap((event) => deps.emit([event]))),
           });
         }
 
@@ -309,73 +333,40 @@ export function makeHandleStdoutEvent(deps: {
             ),
           ]);
         }
-        return yield* handleTurnEnd({
+        yield* handleTurnEnd({
           emit: deps.emit,
           session,
           stamp,
           raw,
           message,
         });
+        return yield* recoverMissingPiAgentEnd({
+          session,
+          settle: () =>
+            settlePiAgentEnd({
+              emit: deps.emit,
+              makeSyntheticEvent: deps.makeSyntheticEvent,
+              session,
+            }),
+          reportExhausted: (recovery) =>
+            deps
+              .makeSyntheticEvent(session.threadId, "runtime.error", {
+                message: "Pi completion recovery exhausted",
+                class: "provider_error",
+                detail: {
+                  turnId: recovery.turnId ?? null,
+                  attempts: recovery.attempts,
+                  class: recovery.class,
+                },
+              })
+              .pipe(Effect.flatMap((event) => deps.emit([event]))),
+        });
       case "agent_end": {
-        session.updatedAt = createdAt;
-        session.agentRunning = false;
-        const boundary = session.completedTurnBoundary;
-        const finalTurnId = session.activeTurnId;
-
-        const nextQueuedTurnId = session.queuedTurnIds.shift();
-        if (nextQueuedTurnId) {
-          session.activeTurnId = nextQueuedTurnId;
-          session.completedTurnBoundary = undefined;
-          return yield* deps.emit([
-            yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
-              state: "running",
-              reason: "turn.queued",
-            }),
-          ]);
-        }
-
-        session.activeTurnId = undefined;
-        session.completedTurnBoundary = undefined;
-        session.pendingTurnEnd = undefined;
-
-        const events: ProviderRuntimeEvent[] = [];
-
-        if (boundary) {
-          const messageRecord = isRecord(boundary.message.message)
-            ? boundary.message.message
-            : undefined;
-          const stopReason = normalizeString(messageRecord?.stopReason);
-          const errorMessage = normalizeString(messageRecord?.errorMessage);
-          events.push({
-            ...eventBase({
-              eventId: boundary.stamp.eventId,
-              createdAt: boundary.stamp.createdAt,
-              threadId: session.threadId,
-              ...(finalTurnId ? { turnId: finalTurnId } : {}),
-              raw: boundary.raw,
-            }),
-            type: "turn.completed",
-            payload: {
-              state:
-                stopReason === "aborted"
-                  ? "interrupted"
-                  : stopReason === "error"
-                    ? "failed"
-                    : "completed",
-              ...(stopReason ? { stopReason } : {}),
-              ...(errorMessage ? { errorMessage } : {}),
-            },
-          } as ProviderRuntimeEvent);
-        }
-
-        events.push(
-          yield* deps.makeSyntheticEvent(session.threadId, "session.state.changed", {
-            state: "ready",
-            reason: "agent_end",
-          }),
-        );
-
-        return yield* deps.emit(events);
+        return yield* settlePiAgentEnd({
+          emit: deps.emit,
+          makeSyntheticEvent: deps.makeSyntheticEvent,
+          session,
+        });
       }
       case "queue_update":
       case "compaction_start":
