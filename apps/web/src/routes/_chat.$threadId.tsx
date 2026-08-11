@@ -3,6 +3,7 @@ import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/reac
 import { useCallback, useEffect } from "react";
 
 import ChatView from "../components/chat/view/ChatView";
+import { BigbudLogo } from "../components/sidebar/SidebarProjectItem";
 import { useComposerDraftStore } from "../stores/composer";
 import { closeDiffRouteSearch, type DiffRouteSearch, parseDiffRouteSearch } from "../utils/diff";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -104,7 +105,13 @@ export function ChatThreadRouteView() {
   }, [missingThreadRouteAction, navigate]);
 
   if (!bootstrapComplete || !routeThreadExists) {
-    return null;
+    return (
+      <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
+        <div className="flex h-full items-center justify-center">
+          <BigbudLogo className="h-7 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />
+        </div>
+      </SidebarInset>
+    );
   }
 
   return (

@@ -11,6 +11,7 @@ import {
   resolveMetadataPath,
   type StoredKanbanCard,
 } from "./ProjectionKanban.shared.ts";
+import { resolveFileMtime } from "./ProjectionFileMtime.ts";
 import { nextKanbanColumnPosition } from "./ProjectionKanban.order.ts";
 import { makePlaceCard } from "./ProjectionKanban.placement.ts";
 import {
@@ -22,9 +23,6 @@ import {
   type UpdateProjectionKanbanCardInput,
 } from "../Services/ProjectionKanban.ts";
 
-const resolveMtime = (stat: { mtime: Date | Option.Option<Date> }): Date =>
-  Option.isOption(stat.mtime) ? Option.getOrElse(stat.mtime, () => new Date(0)) : stat.mtime;
-
 const resolveLatestUpdatedAt = (input: {
   readonly metadataUpdatedAt: string;
   readonly markdownMtime: Date;
@@ -32,7 +30,7 @@ const resolveLatestUpdatedAt = (input: {
   const metadataUpdatedAtTime = Date.parse(input.metadataUpdatedAt);
   const latestTime = Math.max(
     Number.isNaN(metadataUpdatedAtTime) ? 0 : metadataUpdatedAtTime,
-    input.markdownMtime.getTime(),
+    resolveFileMtime(input.markdownMtime).getTime(),
   );
   return new Date(latestTime).toISOString();
 };
@@ -92,7 +90,7 @@ const makeProjectionKanbanRepository = Effect.gen(function* () {
       createdAt: metadata.createdAt,
       updatedAt: resolveLatestUpdatedAt({
         metadataUpdatedAt: metadata.updatedAt,
-        markdownMtime: resolveMtime(markdownStat.value),
+        markdownMtime: resolveFileMtime(markdownStat.value.mtime),
       }),
       position: metadata.position,
     });

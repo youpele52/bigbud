@@ -66,6 +66,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         t.latest_turn_id AS "latestTurnId", t.created_at AS "createdAt", t.updated_at AS "updatedAt",
         t.last_activity_at AS "lastActivityAt",
         t.queued_prompts_json AS "queuedPrompts",
+        t.pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t

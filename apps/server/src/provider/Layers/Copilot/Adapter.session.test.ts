@@ -20,13 +20,19 @@ import { CopilotAdapter } from "../../Services/Copilot/Adapter.ts";
 import { makeCopilotAdapterLive } from "./Adapter.ts";
 
 class FakeCopilotSession {
+  private readonly handlers = new Set<(event: SessionEvent) => void>();
   constructor(
     public readonly sessionId: string,
     readonly config: SessionConfig | ResumeSessionConfig,
   ) {}
 
-  on(_handler: (event: SessionEvent) => void): () => void {
-    return () => undefined;
+  on(handler: (event: SessionEvent) => void): () => void {
+    this.handlers.add(handler);
+    return () => this.handlers.delete(handler);
+  }
+
+  emit(event: SessionEvent): void {
+    for (const handler of this.handlers) handler(event);
   }
 
   async send(): Promise<void> {}
@@ -36,6 +42,7 @@ class FakeCopilotSession {
 }
 
 class FakeCopilotClient {
+  public latestSession: FakeCopilotSession | undefined;
   public readonly createSessionCalls: SessionConfig[] = [];
   public readonly resumeSessionCalls: Array<{
     readonly sessionId: string;
@@ -45,15 +52,17 @@ class FakeCopilotClient {
 
   async createSession(config: SessionConfig): Promise<CopilotSession> {
     this.createSessionCalls.push(config);
-    return new FakeCopilotSession("copilot-session-1", config) as unknown as CopilotSession;
+    this.latestSession = new FakeCopilotSession("copilot-session-1", config);
+    return this.latestSession as unknown as CopilotSession;
   }
 
   async resumeSession(sessionId: string, config?: ResumeSessionConfig): Promise<CopilotSession> {
     this.resumeSessionCalls.push(config ? { sessionId, config } : { sessionId });
-    return new FakeCopilotSession(
+    this.latestSession = new FakeCopilotSession(
       sessionId,
       config ?? ({ onPermissionRequest: async () => ({ kind: "reject" }) } satisfies SessionConfig),
-    ) as unknown as CopilotSession;
+    );
+    return this.latestSession as unknown as CopilotSession;
   }
 
   async stop(): Promise<void> {
@@ -128,6 +137,21 @@ describe("CopilotAdapter remote workspace sessions", () => {
         cwd: "/srv/project",
         runtimeMode: "approval-required",
       });
+
+      const turn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "Lifecycle contract",
+        attachments: [],
+      });
+      client.latestSession?.emit({
+        type: "assistant.turn_start",
+        data: { turnId: turn.turnId },
+      } as unknown as SessionEvent);
+      yield* Effect.yieldNow;
+      assert.equal((yield* adapter.listSessions())[0]?.activeTurnId, turn.turnId);
+      client.latestSession?.emit({ type: "session.idle", data: {} } as SessionEvent);
+      yield* Effect.yieldNow;
+      assert.equal((yield* adapter.listSessions())[0]?.activeTurnId, undefined);
 
       assert.equal(session.providerRuntimeExecutionTargetId, "local");
       assert.equal(session.workspaceExecutionTargetId, "ssh:host=devbox&user=root&port=22");

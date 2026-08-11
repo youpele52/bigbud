@@ -36,7 +36,7 @@ function resolveUserMessageMentionTarget(rawValue: string, cwd: string | undefin
 }
 
 function normalizeMentionName(
-  mentionKind: "path" | "agent" | "skill",
+  mentionKind: "path" | "agent" | "skill" | "plugin",
   rawValue: string,
   displayLabel: string,
 ): string {
@@ -45,6 +45,9 @@ function normalizeMentionName(
   }
   if (mentionKind === "skill") {
     return rawValue.replace(/^skill::?/, "").trim() || displayLabel.trim();
+  }
+  if (mentionKind === "plugin") {
+    return rawValue.replace(/^plugin::?/, "").trim() || displayLabel.trim();
   }
   return displayLabel.trim();
 }
@@ -101,7 +104,7 @@ function buildReferencedSourcePathLookup(messageText: string): {
 const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
   rawValue?: string;
-  mentionKind: "path" | "agent" | "skill";
+  mentionKind: "path" | "agent" | "skill" | "plugin";
   targetPath?: string | null;
   workspaceRoot?: string | undefined;
 }) {
@@ -124,15 +127,26 @@ const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
             : undefined
         }
         onClick={
-          clickable && props.mentionKind !== "path"
+          props.mentionKind === "plugin"
             ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                const targetPath = props.targetPath;
-                if (!targetPath) return;
-                openChatFileTarget(targetPath, props.workspaceRoot, "file");
+                const name = normalizeMentionName(
+                  "plugin",
+                  props.rawValue ?? props.label,
+                  props.label,
+                );
+                window.location.assign(`/plugins/openai-public%3A${encodeURIComponent(name)}`);
               }
-            : undefined
+            : clickable && props.mentionKind !== "path"
+              ? (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const targetPath = props.targetPath;
+                  if (!targetPath) return;
+                  openChatFileTarget(targetPath, props.workspaceRoot, "file");
+                }
+              : undefined
         }
         onDoubleClick={
           clickable && props.mentionKind === "path"

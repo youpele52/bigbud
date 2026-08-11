@@ -13,7 +13,7 @@ import {
   visibleModelOptionsForPicker,
 } from "./ProviderModelPicker.models";
 
-const INITIAL_VISIBLE_MODEL_COUNT = 10;
+const INITIAL_VISIBLE_MODEL_COUNT = 5;
 const VISIBLE_MODEL_COUNT_INCREMENT = 20;
 const VISIBLE_MODEL_LIST_BOTTOM_THRESHOLD_PX = 96;
 
@@ -68,14 +68,7 @@ export function ModelList({
   const [visibleModelCount, setVisibleModelCount] = useState(() =>
     Math.min(filtered.length, INITIAL_VISIBLE_MODEL_COUNT),
   );
-  const selectedOptionIndex = filtered.findIndex(
-    (option) => modelOptionValue(option) === selectedValue,
-  );
-  const resolvedVisibleModelCount =
-    selectedOptionIndex === -1
-      ? visibleModelCount
-      : Math.max(visibleModelCount, selectedOptionIndex + 1);
-  const renderedOptions = filtered.slice(0, resolvedVisibleModelCount);
+  const renderedOptions = filtered.slice(0, visibleModelCount);
 
   const showRecentOptions = Boolean(recentOptions && recentOptions.length > 0 && !hasSearchQuery);
   const grouped = useMemo(() => groupModelOptions(renderedOptions), [renderedOptions]);
@@ -85,7 +78,7 @@ export function ModelList({
   const showUnavailableState = !loading && Boolean(unavailableMessage) && options.length === 0;
   const showEmptyState =
     !showLoadingState && !showUnavailableState && !hasVisibleModels && !showRecentOptions;
-  const hasMoreModelsToRender = resolvedVisibleModelCount < filtered.length;
+  const hasMoreModelsToRender = visibleModelCount < filtered.length;
 
   const loadMoreModels = () => {
     setVisibleModelCount((current) =>

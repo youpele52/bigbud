@@ -5,12 +5,14 @@ import { useEffect, useState } from "react";
 import { SETTINGS_NAV_ITEMS } from "../components/settings/SettingsSidebarNav.items";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { SettingsSearch } from "../components/settings/SettingsSearch";
+import { SettingsSearchProvider } from "../components/settings/SettingsSearch.context";
 import { Button } from "../components/ui/button";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
 import { isElectron } from "../config/env";
 
 function SettingsContentLayout() {
   const [restoreSignal, setRestoreSignal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
   const { changedSettingLabels, restoreDefaults } = useSettingsRestore(() =>
     setRestoreSignal((value) => value + 1),
   );
@@ -54,7 +56,7 @@ function SettingsContentLayout() {
                   <span className="truncate text-muted-foreground">{activeSectionLabel}</span>
                 </div>
               </div>
-              <SettingsSearch />
+              <SettingsSearch query={searchQuery} onQueryChange={setSearchQuery} />
               <div className="flex items-center justify-end gap-2">
                 {showRestoreDefaults && (
                   <Button
@@ -79,7 +81,7 @@ function SettingsContentLayout() {
               <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
               <span className="truncate text-muted-foreground">{activeSectionLabel}</span>
             </div>
-            <SettingsSearch />
+            <SettingsSearch query={searchQuery} onQueryChange={setSearchQuery} />
             <div className="flex items-center justify-end gap-2">
               {showRestoreDefaults && (
                 <Button
@@ -96,9 +98,11 @@ function SettingsContentLayout() {
           </div>
         )}
 
-        <div key={restoreSignal} className="min-h-0 flex flex-1 flex-col">
-          <Outlet />
-        </div>
+        <SettingsSearchProvider query={searchQuery} terms={[activeSectionLabel]}>
+          <div key={restoreSignal} className="min-h-0 flex flex-1 flex-col">
+            <Outlet />
+          </div>
+        </SettingsSearchProvider>
       </div>
     </SidebarInset>
   );

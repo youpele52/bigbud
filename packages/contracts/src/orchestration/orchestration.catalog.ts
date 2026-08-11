@@ -18,7 +18,7 @@ import {
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
 
-export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 2;
+export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 1;
 export const STARTUP_PROJECT_CATALOG_MAX_LIMIT = 20;
 export const PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT = 5;
 export const PROJECT_THREAD_SUMMARY_MAX_LIMIT = 50;

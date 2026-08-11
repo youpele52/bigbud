@@ -36,6 +36,7 @@ export const mockOpencodeServerManagerLayer = Layer.succeed(OpencodeServerManage
 export const fakePiProviderLayer = Layer.succeed(PiProvider, {
   getSnapshot: Effect.succeed(fakePiSnapshot),
   refresh: Effect.succeed(fakePiSnapshot),
+  refreshWithRecovery: () => Effect.succeed(fakePiSnapshot),
   streamChanges: Stream.empty,
 });
 

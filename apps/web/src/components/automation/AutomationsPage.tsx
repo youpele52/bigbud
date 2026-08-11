@@ -23,6 +23,7 @@ import { useStore } from "~/stores/main";
 import { AutomationListContent, useAutomationWorkspace } from "./AutomationWorkspace";
 import { AutomationListPageHeader } from "./AutomationPageHeader";
 import { AutomationPageShell } from "./AutomationPageShell";
+import { StandalonePageContent } from "../standalone/StandalonePageContent";
 import { type AutomationProjectOption } from "./automationDirectory";
 import { createAutomationFromRequest } from "./automationCreate";
 import { resolveAutomationComposerModelSelection } from "./automationComposer";
@@ -136,24 +137,22 @@ export function AutomationsPage() {
   return (
     <AutomationPageShell header={<AutomationListPageHeader />}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <div className="mx-auto w-full max-w-[44rem] px-4 sm:px-6">
-            <div className="border-b border-border/70 pt-7 pb-2">
-              <p className="text-sm text-foreground">Scheduled tasks</p>
-            </div>
-
-            <AutomationListContent
-              automations={automations}
-              loading={loading}
-              className=""
-              layout="inset"
-              onAutomationsChange={() => {
-                void reloadAutomations();
-              }}
-              selectedAutomationId={null}
-            />
+        <StandalonePageContent>
+          <div className="border-b border-border/70 pb-2">
+            <p className="text-sm text-foreground">Scheduled tasks</p>
           </div>
-        </div>
+
+          <AutomationListContent
+            automations={automations}
+            loading={loading}
+            className=""
+            layout="inset"
+            onAutomationsChange={() => {
+              void reloadAutomations();
+            }}
+            selectedAutomationId={null}
+          />
+        </StandalonePageContent>
 
         {builderThreadId && selectedProjectId ? (
           <div className="shrink-0 px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">

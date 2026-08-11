@@ -131,7 +131,7 @@ beforeEach(() => {
 });
 
 describe("bounded project catalog bootstrap", () => {
-  it("continues the project catalog without eagerly loading later project threads", async () => {
+  it("loads only the first project catalog page during bootstrap", async () => {
     const { api, orchestration } = makeApi();
     const cursor = { lastUsedAt: "2026-07-30T00:00:00.000Z", projectId: project1 };
     orchestration.getStartupProjectCatalog
@@ -147,17 +147,11 @@ describe("bounded project catalog bootstrap", () => {
 
     await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
 
-    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
-      [{ limit: 2 }],
-      [{ limit: 20, cursor }],
-    ]);
-    expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(1);
-    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1, project2]);
-    expect(useStore.getState().projects[1]).toMatchObject({
-      workspaceExecutionTargetId: "ssh:workspace",
-    });
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([[{ limit: 1 }]]);
+    expect(orchestration.getProjectThreadSummaries).not.toHaveBeenCalled();
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
     expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
-    expect(useStore.getState().threadSummaryCursorByProjectId?.[project2]).toBeUndefined();
+    expect(useStore.getState().threadSummaryCursorByProjectId?.[project1]).toBeUndefined();
   });
 
   it("loads the first thread summary page for a catalog project that was initially deferred", async () => {
@@ -198,13 +192,13 @@ describe("bounded project catalog bootstrap", () => {
     ]);
   });
 
-  it("does not duplicate a prioritized project from a later catalog page", async () => {
+  it("does not request a later catalog page for a prioritized project", async () => {
     const { api, orchestration } = makeApi();
     const cursor = { lastUsedAt: "2026-07-30T00:00:00.000Z", projectId: project2 };
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [makeProject(project1, "Prioritized"), makeProject(project2, "Recent")],
+        projects: [makeProject(project1, "Prioritized")],
         nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
@@ -214,11 +208,8 @@ describe("bounded project catalog bootstrap", () => {
 
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
 
-    expect(useStore.getState().projects.map((project) => project.id)).toEqual([
-      project1,
-      project2,
-      project3,
-    ]);
+    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
   });
 
   it("restores recent chats outside sampled projects and global pins outside project pages", async () => {

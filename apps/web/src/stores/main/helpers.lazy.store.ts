@@ -9,14 +9,10 @@ import { FAVORITE_THREAD_LIMIT } from "@bigbud/contracts/constants/settings.cons
 import { SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { AppState, ThreadHydration } from "./main.store";
-import {
-  mapProjectSummary,
-  mapSidebarThreadSummary,
-  mapThreadSummary,
-  mergeThreadDetail,
-} from "./mappers.lazy.store";
+import { mapSidebarThreadSummary, mapThreadSummary, mergeThreadDetail } from "./mappers.lazy.store";
 import { normalizeSidebarThreadIds } from "./helpers.sidebar.store";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
+import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
 
 function mergeThreadSummary(
   thread: AppState["threads"][number],
@@ -123,9 +119,25 @@ export function syncBoundedCatalog(
     ),
   };
   const availableThreadIds = new Set(summaries.map((summary) => summary.id));
+  const projectThreadCountsById = {
+    ...state.projectThreadCountsById,
+    ...Object.fromEntries(
+      (sidebarCatalog.projectThreadCounts ?? []).map((entry) => [
+        entry.projectId,
+        entry.threadCount,
+      ]),
+    ),
+  };
+  const projectCatalog = mergeProjectCatalog(state, catalog, projectThreadCountsById, false);
   return {
     ...state,
-    projects: catalog.projects.map(mapProjectSummary),
+    projects: projectCatalog.projects,
+    projectCatalogCursor: catalog.nextCursor ?? null,
+    projectCatalogGeneration: state.projectCatalogGeneration + 1,
+    projectCatalogLoading: false,
+    projectCatalogError: undefined,
+    pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+    projectThreadCountsById,
     threads,
     sidebarThreadsById,
     threadIdsByProjectId,
@@ -182,6 +194,15 @@ export function syncSidebarCatalog(
       state.projects,
       sidebarCatalog.projectThreadCounts,
     ),
+    projectThreadCountsById: {
+      ...state.projectThreadCountsById,
+      ...Object.fromEntries(
+        (sidebarCatalog.projectThreadCounts ?? []).map((entry) => [
+          entry.projectId,
+          entry.threadCount,
+        ]),
+      ),
+    },
     threads,
     sidebarThreadsById,
     threadHydrationById,
@@ -195,6 +216,41 @@ export function syncSidebarCatalog(
       availableThreadIds,
       FAVORITE_THREAD_LIMIT,
     ),
+  };
+}
+
+export function appendProjectCatalogPage(
+  state: AppState,
+  page: GetStartupProjectCatalogResult,
+  generation?: number,
+  loading = false,
+): AppState {
+  if (generation !== undefined && state.projectCatalogGeneration !== generation) {
+    return state;
+  }
+
+  const projectCatalog = mergeProjectCatalog(state, page, state.projectThreadCountsById, true);
+
+  return {
+    ...state,
+    projects: projectCatalog.projects,
+    projectCatalogCursor: page.nextCursor ?? null,
+    projectCatalogLoading: loading,
+    projectCatalogError: undefined,
+    pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+  };
+}
+
+export function mergeProjectCatalogPage(
+  state: AppState,
+  page: GetStartupProjectCatalogResult,
+): AppState {
+  const projectCatalog = mergeProjectCatalog(state, page, state.projectThreadCountsById, true);
+
+  return {
+    ...state,
+    projects: projectCatalog.projects,
+    pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
   };
 }
 

@@ -4,11 +4,88 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- bigbud now takes better care of your work during updates and restarts, fixing stale local data automatically so you can get back to work with fewer interruptions.
-- More reliable provider workflows, including Claudex (CLIProxy) follow-ups, Pi thinking controls, Claude Ultracode, and stronger session recovery.
-- Automatic thread retention with configurable schedules, previews, confirmation, progress tracking, and safe recovery.
-- Queued prompts and history now remain reliable across refreshes and restarts.
-- Safer cleanup protects attachments and active browser, terminal, shell, computer-use, checkpoint, and provider resources.
+- Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
+- Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
+- Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
+- Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
+
+## v0.2.201 (12 August, 2026)
+
+### Faster Startup and Reliable New Chats
+
+- Fixed newly created chats failing to send when their project was outside the initial catalog. bigbud now loads authoritative project and execution-target details before creating the draft and applying remote-access checks.
+- Reduced initial project loading to the single most recently used or restored project, and fixed the first **Load 5 more projects** request so it does not skip projects newer than the initially prioritized project.
+- Kept targeted lookups from disturbing catalog pagination, coalesced simultaneous requests, prevented competing drafts, and added clear feedback when a new thread cannot start.
+
+### More Reliable Provider Recovery
+
+- Added structured provider recovery states, failure classifications, bounded automatic retries, and short manual retries, distinguishing temporary launch failures from problems requiring installation, configuration, authentication, or an upgrade.
+- Prevented overlapping startup, background, Settings, and manual checks from replacing newer provider state; limited checks to three concurrent probes and moved routine health checks from every minute to every five minutes.
+- Excluded disabled and user-action providers from periodic checks, removed Copilot's stale status cache, and added redacted diagnostics for recovery attempts, scheduling, exhaustion, and superseded work.
+
+### Faster OpenCode and KiloCode Workflows
+
+- Split OpenCode and KiloCode startup into fast availability checks and asynchronous catalog enrichment, with persistent Models.dev caches and a bundled fallback keeping providers usable while live discovery completes or recovers.
+- Kept healthy shared provider servers warm, shared concurrent starts, invalidated unhealthy processes, and safely restarted them after unexpected exits or binary changes.
+- Preserved sub-provider routing and custom models, improved shutdown of local and remote processes, retained KiloCode's `~/.kilo/bin/kilo` installer fallback, and added clearer recovery guidance.
+
+### Clearer Settings and Desktop Experience
+
+- Added persistent grouped recovery notices with **View providers** and **Review providers** actions, validated Provider Settings deep links, and safer fallback provider selection while a new chat's chosen provider is still recovering.
+- Reduced the model picker's initial rendering from ten entries to five, kept incremental loading bounded for very large catalogs, and retained opened provider catalogs across menu reopenings.
+- Merged login-shell and inherited desktop PATH entries, and detected the account login shell when macOS GUI launches do not provide `SHELL`, improving CLI discovery.
+
+### More Reliable Notes and Kanban
+
+- Fixed an intermittent issue that could prevent Notes or Kanban boards from loading when a file reported an invalid modification time. bigbud now uses a safe fallback timestamp instead.
+
+### Recent Chats
+
+- Fixed Recents showing only the initial chat preview. The sidebar keeps its fast startup behavior, then uses the same **See more**, **Show less**, and **Load more** controls as Projects so every chat remains reachable.
+
+### Validation
+
+- Added regression coverage for bounded project startup and pagination, on-demand project loading, provider recovery and classification, catalog enrichment, authoritative execution targets, and cursor-safe merging.
+- Added lifecycle, browser, and unit coverage for warm provider servers, recovery notices and Settings links, launch-time provider fallback, desktop environment handling, and bounded rendering of large model catalogs.
+- Added regression coverage for invalid or missing Notes and Kanban file timestamps.
+
+## v0.2.200 (10 August, 2026)
+
+### Plugin Store and Skills
+
+- Added a Plugin Store with searchable catalog and detail pages, artwork, install controls, update notifications, and sidebar navigation.
+- Added secure, provider-neutral skill discovery and installation, so installed plugin skills can be used from the composer, messages, and Orchestra regardless of the selected provider.
+- Protected plugin updates and artwork delivery with validated manifests, immutable installed revisions, and safe asset-path handling.
+
+### More Reliable Workflows
+
+- Added configurable automatic thread retention with previews, confirmation, recovery-aware scheduling, and safe cleanup of eligible inactive threads.
+- Improved provider recovery, queued prompts, thread history, and cleanup of browser, terminal, computer-use, checkpoint, and attachment resources across restarts and deletions.
+- Prevented persisted threads, including delegated parent threads, from being recreated before their stored state has been restored.
+- Kept desktop bridge validation correct when a packaged installation uses its configured Node executable.
+
+### Faster Startup and Provider Discovery
+
+- Provider discovery now publishes immediate, provider-specific snapshots for Claude, Codex, and GitHub Copilot, so the registry can expose model choices and availability feedback while optional CLI or SDK checks continue in the background.
+- Mounted the application shell and selected chat route beneath the startup splash as bootstrap work continues, reducing the blank-screen delay while preserving the startup transition.
+
+### Bounded Project Loading
+
+- Limited startup to the first project catalog page and the selected project's thread summaries, keeping initial loading bounded for workspaces with many projects.
+- Added sidebar controls to load five more projects or all remaining projects on demand, with request coalescing, retry feedback, and protection against stale pagination results overwriting newer state.
+- Preserved live project metadata and deletion updates while catalog pages are loading, preventing stale snapshots from resurrecting deleted projects or replacing newer project changes.
+
+### Refined Interface
+
+- Added in-page Settings filtering that preserves the query while navigating, shows matching controls and sections only, and reports when no setting matches.
+- Replaced the text-based scroll-to-bottom control with a compact circular down-arrow button aligned with the send action.
+- Added a shared centered layout for Usage and Scheduled pages, and refined permission, Git action, and pending-approval dialog presentation.
+- Reduced collapsed work-log groups to two entries and kept virtualized timeline sizing correct when expanding and collapsing them.
+
+### Validation
+
+- Added regression coverage for provider initial snapshots, bounded project pagination and stale-result handling, project-event reconciliation, startup rendering, and work-log virtualization.
+- Passed formatting, linting, and type checks, along with focused Settings-search, startup, project-loading, and scroll-control browser coverage.
 
 ## v0.2.104 (4 August, 2026)
 

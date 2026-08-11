@@ -156,7 +156,7 @@ describe("MessagesTimeline virtualization harness", () => {
     }
   });
 
-  it("keeps the work-log row virtualizer size in sync after show more expands the group", async () => {
+  it("keeps the work-log row sizing in sync across show more and show less", async () => {
     const beforeMessages = createFillerMessages({
       prefix: "before-worklog-expand",
       startOffsetSeconds: 0,
@@ -186,38 +186,52 @@ describe("MessagesTimeline virtualization harness", () => {
         props,
         targetRowId: workEntries[0]!.id,
       });
-      const targetRowElement = mounted.host.querySelector<HTMLElement>(
-        `[data-timeline-row-id="${workEntries[0]!.id}"]`,
-      );
+      const targetRowSelector = `[data-timeline-row-id="${workEntries[0]!.id}"]`;
+      const targetRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
       expect(targetRowElement, "Unable to locate target work-log row.").toBeTruthy();
+      expect(targetRowElement!.textContent).not.toContain("tool output line 8");
+      expect(targetRowElement!.textContent).toContain("tool output line 9");
+      expect(targetRowElement!.textContent).toContain("tool output line 10");
 
       const showMoreButton =
         Array.from(targetRowElement!.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
-          button.textContent?.includes("Show 4 more"),
+          button.textContent?.includes("Show 8 more"),
         ) ?? null;
       expect(showMoreButton, 'Unable to find "Show more" button.').toBeTruthy();
 
       showMoreButton!.click();
 
-      await vi.waitFor(
-        async () => {
-          const afterExpand = await measureTimelineRow({
-            host: mounted.host,
-            props,
-            targetRowId: workEntries[0]!.id,
-          });
-          expect(afterExpand.actualHeightPx).toBeGreaterThan(beforeExpand.actualHeightPx + 72);
-        },
-        { timeout: 8_000, interval: 16 },
-      );
+      await vi.waitFor(() => {
+        const expandedRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
+        expect(expandedRowElement?.textContent).toContain("tool output line 1");
+        expect(expandedRowElement!.getBoundingClientRect().height).toBeGreaterThan(
+          beforeExpand.actualHeightPx + 72,
+        );
+      });
 
-      const afterExpand = await measureTimelineRow({
+      const expandedRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
+      const showLessButton = Array.from(
+        expandedRowElement!.querySelectorAll<HTMLButtonElement>("button"),
+      ).find((button) => button.textContent?.includes("Show less"));
+      expect(showLessButton, 'Unable to find "Show less" button.').toBeTruthy();
+      showLessButton!.click();
+
+      await vi.waitFor(() => {
+        const collapsedRowElement = mounted.host.querySelector<HTMLElement>(targetRowSelector);
+        expect(collapsedRowElement?.textContent).not.toContain("tool output line 2");
+        expect(collapsedRowElement?.textContent).toContain("Show 8 more");
+      });
+
+      const afterCollapse = await measureTimelineRow({
         host: mounted.host,
         props,
         targetRowId: workEntries[0]!.id,
       });
       expect(
-        Math.abs(afterExpand.actualHeightPx - afterExpand.virtualizerSizePx),
+        Math.abs(afterCollapse.actualHeightPx - afterCollapse.virtualizerSizePx),
+      ).toBeLessThanOrEqual(8);
+      expect(
+        Math.abs(afterCollapse.actualHeightPx - beforeExpand.actualHeightPx),
       ).toBeLessThanOrEqual(8);
     } finally {
       await mounted.cleanup();

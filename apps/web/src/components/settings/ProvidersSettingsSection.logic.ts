@@ -137,6 +137,17 @@ export function createInitialOpenProviderDetails(
   ) as Record<ProviderKind, boolean>;
 }
 
+export function expandProviderDetails(
+  previous: Record<ProviderKind, boolean>,
+  providers: ReadonlyArray<ProviderKind>,
+): Record<ProviderKind, boolean> {
+  if (providers.length === 0) return previous;
+  return {
+    ...previous,
+    ...Object.fromEntries(providers.map((provider) => [provider, true])),
+  };
+}
+
 export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
   return {
     codex: "",

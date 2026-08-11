@@ -2,6 +2,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import {
   OrchestrationQueuedPrompt,
+  OrchestrationPendingInterruptFlushIntent,
   ParentThreadReference,
   PersistedModelSelection,
 } from "@bigbud/contracts";
@@ -29,6 +30,9 @@ const ProjectionThreadDbRow = ProjectionThread.mapFields(
     modelSelection: Schema.fromJsonString(PersistedModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
     queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
+    pendingInterruptFlushIntent: Schema.NullOr(
+      Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
+    ),
   }),
 );
 type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
@@ -64,6 +68,9 @@ function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof Projec
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
     latestTurnId: row.latestTurnId,
     queuedPrompts: row.queuedPrompts,
+    ...(row.pendingInterruptFlushIntent !== undefined
+      ? { pendingInterruptFlushIntent: row.pendingInterruptFlushIntent }
+      : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     lastActivityAt: row.lastActivityAt,
@@ -103,7 +110,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_title,
            parent_thread_project_id,
           latest_turn_id,
-          queued_prompts_json,
+           queued_prompts_json,
+           pending_interrupt_flush_intent_json,
           created_at,
           updated_at,
           last_activity_at,
@@ -134,7 +142,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            ${row.parentThread?.title ?? null},
            ${row.parentThread?.projectId ?? row.projectId},
           ${row.latestTurnId},
-          ${JSON.stringify(row.queuedPrompts)},
+           ${JSON.stringify(row.queuedPrompts)},
+           ${row.pendingInterruptFlushIntent == null ? null : JSON.stringify(row.pendingInterruptFlushIntent)},
           ${row.createdAt},
           ${row.updatedAt},
           ${row.lastActivityAt},
@@ -165,7 +174,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
            parent_thread_title = excluded.parent_thread_title,
            parent_thread_project_id = excluded.parent_thread_project_id,
           latest_turn_id = excluded.latest_turn_id,
-          queued_prompts_json = excluded.queued_prompts_json,
+           queued_prompts_json = excluded.queued_prompts_json,
+           pending_interrupt_flush_intent_json = excluded.pending_interrupt_flush_intent_json,
           created_at = excluded.created_at,
           updated_at = excluded.updated_at,
           last_activity_at = MAX(projection_threads.last_activity_at, excluded.last_activity_at),
@@ -205,7 +215,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
              )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
-          queued_prompts_json AS "queuedPrompts",
+           queued_prompts_json AS "queuedPrompts",
+           pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           last_activity_at AS "lastActivityAt",
@@ -247,7 +258,8 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
              )
           END AS "parentThread",
           latest_turn_id AS "latestTurnId",
-          queued_prompts_json AS "queuedPrompts",
+           queued_prompts_json AS "queuedPrompts",
+           pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           last_activity_at AS "lastActivityAt",

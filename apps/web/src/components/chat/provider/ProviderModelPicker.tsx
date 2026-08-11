@@ -151,8 +151,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
           }
           if (open) {
             setView(props.lockedProvider !== null ? "model" : "provider");
-          } else {
-            setOpenedModelProviders(new Set());
           }
           setIsMenuOpen(open);
         }}

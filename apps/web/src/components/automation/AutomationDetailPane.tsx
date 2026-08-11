@@ -10,6 +10,7 @@ import {
   getDeviceTimeZone,
 } from "~/lib/automation";
 import { readNativeApi } from "~/rpc/nativeApi";
+import { StandalonePageContent } from "../standalone/StandalonePageContent";
 
 type AutomationDetail = Awaited<
   ReturnType<NonNullable<ReturnType<typeof readNativeApi>>["server"]["getAutomation"]>
@@ -49,7 +50,7 @@ export function AutomationDetailPane({
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex-[2]">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+          <StandalonePageContent className="min-w-0">
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading automation...</p>
             ) : null}
@@ -60,7 +61,7 @@ export function AutomationDetailPane({
               </div>
             ) : null}
             {!loading && automation ? (
-              <div className="mx-auto w-full max-w-4xl">
+              <>
                 <h1 className="text-3xl font-semibold tracking-tight">{automation.title}</h1>
                 <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-foreground/92">
                   {automation.prompt}
@@ -69,9 +70,9 @@ export function AutomationDetailPane({
                   Ask to change the prompt, schedule, project, or execution model. The task will not
                   run during editing.
                 </p>
-              </div>
+              </>
             ) : null}
-          </div>
+          </StandalonePageContent>
 
           {!loading && automation && editorThreadId ? (
             <div className="shrink-0 px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">

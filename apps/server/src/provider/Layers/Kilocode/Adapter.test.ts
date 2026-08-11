@@ -12,6 +12,7 @@ const fakeServerManager = Layer.succeed(OpencodeServerManager, {
     client: {} as never,
     url: "http://127.0.0.1:4096",
     release() {},
+    invalidate() {},
   }),
 });
 

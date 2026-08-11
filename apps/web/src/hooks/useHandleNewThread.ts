@@ -2,6 +2,8 @@ import {
   BUILT_IN_CHATS_PROJECT_ID,
   DEFAULT_RUNTIME_MODE,
   isBuiltInChatsProject,
+  type GetStartupProjectCatalogResult,
+  type NativeApi,
   type ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
@@ -16,6 +18,43 @@ import { useRemoteExecutionAccessGate } from "./useRemoteExecutionAccessGate";
 import { useStore } from "../stores/main";
 import { useThreadById } from "../stores/main";
 import { useUiStateStore } from "../stores/ui";
+import type { Project } from "../models/types";
+import { readNativeApi } from "../rpc/nativeApi";
+import { toastManager } from "../components/ui/toast";
+
+const pendingProjectLoads = new Map<ProjectId, Promise<Project | undefined>>();
+
+export async function loadProjectForNewThread(input: {
+  api: Pick<NativeApi, "orchestration">;
+  projectId: ProjectId;
+  getProject: () => Project | undefined;
+  mergeProjectCatalogPage: (page: GetStartupProjectCatalogResult) => void;
+}): Promise<Project | undefined> {
+  const existingProject = input.getProject();
+  if (existingProject) {
+    return existingProject;
+  }
+
+  const pendingLoad = pendingProjectLoads.get(input.projectId);
+  if (pendingLoad) {
+    return pendingLoad;
+  }
+
+  const load = input.api.orchestration
+    .getStartupProjectCatalog({
+      limit: 1,
+      priorityProjectId: input.projectId,
+    })
+    .then((page) => {
+      input.mergeProjectCatalogPage(page);
+      return input.getProject();
+    })
+    .finally(() => {
+      pendingProjectLoads.delete(input.projectId);
+    });
+  pendingProjectLoads.set(input.projectId, load);
+  return load;
+}
 
 export function resolveContextualNewThreadOptions(input: {
   activeDraftThread:
@@ -92,7 +131,6 @@ export function useHandleNewThread() {
       const normalizedOptions = isBuiltInChatsProject(projectId)
         ? resolveNewChatOptions()
         : options;
-      const project = projects.find((projectEntry) => projectEntry.id === projectId);
       const {
         clearProjectDraftThreadId,
         getDraftThread,
@@ -101,6 +139,26 @@ export function useHandleNewThread() {
         setDraftThreadContext,
         setProjectDraftThreadId,
       } = useComposerDraftStore.getState();
+      const getProject = () =>
+        useStore.getState().projects.find((projectEntry) => projectEntry.id === projectId);
+      const loadedProject = getProject();
+      const api = loadedProject ? null : readNativeApi();
+      if (!loadedProject && !api) {
+        toastManager.add({
+          type: "error",
+          title: "Could not start a new thread",
+          description: "bigbud is not connected to the server.",
+        });
+        return Promise.resolve();
+      }
+      const loadProject = loadedProject
+        ? Promise.resolve(loadedProject)
+        : loadProjectForNewThread({
+            api: api!,
+            projectId,
+            getProject,
+            mergeProjectCatalogPage: useStore.getState().mergeProjectCatalogPage,
+          });
       const hasBranchOption = normalizedOptions?.branch !== undefined;
       const hasWorktreePathOption = normalizedOptions?.worktreePath !== undefined;
       const hasEnvModeOption = normalizedOptions?.envMode !== undefined;
@@ -109,8 +167,25 @@ export function useHandleNewThread() {
         ? getDraftThread(routeThreadId)
         : null;
       const ensureProjectRemoteAccess = async () => {
+        const project = await loadProject.catch((error: unknown) => {
+          toastManager.add({
+            type: "error",
+            title: "Could not start a new thread",
+            description:
+              error instanceof Error ? error.message : "The project could not be loaded.",
+          });
+          return null;
+        });
+        if (project === null) {
+          return false;
+        }
         if (!project) {
-          return true;
+          toastManager.add({
+            type: "error",
+            title: "Could not start a new thread",
+            description: "The project is unavailable.",
+          });
+          return false;
         }
 
         return beginRemoteExecutionTargetAccessCheck({
@@ -175,6 +250,17 @@ export function useHandleNewThread() {
         if (!(await ensureProjectRemoteAccess())) {
           return;
         }
+        const concurrentlyCreatedDraft = getDraftThreadByProjectId(projectId);
+        if (concurrentlyCreatedDraft) {
+          setProjectDraftThreadId(projectId, concurrentlyCreatedDraft.threadId);
+          if (routeThreadId !== concurrentlyCreatedDraft.threadId) {
+            await navigate({
+              to: "/$threadId",
+              params: { threadId: concurrentlyCreatedDraft.threadId },
+            });
+          }
+          return;
+        }
         clearProjectDraftThreadId(projectId);
         setProjectDraftThreadId(projectId, threadId, {
           createdAt,
@@ -191,7 +277,7 @@ export function useHandleNewThread() {
         });
       })();
     },
-    [beginRemoteExecutionTargetAccessCheck, navigate, projects, routeThreadId],
+    [beginRemoteExecutionTargetAccessCheck, navigate, routeThreadId],
   );
 
   return {

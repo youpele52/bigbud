@@ -15,10 +15,14 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { type ProjectId } from "@bigbud/contracts";
-import { SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
-import { Spinner } from "../ui/spinner";
 import { SidebarMenu, SidebarMenuItem } from "../ui/sidebar";
 import { SortableProjectItem } from "./SidebarProjectItem";
+import { readNativeApi } from "../../rpc/nativeApi";
+import { useStore } from "../../stores/main";
+import {
+  loadAllProjectCatalog,
+  loadMoreProjectCatalog,
+} from "../../routes/-__root.bounded-bootstrap";
 
 const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
@@ -33,9 +37,9 @@ export interface RenderedProject {
 interface SidebarProjectListProps {
   renderedProjects: RenderedProject[];
   isManualSorting: boolean;
-  bootstrapComplete: boolean;
   hasProjects: boolean;
   showEmptyState: boolean;
+  showLoadMore?: boolean;
   onDragStart: (event: DragStartEvent) => void;
   onDragEnd: (event: DragEndEvent) => void;
   onDragCancel: (event: DragCancelEvent) => void;
@@ -45,9 +49,9 @@ interface SidebarProjectListProps {
 export function SidebarProjectList({
   renderedProjects,
   isManualSorting,
-  bootstrapComplete,
   hasProjects,
   showEmptyState,
+  showLoadMore = false,
   onDragStart,
   onDragEnd,
   onDragCancel,
@@ -67,6 +71,10 @@ export function SidebarProjectList({
     return closestCorners(args);
   }, []);
 
+  const projectCatalogCursor = useStore((state) => state.projectCatalogCursor);
+  const projectCatalogLoading = useStore((state) => state.projectCatalogLoading);
+  const projectCatalogError = useStore((state) => state.projectCatalogError);
+  const hasMoreProjects = projectCatalogCursor !== null && projectCatalogCursor !== undefined;
   const animatedListsRef = useRef(new WeakSet<HTMLElement>());
   const attachAutoAnimateRef = useCallback((node: HTMLElement | null) => {
     if (!node || animatedListsRef.current.has(node)) {
@@ -110,11 +118,38 @@ export function SidebarProjectList({
         </SidebarMenu>
       )}
 
-      {!bootstrapComplete ? (
-        <div className="flex justify-center px-2 pt-6">
-          <Spinner className={`${SIDEBAR_ICON_SIZE_CLASS} text-muted-foreground/40`} />
+      {showLoadMore && hasMoreProjects ? (
+        <div className="grid gap-1 px-2 pt-2">
+          <button
+            type="button"
+            className="h-6 w-full rounded-md px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 disabled:cursor-wait"
+            disabled={projectCatalogLoading}
+            onClick={() => {
+              const api = readNativeApi();
+              if (api) void loadMoreProjectCatalog({ api }).catch(() => undefined);
+            }}
+          >
+            {projectCatalogLoading
+              ? "Loading projects..."
+              : projectCatalogError
+                ? "Retry loading projects"
+                : "Load 5 more projects"}
+          </button>
+          <button
+            type="button"
+            className="h-6 w-full rounded-md px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 disabled:cursor-wait"
+            disabled={projectCatalogLoading}
+            onClick={() => {
+              const api = readNativeApi();
+              if (api) void loadAllProjectCatalog({ api }).catch(() => undefined);
+            }}
+          >
+            Load all projects
+          </button>
         </div>
-      ) : !hasProjects && showEmptyState ? (
+      ) : null}
+
+      {!hasProjects && showEmptyState ? (
         <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
           No projects yet
         </div>

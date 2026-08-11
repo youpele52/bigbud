@@ -2,8 +2,184 @@ import { describe, expect, it } from "vitest";
 
 import {
   formatMissingOpencodeBinaryDetail,
+  makeOpencodeServerManager,
   readManagedServerListeningUrl,
 } from "./ServerManager.ts";
+
+describe("OpencodeServerManager lifecycle", () => {
+  it("keeps a successfully started server warm until manager shutdown", async () => {
+    let starts = 0;
+    let closes = 0;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => {
+        starts += 1;
+        return {
+          url: "http://127.0.0.1:4321",
+          close() {
+            closes += 1;
+          },
+        };
+      },
+    });
+
+    const first = await manager.acquire();
+    first.release();
+    const second = await manager.acquire();
+    second.release();
+
+    expect(starts).toBe(1);
+    expect(closes).toBe(0);
+
+    await manager.closeAll();
+    expect(closes).toBe(1);
+    await expect(manager.acquire()).rejects.toThrow("shutting down");
+  });
+
+  it("shares one in-flight start across concurrent acquisitions", async () => {
+    let resolveStart: ((server: { readonly url: string; close(): void }) => void) | undefined;
+    let starts = 0;
+    let closes = 0;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => {
+        starts += 1;
+        return await new Promise((resolve) => {
+          resolveStart = resolve;
+        });
+      },
+    });
+
+    const firstAcquire = manager.acquire();
+    const secondAcquire = manager.acquire();
+    await Promise.resolve();
+    expect(starts).toBe(1);
+
+    resolveStart?.({
+      url: "http://127.0.0.1:4321",
+      close() {
+        closes += 1;
+      },
+    });
+    const [first, second] = await Promise.all([firstAcquire, secondAcquire]);
+    first.release();
+    second.release();
+
+    expect(starts).toBe(1);
+    expect(closes).toBe(0);
+    await manager.closeAll();
+    expect(closes).toBe(1);
+  });
+
+  it("discards an invalidated server so recovery starts a fresh process", async () => {
+    let starts = 0;
+    let closes = 0;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => {
+        starts += 1;
+        return {
+          url: `http://127.0.0.1:${4320 + starts}`,
+          close() {
+            closes += 1;
+          },
+        };
+      },
+    });
+
+    const failedProbe = await manager.acquire();
+    failedProbe.invalidate();
+    const recoveredProbe = await manager.acquire();
+
+    expect(recoveredProbe.url).not.toBe(failedProbe.url);
+    expect(starts).toBe(2);
+    expect(closes).toBe(1);
+    recoveredProbe.release();
+    await manager.closeAll();
+    expect(closes).toBe(2);
+  });
+
+  it("restarts a warm server whose process exited", async () => {
+    let starts = 0;
+    let closes = 0;
+    let running = true;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => {
+        starts += 1;
+        running = true;
+        return {
+          url: `http://127.0.0.1:${4320 + starts}`,
+          isRunning: () => running,
+          close() {
+            closes += 1;
+          },
+        };
+      },
+    });
+
+    const first = await manager.acquire();
+    first.release();
+    running = false;
+    const second = await manager.acquire();
+
+    expect(second.url).not.toBe(first.url);
+    expect(starts).toBe(2);
+    expect(closes).toBe(1);
+    second.release();
+    await manager.closeAll();
+    expect(closes).toBe(2);
+  });
+
+  it("retires the prior warm server when its configured binary changes", async () => {
+    let starts = 0;
+    let closes = 0;
+    const manager = makeOpencodeServerManager({
+      startServer: async ({ binaryPath }) => {
+        starts += 1;
+        return {
+          url: `http://127.0.0.1/${binaryPath}`,
+          close() {
+            closes += 1;
+          },
+        };
+      },
+    });
+
+    const original = await manager.acquire({ binaryPath: "opencode-old" });
+    const replacement = await manager.acquire({ binaryPath: "opencode-new" });
+    expect(starts).toBe(2);
+    expect(closes).toBe(0);
+
+    original.release();
+    expect(closes).toBe(1);
+    replacement.release();
+    await manager.closeAll();
+    expect(closes).toBe(2);
+  });
+
+  it("waits for warm provider processes to close during manager shutdown", async () => {
+    let resolveClose: (() => void) | undefined;
+    let shutdownCompleted = false;
+    const manager = makeOpencodeServerManager({
+      startServer: async () => ({
+        url: "http://127.0.0.1:4321",
+        close: async () =>
+          await new Promise<void>((resolve) => {
+            resolveClose = resolve;
+          }),
+      }),
+    });
+
+    const handle = await manager.acquire();
+    handle.release();
+    const shutdown = manager.closeAll().then(() => {
+      shutdownCompleted = true;
+    });
+    await Promise.resolve();
+    expect(shutdownCompleted).toBe(false);
+
+    resolveClose?.();
+    await shutdown;
+    expect(shutdownCompleted).toBe(true);
+  });
+});
 
 describe("readManagedServerListeningUrl", () => {
   it("reads OpenCode and KiloCode server startup lines", () => {

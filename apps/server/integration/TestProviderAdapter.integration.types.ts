@@ -21,6 +21,7 @@ import type { FixtureProviderRuntimeEvent } from "./TestProviderAdapter.integrat
 
 export interface TestTurnResponse {
   readonly events: ReadonlyArray<FixtureProviderRuntimeEvent>;
+  readonly deferCompletion?: boolean;
   readonly mutateWorkspace?: (input: {
     readonly cwd: string;
     readonly turnCount: number;
@@ -46,10 +47,14 @@ export interface TestProviderAdapterHarness {
     readonly requestId: ApprovalRequestId;
     readonly decision: ProviderApprovalDecision;
   }>;
+  readonly getSentTurnInputs: () => ReadonlyArray<string>;
+  readonly setSession: (session: ProviderSession) => Effect.Effect<void, never>;
+  readonly removeSession: (threadId: ThreadId) => Effect.Effect<void, never>;
+  readonly failNextListSessions: () => Effect.Effect<void, never>;
 }
 
 export interface SessionState {
-  readonly session: ProviderSession;
+  session: ProviderSession;
   snapshot: ProviderThreadSnapshot;
   turnCount: number;
   readonly queuedResponses: Array<TestTurnResponse>;

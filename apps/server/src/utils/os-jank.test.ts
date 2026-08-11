@@ -53,6 +53,21 @@ describe("fixPath", () => {
     expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/usr/local/bin");
   });
 
+  it("uses the account login shell when a GUI launch does not provide SHELL", () => {
+    const env: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
+    const readPath = vi.fn(() => "/Users/example/.local/bin:/usr/bin");
+
+    fixPath({
+      env,
+      platform: "darwin",
+      userShell: "/opt/homebrew/bin/fish",
+      readPath,
+    });
+
+    expect(readPath).toHaveBeenCalledWith("/opt/homebrew/bin/fish");
+    expect(env.PATH).toBe("/Users/example/.local/bin:/usr/bin");
+  });
+
   it("tries multiple shell candidates before falling back to launchctl", () => {
     const env: NodeJS.ProcessEnv = {
       PATH: "/usr/bin",

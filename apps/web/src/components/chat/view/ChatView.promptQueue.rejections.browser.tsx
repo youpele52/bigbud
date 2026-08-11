@@ -16,7 +16,7 @@ const projectedPrompts = [
 function Harness(props: {
   onError: (message: string) => void;
   active?: boolean;
-  onInterrupt?: () => Promise<void>;
+  onInterrupt?: (options?: { queuedPromptIdsAfterSettlement?: readonly string[] }) => Promise<void>;
 }) {
   const queue = usePromptQueue({
     threadId,
@@ -120,6 +120,7 @@ describe("usePromptQueue command rejection", () => {
     await render(<Harness active onError={() => {}} onInterrupt={onInterrupt} />);
     await page.getByRole("button", { name: "Send now" }).click();
     await vi.waitFor(() => expect(onInterrupt).toHaveBeenCalledOnce());
+    expect(onInterrupt).toHaveBeenCalledWith({ queuedPromptIdsAfterSettlement: ["prompt-1"] });
     expect(dispatchCommand).not.toHaveBeenCalled();
     expect(document.querySelector("output")?.textContent).toBe("Projected prompt");
   });

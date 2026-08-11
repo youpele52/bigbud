@@ -1,8 +1,14 @@
-import type { ApprovalRequestId, ProviderApprovalDecision, ThreadId } from "@bigbud/contracts";
+import type {
+  ApprovalRequestId,
+  MessageId,
+  ProviderApprovalDecision,
+  ThreadId,
+} from "@bigbud/contracts";
 import { useCallback, useState } from "react";
 import { newCommandId } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import type { SessionPhase, Thread } from "../../../models/types";
+import { buildSendNowInterruptCommand } from "./ChatView.promptQueue.logic";
 
 export interface UseTurnActionsInput {
   activeThread: Thread | undefined;
@@ -19,7 +25,9 @@ export interface UseTurnActionsInput {
 export interface UseTurnActionsResult {
   respondingRequestIds: ApprovalRequestId[];
   respondingUserInputRequestIds: ApprovalRequestId[];
-  onInterrupt: () => Promise<void>;
+  onInterrupt: (options?: {
+    queuedPromptIdsAfterSettlement?: readonly MessageId[];
+  }) => Promise<void>;
   onRevertToTurnCount: (turnCount: number) => Promise<void>;
   onRespondToApproval: (
     requestId: ApprovalRequestId,
@@ -48,18 +56,35 @@ export function useTurnActions({
     ApprovalRequestId[]
   >([]);
 
-  const onInterrupt = useCallback(async () => {
-    const api = readNativeApi();
-    if (!api || !activeThread) return;
-    const activeTurnId = activeThread.session?.activeTurnId ?? activeThread.latestTurn?.turnId;
-    await api.orchestration.dispatchCommand({
-      type: "thread.turn.interrupt",
-      commandId: newCommandId(),
-      threadId: activeThread.id,
-      ...(activeTurnId !== undefined ? { turnId: activeTurnId } : {}),
-      createdAt: new Date().toISOString(),
-    });
-  }, [activeThread]);
+  const onInterrupt = useCallback(
+    async (options?: { queuedPromptIdsAfterSettlement?: readonly MessageId[] }) => {
+      const api = readNativeApi();
+      if (!api || !activeThread) return;
+      const activeTurnId =
+        options?.queuedPromptIdsAfterSettlement !== undefined
+          ? activeThread.session?.activeTurnId
+          : (activeThread.session?.activeTurnId ?? activeThread.latestTurn?.turnId);
+      const createdAt = new Date().toISOString();
+      await api.orchestration.dispatchCommand(
+        options?.queuedPromptIdsAfterSettlement !== undefined
+          ? buildSendNowInterruptCommand({
+              threadId: activeThread.id,
+              turnId: activeTurnId,
+              commandId: newCommandId(),
+              queuedPromptIds: options.queuedPromptIdsAfterSettlement,
+              createdAt,
+            })
+          : {
+              type: "thread.turn.interrupt" as const,
+              commandId: newCommandId(),
+              threadId: activeThread.id,
+              ...(activeTurnId !== undefined ? { turnId: activeTurnId } : {}),
+              createdAt,
+            },
+      );
+    },
+    [activeThread],
+  );
 
   const onRevertToTurnCount = useCallback(
     async (turnCount: number) => {

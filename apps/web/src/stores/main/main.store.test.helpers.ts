@@ -62,6 +62,7 @@ export function makeState(thread: Thread): AppState {
     sidebarRecentThreadIds: [],
     sidebarPinnedThreadIds: [],
     bootstrapComplete: true,
+    projectCatalogGeneration: 0,
     threadHydrationById: {},
   };
 }

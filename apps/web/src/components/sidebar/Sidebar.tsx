@@ -17,6 +17,7 @@ import { SidebarUpdatePill } from "./SidebarUpdatePill";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import { SidebarAppHeader } from "./SidebarHeader";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { BigbudLogo } from "./SidebarProjectItem";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarActionsSection } from "./Sidebar.actionsSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
@@ -52,6 +53,10 @@ export default function Sidebar() {
               closeMobileSidebar();
               void navigate({ to: "/automations" });
             }}
+            onOpenPlugins={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/plugins" });
+            }}
             onOpenUsage={() => {
               closeMobileSidebar();
               void navigate({ to: "/usage" });
@@ -59,75 +64,88 @@ export default function Sidebar() {
             newThreadShortcutLabel={s.newThreadShortcutLabel}
           />
 
-          <SidebarContent className="gap-0">
-            <SidebarFavoritesSection
-              renderedFavorites={s.renderedFavorites}
-              isExpanded={s.areFavouritesExpanded}
-              onExpandedChange={s.setAreFavouritesExpanded}
-              showAll={s.showAllFavourites}
-              onShowAllChange={s.setShowAllFavourites}
-              sharedProjectItemProps={s.sharedProjectItemProps}
-              bootstrapComplete={s.bootstrapComplete}
-            />
+          <SidebarContent className="min-h-full gap-0">
+            {!s.bootstrapComplete ? (
+              <div className="flex flex-1 items-center justify-center">
+                <BigbudLogo className="size-4 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />
+              </div>
+            ) : (
+              <>
+                <SidebarFavoritesSection
+                  renderedFavorites={s.renderedFavorites}
+                  isExpanded={s.areFavouritesExpanded}
+                  onExpandedChange={s.setAreFavouritesExpanded}
+                  showAll={s.showAllFavourites}
+                  onShowAllChange={s.setShowAllFavourites}
+                  sharedProjectItemProps={s.sharedProjectItemProps}
+                />
 
-            <SidebarChatsSection
-              renderedChats={s.renderedChats}
-              isExpanded={s.areChatsExpanded}
-              onExpandedChange={s.setAreChatsExpanded}
-              showAll={s.showAllChats}
-              onShowAllChange={s.setShowAllChats}
-              onNewChat={() => {
-                closeMobileSidebar();
-                void s.handleNewChat();
-              }}
-              newThreadShortcutLabel={s.newThreadShortcutLabel}
-              sharedProjectItemProps={s.sharedProjectItemProps}
-              chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
-              onChatsSortOrderChange={(sortOrder) => {
-                s.updateSettings({ sidebarChatsSortOrder: sortOrder });
-              }}
-              bootstrapComplete={s.bootstrapComplete}
-            />
+                <SidebarChatsSection
+                  renderedChats={s.renderedChats}
+                  isExpanded={s.areChatsExpanded}
+                  onExpandedChange={s.setAreChatsExpanded}
+                  showAll={s.showAllChats}
+                  onShowAllChange={(showAll) => {
+                    s.setShowAllChats(showAll);
+                    if (showAll) s.loadMoreChats();
+                  }}
+                  hasMoreChats={s.hasMoreChats}
+                  collapsedHiddenChatCount={s.collapsedHiddenChatCount}
+                  unloadedChatCount={s.unloadedChatCount}
+                  isLoadingMoreChats={s.isLoadingMoreChats}
+                  onLoadMoreChats={s.loadMoreChats}
+                  onNewChat={() => {
+                    closeMobileSidebar();
+                    void s.handleNewChat();
+                  }}
+                  newThreadShortcutLabel={s.newThreadShortcutLabel}
+                  sharedProjectItemProps={s.sharedProjectItemProps}
+                  chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
+                  onChatsSortOrderChange={(sortOrder) => {
+                    s.updateSettings({ sidebarChatsSortOrder: sortOrder });
+                  }}
+                />
 
-            <SidebarProjectsSection
-              showArm64IntelBuildWarning={s.showArm64IntelBuildWarning}
-              arm64IntelBuildWarningDescription={s.arm64IntelBuildWarningDescription}
-              desktopUpdateButton={{
-                action: s.desktopUpdateButtonAction,
-                disabled: s.desktopUpdateButtonDisabled,
-                onClick: s.handleDesktopUpdateButtonClick,
-              }}
-              appSettingsSidebarProjectSortOrder={s.appSettings.sidebarProjectSortOrder}
-              appSettingsSidebarThreadSortOrder={s.appSettings.sidebarThreadSortOrder}
-              onProjectSortOrderChange={(sortOrder) => {
-                s.updateSettings({ sidebarProjectSortOrder: sortOrder });
-              }}
-              onThreadSortOrderChange={(sortOrder) => {
-                s.updateSettings({ sidebarThreadSortOrder: sortOrder });
-              }}
-              shouldShowProjectPathEntry={s.shouldShowProjectPathEntry}
-              handleStartAddProject={s.handleStartAddProject}
-              openRemoteProjectDialog={s.openRemoteProjectDialog}
-              onCloseMobileSidebar={closeMobileSidebar}
-              isElectron={isElectron}
-              newCwd={s.newCwd}
-              isPickingFolder={s.isPickingFolder}
-              isAddingProject={s.isAddingProject}
-              addProjectError={s.addProjectError}
-              addProjectInputRef={s.addProjectInputRef}
-              onCwdChange={s.setNewCwd}
-              onClearError={() => s.setAddProjectError(null)}
-              onPickFolder={() => void s.handlePickFolder()}
-              onAdd={s.handleAddProject}
-              onCancelAdd={s.cancelAddProject}
-              renderedProjects={s.renderedProjects}
-              isManualProjectSorting={s.isManualProjectSorting}
-              bootstrapComplete={s.bootstrapComplete}
-              onDragStart={s.handleProjectDragStart}
-              onDragEnd={s.handleProjectDragEnd}
-              onDragCancel={s.handleProjectDragCancel}
-              sharedProjectItemProps={s.sharedProjectItemProps}
-            />
+                <SidebarProjectsSection
+                  showArm64IntelBuildWarning={s.showArm64IntelBuildWarning}
+                  arm64IntelBuildWarningDescription={s.arm64IntelBuildWarningDescription}
+                  desktopUpdateButton={{
+                    action: s.desktopUpdateButtonAction,
+                    disabled: s.desktopUpdateButtonDisabled,
+                    onClick: s.handleDesktopUpdateButtonClick,
+                  }}
+                  appSettingsSidebarProjectSortOrder={s.appSettings.sidebarProjectSortOrder}
+                  appSettingsSidebarThreadSortOrder={s.appSettings.sidebarThreadSortOrder}
+                  onProjectSortOrderChange={(sortOrder) => {
+                    s.updateSettings({ sidebarProjectSortOrder: sortOrder });
+                  }}
+                  onThreadSortOrderChange={(sortOrder) => {
+                    s.updateSettings({ sidebarThreadSortOrder: sortOrder });
+                  }}
+                  shouldShowProjectPathEntry={s.shouldShowProjectPathEntry}
+                  handleStartAddProject={s.handleStartAddProject}
+                  openRemoteProjectDialog={s.openRemoteProjectDialog}
+                  onCloseMobileSidebar={closeMobileSidebar}
+                  isElectron={isElectron}
+                  newCwd={s.newCwd}
+                  isPickingFolder={s.isPickingFolder}
+                  isAddingProject={s.isAddingProject}
+                  addProjectError={s.addProjectError}
+                  addProjectInputRef={s.addProjectInputRef}
+                  onCwdChange={s.setNewCwd}
+                  onClearError={() => s.setAddProjectError(null)}
+                  onPickFolder={() => void s.handlePickFolder()}
+                  onAdd={s.handleAddProject}
+                  onCancelAdd={s.cancelAddProject}
+                  renderedProjects={s.renderedProjects}
+                  isManualProjectSorting={s.isManualProjectSorting}
+                  onDragStart={s.handleProjectDragStart}
+                  onDragEnd={s.handleProjectDragEnd}
+                  onDragCancel={s.handleProjectDragCancel}
+                  sharedProjectItemProps={s.sharedProjectItemProps}
+                />
+              </>
+            )}
           </SidebarContent>
 
           <SidebarSeparator />

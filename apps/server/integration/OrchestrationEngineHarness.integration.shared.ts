@@ -60,7 +60,7 @@ export function waitFor<A, E>(
   timeoutMs = 40_000,
 ): Effect.Effect<A, never> {
   const RETRY_SIGNAL = "wait_for_retry";
-  const retryIntervalMs = 10;
+  const retryIntervalMs = 25;
   const maxRetries = Math.max(0, Math.floor(timeoutMs / retryIntervalMs));
   const retrySchedule = Schedule.spaced(`${retryIntervalMs} millis`);
 

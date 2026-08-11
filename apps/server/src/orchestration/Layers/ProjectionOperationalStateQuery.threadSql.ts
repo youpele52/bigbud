@@ -58,6 +58,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         latest_turn_id AS "latestTurnId", created_at AS "createdAt", updated_at AS "updatedAt",
         last_activity_at AS "lastActivityAt",
         queued_prompts_json AS "queuedPrompts",
+        pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads

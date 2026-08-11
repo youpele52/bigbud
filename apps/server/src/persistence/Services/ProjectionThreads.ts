@@ -15,6 +15,7 @@ import {
   ParentThreadReference,
   OrchestrationThreadPurpose,
   OrchestrationQueuedPrompt,
+  OrchestrationPendingInterruptFlushIntent,
   ProjectId,
   ProviderInteractionMode,
   RuntimeMode,
@@ -46,6 +47,9 @@ export const ProjectionThread = Schema.Struct({
   parentThread: Schema.optional(ParentThreadReference),
   latestTurnId: Schema.NullOr(TurnId),
   queuedPrompts: Schema.Array(OrchestrationQueuedPrompt),
+  pendingInterruptFlushIntent: Schema.optional(
+    Schema.NullOr(OrchestrationPendingInterruptFlushIntent),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   lastActivityAt: IsoDateTime,

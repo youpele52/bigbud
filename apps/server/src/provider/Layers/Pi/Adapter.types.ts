@@ -81,6 +81,7 @@ export interface ActivePiSession {
         readonly message: { readonly message?: Record<string, unknown> };
       }
     | undefined;
+  missingAgentEndRecoveryToken?: symbol | undefined;
   lastUsage: ThreadTokenUsageSnapshot | undefined;
   sessionId: string | undefined;
   sessionFile: string | undefined;

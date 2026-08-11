@@ -38,6 +38,12 @@ layer("ProjectionCatalogQuery", (it) => {
         projectId: "project-b",
       });
 
+      const defaultPage = yield* query.getStartupProjectCatalog({});
+      assert.deepEqual(
+        defaultPage.projects.map((project) => project.id),
+        ["project-a"],
+      );
+
       const prioritized = yield* query.getStartupProjectCatalog({
         limit: 2,
         priorityProjectId: ProjectId.makeUnsafe("project-c"),

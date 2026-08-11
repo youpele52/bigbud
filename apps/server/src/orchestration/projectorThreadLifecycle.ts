@@ -99,6 +99,7 @@ export function projectThreadCreated(
         worktreePath: payload.worktreePath,
         latestTurn: null,
         queuedPrompts: [],
+        pendingInterruptFlushIntent: null,
         createdAt: payload.createdAt,
         updatedAt: payload.updatedAt,
         archivedAt: null,

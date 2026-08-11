@@ -32,6 +32,7 @@ export interface ServerDerivedPaths {
   readonly providerEventLogPath: string;
   readonly terminalLogsDir: string;
   readonly anonymousIdPath: string;
+  readonly pluginsDir?: string;
 }
 
 /**
@@ -90,6 +91,7 @@ export const deriveServerPaths = Effect.fn(function* (
     providerEventLogPath: join(providerLogsDir, "events.log"),
     terminalLogsDir: join(logsDir, "terminals"),
     anonymousIdPath: join(stateDir, "anonymous-id"),
+    pluginsDir: join(stateDir, "plugins"),
   };
 });
 
@@ -109,6 +111,9 @@ export const ensureServerDirectories = Effect.fn(function* (derivedPaths: Server
       fs.makeDirectory(path.dirname(derivedPaths.keybindingsConfigPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.settingsPath), { recursive: true }),
       fs.makeDirectory(path.dirname(derivedPaths.anonymousIdPath), { recursive: true }),
+      fs.makeDirectory(derivedPaths.pluginsDir ?? path.join(derivedPaths.stateDir, "plugins"), {
+        recursive: true,
+      }),
     ],
     { concurrency: "unbounded" },
   );

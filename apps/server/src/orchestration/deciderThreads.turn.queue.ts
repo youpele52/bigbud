@@ -155,6 +155,15 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   }
 
   if (!safelyIdle) return [];
+  const pendingIntent = thread.pendingInterruptFlushIntent;
+  if (
+    pendingIntent !== null &&
+    pendingIntent !== undefined &&
+    (pendingIntent.queuedPromptIds.length !== command.messageIds.length ||
+      pendingIntent.queuedPromptIds.some((id, index) => id !== command.messageIds[index]))
+  ) {
+    return [];
+  }
   const prefix = (thread.queuedPrompts ?? []).slice(0, command.messageIds.length);
   if (
     prefix.length !== command.messageIds.length ||

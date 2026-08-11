@@ -1,110 +1,38 @@
-import type { ModelCapabilities, OpencodeSettings, ServerProviderModel } from "@bigbud/contracts";
-import { ChildProcess } from "effect/unstable/process";
-import { Cache, Duration, Effect, Equal, Layer, Result, Stream } from "effect";
-import type { OpencodeClient } from "@opencode-ai/sdk/v2";
+import type { OpencodeSettings, ServerProvider, ServerProviderModel } from "@bigbud/contracts";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { Effect, Equal, Layer, Result, Stream } from "effect";
 
 import {
+  buildInstalledProviderAvailability,
   buildServerProvider,
+  classifyProviderExecutionFailure,
   providerModelsFromSettings,
   type ProviderProbeResult,
 } from "../../providerSnapshot";
 import { spawnAndCollect } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
+import {
+  enrichManagedServerCatalog,
+  resolveManagedServerCatalog,
+} from "../../managedServerCatalog";
+import {
+  loadManagedServerFallbackModels,
+  MANAGED_SERVER_EMPTY_MODEL_CAPABILITIES as EMPTY_MODEL_CAPABILITIES,
+  managedServerBuiltInModels,
+} from "../../managedServerCatalogFallback";
+import {
+  MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT,
+  withManagedServerProbe,
+} from "../../managedServerProbe.ts";
 import { OpencodeProvider } from "../../Services/Opencode/Provider";
 import { OpencodeServerManager } from "../../Services/Opencode/ServerManager";
 import { ServerSettingsService } from "../../../ws/serverSettings";
-import { ProviderAdapterProcessError } from "../../Errors";
-import { getSubProviderDisplayName } from "../../subProviderDisplayNames";
 import { listOpencodeProviders } from "./Provider.sdk";
 import { isVersionAtLeast } from "./Provider.version";
 
 const PROVIDER = "opencode" as const;
 const MINIMUM_OPENCODE_VERSION = "1.14.19";
-const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
-
-/** Fallback models when the SDK is unreachable or hasn't been configured yet. */
-const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
-  {
-    slug: "claude-sonnet-4-6",
-    name: "Claude Sonnet 4.6",
-    isCustom: false,
-    group: "Anthropic",
-    capabilities: {
-      ...EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: [
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-    },
-  },
-  {
-    slug: "claude-haiku-4-5",
-    name: "Claude Haiku 4.5",
-    isCustom: false,
-    group: "Anthropic",
-    capabilities: EMPTY_MODEL_CAPABILITIES,
-  },
-  {
-    slug: "claude-opus-4-6",
-    name: "Claude Opus 4.6",
-    isCustom: false,
-    group: "Anthropic",
-    capabilities: {
-      ...EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: [
-        { value: "high", label: "High", isDefault: true },
-        { value: "medium", label: "Medium" },
-        { value: "low", label: "Low" },
-      ],
-    },
-  },
-];
-
-/**
- * Map an OpenCode SDK model to a `ServerProviderModel`.
- *
- * The SDK model shape is:
- * ```ts
- * { id, name, capabilities: { reasoning, ... }, ... }
- * ```
- * @param providerName - Human-readable sub-provider name (e.g. "Anthropic", "OpenAI") used for UI grouping.
- */
-function mapOpencodeModel(
-  model: {
-    id: string;
-    providerID: string;
-    name: string;
-    capabilities?: { reasoning?: boolean };
-  },
-  providerName: string,
-): ServerProviderModel {
-  const supportsReasoning = model.capabilities?.reasoning === true;
-  const modelName = model.name.trim();
-  return {
-    slug: model.id,
-    name: modelName.length > 0 ? modelName : model.id,
-    isCustom: false,
-    group: getSubProviderDisplayName(providerName),
-    subProviderID: model.providerID,
-    capabilities: {
-      ...EMPTY_MODEL_CAPABILITIES,
-      reasoningEffortLevels: supportsReasoning
-        ? [
-            { value: "high", label: "High", isDefault: true },
-            { value: "medium", label: "Medium" },
-            { value: "low", label: "Low" },
-          ]
-        : [],
-    },
-  };
-}
+const BUILT_IN_MODELS = managedServerBuiltInModels(PROVIDER);
 
 const getOpencodeVersion = Effect.fn("getOpencodeVersion")(function* (binaryPath: string) {
   const result = yield* spawnAndCollect(
@@ -122,42 +50,6 @@ const getOpencodeVersion = Effect.fn("getOpencodeVersion")(function* (binaryPath
   }
   return result.stdout.trim() || result.stderr.trim();
 });
-
-/**
- * Acquire a handle from the shared OpenCode server manager, run `f`, then
- * release the handle.  Reuses a running server if one is already active.
- */
-const withOpencodeServer = <A>(
-  binaryPath: string,
-  f: (client: OpencodeClient) => Promise<A>,
-): Effect.Effect<A, ProviderAdapterProcessError, OpencodeServerManager> =>
-  Effect.gen(function* () {
-    const manager = yield* OpencodeServerManager;
-    return yield* Effect.acquireUseRelease(
-      Effect.tryPromise({
-        try: () => manager.acquire({ binaryPath }),
-        catch: (cause) =>
-          new ProviderAdapterProcessError({
-            provider: PROVIDER,
-            threadId: "provider-check",
-            detail: cause instanceof Error ? cause.message : String(cause),
-            cause,
-          }),
-      }),
-      (handle) =>
-        Effect.tryPromise({
-          try: () => f(handle.client),
-          catch: (cause) =>
-            new ProviderAdapterProcessError({
-              provider: PROVIDER,
-              threadId: "provider-check",
-              detail: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        }),
-      (handle) => Effect.sync(() => handle.release()),
-    );
-  });
 
 function makeInitialOpencodeSnapshot(settings: OpencodeSettings) {
   const checkedAt = new Date().toISOString();
@@ -199,175 +91,222 @@ function makeInitialOpencodeSnapshot(settings: OpencodeSettings) {
   });
 }
 
-export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatus")(function* () {
-  const opencodeSettings = yield* Effect.service(ServerSettingsService).pipe(
-    Effect.flatMap((service) => service.getSettings),
-    Effect.map((settings) => settings.providers.opencode),
-  );
-  const checkedAt = new Date().toISOString();
-  const builtInModels = providerModelsFromSettings(
-    BUILT_IN_MODELS,
-    PROVIDER,
-    opencodeSettings.customModels,
-    EMPTY_MODEL_CAPABILITIES,
-  );
-
-  if (!opencodeSettings.enabled) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: false,
-      checkedAt,
-      models: builtInModels,
-      probe: {
-        installed: false,
-        version: null,
-        status: "warning",
-        auth: { status: "unknown" },
-        message: "OpenCode is disabled in bigbud settings.",
-      },
-    });
-  }
-
-  const versionResult = yield* getOpencodeVersion(opencodeSettings.binaryPath).pipe(Effect.result);
-
-  if (Result.isFailure(versionResult)) {
-    const message =
-      versionResult.failure instanceof Error
-        ? versionResult.failure.message
-        : String(versionResult.failure);
-    const missing =
-      message.toLowerCase().includes("enoent") || message.toLowerCase().includes("not found");
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: opencodeSettings.enabled,
-      checkedAt,
-      models: builtInModels,
-      probe: {
-        installed: !missing,
-        version: null,
-        status: "error",
-        auth: { status: "unknown" },
-        message: missing
-          ? "OpenCode binary is not installed or not on PATH."
-          : `Failed to execute OpenCode version check: ${message}`,
-      },
-    });
-  }
-
-  const opencodeVersion = versionResult.success;
-  if (!isVersionAtLeast(opencodeVersion, MINIMUM_OPENCODE_VERSION)) {
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: opencodeSettings.enabled,
-      checkedAt,
-      models: builtInModels,
-      probe: {
-        installed: true,
-        version: opencodeVersion,
-        status: "error",
-        auth: { status: "unknown" },
-        message: `OpenCode ${MINIMUM_OPENCODE_VERSION} or newer is required. Found ${opencodeVersion}.`,
-      },
-    });
-  }
-
-  const statusResult = yield* withOpencodeServer(opencodeSettings.binaryPath, async (client) => {
-    const providers = await listOpencodeProviders(client);
-    const hasConfiguredProviders = providers.some(
-      (p) => p.models && Object.keys(p.models).length > 0,
+export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatus")(
+  function* (options?: {
+    readonly availabilityOnly?: boolean;
+    readonly invalidateOnRunFailure?: boolean;
+    readonly fallbackModels?: ReadonlyArray<ServerProviderModel>;
+    readonly fallbackSource?: string;
+  }) {
+    const opencodeSettings = yield* Effect.service(ServerSettingsService).pipe(
+      Effect.flatMap((service) => service.getSettings),
+      Effect.map((settings) => settings.providers.opencode),
+    );
+    const checkedAt = new Date().toISOString();
+    const builtInModels = providerModelsFromSettings(
+      options?.fallbackModels ?? BUILT_IN_MODELS,
+      PROVIDER,
+      opencodeSettings.customModels,
+      EMPTY_MODEL_CAPABILITIES,
     );
 
-    // Collect all models from all providers, preserving sub-provider name for UI grouping
-    const sdkModels: ServerProviderModel[] = [];
-    for (const provider of providers) {
-      if (!provider.models) continue;
-      for (const model of Object.values(provider.models)) {
-        sdkModels.push(mapOpencodeModel(model, provider.name));
-      }
+    if (!opencodeSettings.enabled) {
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: false,
+        checkedAt,
+        models: builtInModels,
+        probe: {
+          installed: false,
+          version: null,
+          status: "warning",
+          auth: { status: "unknown" },
+          message: "OpenCode is disabled in bigbud settings.",
+        },
+      });
     }
 
-    const resolvedModels =
-      sdkModels.length > 0
-        ? [
-            ...sdkModels,
-            ...providerModelsFromSettings(
-              [],
-              PROVIDER,
-              opencodeSettings.customModels,
-              EMPTY_MODEL_CAPABILITIES,
-            ),
-          ]
-        : builtInModels;
+    const versionResult = yield* getOpencodeVersion(opencodeSettings.binaryPath).pipe(
+      Effect.result,
+    );
 
-    const probe: ProviderProbeResult = {
-      installed: true,
-      version: null,
-      status: hasConfiguredProviders ? "ready" : "error",
-      auth: {
-        status: hasConfiguredProviders ? "authenticated" : "unauthenticated",
-      },
-      ...(!hasConfiguredProviders
-        ? {
-            message:
-              "No providers configured in OpenCode. Run `opencode auth` to set up provider credentials.",
-          }
-        : {}),
-    };
+    if (Result.isFailure(versionResult)) {
+      const message =
+        versionResult.failure instanceof Error
+          ? versionResult.failure.message
+          : String(versionResult.failure);
+      const failure = classifyProviderExecutionFailure({
+        message,
+        binaryPath: opencodeSettings.binaryPath,
+        defaultBinaryPath: "opencode",
+      });
+      const missing =
+        failure.reason === "command-not-found" || failure.reason === "invalid-binary-path";
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: opencodeSettings.enabled,
+        checkedAt,
+        models: builtInModels,
+        probe: {
+          installed: !missing,
+          version: null,
+          status: "error",
+          auth: { status: "unknown" },
+          failure,
+          message:
+            failure.reason === "invalid-binary-path"
+              ? "The configured OpenCode binary path is invalid."
+              : missing
+                ? "OpenCode binary is not installed or not on PATH."
+                : `Failed to execute OpenCode version check: ${message}`,
+        },
+      });
+    }
 
-    return buildServerProvider({
+    const opencodeVersion = versionResult.success;
+    if (!isVersionAtLeast(opencodeVersion, MINIMUM_OPENCODE_VERSION)) {
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: opencodeSettings.enabled,
+        checkedAt,
+        models: builtInModels,
+        probe: {
+          installed: true,
+          version: opencodeVersion,
+          status: "error",
+          auth: { status: "unknown" },
+          failure: { classification: "user-action-required", reason: "unsupported-version" },
+          message: `OpenCode ${MINIMUM_OPENCODE_VERSION} or newer is required. Found ${opencodeVersion}.`,
+        },
+      });
+    }
+
+    const statusResult = yield* withManagedServerProbe<ServerProvider>({
       provider: PROVIDER,
-      enabled: opencodeSettings.enabled,
-      checkedAt,
-      models: resolvedModels,
-      probe,
-    });
-  }).pipe(Effect.result);
+      binaryPath: opencodeSettings.binaryPath,
+      ...(options?.invalidateOnRunFailure === undefined
+        ? {}
+        : { invalidateOnRunFailure: options.invalidateOnRunFailure }),
+      run:
+        options?.availabilityOnly === true
+          ? async () =>
+              buildInstalledProviderAvailability({
+                provider: PROVIDER,
+                version: opencodeVersion,
+                checkedAt,
+                models: builtInModels,
+                message: "OpenCode is installed and ready.",
+                modelDiscovery: {
+                  status: "live",
+                  source: options?.fallbackSource ?? "bundled-fallback",
+                  durationMs: 0,
+                },
+              })
+          : async (client) => {
+              const providers = await listOpencodeProviders(client);
+              const catalog = resolveManagedServerCatalog({
+                provider: PROVIDER,
+                providers,
+                customModels: opencodeSettings.customModels,
+                builtInModels,
+                emptyCapabilities: EMPTY_MODEL_CAPABILITIES,
+              });
 
-  if (Result.isFailure(statusResult)) {
-    const message = statusResult.failure.message;
-    const missing =
-      message.toLowerCase().includes("enoent") || message.toLowerCase().includes("not found");
-    return buildServerProvider({
-      provider: PROVIDER,
-      enabled: opencodeSettings.enabled,
-      checkedAt,
-      models: builtInModels,
-      probe: {
-        installed: !missing,
-        version: opencodeVersion,
-        status: "error",
-        auth: { status: "unknown" },
-        message: missing
-          ? "OpenCode binary is not installed or not on PATH."
-          : `Failed to execute OpenCode health check: ${message}`,
-      },
-    });
-  }
+              const probe: ProviderProbeResult = {
+                installed: true,
+                version: null,
+                status: catalog.configured ? "ready" : "error",
+                auth: {
+                  status: catalog.configured ? "authenticated" : "unauthenticated",
+                },
+                ...(!catalog.configured
+                  ? {
+                      failure: {
+                        classification: "user-action-required",
+                        reason: "configuration-required",
+                      },
+                      message:
+                        "No providers configured in OpenCode. Run `opencode auth` to set up provider credentials.",
+                    }
+                  : {}),
+              };
 
-  return statusResult.success;
-});
+              return buildServerProvider({
+                provider: PROVIDER,
+                enabled: opencodeSettings.enabled,
+                checkedAt,
+                models: catalog.models,
+                modelDiscovery: {
+                  status: "live",
+                  source: "opencode-provider-catalog",
+                  durationMs: 0,
+                },
+                probe,
+              });
+            },
+    }).pipe(Effect.result);
+
+    if (Result.isFailure(statusResult)) {
+      const message = statusResult.failure.message;
+      const failure = classifyProviderExecutionFailure({
+        message,
+        binaryPath: opencodeSettings.binaryPath,
+        defaultBinaryPath: "opencode",
+      });
+      const missing =
+        failure.reason === "command-not-found" || failure.reason === "invalid-binary-path";
+      return buildServerProvider({
+        provider: PROVIDER,
+        enabled: opencodeSettings.enabled,
+        checkedAt,
+        models: builtInModels,
+        probe: {
+          installed: !missing,
+          version: opencodeVersion,
+          status: "error",
+          auth: { status: "unknown" },
+          failure,
+          message:
+            failure.reason === "invalid-binary-path"
+              ? "The configured OpenCode binary path is invalid."
+              : missing
+                ? "OpenCode binary is not installed or not on PATH."
+                : `Failed to execute OpenCode health check: ${message}`,
+        },
+      });
+    }
+
+    return statusResult.success;
+  },
+);
 
 export const OpencodeProviderLive = Layer.effect(
   OpencodeProvider,
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettingsService;
     const serverManager = yield* OpencodeServerManager;
+    const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const initialSettings = yield* serverSettings.getSettings.pipe(
       Effect.map((settings) => settings.providers.opencode),
     );
-    const snapshotCache = yield* Cache.make({
-      capacity: 1,
-      timeToLive: Duration.minutes(1),
-      lookup: () =>
-        checkOpencodeProviderStatus().pipe(
-          Effect.provideService(ServerSettingsService, serverSettings),
-          Effect.provideService(OpencodeServerManager, serverManager),
-        ),
-    });
-
-    const checkProvider = Cache.get(snapshotCache, "opencode").pipe(
+    const fallback = yield* loadManagedServerFallbackModels(PROVIDER);
+    const checkProvider = checkOpencodeProviderStatus({
+      availabilityOnly: true,
+      fallbackModels: fallback.models,
+      fallbackSource: fallback.source,
+    }).pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+    );
+    const catalogProviderCheck = checkOpencodeProviderStatus({
+      invalidateOnRunFailure: false,
+      fallbackModels: fallback.models,
+      fallbackSource: fallback.source,
+    }).pipe(
+      Effect.provideService(ServerSettingsService, serverSettings),
+      Effect.provideService(OpencodeServerManager, serverManager),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
     );
 
     return yield* makeManagedServerProvider<OpencodeSettings>({
@@ -380,7 +319,19 @@ export const OpencodeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      checkProviderAtStartup: checkProvider,
+      enrichSnapshot: ({ snapshot, publishSnapshot }) =>
+        snapshot.enabled && snapshot.status === "ready"
+          ? enrichManagedServerCatalog({
+              provider: PROVIDER,
+              baseSnapshot: snapshot,
+              catalogSnapshot: catalogProviderCheck,
+              publishSnapshot,
+            })
+          : Effect.void,
+      preserveEnrichedSnapshot: true,
       initialSnapshot: makeInitialOpencodeSnapshot(initialSettings),
+      probeTimeout: MANAGED_SERVER_PROVIDER_PROBE_TIMEOUT,
     });
   }),
 );

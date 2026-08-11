@@ -36,6 +36,14 @@ import {
 } from "./rpc.automation";
 import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
 import {
+  WsPluginsGetRpc,
+  WsPluginsInstallRpc,
+  WsPluginsListCatalogRpc,
+  WsPluginsRefreshCatalogRpc,
+  WsPluginsUninstallRpc,
+  WsPluginsUpdateRpc,
+} from "./rpc.plugins";
+import {
   WsServerGetThreadRetentionRunRpc,
   WsServerListThreadRetentionRunsRpc,
   WsServerPreviewThreadRetentionRpc,
@@ -119,9 +127,17 @@ export * from "./rpc.core";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
+export * from "./plugins";
+export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsPluginsListCatalogRpc,
+  WsPluginsGetRpc,
+  WsPluginsRefreshCatalogRpc,
+  WsPluginsInstallRpc,
+  WsPluginsUpdateRpc,
+  WsPluginsUninstallRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
   WsServerActivateCliProxyRpc,

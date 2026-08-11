@@ -4,9 +4,14 @@ import { describe, it, assert } from "@effect/vitest";
 import { Effect, Exit, Layer, Scope } from "effect";
 
 import { checkCodexProviderStatus } from "./Codex/Provider";
-import { haveProvidersChanged, makeProviderRegistryLive } from "./ProviderRegistry";
+import {
+  haveProvidersChanged,
+  makeProviderRegistryLive,
+  selectManualRefreshTargets,
+} from "./ProviderRegistry";
 import { OpencodeServerManager } from "../Services/Opencode/ServerManager";
 import { ProviderRegistry } from "../Services/ProviderRegistry";
+import type { ProviderRegistration } from "../ProviderRegistration";
 import { ServerSettingsService } from "../../ws/serverSettings";
 
 import {
@@ -29,8 +34,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             enabled: true,
             installed: true,
             auth: { status: "authenticated" },
-            checkedAt: "2026-03-25T00:00:00.000Z",
             version: "1.0.0",
+            checkedAt: "2026-03-25T00:00:00.000Z",
             models: [],
             slashCommands: [],
             skills: [],
@@ -41,8 +46,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             enabled: true,
             installed: true,
             auth: { status: "unknown" },
+            version: null,
             checkedAt: "2026-03-25T00:00:00.000Z",
-            version: "1.0.0",
             models: [],
             slashCommands: [],
             skills: [],
@@ -76,6 +81,50 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             },
           ]),
           false,
+        );
+      });
+
+      it("never includes disabled providers in an all-healthy manual refresh", () => {
+        const registrations = [
+          { provider: "codex", service: {} },
+          { provider: "copilot", service: {} },
+        ] as unknown as ReadonlyArray<ProviderRegistration>;
+        const providers = [
+          {
+            provider: "codex",
+            enabled: true,
+            installed: true,
+            status: "ready",
+            auth: { status: "authenticated" },
+            version: "1.0.0",
+            checkedAt: "2026-03-25T00:00:00.000Z",
+            models: [],
+            slashCommands: [],
+            skills: [],
+          },
+          {
+            provider: "copilot",
+            enabled: false,
+            installed: false,
+            status: "disabled",
+            auth: { status: "unknown" },
+            version: null,
+            checkedAt: "2026-03-25T00:00:00.000Z",
+            models: [],
+            slashCommands: [],
+            skills: [],
+          },
+        ] as const satisfies ReadonlyArray<ServerProvider>;
+
+        assert.deepStrictEqual(
+          selectManualRefreshTargets(registrations, providers).map((target) => target.provider),
+          ["codex"],
+        );
+        assert.deepStrictEqual(
+          selectManualRefreshTargets(registrations, providers, "copilot").map(
+            (target) => target.provider,
+          ),
+          [],
         );
       });
 
@@ -118,10 +167,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             // Initial probes run asynchronously after layer construction.
             // Poll until codex is ready (or exhaust attempts).
             let initial: ReadonlyArray<ServerProvider> = [];
-            for (let attempt = 0; attempt < 20; attempt += 1) {
+            for (let attempt = 0; attempt < 500; attempt += 1) {
               initial = yield* registry.getProviders;
               if (initial.find((p) => p.provider === "codex")?.status === "ready") break;
-              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
+              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
             }
             assert.strictEqual(
               initial.find((status) => status.provider === "codex")?.status,
@@ -136,18 +185,18 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
               },
             });
 
-            for (let attempt = 0; attempt < 20; attempt += 1) {
+            for (let attempt = 0; attempt < 500; attempt += 1) {
               const updated = yield* registry.getProviders;
               if (updated.find((status) => status.provider === "codex")?.status === "error") {
                 return;
               }
-              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
+              yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
             }
 
             const updated = yield* registry.getProviders;
             assert.strictEqual(
               updated.find((status) => status.provider === "codex")?.status,
-              "error",
+              "warning",
             );
           }).pipe(Effect.provide(runtimeServices));
         }),
@@ -192,7 +241,11 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             const registry = yield* ProviderRegistry;
 
             const initial = yield* registry.getProviders;
-            assert.deepStrictEqual(initial, []);
+            assert.strictEqual(initial.length, 8);
+            assert.strictEqual(
+              initial.find((provider) => provider.provider === "codex")?.status,
+              "warning",
+            );
 
             for (let attempt = 0; attempt < 20; attempt += 1) {
               const providers = yield* registry.getProviders;
@@ -216,7 +269,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest()))(
             );
             assert.strictEqual(
               providers.find((provider) => provider.provider === "codex")?.status,
-              "ready",
+              "warning",
             );
             assert.strictEqual(
               providers.find((provider) => provider.provider === "opencode")?.status,

@@ -9,7 +9,7 @@ import { render } from "vitest-browser-react";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
-import { AboutSettingsPanel, AiSettingsPanel } from "./SettingsPanels";
+import { AboutSettingsPanel, AiSettingsPanel, ProvidersSettingsPanel } from "./SettingsPanels";
 
 function createBaseServerConfig(): ServerConfig {
   return {
@@ -82,13 +82,11 @@ describe("AboutSettingsPanel observability", () => {
     resetServerStateForTests();
     __resetNativeApiForTests();
     localStorage.clear();
-    document.body.innerHTML = "";
   });
 
   afterEach(() => {
     resetServerStateForTests();
     __resetNativeApiForTests();
-    document.body.innerHTML = "";
   });
 
   it("shows diagnostics inside About with a single logs-folder action", async () => {
@@ -147,13 +145,11 @@ describe("AiSettingsPanel defaults", () => {
     resetServerStateForTests();
     __resetNativeApiForTests();
     localStorage.clear();
-    document.body.innerHTML = "";
   });
 
   afterEach(() => {
     resetServerStateForTests();
     __resetNativeApiForTests();
-    document.body.innerHTML = "";
   });
 
   it("renders stream replies and stream thinking enabled by default", async () => {
@@ -178,7 +174,7 @@ describe("AiSettingsPanel defaults", () => {
 
     await renderAiSettingsPanel();
 
-    const trigger = page.getByLabelText("Default agent browser");
+    const trigger = page.getByLabelText("Default agent browser", { exact: true });
     await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
     await expect
       .element(
@@ -197,5 +193,68 @@ describe("AiSettingsPanel defaults", () => {
     await page.getByLabelText("Reset default agent browser to default").click();
     expect(updateSettings).toHaveBeenLastCalledWith({ agentBrowserPreference: "bigbud" });
     await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
+  });
+});
+
+describe("ProvidersSettingsPanel route expansion", () => {
+  beforeEach(() => {
+    resetServerStateForTests();
+    __resetNativeApiForTests();
+    localStorage.clear();
+    setServerConfigSnapshot(createBaseServerConfig());
+  });
+
+  afterEach(() => {
+    resetServerStateForTests();
+    __resetNativeApiForTests();
+  });
+
+  it("opens exactly the provider cards named by a direct route search", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await render(
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          <ProvidersSettingsPanel expandedProviders={["opencode", "kilocode"]} />
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    await vi.waitFor(() => {
+      expect(document.getElementById("provider-install-opencode-binary-path")).not.toBeNull();
+      expect(document.getElementById("provider-install-kilocode-binary-path")).not.toBeNull();
+      expect(document.getElementById("provider-install-codex-binary-path")).toBeNull();
+    });
+  });
+
+  it("applies affected providers when preserved search is restored by history navigation", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const screen = await render(
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          <ProvidersSettingsPanel expandedProviders={[]} />
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    try {
+      await screen.rerender(
+        <QueryClientProvider client={queryClient}>
+          <AppAtomRegistryProvider>
+            <ProvidersSettingsPanel expandedProviders={["opencode"]} />
+          </AppAtomRegistryProvider>
+        </QueryClientProvider>,
+      );
+
+      await vi.waitFor(() => {
+        expect(document.getElementById("provider-install-opencode-binary-path")).not.toBeNull();
+        expect(document.getElementById("provider-install-kilocode-binary-path")).toBeNull();
+      });
+    } finally {
+      await screen.unmount();
+    }
   });
 });

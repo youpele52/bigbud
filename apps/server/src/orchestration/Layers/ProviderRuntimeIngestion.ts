@@ -7,7 +7,7 @@
  *
  * @module ProviderRuntimeIngestion
  */
-import { Effect, Layer, Option, Scope, Stream } from "effect";
+import { Clock, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
 import { Cause } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 
@@ -29,7 +29,14 @@ import {
   type RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
 import { makeRuntimeProcessorCacheHelpers } from "./ProviderRuntimeIngestion.cache.ts";
-import { buildStartupReconciliationCommands } from "./ProviderRuntimeIngestion.reconcile.ts";
+import {
+  buildStartupReconciliationCommands,
+  buildThreadReconciliationCommand,
+} from "./ProviderRuntimeIngestion.reconcile.ts";
+import {
+  makePeriodicReconciliationState,
+  selectPeriodicReconciliationThreads,
+} from "./ProviderRuntimeIngestion.periodic.ts";
 import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { PurgeJobRepository } from "../../persistence/Services/PurgeJobRepository.ts";
 
@@ -72,6 +79,8 @@ const make = Effect.fn("make")(function* () {
     );
   const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionInput>>();
   const outerScope = yield* Effect.scope;
+  let reconciliationPassRunning = false;
+  const periodicReconciliationState = makePeriodicReconciliationState();
 
   const getOrCreateThreadWorker = (threadId: string) => {
     const existing = threadWorkers.get(threadId);
@@ -128,6 +137,61 @@ const make = Effect.fn("make")(function* () {
     },
   );
 
+  const reconcileActiveThreadSessions = Effect.fn("reconcileActiveThreadSessions")(function* () {
+    if (reconciliationPassRunning) return;
+    reconciliationPassRunning = true;
+    yield* Effect.ensuring(
+      Effect.gen(function* () {
+        const [readModel, liveSessions] = yield* Effect.all([
+          orchestrationEngine.getReadModel(),
+          providerService.listSessions(),
+        ]);
+        const sessionsByThreadId = new Map(
+          liveSessions.map((session) => [session.threadId, session]),
+        );
+        const observedAt = yield* Clock.currentTimeMillis;
+        const commands = selectPeriodicReconciliationThreads(
+          readModel.threads,
+          periodicReconciliationState,
+        ).flatMap((thread) => {
+          const liveSession = sessionsByThreadId.get(thread.id);
+          if (liveSession !== undefined) {
+            periodicReconciliationState.missingSessionObservedAt.delete(thread.id);
+          } else if (thread.session !== null && thread.session !== undefined) {
+            const firstMissingAt = periodicReconciliationState.missingSessionObservedAt.get(
+              thread.id,
+            );
+            if (firstMissingAt === undefined) {
+              periodicReconciliationState.missingSessionObservedAt.set(thread.id, observedAt);
+              return [];
+            }
+            if (observedAt - firstMissingAt < 5_000) return [];
+          }
+          const command = buildThreadReconciliationCommand({
+            thread,
+            liveSession,
+            occurredAt: new Date().toISOString(),
+          });
+          return command ? [command] : [];
+        });
+        yield* Effect.forEach(commands, (command) => orchestrationEngine.dispatch(command), {
+          concurrency: 4,
+        });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("provider runtime periodic reconciliation failed", {
+                cause: Cause.pretty(cause),
+              }),
+        ),
+      ),
+      Effect.sync(() => {
+        reconciliationPassRunning = false;
+      }),
+    );
+  });
+
   const start: ProviderRuntimeIngestionShape["start"] = Effect.fn("start")(function* () {
     yield* reconcileThreadSessionsAtStartup().pipe(
       Effect.catchCause((cause) =>
@@ -142,6 +206,9 @@ const make = Effect.fn("make")(function* () {
           Effect.flatMap((worker) => worker.enqueue({ source: "runtime", event })),
         ),
       ),
+    );
+    yield* Effect.forkScoped(
+      reconcileActiveThreadSessions().pipe(Effect.repeat(Schedule.fixed("5 seconds"))),
     );
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {

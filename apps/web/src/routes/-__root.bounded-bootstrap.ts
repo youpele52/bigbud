@@ -3,10 +3,11 @@ import {
   STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
   STARTUP_PROJECT_CATALOG_MAX_LIMIT,
   ThreadId,
+  type ProjectId,
   type GetProjectThreadSummariesResult,
+  type GetSelectedThreadDetailResult,
   type GetStartupProjectCatalogResult,
 } from "@bigbud/contracts";
-import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
@@ -16,6 +17,9 @@ import {
 } from "../logic/orchestration/thread-hydration-events.logic";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
+type ProjectCatalogCursor = NonNullable<GetStartupProjectCatalogResult["nextCursor"]>;
+
+const PROJECT_CATALOG_PAGE_LIMIT = 5;
 
 export function resolveSelectedThreadIdFromPath(
   pathname: string,
@@ -38,65 +42,83 @@ export async function runBoundedBootstrap(input: {
   disposed: () => boolean;
 }): Promise<number> {
   const sequences: number[] = [];
-  let selectedDetail = null;
+  let selectedDetail: GetSelectedThreadDetailResult | null = null;
   let selectedDetailError: unknown = null;
   const hydrationToken =
     input.selectedThreadId === null
       ? null
       : threadHydrationEventBuffer.begin(input.selectedThreadId);
+  const sidebarCatalogPromise = input.api.orchestration.getSidebarThreadCatalog();
+  const selectedDetailPromise =
+    input.selectedThreadId === null
+      ? null
+      : (useStore.getState().setThreadHydration(input.selectedThreadId, { status: "loading" }),
+        input.api.orchestration.getSelectedThreadDetail({ threadId: input.selectedThreadId }));
 
-  if (input.selectedThreadId !== null) {
-    useStore.getState().setThreadHydration(input.selectedThreadId, { status: "loading" });
-    try {
-      selectedDetail = await input.api.orchestration.getSelectedThreadDetail({
-        threadId: input.selectedThreadId,
-      });
-      sequences.push(selectedDetail.projectionSequence);
-    } catch (error) {
-      selectedDetailError = error;
-    }
-  }
-
-  let catalog: GetStartupProjectCatalogResult;
-  let sidebarCatalog: GetSidebarThreadCatalogResult;
-  const pages: GetProjectThreadSummariesResult[] = [];
   try {
-    sidebarCatalog = await input.api.orchestration.getSidebarThreadCatalog();
-    sequences.push(sidebarCatalog.projectionSequence);
-    const firstCatalogPage = await input.api.orchestration.getStartupProjectCatalog({
-      limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
-      ...(selectedDetail ? { priorityProjectId: selectedDetail.projectId } : {}),
-    });
-    sequences.push(firstCatalogPage.projectionSequence);
-
-    const projectsById = new Map(firstCatalogPage.projects.map((project) => [project.id, project]));
-    let cursor = firstCatalogPage.nextCursor;
-    while (cursor !== undefined) {
-      const page = await input.api.orchestration.getStartupProjectCatalog({
-        limit: STARTUP_PROJECT_CATALOG_MAX_LIMIT,
-        cursor,
-      });
-      sequences.push(page.projectionSequence);
-      for (const project of page.projects) {
-        projectsById.set(project.id, project);
+    if (selectedDetailPromise !== null) {
+      try {
+        selectedDetail = await selectedDetailPromise;
+        sequences.push(selectedDetail.projectionSequence);
+      } catch (error) {
+        selectedDetailError = error;
       }
-      cursor = page.nextCursor;
     }
-    catalog = {
-      projectionSequence: firstCatalogPage.projectionSequence,
-      projects: [...projectsById.values()],
-    };
 
-    for (const project of firstCatalogPage.projects) {
-      const page = await input.api.orchestration.getProjectThreadSummaries({
-        projectId: project.id,
-        limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
-        ...(selectedDetail?.projectId === project.id && input.selectedThreadId
-          ? { priorityThreadId: input.selectedThreadId }
-          : {}),
-      });
-      pages.push(page);
-      sequences.push(page.projectionSequence);
+    const [sidebarCatalog, catalog] = await Promise.all([
+      sidebarCatalogPromise,
+      input.api.orchestration.getStartupProjectCatalog({
+        limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+        ...(selectedDetail ? { priorityProjectId: selectedDetail.projectId } : {}),
+      }),
+    ]);
+    sequences.push(sidebarCatalog.projectionSequence, catalog.projectionSequence);
+
+    const selectedProjectId = selectedDetail?.projectId;
+    const selectedProjectPage =
+      selectedProjectId !== undefined &&
+      catalog.projects.some((project) => project.id === selectedProjectId)
+        ? await input.api.orchestration.getProjectThreadSummaries({
+            projectId: selectedProjectId,
+            limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
+            priorityThreadId: input.selectedThreadId!,
+          })
+        : null;
+    if (selectedProjectPage) {
+      sequences.push(selectedProjectPage.projectionSequence);
+    }
+
+    if (!input.disposed()) {
+      const store = useStore.getState();
+      store.syncBoundedCatalog(
+        catalog,
+        sidebarCatalog,
+        selectedProjectPage ? [selectedProjectPage] : [],
+      );
+      if (selectedDetail !== null && hydrationToken !== null) {
+        const events = threadHydrationEventBuffer.finish(
+          selectedDetail.threadId,
+          hydrationToken,
+          selectedDetail.projectionSequence,
+        );
+        if (events !== null) {
+          store.syncSelectedThreadDetail(selectedDetail, false);
+          applyReleasedThreadHydrationEvents(events);
+        }
+      } else if (input.selectedThreadId !== null && hydrationToken !== null) {
+        const events = threadHydrationEventBuffer.fail(input.selectedThreadId, hydrationToken);
+        if (events !== null) {
+          store.setThreadHydration(input.selectedThreadId, {
+            status: "failed",
+            error:
+              selectedDetailError instanceof Error
+                ? selectedDetailError.message
+                : "Unable to load the selected thread.",
+            retry: { kind: "initial" },
+          });
+          applyReleasedThreadHydrationEvents(events);
+        }
+      }
     }
   } catch (error) {
     if (input.selectedThreadId !== null && hydrationToken !== null) {
@@ -113,36 +135,104 @@ export async function runBoundedBootstrap(input: {
     throw error;
   }
 
-  if (!input.disposed()) {
-    const store = useStore.getState();
-    store.syncBoundedCatalog(catalog, sidebarCatalog, pages);
-    if (selectedDetail !== null && hydrationToken !== null) {
-      const events = threadHydrationEventBuffer.finish(
-        selectedDetail.threadId,
-        hydrationToken,
-        selectedDetail.projectionSequence,
-      );
-      if (events !== null) {
-        store.syncSelectedThreadDetail(selectedDetail, false);
-        applyReleasedThreadHydrationEvents(events);
-      }
-    } else if (input.selectedThreadId !== null && hydrationToken !== null) {
-      const events = threadHydrationEventBuffer.fail(input.selectedThreadId, hydrationToken);
-      if (events !== null) {
-        store.setThreadHydration(input.selectedThreadId, {
-          status: "failed",
-          error:
-            selectedDetailError instanceof Error
-              ? selectedDetailError.message
-              : "Unable to load the selected thread.",
-          retry: { kind: "initial" },
-        });
-        applyReleasedThreadHydrationEvents(events);
-      }
-    }
+  return Math.min(...sequences);
+}
+
+interface ProjectCatalogPageLoad {
+  readonly cursor: ProjectCatalogCursor;
+  readonly generation: number;
+  readonly limit: number;
+  readonly loadAll: boolean;
+  readonly restartProjectId: ProjectId | null;
+  promise: Promise<void>;
+}
+
+let projectCatalogPageLoad: ProjectCatalogPageLoad | null = null;
+
+export function loadMoreProjectCatalog(input: { api: Api }): Promise<void> {
+  return loadProjectCatalog(input, { limit: PROJECT_CATALOG_PAGE_LIMIT, loadAll: false });
+}
+
+export function loadAllProjectCatalog(input: { api: Api }): Promise<void> {
+  return loadProjectCatalog(input, { limit: STARTUP_PROJECT_CATALOG_MAX_LIMIT, loadAll: true });
+}
+
+function loadProjectCatalog(
+  input: { api: Api },
+  options: { readonly limit: number; readonly loadAll: boolean },
+): Promise<void> {
+  const state = useStore.getState();
+  const cursor = state.projectCatalogCursor;
+  if (cursor === null || cursor === undefined) {
+    return Promise.resolve();
   }
 
-  return Math.min(...sequences);
+  if (
+    projectCatalogPageLoad !== null &&
+    projectCatalogPageLoad.generation === state.projectCatalogGeneration
+  ) {
+    return projectCatalogPageLoad.promise;
+  }
+
+  const request: ProjectCatalogPageLoad = {
+    cursor,
+    generation: state.projectCatalogGeneration,
+    limit: options.limit,
+    loadAll: options.loadAll,
+    restartProjectId:
+      state.projects.length === 1 && state.projects[0]?.id === cursor.projectId
+        ? state.projects[0].id
+        : null,
+    promise: Promise.resolve(),
+  };
+  useStore.getState().setProjectCatalogLoading(true, undefined, request.generation);
+  projectCatalogPageLoad = request;
+  request.promise = loadProjectCatalogPages(input.api, request)
+    .catch((error: unknown) => {
+      useStore
+        .getState()
+        .setProjectCatalogLoading(
+          false,
+          error instanceof Error ? error.message : "Unable to load projects.",
+          request.generation,
+        );
+      throw error;
+    })
+    .finally(() => {
+      if (projectCatalogPageLoad === request) {
+        projectCatalogPageLoad = null;
+      }
+    });
+  return request.promise;
+}
+
+async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad): Promise<void> {
+  let cursor: ProjectCatalogCursor | null = request.cursor;
+  let restartProjectId = request.restartProjectId;
+
+  while (cursor !== null) {
+    const page = await api.orchestration.getStartupProjectCatalog(
+      restartProjectId === null
+        ? { limit: request.limit, cursor }
+        : {
+            limit: Math.min(request.limit + 1, STARTUP_PROJECT_CATALOG_MAX_LIMIT),
+            priorityProjectId: restartProjectId,
+          },
+    );
+    if (useStore.getState().projectCatalogGeneration !== request.generation) {
+      return;
+    }
+
+    const hasMorePages = page.nextCursor !== null && page.nextCursor !== undefined;
+    useStore
+      .getState()
+      .appendProjectCatalogPage(page, request.generation, request.loadAll && hasMorePages);
+    if (!request.loadAll) {
+      return;
+    }
+    cursor = page.nextCursor ?? null;
+    restartProjectId = null;
+  }
 }
 
 export async function loadOlderThreadMessages(input: {

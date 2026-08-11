@@ -38,6 +38,7 @@ describe("Opencode session lifecycle", () => {
           }),
           url: "http://127.0.0.1:4096",
           release() {},
+          invalidate() {},
         };
 
         const methods = makeSessionMethods({
@@ -96,6 +97,7 @@ describe("Opencode session lifecycle", () => {
         client: makeMockOpencodeClient(),
         url: "http://127.0.0.1:4097",
         release() {},
+        invalidate() {},
       };
 
       const methods = makeSessionMethods({

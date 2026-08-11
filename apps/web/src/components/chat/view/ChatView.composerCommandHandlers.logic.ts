@@ -138,6 +138,22 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
         if (applied) setComposerHighlightedItemId(null);
         return;
       }
+      if (item.type === "plugin") {
+        const replacement = `@plugin::${item.name} `;
+        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
+          snapshot.value,
+          trigger.rangeEnd,
+          replacement,
+        );
+        const applied = applyPromptReplacement(
+          trigger.rangeStart,
+          replacementRangeEnd,
+          replacement,
+          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
+        );
+        if (applied) setComposerHighlightedItemId(null);
+        return;
+      }
       if (item.type === "slash-command") {
         if (item.command === "plan" || item.command === "default") {
           void handleInteractionModeChange(item.command === "plan" ? "plan" : "default");
@@ -176,7 +192,12 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
           return;
         }
 
-        if (item.command === "agents" || item.command === "skill" || item.command === "skills") {
+        if (
+          item.command === "agents" ||
+          item.command === "skill" ||
+          item.command === "skills" ||
+          item.command === "plugins"
+        ) {
           const replacement = `/${item.command} `;
           const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
             snapshot.value,
