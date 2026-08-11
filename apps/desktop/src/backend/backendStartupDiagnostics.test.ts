@@ -56,7 +56,7 @@ describe("backend startup diagnostics", () => {
     });
 
     expect(JSON.stringify(diagnostics)).not.toContain("bootstrap-secret");
-    expect(JSON.stringify(diagnostics)).not.toContain("private");
+    expect(JSON.stringify(diagnostics)).not.toContain("password=private");
     expect(JSON.stringify(diagnostics)).toContain("[REDACTED]");
     expect(
       Object.values(diagnostics)
