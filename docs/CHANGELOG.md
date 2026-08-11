@@ -35,10 +35,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Reduced the model picker's initial rendering from ten entries to five, kept incremental loading bounded for very large catalogs, and retained opened provider catalogs across menu reopenings.
 - Merged login-shell and inherited desktop PATH entries, and detected the account login shell when macOS GUI launches do not provide `SHELL`, improving CLI discovery.
 
+### More Reliable Notes and Kanban
+
+- Fixed an intermittent issue that could prevent Notes or Kanban boards from loading when a file reported an invalid modification time. bigbud now uses a safe fallback timestamp instead.
+
 ### Validation
 
 - Added regression coverage for bounded project startup and pagination, on-demand project loading, provider recovery and classification, catalog enrichment, authoritative execution targets, and cursor-safe merging.
 - Added lifecycle, browser, and unit coverage for warm provider servers, recovery notices and Settings links, launch-time provider fallback, desktop environment handling, and bounded rendering of large model catalogs.
+- Added regression coverage for invalid or missing Notes and Kanban file timestamps.
 
 ## v0.2.200 (10 August, 2026)
 
