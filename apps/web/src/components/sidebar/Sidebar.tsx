@@ -85,7 +85,15 @@ export default function Sidebar() {
                   isExpanded={s.areChatsExpanded}
                   onExpandedChange={s.setAreChatsExpanded}
                   showAll={s.showAllChats}
-                  onShowAllChange={s.setShowAllChats}
+                  onShowAllChange={(showAll) => {
+                    s.setShowAllChats(showAll);
+                    if (showAll) s.loadMoreChats();
+                  }}
+                  hasMoreChats={s.hasMoreChats}
+                  collapsedHiddenChatCount={s.collapsedHiddenChatCount}
+                  unloadedChatCount={s.unloadedChatCount}
+                  isLoadingMoreChats={s.isLoadingMoreChats}
+                  onLoadMoreChats={s.loadMoreChats}
                   onNewChat={() => {
                     closeMobileSidebar();
                     void s.handleNewChat();

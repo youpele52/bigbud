@@ -9,7 +9,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
 - Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
 
-## v0.2.201 (11 August, 2026)
+## v0.2.201 (12 August, 2026)
 
 ### Faster Startup and Reliable New Chats
 
@@ -38,6 +38,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### More Reliable Notes and Kanban
 
 - Fixed an intermittent issue that could prevent Notes or Kanban boards from loading when a file reported an invalid modification time. bigbud now uses a safe fallback timestamp instead.
+
+### Recent Chats
+
+- Fixed Recents showing only the initial chat preview. The sidebar keeps its fast startup behavior, then uses the same **See more**, **Show less**, and **Load more** controls as Projects so every chat remains reachable.
 
 ### Validation
 

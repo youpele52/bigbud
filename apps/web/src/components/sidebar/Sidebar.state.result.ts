@@ -26,6 +26,11 @@ export interface BuildSidebarStateResultInput {
   setAreChatsExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
+  hasMoreChats: boolean;
+  collapsedHiddenChatCount: number | null;
+  unloadedChatCount: number | null;
+  isLoadingMoreChats: boolean;
+  loadMoreChats: () => void;
   renderedChats: SidebarRenderedThreadEntry[];
   renderedProjectsState: SidebarRenderedProjectsOutput;
   isManualProjectSorting: boolean;
@@ -62,6 +67,11 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     setAreChatsExpanded: input.setAreChatsExpanded,
     showAllChats: input.showAllChats,
     setShowAllChats: input.setShowAllChats,
+    hasMoreChats: input.hasMoreChats,
+    collapsedHiddenChatCount: input.collapsedHiddenChatCount,
+    unloadedChatCount: input.unloadedChatCount,
+    isLoadingMoreChats: input.isLoadingMoreChats,
+    loadMoreChats: input.loadMoreChats,
     renderedChats: input.renderedChats,
     renderedProjects: input.renderedProjectsState.renderedProjects,
     isManualProjectSorting: input.isManualProjectSorting,
