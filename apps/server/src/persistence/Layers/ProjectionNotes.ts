@@ -7,6 +7,7 @@ import {
   type ProjectionNoteRepositoryShape,
 } from "../Services/ProjectionNotes.ts";
 import { PersistenceSqlError } from "../Errors.ts";
+import { resolveFileMtime } from "./ProjectionFileMtime.ts";
 
 const NOTES_DIR_SEGMENT = "notes";
 
@@ -32,10 +33,6 @@ function formatTimestamp(date: Date): string {
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
     `-${pad2(date.getHours())}-${pad2(date.getMinutes())}-${pad2(date.getSeconds())}`
   );
-}
-
-function resolveMtime(stat: { mtime: Date | Option.Option<Date> }): Date {
-  return Option.isOption(stat.mtime) ? Option.getOrElse(stat.mtime, () => new Date()) : stat.mtime;
 }
 
 function fileSystemError(operation: string, detail: string, cause?: unknown): PersistenceSqlError {
@@ -93,7 +90,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
           .stat(absolutePath)
           .pipe(Effect.orElseSucceed(() => ({ mtime: new Date() }) as { mtime: Date }));
         const content = yield* fs.readFileString(absolutePath).pipe(Effect.orElseSucceed(() => ""));
-        const mtime = resolveMtime(stat);
+        const mtime = resolveFileMtime(stat.mtime);
         notes.push({
           noteId: noteRelPath as NoteId,
           projectId: input.projectId,
@@ -121,7 +118,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
           const content = yield* fs
             .readFileString(absolutePath)
             .pipe(Effect.orElseSucceed(() => ""));
-          const mtime = resolveMtime(stat);
+          const mtime = resolveFileMtime(stat.mtime);
           notes.push({
             noteId: noteRelPath as NoteId,
             projectId: null,
@@ -153,7 +150,7 @@ const makeProjectionNoteRepository = Effect.gen(function* () {
     const stat = yield* fs
       .stat(absolutePath)
       .pipe(Effect.orElseSucceed(() => ({ mtime: new Date() }) as { mtime: Date }));
-    const mtime = resolveMtime(stat);
+    const mtime = resolveFileMtime(stat.mtime);
 
     const projectId = projectIdFromNoteId(input.noteId);
 
