@@ -8,6 +8,7 @@ import {
   OrchestrationMessageReply,
   OrchestrationProposedPlanId,
   OrchestrationQueuedPrompt,
+  OrchestrationPendingInterruptFlushIntent,
   ParentThreadReference,
   ProjectId,
   ProjectScript,
@@ -48,6 +49,9 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
     modelSelection: Schema.fromJsonString(ModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
     queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
+    pendingInterruptFlushIntent: Schema.NullOr(
+      Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
+    ),
   }),
 );
 

@@ -47,7 +47,16 @@ export function makeQueuedPromptFlushCommand(input: {
   const status = resolveThreadWorkflowStatus(thread);
   if (status.isAgentActive || status.hasPendingApprovals || status.hasPendingUserInput) return null;
 
-  const messageIds = prompts.map((prompt) => prompt.id);
+  const messageIds =
+    thread.pendingInterruptFlushIntent?.queuedPromptIds ?? prompts.map((prompt) => prompt.id);
+  const prefix = prompts.slice(0, messageIds.length);
+  if (
+    messageIds.length === 0 ||
+    prefix.length !== messageIds.length ||
+    prefix.some((prompt, index) => prompt.id !== messageIds[index])
+  ) {
+    return null;
+  }
   const digest = createHash("sha256")
     .update(`${thread.id}\n${messageIds.join("\n")}`)
     .digest("hex");

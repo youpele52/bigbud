@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   CheckpointRef,
+  CommandId,
   ExecutionTargetId,
   EventId,
   IsoDateTime,
@@ -257,6 +258,16 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 
+/** Durable Send now request; its captured prefix must be consumed exactly once. */
+export const OrchestrationPendingInterruptFlushIntent = Schema.Struct({
+  intentId: CommandId,
+  requestedTurnId: Schema.optional(Schema.NullOr(TurnId)),
+  queuedPromptIds: Schema.Array(MessageId),
+  requestedAt: IsoDateTime,
+});
+export type OrchestrationPendingInterruptFlushIntent =
+  typeof OrchestrationPendingInterruptFlushIntent.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -278,6 +289,9 @@ export const OrchestrationThread = Schema.Struct({
   queuedPrompts: Schema.optional(Schema.Array(OrchestrationQueuedPrompt)).pipe(
     Schema.withDecodingDefault(() => []),
   ),
+  pendingInterruptFlushIntent: Schema.optional(
+    Schema.NullOr(OrchestrationPendingInterruptFlushIntent),
+  ).pipe(Schema.withDecodingDefault(() => null)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
