@@ -6,7 +6,7 @@ vi.mock("./backendStartupState", () => ({ recordBackendStartupStatus: recordStat
 
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
 
-beforeEach(() => recordStatus.mockClear());
+beforeEach(() => recordStatus.mockReset());
 
 it("parses split and multiple NDJSON status records", () => {
   const stream = new PassThrough();
@@ -41,4 +41,32 @@ it("accepts only server safe failure codes and falls back to unknown", () => {
   stream.write('{"status":"error","reason":"untrusted error text"}\n');
   expect(recordStatus).toHaveBeenNthCalledWith(1, 2, "error", "server_runtime_startup_failed");
   expect(recordStatus).toHaveBeenNthCalledWith(2, 2, "error", "unknown");
+});
+
+it("reports readiness only after an accepted ready status", () => {
+  const stream = new PassThrough();
+  const onReady = vi.fn();
+  listenForBackendStartupStatus(stream, 6, undefined, onReady);
+  recordStatus.mockReturnValue(false);
+  stream.write('{"status":"starting"}\nnot-json\n');
+  stream.write('{"status":"error","reason":"unknown"}\n');
+  stream.write('{"status":"ready"}\n');
+  expect(onReady).not.toHaveBeenCalled();
+
+  recordStatus.mockReturnValue(true);
+  stream.write('{"status":"ready"}\n');
+  expect(onReady).toHaveBeenCalledOnce();
+});
+
+it("does not report a ready rejected after an accepted error", () => {
+  const stream = new PassThrough();
+  const onReady = vi.fn();
+  recordStatus.mockReturnValueOnce(true).mockReturnValueOnce(false);
+  listenForBackendStartupStatus(stream, 9, undefined, onReady);
+
+  stream.write('{"status":"error","reason":"unknown"}\n{"status":"ready"}\n');
+
+  expect(recordStatus).toHaveBeenNthCalledWith(1, 9, "error", "unknown");
+  expect(recordStatus).toHaveBeenNthCalledWith(2, 9, "ready");
+  expect(onReady).not.toHaveBeenCalled();
 });

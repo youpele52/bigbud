@@ -21,6 +21,7 @@ export function listenForBackendStartupStatus(
   stream: Readable | null,
   generation: number,
   onInvalidRecord?: (detail: string) => void,
+  onReady?: () => void,
 ): void {
   if (!stream) return;
   let buffered = "";
@@ -65,7 +66,8 @@ export function listenForBackendStartupStatus(
               isFailureReason(reason) ? reason : "unknown",
             );
           } else {
-            recordBackendStartupStatus(generation, status);
+            const accepted = recordBackendStartupStatus(generation, status);
+            if (accepted && status === "ready") onReady?.();
           }
         }
       } catch {

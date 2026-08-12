@@ -133,6 +133,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
       webviewTag: true,
     },
   });
+  const hostWebContents = window.webContents;
 
   const syncBackgroundColorWithTheme = (): void => {
     applyWindowMaterial(window, getWindowMaterial(window));
@@ -245,7 +246,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   }
 
   window.on("closed", () => {
-    certificateChallengeManager.closeHost(window.webContents);
+    certificateChallengeManager.closeHost(hostWebContents);
     deps.onWindowClosed(window);
   });
 
