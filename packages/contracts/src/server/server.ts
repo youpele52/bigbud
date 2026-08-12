@@ -9,6 +9,7 @@ import {
 } from "../core/baseSchemas";
 import { KeybindingRule, ResolvedKeybindingsConfig } from "./keybindings";
 import { EditorId } from "../workspace/editor";
+import { TerminalApplicationId } from "../workspace/terminalApplication";
 import { ModelCapabilities } from "../core/model";
 import { ProviderKind } from "../orchestration/orchestration";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
@@ -226,6 +227,7 @@ export const ServerConfig = Schema.Struct({
   providers: ServerProviders,
   discovery: ServerDiscoveryCatalog,
   availableEditors: Schema.Array(EditorId),
+  availableTerminals: Schema.optional(Schema.Array(TerminalApplicationId)),
   observability: ServerObservability,
   settings: ServerSettings,
 });

@@ -2,6 +2,7 @@ import { useAtomSubscribe, useAtomValue } from "@effect/atom-react";
 import {
   DEFAULT_SERVER_SETTINGS,
   type EditorId,
+  type TerminalApplicationId,
   type ServerConfig,
   type ServerDiscoveryCatalog,
   type ServerDiscoveredAgent,
@@ -46,6 +47,7 @@ function toServerConfigUpdatedPayload(config: ServerConfig): ServerConfigUpdated
 }
 
 const EMPTY_AVAILABLE_EDITORS: ReadonlyArray<EditorId> = [];
+const EMPTY_AVAILABLE_TERMINALS: ReadonlyArray<TerminalApplicationId> = [];
 const EMPTY_KEYBINDINGS: ServerConfig["keybindings"] = [];
 const EMPTY_SERVER_PROVIDERS: ReadonlyArray<ServerProvider> = [];
 const EMPTY_SERVER_DISCOVERY_AGENTS: ReadonlyArray<ServerDiscoveredAgent> = [];
@@ -53,6 +55,9 @@ const EMPTY_SERVER_DISCOVERY_SKILLS: ReadonlyArray<ServerDiscoveredSkill> = [];
 
 const selectAvailableEditors = (config: ServerConfig | null): ReadonlyArray<EditorId> =>
   config?.availableEditors ?? EMPTY_AVAILABLE_EDITORS;
+const selectAvailableTerminals = (
+  config: ServerConfig | null,
+): ReadonlyArray<TerminalApplicationId> => config?.availableTerminals ?? EMPTY_AVAILABLE_TERMINALS;
 const selectKeybindings = (config: ServerConfig | null) => config?.keybindings ?? EMPTY_KEYBINDINGS;
 const selectKeybindingsConfigPath = (config: ServerConfig | null) =>
   config?.keybindingsConfigPath ?? null;
@@ -312,6 +317,10 @@ export function useServerKeybindings(): ServerConfig["keybindings"] {
 
 export function useServerAvailableEditors(): ReadonlyArray<EditorId> {
   return useAtomValue(serverConfigAtom, selectAvailableEditors);
+}
+
+export function useServerAvailableTerminals(): ReadonlyArray<TerminalApplicationId> {
+  return useAtomValue(serverConfigAtom, selectAvailableTerminals);
 }
 
 export function useServerKeybindingsConfigPath(): string | null {

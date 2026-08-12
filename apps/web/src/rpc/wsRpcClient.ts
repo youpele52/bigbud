@@ -138,6 +138,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
+      openInTerminal: (input) =>
+        transport.request((client) => client[WS_METHODS.shellOpenInTerminal](input)),
       openPath: (input) => transport.request((client) => client[WS_METHODS.shellOpenPath](input)),
     },
     git: {
