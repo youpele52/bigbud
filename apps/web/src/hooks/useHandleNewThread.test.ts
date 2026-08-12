@@ -39,7 +39,9 @@ describe("loadProjectForNewThread", () => {
         },
       ],
     } satisfies GetStartupProjectCatalogResult;
-    const getStartupProjectCatalog = vi.fn(async () => page);
+    const getStartupProjectCatalog = vi.fn(async ({ scope }) =>
+      scope === "remote" ? page : { projectionSequence: 10, projects: [] },
+    );
     const mergeProjectCatalogPage = vi.fn(() => {
       loadedProject = project;
     });
@@ -52,11 +54,11 @@ describe("loadProjectForNewThread", () => {
         mergeProjectCatalogPage,
       }),
     ).resolves.toBe(project);
-    expect(getStartupProjectCatalog).toHaveBeenCalledWith({
-      limit: 1,
-      priorityProjectId: projectId,
-    });
-    expect(mergeProjectCatalogPage).toHaveBeenCalledWith(page);
+    expect(getStartupProjectCatalog.mock.calls).toEqual([
+      [{ scope: "local", limit: 1, priorityProjectId: projectId }],
+      [{ scope: "remote", limit: 1, priorityProjectId: projectId }],
+    ]);
+    expect(mergeProjectCatalogPage).toHaveBeenLastCalledWith(page);
   });
 
   it("reuses a project already loaded by the bounded catalog", async () => {
@@ -73,9 +75,49 @@ describe("loadProjectForNewThread", () => {
     expect(getStartupProjectCatalog).not.toHaveBeenCalled();
   });
 
+  it("uses the matching scope when the other scoped lookup fails", async () => {
+    let loadedProject: Project | undefined;
+    const remotePage = {
+      projectionSequence: 10,
+      projects: [
+        {
+          id: projectId,
+          title: "Project 1",
+          providerRuntimeExecutionTargetId: "remote-provider",
+          workspaceExecutionTargetId: "remote-workspace",
+          executionTargetId: "remote-workspace",
+          workspaceRoot: "/workspace",
+          lastUsedAt: "2026-08-11T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z",
+          deletingAt: null,
+          threadCount: 0,
+          exceptionalThreadCount: 0,
+          hasExceptionalThreads: false,
+        },
+      ],
+    } satisfies GetStartupProjectCatalogResult;
+    const getStartupProjectCatalog = vi.fn(({ scope }) =>
+      scope === "local" ? Promise.reject(new Error("local failed")) : Promise.resolve(remotePage),
+    );
+
+    await expect(
+      loadProjectForNewThread({
+        api: { orchestration: { getStartupProjectCatalog } } as never,
+        projectId,
+        getProject: () => loadedProject,
+        mergeProjectCatalogPage: () => {
+          loadedProject = project;
+        },
+      }),
+    ).resolves.toBe(project);
+  });
+
   it("merges a targeted lookup without changing catalog pagination", () => {
     const cursor = { lastUsedAt: "2026-08-10T00:00:00.000Z", projectId };
-    useStore.setState({ projects: [], projectCatalogCursor: cursor });
+    useStore.setState({
+      projects: [],
+      projectCatalogCursorByScope: { local: cursor, remote: null },
+    });
 
     useStore.getState().mergeProjectCatalogPage({
       projectionSequence: 10,
@@ -102,6 +144,6 @@ describe("loadProjectForNewThread", () => {
       providerRuntimeExecutionTargetId: "remote-provider",
       workspaceExecutionTargetId: "remote-workspace",
     });
-    expect(useStore.getState().projectCatalogCursor).toEqual(cursor);
+    expect(useStore.getState().projectCatalogCursorByScope.local).toEqual(cursor);
   });
 });

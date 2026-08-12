@@ -186,6 +186,7 @@ export function SidebarProjectsSection({
           hasProjects={localProjects.length > 0}
           showEmptyState={!shouldShowProjectPathEntry && remoteProjects.length === 0}
           showLoadMore
+          catalogScope="local"
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
@@ -237,7 +238,8 @@ export function SidebarProjectsSection({
             isManualSorting={isManualProjectSorting}
             hasProjects={remoteProjects.length > 0}
             showEmptyState={false}
-            showLoadMore={false}
+            showLoadMore
+            catalogScope="remote"
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onDragCancel={onDragCancel}

@@ -186,10 +186,10 @@ describe("bounded orchestration bootstrap", () => {
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledWith({
       threadId: selectedThread,
     });
-    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
-      limit: 1,
-      priorityProjectId: project2,
-    });
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
+      [{ scope: "local", limit: 1, priorityProjectId: project2 }],
+      [{ scope: "remote", limit: 1, priorityProjectId: project2 }],
+    ]);
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(1);
     expect(orchestration.getProjectThreadSummaries.mock.calls).toEqual([
       [{ projectId: project2, limit: 5, priorityThreadId: selectedThread }],

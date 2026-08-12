@@ -137,17 +137,20 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [makeProject(project1, "Project 1", 94)],
-        nextCursor: cursor,
+        projects: [],
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
         projectionSequence: 12,
-        projects: [makeProject(project2, "Project 2")],
+        projects: [makeProject(project1, "Project 1", 94)],
+        nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult);
 
     await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
 
-    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([[{ limit: 1 }]]);
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
+      [{ scope: "local", limit: 1 }],
+      [{ scope: "remote", limit: 1 }],
+    ]);
     expect(orchestration.getProjectThreadSummaries).not.toHaveBeenCalled();
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
     expect(useStore.getState().projects[0]?.activeThreadCount).toBe(94);
@@ -163,6 +166,44 @@ describe("bounded project catalog bootstrap", () => {
       projectId: project2,
       limit: 5,
     });
+  });
+
+  it("keeps a successful scope and exposes a head retry when the other scope fails", async () => {
+    const { api, orchestration } = makeApi();
+    orchestration.getStartupProjectCatalog
+      .mockResolvedValueOnce({
+        projectionSequence: 10,
+        projects: [makeProject(project1, "Project 1")],
+      } satisfies GetStartupProjectCatalogResult)
+      .mockRejectedValueOnce(new Error("remote offline"));
+
+    await expect(
+      runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false }),
+    ).resolves.toBe(10);
+
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
+    expect(useStore.getState().projectCatalogErrorByScope.remote).toBe("remote offline");
+    expect(useStore.getState().projectCatalogRetryHeadByScope.remote).toBe(true);
+    expect(useStore.getState().projectCatalogCursorByScope.remote).toBeNull();
+  });
+
+  it("keeps the remote scope when the local scope fails", async () => {
+    const { api, orchestration } = makeApi();
+    orchestration.getStartupProjectCatalog
+      .mockRejectedValueOnce(new Error("local offline"))
+      .mockResolvedValueOnce({
+        projectionSequence: 12,
+        projects: [makeProject(project1, "Remote project")],
+      } satisfies GetStartupProjectCatalogResult);
+
+    await expect(
+      runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false }),
+    ).resolves.toBe(10);
+
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
+    expect(useStore.getState().projectCatalogErrorByScope.local).toBe("local offline");
+    expect(useStore.getState().projectCatalogRetryHeadByScope.local).toBe(true);
+    expect(useStore.getState().projectCatalogCursorByScope.local).toBeNull();
   });
 
   it("preserves the authoritative total while appending a thread summary page", async () => {
@@ -198,17 +239,20 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog
       .mockResolvedValueOnce({
         projectionSequence: 10,
-        projects: [makeProject(project1, "Prioritized")],
-        nextCursor: cursor,
+        projects: [],
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
         projectionSequence: 12,
-        projects: [makeProject(project3, "Older"), makeProject(project1, "Prioritized")],
+        projects: [makeProject(project1, "Prioritized")],
+        nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult);
 
     await runBoundedBootstrap({ api, selectedThreadId: selectedThread, disposed: () => false });
 
-    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(1);
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
+      [{ scope: "local", limit: 1, priorityProjectId: project1 }],
+      [{ scope: "remote", limit: 1, priorityProjectId: project1 }],
+    ]);
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1]);
   });
 

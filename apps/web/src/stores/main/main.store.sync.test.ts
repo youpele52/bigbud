@@ -172,7 +172,12 @@ describe("store read model sync", () => {
       sidebarRecentThreadIds: [],
       sidebarPinnedThreadIds: [],
       bootstrapComplete: true,
-      projectCatalogGeneration: 0,
+      projectCatalogCursorByScope: { local: null, remote: null },
+      projectCatalogGenerationByScope: { local: 0, remote: 0 },
+      projectCatalogLoadingByScope: { local: false, remote: false },
+      projectCatalogErrorByScope: { local: undefined, remote: undefined },
+      projectCatalogRetryHeadByScope: { local: false, remote: false },
+      projectCatalogRestartProjectIdByScope: { local: null, remote: null },
       threadHydrationById: {},
     };
     const readModel: OrchestrationReadModel = {
@@ -263,7 +268,12 @@ describe("store read model sync", () => {
 
     const next = syncBoundedCatalog(
       initialState,
-      { projectionSequence: 1, projects: [] },
+      {
+        local: { projectionSequence: 1, projects: [] },
+        remote: { projectionSequence: 1, projects: [] },
+      },
+      {},
+      {},
       { projectionSequence: 1, threads: [summary], recentThreadIds: [], pinnedThreadIds: [] },
       [],
     );

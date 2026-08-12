@@ -27,10 +27,12 @@ it.effect("decodes sidebar catalog membership", () =>
 it.effect("decodes structured catalog cursors", () =>
   Effect.gen(function* () {
     const input = yield* Schema.decodeUnknownEffect(GetStartupProjectCatalogInput)({
+      scope: "local",
       limit: 2,
       cursor: { lastUsedAt: "2026-01-03T00:00:00.000Z", projectId: "project-1" },
     });
     assert.equal(input.cursor?.projectId, "project-1");
+    assert.equal(input.scope, "local");
   }),
 );
 

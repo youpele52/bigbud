@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { restrictToFirstScrollableAncestor, restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import { type ProjectId } from "@bigbud/contracts";
+import { type ProjectCatalogScope, type ProjectId } from "@bigbud/contracts";
 import { SidebarMenu, SidebarMenuItem } from "../ui/sidebar";
 import { SortableProjectItem } from "./SidebarProjectItem";
 import { readNativeApi } from "../../rpc/nativeApi";
@@ -40,6 +40,7 @@ interface SidebarProjectListProps {
   hasProjects: boolean;
   showEmptyState: boolean;
   showLoadMore?: boolean;
+  catalogScope: ProjectCatalogScope;
   onDragStart: (event: DragStartEvent) => void;
   onDragEnd: (event: DragEndEvent) => void;
   onDragCancel: (event: DragCancelEvent) => void;
@@ -52,6 +53,7 @@ export function SidebarProjectList({
   hasProjects,
   showEmptyState,
   showLoadMore = false,
+  catalogScope,
   onDragStart,
   onDragEnd,
   onDragCancel,
@@ -71,10 +73,14 @@ export function SidebarProjectList({
     return closestCorners(args);
   }, []);
 
-  const projectCatalogCursor = useStore((state) => state.projectCatalogCursor);
-  const projectCatalogLoading = useStore((state) => state.projectCatalogLoading);
-  const projectCatalogError = useStore((state) => state.projectCatalogError);
-  const hasMoreProjects = projectCatalogCursor !== null && projectCatalogCursor !== undefined;
+  const projectCatalogCursor = useStore((state) => state.projectCatalogCursorByScope[catalogScope]);
+  const projectCatalogLoading = useStore(
+    (state) => state.projectCatalogLoadingByScope[catalogScope],
+  );
+  const projectCatalogError = useStore((state) => state.projectCatalogErrorByScope[catalogScope]);
+  const retryCatalogHead = useStore((state) => state.projectCatalogRetryHeadByScope[catalogScope]);
+  const hasMoreProjects =
+    retryCatalogHead || (projectCatalogCursor !== null && projectCatalogCursor !== undefined);
   const animatedListsRef = useRef(new WeakSet<HTMLElement>());
   const attachAutoAnimateRef = useCallback((node: HTMLElement | null) => {
     if (!node || animatedListsRef.current.has(node)) {
@@ -126,7 +132,8 @@ export function SidebarProjectList({
             disabled={projectCatalogLoading}
             onClick={() => {
               const api = readNativeApi();
-              if (api) void loadMoreProjectCatalog({ api }).catch(() => undefined);
+              if (api)
+                void loadMoreProjectCatalog({ api, scope: catalogScope }).catch(() => undefined);
             }}
           >
             {projectCatalogLoading
@@ -141,7 +148,8 @@ export function SidebarProjectList({
             disabled={projectCatalogLoading}
             onClick={() => {
               const api = readNativeApi();
-              if (api) void loadAllProjectCatalog({ api }).catch(() => undefined);
+              if (api)
+                void loadAllProjectCatalog({ api, scope: catalogScope }).catch(() => undefined);
             }}
           >
             Load all projects

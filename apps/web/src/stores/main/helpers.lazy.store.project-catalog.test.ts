@@ -43,9 +43,11 @@ const emptySidebarCatalog = {
 beforeEach(() => {
   useStore.setState({
     projects: [],
-    projectCatalogCursor: null,
-    projectCatalogLoading: false,
-    projectCatalogError: undefined,
+    projectCatalogCursorByScope: { local: null, remote: null },
+    projectCatalogLoadingByScope: { local: false, remote: false },
+    projectCatalogErrorByScope: { local: undefined, remote: undefined },
+    projectCatalogRetryHeadByScope: { local: false, remote: false },
+    projectCatalogRestartProjectIdByScope: { local: null, remote: null },
     latestProjectEventSequenceById: {},
     deletedProjectSequenceById: {},
     pendingUnloadedProjectPatchById: {},
@@ -65,7 +67,7 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().appendProjectCatalogPage(makePage(19));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19));
 
     expect(useStore.getState().projects).toEqual([]);
   });
@@ -81,13 +83,21 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().syncBoundedCatalog(makePage(19), emptySidebarCatalog, []);
+    useStore
+      .getState()
+      .syncBoundedCatalog(
+        { local: makePage(19), remote: { projectionSequence: 19, projects: [] } },
+        {},
+        {},
+        emptySidebarCatalog,
+        [],
+      );
 
     expect(useStore.getState().projects).toEqual([]);
   });
 
   it("does not overwrite newer project metadata with an older page", () => {
-    useStore.getState().appendProjectCatalogPage(makePage(10));
+    useStore.getState().appendProjectCatalogPage("local", makePage(10));
     useStore
       .getState()
       .applyOrchestrationEvent(
@@ -98,13 +108,13 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().appendProjectCatalogPage(makePage(19, "Stale title"));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19, "Stale title"));
 
     expect(useStore.getState().projects[0]?.name).toBe("Newer title");
   });
 
   it("keeps loaded projects protected after deletion-requested", () => {
-    useStore.getState().appendProjectCatalogPage(makePage(10, "Current title"));
+    useStore.getState().appendProjectCatalogPage("local", makePage(10, "Current title"));
     useStore
       .getState()
       .applyOrchestrationEvent(
@@ -115,14 +125,14 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().appendProjectCatalogPage(makePage(19, "Stale title"));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19, "Stale title"));
 
     expect(useStore.getState().latestProjectEventSequenceById?.[projectId]).toBe(20);
     expect(useStore.getState().projects[0]?.name).toBe("Current title");
   });
 
   it("keeps loaded projects protected after deletion-failed", () => {
-    useStore.getState().appendProjectCatalogPage(makePage(10, "Current title"));
+    useStore.getState().appendProjectCatalogPage("local", makePage(10, "Current title"));
     useStore
       .getState()
       .applyOrchestrationEvent(
@@ -133,7 +143,7 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().appendProjectCatalogPage(makePage(19, "Stale title"));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19, "Stale title"));
 
     expect(useStore.getState().latestProjectEventSequenceById?.[projectId]).toBe(20);
     expect(useStore.getState().projects[0]?.name).toBe("Current title");
@@ -149,7 +159,7 @@ describe("lazy project catalog pages", () => {
           { sequence: 20 },
         ),
       );
-    useStore.getState().appendProjectCatalogPage(makePage(19));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19));
 
     expect(useStore.getState().projects).toHaveLength(1);
     expect(useStore.getState().projects[0]).toMatchObject({
@@ -170,7 +180,15 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().syncBoundedCatalog(makePage(19), emptySidebarCatalog, []);
+    useStore
+      .getState()
+      .syncBoundedCatalog(
+        { local: makePage(19), remote: { projectionSequence: 19, projects: [] } },
+        {},
+        {},
+        emptySidebarCatalog,
+        [],
+      );
 
     expect(useStore.getState().projects[0]).toMatchObject({
       name: "Newer title",
@@ -180,7 +198,7 @@ describe("lazy project catalog pages", () => {
   });
 
   it("retains a newer loaded project omitted from a stale bounded recovery page", () => {
-    useStore.getState().appendProjectCatalogPage(makePage(10));
+    useStore.getState().appendProjectCatalogPage("local", makePage(10));
     useStore
       .getState()
       .applyOrchestrationEvent(
@@ -191,9 +209,16 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore
-      .getState()
-      .syncBoundedCatalog({ ...makePage(19), projects: [] }, emptySidebarCatalog, []);
+    useStore.getState().syncBoundedCatalog(
+      {
+        local: { ...makePage(19), projects: [] },
+        remote: { projectionSequence: 19, projects: [] },
+      },
+      {},
+      {},
+      emptySidebarCatalog,
+      [],
+    );
 
     expect(useStore.getState().projects[0]).toMatchObject({
       id: projectId,
@@ -213,7 +238,7 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore.getState().appendProjectCatalogPage(makePage(19));
+    useStore.getState().appendProjectCatalogPage("local", makePage(19));
 
     expect(useStore.getState().projects[0]).toMatchObject({
       deletingAt: "2026-08-10T00:00:01.000Z",
@@ -234,7 +259,10 @@ describe("lazy project catalog pages", () => {
 
     useStore
       .getState()
-      .appendProjectCatalogPage(makePage(19, "Catalog project", "2026-08-10T00:00:00.000Z"));
+      .appendProjectCatalogPage(
+        "local",
+        makePage(19, "Catalog project", "2026-08-10T00:00:00.000Z"),
+      );
 
     expect(useStore.getState().projects[0]).toMatchObject({
       deletingAt: null,

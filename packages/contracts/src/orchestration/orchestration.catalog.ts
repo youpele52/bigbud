@@ -82,6 +82,9 @@ export const ProjectCatalogCursor = Schema.Struct({
 });
 export type ProjectCatalogCursor = typeof ProjectCatalogCursor.Type;
 
+export const ProjectCatalogScope = Schema.Literals(["local", "remote"]);
+export type ProjectCatalogScope = typeof ProjectCatalogScope.Type;
+
 export const ThreadSummaryCursor = Schema.Struct({
   updatedAt: IsoDateTime,
   threadId: ThreadId,
@@ -89,6 +92,7 @@ export const ThreadSummaryCursor = Schema.Struct({
 export type ThreadSummaryCursor = typeof ThreadSummaryCursor.Type;
 
 export const GetStartupProjectCatalogInput = Schema.Struct({
+  scope: ProjectCatalogScope,
   limit: Schema.optional(PositiveInt),
   priorityProjectId: Schema.optional(ProjectId),
   cursor: Schema.optional(ProjectCatalogCursor),

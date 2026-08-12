@@ -53,10 +53,12 @@ function deferred<T>() {
 beforeEach(() => {
   useStore.setState({
     projects: [],
-    projectCatalogCursor: cursor1,
-    projectCatalogGeneration: 1,
-    projectCatalogLoading: false,
-    projectCatalogError: undefined,
+    projectCatalogCursorByScope: { local: cursor1, remote: cursor2 },
+    projectCatalogGenerationByScope: { local: 1, remote: 1 },
+    projectCatalogLoadingByScope: { local: false, remote: false },
+    projectCatalogErrorByScope: { local: undefined, remote: undefined },
+    projectCatalogRetryHeadByScope: { local: false, remote: false },
+    projectCatalogRestartProjectIdByScope: { local: null, remote: null },
     latestProjectEventSequenceById: {},
     projectThreadCountsById: {},
   });
@@ -68,47 +70,133 @@ describe("lazy project catalog pagination", () => {
     const page = deferred<GetStartupProjectCatalogResult>();
     orchestration.getStartupProjectCatalog.mockReturnValueOnce(page.promise);
 
-    const first = loadMoreProjectCatalog({ api });
-    const second = loadMoreProjectCatalog({ api });
+    const first = loadMoreProjectCatalog({ api, scope: "local" });
+    const second = loadMoreProjectCatalog({ api, scope: "local" });
 
     expect(second).toBe(first);
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      scope: "local",
       limit: 5,
       cursor: cursor1,
     });
     page.resolve(makePage(project1));
     await first;
 
-    expect(useStore.getState().projectCatalogCursor).toBeNull();
+    expect(useStore.getState().projectCatalogCursorByScope.local).toBeNull();
+    expect(useStore.getState().projectCatalogCursorByScope.remote).toEqual(cursor2);
+  });
+
+  it("loads local and remote pages independently", async () => {
+    const { api, orchestration } = makeApi();
+    const localPage = deferred<GetStartupProjectCatalogResult>();
+    const remotePage = deferred<GetStartupProjectCatalogResult>();
+    orchestration.getStartupProjectCatalog
+      .mockReturnValueOnce(localPage.promise)
+      .mockReturnValueOnce(remotePage.promise);
+
+    const localLoad = loadMoreProjectCatalog({ api, scope: "local" });
+    const remoteLoad = loadMoreProjectCatalog({ api, scope: "remote" });
+
+    expect(remoteLoad).not.toBe(localLoad);
+    expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
+      [{ scope: "local", limit: 5, cursor: cursor1 }],
+      [{ scope: "remote", limit: 5, cursor: cursor2 }],
+    ]);
+    remotePage.resolve(makePage(project2));
+    await remoteLoad;
+    expect(useStore.getState().projectCatalogLoadingByScope.local).toBe(true);
+    expect(useStore.getState().projectCatalogLoadingByScope.remote).toBe(false);
+
+    localPage.resolve(makePage(project1));
+    await localLoad;
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2, project1]);
   });
 
   it("loads five projects from the catalog head after a single prioritized project", async () => {
     const { api, orchestration } = makeApi();
-    useStore.getState().appendProjectCatalogPage(makePage(project1, cursor1));
+    useStore.getState().appendProjectCatalogPage("local", makePage(project1, cursor1));
+    useStore.setState({
+      projectCatalogRestartProjectIdByScope: { local: project1, remote: null },
+    });
     orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
 
-    await loadMoreProjectCatalog({ api });
+    await loadMoreProjectCatalog({ api, scope: "local" });
 
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      scope: "local",
       limit: 6,
       priorityProjectId: project1,
     });
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1, project2]);
   });
 
+  it("uses explicit restart priority after a same-scope project is inserted", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.setState({
+      projectCatalogRestartProjectIdByScope: { local: project1, remote: null },
+    });
+    useStore.getState().mergeProjectCatalogPage(makePage(project2));
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api, scope: "local" });
+
+    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      scope: "local",
+      limit: 6,
+      priorityProjectId: project1,
+    });
+    expect(useStore.getState().projectCatalogRestartProjectIdByScope.local).toBeNull();
+  });
+
+  it("uses explicit restart priority after a remote project is inserted", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.setState({
+      projectCatalogRestartProjectIdByScope: { local: null, remote: project1 },
+    });
+    useStore.getState().mergeProjectCatalogPage(makePage(project2));
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api, scope: "remote" });
+
+    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      scope: "remote",
+      limit: 6,
+      priorityProjectId: project1,
+    });
+    expect(useStore.getState().projectCatalogRestartProjectIdByScope.remote).toBeNull();
+  });
+
+  it("retries a failed bootstrap scope from the catalog head", async () => {
+    const { api, orchestration } = makeApi();
+    useStore.setState({
+      projectCatalogCursorByScope: { local: cursor1, remote: null },
+      projectCatalogRetryHeadByScope: { local: false, remote: true },
+      projectCatalogErrorByScope: { local: undefined, remote: "offline" },
+    });
+    orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
+
+    await loadMoreProjectCatalog({ api, scope: "remote" });
+
+    expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledWith({
+      scope: "remote",
+      limit: 5,
+    });
+    expect(useStore.getState().projectCatalogRetryHeadByScope.remote).toBe(false);
+  });
+
   it("preserves the cursor after failure and retries", async () => {
     const { api, orchestration } = makeApi();
     orchestration.getStartupProjectCatalog.mockRejectedValueOnce(new Error("offline"));
 
-    await expect(loadMoreProjectCatalog({ api })).rejects.toThrow("offline");
+    await expect(loadMoreProjectCatalog({ api, scope: "local" })).rejects.toThrow("offline");
 
-    expect(useStore.getState().projectCatalogCursor).toEqual(cursor1);
-    expect(useStore.getState().projectCatalogError).toBe("offline");
+    expect(useStore.getState().projectCatalogCursorByScope.local).toEqual(cursor1);
+    expect(useStore.getState().projectCatalogErrorByScope.local).toBe("offline");
     orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project1));
-    await loadMoreProjectCatalog({ api });
+    await loadMoreProjectCatalog({ api, scope: "local" });
 
     expect(orchestration.getStartupProjectCatalog).toHaveBeenCalledTimes(2);
-    expect(useStore.getState().projectCatalogError).toBeUndefined();
+    expect(useStore.getState().projectCatalogErrorByScope.local).toBeUndefined();
   });
 
   it("loads every remaining page only for the explicit load-all action", async () => {
@@ -117,11 +205,11 @@ describe("lazy project catalog pagination", () => {
       .mockResolvedValueOnce(makePage(project1, cursor2))
       .mockResolvedValueOnce(makePage(project2));
 
-    await loadAllProjectCatalog({ api });
+    await loadAllProjectCatalog({ api, scope: "local" });
 
     expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
-      [{ limit: 20, cursor: cursor1 }],
-      [{ limit: 20, cursor: cursor2 }],
+      [{ scope: "local", limit: 20, cursor: cursor1 }],
+      [{ scope: "local", limit: 20, cursor: cursor2 }],
     ]);
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project1, project2]);
   });
@@ -131,19 +219,19 @@ describe("lazy project catalog pagination", () => {
     const stalePage = deferred<GetStartupProjectCatalogResult>();
     orchestration.getStartupProjectCatalog.mockReturnValueOnce(stalePage.promise);
 
-    const staleLoad = loadMoreProjectCatalog({ api });
+    const staleLoad = loadMoreProjectCatalog({ api, scope: "local" });
     useStore.setState({
-      projectCatalogCursor: cursor2,
-      projectCatalogGeneration: 2,
-      projectCatalogLoading: false,
+      projectCatalogCursorByScope: { local: cursor2, remote: cursor2 },
+      projectCatalogGenerationByScope: { local: 2, remote: 1 },
+      projectCatalogLoadingByScope: { local: false, remote: false },
     });
     orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
-    await loadMoreProjectCatalog({ api });
+    await loadMoreProjectCatalog({ api, scope: "local" });
     stalePage.resolve(makePage(project1, cursor1));
     await staleLoad;
 
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2]);
-    expect(useStore.getState().projectCatalogCursor).toBeNull();
+    expect(useStore.getState().projectCatalogCursorByScope.local).toBeNull();
   });
 
   it("ignores a superseded page failure", async () => {
@@ -151,19 +239,19 @@ describe("lazy project catalog pagination", () => {
     const stalePage = deferred<GetStartupProjectCatalogResult>();
     orchestration.getStartupProjectCatalog.mockReturnValueOnce(stalePage.promise);
 
-    const staleLoad = loadMoreProjectCatalog({ api });
+    const staleLoad = loadMoreProjectCatalog({ api, scope: "local" });
     useStore.setState({
-      projectCatalogCursor: cursor2,
-      projectCatalogGeneration: 2,
-      projectCatalogLoading: false,
-      projectCatalogError: undefined,
+      projectCatalogCursorByScope: { local: cursor2, remote: cursor2 },
+      projectCatalogGenerationByScope: { local: 2, remote: 1 },
+      projectCatalogLoadingByScope: { local: false, remote: false },
+      projectCatalogErrorByScope: { local: undefined, remote: undefined },
     });
     orchestration.getStartupProjectCatalog.mockResolvedValueOnce(makePage(project2));
-    await loadMoreProjectCatalog({ api });
+    await loadMoreProjectCatalog({ api, scope: "local" });
     stalePage.reject(new Error("old failure"));
     await expect(staleLoad).rejects.toThrow("old failure");
 
-    expect(useStore.getState().projectCatalogError).toBeUndefined();
-    expect(useStore.getState().projectCatalogLoading).toBe(false);
+    expect(useStore.getState().projectCatalogErrorByScope.local).toBeUndefined();
+    expect(useStore.getState().projectCatalogLoadingByScope.local).toBe(false);
   });
 });

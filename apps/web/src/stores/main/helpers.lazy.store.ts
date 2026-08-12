@@ -2,6 +2,8 @@ import type {
   GetProjectThreadSummariesResult,
   GetSelectedThreadDetailResult,
   GetStartupProjectCatalogResult,
+  ProjectCatalogScope,
+  ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
@@ -69,7 +71,9 @@ export function setThreadHydration(
 
 export function syncBoundedCatalog(
   state: AppState,
-  catalog: GetStartupProjectCatalogResult,
+  catalogs: Partial<Record<ProjectCatalogScope, GetStartupProjectCatalogResult>>,
+  catalogErrors: Partial<Record<ProjectCatalogScope, string>>,
+  catalogRestartProjectIds: Partial<Record<ProjectCatalogScope, ProjectId>>,
   sidebarCatalog: GetSidebarThreadCatalogResult,
   pages: ReadonlyArray<GetProjectThreadSummariesResult>,
 ): AppState {
@@ -128,14 +132,58 @@ export function syncBoundedCatalog(
       ]),
     ),
   };
-  const projectCatalog = mergeProjectCatalog(state, catalog, projectThreadCountsById, false);
+  let projectCatalog = {
+    projects: state.projects,
+    pendingUnloadedProjectPatchById: state.pendingUnloadedProjectPatchById ?? {},
+  };
+  for (const scope of ["local", "remote"] as const) {
+    const catalog = catalogs[scope];
+    if (catalog) {
+      projectCatalog = mergeProjectCatalog(
+        {
+          ...state,
+          projects: projectCatalog.projects,
+          pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
+        },
+        catalog,
+        projectThreadCountsById,
+        false,
+        scope,
+      );
+    }
+  }
+  const nextCursorByScope = { ...state.projectCatalogCursorByScope };
+  const nextErrorByScope = { ...state.projectCatalogErrorByScope };
+  const nextRetryHeadByScope = { ...state.projectCatalogRetryHeadByScope };
+  const nextRestartProjectIdByScope = { ...state.projectCatalogRestartProjectIdByScope };
+  for (const scope of ["local", "remote"] as const) {
+    const catalog = catalogs[scope];
+    if (catalog) {
+      nextCursorByScope[scope] = catalog.nextCursor ?? null;
+      nextErrorByScope[scope] = undefined;
+      nextRetryHeadByScope[scope] = false;
+      nextRestartProjectIdByScope[scope] = catalog.nextCursor
+        ? (catalogRestartProjectIds[scope] ?? null)
+        : null;
+    } else {
+      nextCursorByScope[scope] = null;
+      nextErrorByScope[scope] = catalogErrors[scope] ?? "Unable to load projects.";
+      nextRetryHeadByScope[scope] = true;
+      nextRestartProjectIdByScope[scope] = null;
+    }
+  }
   return {
     ...state,
     projects: projectCatalog.projects,
-    projectCatalogCursor: catalog.nextCursor ?? null,
-    projectCatalogGeneration: state.projectCatalogGeneration + 1,
-    projectCatalogLoading: false,
-    projectCatalogError: undefined,
+    projectCatalogCursorByScope: nextCursorByScope,
+    projectCatalogGenerationByScope: {
+      local: state.projectCatalogGenerationByScope.local + 1,
+      remote: state.projectCatalogGenerationByScope.remote + 1,
+    },
+    projectCatalogLoadingByScope: { local: false, remote: false },
+    projectCatalogErrorByScope: nextErrorByScope,
+    projectCatalogRetryHeadByScope: nextRetryHeadByScope,
+    projectCatalogRestartProjectIdByScope: nextRestartProjectIdByScope,
     pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
     projectThreadCountsById,
     threads,
@@ -221,11 +269,12 @@ export function syncSidebarCatalog(
 
 export function appendProjectCatalogPage(
   state: AppState,
+  scope: ProjectCatalogScope,
   page: GetStartupProjectCatalogResult,
   generation?: number,
   loading = false,
 ): AppState {
-  if (generation !== undefined && state.projectCatalogGeneration !== generation) {
+  if (generation !== undefined && state.projectCatalogGenerationByScope[scope] !== generation) {
     return state;
   }
 
@@ -234,9 +283,17 @@ export function appendProjectCatalogPage(
   return {
     ...state,
     projects: projectCatalog.projects,
-    projectCatalogCursor: page.nextCursor ?? null,
-    projectCatalogLoading: loading,
-    projectCatalogError: undefined,
+    projectCatalogCursorByScope: {
+      ...state.projectCatalogCursorByScope,
+      [scope]: page.nextCursor ?? null,
+    },
+    projectCatalogLoadingByScope: { ...state.projectCatalogLoadingByScope, [scope]: loading },
+    projectCatalogErrorByScope: { ...state.projectCatalogErrorByScope, [scope]: undefined },
+    projectCatalogRetryHeadByScope: { ...state.projectCatalogRetryHeadByScope, [scope]: false },
+    projectCatalogRestartProjectIdByScope: {
+      ...state.projectCatalogRestartProjectIdByScope,
+      [scope]: null,
+    },
     pendingUnloadedProjectPatchById: projectCatalog.pendingUnloadedProjectPatchById,
   };
 }

@@ -27,6 +27,7 @@ import { makeGetSidebarThreadCatalog } from "./ProjectionCatalogQuery.sidebar.ts
 import { makeListThreads } from "./ProjectionCatalogQuery.listThreads.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
+  scope: Schema.Literals(["local", "remote"]),
   limit: Schema.Number,
   priorityProjectId: Schema.NullOr(Schema.String),
   cursorLastUsedAt: Schema.NullOr(Schema.String),
@@ -58,11 +59,28 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   const readProjects = SqlSchema.findAll({
     Request: ProjectCatalogQueryRequest,
     Result: ProjectCatalogDbRow,
-    execute: ({ limit, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => sql`
-      WITH page AS (
+    execute: ({ scope, limit, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+      const scopePredicate = sql.unsafe(
+        scope === "local"
+          ? "workspace_execution_target_id = 'local'"
+          : "workspace_execution_target_id <> 'local'",
+      );
+      const pageOrderBy =
+        priorityProjectId === null
+          ? sql.unsafe("last_used_at DESC, project_id ASC")
+          : sql`CASE WHEN project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
+              last_used_at DESC, project_id ASC`;
+      const resultOrderBy =
+        priorityProjectId === null
+          ? sql.unsafe("p.last_used_at DESC, p.project_id ASC")
+          : sql`CASE WHEN p.project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
+              p.last_used_at DESC, p.project_id ASC`;
+      return sql`
+        WITH page AS (
         SELECT *
         FROM projection_projects
         WHERE deleted_at IS NULL
+          AND ${scopePredicate}
           AND (
             ${cursorLastUsedAt} IS NULL
             OR ${priorityProjectId} IS NULL
@@ -73,8 +91,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
             OR last_used_at < ${cursorLastUsedAt}
             OR (last_used_at = ${cursorLastUsedAt} AND project_id > ${cursorProjectId})
           )
-        ORDER BY CASE WHEN project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
-          last_used_at DESC, project_id ASC
+        ORDER BY ${pageOrderBy}
         LIMIT ${limit}
       ), stats AS (
         SELECT
@@ -128,9 +145,9 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         CASE WHEN stats.exceptional_thread_count > 0 THEN 1 ELSE 0 END AS "hasExceptionalThreads"
       FROM page p
       JOIN stats ON stats.project_id = p.project_id
-      ORDER BY CASE WHEN p.project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
-        p.last_used_at DESC, p.project_id ASC
-    `,
+      ORDER BY ${resultOrderBy}
+      `;
+    },
   });
 
   const readThreads = SqlSchema.findAll({
@@ -217,6 +234,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         Effect.all({
           sequence: readProjectionSequence(undefined),
           rows: readProjects({
+            scope: input.scope,
             limit: limit + 1,
             priorityProjectId: input.priorityProjectId ?? null,
             cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,

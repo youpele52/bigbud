@@ -40,14 +40,30 @@ export async function loadProjectForNewThread(input: {
     return pendingLoad;
   }
 
-  const load = input.api.orchestration
-    .getStartupProjectCatalog({
-      limit: 1,
-      priorityProjectId: input.projectId,
-    })
-    .then((page) => {
-      input.mergeProjectCatalogPage(page);
-      return input.getProject();
+  const load = Promise.allSettled(
+    (["local", "remote"] as const).map((scope) =>
+      input.api.orchestration.getStartupProjectCatalog({
+        scope,
+        limit: 1,
+        priorityProjectId: input.projectId,
+      }),
+    ),
+  )
+    .then((results) => {
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        const page = result.value;
+        if (page.projects.some((candidate) => candidate.id === input.projectId)) {
+          input.mergeProjectCatalogPage(page);
+        }
+      }
+      const loadedProject = input.getProject();
+      if (loadedProject) return loadedProject;
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length === results.length) {
+        throw failures[0]!.reason;
+      }
+      return undefined;
     })
     .finally(() => {
       pendingProjectLoads.delete(input.projectId);
