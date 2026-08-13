@@ -25,6 +25,7 @@ export type ThreadTurnCommand = Exclude<
     type:
       | "project.create"
       | "project.meta.update"
+      | "project.reconfigure"
       | "project.delete"
       | "project.delete.finalize"
       | "project.delete.abort"

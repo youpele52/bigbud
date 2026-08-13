@@ -223,12 +223,13 @@ export default function Sidebar() {
           </AlertDialog>
 
           <SidebarRemoteProjectDialog
+            mode={s.remoteProjectDialogMode}
             open={s.isRemoteProjectDialogOpen}
             draft={s.remoteProjectDraft}
             fieldErrors={s.remoteProjectFieldErrors}
             error={s.remoteProjectError}
             verificationMessage={s.remoteProjectVerificationMessage}
-            isSubmitting={s.isAddingProject}
+            isSubmitting={s.isAddingProject || s.isSavingRemoteProject}
             isVerifying={s.isVerifyingRemoteProject}
             onOpenChange={(open) => {
               if (!open) {
@@ -260,12 +261,14 @@ export default function Sidebar() {
               s.remoteProjectUnlockMode === "password" ? (
                 <>
                   bigbud needs the SSH password for <code>{s.remoteProjectUnlockKeyPath}</code>{" "}
-                  before it can verify and add this remote project.
+                  before it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"}{" "}
+                  this remote project.
                 </>
               ) : (
                 <>
                   bigbud needs the passphrase for <code>{s.remoteProjectUnlockKeyPath}</code> before
-                  it can verify and add this remote project.
+                  it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"} this
+                  remote project.
                 </>
               )
             }

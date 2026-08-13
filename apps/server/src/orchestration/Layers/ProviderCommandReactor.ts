@@ -13,6 +13,7 @@ type ProviderIntentEvent = Extract<
   {
     type:
       | "project.deletion-requested"
+      | "thread.meta-updated"
       | "thread.runtime-mode-set"
       | "thread.turn-start-requested"
       | "thread.message-sent"
@@ -66,6 +67,7 @@ const make = Effect.gen(function* () {
     const processEvent = Effect.fn("processEvent")(function* (event: OrchestrationEvent) {
       if (
         event.type === "project.deletion-requested" ||
+        event.type === "thread.meta-updated" ||
         event.type === "thread.runtime-mode-set" ||
         event.type === "thread.turn-start-requested" ||
         event.type === "thread.message-sent" ||

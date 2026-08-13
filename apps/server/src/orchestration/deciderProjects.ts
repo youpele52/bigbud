@@ -19,6 +19,10 @@ import {
   requireProjectAbsent,
   requireProjectDeleting,
   requireProjectNotDeleting,
+  requireProjectRevision,
+  requireProjectThreadsIdle,
+  requireProjectWorkspaceAvailable,
+  requireProjectWorktreesVerified,
 } from "./commandInvariants.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 
@@ -32,6 +36,7 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
       type:
         | "project.create"
         | "project.meta.update"
+        | "project.reconfigure"
         | "project.delete"
         | "project.delete.finalize"
         | "project.delete.abort";
@@ -116,6 +121,82 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
           updatedAt: occurredAt,
         },
       };
+    }
+
+    case "project.reconfigure": {
+      yield* requireProjectNotDeleting({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      yield* requireProjectThreadsIdle({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      yield* requireProjectRevision({
+        readModel,
+        command,
+        projectId: command.projectId,
+        expectedUpdatedAt: command.expectedUpdatedAt,
+      });
+      yield* requireProjectWorktreesVerified({
+        readModel,
+        command,
+        projectId: command.projectId,
+        verifiedWorktreePaths: command.verifiedWorktreePaths,
+      });
+      yield* requireProjectWorkspaceAvailable({
+        readModel,
+        command,
+        projectId: command.projectId,
+        workspaceRoot: command.workspaceRoot,
+        workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+      });
+      const occurredAt = nowIso();
+      const activeThreads = listThreadsByProjectId(readModel, command.projectId).filter(
+        (thread) => thread.deletedAt === null,
+      );
+      return [
+        {
+          ...withEventBase({
+            aggregateKind: "project",
+            aggregateId: command.projectId,
+            occurredAt,
+            commandId: command.commandId,
+          }),
+          type: "project.meta-updated" as const,
+          payload: {
+            projectId: command.projectId,
+            title: command.title,
+            providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+            workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+            executionTargetId: command.executionTargetId,
+            workspaceRoot: command.workspaceRoot,
+            updatedAt: occurredAt,
+          },
+        },
+        ...activeThreads.map((thread) =>
+          Object.assign(
+            withEventBase({
+              aggregateKind: "thread" as const,
+              aggregateId: thread.id,
+              occurredAt,
+              commandId: command.commandId,
+            }),
+            {
+              type: "thread.meta-updated" as const,
+              payload: {
+                threadId: thread.id,
+                providerRuntimeExecutionTargetId: command.providerRuntimeExecutionTargetId,
+                workspaceExecutionTargetId: command.workspaceExecutionTargetId,
+                executionTargetId: command.executionTargetId,
+                updatedAt: occurredAt,
+              },
+            },
+          ),
+        ),
+      ];
     }
 
     case "project.delete": {

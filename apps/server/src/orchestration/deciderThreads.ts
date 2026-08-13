@@ -44,6 +44,7 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
       type:
         | "project.create"
         | "project.meta.update"
+        | "project.reconfigure"
         | "project.delete"
         | "project.delete.finalize"
         | "project.delete.abort";

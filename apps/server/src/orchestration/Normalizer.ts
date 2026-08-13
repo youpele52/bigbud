@@ -76,6 +76,19 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
       } satisfies OrchestrationCommand;
     }
 
+    if (command.type === "project.reconfigure") {
+      return {
+        ...command,
+        workspaceRoot:
+          command.workspaceRoot === null
+            ? null
+            : yield* normalizeProjectWorkspaceRoot(
+                command.workspaceRoot,
+                command.workspaceExecutionTargetId,
+              ),
+      } satisfies OrchestrationCommand;
+    }
+
     if (command.type !== "thread.turn.start" && command.type !== "thread.shell.run") {
       return command as OrchestrationCommand;
     }
