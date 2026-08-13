@@ -9,6 +9,48 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
 - Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
 
+## v0.2.202 (14 August, 2026)
+
+### Faster, Safer File Browsing
+
+- Added per-workspace Files preview history with **Back** and **Forward** controls, including mouse navigation buttons. bigbud restores your recent preview, cursor position, and scroll position for text, Markdown, and notebook files after you switch workspaces or restart.
+- Prevented stale directory responses from replacing the current Files tree after a workspace switch or newer request. Already handled file-open and directory-navigation requests no longer replay when you reopen the panel.
+- Removed deleted and renamed files from preview history with clear feedback, and close renamed previews rather than opening a potentially unrelated path.
+- Refined file preview headers with compact breadcrumbs, full-path tooltips, and dedicated navigation and close controls.
+
+### Local and Remote Projects, Independently
+
+- Separated local and remote project catalogs so their startup loading, pagination, retries, cursors, and failures no longer affect one another.
+- Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now manages its own **Load 5 more projects** and **Load all projects** controls.
+- Added targeted database indexes and query coverage for efficient project catalog loading at scale.
+
+### SSH Project Editing and External Tools
+
+- Added editing for SSH-backed projects, with target verification, retained-worktree safeguards, optimistic update checks, terminal target updates, and provider-session reconfiguration.
+- Fixed macOS IDE launches so detected applications, including Zed, open the active project or worktree instead of only activating. Positioned file navigation continues to use editor-specific command-line arguments.
+- Added a separate external-terminal picker with verified availability and working-directory launches, independent from your preferred code editor.
+
+### More Reliable Chats and Providers
+
+- Added persisted, provider-neutral supervision for turns that stop producing events. bigbud can inspect silent turns, surface recoverable health states, and safely reconcile them with bounded checks.
+- Routed automatic follow-ups and queued-prompt delivery through shared safety gates, so they remain queued whenever a turn, session startup, active run, or pending interaction is still in progress.
+- Preserved exactly-once queued follow-up delivery across provider completion, failures, terminal activity, replay, and idle-versus-active races. The composer now makes an unconfirmed provider-health state clearer.
+
+### Automatic Thread Cleanup
+
+- Made confirmed thread-cleanup requests durable across recovery and restarts, so they wait and resume automatically when cleanup can safely proceed.
+- Enabled daily automatic cleanup for finite policies, repaired interrupted purge and projection-baseline recovery, and clarified cleanup status and Settings copy.
+
+### More Reliable Desktop Startup
+
+- Prevented an optional Plugin Store refresh from stopping the Windows backend when Git is unavailable.
+- Kept desktop startup backoff active until the backend has accepted readiness, rejected stale or terminal readiness records, and avoided accessing destroyed Electron window contents during cleanup.
+
+### Validation
+
+- Added regression coverage for Files history, workspace isolation, stale directory results, preview restoration, removed paths, request consumption, and header navigation.
+- Added catalog, migration, query-plan, SSH reconfiguration, external-launcher, provider-liveness, queued-prompt, cleanup, and desktop-startup coverage.
+
 ## v0.2.201 (12 August, 2026)
 
 ### Faster Startup and Reliable New Chats

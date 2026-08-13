@@ -16,6 +16,7 @@ import {
   cellSource,
   detectNotebookLanguage,
   getNotebookFlatSource,
+  notebookSizerCellKey,
   parseNotebook,
   renderOutput,
   type OutputRendering,
@@ -24,14 +25,15 @@ import { OutputArea } from "./IpynbPreview.render";
 import { NotebookAnnotationComposer } from "./IpynbPreview.annotations";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
+import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
+import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
 
-interface IpynbPreviewProps {
+interface IpynbPreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
   relativePath: string;
   targetLine?: number | undefined;
   executionTargetId?: string | undefined;
   projectName?: string | undefined;
-  onBack?: (() => void) | undefined;
   onCreateAnnotation?: ((annotation: CodeAnnotationDraft) => void) | undefined;
 }
 
@@ -40,23 +42,27 @@ interface LineRange {
   endLine: number;
 }
 
-function notebookSizerCellKey(source: string, executionCount: number | null | undefined) {
-  return `${executionCount ?? "none"}:${source}`;
-}
-
 export const IpynbPreview = memo(function IpynbPreview({
   cwd,
   relativePath,
   targetLine: _targetLine,
   executionTargetId,
   projectName,
-  onBack,
+  canNavigateBack,
+  canNavigateForward,
+  onNavigateBack,
+  onNavigateForward,
+  onClose,
+  initialScrollTop,
+  onScrollPositionChange,
+  onPreviewLoadError,
   onCreateAnnotation,
 }: IpynbPreviewProps) {
   const { state, loadPreview, refreshPreview } = usePreviewLoad({
     cwd,
     relativePath,
     executionTargetId,
+    onLoadError: onPreviewLoadError,
   });
   const [selectedRange, setSelectedRange] = useState<LineRange | null>(null);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
@@ -96,6 +102,19 @@ export const IpynbPreview = memo(function IpynbPreview({
   useEffect(() => {
     setSelectedRange(null);
   }, [relativePath]);
+
+  useRestoreFilePreviewScroll({
+    containerRef: scrollContainerRef,
+    pathKey: `${cwd}:${relativePath}`,
+    initialScrollTop,
+    disabled: Boolean(state.loading || state.error),
+  });
+
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) =>
+      onScrollPositionChange?.(event.currentTarget.scrollTop),
+    [onScrollPositionChange],
+  );
 
   const notebook = useMemo(() => {
     if (!state.loaded || state.error) return null;
@@ -256,7 +275,12 @@ export const IpynbPreview = memo(function IpynbPreview({
       {measureSizer}
       <FilePreviewHeader
         breadcrumb={breadcrumb}
-        onBack={onBack}
+        absolutePath={absolutePath}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+        onClose={onClose}
         onContextMenu={handleHeaderContextMenu}
       />
 
@@ -273,7 +297,11 @@ export const IpynbPreview = memo(function IpynbPreview({
           <span>Notebook parse error: {parseError}</span>
         </div>
       ) : notebook ? (
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-auto">
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 overflow-auto"
+          onScroll={handleScroll}
+        >
           {state.truncated ? (
             <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">
               Notebook truncated. Content may be incomplete.
