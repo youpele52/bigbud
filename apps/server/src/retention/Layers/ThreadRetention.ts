@@ -96,9 +96,6 @@ const makeThreadRetention = Effect.gen(function* () {
       Effect.gen(function* () {
         if (process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1") return "disabled" as const;
         if (run.trigger === "scheduled") {
-          if (process.env.BIGBUD_INTERNAL_THREAD_RETENTION_AUTOMATIC_ROLLOUT !== "1") {
-            return "disabled" as const;
-          }
           const policy = yield* getAuthoritativePolicy;
           if (policy === "never") return "policy_never" as const;
           if (policy !== run.policy) return "policy_changed" as const;
@@ -126,51 +123,80 @@ const makeThreadRetention = Effect.gen(function* () {
   yield* Effect.forkScoped(
     Effect.forever(
       Queue.take(workQueue).pipe(
-        Effect.flatMap((runId) =>
-          processRun(runId).pipe(
-            Effect.catchCause((cause) =>
-              Cause.hasInterruptsOnly(cause)
-                ? Effect.failCause(cause)
-                : Effect.gen(function* () {
-                    const run = yield* loadRun(runId);
-                    const failedAt = new Date().toISOString();
-                    const retry = yield* repository.recordRunFailure({
-                      runId,
-                      expectedStatuses: [run.status],
-                      failedAt,
-                      lastErrorCode: "coordinator_failure",
-                    });
-                    if (Option.isNone(retry)) return;
-                    yield* repository.transitionRun({
-                      runId,
-                      expectedStatuses: [run.status],
-                      nextStatus: "deferred",
-                      updatedAt: failedAt,
-                    });
-                    yield* increment(threadRetentionRunsTotal, {
-                      trigger: run.trigger,
-                      policy: run.policy,
-                      outcome: "deferred",
-                    });
-                    if (retry.value.nextAttemptAt !== null) {
-                      yield* scheduleWake(runId, retry.value.nextAttemptAt);
-                    }
-                    yield* Effect.logWarning("thread retention run deferred", {
-                      reason: "coordinator_failure",
-                    });
-                  }).pipe(
-                    Effect.catchCause(() =>
-                      Effect.logWarning("thread retention failure recovery failed", {
-                        reason: "retry_persistence_failure",
-                      }),
-                    ),
-                  ),
-            ),
-          ),
+        Effect.flatMap(() =>
+          Effect.gen(function* () {
+            const readyAt = yield* Ref.get(maintenanceReadyAt);
+            if (readyAt === null || Date.now() < readyAt) return;
+            const active = yield* repository.listRecoverableRuns(1);
+            if (active[0]) {
+              yield* processQueuedRun(active[0].runId);
+              return;
+            }
+            if ((yield* purgeJobs.countIncomplete()) >= PURGE_BACKLOG_LIMIT) return;
+            const run = yield* repository.claimNextQueuedRun(new Date().toISOString());
+            if (Option.isNone(run)) return;
+            yield* processQueuedRun(run.value.runId);
+          }),
         ),
       ),
     ),
   );
+
+  function processQueuedRun(runId: string) {
+    return processRun(runId).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.failCause(cause)
+          : Effect.gen(function* () {
+              const run = yield* loadRun(runId);
+              const failedAt = new Date().toISOString();
+              const retry = yield* repository.recordRunFailure({
+                runId,
+                expectedStatuses: [run.status],
+                failedAt,
+                lastErrorCode: "coordinator_failure",
+              });
+              if (Option.isNone(retry)) return;
+              yield* repository.transitionRun({
+                runId,
+                expectedStatuses: [run.status],
+                nextStatus: "deferred",
+                updatedAt: failedAt,
+              });
+              yield* increment(threadRetentionRunsTotal, {
+                trigger: run.trigger,
+                policy: run.policy,
+                outcome: "deferred",
+              });
+              if (retry.value.nextAttemptAt !== null) {
+                yield* scheduleWake(runId, retry.value.nextAttemptAt);
+              }
+              yield* Effect.logWarning("thread retention run deferred", {
+                reason: "coordinator_failure",
+              });
+            }).pipe(
+              Effect.catchCause(() =>
+                Effect.logWarning("thread retention failure recovery failed", {
+                  reason: "retry_persistence_failure",
+                }),
+              ),
+            ),
+      ),
+      Effect.andThen(
+        Effect.gen(function* () {
+          const processed = yield* repository.getRun(runId);
+          if (
+            Option.isSome(processed) &&
+            ["completed", "completed_with_failures", "failed", "cancelled"].includes(
+              processed.value.status,
+            )
+          ) {
+            yield* Queue.offer(workQueue, "next");
+          }
+        }),
+      ),
+    );
+  }
 
   const preview = makeThreadRetentionPreview({ repository, getPolicy: getAuthoritativePolicy });
 
@@ -180,22 +206,6 @@ const makeThreadRetention = Effect.gen(function* () {
         return yield* retentionError(
           "disabled",
           "Thread retention is disabled by the server administrator.",
-        );
-      }
-      const readyAt = yield* Ref.get(maintenanceReadyAt);
-      if (readyAt === null || Date.now() < readyAt) {
-        return yield* retentionError("busy", "Thread retention is not ready yet.");
-      }
-      if ((yield* purgeJobs.countIncomplete()) >= PURGE_BACKLOG_LIMIT) {
-        return yield* retentionError(
-          "busy",
-          "Purge recovery must catch up before retention starts.",
-        );
-      }
-      if ((yield* repository.listRecoverableRuns(1)).length > 0) {
-        return yield* retentionError(
-          "busy",
-          "Thread retention maintenance is already active. Wait for it to finish before starting another run.",
         );
       }
       const challengeOption = yield* repository.readChallenge(challengeToken);
@@ -232,21 +242,10 @@ const makeThreadRetention = Effect.gen(function* () {
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
       const run = accepted.run;
-      if (
-        run.runId !== requestedRunId &&
-        (run.trigger !== "manual" ||
-          run.policy !== challenge.policy ||
-          run.cutoffAt !== challenge.cutoffAt)
-      ) {
-        return yield* retentionError(
-          "busy",
-          "Thread retention maintenance is already running with a different cutoff.",
-        );
-      }
       yield* increment(threadRetentionRunsTotal, {
         trigger: "manual",
         policy: run.policy,
-        outcome: "started",
+        outcome: "queued",
       });
       yield* Queue.offer(workQueue, run.runId);
       return toPublicThreadRetentionRun(run);
@@ -282,46 +281,34 @@ const makeThreadRetention = Effect.gen(function* () {
     }),
     getPolicy: getAuthoritativePolicy,
     isDisabled: () => process.env.BIGBUD_DISABLE_THREAD_RETENTION === "1",
-    isAutomaticRolloutEnabled: () =>
-      process.env.BIGBUD_INTERNAL_THREAD_RETENTION_AUTOMATIC_ROLLOUT === "1",
     enqueue: (policy) => {
       const nowMs = Date.now();
       const now = new Date(nowMs).toISOString();
-      return purgeJobs.countIncomplete().pipe(
-        Effect.flatMap((backlog) =>
-          backlog >= PURGE_BACKLOG_LIMIT
-            ? Effect.void
-            : repository
-                .createOrGetActiveRun({
-                  runId: crypto.randomUUID(),
+      return repository
+        .createScheduledQueuedRun({
+          runId: crypto.randomUUID(),
+          trigger: "scheduled",
+          policy,
+          cutoffAt: cutoffForRetentionPolicy(policy, nowMs),
+          createdAt: now,
+        })
+        .pipe(
+          Effect.tap(({ run, created }) =>
+            created
+              ? increment(threadRetentionRunsTotal, {
                   trigger: "scheduled",
-                  policy,
-                  cutoffAt: cutoffForRetentionPolicy(policy, nowMs),
-                  createdAt: now,
+                  policy: run.policy,
+                  outcome: "queued",
                 })
-                .pipe(
-                  Effect.tap((run) =>
-                    increment(threadRetentionRunsTotal, {
-                      trigger: "scheduled",
-                      policy: run.policy,
-                      outcome: "started",
-                    }),
-                  ),
-                  Effect.flatMap((run) => Queue.offer(workQueue, run.runId)),
-                  Effect.asVoid,
-                ),
-        ),
-      );
+              : Effect.void,
+          ),
+          Effect.flatMap(() => Queue.offer(workQueue, "scheduled")),
+          Effect.asVoid,
+        );
     },
   });
 
-  const runScheduledOnce: ThreadRetentionShape["runScheduledOnce"] = Effect.gen(function* () {
-    const readyAt = yield* Ref.get(maintenanceReadyAt);
-    if (readyAt === null || Date.now() < readyAt) {
-      return yield* retentionError("busy", "Thread retention is not ready yet.");
-    }
-    yield* runScheduledTick;
-  }).pipe(
+  const runScheduledOnce: ThreadRetentionShape["runScheduledOnce"] = runScheduledTick.pipe(
     Effect.mapError((error) =>
       Schema.is(ServerThreadRetentionError)(error)
         ? error
@@ -362,7 +349,6 @@ const makeThreadRetention = Effect.gen(function* () {
     start: makeThreadRetentionStart({
       maintenanceReadyAt,
       readyDelayMs: RETENTION_READY_DELAY_MS,
-      repository,
       workQueue,
       runScheduledTick,
       scheduleWake,

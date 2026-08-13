@@ -206,12 +206,14 @@ describe("ThreadRetentionSettingsSection", () => {
       getThreadRetentionRun: getRun,
     });
     const screen = await mountRetentionSettings();
-    await vi.waitFor(() => expect(page.getByText(/Latest run: queued/).element()).toBeTruthy());
+    await vi.waitFor(() => expect(page.getByText(/Cleanup request queued/).element()).toBeTruthy());
 
     await vi.advanceTimersByTimeAsync(2_000);
-    await vi.waitFor(() => expect(page.getByText(/Latest run: deferred/).element()).toBeTruthy());
+    await vi.waitFor(() => expect(page.getByText(/Cleanup is paused/).element()).toBeTruthy());
     await vi.advanceTimersByTimeAsync(5_000);
-    await vi.waitFor(() => expect(page.getByText(/Latest run: completed/).element()).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(page.getByText(/Latest cleanup: completed/).element()).toBeTruthy(),
+    );
     await expect.element(page.getByText("Completed: ")).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(getRun).toHaveBeenCalledTimes(2);
@@ -230,7 +232,7 @@ describe("ThreadRetentionSettingsSection", () => {
       getThreadRetentionRun: getRun,
     });
     const screen = await mountRetentionSettings();
-    await vi.waitFor(() => expect(page.getByText(/Latest run: queued/).element()).toBeTruthy());
+    await vi.waitFor(() => expect(page.getByText(/Cleanup request queued/).element()).toBeTruthy());
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.advanceTimersByTimeAsync(7_500);
     expect(getRun).toHaveBeenCalledTimes(5);
@@ -241,9 +243,33 @@ describe("ThreadRetentionSettingsSection", () => {
     getRun.mockResolvedValue({ ...QUEUED_RUN, status: "completed" });
     await page.getByRole("button", { name: "Retry updates" }).click();
     await vi.advanceTimersByTimeAsync(2_000);
-    await vi.waitFor(() => expect(page.getByText(/Latest run: completed/).element()).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(page.getByText(/Latest cleanup: completed/).element()).toBeTruthy(),
+    );
     await screen.unmount();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(getRun).toHaveBeenCalledTimes(6);
+  });
+
+  it("allows a manual request to be previewed and queued while cleanup is active", async () => {
+    const deferredPreview = { ...PREVIEW, maintenanceState: "deferred" as const };
+    const server = configureApi({
+      listThreadRetentionRuns: vi
+        .fn()
+        .mockResolvedValue({ runs: [QUEUED_RUN], availability: "available" }),
+      previewThreadRetention: vi.fn().mockResolvedValue(deferredPreview),
+    });
+    const screen = await mountRetentionSettings();
+    const trigger = page.getByRole("button", { name: "Delete eligible threads now" });
+
+    await expect.element(trigger).toBeEnabled();
+    await trigger.click();
+    await expect.element(page.getByText(/confirm this request now/)).toBeInTheDocument();
+    const confirm = page.getByRole("button", { name: "Delete threads permanently" });
+    await expect.element(confirm).toBeEnabled();
+    await confirm.click();
+
+    expect(server.startThreadRetention).toHaveBeenCalledWith({ challengeToken: "challenge-1" });
+    await screen.unmount();
   });
 });

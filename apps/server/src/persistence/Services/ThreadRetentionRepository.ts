@@ -132,6 +132,10 @@ export type CreateRetentionRunInput = {
   readonly cutoffAt: string;
   readonly createdAt: string;
 };
+export type CreateScheduledRetentionRunResult = {
+  readonly run: ThreadRetentionRun;
+  readonly created: boolean;
+};
 export type InsertRetentionItemInput = ThreadRetentionCandidate & {
   readonly deletionCommandId: string;
 };
@@ -244,6 +248,15 @@ export interface ThreadRetentionRepositoryShape {
   readonly createOrGetActiveRun: (
     input: CreateRetentionRunInput,
   ) => Effect.Effect<ThreadRetentionRun, ProjectionRepositoryError>;
+  readonly createQueuedRun: (
+    input: CreateRetentionRunInput,
+  ) => Effect.Effect<ThreadRetentionRun, ProjectionRepositoryError>;
+  readonly createScheduledQueuedRun: (
+    input: CreateRetentionRunInput & { readonly trigger: "scheduled" },
+  ) => Effect.Effect<CreateScheduledRetentionRunResult, ProjectionRepositoryError>;
+  readonly claimNextQueuedRun: (
+    claimedAt: string,
+  ) => Effect.Effect<Option.Option<ThreadRetentionRun>, ProjectionRepositoryError>;
   readonly selectNextPage: (input: {
     readonly cutoffAt: string;
     readonly cursor?: ThreadRetentionCursor;

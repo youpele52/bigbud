@@ -39,6 +39,13 @@ layer("thread retention consent", (it) => {
         cutoffAt: issued.cutoffAt,
         consumedAt: "2026-08-04T00:04:00.000Z",
       };
+      yield* repository.createOrGetActiveRun({
+        runId: "active-run",
+        trigger: "scheduled",
+        policy: "7-days",
+        cutoffAt: issued.cutoffAt,
+        createdAt: "2026-08-04T00:03:00.000Z",
+      });
       assert.equal(
         yield* repository.consumeChallenge({ ...exact, cutoffAt: "2026-07-02T00:00:00.000Z" }),
         "invalid",
@@ -51,6 +58,8 @@ layer("thread retention consent", (it) => {
       });
       assert.isTrue(accepted.consumed);
       if (accepted.consumed) {
+        assert.equal(accepted.run.runId, "challenge-run");
+        assert.equal(accepted.run.status, "queued");
         assert.equal(accepted.run.policy, issued.policy);
         assert.equal(accepted.run.cutoffAt, issued.cutoffAt);
       }

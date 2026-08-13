@@ -28,11 +28,11 @@ export function ThreadRetentionConfirmationContent({
               <p>
                 This preview found{" "}
                 <strong className="text-foreground">{preview.eligibleCount}</strong> threads
-                currently eligible for future retention. This policy change does not delete anything
-                now; future runs recheck every safety rule.
+                currently eligible for future cleanup. This setting change does not delete anything
+                now; daily checks recheck every safety rule.
               </p>
               <p className="font-medium text-foreground">
-                Export or back up anything you need before enabling automatic retention.
+                Export or back up anything you need before enabling automatic thread cleanup.
               </p>
             </>
           ) : (
@@ -102,8 +102,8 @@ export function ThreadRetentionConfirmationContent({
           </div>
           {preview.maintenanceState !== "available" ? (
             <p className="font-medium text-foreground">
-              Retention maintenance is {preview.maintenanceState}. Wait for the current run to
-              finish before starting another manual run.
+              Another cleanup is active or waiting. You can confirm this request now; it will queue
+              and start automatically when safe.
             </p>
           ) : null}
           {preview.warnings.length > 0 ? (
@@ -125,7 +125,7 @@ export function ThreadRetentionConfirmationContent({
       <p className="flex items-start gap-2 font-medium text-destructive">
         <AlertTriangleIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         {trigger === "policy-change"
-          ? "Future retention runs permanently delete eligible bigbud data and cannot be undone."
+          ? "Future cleanup permanently deletes eligible bigbud data and cannot be undone."
           : "This permanently deletes the listed bigbud data and cannot be undone. Export or back up anything you need first."}
       </p>
     </div>

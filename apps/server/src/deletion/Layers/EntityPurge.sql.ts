@@ -231,7 +231,9 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
               sql`DELETE FROM automation_schedules WHERE target_thread_id = ${threadId}`,
               sql`DELETE FROM projection_thread_watches WHERE watcher_thread_id = ${threadId} OR watched_thread_id = ${threadId}`,
               sql`DELETE FROM thread_delegations WHERE caller_thread_id = ${threadId} OR child_thread_id = ${threadId}`,
-              sql`UPDATE projection_threads SET parent_thread_id = NULL WHERE parent_thread_id = ${threadId}`,
+              sql`UPDATE projection_threads
+                SET parent_thread_id = NULL, parent_thread_title = NULL, parent_thread_project_id = NULL
+                WHERE parent_thread_id = ${threadId}`,
               sql`UPDATE projection_turns SET source_proposed_plan_thread_id = NULL, source_proposed_plan_id = NULL WHERE source_proposed_plan_thread_id = ${threadId}`,
               sql`DELETE FROM learning_jobs WHERE thread_id = ${threadId}`,
               sql`DELETE FROM skill_change_proposals WHERE thread_id = ${threadId}`,

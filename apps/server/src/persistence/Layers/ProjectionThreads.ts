@@ -317,9 +317,18 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     );
 
   const deleteById: ProjectionThreadRepositoryShape["deleteById"] = (input) =>
-    deleteProjectionThreadRow(input).pipe(
-      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")),
-    );
+    sql
+      .withTransaction(
+        Effect.gen(function* () {
+          yield* sql`
+          UPDATE projection_threads
+          SET parent_thread_id = NULL, parent_thread_title = NULL, parent_thread_project_id = NULL
+          WHERE parent_thread_id = ${input.threadId}
+        `;
+          yield* deleteProjectionThreadRow(input);
+        }),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.deleteById:query")));
 
   const touchActivity: ProjectionThreadRepositoryShape["touchActivity"] = (input) =>
     touchProjectionThreadActivity(input).pipe(

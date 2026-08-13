@@ -1,3 +1,4 @@
+import { THREAD_RETENTION_POLICY_LABELS } from "@bigbud/contracts/core/settings.threadRetention";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -26,16 +27,36 @@ describe("ThreadRetentionSettingsSection", () => {
   it("renders the safe policy and explicit permanent-delete action", () => {
     const markup = renderToStaticMarkup(<ThreadRetentionSettingsSection />);
 
-    expect(markup).toContain("Thread retention");
+    expect(markup).toContain("Automatic thread cleanup");
+    expect(markup).toContain("Automatically delete old threads");
+    expect(markup).toContain("Checks thresholds daily");
+    expect(markup).toContain("queue automatically");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
     expect(markup).toContain("cannot be undone");
   });
 
+  it("uses day-based labels for every cleanup threshold", () => {
+    expect(THREAD_RETENTION_POLICY_LABELS).toEqual({
+      "7-days": "7 days",
+      "14-days": "14 days",
+      "30-days": "30 days",
+      "90-days": "90 days",
+      never: "Never",
+    });
+  });
+
   it("registers retention settings search entries", () => {
     expect(SETTINGS_SEARCH_ITEMS).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Thread retention", to: "/settings/general" }),
+        expect.objectContaining({
+          label: "Automatic thread cleanup",
+          to: "/settings/general",
+        }),
+        expect.objectContaining({
+          label: "Automatically delete old threads",
+          to: "/settings/general",
+        }),
         expect.objectContaining({
           label: "Delete eligible threads now",
           to: "/settings/general",
@@ -80,6 +101,8 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(markup).toContain("bounded preview is partial");
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
+    expect(markup).toContain("confirm this request now");
+    expect(markup).toContain("queue");
     for (const phrase of [
       "Pinned threads",
       "active or running threads",
@@ -127,7 +150,7 @@ describe("ThreadRetentionSettingsSection", () => {
     );
 
     expect(markup).toContain("3");
-    expect(markup).toContain("currently eligible");
+    expect(markup).toContain("currently eligible for future cleanup");
     expect(markup).toContain("Export or back up anything you need");
   });
 

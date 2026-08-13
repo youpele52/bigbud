@@ -13,7 +13,7 @@ const tokenHash = (token: string) => createHash("sha256").update(token).digest("
 
 export function makeThreadRetentionChallenges<E, R>(input: {
   readonly sql: SqlClient.SqlClient;
-  readonly createOrGetActiveRun: (
+  readonly createQueuedRun: (
     run: CreateRetentionRunInput,
   ) => Effect.Effect<ThreadRetentionRun, E, R>;
 }) {
@@ -112,7 +112,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
         if (result !== "consumed") return { consumed: false, result } as const;
         return {
           consumed: true,
-          run: yield* input.createOrGetActiveRun({
+          run: yield* input.createQueuedRun({
             runId: request.runId,
             trigger: request.trigger,
             policy: challenge.value.policy,

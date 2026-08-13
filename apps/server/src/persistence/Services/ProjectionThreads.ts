@@ -108,7 +108,7 @@ export interface ProjectionThreadRepositoryShape {
     input: ListProjectionThreadsByProjectInput,
   ) => Effect.Effect<ReadonlyArray<ProjectionThread>, ProjectionRepositoryError>;
 
-  /** Physically remove a projected thread row by id. */
+  /** Detach child references and physically remove a projected thread row by id. */
   readonly deleteById: (
     input: DeleteProjectionThreadInput,
   ) => Effect.Effect<void, ProjectionRepositoryError>;

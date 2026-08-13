@@ -1,6 +1,5 @@
 import { Cause, Effect, Fiber, Queue, Ref, Schedule, Scope, Semaphore } from "effect";
 
-import type { ThreadRetentionRepositoryShape } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { runThreadRetentionSchedule } from "./ThreadRetention.scheduler.ts";
 
 export const makeThreadRetentionWakeScheduler = Effect.fn("ThreadRetention.makeWakeScheduler")(
@@ -41,7 +40,6 @@ export const makeThreadRetentionWakeScheduler = Effect.fn("ThreadRetention.makeW
 export function makeThreadRetentionStart<E>(input: {
   readonly maintenanceReadyAt: Ref.Ref<number | null>;
   readonly readyDelayMs: number;
-  readonly repository: ThreadRetentionRepositoryShape;
   readonly workQueue: Queue.Queue<string>;
   readonly runScheduledTick: Effect.Effect<void, E>;
   readonly scheduleWake: (runId: string, wakeAt: string) => Effect.Effect<void>;
@@ -53,17 +51,7 @@ export function makeThreadRetentionStart<E>(input: {
           Effect.sleep(input.readyDelayMs).pipe(
             Effect.andThen(
               Effect.repeat(
-                input.repository.listRecoverableRuns(1).pipe(
-                  Effect.flatMap((runs) =>
-                    Effect.forEach(
-                      runs,
-                      (run) =>
-                        run.nextAttemptAt !== null && run.nextAttemptAt > new Date().toISOString()
-                          ? input.scheduleWake(run.runId, run.nextAttemptAt)
-                          : Queue.offer(input.workQueue, run.runId),
-                      { discard: true },
-                    ),
-                  ),
+                Queue.offer(input.workQueue, "poll").pipe(
                   Effect.catchCause((cause) =>
                     Cause.hasInterruptsOnly(cause)
                       ? Effect.failCause(cause)

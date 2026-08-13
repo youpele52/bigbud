@@ -8,7 +8,6 @@ import {
   ThreadRetentionRun,
   ThreadRetentionRunItem,
   ThreadRetentionRepository,
-  type CreateRetentionRunInput,
   type RecheckAndClaimRetentionItemInput,
   type ThreadRetentionExclusionReason,
   type ThreadRetentionRepositoryShape,
@@ -18,6 +17,7 @@ import { makeThreadRetentionChallenges } from "./ThreadRetentionRepository.chall
 import { makeThreadRetentionAudit } from "./ThreadRetentionRepository.audit.ts";
 import { makeThreadRetentionPages } from "./ThreadRetentionRepository.pages.ts";
 import { makeThreadRetentionPreview } from "./ThreadRetentionRepository.preview.ts";
+import { makeThreadRetentionQueue } from "./ThreadRetentionRepository.queue.ts";
 import { makeThreadRetentionRetry } from "./ThreadRetentionRepository.retry.ts";
 import {
   retentionDurableExclusions,
@@ -98,35 +98,6 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
     `.pipe(Effect.map((rows) => rows.map((row) => row.threadId)));
   };
 
-  const createOrGetActiveRun = Effect.fn("ThreadRetentionRepository.createOrGetActiveRun")(
-    function* (input: CreateRetentionRunInput) {
-      return yield* sql.withTransaction(
-        Effect.gen(function* () {
-          yield* sql`
-          INSERT INTO thread_retention_runs (
-            run_id, trigger_kind, policy, cutoff_at, status, active_slot, eligible_count,
-            created_at, updated_at
-          ) VALUES (${input.runId}, ${input.trigger}, ${input.policy}, ${input.cutoffAt}, 'queued', 1,
-            (SELECT COUNT(*) FROM projection_threads AS t
-              WHERE t.last_activity_at <= ${input.cutoffAt} AND ${eligible}),
-            ${input.createdAt}, ${input.createdAt})
-          ON CONFLICT DO NOTHING
-        `;
-          const rows = yield* sql<{ runId: string }>`
-          SELECT run_id AS "runId" FROM thread_retention_runs WHERE active_slot = 1 LIMIT 1
-        `;
-          const activeRunId = rows[0]?.runId;
-          if (activeRunId === undefined)
-            return yield* Effect.die("active retention run was not persisted");
-          const active = yield* getRunQuery(activeRunId);
-          if (Option.isNone(active))
-            return yield* Effect.die("active retention run could not be read");
-          return active.value;
-        }),
-      );
-    },
-  );
-
   const recheckAndClaimItem = Effect.fn("ThreadRetentionRepository.recheckAndClaimItem")(function* (
     input: RecheckAndClaimRetentionItemInput,
   ) {
@@ -201,7 +172,9 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         started_at = CASE WHEN started_at IS NULL AND ${input.nextStatus} <> 'queued' THEN ${input.updatedAt} ELSE started_at END,
         completed_at = CASE WHEN ${terminal ? 1 : 0} = 1 THEN ${input.updatedAt} ELSE NULL END,
         updated_at = ${input.updatedAt}
-      WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)} RETURNING run_id
+      WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
+        AND (status <> 'queued' OR active_slot = 1)
+      RETURNING run_id
     `.pipe(Effect.map((rows) => rows.length === 1));
   };
 
@@ -266,7 +239,8 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
     ORDER BY created_at DESC, run_id DESC LIMIT ${clampLimit(limit)}
   `;
 
-  const challenges = makeThreadRetentionChallenges({ sql, createOrGetActiveRun });
+  const queue = makeThreadRetentionQueue({ sql, getRun: getRunQuery });
+  const challenges = makeThreadRetentionChallenges({ sql, createQueuedRun: queue.createQueuedRun });
   const cleanupAudit = makeThreadRetentionAudit(sql);
   const pages = makeThreadRetentionPages(sql);
   const preview = makeThreadRetentionPreview(sql);
@@ -285,7 +259,13 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       listDeletionOwnedThreadIds(threadIds).pipe(mapPersistenceError("listDeletionOwnedThreadIds")),
     preview: (cutoffAt) => preview(cutoffAt).pipe(mapPersistenceError("preview")),
     createOrGetActiveRun: (input) =>
-      createOrGetActiveRun(input).pipe(mapPersistenceError("createOrGetActiveRun")),
+      queue.createOrGetActiveRun(input).pipe(mapPersistenceError("createOrGetActiveRun")),
+    createQueuedRun: (input) =>
+      queue.createQueuedRun(input).pipe(mapPersistenceError("createQueuedRun")),
+    createScheduledQueuedRun: (input) =>
+      queue.createScheduledQueuedRun(input).pipe(mapPersistenceError("createScheduledQueuedRun")),
+    claimNextQueuedRun: (claimedAt) =>
+      queue.claimNextQueuedRun(claimedAt).pipe(mapPersistenceError("claimNextQueuedRun")),
     selectNextPage: (input) =>
       pages.selectNextPage(input).pipe(mapPersistenceError("selectNextPage")),
     insertSelectedItems,

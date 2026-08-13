@@ -210,8 +210,21 @@ const makePurgeJobRepository = Effect.gen(function* () {
       SET
         phase = ${input.phase},
         status = ${input.status},
-        last_error = ${input.lastError},
+        last_error = CASE
+          WHEN ${input.status} = 'failed'
+            AND ${input.phase} = 'awaiting-finalization'
+            AND ${input.lastError} = 'entity deletion marker is not yet available'
+            AND attempt_count + 1 >= ${PURGE_MAX_ATTEMPTS}
+          THEN 'manual_recovery_required' ELSE ${input.lastError}
+        END,
         attempt_count = attempt_count + CASE WHEN ${input.status} = 'failed' THEN 1 ELSE 0 END,
+        auto_resume_disabled = CASE
+          WHEN ${input.status} = 'failed'
+            AND ${input.phase} = 'awaiting-finalization'
+            AND ${input.lastError} = 'entity deletion marker is not yet available'
+            AND attempt_count + 1 >= ${PURGE_MAX_ATTEMPTS}
+          THEN 1 ELSE auto_resume_disabled
+        END,
         updated_at = ${input.updatedAt}
       WHERE job_id = ${input.jobId}
         AND phase = ${input.phase}

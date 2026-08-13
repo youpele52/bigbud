@@ -4,7 +4,7 @@ import { CircleAlertIcon, CircleCheckIcon, Clock3Icon, RefreshCwIcon } from "luc
 import { Button } from "../ui/button";
 import {
   formatRetentionCutoff,
-  formatRetentionRunStatus,
+  getRetentionRunStatusMessage,
   isActiveRetentionRun,
 } from "./ThreadRetentionSettingsSection.logic";
 
@@ -38,15 +38,14 @@ export function ThreadRetentionRunStatus({
       {availability === "disabled" ? (
         <p className="flex items-center gap-1.5 font-medium text-foreground">
           <CircleAlertIcon aria-hidden="true" className="size-3.5 shrink-0" />
-          Retention maintenance is disabled by the server administrator.
+          Automatic thread cleanup is disabled by the server administrator.
         </p>
       ) : null}
       {run ? (
         <>
           <p className="flex items-center gap-1.5 font-medium text-foreground">
             <StateIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            Latest run: {formatRetentionRunStatus(run.status)}
-            {active ? " — updating automatically" : ""}
+            {getRetentionRunStatusMessage(run)}
           </p>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
             <div>
@@ -81,7 +80,6 @@ export function ThreadRetentionRunStatus({
           <p>
             Cutoff: {formatRetentionCutoff(run.cutoffAt)}. Run ID: {run.runId}.
           </p>
-          {run.deferredReason ? <p>Deferred: {run.deferredReason}</p> : null}
           {run.errorMessage ? (
             <p className="font-medium text-foreground">{run.errorMessage}</p>
           ) : null}

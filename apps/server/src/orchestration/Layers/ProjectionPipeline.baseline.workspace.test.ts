@@ -1,4 +1,4 @@
-import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
+import { CommandId, EventId, ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, Scope } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -69,6 +69,95 @@ it.layer(BaseTestLayer)("projection baseline workspace", (it) => {
       for (const suffix of ["", "-wal", "-shm", "-journal"]) {
         assert.isFalse(yield* fs.exists(`${workspacePath}${suffix}`));
       }
+    }),
+  );
+
+  it.effect("verifies a baseline after deleting a parent thread with a surviving child", () =>
+    Effect.gen(function* () {
+      const eventStore = yield* OrchestrationEventStore;
+      const pipeline = yield* OrchestrationProjectionPipeline;
+      const sql = yield* SqlClient.SqlClient;
+      const now = "2026-08-03T00:00:00.000Z";
+      const projectId = ProjectId.makeUnsafe("parent-deletion-project");
+      const parentId = ThreadId.makeUnsafe("parent-deletion-parent");
+      const childId = ThreadId.makeUnsafe("parent-deletion-child");
+      const append = (event: Parameters<typeof eventStore.append>[0]) => eventStore.append(event);
+
+      yield* append({
+        type: "project.created",
+        eventId: EventId.makeUnsafe("parent-deletion-project-created"),
+        aggregateKind: "project",
+        aggregateId: projectId,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("parent-deletion-project-command"),
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        payload: {
+          projectId,
+          title: "Parent deletion project",
+          workspaceRoot: null,
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+      for (const [threadId, title, parentThread] of [
+        [parentId, "Parent", undefined],
+        [childId, "Child", { threadId: parentId, title: "Parent", projectId }],
+      ] as const) {
+        yield* append({
+          type: "thread.created",
+          eventId: EventId.makeUnsafe(`${threadId}-created`),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: now,
+          commandId: CommandId.makeUnsafe(`${threadId}-command`),
+          causationEventId: null,
+          correlationId: null,
+          metadata: {},
+          payload: {
+            threadId,
+            projectId,
+            title,
+            modelSelection: { provider: "codex", model: "gpt-5.6" },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            ...(parentThread === undefined ? {} : { parentThread }),
+            createdAt: now,
+            updatedAt: now,
+          },
+        });
+      }
+      yield* pipeline.bootstrap;
+      yield* pipeline.ensureVerifiedBaselineThrough(3);
+
+      const deleted = yield* append({
+        type: "thread.deleted",
+        eventId: EventId.makeUnsafe("parent-deletion-deleted"),
+        aggregateKind: "thread",
+        aggregateId: parentId,
+        occurredAt: now,
+        commandId: CommandId.makeUnsafe("parent-deletion-delete-command"),
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        payload: { threadId: parentId, deletedAt: now },
+      });
+      yield* pipeline.projectEvent(deleted);
+      yield* pipeline.ensureVerifiedBaselineThrough(4);
+
+      const children = yield* sql<{ readonly parentThreadId: string | null }>`
+        SELECT parent_thread_id AS "parentThreadId"
+        FROM projection_threads WHERE thread_id = ${childId}
+      `;
+      assert.deepEqual(children, [{ parentThreadId: null }]);
+      const baselines = yield* ProjectionBaselineRepository;
+      const verified = yield* baselines.latestVerified();
+      assert.equal(verified._tag, "Some");
+      if (verified._tag === "Some") assert.equal(verified.value.sequence, 4);
     }),
   );
 });

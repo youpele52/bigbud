@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getRetentionRunStatusMessage,
   getRetentionPollIntervalMs,
   shouldReplaceRetentionRun,
 } from "./ThreadRetentionSettingsSection.logic";
@@ -46,5 +47,18 @@ describe("ThreadRetentionSettingsSection logic", () => {
         updatedAt: "2026-08-04T00:00:01.000Z",
       }),
     ).toBe(true);
+  });
+
+  it("uses actionable cleanup copy for queued and active internal statuses", () => {
+    expect(getRetentionRunStatusMessage(RUN)).toBe(
+      "Cleanup request queued — it will start automatically when safe.",
+    );
+    expect(getRetentionRunStatusMessage({ ...RUN, status: "deferred" })).toContain(
+      "retry automatically",
+    );
+    expect(getRetentionRunStatusMessage({ ...RUN, status: "purging" })).toBe(
+      "Cleanup in progress — updates appear automatically.",
+    );
+    expect(getRetentionRunStatusMessage({ ...RUN, status: "purging" })).not.toContain("purge");
   });
 });

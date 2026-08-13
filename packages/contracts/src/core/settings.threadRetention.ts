@@ -18,8 +18,8 @@ export const FINITE_THREAD_RETENTION_POLICIES = [
 export const THREAD_RETENTION_POLICY_LABELS = {
   "7-days": "7 days",
   "14-days": "14 days",
-  "30-days": "1 month",
-  "90-days": "3 months",
+  "30-days": "30 days",
+  "90-days": "90 days",
   never: "Never",
 } as const;
 

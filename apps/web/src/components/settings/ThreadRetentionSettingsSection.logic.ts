@@ -38,6 +38,21 @@ export function formatRetentionRunStatus(status: ServerThreadRetentionRun["statu
   return status.replaceAll("_", " ");
 }
 
+export function getRetentionRunStatusMessage(run: ServerThreadRetentionRun): string {
+  switch (run.status) {
+    case "queued":
+      return "Cleanup request queued — it will start automatically when safe.";
+    case "deferred":
+      return "Cleanup is paused — it will retry automatically when safe.";
+    case "selecting":
+    case "preparing":
+    case "purging":
+      return "Cleanup in progress — updates appear automatically.";
+    default:
+      return `Latest cleanup: ${formatRetentionRunStatus(run.status)}`;
+  }
+}
+
 export function formatRetentionExclusionReason(reason: string): string {
   return reason.replaceAll("_", " ");
 }
