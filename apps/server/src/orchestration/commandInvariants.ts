@@ -11,6 +11,7 @@ import type {
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { hasActiveThreadTurnOrSession } from "./ThreadDispatchSafety.logic.ts";
 
 function invariantError(commandType: string, detail: string): OrchestrationCommandInvariantError {
   return new OrchestrationCommandInvariantError({
@@ -175,11 +176,7 @@ export function requireProjectThreadsIdle(input: {
   readonly projectId: ProjectId;
 }): Effect.Effect<void, OrchestrationCommandInvariantError> {
   const activeThread = listThreadsByProjectId(input.readModel, input.projectId).find(
-    (thread) =>
-      thread.deletedAt === null &&
-      (thread.session?.activeTurnId !== null && thread.session?.activeTurnId !== undefined
-        ? true
-        : thread.session?.status === "starting" || thread.session?.status === "running"),
+    (thread) => thread.deletedAt === null && hasActiveThreadTurnOrSession(thread),
   );
   return activeThread
     ? Effect.fail(

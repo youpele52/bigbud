@@ -13,7 +13,7 @@ import {
   decideThreadTurnStartCommand,
   requireThreadReadyForMutation,
 } from "./deciderThreads.turn.start.ts";
-import { resolveThreadWorkflowStatus } from "./ThreadWorkflowStatus.logic.ts";
+import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
 
 const MAX_QUEUED_PROMPTS = 5;
 type QueueCommand = Extract<
@@ -81,9 +81,7 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       detail: `Thread '${thread.id}' is archived.`,
     });
   }
-  const status = resolveThreadWorkflowStatus(thread);
-  const safelyIdle =
-    !status.isAgentActive && !status.hasPendingApprovals && !status.hasPendingUserInput;
+  const safelyIdle = isThreadConfirmedIdleForDispatch(thread);
 
   if (command.type === "thread.message.submit") {
     const queuedPrompts = thread.queuedPrompts ?? [];

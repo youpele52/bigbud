@@ -7,7 +7,7 @@ import {
 } from "@bigbud/contracts";
 import { createHash } from "node:crypto";
 
-import { resolveThreadWorkflowStatus } from "./ThreadWorkflowStatus.logic.ts";
+import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
 
 export function makeLifecycleQueuedPromptFlushCommand(input: {
   readonly trigger: OrchestrationCommand;
@@ -15,9 +15,8 @@ export function makeLifecycleQueuedPromptFlushCommand(input: {
   readonly createdAt: string;
 }): OrchestrationCommand | null {
   if (
-    (input.trigger.type === "thread.session.set" && input.trigger.suppressQueuedPromptFlush) ||
-    (input.trigger.type !== "thread.session.set" &&
-      input.trigger.type !== "thread.turn.start.failed")
+    input.trigger.type !== "thread.session.set" &&
+    input.trigger.type !== "thread.turn.start.failed"
   ) {
     return null;
   }
@@ -45,8 +44,7 @@ export function makeQueuedPromptFlushCommand(input: {
   ) {
     return null;
   }
-  const status = resolveThreadWorkflowStatus(thread);
-  if (status.isAgentActive || status.hasPendingApprovals || status.hasPendingUserInput) return null;
+  if (!isThreadConfirmedIdleForDispatch(thread)) return null;
 
   const messageIds =
     thread.pendingInterruptFlushIntent?.queuedPromptIds ?? prompts.map((prompt) => prompt.id);

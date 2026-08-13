@@ -62,7 +62,6 @@ function projectHealthState(input: {
         lastError: input.lastError,
         updatedAt: input.occurredAt,
       },
-      ...(input.terminal ? { suppressQueuedPromptFlush: true } : {}),
       createdAt: input.occurredAt,
     })
     .pipe(Effect.asVoid);

@@ -87,7 +87,7 @@ describe("provider turn supervisor", () => {
     expect(setup.commands).toEqual([]);
   });
 
-  it("settles authoritative completion once without allowing queued-prompt flush", async () => {
+  it("settles authoritative completion and allows the normal queued-prompt flush", async () => {
     const setup = harness({
       row: liveness(),
       inspection: () =>
@@ -100,9 +100,9 @@ describe("provider turn supervisor", () => {
     await Effect.runPromise(superviseProviderTurns({ ...setup, now: () => now }));
     expect(setup.commands.at(-1)).toMatchObject({
       type: "thread.session.set",
-      suppressQueuedPromptFlush: true,
       session: { status: "ready", activeTurnId: null },
     });
+    expect(setup.commands.at(-1)).not.toHaveProperty("suppressQueuedPromptFlush");
   });
 
   it("projects stalled only after bounded unavailable inspections", async () => {
