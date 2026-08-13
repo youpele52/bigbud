@@ -3,7 +3,6 @@ import {
   FolderIcon,
   FolderOpenIcon,
   GripVerticalIcon,
-  ServerIcon,
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -24,6 +23,7 @@ import {
   isChatsSidebarProject,
   type SidebarRenderedProjectItemProps,
 } from "./SidebarRenderedProjectItem.types";
+import { SidebarRemoteProjectStatusIcon } from "./SidebarRemoteProjectStatusIcon";
 
 export function SidebarRenderedProjectItem({
   dragHandleProps,
@@ -212,7 +212,12 @@ export function SidebarRenderedProjectItem({
                 });
               }}
             >
-              {project.expanded ? (
+              {isRemoteProject && workspaceExecutionTargetId ? (
+                <SidebarRemoteProjectStatusIcon
+                  executionTargetId={workspaceExecutionTargetId}
+                  remoteTargetLabel={remoteTargetLabel}
+                />
+              ) : project.expanded ? (
                 <FolderOpenIcon
                   className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/70`}
                 />
@@ -253,15 +258,6 @@ export function SidebarRenderedProjectItem({
                   <span className="truncate text-xs font-medium text-foreground/90">
                     {project.name}
                   </span>
-                  {isRemoteProject ? (
-                    <span
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border/70 bg-secondary/70 px-1 py-0.5 text-[9px] font-medium tracking-[0.12em] text-muted-foreground/80 uppercase"
-                      title={remoteTargetLabel ?? "SSH remote project"}
-                    >
-                      <ServerIcon className="size-2.5" />
-                      SSH
-                    </span>
-                  ) : null}
                   {project.expanded ? (
                     <ChevronRightIcon
                       className={`${SIDEBAR_ICON_SIZE_CLASS} shrink-0 rotate-90 text-muted-foreground/70 transition-all duration-150`}
