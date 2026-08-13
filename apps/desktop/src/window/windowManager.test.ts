@@ -156,6 +156,28 @@ describe("windowManager context menu", () => {
     );
   });
 
+  it("forwards native browser navigation commands to the renderer", () => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const appCommand = window?.windowHandlers.get("app-command");
+
+    appCommand?.({}, "browser-backward");
+    appCommand?.({}, "browser-forward");
+    appCommand?.({}, "media-play-pause");
+
+    expect(window?.webContents.send).toHaveBeenCalledTimes(2);
+    expect(window?.webContents.send).toHaveBeenNthCalledWith(
+      1,
+      "desktop:menu-action",
+      "browser-backward",
+    );
+    expect(window?.webContents.send).toHaveBeenNthCalledWith(
+      2,
+      "desktop:menu-action",
+      "browser-forward",
+    );
+  });
+
   it("adds Copy Image for image context menus", () => {
     mockWindowInstances.length = 0;
     buildFromTemplateMock.mockClear();

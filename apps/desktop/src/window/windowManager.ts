@@ -209,6 +209,12 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     Menu.buildFromTemplate(menuTemplate).popup({ window });
   });
 
+  window.on("app-command", (_event, command) => {
+    if (command === "browser-backward" || command === "browser-forward") {
+      window.webContents.send(deps.menuActionChannel, command);
+    }
+  });
+
   window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
     certificateChallengeManager.attachGuest(window.webContents, guestWebContents);
     guestWebContents.on("before-mouse-event", (_mouseEvent, input) => {
