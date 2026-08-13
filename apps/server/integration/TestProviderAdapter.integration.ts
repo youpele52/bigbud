@@ -21,6 +21,7 @@ import type {
   ProviderAdapterShape,
   ProviderThreadTurnSnapshot,
 } from "../src/provider/Services/ProviderAdapter.ts";
+import { unavailableActiveTurnInspection } from "../src/provider/providerActiveTurnInspection.ts";
 import {
   normalizeFixtureEvent,
   type FixtureProviderRuntimeEvent,
@@ -309,6 +310,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
       startSession,
       sendTurn,
       interruptTurn,
+      inspectActiveTurn: unavailableActiveTurnInspection(provider),
       respondToRequest,
       respondToUserInput,
       stopSession,

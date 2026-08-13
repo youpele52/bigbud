@@ -7,6 +7,12 @@ import {
   type OrchestrationThreadActivity,
   type ThreadId,
 } from "@bigbud/contracts";
+import {
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
+  PROVIDER_STALLED_SESSION_REASON,
+} from "@bigbud/contracts/constants/providerRuntime.constant";
 
 export type ThreadWorkflowStatusLabel =
   | "archived"
@@ -223,7 +229,14 @@ export function resolveThreadWorkflowStatus(
 
   if (thread.archivedAt !== null) {
     workflowStatus = "archived";
-  } else if (session?.status === "error" || latestTurn?.state === "error") {
+  } else if (
+    session?.status === "error" ||
+    latestTurn?.state === "error" ||
+    session?.reason === PROVIDER_STALLED_SESSION_REASON ||
+    session?.reason === PROVIDER_CHECKING_SESSION_REASON ||
+    session?.reason === PROVIDER_LOST_SESSION_REASON ||
+    session?.reason === PROVIDER_RECOVERING_SESSION_REASON
+  ) {
     workflowStatus = "error";
   } else if (hasPendingApprovals) {
     workflowStatus = "awaiting_approval";

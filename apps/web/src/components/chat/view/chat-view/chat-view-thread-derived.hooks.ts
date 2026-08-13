@@ -10,6 +10,7 @@ import {
   formatElapsed,
   hasActionableProposedPlan,
   isSessionActivelyRunningTurn,
+  isSessionHealthUnconfirmed,
   hasToolActivityForTurn,
   isLatestTurnSettled,
 } from "../../../../logic/session";
@@ -258,7 +259,11 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
     threadError: activeThread?.error,
   });
 
-  const isWorking = activeSessionTurnRunning || isSendBusy || isConnecting || isRevertingCheckpoint;
+  const isWorking =
+    (activeSessionTurnRunning && !isSessionHealthUnconfirmed(activeThread?.session ?? null)) ||
+    isSendBusy ||
+    isConnecting ||
+    isRevertingCheckpoint;
   const nowIso = new Date(nowTick).toISOString();
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
     activeLatestTurn,

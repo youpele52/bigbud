@@ -1,9 +1,20 @@
+import {
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
+  PROVIDER_STALLED_SESSION_REASON,
+} from "@bigbud/contracts/constants/providerRuntime.constant";
+
 /** Session reasons that indicate provider-side agent work is still in progress. */
 const ONGOING_AGENT_WORK_SESSION_REASONS = new Set([
   "agent_start",
   "assistant_message.pending_completion",
   "turn.completed.awaiting_agent_end",
   "turn.queued",
+  PROVIDER_STALLED_SESSION_REASON,
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
 ]);
 
 export function isOngoingAgentWorkSessionReason(reason: string | null | undefined): boolean {

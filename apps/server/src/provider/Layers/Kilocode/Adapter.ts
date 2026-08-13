@@ -16,6 +16,7 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { KilocodeAdapter, type KilocodeAdapterShape } from "../../Services/Kilocode/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeSessionMethods, type SessionMethodDeps } from "../Opencode/Adapter.session.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { ActiveOpencodeSession } from "../Opencode/Adapter.types.ts";
@@ -70,6 +71,7 @@ const makeKilocodeAdapter = Effect.fn("makeKilocodeAdapter")(function* (
       sessionModelSwitch: "in-session",
     },
     ...sessionMethods,
+    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },

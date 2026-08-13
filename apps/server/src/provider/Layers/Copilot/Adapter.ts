@@ -18,6 +18,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { ProviderAdapterRequestError, ProviderAdapterSessionNotFoundError } from "../../Errors.ts";
 import { CopilotAdapter, type CopilotAdapterShape } from "../../Services/Copilot/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { buildSessionConfig } from "./Adapter.session.config.ts";
 import {
   PROVIDER,
@@ -287,6 +288,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     startSession: makeStartSession(sessionDeps),
     sendTurn: makeSendTurn(sessionDeps),
     interruptTurn: makeInterruptTurn(sessionDeps),
+    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
     respondToRequest,
     respondToUserInput,
     stopSession: makeStopSession(sessionDeps),

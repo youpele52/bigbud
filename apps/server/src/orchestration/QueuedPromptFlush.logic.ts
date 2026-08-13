@@ -15,8 +15,9 @@ export function makeLifecycleQueuedPromptFlushCommand(input: {
   readonly createdAt: string;
 }): OrchestrationCommand | null {
   if (
-    input.trigger.type !== "thread.session.set" &&
-    input.trigger.type !== "thread.turn.start.failed"
+    (input.trigger.type === "thread.session.set" && input.trigger.suppressQueuedPromptFlush) ||
+    (input.trigger.type !== "thread.session.set" &&
+      input.trigger.type !== "thread.turn.start.failed")
   ) {
     return null;
   }

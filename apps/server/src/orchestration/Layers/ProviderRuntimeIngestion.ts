@@ -32,6 +32,7 @@ import { makeRuntimeProcessorCacheHelpers } from "./ProviderRuntimeIngestion.cac
 import {
   buildStartupReconciliationCommands,
   buildThreadReconciliationCommand,
+  dispatchReconciliationCommandSafely,
 } from "./ProviderRuntimeIngestion.reconcile.ts";
 import {
   makePeriodicReconciliationState,
@@ -39,6 +40,7 @@ import {
 } from "./ProviderRuntimeIngestion.periodic.ts";
 import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { PurgeJobRepository } from "../../persistence/Services/PurgeJobRepository.ts";
+import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
 
 const make = Effect.fn("make")(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -82,6 +84,19 @@ const make = Effect.fn("make")(function* () {
   let reconciliationPassRunning = false;
   const periodicReconciliationState = makePeriodicReconciliationState();
 
+  const discoverProviderSessions = Effect.fn("discoverProviderSessions")(function* () {
+    const discovery = yield* providerService.listSessionsForReconciliation();
+    if (discovery.diagnostics.length > 0) {
+      yield* Effect.logWarning(
+        "provider runtime reconciliation discovery was partially unavailable",
+        {
+          diagnostics: discovery.diagnostics,
+        },
+      );
+    }
+    return discovery;
+  });
+
   const getOrCreateThreadWorker = (threadId: string) => {
     const existing = threadWorkers.get(threadId);
     if (existing !== undefined) {
@@ -93,15 +108,25 @@ const make = Effect.fn("make")(function* () {
     );
   };
 
+  const superviseActiveTurns = () =>
+    superviseProviderTurns({
+      orchestrationEngine,
+      providerService,
+    });
+
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
-      const [readModel, liveSessions, purgeJobs] = yield* Effect.all([
+      const [readModel, discovery, purgeJobs] = yield* Effect.all([
         orchestrationEngine.getReadModel(),
-        providerService.listSessions(),
+        discoverProviderSessions(),
         Option.isSome(purgeJobRepository)
           ? purgeJobRepository.value.listIncomplete(1_000)
           : Effect.succeed([]),
       ]);
+      const liveSessions = discovery.sessions;
+      const reconcilableThreads = readModel.threads.filter((thread) =>
+        discovery.availableProviders.has(thread.modelSelection.provider),
+      );
       const startupDeletingThreadIds = readModel.threads
         .filter((thread) => thread.deletingAt !== null)
         .slice(0, 250)
@@ -116,7 +141,7 @@ const make = Effect.fn("make")(function* () {
       }
       const occurredAt = new Date().toISOString();
       const commands = buildStartupReconciliationCommands({
-        threads: readModel.threads,
+        threads: reconcilableThreads,
         liveSessions,
         deletionOwnedThreadIds,
         occurredAt,
@@ -124,7 +149,7 @@ const make = Effect.fn("make")(function* () {
 
       yield* Effect.forEach(
         commands,
-        (command) => orchestrationEngine.dispatch(command).pipe(Effect.asVoid),
+        (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
         { concurrency: 1 },
       ).pipe(Effect.asVoid);
 
@@ -142,18 +167,19 @@ const make = Effect.fn("make")(function* () {
     reconciliationPassRunning = true;
     yield* Effect.ensuring(
       Effect.gen(function* () {
-        const [readModel, liveSessions] = yield* Effect.all([
+        const [readModel, discovery] = yield* Effect.all([
           orchestrationEngine.getReadModel(),
-          providerService.listSessions(),
+          discoverProviderSessions(),
         ]);
         const sessionsByThreadId = new Map(
-          liveSessions.map((session) => [session.threadId, session]),
+          discovery.sessions.map((session) => [session.threadId, session]),
         );
         const observedAt = yield* Clock.currentTimeMillis;
         const commands = selectPeriodicReconciliationThreads(
           readModel.threads,
           periodicReconciliationState,
         ).flatMap((thread) => {
+          if (!discovery.availableProviders.has(thread.modelSelection.provider)) return [];
           const liveSession = sessionsByThreadId.get(thread.id);
           if (liveSession !== undefined) {
             periodicReconciliationState.missingSessionObservedAt.delete(thread.id);
@@ -174,9 +200,11 @@ const make = Effect.fn("make")(function* () {
           });
           return command ? [command] : [];
         });
-        yield* Effect.forEach(commands, (command) => orchestrationEngine.dispatch(command), {
-          concurrency: 4,
-        });
+        yield* Effect.forEach(
+          commands,
+          (command) => dispatchReconciliationCommandSafely(orchestrationEngine, command),
+          { concurrency: 4 },
+        );
       }).pipe(
         Effect.catchCause((cause) =>
           Cause.hasInterruptsOnly(cause)
@@ -200,6 +228,13 @@ const make = Effect.fn("make")(function* () {
         }),
       ),
     );
+    yield* superviseActiveTurns().pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("provider runtime ingestion failed to supervise persisted turns", {
+          cause: Cause.pretty(cause),
+        }),
+      ),
+    );
     yield* Effect.forkScoped(
       Stream.runForEach(providerService.streamEvents, (event) =>
         getOrCreateThreadWorker(event.threadId).pipe(
@@ -208,7 +243,10 @@ const make = Effect.fn("make")(function* () {
       ),
     );
     yield* Effect.forkScoped(
-      reconcileActiveThreadSessions().pipe(Effect.repeat(Schedule.fixed("5 seconds"))),
+      Effect.all([reconcileActiveThreadSessions(), superviseActiveTurns()], {
+        concurrency: 2,
+        discard: true,
+      }).pipe(Effect.repeat(Schedule.fixed("5 seconds"))),
     );
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {

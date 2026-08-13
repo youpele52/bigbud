@@ -29,6 +29,7 @@ import type {
 } from "../Services/ProviderAdapter.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
+import { unavailableActiveTurnInspection } from "../providerActiveTurnInspection.ts";
 import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderSessionRuntimeRepositoryLive } from "../../persistence/Layers/ProviderSessionRuntime.ts";
@@ -190,6 +191,7 @@ export function makeFakeCodexAdapter(
     startSession,
     sendTurn,
     interruptTurn,
+    inspectActiveTurn: unavailableActiveTurnInspection(provider),
     respondToRequest,
     respondToUserInput,
     stopSession,

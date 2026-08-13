@@ -13,6 +13,7 @@
  */
 import type {
   ProviderInterruptTurnInput,
+  ProviderActiveTurnInspection,
   ProviderKind,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
@@ -24,11 +25,30 @@ import type {
   ThreadId,
   ProviderTurnStartResult,
 } from "@bigbud/contracts";
+import type {
+  ProviderTurnInspectionState,
+  ProviderTurnLiveness,
+} from "@bigbud/contracts/orchestration/providerTurnLiveness";
 import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { ProviderServiceError } from "../Errors.ts";
 import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+
+export interface ProviderSessionDiscoveryDiagnostic {
+  readonly provider: ProviderKind | null;
+  readonly source: "adapter" | "directory";
+  readonly kind: "timeout" | "error";
+  readonly detail: string;
+}
+
+export interface ProviderSessionDiscoveryResult {
+  readonly sessions: ReadonlyArray<ProviderSession>;
+  readonly availableProviders: ReadonlySet<ProviderKind>;
+  readonly unavailableProviders: ReadonlySet<ProviderKind>;
+  readonly directoryAvailable: boolean;
+  readonly diagnostics: ReadonlyArray<ProviderSessionDiscoveryDiagnostic>;
+}
 
 /**
  * ProviderServiceShape - Service API for provider session and turn orchestration.
@@ -64,6 +84,28 @@ export interface ProviderServiceShape {
     input: ProviderInterruptTurnInput,
   ) => Effect.Effect<void, ProviderServiceError>;
 
+  readonly inspectActiveTurn: (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: import("@bigbud/contracts").TurnId;
+  }) => Effect.Effect<ProviderActiveTurnInspection, ProviderServiceError>;
+
+  readonly listActiveTurnLiveness: () => Effect.Effect<ReadonlyArray<ProviderTurnLiveness>>;
+
+  readonly recordTurnInspection: (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: import("@bigbud/contracts").TurnId;
+    readonly observedAt: string;
+    readonly status: ProviderTurnInspectionState;
+    readonly failed: boolean;
+  }) => Effect.Effect<void>;
+
+  readonly claimTurnTerminal: (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: import("@bigbud/contracts").TurnId;
+    readonly provider: ProviderKind;
+    readonly terminalAt: string;
+  }) => Effect.Effect<boolean>;
+
   /**
    * Respond to a provider approval request.
    */
@@ -91,6 +133,9 @@ export interface ProviderServiceShape {
    * Aggregates runtime session lists from all registered adapters.
    */
   readonly listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
+
+  /** Failure-isolated provider discovery used only by reconciliation. */
+  readonly listSessionsForReconciliation: () => Effect.Effect<ProviderSessionDiscoveryResult>;
 
   /**
    * Read static capabilities for a provider adapter.

@@ -72,6 +72,7 @@ const ThreadSessionSetCommand = Schema.Struct({
   commandId: CommandId,
   threadId: ThreadId,
   session: OrchestrationSession,
+  suppressQueuedPromptFlush: Schema.optional(Schema.Boolean),
   createdAt: IsoDateTime,
 });
 

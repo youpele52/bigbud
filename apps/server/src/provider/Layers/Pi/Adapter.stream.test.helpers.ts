@@ -24,10 +24,23 @@ export function createProviderServiceHarness() {
     startSessionFresh: () => unsupported(),
     sendTurn: () => unsupported(),
     interruptTurn: () => unsupported(),
+    inspectActiveTurn: () =>
+      Effect.succeed({ status: "unavailable", observedAt: new Date().toISOString() }),
+    listActiveTurnLiveness: () => Effect.succeed([]),
+    recordTurnInspection: () => Effect.void,
+    claimTurnTerminal: () => Effect.succeed(true),
     respondToRequest: () => unsupported(),
     respondToUserInput: () => unsupported(),
     stopSession: () => unsupported(),
     listSessions: () => Effect.succeed([] as ProviderSession[]),
+    listSessionsForReconciliation: () =>
+      Effect.succeed({
+        sessions: [],
+        availableProviders: new Set(["pi" as const]),
+        unavailableProviders: new Set(),
+        directoryAvailable: true,
+        diagnostics: [],
+      }),
     getCapabilities: () => Effect.succeed({ sessionModelSwitch: "in-session" }),
     rollbackConversation: () => unsupported(),
     get streamEvents() {
