@@ -1,5 +1,6 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { Effect } from "effect";
+import { homedir } from "node:os";
 
 import { increment, terminalSessionsTotal } from "../../observability/Metrics";
 import { PtySpawnError, type PtyProcess } from "../Services/PTY";
@@ -69,7 +70,7 @@ export function trySpawnWith(
       ctx.ptyAdapter.spawn({
         shell: candidate.shell,
         ...(candidate.args ? { args: candidate.args } : {}),
-        cwd: session.cwd,
+        cwd: isLocalExecutionTarget(session.executionTargetId) ? session.cwd : homedir(),
         cols: session.cols,
         rows: session.rows,
         env: spawnEnv,
