@@ -12,6 +12,7 @@ const cursor2 = { lastUsedAt: "2026-08-09T00:00:00.000Z", projectId: project2 };
 function makePage(
   projectId: ProjectId,
   nextCursor: GetStartupProjectCatalogResult["nextCursor"] = undefined,
+  remainingCount = 0,
 ): GetStartupProjectCatalogResult {
   return {
     projectionSequence: 10,
@@ -31,6 +32,7 @@ function makePage(
         hasExceptionalThreads: false,
       },
     ],
+    remainingCount,
     nextCursor,
   };
 }
@@ -110,6 +112,23 @@ describe("lazy project catalog pagination", () => {
     localPage.resolve(makePage(project1));
     await localLoad;
     expect(useStore.getState().projects.map((project) => project.id)).toEqual([project2, project1]);
+  });
+
+  it("stores remaining counts independently for each catalog scope", async () => {
+    const { api, orchestration } = makeApi();
+    orchestration.getStartupProjectCatalog
+      .mockResolvedValueOnce(makePage(project1, cursor1, 6))
+      .mockResolvedValueOnce(makePage(project2, cursor2, 3));
+
+    await Promise.all([
+      loadMoreProjectCatalog({ api, scope: "local" }),
+      loadMoreProjectCatalog({ api, scope: "remote" }),
+    ]);
+
+    expect(useStore.getState().projectCatalogRemainingCountByScope).toEqual({
+      local: 6,
+      remote: 3,
+    });
   });
 
   it("loads five projects from the catalog head after a single prioritized project", async () => {

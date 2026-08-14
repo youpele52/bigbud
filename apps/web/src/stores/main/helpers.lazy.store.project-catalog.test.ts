@@ -29,6 +29,7 @@ function makePage(
         hasExceptionalThreads: false,
       },
     ],
+    remainingCount: 0,
   } as const;
 }
 
@@ -83,15 +84,16 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore
-      .getState()
-      .syncBoundedCatalog(
-        { local: makePage(19), remote: { projectionSequence: 19, projects: [] } },
-        {},
-        {},
-        emptySidebarCatalog,
-        [],
-      );
+    useStore.getState().syncBoundedCatalog(
+      {
+        local: makePage(19),
+        remote: { projectionSequence: 19, projects: [], remainingCount: 0 },
+      },
+      {},
+      {},
+      emptySidebarCatalog,
+      [],
+    );
 
     expect(useStore.getState().projects).toEqual([]);
   });
@@ -180,15 +182,16 @@ describe("lazy project catalog pages", () => {
         ),
       );
 
-    useStore
-      .getState()
-      .syncBoundedCatalog(
-        { local: makePage(19), remote: { projectionSequence: 19, projects: [] } },
-        {},
-        {},
-        emptySidebarCatalog,
-        [],
-      );
+    useStore.getState().syncBoundedCatalog(
+      {
+        local: makePage(19),
+        remote: { projectionSequence: 19, projects: [], remainingCount: 0 },
+      },
+      {},
+      {},
+      emptySidebarCatalog,
+      [],
+    );
 
     expect(useStore.getState().projects[0]).toMatchObject({
       name: "Newer title",
@@ -212,7 +215,7 @@ describe("lazy project catalog pages", () => {
     useStore.getState().syncBoundedCatalog(
       {
         local: { ...makePage(19), projects: [] },
-        remote: { projectionSequence: 19, projects: [] },
+        remote: { projectionSequence: 19, projects: [], remainingCount: 0 },
       },
       {},
       {},

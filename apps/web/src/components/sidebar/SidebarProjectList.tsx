@@ -77,10 +77,14 @@ export function SidebarProjectList({
   const projectCatalogLoading = useStore(
     (state) => state.projectCatalogLoadingByScope[catalogScope],
   );
+  const projectCatalogRemainingCount = useStore(
+    (state) => state.projectCatalogRemainingCountByScope[catalogScope],
+  );
   const projectCatalogError = useStore((state) => state.projectCatalogErrorByScope[catalogScope]);
   const retryCatalogHead = useStore((state) => state.projectCatalogRetryHeadByScope[catalogScope]);
   const hasMoreProjects =
     retryCatalogHead || (projectCatalogCursor !== null && projectCatalogCursor !== undefined);
+  const loadMoreCount = Math.min(5, projectCatalogRemainingCount ?? 5);
   const animatedListsRef = useRef(new WeakSet<HTMLElement>());
   const attachAutoAnimateRef = useCallback((node: HTMLElement | null) => {
     if (!node || animatedListsRef.current.has(node)) {
@@ -140,20 +144,22 @@ export function SidebarProjectList({
               ? "Loading projects..."
               : projectCatalogError
                 ? "Retry loading projects"
-                : "Load 5 more projects"}
+                : `Load ${loadMoreCount} more project${loadMoreCount === 1 ? "" : "s"}`}
           </button>
-          <button
-            type="button"
-            className="h-6 w-full rounded-md px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 disabled:cursor-wait"
-            disabled={projectCatalogLoading}
-            onClick={() => {
-              const api = readNativeApi();
-              if (api)
-                void loadAllProjectCatalog({ api, scope: catalogScope }).catch(() => undefined);
-            }}
-          >
-            Load all projects
-          </button>
+          {projectCatalogRemainingCount !== null && projectCatalogRemainingCount > 5 ? (
+            <button
+              type="button"
+              className="h-6 w-full rounded-md px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80 disabled:cursor-wait"
+              disabled={projectCatalogLoading}
+              onClick={() => {
+                const api = readNativeApi();
+                if (api)
+                  void loadAllProjectCatalog({ api, scope: catalogScope }).catch(() => undefined);
+              }}
+            >
+              {`Load all ${projectCatalogRemainingCount} projects`}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

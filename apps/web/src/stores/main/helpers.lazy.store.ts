@@ -153,6 +153,7 @@ export function syncBoundedCatalog(
     }
   }
   const nextCursorByScope = { ...state.projectCatalogCursorByScope };
+  const nextRemainingCountByScope = { ...state.projectCatalogRemainingCountByScope };
   const nextErrorByScope = { ...state.projectCatalogErrorByScope };
   const nextRetryHeadByScope = { ...state.projectCatalogRetryHeadByScope };
   const nextRestartProjectIdByScope = { ...state.projectCatalogRestartProjectIdByScope };
@@ -160,6 +161,7 @@ export function syncBoundedCatalog(
     const catalog = catalogs[scope];
     if (catalog) {
       nextCursorByScope[scope] = catalog.nextCursor ?? null;
+      nextRemainingCountByScope[scope] = catalog.remainingCount;
       nextErrorByScope[scope] = undefined;
       nextRetryHeadByScope[scope] = false;
       nextRestartProjectIdByScope[scope] = catalog.nextCursor
@@ -167,6 +169,7 @@ export function syncBoundedCatalog(
         : null;
     } else {
       nextCursorByScope[scope] = null;
+      nextRemainingCountByScope[scope] = null;
       nextErrorByScope[scope] = catalogErrors[scope] ?? "Unable to load projects.";
       nextRetryHeadByScope[scope] = true;
       nextRestartProjectIdByScope[scope] = null;
@@ -176,6 +179,7 @@ export function syncBoundedCatalog(
     ...state,
     projects: projectCatalog.projects,
     projectCatalogCursorByScope: nextCursorByScope,
+    projectCatalogRemainingCountByScope: nextRemainingCountByScope,
     projectCatalogGenerationByScope: {
       local: state.projectCatalogGenerationByScope.local + 1,
       remote: state.projectCatalogGenerationByScope.remote + 1,
@@ -286,6 +290,10 @@ export function appendProjectCatalogPage(
     projectCatalogCursorByScope: {
       ...state.projectCatalogCursorByScope,
       [scope]: page.nextCursor ?? null,
+    },
+    projectCatalogRemainingCountByScope: {
+      ...state.projectCatalogRemainingCountByScope,
+      [scope]: page.remainingCount,
     },
     projectCatalogLoadingByScope: { ...state.projectCatalogLoadingByScope, [scope]: loading },
     projectCatalogErrorByScope: { ...state.projectCatalogErrorByScope, [scope]: undefined },

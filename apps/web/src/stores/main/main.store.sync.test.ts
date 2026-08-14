@@ -173,6 +173,7 @@ describe("store read model sync", () => {
       sidebarPinnedThreadIds: [],
       bootstrapComplete: true,
       projectCatalogCursorByScope: { local: null, remote: null },
+      projectCatalogRemainingCountByScope: { local: null, remote: null },
       projectCatalogGenerationByScope: { local: 0, remote: 0 },
       projectCatalogLoadingByScope: { local: false, remote: false },
       projectCatalogErrorByScope: { local: undefined, remote: undefined },
@@ -269,8 +270,8 @@ describe("store read model sync", () => {
     const next = syncBoundedCatalog(
       initialState,
       {
-        local: { projectionSequence: 1, projects: [] },
-        remote: { projectionSequence: 1, projects: [] },
+        local: { projectionSequence: 1, projects: [], remainingCount: 0 },
+        remote: { projectionSequence: 1, projects: [], remainingCount: 0 },
       },
       {},
       {},

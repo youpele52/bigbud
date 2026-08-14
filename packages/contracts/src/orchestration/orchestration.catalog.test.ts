@@ -97,6 +97,7 @@ it.effect("decodes project execution targets", () =>
           hasExceptionalThreads: false,
         },
       ],
+      remainingCount: 0,
     });
     assert.equal(result.projects[0]?.workspaceExecutionTargetId, "ssh:workspace");
   }),

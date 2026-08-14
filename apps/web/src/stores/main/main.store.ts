@@ -47,6 +47,7 @@ export interface AppState {
     ProjectCatalogScope,
     GetStartupProjectCatalogResult["nextCursor"] | null
   >;
+  projectCatalogRemainingCountByScope: Record<ProjectCatalogScope, number | null>;
   projectCatalogGenerationByScope: Record<ProjectCatalogScope, number>;
   projectCatalogLoadingByScope: Record<ProjectCatalogScope, boolean>;
   projectCatalogErrorByScope: Record<ProjectCatalogScope, string | undefined>;
@@ -81,6 +82,7 @@ const initialState: AppState = {
   threadIdsByProjectId: {},
   threadSummaryCursorByProjectId: {},
   projectCatalogCursorByScope: { local: null, remote: null },
+  projectCatalogRemainingCountByScope: { local: null, remote: null },
   projectCatalogGenerationByScope: { local: 0, remote: 0 },
   projectCatalogLoadingByScope: { local: false, remote: false },
   projectCatalogErrorByScope: { local: undefined, remote: undefined },

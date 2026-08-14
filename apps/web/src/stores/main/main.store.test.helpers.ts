@@ -63,6 +63,7 @@ export function makeState(thread: Thread): AppState {
     sidebarPinnedThreadIds: [],
     bootstrapComplete: true,
     projectCatalogCursorByScope: { local: null, remote: null },
+    projectCatalogRemainingCountByScope: { local: null, remote: null },
     projectCatalogGenerationByScope: { local: 0, remote: 0 },
     projectCatalogLoadingByScope: { local: false, remote: false },
     projectCatalogErrorByScope: { local: undefined, remote: undefined },

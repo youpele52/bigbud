@@ -38,9 +38,10 @@ describe("loadProjectForNewThread", () => {
           hasExceptionalThreads: false,
         },
       ],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult;
     const getStartupProjectCatalog = vi.fn(async ({ scope }) =>
-      scope === "remote" ? page : { projectionSequence: 10, projects: [] },
+      scope === "remote" ? page : { projectionSequence: 10, projects: [], remainingCount: 0 },
     );
     const mergeProjectCatalogPage = vi.fn(() => {
       loadedProject = project;
@@ -95,6 +96,7 @@ describe("loadProjectForNewThread", () => {
           hasExceptionalThreads: false,
         },
       ],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult;
     const getStartupProjectCatalog = vi.fn(({ scope }) =>
       scope === "local" ? Promise.reject(new Error("local failed")) : Promise.resolve(remotePage),
@@ -137,6 +139,7 @@ describe("loadProjectForNewThread", () => {
           hasExceptionalThreads: false,
         },
       ],
+      remainingCount: 0,
     });
 
     expect(useStore.getState().projects[0]).toMatchObject({

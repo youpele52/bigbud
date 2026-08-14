@@ -37,6 +37,7 @@ layer("ProjectionCatalogQuery", (it) => {
         lastUsedAt: "2026-01-03",
         projectId: "project-b",
       });
+      assert.equal(first.remainingCount, 1);
 
       const defaultPage = yield* query.getStartupProjectCatalog({ scope: "local" });
       assert.deepEqual(
@@ -53,6 +54,7 @@ layer("ProjectionCatalogQuery", (it) => {
         prioritized.projects.map((project) => project.id),
         ["project-c", "project-a"],
       );
+      assert.equal(prioritized.remainingCount, 1);
 
       const second = yield* query.getStartupProjectCatalog({
         scope: "local",
@@ -64,6 +66,7 @@ layer("ProjectionCatalogQuery", (it) => {
         ["project-c"],
       );
       assert.equal(second.nextCursor, undefined);
+      assert.equal(second.remainingCount, 0);
     }),
   );
 
@@ -171,6 +174,8 @@ layer("ProjectionCatalogQuery", (it) => {
         remote.projects.map((project) => project.id),
         ["remote-project"],
       );
+      assert.equal(local.remainingCount, 0);
+      assert.equal(remote.remainingCount, 0);
     }),
   );
 

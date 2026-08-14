@@ -21,7 +21,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### Local and Remote Projects, Independently
 
 - Separated local and remote project catalogs so their startup loading, pagination, retries, cursors, and failures no longer affect one another.
-- Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now manages its own **Load 5 more projects** and **Load all projects** controls.
+- Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now shows the exact number of projects available to load, with **Load n more projects** capped at five and **Load all n projects** when more remain.
 - Added targeted database indexes and query coverage for efficient project catalog loading at scale.
 
 ### SSH Project Editing and External Tools

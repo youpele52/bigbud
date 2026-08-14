@@ -138,10 +138,12 @@ describe("bounded project catalog bootstrap", () => {
       .mockResolvedValueOnce({
         projectionSequence: 10,
         projects: [],
+        remainingCount: 0,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
         projectionSequence: 12,
         projects: [makeProject(project1, "Project 1", 94)],
+        remainingCount: 1,
         nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult);
 
@@ -174,6 +176,7 @@ describe("bounded project catalog bootstrap", () => {
       .mockResolvedValueOnce({
         projectionSequence: 10,
         projects: [makeProject(project1, "Project 1")],
+        remainingCount: 0,
       } satisfies GetStartupProjectCatalogResult)
       .mockRejectedValueOnce(new Error("remote offline"));
 
@@ -194,6 +197,7 @@ describe("bounded project catalog bootstrap", () => {
       .mockResolvedValueOnce({
         projectionSequence: 12,
         projects: [makeProject(project1, "Remote project")],
+        remainingCount: 0,
       } satisfies GetStartupProjectCatalogResult);
 
     await expect(
@@ -211,6 +215,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog.mockResolvedValue({
       projectionSequence: 10,
       projects: [makeProject(project1, "Project 1", 94)],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult);
     await runBoundedBootstrap({ api, selectedThreadId: null, disposed: () => false });
 
@@ -240,10 +245,12 @@ describe("bounded project catalog bootstrap", () => {
       .mockResolvedValueOnce({
         projectionSequence: 10,
         projects: [],
+        remainingCount: 0,
       } satisfies GetStartupProjectCatalogResult)
       .mockResolvedValueOnce({
         projectionSequence: 12,
         projects: [makeProject(project1, "Prioritized")],
+        remainingCount: 1,
         nextCursor: cursor,
       } satisfies GetStartupProjectCatalogResult);
 
@@ -263,6 +270,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog.mockResolvedValue({
       projectionSequence: 10,
       projects: [makeProject(project1, "Project 1"), makeProject(project2, "Project 2")],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult);
     orchestration.getSidebarThreadCatalog.mockResolvedValue({
       projectionSequence: 10,
@@ -298,6 +306,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog.mockResolvedValue({
       projectionSequence: 10,
       projects: [makeProject(project1, "Project 1")],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult);
     orchestration.getSidebarThreadCatalog.mockResolvedValue({
       projectionSequence: 10,
@@ -353,6 +362,7 @@ describe("bounded project catalog bootstrap", () => {
     orchestration.getStartupProjectCatalog.mockResolvedValue({
       projectionSequence: 10,
       projects: [],
+      remainingCount: 0,
     } satisfies GetStartupProjectCatalogResult);
     orchestration.getSidebarThreadCatalog.mockResolvedValue({
       projectionSequence: 10,

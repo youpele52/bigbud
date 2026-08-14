@@ -102,6 +102,7 @@ export type GetStartupProjectCatalogInput = typeof GetStartupProjectCatalogInput
 export const GetStartupProjectCatalogResult = Schema.Struct({
   projectionSequence: NonNegativeInt,
   projects: Schema.Array(ProjectSummary),
+  remainingCount: NonNegativeInt,
   nextCursor: Schema.optional(ProjectCatalogCursor),
 });
 export type GetStartupProjectCatalogResult = typeof GetStartupProjectCatalogResult.Type;

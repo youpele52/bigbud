@@ -46,6 +46,7 @@ function makeCatalog(): GetStartupProjectCatalogResult {
       exceptionalThreadCount: 0,
       hasExceptionalThreads: false,
     })),
+    remainingCount: 0,
   };
 }
 

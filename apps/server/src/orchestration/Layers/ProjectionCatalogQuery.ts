@@ -34,6 +34,10 @@ const ProjectCatalogQueryRequest = Schema.Struct({
   cursorProjectId: Schema.NullOr(Schema.String),
 });
 
+const ProjectCatalogCountDbRow = Schema.Struct({
+  count: Schema.Number,
+});
+
 const ThreadSummaryQueryRequest = Schema.Struct({
   projectId: Schema.String,
   limit: Schema.Number,
@@ -150,6 +154,34 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
     },
   });
 
+  const countProjects = SqlSchema.findOne({
+    Request: ProjectCatalogQueryRequest,
+    Result: ProjectCatalogCountDbRow,
+    execute: ({ scope, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+      const scopePredicate = sql.unsafe(
+        scope === "local"
+          ? "workspace_execution_target_id = 'local'"
+          : "workspace_execution_target_id <> 'local'",
+      );
+      return sql`
+        SELECT COUNT(*) AS count
+        FROM projection_projects
+        WHERE deleted_at IS NULL
+          AND ${scopePredicate}
+          AND (
+            ${cursorLastUsedAt} IS NULL
+            OR ${priorityProjectId} IS NULL
+            OR project_id != ${priorityProjectId}
+          )
+          AND (
+            ${cursorLastUsedAt} IS NULL
+            OR last_used_at < ${cursorLastUsedAt}
+            OR (last_used_at = ${cursorLastUsedAt} AND project_id > ${cursorProjectId})
+          )
+      `;
+    },
+  });
+
   const readThreads = SqlSchema.findAll({
     Request: ThreadSummaryQueryRequest,
     Result: ThreadSummaryDbRow,
@@ -240,16 +272,25 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
             cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
             cursorProjectId: input.cursor?.projectId ?? null,
           }),
+          count: countProjects({
+            scope: input.scope,
+            limit: limit + 1,
+            priorityProjectId: input.priorityProjectId ?? null,
+            cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
+            cursorProjectId: input.cursor?.projectId ?? null,
+          }),
         }),
       )
       .pipe(
-        Effect.map(({ rows, sequence }) => {
+        Effect.map(({ rows, count, sequence }) => {
           const projects = rows.slice(0, limit).map(normalizeProject);
           const last = projects.at(-1);
+          const remainingCount = Math.max(count.count - projects.length, 0);
           return {
             projectionSequence: sequence.projectionSequence ?? 0,
             projects,
-            ...(rows.length > limit && last
+            remainingCount,
+            ...(remainingCount > 0 && last
               ? { nextCursor: { lastUsedAt: last.lastUsedAt, projectId: last.id } }
               : {}),
           };
