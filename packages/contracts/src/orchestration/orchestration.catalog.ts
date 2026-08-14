@@ -94,6 +94,7 @@ export type ThreadSummaryCursor = typeof ThreadSummaryCursor.Type;
 export const GetStartupProjectCatalogInput = Schema.Struct({
   scope: ProjectCatalogScope,
   limit: Schema.optional(PositiveInt),
+  query: Schema.optional(TrimmedNonEmptyString),
   priorityProjectId: Schema.optional(ProjectId),
   cursor: Schema.optional(ProjectCatalogCursor),
 });

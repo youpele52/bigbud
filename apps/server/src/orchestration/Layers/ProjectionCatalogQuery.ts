@@ -29,6 +29,7 @@ import { makeListThreads } from "./ProjectionCatalogQuery.listThreads.ts";
 const ProjectCatalogQueryRequest = Schema.Struct({
   scope: Schema.Literals(["local", "remote"]),
   limit: Schema.Number,
+  query: Schema.NullOr(Schema.String),
   priorityProjectId: Schema.NullOr(Schema.String),
   cursorLastUsedAt: Schema.NullOr(Schema.String),
   cursorProjectId: Schema.NullOr(Schema.String),
@@ -63,7 +64,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   const readProjects = SqlSchema.findAll({
     Request: ProjectCatalogQueryRequest,
     Result: ProjectCatalogDbRow,
-    execute: ({ scope, limit, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+    execute: ({ scope, limit, query, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
       const scopePredicate = sql.unsafe(
         scope === "local"
           ? "workspace_execution_target_id = 'local'"
@@ -84,7 +85,9 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         SELECT *
         FROM projection_projects
         WHERE deleted_at IS NULL
+          AND (${query} IS NULL OR deleting_at IS NULL)
           AND ${scopePredicate}
+           AND (${query} IS NULL OR instr(lower(title), lower(${query})) > 0)
           AND (
             ${cursorLastUsedAt} IS NULL
             OR ${priorityProjectId} IS NULL
@@ -157,7 +160,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   const countProjects = SqlSchema.findOne({
     Request: ProjectCatalogQueryRequest,
     Result: ProjectCatalogCountDbRow,
-    execute: ({ scope, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+    execute: ({ scope, query, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
       const scopePredicate = sql.unsafe(
         scope === "local"
           ? "workspace_execution_target_id = 'local'"
@@ -167,7 +170,9 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         SELECT COUNT(*) AS count
         FROM projection_projects
         WHERE deleted_at IS NULL
+          AND (${query} IS NULL OR deleting_at IS NULL)
           AND ${scopePredicate}
+           AND (${query} IS NULL OR instr(lower(title), lower(${query})) > 0)
           AND (
             ${cursorLastUsedAt} IS NULL
             OR ${priorityProjectId} IS NULL
@@ -268,6 +273,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
           rows: readProjects({
             scope: input.scope,
             limit: limit + 1,
+            query: input.query ?? null,
             priorityProjectId: input.priorityProjectId ?? null,
             cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
             cursorProjectId: input.cursor?.projectId ?? null,
@@ -275,6 +281,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
           count: countProjects({
             scope: input.scope,
             limit: limit + 1,
+            query: input.query ?? null,
             priorityProjectId: input.priorityProjectId ?? null,
             cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
             cursorProjectId: input.cursor?.projectId ?? null,

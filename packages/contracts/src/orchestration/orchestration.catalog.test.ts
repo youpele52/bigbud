@@ -36,6 +36,16 @@ it.effect("decodes structured catalog cursors", () =>
   }),
 );
 
+it.effect("decodes a project catalog name query", () =>
+  Effect.gen(function* () {
+    const input = yield* Schema.decodeUnknownEffect(GetStartupProjectCatalogInput)({
+      scope: "local",
+      query: "Project name",
+    });
+    assert.equal(input.query, "Project name");
+  }),
+);
+
 it.effect("decodes thread summaries without history arrays", () =>
   Effect.gen(function* () {
     const result = yield* Schema.decodeUnknownEffect(GetProjectThreadSummariesResult)({
