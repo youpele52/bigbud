@@ -125,6 +125,22 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Compacting", pulse: true, dotClass: "bg-warning" });
   });
 
+  it("keeps connecting available to project aggregate indicators", () => {
+    const connecting = resolveThreadStatusPill({
+      thread: {
+        ...baseThread,
+        session: {
+          ...baseThread.session,
+          status: "connecting",
+          orchestrationStatus: "starting",
+        },
+      },
+    });
+
+    expect(connecting).toMatchObject({ label: "Connecting", dotClass: "bg-primary", pulse: true });
+    expect(resolveProjectStatusIndicator([connecting])).toBe(connecting);
+  });
+
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {
     expect(
       resolveThreadStatusPill({

@@ -1,5 +1,7 @@
 import type { GitStatusResult } from "@bigbud/contracts";
 
+import type { ThreadStatusPill } from "./Sidebar.logic";
+
 export type ThreadPr = GitStatusResult["pr"];
 
 export interface TerminalStatusIndicator {
@@ -13,6 +15,37 @@ export interface PrStatusIndicator {
   colorClass: string;
   tooltip: string;
   url: string;
+}
+
+export function providerIconPresentationClass({
+  isCompleted,
+  isCompacting,
+  isConnecting,
+  isError,
+  isRunning,
+}: {
+  isCompleted: boolean;
+  isCompacting: boolean;
+  isConnecting: boolean;
+  isError: boolean;
+  isRunning: boolean;
+}): string {
+  if (isError) return "text-destructive";
+  if (isCompacting) return "text-warning";
+  if (isRunning) return "text-info-foreground";
+  if (isCompleted) return "text-success";
+  if (isConnecting) return "text-warning";
+  return "text-muted-foreground";
+}
+
+export function shouldAnimateProviderIcon({
+  isConnecting,
+  isRunning,
+}: {
+  isConnecting: boolean;
+  isRunning: boolean;
+}): boolean {
+  return isConnecting || isRunning;
 }
 
 export function terminalStatusFromRunningIds(
@@ -62,4 +95,11 @@ export function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
     };
   }
   return null;
+}
+
+export function shouldShowThreadConnectingPresentation(
+  visibleThreadStatus: ThreadStatusPill | null,
+  connectingStartedAt: string | null,
+): connectingStartedAt is string {
+  return connectingStartedAt !== null && visibleThreadStatus?.label === "Connecting";
 }
