@@ -3,6 +3,7 @@ import { type AppState } from "./main.store";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { EMPTY_THREAD_IDS, updateThreadState } from "./helpers.store";
 import { isSessionCompacting } from "../../components/chat/common/threadActivityIndicator";
+import { isSessionHealthUnconfirmed } from "../../logic/session";
 
 // ── Selectors ─────────────────────────────────────────────────────────
 
@@ -28,7 +29,11 @@ export const selectIsThreadRunning =
   (state: AppState): boolean => {
     if (!threadId) return false;
     const summary = state.sidebarThreadsById[threadId];
-    return summary?.session?.status === "running" && summary.session.activeTurnId != null;
+    return (
+      summary?.session?.status === "running" &&
+      summary.session.activeTurnId != null &&
+      !isSessionHealthUnconfirmed(summary.session)
+    );
   };
 
 export const selectIsThreadCompacting =

@@ -90,6 +90,31 @@ export const ProviderInterruptTurnInput = Schema.Struct({
 });
 export type ProviderInterruptTurnInput = typeof ProviderInterruptTurnInput.Type;
 
+export const ProviderActiveTurnInspectionStatus = Schema.Literals([
+  "running",
+  "waiting-for-user",
+  "completed",
+  "failed",
+  "missing",
+  "unavailable",
+]);
+export type ProviderActiveTurnInspectionStatus = typeof ProviderActiveTurnInspectionStatus.Type;
+
+export const ProviderActiveTurnEvidence = Schema.Struct({
+  source: TrimmedNonEmptyString,
+  detail: Schema.optional(TrimmedNonEmptyString),
+});
+export type ProviderActiveTurnEvidence = typeof ProviderActiveTurnEvidence.Type;
+
+export const ProviderActiveTurnInspection = Schema.Struct({
+  status: ProviderActiveTurnInspectionStatus,
+  observedAt: IsoDateTime,
+  lastActivityAt: Schema.optional(IsoDateTime),
+  completionEvidence: Schema.optional(ProviderActiveTurnEvidence),
+  errorEvidence: Schema.optional(ProviderActiveTurnEvidence),
+});
+export type ProviderActiveTurnInspection = typeof ProviderActiveTurnInspection.Type;
+
 export const ProviderStopSessionInput = Schema.Struct({
   threadId: ThreadId,
 });

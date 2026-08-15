@@ -40,6 +40,13 @@ export function cellSource(cell: NotebookCell): string {
   return (source ?? []).join("");
 }
 
+export function notebookSizerCellKey(
+  source: string,
+  executionCount: number | null | undefined,
+): string {
+  return `${executionCount ?? "none"}:${source}`;
+}
+
 export function getNotebookFlatSource(notebook: NotebookJson): string {
   const parts: string[] = [];
 

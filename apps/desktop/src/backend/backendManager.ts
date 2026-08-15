@@ -218,6 +218,9 @@ export async function startBackend(): Promise<void> {
       startupGeneration,
       (detail) =>
         logBackendLifecycle("fd4_invalid_record", `generation=${startupGeneration} ${detail}`),
+      () => {
+        restartAttempt = 0;
+      },
     );
   }
 
@@ -284,10 +287,6 @@ export async function startBackend(): Promise<void> {
     `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)} exec=${backendLauncherPath}`,
   );
   captureBackendOutput(child, backendLogSink);
-
-  child.once("spawn", () => {
-    restartAttempt = 0;
-  });
 
   child.on("error", (error) => {
     logBackendLifecycle(

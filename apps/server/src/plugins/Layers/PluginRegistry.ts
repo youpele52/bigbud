@@ -1,8 +1,7 @@
 import { cp, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Effect, Layer, PubSub, Ref, Schema, Stream } from "effect";
+import { Cause, Effect, Layer, PubSub, Ref, Schema, Stream } from "effect";
 import { PluginError, type PluginCatalog, type PluginCatalogItem } from "@bigbud/contracts";
-
 import { ServerConfig } from "../../startup/config";
 import { normalizePluginManifest, validatePluginPackage } from "../PluginManifest";
 import { PluginRegistry, type PluginRegistryShape } from "../Services/PluginRegistry";
@@ -18,10 +17,8 @@ import {
   type StoredPluginRegistry,
   type StoredPluginSnapshot,
 } from "./PluginRegistry.utils";
-
-const MARKETPLACE_REPOSITORY = "https://github.com/openai/plugins.git";
-const CATALOG_PATH = ".agents/plugins/api_marketplace.json";
-
+const MARKETPLACE_REPOSITORY = "https://github.com/openai/plugins.git",
+  CATALOG_PATH = ".agents/plugins/api_marketplace.json";
 export const PluginRegistryLive = Layer.effect(
   PluginRegistry,
   Effect.gen(function* () {
@@ -98,16 +95,14 @@ export const PluginRegistryLive = Layer.effect(
         Effect.tap((next) => PubSub.publish(changes, next)),
         Effect.asVoid,
       );
-
     const refresh = () => {
       if (!refreshPromise) {
         // @effect-diagnostics-next-line runEffectInsideEffect:off
         refreshPromise = Effect.runPromise(
-          // @effect-diagnostics-next-line tryCatchInEffectGen:off
           Effect.gen(function* () {
             const attemptedAt = new Date().toISOString();
             const stagingRoot = join(staging, crypto.randomUUID());
-            try {
+            return yield* Effect.gen(function* () {
               yield* Effect.promise(() =>
                 runGit([
                   "clone",
@@ -152,6 +147,7 @@ export const PluginRegistryLive = Layer.effect(
                   manifest,
                 } as never);
                 if ("reason" in normalized) continue;
+                // @effect-diagnostics-next-line tryCatchInEffectGen:off
                 try {
                   yield* Effect.promise(() => validatePluginPackage(packageRoot, normalized));
                 } catch {
@@ -160,7 +156,6 @@ export const PluginRegistryLive = Layer.effect(
                 items.push(normalized);
               }
               const immutableRoot = join(snapshots, commit);
-              // A commit-addressed snapshot is immutable. A duplicate fetch simply keeps it.
               const exists = yield* Effect.promise(() =>
                 lstat(immutableRoot).then(
                   () => true,
@@ -184,25 +179,31 @@ export const PluginRegistryLive = Layer.effect(
               }));
               yield* publish();
               return yield* catalog();
-            } catch (cause) {
-              yield* Effect.promise(() => rm(stagingRoot, { recursive: true, force: true }));
-              yield* Ref.update(state, (previous) => ({
-                ...previous,
-                sync: {
-                  ...(previous.snapshot
-                    ? {
-                        status: "stale" as const,
-                        commit: previous.snapshot.commit,
-                        successfulSyncAt: previous.snapshot.syncedAt,
-                      }
-                    : emptyPluginSync("unavailable")),
-                  lastAttemptedAt: attemptedAt,
-                  failure: pluginFailureCategory(cause),
-                },
-              }));
-              yield* publish();
-              return yield* catalog();
-            }
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  yield* Effect.promise(() =>
+                    rm(stagingRoot, { recursive: true, force: true }),
+                  ).pipe(Effect.ignoreCause({ log: false }));
+                  yield* Ref.update(state, (previous) => ({
+                    ...previous,
+                    sync: {
+                      ...(previous.snapshot
+                        ? {
+                            status: "stale" as const,
+                            commit: previous.snapshot.commit,
+                            successfulSyncAt: previous.snapshot.syncedAt,
+                          }
+                        : emptyPluginSync("unavailable")),
+                      lastAttemptedAt: attemptedAt,
+                      failure: pluginFailureCategory(Cause.squash(cause)),
+                    },
+                  }));
+                  yield* publish();
+                  return yield* catalog();
+                }),
+              ),
+            );
           }),
         ).finally(() => {
           refreshPromise = undefined;
@@ -393,7 +394,7 @@ export const PluginRegistryLive = Layer.effect(
         ),
       ),
     } as unknown as PluginRegistryShape;
-    yield* refresh().pipe(Effect.ignore, Effect.forkScoped);
+    yield* refresh().pipe(Effect.ignoreCause({ log: true }), Effect.forkScoped);
     return service;
   }),
 );

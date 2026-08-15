@@ -54,6 +54,7 @@ export function commandToAggregateRef(command: OrchestrationCommand): {
   switch (command.type) {
     case "project.create":
     case "project.meta.update":
+    case "project.reconfigure":
     case "project.delete":
     case "project.delete.finalize":
     case "project.delete.abort":

@@ -16,6 +16,7 @@ import {
   requireNonNegativeInteger,
   requireThread,
   requireThreadAbsent,
+  requireProjectWorktreesVerified,
 } from "./commandInvariants.ts";
 
 const now = new Date().toISOString();
@@ -123,6 +124,26 @@ const messageSendCommand: OrchestrationCommand = {
   runtimeMode: "approval-required",
   createdAt: now,
 };
+
+it("rejects an unverified retained worktree", async () => {
+  const projectId = ProjectId.makeUnsafe("project-a");
+  const model = {
+    ...readModel,
+    threads: readModel.threads.map((thread) =>
+      thread.projectId === projectId ? { ...thread, worktreePath: "/tmp/worktree-a" } : thread,
+    ),
+  };
+  await expect(
+    Effect.runPromise(
+      requireProjectWorktreesVerified({
+        readModel: model,
+        command: messageSendCommand,
+        projectId,
+        verifiedWorktreePaths: [],
+      }),
+    ),
+  ).rejects.toThrow("was not verified");
+});
 
 describe("commandInvariants", () => {
   it("finds threads by id and project", () => {

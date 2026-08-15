@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldQueueForceDirectoryRefresh } from "./useFilesPanelDirectoryLoader";
+import {
+  isCurrentDirectoryRequest,
+  shouldQueueForceDirectoryRefresh,
+} from "./useFilesPanelDirectoryLoader";
 
 describe("shouldQueueForceDirectoryRefresh", () => {
   it("queues a forced refresh while a directory load is in flight", () => {
@@ -14,5 +17,19 @@ describe("shouldQueueForceDirectoryRefresh", () => {
   it("does not queue a non-forced refresh while loading", () => {
     expect(shouldQueueForceDirectoryRefresh(true, false)).toBe(false);
     expect(shouldQueueForceDirectoryRefresh(true, undefined)).toBe(false);
+  });
+});
+
+describe("isCurrentDirectoryRequest", () => {
+  it("rejects a directory response after its workspace generation changes", () => {
+    expect(isCurrentDirectoryRequest(1, 2, 1, 1)).toBe(false);
+  });
+
+  it("rejects a superseded request in the current workspace", () => {
+    expect(isCurrentDirectoryRequest(2, 2, 1, 2)).toBe(false);
+  });
+
+  it("accepts only the active request in its initiating workspace", () => {
+    expect(isCurrentDirectoryRequest(2, 2, 3, 3)).toBe(true);
   });
 });

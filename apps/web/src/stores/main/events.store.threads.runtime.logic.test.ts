@@ -11,6 +11,9 @@ describe("isOngoingAgentWorkSessionReason", () => {
     expect(isOngoingAgentWorkSessionReason("assistant_message.pending_completion")).toBe(true);
     expect(isOngoingAgentWorkSessionReason("turn.queued")).toBe(true);
     expect(isOngoingAgentWorkSessionReason("agent_start")).toBe(true);
+    expect(isOngoingAgentWorkSessionReason("provider.stalled")).toBe(true);
+    expect(isOngoingAgentWorkSessionReason("provider.checking")).toBe(true);
+    expect(isOngoingAgentWorkSessionReason("provider.lost-session")).toBe(true);
   });
 
   it("does not treat unrelated reasons as ongoing agent work", () => {
@@ -51,5 +54,18 @@ describe("isStaleRunningSessionUpdate", () => {
         },
       }),
     ).toBe(true);
+  });
+
+  it("preserves a stalled running session so the user can see the error", () => {
+    expect(
+      isStaleRunningSessionUpdate({
+        ...baseInput,
+        incomingReason: "provider.stalled",
+        latestTurn: {
+          turnId: "turn-1",
+          completedAt: "2026-02-27T00:00:02.000Z",
+        },
+      }),
+    ).toBe(false);
   });
 });

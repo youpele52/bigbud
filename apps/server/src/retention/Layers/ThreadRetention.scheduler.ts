@@ -7,13 +7,11 @@ export const runThreadRetentionScheduledTick = Effect.fn("ThreadRetention.runSch
     readonly getPolicy: Effect.Effect<ThreadRetentionPolicy, EP>;
     readonly enqueue: (policy: Exclude<ThreadRetentionPolicy, "never">) => Effect.Effect<void, EE>;
     readonly isDisabled: () => boolean;
-    readonly isAutomaticRolloutEnabled: () => boolean;
   }) {
     yield* input.auditAndResume;
     if (input.isDisabled()) return;
     const policy = yield* input.getPolicy;
     if (policy === "never") return;
-    if (!input.isAutomaticRolloutEnabled()) return;
     yield* input.enqueue(policy);
   },
 );

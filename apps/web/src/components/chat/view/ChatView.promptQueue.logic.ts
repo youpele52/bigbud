@@ -53,6 +53,23 @@ export function buildSendNowInterruptCommand(input: {
   };
 }
 
+export function buildComposerFollowUpCommand(input: {
+  readonly threadId: ThreadId;
+  readonly commandId: CommandId;
+  readonly messageId: MessageId;
+  readonly text: string;
+  readonly createdAt: string;
+}) {
+  return {
+    type: "thread.message.submit" as const,
+    commandId: input.commandId,
+    threadId: input.threadId,
+    message: { messageId: input.messageId, text: input.text },
+    delivery: "auto" as const,
+    createdAt: input.createdAt,
+  };
+}
+
 export function usePromptQueue(input: UsePromptQueueInput) {
   const queuedPrompts = input.projectedPrompts;
 
@@ -73,14 +90,15 @@ export function usePromptQueue(input: UsePromptQueueInput) {
       const id = input.newId();
       const createdAt = new Date().toISOString();
       void readNativeApi()
-        ?.orchestration.dispatchCommand({
-          type: "thread.message.submit",
-          commandId: newCommandId(),
-          threadId: input.threadId,
-          message: { messageId: id as MessageId, text: trimmed },
-          delivery: "queue",
-          createdAt,
-        })
+        ?.orchestration.dispatchCommand(
+          buildComposerFollowUpCommand({
+            commandId: newCommandId(),
+            threadId: input.threadId,
+            messageId: id as MessageId,
+            text: trimmed,
+            createdAt,
+          }),
+        )
         .catch((error: unknown) => input.onError(promptQueueErrorMessage(error)));
       return "queued";
     },

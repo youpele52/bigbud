@@ -24,14 +24,15 @@ import {
 } from "./FilePreview.logic";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
 import { usePreviewLoad } from "./usePreviewLoad";
+import type { FilePreviewNavigationProps, FilePreviewScrollProps } from "./FilePreview.types";
+import { useRestoreFilePreviewScroll } from "./useFilePreviewScroll";
 
-interface FilePreviewProps {
+interface FilePreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
   relativePath: string;
   targetLine?: number | undefined;
   executionTargetId?: string | undefined;
   projectName?: string | undefined;
-  onBack?: (() => void) | undefined;
   onCreateAnnotation?: ((annotation: CodeAnnotationDraft) => void) | undefined;
 }
 
@@ -49,7 +50,14 @@ export const FilePreview = memo(function FilePreview({
   targetLine,
   executionTargetId,
   projectName,
-  onBack,
+  canNavigateBack,
+  canNavigateForward,
+  onNavigateBack,
+  onNavigateForward,
+  onClose,
+  initialScrollTop,
+  onScrollPositionChange,
+  onPreviewLoadError,
   onCreateAnnotation,
 }: FilePreviewProps) {
   const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
@@ -65,6 +73,7 @@ export const FilePreview = memo(function FilePreview({
     cwd,
     relativePath,
     executionTargetId,
+    onLoadError: onPreviewLoadError,
   });
 
   useEffect(() => {
@@ -104,6 +113,19 @@ export const FilePreview = memo(function FilePreview({
     }
     container.scrollTo({ top: scrollTop, behavior: "smooth" });
   }, [state.contents, state.error, state.loading, targetLine]);
+
+  useRestoreFilePreviewScroll({
+    containerRef: scrollContainerRef,
+    pathKey: `${cwd}:${relativePath}`,
+    initialScrollTop,
+    disabled: Boolean(targetLine || state.loading || state.error),
+  });
+
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) =>
+      onScrollPositionChange?.(event.currentTarget.scrollTop),
+    [onScrollPositionChange],
+  );
 
   const lines = useMemo(
     () =>
@@ -209,7 +231,12 @@ export const FilePreview = memo(function FilePreview({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <FilePreviewHeader
         breadcrumb={breadcrumb}
-        onBack={onBack}
+        absolutePath={absolutePath}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+        onClose={onClose}
         onContextMenu={handleHeaderContextMenu}
         actions={
           isMarkdownFile ? (
@@ -242,12 +269,14 @@ export const FilePreview = memo(function FilePreview({
           onContextMenu={handlePreviewContextMenu}
           onCreateAnnotation={onCreateAnnotation}
           onCancelAnnotation={() => setSelectedRange(null)}
+          onScroll={handleScroll}
         />
       ) : (
         <div
           ref={scrollContainerRef}
           className="relative min-h-0 flex-1 overflow-auto"
           onContextMenu={handlePreviewContextMenu}
+          onScroll={handleScroll}
         >
           {state.truncated ? (
             <div className="border-b border-border bg-muted/35 px-3 py-2 text-xs text-muted-foreground">

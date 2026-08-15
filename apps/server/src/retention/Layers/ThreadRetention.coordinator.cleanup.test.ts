@@ -1,6 +1,7 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer, Option } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { EntityPurgeShape } from "../../deletion/Services/EntityPurge.ts";
 import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
@@ -95,6 +96,11 @@ layer("retention cleanup recovery", (it) => {
       assert.equal(finalizeCount, 0);
 
       cleanupReady = true;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        UPDATE thread_retention_run_items SET next_attempt_at = ${createdAt}
+        WHERE run_id = 'cleanup-restart-run'
+      `;
       yield* repository.transitionRun({
         runId: "cleanup-restart-run",
         expectedStatuses: ["deferred"],

@@ -13,10 +13,8 @@ import type { useServerProviders } from "../../rpc/serverState";
 import { toastManager } from "../ui/toast";
 import { deriveProjectTitleFromCwd } from "./Sidebar.projects.logic";
 import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
-import {
-  useSidebarRemoteProjectAddActions,
-  type SidebarRemoteProjectAddActionsOutput,
-} from "./Sidebar.projectAddActions.remote";
+import { useSidebarRemoteProjectAddActions } from "./Sidebar.projectAddActions.remote";
+import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
 
 interface UseSidebarProjectAddActionsInput {
   projects: Project[];
@@ -41,12 +39,15 @@ export interface SidebarProjectAddActionsOutput {
   handlePickFolder: () => Promise<void>;
   cancelAddProject: () => void;
   isRemoteProjectDialogOpen: SidebarRemoteProjectAddActionsOutput["isRemoteProjectDialogOpen"];
+  remoteProjectDialogMode: SidebarRemoteProjectAddActionsOutput["remoteProjectDialogMode"];
   remoteProjectDraft: SidebarRemoteProjectAddActionsOutput["remoteProjectDraft"];
   remoteProjectFieldErrors: SidebarRemoteProjectAddActionsOutput["remoteProjectFieldErrors"];
   remoteProjectError: SidebarRemoteProjectAddActionsOutput["remoteProjectError"];
   remoteProjectVerificationMessage: SidebarRemoteProjectAddActionsOutput["remoteProjectVerificationMessage"];
   isVerifyingRemoteProject: SidebarRemoteProjectAddActionsOutput["isVerifyingRemoteProject"];
+  isSavingRemoteProject: SidebarRemoteProjectAddActionsOutput["isSavingRemoteProject"];
   openRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["openRemoteProjectDialog"];
+  openRemoteProjectEditDialog: SidebarRemoteProjectAddActionsOutput["openRemoteProjectEditDialog"];
   closeRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["closeRemoteProjectDialog"];
   updateRemoteProjectDraft: SidebarRemoteProjectAddActionsOutput["updateRemoteProjectDraft"];
   submitRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["submitRemoteProjectDialog"];

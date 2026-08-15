@@ -164,6 +164,7 @@ export interface SidebarState {
   /** Cancel the add-project flow, resetting both the form and the visibility flag. */
   cancelAddProject: () => void;
   isRemoteProjectDialogOpen: boolean;
+  remoteProjectDialogMode: "add" | "edit";
   remoteProjectDraft: RemoteProjectDraft;
   remoteProjectFieldErrors: Partial<
     Record<"displayName" | "host" | "username" | "port" | "workspaceRoot" | "sshKeyPath", string>
@@ -171,7 +172,9 @@ export interface SidebarState {
   remoteProjectError: string | null;
   remoteProjectVerificationMessage: string | null;
   isVerifyingRemoteProject: boolean;
+  isSavingRemoteProject: boolean;
   openRemoteProjectDialog: () => void;
+  openRemoteProjectEditDialog: (project: Project) => void;
   closeRemoteProjectDialog: () => void;
   updateRemoteProjectDraft: (
     field:

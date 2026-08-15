@@ -12,18 +12,32 @@ import type { ProjectionRepositoryError } from "../Errors.ts";
 
 export const ThreadRetentionRunTrigger = Schema.Literals(["manual", "scheduled"]);
 export type ThreadRetentionRunTrigger = typeof ThreadRetentionRunTrigger.Type;
-export const ThreadRetentionRunStatus = Schema.Literals([
+export const THREAD_RETENTION_NONTERMINAL_RUN_STATUSES = [
   "queued",
   "selecting",
   "preparing",
   "purging",
   "deferred",
+] as const;
+export const THREAD_RETENTION_TERMINAL_RUN_STATUSES = [
   "completed",
   "completed_with_failures",
   "failed",
   "cancelled",
+] as const;
+export const ThreadRetentionRunStatus = Schema.Literals([
+  ...THREAD_RETENTION_NONTERMINAL_RUN_STATUSES,
+  ...THREAD_RETENTION_TERMINAL_RUN_STATUSES,
 ]);
 export type ThreadRetentionRunStatus = typeof ThreadRetentionRunStatus.Type;
+export const isThreadRetentionTerminalRunStatus = (status: ThreadRetentionRunStatus) =>
+  (THREAD_RETENTION_TERMINAL_RUN_STATUSES as ReadonlyArray<ThreadRetentionRunStatus>).includes(
+    status,
+  );
+export const isThreadRetentionNonterminalRunStatus = (status: ThreadRetentionRunStatus) =>
+  (THREAD_RETENTION_NONTERMINAL_RUN_STATUSES as ReadonlyArray<ThreadRetentionRunStatus>).includes(
+    status,
+  );
 export const ThreadRetentionItemStatus = Schema.Literals([
   "selected",
   "deletion_requested",
@@ -118,6 +132,7 @@ export const ThreadRetentionRunItem = Schema.Struct({
   status: ThreadRetentionItemStatus,
   exclusionReason: Schema.NullOr(ThreadRetentionExclusionReason),
   attemptCount: NonNegativeInt,
+  nextAttemptAt: Schema.NullOr(IsoDateTime),
   lastErrorCode: Schema.NullOr(Schema.String),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -131,6 +146,10 @@ export type CreateRetentionRunInput = {
   readonly policy: typeof FiniteThreadRetentionPolicy.Type;
   readonly cutoffAt: string;
   readonly createdAt: string;
+};
+export type CreateScheduledRetentionRunResult = {
+  readonly run: ThreadRetentionRun;
+  readonly created: boolean;
 };
 export type InsertRetentionItemInput = ThreadRetentionCandidate & {
   readonly deletionCommandId: string;
@@ -179,6 +198,7 @@ export type TransitionRetentionRunInput = {
   readonly eligibleCount?: number;
   readonly estimatedResourceCount?: number;
   readonly requiredBaselineSequence?: number | null;
+  readonly releaseActiveSlot?: boolean;
 };
 export type TransitionRetentionItemInput = {
   readonly runId: string;
@@ -226,7 +246,7 @@ export type ConsumeRetentionChallengeResult =
   | "expired"
   | "already_consumed";
 export type ConsumeChallengeAndCreateRunResult =
-  | { readonly consumed: true; readonly run: ThreadRetentionRun }
+  | { readonly consumed: true; readonly run: ThreadRetentionRun; readonly created: boolean }
   | { readonly consumed: false; readonly result: ConsumeRetentionChallengeResult };
 export type ThreadRetentionPolicyAuthority = {
   readonly policy: ThreadRetentionPolicy;
@@ -244,6 +264,29 @@ export interface ThreadRetentionRepositoryShape {
   readonly createOrGetActiveRun: (
     input: CreateRetentionRunInput,
   ) => Effect.Effect<ThreadRetentionRun, ProjectionRepositoryError>;
+  readonly createQueuedRun: (
+    input: CreateRetentionRunInput,
+  ) => Effect.Effect<ThreadRetentionRun, ProjectionRepositoryError>;
+  readonly createScheduledQueuedRun: (
+    input: CreateRetentionRunInput & { readonly trigger: "scheduled" },
+  ) => Effect.Effect<CreateScheduledRetentionRunResult, ProjectionRepositoryError>;
+  readonly claimNextQueuedRun: (
+    claimedAt: string,
+  ) => Effect.Effect<Option.Option<ThreadRetentionRun>, ProjectionRepositoryError>;
+  readonly listQueuedManualRuns: (
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<ThreadRetentionRun>, ProjectionRepositoryError>;
+  readonly claimQueuedManualRun: (
+    runId: string,
+    claimedAt: string,
+    purgeBacklogLimit: number,
+  ) => Effect.Effect<Option.Option<ThreadRetentionRun>, ProjectionRepositoryError>;
+  readonly yieldActiveRunToManual: (
+    activeRunId: string,
+    manualRunId: string,
+    yieldedAt: string,
+    purgeBacklogLimit: number,
+  ) => Effect.Effect<Option.Option<ThreadRetentionRun>, ProjectionRepositoryError>;
   readonly selectNextPage: (input: {
     readonly cutoffAt: string;
     readonly cursor?: ThreadRetentionCursor;
@@ -263,6 +306,7 @@ export interface ThreadRetentionRepositoryShape {
     readonly expectedStatuses: ReadonlyArray<ThreadRetentionRunStatus>;
     readonly failedAt: string;
     readonly lastErrorCode: string;
+    readonly isolateItemFailure?: boolean;
   }) => Effect.Effect<Option.Option<ThreadRetentionRetryState>, ProjectionRepositoryError>;
   readonly readRunRetryState: (
     runId: string,
@@ -307,8 +351,9 @@ export interface ThreadRetentionRepositoryShape {
   readonly recordItemRetry: (input: {
     readonly runId: string;
     readonly threadId: typeof ThreadId.Type;
-    readonly expectedStatus: "deletion_requested";
+    readonly expectedStatuses: ReadonlyArray<"deletion_requested" | "prepared" | "purging">;
     readonly lastErrorCode: string;
+    readonly nextAttemptAt: string;
     readonly updatedAt: string;
   }) => Effect.Effect<boolean, ProjectionRepositoryError>;
   readonly markPrepared: (input: {

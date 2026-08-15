@@ -217,6 +217,134 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.runtimeMode).toBe("approval-required");
   });
 
+  it("rebinds an idle provider session when execution targets change", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("cmd-turn-start-target-rebind"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-target-rebind"),
+          role: "user",
+          text: "first",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-target-rebind"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:devbox",
+        executionTargetId: "ssh:devbox",
+      }),
+    );
+
+    await waitFor(() => harness.stopSession.mock.calls.length === 1);
+    await waitFor(() => harness.startSession.mock.calls.length === 2);
+    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+      workspaceExecutionTargetId: "ssh:devbox",
+      providerRuntimeExecutionTargetId: "local",
+    });
+  });
+
+  it("marks the thread session as failed when target rebind stop fails", async () => {
+    const harness = await createHarness({ stopSessionFailure: "simulated stop failure" });
+    const now = new Date().toISOString();
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-target-rebind-stop-failure-session"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-target-rebind-stop-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:devbox",
+        executionTargetId: "ssh:devbox",
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-1"))?.session
+          ?.status === "error"
+      );
+    });
+    expect(harness.stopSession).toHaveBeenCalledTimes(1);
+    expect(harness.startSession).not.toHaveBeenCalled();
+  });
+
+  it("marks the thread session as failed when target rebind start fails", async () => {
+    const harness = await createHarness();
+    const now = new Date().toISOString();
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.session.set",
+        commandId: CommandId.makeUnsafe("cmd-target-rebind-start-failure-session"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        session: {
+          threadId: ThreadId.makeUnsafe("thread-1"),
+          status: "ready",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: null,
+          lastError: null,
+          updatedAt: now,
+        },
+        createdAt: now,
+      }),
+    );
+    harness.startSession.mockImplementationOnce(
+      () => Effect.fail(new Error("simulated target restart failure")) as never,
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.meta.update",
+        commandId: CommandId.makeUnsafe("cmd-target-rebind-start-failure"),
+        threadId: ThreadId.makeUnsafe("thread-1"),
+        providerRuntimeExecutionTargetId: "local",
+        workspaceExecutionTargetId: "ssh:devbox",
+        executionTargetId: "ssh:devbox",
+      }),
+    );
+
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return (
+        readModel.threads.find((thread) => thread.id === ThreadId.makeUnsafe("thread-1"))?.session
+          ?.status === "error"
+      );
+    });
+    expect(harness.stopSession).toHaveBeenCalledTimes(1);
+    expect(harness.startSession).toHaveBeenCalledTimes(1);
+  });
+
   it("does not inject derived model options when restarting claude on runtime mode changes", async () => {
     const harness = await createHarness({
       threadModelSelection: { provider: "claudeAgent", model: "claude-opus-4-6" },

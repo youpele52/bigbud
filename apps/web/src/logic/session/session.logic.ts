@@ -6,6 +6,12 @@ import {
   type ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
+import {
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
+  PROVIDER_STALLED_SESSION_REASON,
+} from "@bigbud/contracts/constants/providerRuntime.constant";
 
 import type { ChatMessage, ProposedPlan, ThreadSession } from "../../models/types";
 import {
@@ -138,14 +144,40 @@ export function formatElapsed(startIso: string, endIso: string | undefined): str
 // ── Turn/session state helpers ────────────────────────────────────────
 
 type LatestTurnTiming = Pick<OrchestrationLatestTurn, "turnId" | "startedAt" | "completedAt">;
-type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId">;
+type SessionActivityState = Pick<ThreadSession, "orchestrationStatus" | "activeTurnId" | "reason">;
+
+export function isSessionStalled(session: Pick<ThreadSession, "reason"> | null): boolean {
+  return (
+    session?.reason === PROVIDER_STALLED_SESSION_REASON ||
+    session?.reason === PROVIDER_LOST_SESSION_REASON
+  );
+}
+
+export function isSessionHealthChecking(session: Pick<ThreadSession, "reason"> | null): boolean {
+  return session?.reason === PROVIDER_CHECKING_SESSION_REASON;
+}
+
+export function isSessionRecovering(session: Pick<ThreadSession, "reason"> | null): boolean {
+  return session?.reason === PROVIDER_RECOVERING_SESSION_REASON;
+}
+
+export function isSessionHealthUnconfirmed(session: Pick<ThreadSession, "reason"> | null): boolean {
+  return (
+    isSessionStalled(session) || isSessionHealthChecking(session) || isSessionRecovering(session)
+  );
+}
 
 /** Returns true if the session is actively running the given turn (or any turn if no activeTurnId). */
 export function isSessionActivelyRunningTurn(
   latestTurn: LatestTurnTiming | null,
   session: SessionActivityState | null,
 ): boolean {
-  if (!session || session.orchestrationStatus !== "running") return false;
+  if (
+    !session ||
+    (session.orchestrationStatus !== "running" && !isSessionHealthUnconfirmed(session))
+  ) {
+    return false;
+  }
   if (!latestTurn) return true;
 
   const activeTurnId = session.activeTurnId;

@@ -5,6 +5,7 @@ import { highlightMatch } from "./SearchPalette.logic";
 import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
 import { cn } from "~/lib/utils";
+import { ProjectSearchResultGroup, type ProjectSearchResult } from "./SearchPalette.projectResults";
 
 export interface ThreadSearchResult {
   id: string;
@@ -66,6 +67,7 @@ interface SearchPaletteResultsProps {
   normalizedQuery: string;
   isSearchPending: boolean;
   isFileSearchPending: boolean;
+  isProjectSearchPending: boolean;
   inThreadMessageResults: MessageSearchResult[];
   otherThreadMessageResults: MessageSearchResult[];
   visibleOtherThreadMessageResults: MessageSearchResult[];
@@ -74,14 +76,19 @@ interface SearchPaletteResultsProps {
   threadResults: ThreadSearchResult[];
   visibleThreadResults: ThreadSearchResult[];
   setVisibleThreadCount: React.Dispatch<React.SetStateAction<number>>;
+  projectResults: ProjectSearchResult[];
+  visibleProjectResults: ProjectSearchResult[];
+  setVisibleProjectCount: React.Dispatch<React.SetStateAction<number>>;
   fileResults: FileSearchResult[];
   visibleFileResults: FileSearchResult[];
   setVisibleFileCount: React.Dispatch<React.SetStateAction<number>>;
   hasMessageResults: boolean;
   hasThreadResults: boolean;
+  hasProjectResults: boolean;
   hasFileResults: boolean;
   onSelectMessage: (threadId: ThreadId, messageId: MessageId) => void;
   onSelectThread: (threadId: ThreadId) => void;
+  onSelectProject: (result: ProjectSearchResult) => void;
   onSelectFile: (result: FileSearchResult) => void;
   initialVisibleResultCount: number;
 }
@@ -91,6 +98,7 @@ export function SearchPaletteResults({
   normalizedQuery,
   isSearchPending,
   isFileSearchPending,
+  isProjectSearchPending,
   inThreadMessageResults,
   otherThreadMessageResults,
   visibleOtherThreadMessageResults,
@@ -98,30 +106,39 @@ export function SearchPaletteResults({
   threadResults,
   visibleThreadResults,
   setVisibleThreadCount,
+  projectResults,
+  visibleProjectResults,
+  setVisibleProjectCount,
   fileResults,
   visibleFileResults,
   setVisibleFileCount,
   hasMessageResults,
   hasThreadResults,
+  hasProjectResults,
   hasFileResults,
   onSelectMessage,
   onSelectThread,
+  onSelectProject,
   onSelectFile,
   initialVisibleResultCount,
 }: SearchPaletteResultsProps) {
-  const hasResults = hasMessageResults || hasThreadResults || hasFileResults;
+  const hasResults = hasMessageResults || hasProjectResults || hasThreadResults || hasFileResults;
 
   return (
     <>
-      {(isSearchPending || isFileSearchPending) && normalizedQuery && (
+      {(isSearchPending || isFileSearchPending || isProjectSearchPending) && normalizedQuery && (
         <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
       )}
 
-      {!isSearchPending && !isFileSearchPending && !hasResults && normalizedQuery && (
-        <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-          No matching results
-        </div>
-      )}
+      {!isSearchPending &&
+        !isFileSearchPending &&
+        !isProjectSearchPending &&
+        !hasResults &&
+        normalizedQuery && (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">
+            No matching results
+          </div>
+        )}
 
       {!isSearchPending && inThreadMessageResults.length > 0 && (
         <CommandGroup>
@@ -220,8 +237,20 @@ export function SearchPaletteResults({
         </CommandGroup>
       )}
 
+      {!isSearchPending && !isProjectSearchPending ? (
+        <ProjectSearchResultGroup
+          query={query}
+          results={projectResults}
+          visibleResults={visibleProjectResults}
+          onSelect={onSelectProject}
+          onShowMore={() =>
+            setVisibleProjectCount((current) => current + initialVisibleResultCount)
+          }
+        />
+      ) : null}
+
       {!isSearchPending && hasThreadResults && (
-        <CommandGroup className={cn(hasMessageResults ? "mt-2" : undefined)}>
+        <CommandGroup className={cn(hasMessageResults || hasProjectResults ? "mt-2" : undefined)}>
           <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
             All threads
           </CommandGroupLabel>
@@ -264,7 +293,11 @@ export function SearchPaletteResults({
       )}
 
       {!isFileSearchPending && hasFileResults && (
-        <CommandGroup className={cn(hasMessageResults || hasThreadResults ? "mt-2" : undefined)}>
+        <CommandGroup
+          className={cn(
+            hasMessageResults || hasProjectResults || hasThreadResults ? "mt-2" : undefined,
+          )}
+        >
           <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
             Files
           </CommandGroupLabel>

@@ -86,6 +86,31 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Working", pulse: true });
   });
 
+  it("shows a stalled provider separately from active work", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          session: {
+            ...baseThread.session,
+            reason: "provider.stalled",
+          },
+        },
+      }),
+    ).toMatchObject({ label: "Stalled", pulse: false });
+  });
+
+  it("shows provider inspection without a work spinner", () => {
+    expect(
+      resolveThreadStatusPill({
+        thread: {
+          ...baseThread,
+          session: { ...baseThread.session, status: "error", reason: "provider.checking" },
+        },
+      }),
+    ).toMatchObject({ label: "Checking", pulse: false });
+  });
+
   it("shows compacting context when the running session is compacting", () => {
     expect(
       resolveThreadStatusPill({
@@ -98,6 +123,22 @@ describe("resolveThreadStatusPill", () => {
         },
       }),
     ).toMatchObject({ label: "Compacting", pulse: true, dotClass: "bg-warning" });
+  });
+
+  it("keeps connecting available to project aggregate indicators", () => {
+    const connecting = resolveThreadStatusPill({
+      thread: {
+        ...baseThread,
+        session: {
+          ...baseThread.session,
+          status: "connecting",
+          orchestrationStatus: "starting",
+        },
+      },
+    });
+
+    expect(connecting).toMatchObject({ label: "Connecting", dotClass: "bg-primary", pulse: true });
+    expect(resolveProjectStatusIndicator([connecting])).toBe(connecting);
   });
 
   it("shows plan ready when a settled plan turn has a proposed plan ready for follow-up", () => {

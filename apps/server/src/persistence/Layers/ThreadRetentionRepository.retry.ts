@@ -91,7 +91,9 @@ export function makeThreadRetentionRetry(sql: SqlClient.SqlClient) {
             : null;
         const nextAttemptAt = circuitOpenUntil ?? new Date(failedAtMs + retryDelay).toISOString();
         yield* sql`
-            UPDATE thread_retention_runs SET next_attempt_at = ${nextAttemptAt},
+            UPDATE thread_retention_runs SET next_attempt_at = CASE
+                WHEN ${input.isolateItemFailure === true ? 1 : 0} = 1
+                THEN next_attempt_at ELSE ${nextAttemptAt} END,
               circuit_open_until = ${circuitOpenUntil}
             WHERE run_id = ${input.runId} AND retry_ordinal = ${row.retryOrdinal}
               AND last_failure_at = ${input.failedAt}

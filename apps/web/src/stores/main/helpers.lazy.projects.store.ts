@@ -1,4 +1,4 @@
-import type { GetStartupProjectCatalogResult } from "@bigbud/contracts";
+import type { GetStartupProjectCatalogResult, ProjectCatalogScope } from "@bigbud/contracts";
 
 import type { AppState } from "./main.store";
 import { mapProjectSummary } from "./mappers.lazy.store";
@@ -16,6 +16,7 @@ export function mergeProjectCatalog(
   page: GetStartupProjectCatalogResult,
   projectThreadCountsById: AppState["projectThreadCountsById"],
   preserveUnlistedProjects: boolean,
+  scope?: ProjectCatalogScope,
 ) {
   const latestEventSequences = state.latestProjectEventSequenceById ?? {};
   const deletionSequences = state.deletedProjectSequenceById ?? {};
@@ -27,8 +28,10 @@ export function mergeProjectCatalog(
       : state.projects
           .filter(
             (project) =>
-              (latestEventSequences[project.id] ?? 0) > page.projectionSequence &&
-              (deletionSequences[project.id] ?? 0) <= page.projectionSequence,
+              (scope !== undefined &&
+                (project.workspaceExecutionTargetId === "local") !== (scope === "local")) ||
+              ((latestEventSequences[project.id] ?? 0) > page.projectionSequence &&
+                (deletionSequences[project.id] ?? 0) <= page.projectionSequence),
           )
           .map((project) => [project.id, project]),
   );

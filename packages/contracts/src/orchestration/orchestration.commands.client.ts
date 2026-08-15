@@ -56,6 +56,19 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   scripts: Schema.optional(Schema.Array(ProjectScript)),
 });
 
+const ProjectReconfigureCommand = Schema.Struct({
+  type: Schema.Literal("project.reconfigure"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  providerRuntimeExecutionTargetId: ExecutionTargetId,
+  workspaceExecutionTargetId: ExecutionTargetId,
+  executionTargetId: ExecutionTargetId,
+  workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
+  expectedUpdatedAt: IsoDateTime,
+  verifiedWorktreePaths: Schema.Array(TrimmedNonEmptyString),
+});
+
 const ProjectDeleteCommand = Schema.Struct({
   type: Schema.Literal("project.delete"),
   commandId: CommandId,
@@ -335,6 +348,7 @@ const ThreadSessionStopCommand = Schema.Struct({
 export const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
+  ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
   ThreadDeleteCommand,
@@ -364,6 +378,7 @@ export type DispatchableClientOrchestrationCommand =
 export const ClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
+  ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
   ThreadDeleteCommand,

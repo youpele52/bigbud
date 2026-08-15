@@ -1,5 +1,10 @@
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
-import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import {
+  resolveProviderRuntimeExecutionTargetId,
+  resolveWorkspaceExecutionTargetId,
+  type ProviderRuntimeLocation,
+} from "../../lib/providerExecutionTargets";
+import type { Project } from "../../models/types";
 
 export type RemoteProjectAuthMode = "ssh-key" | "password";
 
@@ -16,6 +21,10 @@ export interface RemoteProjectDraft {
 
 export function isRemoteExecutionTargetId(executionTargetId: string | null | undefined): boolean {
   return (executionTargetId ?? LOCAL_EXECUTION_TARGET_ID) !== LOCAL_EXECUTION_TARGET_ID;
+}
+
+export function isSshExecutionTargetId(executionTargetId: string | null | undefined): boolean {
+  return executionTargetId?.startsWith("ssh:") === true && executionTargetId.length > 4;
 }
 
 export function makeSshExecutionTargetId(remoteTarget: string): string {
@@ -39,17 +48,21 @@ function parseRemoteExecutionTarget(executionTargetId: string | null | undefined
   host: string;
   username: string | null;
   port: string | null;
+  authMode: RemoteProjectAuthMode;
+  sshKeyPath: string | null;
 } | null {
-  if (!executionTargetId || !isRemoteExecutionTargetId(executionTargetId)) {
+  if (!isSshExecutionTargetId(executionTargetId)) {
     return null;
   }
 
-  const raw = executionTargetId.replace(/^ssh:/, "");
+  const raw = executionTargetId!.slice("ssh:".length);
   if (!raw.includes("=")) {
     return {
       host: raw,
       username: null,
       port: null,
+      authMode: "ssh-key",
+      sshKeyPath: null,
     };
   }
 
@@ -66,6 +79,30 @@ function parseRemoteExecutionTarget(executionTargetId: string | null | undefined
     host,
     username: username.length > 0 ? username : null,
     port: port.length > 0 ? port : null,
+    authMode: params.get("auth") === "password" ? "password" : "ssh-key",
+    sshKeyPath: params.get("keyPath")?.trim() || null,
+  };
+}
+
+export function createRemoteProjectDraft(project: Project): RemoteProjectDraft | null {
+  const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(project);
+  const parsed = parseRemoteExecutionTarget(workspaceExecutionTargetId);
+  if (!parsed) {
+    return null;
+  }
+
+  return {
+    displayName: project.name,
+    host: parsed.host,
+    username: parsed.username ?? "",
+    port: parsed.port ?? "",
+    workspaceRoot: project.cwd ?? "",
+    sshKeyPath: parsed.sshKeyPath ?? "",
+    authMode: parsed.authMode,
+    providerRuntimeLocation:
+      resolveProviderRuntimeExecutionTargetId(project) === workspaceExecutionTargetId
+        ? "remote"
+        : "local",
   };
 }
 

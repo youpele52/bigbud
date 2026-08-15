@@ -53,7 +53,7 @@ layer("ProjectionCatalogQuery active project thread counts", (it) => {
            '2026-08-01', '2026-08-01', NULL, NULL, NULL)
       `;
 
-      const projectCatalog = yield* query.getStartupProjectCatalog({ limit: 1 });
+      const projectCatalog = yield* query.getStartupProjectCatalog({ scope: "local", limit: 1 });
       const threadPage = yield* query.getProjectThreadSummaries({
         projectId,
         limit: 20,

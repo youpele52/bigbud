@@ -1,12 +1,4 @@
-// TODO: Split by concern when this file is next touched.
-/**
- * Session lifecycle for the Codex provider adapter.
- *
- * Implements startSession, sendTurn, interruptTurn, readThread, rollbackThread,
- * respondToRequest, respondToUserInput, stopSession, and related helpers.
- *
- * @module CodexAdapter.session
- */
+/** Session lifecycle for the Codex provider adapter. */
 import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
 import { Effect, FileSystem, Queue, Stream } from "effect";
 
@@ -16,10 +8,8 @@ import {
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
-import {
-  CodexAppServerManager,
-  type CodexAppServerStartSessionInput,
-} from "../../../codex/codexAppServerManager.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
+import type { CodexAppServerStartSessionInput } from "../../../codex/codexAppServerManager.ts";
 import { createCodexRemoteWorkspaceBridge } from "../../../codex/codexRemoteWorkspaceBridge.ts";
 import {
   buildCodexSessionOrchestrationConfig,
@@ -41,12 +31,12 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { type EventNdjsonLogger, makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
 import { makeResolveAttachment, toRequestError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
+import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.session.bootstrap.ts";
 
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
@@ -54,23 +44,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 ) {
   const fileSystem = yield* FileSystem.FileSystem;
   const serverConfig = yield* Effect.service(ServerConfig);
-  const nativeEventLogger: EventNdjsonLogger | undefined =
-    options?.nativeEventLogger ??
-    (options?.nativeEventLogPath !== undefined
-      ? yield* makeEventNdjsonLogger(options.nativeEventLogPath, {
-          stream: "native",
-        })
-      : undefined);
-
-  const acquireManager = Effect.fn("acquireManager")(function* () {
-    if (options?.manager) {
-      return options.manager;
-    }
-    const services = yield* Effect.services<never>();
-    return options?.makeManager?.(services) ?? new CodexAppServerManager(services);
-  });
-
-  const manager = yield* Effect.acquireRelease(acquireManager(), (m) =>
+  const nativeEventLogger = yield* resolveCodexNativeEventLogger(options);
+  const manager = yield* Effect.acquireRelease(acquireCodexManager(options), (m) =>
     Effect.sync(() => {
       try {
         m.stopAll();
@@ -408,6 +383,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
+    inspectActiveTurn: unavailableActiveTurnInspection("codex"),
     readThread,
     rollbackThread,
     respondToRequest,

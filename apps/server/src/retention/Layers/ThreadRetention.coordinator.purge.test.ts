@@ -56,6 +56,79 @@ it.effect("runs failed purge recovery before newly prepared work", () =>
   }),
 );
 
+it.effect("isolates a future purge retry while processing other prepared work", () =>
+  Effect.gen(function* () {
+    const dueAt = "2026-08-04T00:30:00.000Z";
+    const calls = new Map<string, number>();
+    const batchOrder: Array<string> = [];
+    const retries: Array<string> = [];
+    const purge = makePurgePreparedRetentionItems({
+      repository: {
+        transitionItem: () => Effect.succeed(true),
+        recordItemRetry: (input: { readonly nextAttemptAt: string }) =>
+          Effect.sync(() => {
+            retries.push(input.nextAttemptAt);
+            return true;
+          }),
+      } as unknown as ThreadRetentionRepositoryShape,
+      purgeJobs: {
+        findIncomplete: ({ entityId }: { readonly entityId: string }) =>
+          Effect.sync(() => {
+            const count = calls.get(entityId) ?? 0;
+            calls.set(entityId, count + 1);
+            if (entityId === "future-failure-thread") {
+              return Option.some({
+                jobId: "future-failure",
+                entityId,
+                status: "failed",
+                attemptCount: 1,
+                updatedAt: dueAt,
+              } as never);
+            }
+            return count === 0
+              ? Option.some({
+                  jobId: "healthy-job",
+                  entityId,
+                  status: "pending",
+                  attemptCount: 0,
+                } as never)
+              : Option.none();
+          }),
+        findById: (jobId: string) =>
+          Effect.succeed(Option.some({ jobId, status: "completed" } as never)),
+      } as unknown as PurgeJobRepositoryShape,
+      entityPurge: {
+        runBatch: (jobs: ReadonlyArray<PurgeJob>) =>
+          Effect.sync(() => {
+            batchOrder.push(...jobs.map((job) => job.jobId));
+          }),
+      } as unknown as EntityPurgeShape,
+    });
+
+    const result = yield* purge(
+      { runId: "isolated-purge-run" } as never,
+      [
+        {
+          threadId: ThreadId.makeUnsafe("future-failure-thread"),
+          status: "purging",
+          nextAttemptAt: null,
+        } as ThreadRetentionRunItem,
+        {
+          threadId: ThreadId.makeUnsafe("healthy-thread"),
+          status: "prepared",
+          nextAttemptAt: null,
+        } as ThreadRetentionRunItem,
+      ],
+      Number.POSITIVE_INFINITY,
+      () => Date.parse("2026-08-04T00:00:00.000Z"),
+    );
+
+    assert.equal(result, "complete");
+    assert.deepEqual(batchOrder, ["healthy-job"]);
+    assert.deepEqual(retries, [dueAt]);
+  }),
+);
+
 it.effect("does not treat missing purge evidence as successful deletion", () =>
   Effect.gen(function* () {
     let completed = false;

@@ -18,6 +18,7 @@ import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { ThreadActivityDots } from "../../common/threadActivityIndicator";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
+import { isSessionHealthUnconfirmed } from "../../../../logic/session";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -93,6 +94,7 @@ export function ChatViewComposer({
   });
 
   const handoffAvailable = base.isServerThread;
+  const providerHealthUnconfirmed = isSessionHealthUnconfirmed(base.activeThread?.session ?? null);
 
   return (
     <form
@@ -216,6 +218,11 @@ export function ChatViewComposer({
               disabled={base.isConnecting || thread.isComposerApprovalState}
               {...(compact ? { className: "min-h-9 max-h-20 leading-5" } : {})}
             />
+            {providerHealthUnconfirmed ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Provider status is unconfirmed. Follow-ups will wait until sending is safe.
+              </p>
+            ) : null}
           </div>
 
           {thread.activePendingApproval ? (

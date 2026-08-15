@@ -2,6 +2,8 @@ import {
   type GetProjectThreadSummariesResult,
   type GetSelectedThreadDetailResult,
   type GetStartupProjectCatalogResult,
+  type ProjectCatalogScope,
+  type ProjectId,
   type OrchestrationEvent,
   ThreadId,
   type ThreadMessageCursor,
@@ -41,10 +43,16 @@ export interface AppState {
   sidebarThreadsById: Record<string, SidebarThreadSummary>;
   threadIdsByProjectId: Record<string, ThreadId[]>;
   threadSummaryCursorByProjectId?: Record<string, ThreadSummaryCursor | null>;
-  projectCatalogCursor?: GetStartupProjectCatalogResult["nextCursor"] | null;
-  projectCatalogGeneration: number;
-  projectCatalogLoading?: boolean;
-  projectCatalogError?: string | undefined;
+  projectCatalogCursorByScope: Record<
+    ProjectCatalogScope,
+    GetStartupProjectCatalogResult["nextCursor"] | null
+  >;
+  projectCatalogRemainingCountByScope: Record<ProjectCatalogScope, number | null>;
+  projectCatalogGenerationByScope: Record<ProjectCatalogScope, number>;
+  projectCatalogLoadingByScope: Record<ProjectCatalogScope, boolean>;
+  projectCatalogErrorByScope: Record<ProjectCatalogScope, string | undefined>;
+  projectCatalogRetryHeadByScope: Record<ProjectCatalogScope, boolean>;
+  projectCatalogRestartProjectIdByScope: Record<ProjectCatalogScope, ProjectId | null>;
   latestProjectEventSequenceById?: Record<string, number>;
   deletedProjectSequenceById?: Record<string, number>;
   pendingUnloadedProjectPatchById?: Record<
@@ -73,10 +81,13 @@ const initialState: AppState = {
   sidebarThreadsById: {},
   threadIdsByProjectId: {},
   threadSummaryCursorByProjectId: {},
-  projectCatalogCursor: null,
-  projectCatalogGeneration: 0,
-  projectCatalogLoading: false,
-  projectCatalogError: undefined,
+  projectCatalogCursorByScope: { local: null, remote: null },
+  projectCatalogRemainingCountByScope: { local: null, remote: null },
+  projectCatalogGenerationByScope: { local: 0, remote: 0 },
+  projectCatalogLoadingByScope: { local: false, remote: false },
+  projectCatalogErrorByScope: { local: undefined, remote: undefined },
+  projectCatalogRetryHeadByScope: { local: false, remote: false },
+  projectCatalogRestartProjectIdByScope: { local: null, remote: null },
   latestProjectEventSequenceById: {},
   deletedProjectSequenceById: {},
   pendingUnloadedProjectPatchById: {},
@@ -108,7 +119,9 @@ export {
 interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
   syncBoundedCatalog: (
-    catalog: GetStartupProjectCatalogResult,
+    catalogs: Partial<Record<ProjectCatalogScope, GetStartupProjectCatalogResult>>,
+    catalogErrors: Partial<Record<ProjectCatalogScope, string>>,
+    catalogRestartProjectIds: Partial<Record<ProjectCatalogScope, ProjectId>>,
     sidebarCatalog: GetSidebarThreadCatalogResult,
     pages: ReadonlyArray<GetProjectThreadSummariesResult>,
   ) => void;
@@ -116,12 +129,18 @@ interface AppStore extends AppState {
   syncSelectedThreadDetail: (detail: GetSelectedThreadDetailResult, loadingOlder: boolean) => void;
   appendProjectThreadSummaries: (page: GetProjectThreadSummariesResult) => void;
   appendProjectCatalogPage: (
+    scope: ProjectCatalogScope,
     page: GetStartupProjectCatalogResult,
     generation?: number,
     loading?: boolean,
   ) => void;
   mergeProjectCatalogPage: (page: GetStartupProjectCatalogResult) => void;
-  setProjectCatalogLoading: (loading: boolean, error?: string, generation?: number) => void;
+  setProjectCatalogLoading: (
+    scope: ProjectCatalogScope,
+    loading: boolean,
+    error?: string,
+    generation?: number,
+  ) => void;
   setThreadHydration: (threadId: ThreadId, hydration: ThreadHydration) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
@@ -132,20 +151,36 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
-  syncBoundedCatalog: (catalog, sidebarCatalog, pages) =>
-    set((state) => syncBoundedCatalog(state, catalog, sidebarCatalog, pages)),
+  syncBoundedCatalog: (catalogs, catalogErrors, catalogRestartProjectIds, sidebarCatalog, pages) =>
+    set((state) =>
+      syncBoundedCatalog(
+        state,
+        catalogs,
+        catalogErrors,
+        catalogRestartProjectIds,
+        sidebarCatalog,
+        pages,
+      ),
+    ),
   syncSidebarCatalog: (sidebarCatalog) => set((state) => syncSidebarCatalog(state, sidebarCatalog)),
   syncSelectedThreadDetail: (detail, loadingOlder) =>
     set((state) => syncSelectedThreadDetail(state, detail, loadingOlder)),
   appendProjectThreadSummaries: (page) => set((state) => appendProjectThreadSummaries(state, page)),
-  appendProjectCatalogPage: (page, generation, loading) =>
-    set((state) => appendProjectCatalogPage(state, page, generation, loading)),
+  appendProjectCatalogPage: (scope, page, generation, loading) =>
+    set((state) => appendProjectCatalogPage(state, scope, page, generation, loading)),
   mergeProjectCatalogPage: (page) => set((state) => mergeProjectCatalogPage(state, page)),
-  setProjectCatalogLoading: (loading, error, generation) =>
+  setProjectCatalogLoading: (scope, loading, error, generation) =>
     set((state) =>
-      generation !== undefined && state.projectCatalogGeneration !== generation
+      generation !== undefined && state.projectCatalogGenerationByScope[scope] !== generation
         ? state
-        : { ...state, projectCatalogLoading: loading, projectCatalogError: error },
+        : {
+            ...state,
+            projectCatalogLoadingByScope: {
+              ...state.projectCatalogLoadingByScope,
+              [scope]: loading,
+            },
+            projectCatalogErrorByScope: { ...state.projectCatalogErrorByScope, [scope]: error },
+          },
     ),
   setThreadHydration: (threadId, hydration) =>
     set((state) => setThreadHydration(state, threadId, hydration)),

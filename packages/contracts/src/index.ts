@@ -12,6 +12,7 @@ export * from "./constants/terminal.constant";
 export * from "./constants/websocket.constant";
 export * from "./server/ipc";
 export * from "./workspace/terminal";
+export * from "./workspace/terminalApplication";
 export * from "./orchestration/provider";
 export * from "./orchestration/providerRuntime";
 export * from "./orchestration/computerUse";

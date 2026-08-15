@@ -169,6 +169,8 @@ it.layer(testLayer)("entity purge baseline preflight", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const config = yield* ServerConfig;
       const now = "2026-08-03T02:00:00.000Z";
+      yield* sql`DELETE FROM purge_jobs`;
+      yield* sql`DELETE FROM orchestration_deletion_markers`;
       for (const [threadId, sequence] of [
         ["orphan-thread-a", 21],
         ["orphan-thread-b", 22],
@@ -191,12 +193,12 @@ it.layer(testLayer)("entity purge baseline preflight", (it) => {
       const completed = yield* sql<{ count: number }>`
         SELECT COUNT(*) AS count FROM purge_jobs WHERE status = 'completed' AND entity_id LIKE 'orphan-thread-%'
       `;
-      assert.deepEqual(completed, [{ count: 1 }]);
+      assert.deepEqual(completed, [{ count: 2 }]);
       const survivors = yield* Effect.forEach(
         ["orphan-thread-a", "orphan-thread-b", "orphan-thread-c"],
         (threadId) => fs.exists(`${config.providerLogsDir}/${threadId}.log`),
       );
-      assert.equal(survivors.filter(Boolean).length, 2);
+      assert.equal(survivors.filter(Boolean).length, 1);
     }),
   );
 
@@ -293,6 +295,31 @@ it.layer(testLayer)("entity purge baseline preflight", (it) => {
         SELECT status, last_error AS "lastError" FROM purge_jobs WHERE job_id = 'root-proof-retry'
       `;
       assert.deepEqual(completed, [{ status: "completed", lastError: null }]);
+    }),
+  );
+
+  it.effect("quarantines a purge job when its deletion marker never appears", () =>
+    Effect.gen(function* () {
+      const purge = yield* EntityPurge;
+      const sql = yield* SqlClient.SqlClient;
+      const job = yield* purge.requestThread(ThreadId.makeUnsafe("missing-marker-thread"));
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        yield* sql`
+          UPDATE purge_jobs SET updated_at = '2000-01-01T00:00:00.000Z'
+          WHERE job_id = ${job.jobId}
+        `;
+        yield* purge.auditAndResume();
+      }
+
+      const stored = yield* sql<{
+        autoResumeDisabled: number;
+        lastError: string | null;
+      }>`
+        SELECT auto_resume_disabled AS "autoResumeDisabled", last_error AS "lastError"
+        FROM purge_jobs WHERE job_id = ${job.jobId}
+      `;
+      assert.deepEqual(stored, [{ autoResumeDisabled: 1, lastError: "manual_recovery_required" }]);
     }),
   );
 });

@@ -32,6 +32,14 @@ export const ThreadRetentionExclusionCount = Schema.Struct({
   count: NonNegativeInt,
 });
 
+export const ThreadRetentionMaintenanceState = Schema.Literals([
+  "available",
+  "scheduled_active",
+  "manual_active",
+  "safety_deferred",
+]);
+export type ThreadRetentionMaintenanceState = typeof ThreadRetentionMaintenanceState.Type;
+
 export const ServerThreadRetentionPreview = Schema.Struct({
   generatedAt: IsoDateTime,
   policy: FiniteThreadRetentionPolicy,
@@ -46,7 +54,7 @@ export const ServerThreadRetentionPreview = Schema.Struct({
   attachmentEstimateComplete: Schema.Boolean,
   resourceEstimateComplete: Schema.Boolean,
   bytesEstimateComplete: Schema.Boolean,
-  maintenanceState: Schema.Literals(["available", "active", "deferred"]),
+  maintenanceState: ThreadRetentionMaintenanceState,
   warnings: Schema.Array(Schema.String),
   challenge: ThreadRetentionConsentChallenge,
 });

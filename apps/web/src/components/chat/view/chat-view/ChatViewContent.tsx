@@ -124,6 +124,7 @@ export function ChatViewContent({
           preferredScriptId={interactions.preferredScriptId}
           keybindings={composer.keybindings}
           availableEditors={composer.availableEditors}
+          availableTerminals={composer.availableTerminals}
           executionTargetId={projectWorkspaceExecutionTargetId}
           sidebarToggleShortcutLabel={composer.sidebarToggleShortcutLabel}
           rightPanelToggleShortcutLabel={composer.rightPanelToggleShortcutLabel}

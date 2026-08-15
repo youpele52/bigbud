@@ -31,6 +31,7 @@ import {
   type ProviderAdapterError,
 } from "../../Errors.ts";
 import { ClaudeAdapter, type ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type {
   PendingApprovalLedgerEntry,
@@ -371,6 +372,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
+    inspectActiveTurn: unavailableActiveTurnInspection("claudeAgent"),
     readThread,
     rollbackThread,
     respondToRequest,

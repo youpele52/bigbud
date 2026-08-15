@@ -147,6 +147,14 @@ export const verifyCandidateInWorkspace = (input: {
                 sql: workspaceSql,
                 workspaceId: String(input.candidate.baselineId),
               });
+              const operationalGuards = yield* workspaceSql<{ readonly name: string }>`
+                SELECT name FROM sqlite_master
+                WHERE type = 'trigger' AND name LIKE 'thread_retention_guard_%'
+                ORDER BY name
+              `;
+              for (const guard of operationalGuards) {
+                yield* workspaceSql.unsafe(`DROP TRIGGER "${guard.name}"`);
+              }
               yield* Effect.logDebug("projection baseline workspace schema ready", {
                 candidateId: input.candidate.baselineId,
                 sequence: input.candidate.sequence,

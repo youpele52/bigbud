@@ -170,6 +170,10 @@ export interface WsRpcClient {
       readonly cwd: Parameters<NativeApi["shell"]["openInEditor"]>[0];
       readonly editor: Parameters<NativeApi["shell"]["openInEditor"]>[1];
     }) => ReturnType<NativeApi["shell"]["openInEditor"]>;
+    readonly openInTerminal: (input: {
+      readonly cwd: Parameters<NativeApi["shell"]["openInTerminal"]>[0];
+      readonly terminal: Parameters<NativeApi["shell"]["openInTerminal"]>[1];
+    }) => ReturnType<NativeApi["shell"]["openInTerminal"]>;
     readonly openPath: (input: {
       readonly path: Parameters<NativeApi["shell"]["openPath"]>[0];
     }) => ReturnType<NativeApi["shell"]["openPath"]>;

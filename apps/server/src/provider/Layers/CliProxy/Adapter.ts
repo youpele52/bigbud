@@ -18,6 +18,7 @@ import {
   type ProviderAdapterError,
 } from "../../Errors.ts";
 import { CliProxyAdapter, type CliProxyAdapterShape } from "../../Services/CliProxy/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
 import { resolveCliProxyRuntimeConfig } from "./RuntimeConfig.ts";
 
@@ -237,6 +238,7 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
       ),
     interruptTurn: (threadId, turnId) =>
       claude.interruptTurn(threadId, turnId).pipe(Effect.mapError(remapError)),
+    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
     respondToRequest: (threadId, requestId, decision) =>
       claude.respondToRequest(threadId, requestId, decision).pipe(Effect.mapError(remapError)),
     respondToUserInput: (threadId, requestId, answers) =>

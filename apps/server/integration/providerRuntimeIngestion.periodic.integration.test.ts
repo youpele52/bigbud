@@ -185,6 +185,31 @@ it.live("leaves state unchanged after one listSessions failure and repairs on th
   ),
 );
 
+it.live("leaves state unchanged when provider session listing times out", () =>
+  withPeriodicHarness((harness) =>
+    Effect.gen(function* () {
+      yield* seedRunningThread(harness, TurnId.makeUnsafe("list-timeout"));
+      const readyAt = nowIso();
+      yield* harness.adapterHarness!.setSession({
+        provider: "codex",
+        status: "ready",
+        runtimeMode: "approval-required",
+        threadId: THREAD_ID,
+        createdAt: readyAt,
+        updatedAt: readyAt,
+      });
+      yield* harness.adapterHarness!.hangNextListSessions();
+
+      yield* harness.advanceClock("5 seconds");
+      const thread = (yield* harness.engine.getReadModel()).threads.find(
+        (entry) => entry.id === THREAD_ID,
+      );
+      assert.equal(thread?.session?.status, "running");
+      assert.equal(thread?.session?.activeTurnId, "list-timeout");
+    }),
+  ),
+);
+
 it.live("flushes only the prompts captured before interruption after periodic repair", () =>
   withPeriodicHarness((harness) =>
     Effect.gen(function* () {

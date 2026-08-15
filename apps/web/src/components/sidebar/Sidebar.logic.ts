@@ -1,9 +1,11 @@
-import type { SidebarThreadSummary, Thread } from "../../models/types";
+import type { Thread } from "../../models/types";
 import { cn } from "../../lib/utils";
-import { isLatestTurnSettled } from "../../logic/session";
-import { isThreadCompletedStatus } from "../../logic/thread/threadCompletion.logic";
-import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
 export { hasUnseenCompletion } from "../../logic/thread/threadCompletion.logic";
+export {
+  resolveProjectStatusIndicator,
+  resolveThreadStatusPill,
+  type ThreadStatusPill,
+} from "./Sidebar.logic.status";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export type SidebarNewThreadEnvMode = "local" | "worktree";
@@ -27,42 +29,6 @@ export {
 } from "./Sidebar.sort.logic";
 
 export type ThreadTraversalDirection = "previous" | "next";
-
-export interface ThreadStatusPill {
-  label:
-    | "Working"
-    | "Compacting"
-    | "Connecting"
-    | "Completed"
-    | "Pending Approval"
-    | "Awaiting Input"
-    | "Plan Ready";
-  colorClass: string;
-  dotClass: string;
-  pulse: boolean;
-}
-
-const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
-  "Pending Approval": 5,
-  "Awaiting Input": 4,
-  Working: 3,
-  Compacting: 3,
-  Connecting: 3,
-  "Plan Ready": 2,
-  Completed: 1,
-};
-
-type ThreadStatusInput = Pick<
-  SidebarThreadSummary,
-  | "hasActionableProposedPlan"
-  | "hasPendingApprovals"
-  | "hasPendingUserInput"
-  | "interactionMode"
-  | "latestTurn"
-  | "session"
-> & {
-  lastVisitedAt?: string | undefined;
-};
 
 export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
@@ -240,100 +206,6 @@ export function resolveThreadRowClassName(input: {
   }
 
   return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
-}
-
-export function resolveThreadStatusPill(input: {
-  thread: ThreadStatusInput;
-}): ThreadStatusPill | null {
-  const { thread } = input;
-
-  if (thread.hasPendingApprovals) {
-    return {
-      label: "Pending Approval",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: false,
-    };
-  }
-
-  if (thread.hasPendingUserInput) {
-    return {
-      label: "Awaiting Input",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: false,
-    };
-  }
-
-  if (thread.session?.status === "running") {
-    if (isSessionCompacting(thread.session)) {
-      return {
-        label: "Compacting",
-        colorClass: "text-warning",
-        dotClass: "bg-warning",
-        pulse: true,
-      };
-    }
-
-    return {
-      label: "Working",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: true,
-    };
-  }
-
-  if (thread.session?.status === "connecting") {
-    return {
-      label: "Connecting",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: true,
-    };
-  }
-
-  const hasPlanReadyPrompt =
-    !thread.hasPendingUserInput &&
-    thread.interactionMode === "plan" &&
-    isLatestTurnSettled(thread.latestTurn, thread.session) &&
-    thread.hasActionableProposedPlan;
-  if (hasPlanReadyPrompt) {
-    return {
-      label: "Plan Ready",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: false,
-    };
-  }
-
-  if (isThreadCompletedStatus(thread)) {
-    return {
-      label: "Completed",
-      colorClass: "text-primary",
-      dotClass: "bg-primary",
-      pulse: false,
-    };
-  }
-
-  return null;
-}
-
-export function resolveProjectStatusIndicator(
-  statuses: ReadonlyArray<ThreadStatusPill | null>,
-): ThreadStatusPill | null {
-  let highestPriorityStatus: ThreadStatusPill | null = null;
-
-  for (const status of statuses) {
-    if (status === null) continue;
-    if (
-      highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
-    ) {
-      highestPriorityStatus = status;
-    }
-  }
-
-  return highestPriorityStatus;
 }
 
 export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {

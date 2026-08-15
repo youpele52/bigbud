@@ -27,10 +27,22 @@ it.effect("decodes sidebar catalog membership", () =>
 it.effect("decodes structured catalog cursors", () =>
   Effect.gen(function* () {
     const input = yield* Schema.decodeUnknownEffect(GetStartupProjectCatalogInput)({
+      scope: "local",
       limit: 2,
       cursor: { lastUsedAt: "2026-01-03T00:00:00.000Z", projectId: "project-1" },
     });
     assert.equal(input.cursor?.projectId, "project-1");
+    assert.equal(input.scope, "local");
+  }),
+);
+
+it.effect("decodes a project catalog name query", () =>
+  Effect.gen(function* () {
+    const input = yield* Schema.decodeUnknownEffect(GetStartupProjectCatalogInput)({
+      scope: "local",
+      query: "Project name",
+    });
+    assert.equal(input.query, "Project name");
   }),
 );
 
@@ -95,6 +107,7 @@ it.effect("decodes project execution targets", () =>
           hasExceptionalThreads: false,
         },
       ],
+      remainingCount: 0,
     });
     assert.equal(result.projects[0]?.workspaceExecutionTargetId, "ssh:workspace");
   }),

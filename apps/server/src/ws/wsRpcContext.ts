@@ -15,7 +15,7 @@ import { GitCore } from "../git/Services/GitCore";
 import { GitManager } from "../git/Services/GitManager";
 import { GitStatusBroadcaster } from "../git/Services/GitStatusBroadcaster";
 import { Keybindings } from "../keybindings/keybindings";
-import { Open, resolveAvailableEditors } from "../utils/open";
+import { Open, resolveAvailableEditors, resolveAvailableTerminals } from "../utils/open";
 import { normalizeDispatchCommand } from "../orchestration/Normalizer";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
@@ -316,6 +316,7 @@ export const makeWsRpcContext = Effect.gen(function* () {
       providers,
       discovery,
       availableEditors: resolveAvailableEditors(),
+      availableTerminals: resolveAvailableTerminals(),
       observability: {
         logsDirectoryPath: config.logsDir,
         localTracingEnabled: true,

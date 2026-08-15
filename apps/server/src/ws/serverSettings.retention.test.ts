@@ -64,12 +64,12 @@ it.effect("persists an explicitly authorized finite transition", () =>
     const fs = yield* FileSystem.FileSystem;
     const config = yield* ServerConfig;
     if (!settings.setThreadRetentionPolicy) return yield* Effect.die("retention unavailable");
-    const updated = yield* settings.setThreadRetentionPolicy("30-days");
+    const updated = yield* settings.setThreadRetentionPolicy("7-days");
 
-    assert.equal(updated.threadRetentionPolicy, "30-days");
+    assert.equal(updated.threadRetentionPolicy, "7-days");
     assert.equal(
       JSON.parse(yield* fs.readFileString(config.settingsPath)).threadRetentionPolicy,
-      "30-days",
+      "7-days",
     );
   }).pipe(Effect.provide(makeLayer("bigbud-retention-explicit-"))),
 );

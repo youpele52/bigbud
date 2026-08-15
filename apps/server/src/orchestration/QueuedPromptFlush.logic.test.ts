@@ -96,6 +96,41 @@ describe("makeLifecycleQueuedPromptFlushCommand", () => {
     ).toBeNull();
   });
 
+  it.each([
+    "provider.checking",
+    "provider.recovering",
+    "provider.stalled",
+    "provider.lost-session",
+  ])("does not flush %s while its active turn is preserved", (reason) => {
+    expect(
+      makeLifecycleQueuedPromptFlushCommand({
+        trigger,
+        readModel: model({
+          session: {
+            ...trigger.session,
+            status: "error",
+            activeTurnId: "preserved-turn",
+            reason,
+          },
+        }),
+        createdAt: trigger.createdAt,
+      }),
+    ).toBeNull();
+  });
+
+  it.each(["ready", "error"] as const)(
+    "flushes terminal %s state after the active turn is cleared",
+    (status) => {
+      expect(
+        makeLifecycleQueuedPromptFlushCommand({
+          trigger,
+          readModel: model({ session: { ...trigger.session, status, activeTurnId: null } }),
+          createdAt: trigger.createdAt,
+        }),
+      ).toMatchObject({ type: "thread.queued-prompt.flush" });
+    },
+  );
+
   it("derives startup recovery with deterministic IDs that change with the prefix", () => {
     const first = makeQueuedPromptFlushCommand({
       threadId,

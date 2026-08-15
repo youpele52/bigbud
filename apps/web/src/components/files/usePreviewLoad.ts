@@ -13,6 +13,7 @@ interface UsePreviewLoadInput {
   cwd: string;
   relativePath: string;
   executionTargetId?: string | undefined;
+  onLoadError?: ((error: unknown) => void) | undefined;
 }
 
 const INITIAL_STATE: PreviewState = {
@@ -23,7 +24,12 @@ const INITIAL_STATE: PreviewState = {
   error: null,
 };
 
-export function usePreviewLoad({ cwd, relativePath, executionTargetId }: UsePreviewLoadInput) {
+export function usePreviewLoad({
+  cwd,
+  relativePath,
+  executionTargetId,
+  onLoadError,
+}: UsePreviewLoadInput) {
   const [state, setState] = useState<PreviewState>(INITIAL_STATE);
   const previewRequestIdRef = useRef(0);
 
@@ -88,6 +94,8 @@ export function usePreviewLoad({ cwd, relativePath, executionTargetId }: UsePrev
           });
         })
         .catch((error) => {
+          if (requestId !== previewRequestIdRef.current) return;
+          onLoadError?.(error);
           const message = error instanceof Error ? error.message : "Failed to load preview.";
 
           setState((current) => {
@@ -112,7 +120,7 @@ export function usePreviewLoad({ cwd, relativePath, executionTargetId }: UsePrev
           });
         });
     },
-    [cwd, executionTargetId, relativePath],
+    [cwd, executionTargetId, onLoadError, relativePath],
   );
 
   const refreshPreview = useCallback(() => {

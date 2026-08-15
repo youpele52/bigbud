@@ -4,7 +4,30 @@ import { FileSystem, Path, Effect } from "effect";
 import { resolveAvailableEditors, resolveEditorLaunch } from "./open";
 
 it.layer(NodeServices.layer)("resolveEditorLaunch installation evidence", (it) => {
-  it.effect("prefers launching installed macOS apps via open", () =>
+  it.effect("opens a workspace in installed macOS apps", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const applicationsDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-macos-apps-" });
+      yield* fs.makeDirectory(path.join(applicationsDir, "Windsurf.app"));
+
+      const launch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "windsurf" },
+        "darwin",
+        {
+          PATH: "",
+          BIGBUD_EDITOR_APP_DIRS_DARWIN: applicationsDir,
+        },
+      );
+
+      assert.deepEqual(launch, {
+        command: "open",
+        args: ["-a", path.join(applicationsDir, "Windsurf.app"), "/tmp/workspace"],
+      });
+    }),
+  );
+
+  it.effect("preserves editor navigation arguments for positioned file targets", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;

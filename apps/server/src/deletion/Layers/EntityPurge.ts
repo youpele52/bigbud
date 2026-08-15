@@ -1,14 +1,10 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { Effect, FileSystem, Layer, Semaphore } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-
-import { CheckpointStoreLive } from "../../checkpointing/Layers/CheckpointStore.ts";
 import { CheckpointStore } from "../../checkpointing/Services/CheckpointStore.ts";
-import { GitCoreLive } from "../../git/Layers/GitCore.ts";
 import { safeEntitySegment, threadAttachmentRelativePaths } from "./EntityPurge.assets.ts";
 import { makeEntityPurgeCheckpointOps } from "./EntityPurge.checkpoints.ts";
 import { toPersistenceSqlError, type ProjectionRepositoryError } from "../../persistence/Errors.ts";
-import { PurgeJobRepositoryLive as PurgeJobs } from "../../persistence/Layers/PurgeJobRepository.ts";
 import {
   type PurgeJob,
   PurgeJobRepository,
@@ -18,7 +14,12 @@ import { ServerConfig } from "../../startup/config.ts";
 import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { EntityPurge, type EntityPurgeShape as PurgeShape } from "../Services/EntityPurge.ts";
 import { makeEntityPurgeMaintenance } from "./EntityPurge.batch.ts";
-import { mapPurgeError, nextPurgeRetryAt } from "./EntityPurge.errors.ts";
+import { EntityPurgeDependenciesLive } from "./EntityPurge.dependencies.ts";
+import {
+  mapPurgeError,
+  persistPurgeFailure,
+  purgeResourceOperation,
+} from "./EntityPurge.errors.ts";
 import {
   exclusiveOwnedLogNames,
   readOwnedLogDirectory,
@@ -40,7 +41,6 @@ import {
   verifyResourceAbsent,
   verifyResourcePresent,
 } from "./EntityPurge.resources.ts";
-
 const makeEntityPurge = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const jobs = yield* PurgeJobRepository;
@@ -50,10 +50,6 @@ const makeEntityPurge = Effect.gen(function* () {
   const checkpointStore = yield* CheckpointStore;
   const queries = makeEntityPurgeSql(sql);
   const maintenanceSemaphore = yield* Semaphore.make(1);
-
-  const resourceOperation = <A>(operation: string, run: () => Promise<A>) =>
-    Effect.tryPromise({ try: run, catch: mapPurgeError(operation) });
-
   const captureResource = Effect.fn("EntityPurge.captureResource")(function* (
     kind: PurgeResource["kind"],
     relativePath: string,
@@ -69,7 +65,7 @@ const makeEntityPurge = Effect.gen(function* () {
       .makeDirectory(resourceRoot(config, kind), { recursive: true })
       .pipe(Effect.mapError(mapPurgeError("EntityPurge.captureResourceRoot")));
     const resolved = resolvePurgeResource(config, resource);
-    const identity = yield* resourceOperation("EntityPurge.captureResource", () =>
+    const identity = yield* purgeResourceOperation("EntityPurge.captureResource", () =>
       captureResourceIdentity(resolved),
     );
     return { ...resource, identity } satisfies PurgeResource;
@@ -82,12 +78,18 @@ const makeEntityPurge = Effect.gen(function* () {
     attachmentIsShared,
     assertResourceClaims,
     acquireResourceClaims,
-  } = makeEntityPurgeClaims({ config, queries, captureResource, resourceOperation, jobs, sql });
+  } = makeEntityPurgeClaims({
+    config,
+    queries,
+    captureResource,
+    resourceOperation: purgeResourceOperation,
+    jobs,
+    sql,
+  });
   const { captureCheckpointRefs, deleteCheckpointRefs } = makeEntityPurgeCheckpointOps({
     checkpointStore,
     queries,
   });
-
   const requestThread: PurgeShape["requestThread"] = Effect.fn("EntityPurge.requestThread")(
     function* (threadId: ThreadId) {
       return yield* Effect.gen(function* () {
@@ -118,7 +120,7 @@ const makeEntityPurge = Effect.gen(function* () {
           ["provider-log", config.providerLogsDir, "provider"],
           ["terminal-history", config.terminalLogsDir, "terminal"],
         ] as const) {
-          const entries = yield* resourceOperation("EntityPurge.readOwnedLogDirectory", () =>
+          const entries = yield* purgeResourceOperation("EntityPurge.readOwnedLogDirectory", () =>
             readOwnedLogDirectory(directory),
           );
           for (const relativePath of exclusiveOwnedLogNames({
@@ -175,7 +177,7 @@ const makeEntityPurge = Effect.gen(function* () {
             resource.action === "retain-shared" &&
             (yield* attachmentIsShared(ThreadId.makeUnsafe(job.entityId), resource));
           if (!retainShared) {
-            const removed = yield* resourceOperation("EntityPurge.deleteResources", () =>
+            const removed = yield* purgeResourceOperation("EntityPurge.deleteResources", () =>
               deleteResourceAtomically({ jobId: job.jobId, resolved, resource }),
             );
             yield* recordRemovedPurgeResource(resource.kind, removed);
@@ -197,7 +199,7 @@ const makeEntityPurge = Effect.gen(function* () {
             resource.kind === "attachment" &&
             resource.action === "retain-shared" &&
             (yield* attachmentIsShared(ThreadId.makeUnsafe(job.entityId), resource));
-          yield* resourceOperation("EntityPurge.verifyResources", () =>
+          yield* purgeResourceOperation("EntityPurge.verifyResources", () =>
             retainShared
               ? verifyResourcePresent({ resolved, resource })
               : verifyResourceAbsent({ jobId: job.jobId, resolved, resource }),
@@ -248,7 +250,9 @@ const makeEntityPurge = Effect.gen(function* () {
           entityKind: job.entityKind,
           entityId,
         });
-        if (markers[0] === undefined) return;
+        if (markers[0] === undefined) {
+          return yield* Effect.fail(new Error("entity deletion marker is not yet available"));
+        }
         yield* transitionJob(job, "awaiting-finalization", "baseline");
         phase = "baseline";
         failurePhase = phase;
@@ -322,7 +326,7 @@ const makeEntityPurge = Effect.gen(function* () {
         yield* verifyResources(claimedJob);
         if (job.entityKind === "thread") {
           const knownThreadIds = (yield* queries.listKnownThreadIds()).map((row) => row.threadId);
-          yield* resourceOperation("EntityPurge.verifyOwnedLogs", () =>
+          yield* purgeResourceOperation("EntityPurge.verifyOwnedLogs", () =>
             verifyOwnedLogsAbsent({
               providerDirectory: config.providerLogsDir,
               terminalDirectory: config.terminalLogsDir,
@@ -365,17 +369,14 @@ const makeEntityPurge = Effect.gen(function* () {
         );
       }
     }).pipe(
-      Effect.mapError(mapPurgeError("EntityPurge.run")),
       Effect.catch((error) =>
-        jobs
-          .update({
-            jobId: inputJob.jobId,
-            phase: failurePhase,
-            status: "failed",
-            lastError: error.message,
-            updatedAt: nextPurgeRetryAt(inputJob.attemptCount),
-          })
-          .pipe(Effect.ignore, Effect.andThen(Effect.fail(error))),
+        persistPurgeFailure({
+          attemptCount: inputJob.attemptCount,
+          error,
+          failurePhase,
+          jobId: inputJob.jobId,
+          jobs,
+        }),
       ),
     );
   });
@@ -395,6 +396,5 @@ const makeEntityPurge = Effect.gen(function* () {
 });
 
 export const EntityPurgeLive = Layer.effect(EntityPurge, makeEntityPurge).pipe(
-  Layer.provide(PurgeJobs),
-  Layer.provide(CheckpointStoreLive.pipe(Layer.provide(GitCoreLive))),
+  Layer.provide(EntityPurgeDependenciesLive),
 );

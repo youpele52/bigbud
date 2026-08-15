@@ -108,6 +108,27 @@ describe("normalizeDispatchCommand", () => {
     expect(normalized.workspaceRoot).toBe("~/workspace/renamed");
   });
 
+  it("preserves remote workspace roots while reconfiguring a project", async () => {
+    const normalized = await runNormalize({
+      type: "project.reconfigure",
+      commandId: CommandId.makeUnsafe("cmd-project-reconfigure-remote"),
+      projectId: ProjectId.makeUnsafe("project-remote"),
+      title: "Remote Project",
+      providerRuntimeExecutionTargetId: "ssh:devbox",
+      workspaceExecutionTargetId: "ssh:devbox",
+      executionTargetId: "ssh:devbox",
+      workspaceRoot: "~/workspace/reconfigured  ",
+      expectedUpdatedAt: "2026-01-01T00:00:00.000Z",
+      verifiedWorktreePaths: [],
+    });
+
+    expect(normalized.type).toBe("project.reconfigure");
+    if (normalized.type !== "project.reconfigure") {
+      throw new Error(`Unexpected command type: ${normalized.type}`);
+    }
+    expect(normalized.workspaceRoot).toBe("~/workspace/reconfigured");
+  });
+
   it("hydrates a readable file path-reference attachment into a persisted file attachment", async () => {
     const config = await getServerConfig();
     const noteDir = path.join(config.stateDir, "notes", "project-1");
