@@ -19,7 +19,7 @@ export const MessageBranchButton = memo(function MessageBranchButton(props: {
       disabled={disabled}
       onClick={onClick}
     >
-      <SplitIcon className="size-3" />
+      <SplitIcon className="size-3 rotate-90" />
     </Button>
   );
 
