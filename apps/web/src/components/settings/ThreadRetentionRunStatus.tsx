@@ -1,7 +1,14 @@
 import type { ServerThreadRetentionRun } from "@bigbud/contracts/server/threadRetention";
-import { CircleAlertIcon, CircleCheckIcon, Clock3Icon, RefreshCwIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  Clock3Icon,
+  RefreshCwIcon,
+} from "lucide-react";
 
 import { Button } from "../ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   formatRetentionCutoff,
   getRetentionRunStatusMessage,
@@ -42,48 +49,56 @@ export function ThreadRetentionRunStatus({
         </p>
       ) : null}
       {run ? (
-        <>
-          <p className="flex items-center gap-1.5 font-medium text-foreground">
+        <Collapsible>
+          <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md py-0.5 text-left font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <StateIcon aria-hidden="true" className="size-3.5 shrink-0" />
-            {getRetentionRunStatusMessage(run)}
-          </p>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
-            <div>
-              <dt className="inline">Accepted: </dt>
-              <dd className="inline text-foreground">{formatRetentionCutoff(run.createdAt)}</dd>
+            <span className="flex-1">{getRetentionRunStatusMessage(run)}</span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3.5 shrink-0 transition-transform [[data-panel-open]_&]:rotate-180"
+            />
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="space-y-2 pt-2">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                <div>
+                  <dt className="inline">Accepted: </dt>
+                  <dd className="inline text-foreground">{formatRetentionCutoff(run.createdAt)}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Eligible: </dt>
+                  <dd className="inline text-foreground">{run.eligibleCount}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Selected: </dt>
+                  <dd className="inline text-foreground">{run.selectedCount}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Requested: </dt>
+                  <dd className="inline text-foreground">{run.requestedCount}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Completed: </dt>
+                  <dd className="inline text-foreground">{run.completedCount}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Skipped: </dt>
+                  <dd className="inline text-foreground">{run.skippedCount}</dd>
+                </div>
+                <div>
+                  <dt className="inline">Failed: </dt>
+                  <dd className="inline text-foreground">{run.failedCount}</dd>
+                </div>
+              </dl>
+              <p>
+                Cutoff: {formatRetentionCutoff(run.cutoffAt)}. Run ID: {run.runId}.
+              </p>
+              {run.errorMessage ? (
+                <p className="font-medium text-foreground">{run.errorMessage}</p>
+              ) : null}
             </div>
-            <div>
-              <dt className="inline">Eligible: </dt>
-              <dd className="inline text-foreground">{run.eligibleCount}</dd>
-            </div>
-            <div>
-              <dt className="inline">Selected: </dt>
-              <dd className="inline text-foreground">{run.selectedCount}</dd>
-            </div>
-            <div>
-              <dt className="inline">Requested: </dt>
-              <dd className="inline text-foreground">{run.requestedCount}</dd>
-            </div>
-            <div>
-              <dt className="inline">Completed: </dt>
-              <dd className="inline text-foreground">{run.completedCount}</dd>
-            </div>
-            <div>
-              <dt className="inline">Skipped: </dt>
-              <dd className="inline text-foreground">{run.skippedCount}</dd>
-            </div>
-            <div>
-              <dt className="inline">Failed: </dt>
-              <dd className="inline text-foreground">{run.failedCount}</dd>
-            </div>
-          </dl>
-          <p>
-            Cutoff: {formatRetentionCutoff(run.cutoffAt)}. Run ID: {run.runId}.
-          </p>
-          {run.errorMessage ? (
-            <p className="font-medium text-foreground">{run.errorMessage}</p>
-          ) : null}
-        </>
+          </CollapsiblePanel>
+        </Collapsible>
       ) : null}
       {pollingError ? (
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getRetentionRunStatusMessage,
+  getRetentionMaintenanceMessage,
   getRetentionPollIntervalMs,
   shouldReplaceRetentionRun,
 } from "./ThreadRetentionSettingsSection.logic";
@@ -51,7 +52,7 @@ describe("ThreadRetentionSettingsSection logic", () => {
 
   it("uses actionable cleanup copy for queued and active internal statuses", () => {
     expect(getRetentionRunStatusMessage(RUN)).toBe(
-      "Cleanup request queued — it will start automatically when safe.",
+      "Cleanup request is ready to start at a safe checkpoint, ahead of scheduled cleanup.",
     );
     expect(getRetentionRunStatusMessage({ ...RUN, status: "deferred" })).toContain(
       "retry automatically",
@@ -60,5 +61,18 @@ describe("ThreadRetentionSettingsSection logic", () => {
       "Cleanup in progress — updates appear automatically.",
     );
     expect(getRetentionRunStatusMessage({ ...RUN, status: "purging" })).not.toContain("purge");
+  });
+
+  it("explains each preview maintenance state without overpromising deletion", () => {
+    expect(getRetentionMaintenanceMessage("available")).toBeNull();
+    expect(getRetentionMaintenanceMessage("scheduled_active")).toBe(
+      "Scheduled cleanup is active. This request starts at the next safe checkpoint.",
+    );
+    expect(getRetentionMaintenanceMessage("manual_active")).toBe(
+      "Another manual cleanup is active. This request may join an equivalent cleanup; otherwise it waits for that cleanup.",
+    );
+    expect(getRetentionMaintenanceMessage("safety_deferred")).toBe(
+      "Cleanup is waiting for safety or recovery work to finish before this request can start.",
+    );
   });
 });

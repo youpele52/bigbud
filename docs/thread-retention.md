@@ -1,6 +1,6 @@
 # Automatic thread cleanup
 
-bigbud can automatically remove inactive, unpinned threads after 7 days, 14 days, 30 days, or 90 days. `Never` disables automatic cleanup. Thresholds are checked daily. Manual cleanup requests can be confirmed while another cleanup is active or deferred; they queue automatically and start when it is safe. A finite policy is server-authorized state: changing `settings.json` directly cannot enable or shorten cleanup. Finite user changes require the policy-change challenge to be consumed, and unauthorized or malformed disk changes are replaced with the last server-authorized policy.
+bigbud can automatically remove inactive, unpinned threads after 7 days, 14 days, 30 days, or 90 days. `Never` disables automatic cleanup. Thresholds are checked daily. Manual cleanup uses its own selected finite period and does not have to match the automatic policy. Equivalent confirmed manual requests join the same nonterminal run, and manual work runs before queued automatic work after any active destructive page reaches a safe checkpoint. Failed items retain their own retry backoff while successful pages continue. A finite policy is server-authorized state: changing `settings.json` directly cannot enable or shorten cleanup. Finite user changes require the policy-change challenge to be consumed, and unauthorized or malformed disk changes are replaced with the last server-authorized policy.
 
 ## Rollout semantics
 

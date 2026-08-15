@@ -134,8 +134,9 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Automatic Thread Cleanup
 
-- Added configurable automatic thread cleanup for inactive, unpinned threads after 7 days, 14 days, 30 days, or 90 days, with **Never** available to disable scheduled cleanup.
+- Added configurable automatic thread cleanup for inactive, unpinned threads after 1 day, 2 days, 7 days, 14 days, 30 days, or 90 days, with **Never** available to disable scheduled cleanup.
 - Added cleanup previews, one-time confirmation challenges, manual deletion of eligible threads across projects, progress reporting, and recent cleanup history in General settings.
+- Coalesced equivalent manual cleanup confirmations, prioritized manual work at safe page checkpoints, kept active progress visible ahead of queued runs, and isolated failed-item backoff from successful page continuation.
 - Protected existing installations with a safe rollout default and made retention policy state server-authoritative, so malformed or direct settings-file edits cannot silently enable or shorten retention.
 - Added a dedicated cleanup service and recovery-aware scheduling path, so automatic cleanup can pause, retry, or require manual attention without blocking normal startup.
 

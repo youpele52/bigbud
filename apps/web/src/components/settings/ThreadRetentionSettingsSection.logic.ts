@@ -1,4 +1,7 @@
-import type { ServerThreadRetentionRun } from "@bigbud/contracts/server/threadRetention";
+import type {
+  ServerThreadRetentionRun,
+  ThreadRetentionMaintenanceState,
+} from "@bigbud/contracts/server/threadRetention";
 
 export const ACTIVE_RETENTION_RUN_STATUSES = new Set<ServerThreadRetentionRun["status"]>([
   "queued",
@@ -41,7 +44,9 @@ export function formatRetentionRunStatus(status: ServerThreadRetentionRun["statu
 export function getRetentionRunStatusMessage(run: ServerThreadRetentionRun): string {
   switch (run.status) {
     case "queued":
-      return "Cleanup request queued — it will start automatically when safe.";
+      return run.trigger === "manual"
+        ? "Cleanup request is ready to start at a safe checkpoint, ahead of scheduled cleanup."
+        : "Cleanup request queued — it will start automatically when safe.";
     case "deferred":
       return "Cleanup is paused — it will retry automatically when safe.";
     case "selecting":
@@ -50,6 +55,21 @@ export function getRetentionRunStatusMessage(run: ServerThreadRetentionRun): str
       return "Cleanup in progress — updates appear automatically.";
     default:
       return `Latest cleanup: ${formatRetentionRunStatus(run.status)}`;
+  }
+}
+
+export function getRetentionMaintenanceMessage(
+  state: ThreadRetentionMaintenanceState,
+): string | null {
+  switch (state) {
+    case "available":
+      return null;
+    case "scheduled_active":
+      return "Scheduled cleanup is active. This request starts at the next safe checkpoint.";
+    case "manual_active":
+      return "Another manual cleanup is active. This request may join an equivalent cleanup; otherwise it waits for that cleanup.";
+    case "safety_deferred":
+      return "Cleanup is waiting for safety or recovery work to finish before this request can start.";
   }
 }
 

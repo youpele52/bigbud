@@ -47,6 +47,8 @@ export function SettingsRow({
   control,
   children,
   searchTerms = [],
+  layout = "default",
+  statusPlacement = "inline",
 }: {
   title: ReactNode;
   description: string;
@@ -55,6 +57,8 @@ export function SettingsRow({
   control?: ReactNode;
   children?: ReactNode;
   searchTerms?: ReadonlyArray<string>;
+  layout?: "default" | "three-quarter-control";
+  statusPlacement?: "inline" | "below";
 }) {
   const { query, terms } = useSettingsSearch();
   const titleTerms = typeof title === "string" ? [title] : [];
@@ -72,8 +76,20 @@ export function SettingsRow({
       data-settings-search-match={matches ? "" : undefined}
       hidden={isSearching && !matches}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1 space-y-1">
+      <div
+        className={
+          layout === "three-quarter-control"
+            ? "grid gap-3 sm:grid-cols-4 sm:gap-x-8 sm:items-center"
+            : "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        }
+      >
+        <div
+          className={
+            layout === "three-quarter-control"
+              ? "min-w-0 space-y-1 sm:col-span-3"
+              : "min-w-0 flex-1 space-y-1"
+          }
+        >
           <div className="flex min-h-5 items-center gap-1.5">
             <h3 className="text-sm font-medium text-foreground">{title}</h3>
             <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
@@ -81,14 +97,23 @@ export function SettingsRow({
             </span>
           </div>
           <p className="text-xs text-muted-foreground">{description}</p>
-          {status ? <div className="pt-1 text-[11px] text-muted-foreground">{status}</div> : null}
+          {status && statusPlacement === "inline" ? (
+            <div className="pt-1 text-[11px] text-muted-foreground">{status}</div>
+          ) : null}
         </div>
         {control ? (
-          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
+          <div
+            className={
+              layout === "three-quarter-control"
+                ? "flex w-full shrink-0 items-center gap-2 sm:col-span-1"
+                : "flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end"
+            }
+          >
             {control}
           </div>
         ) : null}
       </div>
+      {status && statusPlacement === "below" ? <div className="pt-3">{status}</div> : null}
       {children}
     </div>
   );

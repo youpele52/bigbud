@@ -142,14 +142,16 @@ export function ThreadRetentionSettingsSection() {
   const dialogTitle =
     dialogTrigger === "policy-change"
       ? `Delete old threads after ${THREAD_RETENTION_POLICY_LABELS[dialogPolicy]}?`
-      : "Permanently delete eligible threads?";
+      : `Permanently delete threads older than ${THREAD_RETENTION_POLICY_LABELS[manualPolicy]}?`;
 
   return (
     <>
       <SettingsSection title="Automatic thread cleanup">
         <SettingsRow
           title="Automatically delete old threads"
-          description="Checks thresholds daily using fixed 7, 14, 30, or 90 day periods. Cleanup requests queue automatically when active work makes deletion unsafe. Pinned, active, queued, waiting, watched, and delegated threads are preserved."
+          description="Checks thresholds daily using fixed 1, 2, 3, 7, 14, 30, or 90 day periods. Manual cleanup takes priority over scheduled cleanup at safe checkpoints, while a different manual cleanup is never interrupted. Pinned, active, queued, waiting, watched, and delegated threads are preserved."
+          layout="three-quarter-control"
+          statusPlacement="below"
           status={
             <ThreadRetentionRunStatus
               run={latestRun}
@@ -173,7 +175,7 @@ export function ThreadRetentionSettingsSection() {
             >
               <SelectTrigger
                 ref={policyTriggerRef}
-                className="w-full sm:w-40"
+                className="w-full"
                 aria-label="Automatic thread cleanup period"
               >
                 <SelectValue>{selectedLabel}</SelectValue>
@@ -190,7 +192,7 @@ export function ThreadRetentionSettingsSection() {
         />
         <SettingsRow
           title="Delete eligible threads now"
-          description="Deletes eligible threads across all projects using the selected cleanup period and cannot be undone. If automatic cleanup is set to Never, you can choose a one-off period before confirming. Requests queue automatically if active work makes deletion unsafe."
+          description="Deletes eligible threads across all projects using a one-off cleanup period you choose and cannot be undone. Manual requests take priority over scheduled cleanup at safe checkpoints."
           control={
             <Button
               ref={actionButtonRef}
@@ -198,7 +200,8 @@ export function ThreadRetentionSettingsSection() {
               size="sm"
               disabled={busy || availability !== "available"}
               onClick={() => {
-                const nextPolicy = policy === "never" ? manualPolicy : policy;
+                const nextPolicy = policy === "never" ? "7-days" : policy;
+                setManualPolicy(nextPolicy);
                 void requestPreview("manual", nextPolicy);
               }}
             >
@@ -240,32 +243,37 @@ export function ThreadRetentionSettingsSection() {
             onConfirm={() => void confirmAction()}
             descriptionSlot={
               <div className="space-y-3">
-                {dialogTrigger === "manual" && policy === "never" ? (
-                  <Select
-                    value={manualPolicy}
-                    disabled={actionBusy || previewBusy}
-                    onValueChange={(value) => {
-                      if (
-                        typeof value === "string" &&
-                        (FINITE_THREAD_RETENTION_POLICIES as readonly string[]).includes(value)
-                      ) {
-                        const nextPolicy = value as FiniteThreadRetentionPolicy;
-                        setManualPolicy(nextPolicy);
-                        void requestPreview("manual", nextPolicy);
-                      }
-                    }}
-                  >
-                    <SelectTrigger aria-label="One-off cleanup period" className="w-full">
-                      <SelectValue>{THREAD_RETENTION_POLICY_LABELS[manualPolicy]}</SelectValue>
-                    </SelectTrigger>
-                    <SelectPopup alignItemWithTrigger={false}>
-                      {FINITE_THREAD_RETENTION_POLICIES.map((value) => (
-                        <SelectItem hideIndicator key={value} value={value}>
-                          {THREAD_RETENTION_POLICY_LABELS[value]}
-                        </SelectItem>
-                      ))}
-                    </SelectPopup>
-                  </Select>
+                {dialogTrigger === "manual" ? (
+                  <div className="pb-2">
+                    <Select
+                      value={manualPolicy}
+                      disabled={actionBusy || previewBusy}
+                      onValueChange={(value) => {
+                        if (
+                          typeof value === "string" &&
+                          (FINITE_THREAD_RETENTION_POLICIES as readonly string[]).includes(value)
+                        ) {
+                          const nextPolicy = value as FiniteThreadRetentionPolicy;
+                          setManualPolicy(nextPolicy);
+                          void requestPreview("manual", nextPolicy);
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        aria-label="One-off cleanup period"
+                        className="w-full sm:w-1/3"
+                      >
+                        <SelectValue>{THREAD_RETENTION_POLICY_LABELS[manualPolicy]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectPopup alignItemWithTrigger={false}>
+                        {FINITE_THREAD_RETENTION_POLICIES.map((value) => (
+                          <SelectItem hideIndicator key={value} value={value}>
+                            {THREAD_RETENTION_POLICY_LABELS[value]}
+                          </SelectItem>
+                        ))}
+                      </SelectPopup>
+                    </Select>
+                  </div>
                 ) : null}
                 <ThreadRetentionConfirmationContent preview={preview} trigger={dialogTrigger} />
               </div>

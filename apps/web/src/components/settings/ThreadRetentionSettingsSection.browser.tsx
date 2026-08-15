@@ -79,9 +79,11 @@ function configureApi(overrides: Partial<NativeApi["server"]> = {}) {
   return server;
 }
 
-async function mountRetentionSettings() {
+async function mountRetentionSettings(
+  threadRetentionPolicy: ServerConfig["settings"]["threadRetentionPolicy"] = "never",
+) {
   setServerConfigSnapshot({
-    settings: { ...DEFAULT_SERVER_SETTINGS, threadRetentionPolicy: "never" },
+    settings: { ...DEFAULT_SERVER_SETTINGS, threadRetentionPolicy },
   } as ServerConfig);
   return render(<ThreadRetentionSettingsSection />);
 }
@@ -110,10 +112,10 @@ describe("ThreadRetentionSettingsSection", () => {
     await trigger.click();
 
     const dialog = page.getByRole("alertdialog", {
-      name: "Permanently delete eligible threads?",
+      name: "Permanently delete threads older than 7 days?",
     });
     await expect.element(dialog).toBeInTheDocument();
-    await expect.element(dialog).toHaveAccessibleDescription(/This preview found 3 threads/);
+    await expect.element(dialog).toHaveAccessibleDescription(/3 threads have been inactive/);
     await expect.element(page.getByText("At least 4 known resources")).toBeInTheDocument();
     await expect
       .element(page.getByText("One managed log could not be measured."))
@@ -139,7 +141,7 @@ describe("ThreadRetentionSettingsSection", () => {
 
     const dialog = page
       .getByRole("alertdialog", {
-        name: "Permanently delete eligible threads?",
+        name: "Permanently delete threads older than 7 days?",
       })
       .element();
     expect(dialog.getBoundingClientRect().height).toBeLessThanOrEqual(525);
@@ -170,11 +172,11 @@ describe("ThreadRetentionSettingsSection", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
     await trigger.click();
     second.resolve({ ...PREVIEW, eligibleCount: 8 });
-    await expect.element(page.getByText(/This preview found 8 threads/)).toBeInTheDocument();
+    await expect.element(page.getByText(/8 threads have been inactive/)).toBeInTheDocument();
     first.resolve({ ...PREVIEW, eligibleCount: 1 });
     await Promise.resolve();
-    await expect.element(page.getByText(/This preview found 8 threads/)).toBeInTheDocument();
-    await expect.element(page.getByText(/This preview found 1 threads/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/8 threads have been inactive/)).toBeInTheDocument();
+    await expect.element(page.getByText(/1 threads have been inactive/)).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect.element(page.getByRole("alertdialog")).not.toBeInTheDocument();
     await screen.unmount();
@@ -206,7 +208,9 @@ describe("ThreadRetentionSettingsSection", () => {
       getThreadRetentionRun: getRun,
     });
     const screen = await mountRetentionSettings();
-    await vi.waitFor(() => expect(page.getByText(/Cleanup request queued/).element()).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(page.getByText(/Cleanup request is ready/).element()).toBeTruthy(),
+    );
 
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.waitFor(() => expect(page.getByText(/Cleanup is paused/).element()).toBeTruthy());
@@ -214,6 +218,7 @@ describe("ThreadRetentionSettingsSection", () => {
     await vi.waitFor(() =>
       expect(page.getByText(/Latest cleanup: completed/).element()).toBeTruthy(),
     );
+    await page.getByRole("button", { name: /Latest cleanup: completed/ }).click();
     await expect.element(page.getByText("Completed: ")).toBeInTheDocument();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(getRun).toHaveBeenCalledTimes(2);
@@ -232,7 +237,9 @@ describe("ThreadRetentionSettingsSection", () => {
       getThreadRetentionRun: getRun,
     });
     const screen = await mountRetentionSettings();
-    await vi.waitFor(() => expect(page.getByText(/Cleanup request queued/).element()).toBeTruthy());
+    await vi.waitFor(() =>
+      expect(page.getByText(/Cleanup request is ready/).element()).toBeTruthy(),
+    );
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.advanceTimersByTimeAsync(7_500);
     expect(getRun).toHaveBeenCalledTimes(5);
@@ -251,25 +258,108 @@ describe("ThreadRetentionSettingsSection", () => {
     expect(getRun).toHaveBeenCalledTimes(6);
   });
 
-  it("allows a manual request to be previewed and queued while cleanup is active", async () => {
-    const deferredPreview = { ...PREVIEW, maintenanceState: "deferred" as const };
+  it("allows a manual request to be confirmed while scheduled cleanup is active", async () => {
+    const scheduledPreview = { ...PREVIEW, maintenanceState: "scheduled_active" as const };
     const server = configureApi({
       listThreadRetentionRuns: vi
         .fn()
         .mockResolvedValue({ runs: [QUEUED_RUN], availability: "available" }),
-      previewThreadRetention: vi.fn().mockResolvedValue(deferredPreview),
+      previewThreadRetention: vi.fn().mockResolvedValue(scheduledPreview),
     });
     const screen = await mountRetentionSettings();
     const trigger = page.getByRole("button", { name: "Delete eligible threads now" });
 
     await expect.element(trigger).toBeEnabled();
     await trigger.click();
-    await expect.element(page.getByText(/confirm this request now/)).toBeInTheDocument();
+    await expect.element(page.getByText(/starts at the next safe checkpoint/)).toBeInTheDocument();
     const confirm = page.getByRole("button", { name: "Delete threads permanently" });
     await expect.element(confirm).toBeEnabled();
     await confirm.click();
 
     expect(server.startThreadRetention).toHaveBeenCalledWith({ challengeToken: "challenge-1" });
+    await screen.unmount();
+  });
+
+  it("uses neutral copy while another manual cleanup is active", async () => {
+    const server = configureApi({
+      previewThreadRetention: vi
+        .fn()
+        .mockResolvedValue({ ...PREVIEW, maintenanceState: "manual_active" as const }),
+    });
+    const screen = await mountRetentionSettings();
+
+    await page.getByRole("button", { name: "Delete eligible threads now" }).click();
+    await expect
+      .element(
+        page.getByText(
+          "Another manual cleanup is active. This request may join an equivalent cleanup; otherwise it waits for that cleanup.",
+        ),
+      )
+      .toBeInTheDocument();
+    expect(server.previewThreadRetention).toHaveBeenCalledWith({
+      trigger: "manual",
+      policy: "7-days",
+    });
+    await screen.unmount();
+  });
+
+  it("always exposes a one-off policy selector and refreshes its preview", async () => {
+    const sevenDayPreview = {
+      ...PREVIEW,
+      policy: "7-days" as const,
+      cutoffAt: "2026-07-28T00:00:00.000Z",
+      challenge: {
+        ...PREVIEW.challenge,
+        policy: "7-days" as const,
+        cutoffAt: "2026-07-28T00:00:00.000Z",
+      },
+    };
+    const ninetyDayPreview = {
+      ...PREVIEW,
+      policy: "90-days" as const,
+      cutoffAt: "2026-05-06T00:00:00.000Z",
+      challenge: {
+        ...PREVIEW.challenge,
+        policy: "90-days" as const,
+        cutoffAt: "2026-05-06T00:00:00.000Z",
+      },
+    };
+    const server = configureApi({
+      previewThreadRetention: vi
+        .fn()
+        .mockResolvedValueOnce(sevenDayPreview)
+        .mockResolvedValueOnce(ninetyDayPreview),
+    });
+    const screen = await mountRetentionSettings();
+
+    await page.getByRole("button", { name: "Delete eligible threads now" }).click();
+    await expect
+      .element(page.getByRole("combobox", { name: "One-off cleanup period" }))
+      .toBeInTheDocument();
+    expect(server.previewThreadRetention).toHaveBeenCalledWith({
+      trigger: "manual",
+      policy: "7-days",
+    });
+    await expect
+      .element(
+        page.getByRole("alertdialog", { name: "Permanently delete threads older than 7 days?" }),
+      )
+      .toBeInTheDocument();
+
+    await page.getByRole("combobox", { name: "One-off cleanup period" }).click();
+    for (const label of ["1 day", "2 days", "3 days"]) {
+      await expect.element(page.getByRole("option", { name: label })).toBeInTheDocument();
+    }
+    await page.getByRole("option", { name: "90 days" }).click();
+    await expect
+      .element(
+        page.getByRole("alertdialog", { name: "Permanently delete threads older than 90 days?" }),
+      )
+      .toBeInTheDocument();
+    expect(server.previewThreadRetention).toHaveBeenLastCalledWith({
+      trigger: "manual",
+      policy: "90-days",
+    });
     await screen.unmount();
   });
 });
