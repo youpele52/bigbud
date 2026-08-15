@@ -10,7 +10,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
-## v0.2.202 (14 August, 2026)
+## v0.2.202 (16 August, 2026)
 
 ### Faster, Safer File Browsing
 
@@ -39,8 +39,10 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Automatic Thread Cleanup
 
-- Made confirmed thread-cleanup requests durable across recovery and restarts, so they wait and resume automatically when cleanup can safely proceed.
-- Enabled daily automatic cleanup for finite policies, repaired interrupted purge and projection-baseline recovery, and clarified cleanup status and Settings copy.
+- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days; **Never** remains available to disable scheduled cleanup.
+- Made daily and confirmed cleanup durable across recovery and restarts, including repaired interrupted purge and projection-baseline recovery, so work waits and resumes safely when it can proceed.
+- Prioritized manual cleanup at safe checkpoints, coalesced equivalent manual requests into one run, and kept individual retry delays from stopping other eligible threads.
+- Improved the cleanup confirmation dialog and status with direct one-off period selection, clearer deletion and preservation details, understandable estimates and exclusions, and plain-language waiting and progress updates; added durable retries, safe worker wake-ups, and regression coverage.
 
 ### More Reliable Desktop Startup
 
