@@ -1,7 +1,15 @@
-import { CommandId, MessageId, ThreadId } from "@bigbud/contracts";
+import {
+  CommandId,
+  MessageId,
+  ThreadId,
+  type ProviderActiveTurnInspection,
+} from "@bigbud/contracts";
+import type { ProviderTurnLiveness } from "@bigbud/contracts/orchestration/providerTurnLiveness";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import {
   asEventId,
   asThreadId,
@@ -10,6 +18,12 @@ import {
   registerProviderRuntimeIngestionTestCleanup,
   waitForThread,
 } from "./ProviderRuntimeIngestion.test.helpers.ts";
+import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
+
+const runSupervisor = (
+  orchestrationEngine: OrchestrationEngineShape,
+  providerService: ProviderServiceShape,
+) => Effect.runPromise(superviseProviderTurns({ orchestrationEngine, providerService }));
 
 describe("ProviderRuntimeIngestion queued prompt settlement", () => {
   registerProviderRuntimeIngestionTestCleanup();
@@ -74,6 +88,100 @@ describe("ProviderRuntimeIngestion queued prompt settlement", () => {
     );
     expect(settled.queuedPrompts).toEqual([]);
   });
+
+  it.each(["completed", "failed"] as const)(
+    "flushes one queued follow-up after authoritative supervisor %s settlement",
+    async (inspectionStatus) => {
+      const harness = await createHarness();
+      const threadId = asThreadId("thread-1");
+      const turnId = asTurnId(`supervisor-${inspectionStatus}`);
+      const createdAt = new Date().toISOString();
+      harness.emit({
+        type: "turn.started",
+        eventId: asEventId(`supervisor-start-${inspectionStatus}`),
+        provider: "codex",
+        threadId,
+        turnId,
+        createdAt,
+      });
+      await waitForThread(harness.engine, (thread) => thread.session?.activeTurnId === turnId);
+      await Effect.runPromise(
+        harness.engine.dispatch({
+          type: "thread.message.submit",
+          commandId: CommandId.makeUnsafe(`supervisor-queue-${inspectionStatus}`),
+          threadId,
+          message: {
+            messageId: MessageId.makeUnsafe(`supervisor-message-${inspectionStatus}`),
+            text: `Supervisor follow-up ${inspectionStatus}`,
+          },
+          delivery: "auto",
+          createdAt,
+        }),
+      );
+
+      let claimed = false;
+      const inspection: ProviderActiveTurnInspection = {
+        status: inspectionStatus,
+        observedAt: createdAt,
+        ...(inspectionStatus === "failed"
+          ? { errorEvidence: { source: "test", detail: "provider failed" } }
+          : { completionEvidence: { source: "test" } }),
+      };
+      const row: ProviderTurnLiveness = {
+        threadId,
+        turnId,
+        provider: "codex",
+        turnStartedAt: createdAt,
+        lastRuntimeEventAt: createdAt,
+        lastMeaningfulProgressAt: new Date(Date.now() - 100_000).toISOString(),
+        lastInspectionAt: null,
+        inspectionStatus: "idle",
+        consecutiveInspectionFailures: 0,
+        terminalAt: null,
+      };
+      const providerService = {
+        listActiveTurnLiveness: () => Effect.succeed([row]),
+        recordTurnInspection: () => Effect.void,
+        inspectActiveTurn: () => Effect.succeed(inspection),
+        claimTurnTerminal: vi.fn(() =>
+          Effect.sync(() => {
+            if (claimed) return false;
+            claimed = true;
+            return true;
+          }),
+        ),
+      } as unknown as ProviderServiceShape;
+
+      await runSupervisor(harness.engine, providerService);
+      const settled = await waitForThread(
+        harness.engine,
+        (thread) =>
+          (thread.queuedPrompts?.length ?? 0) === 0 &&
+          thread.messages.filter((message) =>
+            message.text.includes(`Supervisor follow-up ${inspectionStatus}`),
+          ).length === 1,
+      );
+      expect(settled.queuedPrompts).toEqual([]);
+
+      await runSupervisor(harness.engine, providerService);
+      harness.emit({
+        type: "turn.completed",
+        eventId: asEventId(`late-terminal-${inspectionStatus}`),
+        provider: "codex",
+        threadId,
+        turnId,
+        status: inspectionStatus,
+        createdAt: new Date().toISOString(),
+      });
+      await harness.drain();
+      const replayed = (await Effect.runPromise(harness.engine.getReadModel())).threads[0]!;
+      expect(
+        replayed.messages.filter((message) =>
+          message.text.includes(`Supervisor follow-up ${inspectionStatus}`),
+        ),
+      ).toHaveLength(1);
+    },
+  );
 
   it("reconciles a rejected terminal event from the live idle session and flushes once", async () => {
     const harness = await createHarness();

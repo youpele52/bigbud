@@ -27,7 +27,7 @@ layer("ProjectionCatalogQuery", (it) => {
           ('project-c', 'C', '/c', '[]', '2026-01-01', '2026-01-01', '2026-01-02', NULL, NULL)
       `;
 
-      const first = yield* query.getStartupProjectCatalog({ limit: 2 });
+      const first = yield* query.getStartupProjectCatalog({ scope: "local", limit: 2 });
       assert.deepEqual(
         first.projects.map((project) => project.id),
         ["project-a", "project-b"],
@@ -37,14 +37,16 @@ layer("ProjectionCatalogQuery", (it) => {
         lastUsedAt: "2026-01-03",
         projectId: "project-b",
       });
+      assert.equal(first.remainingCount, 1);
 
-      const defaultPage = yield* query.getStartupProjectCatalog({});
+      const defaultPage = yield* query.getStartupProjectCatalog({ scope: "local" });
       assert.deepEqual(
         defaultPage.projects.map((project) => project.id),
         ["project-a"],
       );
 
       const prioritized = yield* query.getStartupProjectCatalog({
+        scope: "local",
         limit: 2,
         priorityProjectId: ProjectId.makeUnsafe("project-c"),
       });
@@ -52,8 +54,10 @@ layer("ProjectionCatalogQuery", (it) => {
         prioritized.projects.map((project) => project.id),
         ["project-c", "project-a"],
       );
+      assert.equal(prioritized.remainingCount, 1);
 
       const second = yield* query.getStartupProjectCatalog({
+        scope: "local",
         limit: 2,
         cursor: first.nextCursor,
       });
@@ -62,6 +66,7 @@ layer("ProjectionCatalogQuery", (it) => {
         ["project-c"],
       );
       assert.equal(second.nextCursor, undefined);
+      assert.equal(second.remainingCount, 0);
     }),
   );
 
@@ -140,6 +145,40 @@ layer("ProjectionCatalogQuery", (it) => {
     }),
   );
 
+  it.effect("filters project catalogs by workspace execution target", () =>
+    Effect.gen(function* () {
+      const query = yield* ProjectionCatalogQuery;
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id, title, workspace_execution_target_id, workspace_root, scripts_json,
+          created_at, updated_at, last_used_at, deleting_at, deleted_at
+        ) VALUES
+          ('local-project', 'Local', 'local', '/local', '[]',
+           '2026-01-01', '2026-01-01', '2026-01-02', NULL, NULL),
+          ('remote-project', 'Remote', 'ssh:workspace', '/remote', '[]',
+           '2026-01-01', '2026-01-01', '2026-01-03', NULL, NULL)
+      `;
+
+      const [local, remote] = yield* Effect.all([
+        query.getStartupProjectCatalog({ scope: "local" }),
+        query.getStartupProjectCatalog({ scope: "remote" }),
+      ]);
+
+      assert.deepEqual(
+        local.projects.map((project) => project.id),
+        ["local-project"],
+      );
+      assert.deepEqual(
+        remote.projects.map((project) => project.id),
+        ["remote-project"],
+      );
+      assert.equal(local.remainingCount, 0);
+      assert.equal(remote.remainingCount, 0);
+    }),
+  );
+
   it.effect("clamps oversized project catalog pages", () =>
     Effect.gen(function* () {
       const query = yield* ProjectionCatalogQuery;
@@ -162,7 +201,7 @@ layer("ProjectionCatalogQuery", (it) => {
         { discard: true },
       );
 
-      const result = yield* query.getStartupProjectCatalog({ limit: 100 });
+      const result = yield* query.getStartupProjectCatalog({ scope: "local", limit: 100 });
       assert.equal(result.projects.length, 20);
       assert.notEqual(result.nextCursor, undefined);
     }),

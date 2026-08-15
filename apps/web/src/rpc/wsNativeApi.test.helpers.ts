@@ -99,6 +99,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   },
   shell: {
     openInEditor: vi.fn(),
+    openInTerminal: vi.fn(),
     openPath: vi.fn(),
   },
   git: {

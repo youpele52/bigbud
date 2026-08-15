@@ -83,7 +83,7 @@ layer("ProjectionCatalogQuery historical-scale bounds", (it) => {
       `;
 
       const catalogStartedAt = performance.now();
-      const catalog = yield* query.getStartupProjectCatalog({ limit: 2 });
+      const catalog = yield* query.getStartupProjectCatalog({ scope: "local", limit: 2 });
       const catalogElapsedMs = performance.now() - catalogStartedAt;
       const threadSummariesStartedAt = performance.now();
       const threadPages = yield* Effect.all(

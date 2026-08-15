@@ -11,6 +11,7 @@ import type {
 import { Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { hasActiveThreadTurnOrSession } from "./ThreadDispatchSafety.logic.ts";
 
 function invariantError(commandType: string, detail: string): OrchestrationCommandInvariantError {
   return new OrchestrationCommandInvariantError({
@@ -138,6 +139,93 @@ export function requireProjectAbsent(input: {
         ),
       )
     : Effect.void;
+}
+
+export function requireProjectWorkspaceAvailable(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+  readonly workspaceRoot: string | null;
+  readonly workspaceExecutionTargetId: ExecutionTargetId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  if (input.workspaceRoot === null) {
+    return Effect.void;
+  }
+  const existing = input.readModel.projects.find(
+    (project) =>
+      project.id !== input.projectId &&
+      project.deletedAt === null &&
+      project.workspaceRoot === input.workspaceRoot &&
+      (project.workspaceExecutionTargetId ??
+        project.executionTargetId ??
+        LOCAL_EXECUTION_TARGET_ID) === input.workspaceExecutionTargetId,
+  );
+  return existing
+    ? Effect.fail(
+        invariantError(
+          input.command.type,
+          `A project already exists for workspace '${input.workspaceRoot}'.`,
+        ),
+      )
+    : Effect.void;
+}
+
+export function requireProjectThreadsIdle(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const activeThread = listThreadsByProjectId(input.readModel, input.projectId).find(
+    (thread) => thread.deletedAt === null && hasActiveThreadTurnOrSession(thread),
+  );
+  return activeThread
+    ? Effect.fail(
+        invariantError(
+          input.command.type,
+          `Project '${input.projectId}' cannot be reconfigured while thread '${activeThread.id}' has an active turn or session.`,
+        ),
+      )
+    : Effect.void;
+}
+
+export function requireProjectRevision(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+  readonly expectedUpdatedAt: string;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const project = findProjectById(input.readModel, input.projectId);
+  return project?.deletedAt === null && project.updatedAt === input.expectedUpdatedAt
+    ? Effect.void
+    : Effect.fail(
+        invariantError(
+          input.command.type,
+          `Project '${input.projectId}' changed after editing started. Reopen the SSH configuration and try again.`,
+        ),
+      );
+}
+
+export function requireProjectWorktreesVerified(input: {
+  readonly readModel: OrchestrationReadModel;
+  readonly command: OrchestrationCommand;
+  readonly projectId: ProjectId;
+  readonly verifiedWorktreePaths: ReadonlyArray<string>;
+}): Effect.Effect<void, OrchestrationCommandInvariantError> {
+  const verifiedPaths = new Set(input.verifiedWorktreePaths);
+  const unverifiedPath = listThreadsByProjectId(input.readModel, input.projectId).find(
+    (thread) =>
+      thread.deletedAt === null &&
+      thread.worktreePath !== null &&
+      !verifiedPaths.has(thread.worktreePath),
+  )?.worktreePath;
+  return unverifiedPath === undefined
+    ? Effect.void
+    : Effect.fail(
+        invariantError(
+          input.command.type,
+          `Thread worktree '${unverifiedPath}' was not verified on the new SSH target.`,
+        ),
+      );
 }
 
 export function requireThread(input: {

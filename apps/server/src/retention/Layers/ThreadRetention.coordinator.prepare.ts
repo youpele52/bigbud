@@ -14,6 +14,7 @@ import type {
 import {
   persistRequiredBaselineSequence,
   RETENTION_PREPARATION_TIMEOUT_MS,
+  retentionRetryDelayMs,
   retentionFinalizeCommandId,
   runRetentionEffectWithinDeadline,
 } from "./ThreadRetention.coordinator.helpers.ts";
@@ -47,12 +48,16 @@ export function makeReconcileRequestedRetentionItem(input: {
     if (Option.isNone(cleanupResult)) return "timeout" as const;
     const cleanup = cleanupResult.value;
     if (cleanup === "active" || cleanup === "failed") {
+      const failedAt = input.now();
       yield* input.repository.recordItemRetry({
         runId: run.runId,
         threadId: item.threadId,
-        expectedStatus: "deletion_requested",
+        expectedStatuses: ["deletion_requested"],
         lastErrorCode: "cleanup_failed",
-        updatedAt: new Date(input.now()).toISOString(),
+        nextAttemptAt: new Date(
+          failedAt + retentionRetryDelayMs(item.attemptCount + 1),
+        ).toISOString(),
+        updatedAt: new Date(failedAt).toISOString(),
       });
       return "complete" as const;
     }

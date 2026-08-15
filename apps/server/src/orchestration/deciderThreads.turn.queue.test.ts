@@ -62,7 +62,7 @@ const submit = (delivery: "auto" | "queue" = "auto") => ({
 });
 
 describe("thread queued prompt decider", () => {
-  it("starts auto delivery immediately when safely idle", async () => {
+  it("starts auto delivery immediately when the client thought busy but server is idle", async () => {
     const events = await Effect.runPromise(
       decideThreadQueueCommand({ command: submit(), readModel: readModel() }),
     );
@@ -90,6 +90,88 @@ describe("thread queued prompt decider", () => {
     expect(Array.isArray(event) ? null : (event as { readonly type: string }).type).toBe(
       "thread.prompt-queued",
     );
+  });
+
+  it.each([
+    "provider.checking",
+    "provider.recovering",
+    "provider.stalled",
+    "provider.lost-session",
+  ])("queues auto delivery in health-unconfirmed state %s", async (reason) => {
+    const event = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: submit(),
+        readModel: readModel({
+          session: {
+            threadId,
+            status: "error",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: "preserved-turn" as never,
+            reason,
+            lastError: "Status cannot be confirmed",
+            updatedAt: now,
+          },
+        }),
+      }),
+    );
+    expect(Array.isArray(event) ? null : (event as { readonly type: string }).type).toBe(
+      "thread.prompt-queued",
+    );
+  });
+
+  it.each(["approval.requested", "user-input.requested"] as const)(
+    "queues auto delivery while %s is pending",
+    async (kind) => {
+      const event = await Effect.runPromise(
+        decideThreadQueueCommand({
+          command: submit(),
+          readModel: readModel({
+            activities: [
+              {
+                id: "pending" as never,
+                kind,
+                tone: kind === "approval.requested" ? "approval" : "info",
+                summary: "Pending interaction",
+                createdAt: now,
+                turnId: null,
+                payload:
+                  kind === "approval.requested"
+                    ? { requestId: "approval" }
+                    : { requestId: "input", questions: [{}] },
+              },
+            ],
+          }),
+        }),
+      );
+      expect(Array.isArray(event) ? null : (event as { readonly type: string }).type).toBe(
+        "thread.prompt-queued",
+      );
+    },
+  );
+
+  it("starts auto immediately after terminal state clears the active turn", async () => {
+    const events = await Effect.runPromise(
+      decideThreadQueueCommand({
+        command: submit(),
+        readModel: readModel({
+          session: {
+            threadId,
+            status: "error",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: null,
+            reason: null,
+            lastError: "Previous turn failed",
+            updatedAt: now,
+          },
+        }),
+      }),
+    );
+    expect(Array.isArray(events) ? events.map((event) => event.type) : []).toEqual([
+      "thread.message-sent",
+      "thread.turn-start-requested",
+    ]);
   });
 
   it("honors explicit queue delivery while idle", async () => {

@@ -47,7 +47,7 @@ export function SidebarThreadRowActions({
               }}
               onClick={handleBranchAction}
             >
-              <SplitIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+              <SplitIcon className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} rotate-90`} />
             </button>
           }
         />

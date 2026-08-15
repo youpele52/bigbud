@@ -329,4 +329,25 @@ layer("ThreadRetentionRepository audit gaps", (it) => {
       assert.isNull(capped.circuitOpenUntil);
     }),
   );
+
+  it.effect("records isolated item failures without delaying run continuation", () =>
+    Effect.gen(function* () {
+      yield* reset();
+      yield* createSelectingRun("isolated-retry-run");
+      const repository = yield* ThreadRetentionRepository;
+      const retry = Option.getOrThrow(
+        yield* repository.recordRunFailure({
+          runId: "isolated-retry-run",
+          expectedStatuses: ["selecting"],
+          failedAt: "2026-03-01T00:00:00.000Z",
+          lastErrorCode: "cleanup_failed",
+          isolateItemFailure: true,
+        }),
+      );
+      assert.equal(retry.nextAttemptAt, "2026-03-01T00:15:00.000Z");
+      const run = Option.getOrThrow(yield* repository.getRun("isolated-retry-run"));
+      assert.isNull(run.nextAttemptAt);
+      assert.equal(run.retryOrdinal, 1);
+    }),
+  );
 });

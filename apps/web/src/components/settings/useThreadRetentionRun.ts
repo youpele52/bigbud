@@ -26,18 +26,29 @@ export function useThreadRetentionRun(): ThreadRetentionRunState {
   const [availability, setAvailability] = useState<"available" | "disabled" | "loading">("loading");
   const [retrySequence, setRetrySequence] = useState(0);
   const generationRef = useRef(0);
+  const latestListRequestRef = useRef(0);
+  const latestRunRef = useRef<ServerThreadRetentionRun | null>(null);
 
   const commitRun = useCallback((candidate: ServerThreadRetentionRun) => {
-    setLatestRun((current) =>
-      shouldReplaceRetentionRun(current, candidate) ? candidate : current,
-    );
+    const current = latestRunRef.current;
+    if (shouldReplaceRetentionRun(current, candidate)) {
+      latestRunRef.current = candidate;
+      setLatestRun(candidate);
+    }
     setPollingError(null);
   }, []);
 
   const acceptRun = useCallback(
     (run: ServerThreadRetentionRun) => {
+      if (latestRunRef.current?.runId === run.runId) {
+        commitRun(run);
+        return;
+      }
       generationRef.current += 1;
-      commitRun(run);
+      latestListRequestRef.current += 1;
+      latestRunRef.current = run;
+      setLatestRun(run);
+      setPollingError(null);
     },
     [commitRun],
   );
@@ -51,16 +62,17 @@ export function useThreadRetentionRun(): ThreadRetentionRunState {
     let cancelled = false;
 
     const loadLatest = () => {
+      const requestId = ++latestListRequestRef.current;
       void ensureNativeApi()
         .server.listThreadRetentionRuns({ limit: 1 })
         .then(({ runs, availability: nextAvailability }) => {
-          if (cancelled) return;
+          if (cancelled || requestId !== latestListRequestRef.current) return;
           setAvailability(nextAvailability);
           const run = runs[0];
-          if (run) commitRun(run);
+          if (run) acceptRun(run);
         })
         .catch((error: unknown) => {
-          if (cancelled) return;
+          if (cancelled || requestId !== latestListRequestRef.current) return;
           const detail = error instanceof Error ? error.message : "The server did not respond.";
           setPollingError(`Could not load the latest retention run. ${detail}`);
         });
@@ -72,7 +84,7 @@ export function useThreadRetentionRun(): ThreadRetentionRunState {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [commitRun, retrySequence]);
+  }, [acceptRun, retrySequence]);
 
   useEffect(() => {
     if (!latestRun || pollingError) return;

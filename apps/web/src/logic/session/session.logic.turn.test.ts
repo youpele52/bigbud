@@ -6,6 +6,7 @@ import {
   hasToolActivityForTurn,
   isLatestTurnSettled,
   isSessionActivelyRunningTurn,
+  isSessionStalled,
   PROVIDER_OPTIONS,
 } from "./session.logic";
 import { makeActivity } from "./session.logic.test.helpers";
@@ -78,6 +79,33 @@ describe("isSessionActivelyRunningTurn", () => {
         activeTurnId: undefined,
       }),
     ).toBe(false);
+  });
+
+  it("keeps the active turn interruptible when the provider reports a stalled session", () => {
+    expect(
+      isSessionActivelyRunningTurn(
+        { ...completedTurn, completedAt: null },
+        {
+          orchestrationStatus: "running",
+          activeTurnId: TurnId.makeUnsafe("turn-1"),
+          reason: "provider.stalled",
+        },
+      ),
+    ).toBe(true);
+    expect(isSessionStalled({ reason: "provider.stalled" })).toBe(true);
+  });
+
+  it("keeps an unconfirmed error-state turn active to prevent a duplicate send", () => {
+    expect(
+      isSessionActivelyRunningTurn(
+        { ...completedTurn, completedAt: null },
+        {
+          orchestrationStatus: "error",
+          activeTurnId: TurnId.makeUnsafe("turn-1"),
+          reason: "provider.checking",
+        },
+      ),
+    ).toBe(true);
   });
 });
 

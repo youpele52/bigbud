@@ -1,3 +1,4 @@
+import { THREAD_RETENTION_POLICY_LABELS } from "@bigbud/contracts/core/settings.threadRetention";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -26,16 +27,42 @@ describe("ThreadRetentionSettingsSection", () => {
   it("renders the safe policy and explicit permanent-delete action", () => {
     const markup = renderToStaticMarkup(<ThreadRetentionSettingsSection />);
 
-    expect(markup).toContain("Thread retention");
+    expect(markup).toContain("Automatic thread cleanup");
+    expect(markup).toContain("Automatically delete old threads");
+    expect(markup).toContain("Checks thresholds daily");
+    expect(markup).toContain("takes priority over scheduled cleanup");
     expect(markup).toContain("Never");
     expect(markup).toContain("Delete eligible threads now");
     expect(markup).toContain("cannot be undone");
   });
 
+  it("uses day-based labels for every cleanup threshold", () => {
+    expect(THREAD_RETENTION_POLICY_LABELS).toEqual({
+      "1-day": "1 day",
+      "2-days": "2 days",
+      "3-days": "3 days",
+      "7-days": "7 days",
+      "14-days": "14 days",
+      "30-days": "30 days",
+      "90-days": "90 days",
+      never: "Never",
+    });
+    expect(JSON.stringify(THREAD_RETENTION_POLICY_LABELS)).toContain("1 day");
+    expect(JSON.stringify(THREAD_RETENTION_POLICY_LABELS)).toContain("2 days");
+    expect(JSON.stringify(THREAD_RETENTION_POLICY_LABELS)).toContain("3 days");
+  });
+
   it("registers retention settings search entries", () => {
     expect(SETTINGS_SEARCH_ITEMS).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: "Thread retention", to: "/settings/general" }),
+        expect.objectContaining({
+          label: "Automatic thread cleanup",
+          to: "/settings/general",
+        }),
+        expect.objectContaining({
+          label: "Automatically delete old threads",
+          to: "/settings/general",
+        }),
         expect.objectContaining({
           label: "Delete eligible threads now",
           to: "/settings/general",
@@ -62,7 +89,7 @@ describe("ThreadRetentionSettingsSection", () => {
           attachmentEstimateComplete: false,
           resourceEstimateComplete: false,
           bytesEstimateComplete: false,
-          maintenanceState: "deferred",
+          maintenanceState: "safety_deferred",
           warnings: ["Some managed logs could not be measured."],
           challenge: {
             token: "challenge-1",
@@ -77,18 +104,21 @@ describe("ThreadRetentionSettingsSection", () => {
     );
 
     expect(markup).toContain("At least");
-    expect(markup).toContain("bounded preview is partial");
+    expect(markup).toContain("This is an estimate.");
     expect(markup).toContain("waiting for input");
     expect(markup).toContain("Some managed logs could not be measured.");
+    expect(markup).toContain(
+      "Cleanup is waiting for safety or recovery work to finish before this request can start.",
+    );
     for (const phrase of [
-      "Pinned threads",
-      "active or running threads",
-      "queued threads",
+      "pinned",
+      "active or running",
+      "queued",
       "waiting for approval or input",
-      "watched threads",
-      "delegated parent or child threads",
-      "Project folders",
-      "user-created files",
+      "watched",
+      "delegated parent or child task",
+      "project folders",
+      "other files",
     ]) {
       expect(markup).toContain(phrase);
     }
@@ -127,11 +157,11 @@ describe("ThreadRetentionSettingsSection", () => {
     );
 
     expect(markup).toContain("3");
-    expect(markup).toContain("currently eligible");
+    expect(markup).toContain("currently eligible for future cleanup");
     expect(markup).toContain("Export or back up anything you need");
   });
 
-  it("shows accepted and all run progress counts with a non-color status", () => {
+  it("uses a collapsed, non-color status summary that exposes run progress on demand", () => {
     const markup = renderToStaticMarkup(
       <ThreadRetentionRunStatus
         pollingError={null}
@@ -157,18 +187,8 @@ describe("ThreadRetentionSettingsSection", () => {
       />,
     );
 
-    for (const label of [
-      "Accepted:",
-      "Eligible:",
-      "Selected:",
-      "Requested:",
-      "Completed:",
-      "Skipped:",
-      "Failed:",
-    ]) {
-      expect(markup).toContain(label);
-    }
     expect(markup).toContain("completed with failures");
-    expect(markup).toContain("One thread could not be deleted.");
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain("Accepted:");
   });
 });

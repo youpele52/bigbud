@@ -7,8 +7,8 @@
  *
  * @module ProviderService.operations
  */
-import { type ProviderSession, type ThreadId } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { type ProviderKind, type ProviderSession, type ThreadId } from "@bigbud/contracts";
+import { Cause, Effect, Option } from "effect";
 
 import {
   providerMetricAttributes,
@@ -19,10 +19,15 @@ import type { AnalyticsServiceShape } from "../../telemetry/Services/AnalyticsSe
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import type { ProviderAdapterError, ProviderServiceError } from "../Errors.ts";
 import type {
+  ProviderRuntimeBinding,
   ProviderSessionDirectoryShape,
   ProviderSessionDirectoryWriteError,
 } from "../Services/ProviderSessionDirectory.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
+import type {
+  ProviderSessionDiscoveryDiagnostic,
+  ProviderSessionDiscoveryResult,
+} from "../Services/ProviderService.ts";
 import {
   decodeInputOrValidationError,
   ProviderRollbackConversationInput,
@@ -34,6 +39,8 @@ import { resolveProviderSessionExecutionTargets } from "../providerSessionExecut
 export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSession>;
 
 type Adapter = ProviderAdapterShape<ProviderAdapterError>;
+
+const RECONCILIATION_DISCOVERY_TIMEOUT = "5 seconds";
 
 type UpsertSessionBinding = (
   session: ProviderSession,
@@ -75,46 +82,157 @@ export function makeListSessions(
       }
     }
 
-    return activeSessions.map((session) => {
-      const binding = bindingsByThreadId.get(session.threadId);
-      if (!binding) return session;
+    return enrichSessionsWithBindings(activeSessions, bindingsByThreadId);
+  });
+}
 
-      const overrides: {
-        providerRuntimeExecutionTargetId?: ProviderSession["providerRuntimeExecutionTargetId"];
-        workspaceExecutionTargetId?: ProviderSession["workspaceExecutionTargetId"];
-        executionTargetId?: ProviderSession["executionTargetId"];
-        resumeCursor?: ProviderSession["resumeCursor"];
-        runtimeMode?: ProviderSession["runtimeMode"];
-      } = {};
-      const executionTargets = resolveProviderSessionExecutionTargets({
-        providerRuntimeExecutionTargetId:
-          session.providerRuntimeExecutionTargetId ?? binding.providerRuntimeExecutionTargetId,
-        workspaceExecutionTargetId:
-          session.workspaceExecutionTargetId ?? binding.workspaceExecutionTargetId,
-        executionTargetId: session.executionTargetId ?? binding.executionTargetId,
-        defaultProviderRuntimeExecutionTargetId:
-          binding.providerRuntimeExecutionTargetId ?? binding.executionTargetId,
-        defaultWorkspaceExecutionTargetId:
-          binding.workspaceExecutionTargetId ?? binding.executionTargetId,
-      });
-      if (session.providerRuntimeExecutionTargetId === undefined) {
-        overrides.providerRuntimeExecutionTargetId =
-          executionTargets.providerRuntimeExecutionTargetId;
-      }
-      if (session.workspaceExecutionTargetId === undefined) {
-        overrides.workspaceExecutionTargetId = executionTargets.workspaceExecutionTargetId;
-      }
-      if (session.executionTargetId === undefined) {
-        overrides.executionTargetId = executionTargets.executionTargetId;
-      }
-      if (session.resumeCursor === undefined && binding.resumeCursor !== undefined) {
-        overrides.resumeCursor = binding.resumeCursor;
-      }
-      if (binding.runtimeMode !== undefined) {
-        overrides.runtimeMode = binding.runtimeMode;
-      }
-      return Object.assign({}, session, overrides);
+function enrichSessionsWithBindings(
+  activeSessions: ReadonlyArray<ProviderSession>,
+  bindingsByThreadId: ReadonlyMap<ThreadId, ProviderRuntimeBinding>,
+): ReadonlyArray<ProviderSession> {
+  return activeSessions.map((session) => {
+    const binding = bindingsByThreadId.get(session.threadId);
+    if (!binding) return session;
+
+    const executionTargets = resolveProviderSessionExecutionTargets({
+      providerRuntimeExecutionTargetId:
+        session.providerRuntimeExecutionTargetId ?? binding.providerRuntimeExecutionTargetId,
+      workspaceExecutionTargetId:
+        session.workspaceExecutionTargetId ?? binding.workspaceExecutionTargetId,
+      executionTargetId: session.executionTargetId ?? binding.executionTargetId,
+      defaultProviderRuntimeExecutionTargetId:
+        binding.providerRuntimeExecutionTargetId ?? binding.executionTargetId,
+      defaultWorkspaceExecutionTargetId:
+        binding.workspaceExecutionTargetId ?? binding.executionTargetId,
     });
+    return Object.assign(
+      {},
+      session,
+      session.providerRuntimeExecutionTargetId === undefined
+        ? { providerRuntimeExecutionTargetId: executionTargets.providerRuntimeExecutionTargetId }
+        : undefined,
+      session.workspaceExecutionTargetId === undefined
+        ? { workspaceExecutionTargetId: executionTargets.workspaceExecutionTargetId }
+        : undefined,
+      session.executionTargetId === undefined
+        ? { executionTargetId: executionTargets.executionTargetId }
+        : undefined,
+      session.resumeCursor === undefined && binding.resumeCursor !== undefined
+        ? { resumeCursor: binding.resumeCursor }
+        : undefined,
+      binding.runtimeMode !== undefined ? { runtimeMode: binding.runtimeMode } : undefined,
+    );
+  });
+}
+
+/** Lists each provider independently so one broken adapter cannot hide healthy providers. */
+export function makeListSessionsForReconciliation(
+  adapters: ReadonlyArray<Adapter>,
+  directory: ProviderSessionDirectoryShape,
+): ProviderServiceShape["listSessionsForReconciliation"] {
+  return Effect.fn("listSessionsForReconciliation")(function* () {
+    const adapterResults = yield* Effect.forEach(
+      adapters,
+      (adapter) =>
+        adapter.listSessions().pipe(
+          Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
+          Effect.matchCause({
+            onFailure: (cause) => ({
+              provider: adapter.provider,
+              sessions: null,
+              diagnostic: {
+                provider: adapter.provider,
+                source: "adapter" as const,
+                kind: "error" as const,
+                detail: Cause.pretty(cause),
+              },
+            }),
+            onSuccess: (sessions) =>
+              Option.isSome(sessions)
+                ? { provider: adapter.provider, sessions: sessions.value, diagnostic: null }
+                : {
+                    provider: adapter.provider,
+                    sessions: null,
+                    diagnostic: {
+                      provider: adapter.provider,
+                      source: "adapter" as const,
+                      kind: "timeout" as const,
+                      detail: `Session listing timed out after ${RECONCILIATION_DISCOVERY_TIMEOUT}.`,
+                    },
+                  },
+          }),
+        ),
+      { concurrency: "unbounded" },
+    );
+
+    const availableProviders = new Set<ProviderKind>();
+    const unavailableProviders = new Set<ProviderKind>();
+    const diagnostics: ProviderSessionDiscoveryDiagnostic[] = [];
+    const activeSessions: ProviderSession[] = [];
+    for (const result of adapterResults) {
+      if (result.sessions === null) {
+        unavailableProviders.add(result.provider);
+        if (result.diagnostic) diagnostics.push(result.diagnostic);
+      } else {
+        availableProviders.add(result.provider);
+        activeSessions.push(...result.sessions);
+      }
+    }
+
+    const directoryResult = yield* directory.listThreadIds().pipe(
+      Effect.flatMap((threadIds) =>
+        Effect.forEach(
+          threadIds,
+          (threadId) =>
+            directory.getBinding(threadId).pipe(
+              Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
+              Effect.matchCause({
+                onFailure: () => Option.none(),
+                onSuccess: (binding) => Option.getOrElse(binding, () => Option.none()),
+              }),
+            ),
+          { concurrency: "unbounded" },
+        ),
+      ),
+      Effect.timeoutOption(RECONCILIATION_DISCOVERY_TIMEOUT),
+      Effect.matchCause({
+        onFailure: (cause) => ({
+          available: false as const,
+          bindings: [],
+          detail: Cause.pretty(cause),
+        }),
+        onSuccess: (result) =>
+          Option.isSome(result)
+            ? { available: true as const, bindings: result.value, detail: null }
+            : {
+                available: false as const,
+                bindings: [],
+                detail: `Directory listing timed out after ${RECONCILIATION_DISCOVERY_TIMEOUT}.`,
+              },
+      }),
+    );
+    if (!directoryResult.available) {
+      diagnostics.push({
+        provider: null,
+        source: "directory",
+        kind: directoryResult.detail?.includes("timed out") ? "timeout" : "error",
+        detail: directoryResult.detail ?? "Provider session directory is unavailable.",
+      });
+    }
+
+    const bindingsByThreadId = new Map<ThreadId, ProviderRuntimeBinding>();
+    for (const bindingOption of directoryResult.bindings) {
+      const binding = Option.getOrUndefined(bindingOption);
+      if (binding) bindingsByThreadId.set(binding.threadId, binding);
+    }
+
+    return {
+      sessions: enrichSessionsWithBindings(activeSessions, bindingsByThreadId),
+      availableProviders,
+      unavailableProviders,
+      directoryAvailable: directoryResult.available,
+      diagnostics,
+    } satisfies ProviderSessionDiscoveryResult;
   });
 }
 

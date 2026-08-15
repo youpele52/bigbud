@@ -26,6 +26,7 @@ const remoteProjectInputClassName =
   "mt-1.5 flex border-border bg-card font-sans has-focus-visible:border-ring/45 has-focus-visible:ring-0 [&_input]:placeholder:text-xs [&_input]:placeholder:tracking-normal";
 
 interface SidebarRemoteProjectDialogProps {
+  mode: "add" | "edit";
   open: boolean;
   draft: RemoteProjectDraft;
   fieldErrors: RemoteProjectFieldErrors;
@@ -83,6 +84,7 @@ function AuthModeButton({
 }
 
 export function SidebarRemoteProjectDialog({
+  mode,
   open,
   draft,
   fieldErrors,
@@ -94,14 +96,17 @@ export function SidebarRemoteProjectDialog({
   onFieldChange,
   onSubmit,
 }: SidebarRemoteProjectDialogProps) {
+  const isEditing = mode === "edit";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Add SSH remote project</DialogTitle>
+          <DialogTitle>
+            {isEditing ? "Edit SSH remote project" : "Add SSH remote project"}
+          </DialogTitle>
           <DialogDescription>
-            bigbud verifies the SSH target before it creates the remote project. You can keep the
-            provider runtime local or run it on the remote host.
+            bigbud verifies the SSH target before it {isEditing ? "updates" : "creates"} the remote
+            project. You can keep the provider runtime local or run it on the remote host.
           </DialogDescription>
         </DialogHeader>
 
@@ -246,7 +251,15 @@ export function SidebarRemoteProjectDialog({
             Cancel
           </Button>
           <Button size="sm" disabled={isSubmitting || isVerifying} onClick={onSubmit}>
-            {isSubmitting ? "Adding..." : isVerifying ? "Verifying..." : "Add remote project"}
+            {isSubmitting
+              ? isEditing
+                ? "Saving..."
+                : "Adding..."
+              : isVerifying
+                ? "Verifying..."
+                : isEditing
+                  ? "Save changes"
+                  : "Add remote project"}
           </Button>
         </DialogFooter>
       </DialogPopup>

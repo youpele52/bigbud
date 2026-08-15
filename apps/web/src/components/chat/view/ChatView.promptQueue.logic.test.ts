@@ -1,6 +1,8 @@
+import { CommandId, MessageId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildComposerFollowUpCommand,
   formatQueuedPromptText,
   MAX_QUEUED_PROMPTS,
   promptQueueErrorMessage,
@@ -40,5 +42,19 @@ describe("promptQueueErrorMessage", () => {
   it("uses command error messages and a stable fallback", () => {
     expect(promptQueueErrorMessage(new Error("Queue rejected"))).toBe("Queue rejected");
     expect(promptQueueErrorMessage("rejected")).toBe("Failed to update the prompt queue.");
+  });
+});
+
+describe("buildComposerFollowUpCommand", () => {
+  it("uses authoritative auto delivery for the routine text follow-up", () => {
+    expect(
+      buildComposerFollowUpCommand({
+        threadId: ThreadId.makeUnsafe("thread"),
+        commandId: CommandId.makeUnsafe("command"),
+        messageId: MessageId.makeUnsafe("message"),
+        text: "Continue safely",
+        createdAt: "2026-08-13T00:00:00.000Z",
+      }),
+    ).toMatchObject({ type: "thread.message.submit", delivery: "auto" });
   });
 });

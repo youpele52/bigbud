@@ -1,12 +1,12 @@
-# Thread retention operations
+# Automatic thread cleanup
 
-bigbud can automatically remove inactive, unpinned threads after the configured retention period. `Never` disables scheduled retention. A finite policy is server-authorized state: changing `settings.json` directly cannot enable or shorten retention. Finite user changes require the retention policy-change challenge to be consumed, and unauthorized or malformed disk changes are replaced with the last server-authorized policy.
+bigbud can automatically remove inactive, unpinned threads after 7 days, 14 days, 30 days, or 90 days. `Never` disables automatic cleanup. Thresholds are checked daily. Manual cleanup uses its own selected finite period and does not have to match the automatic policy. Equivalent confirmed manual requests join the same nonterminal run, and manual work runs before queued automatic work after any active destructive page reaches a safe checkpoint. Failed items retain their own retry backoff while successful pages continue. A finite policy is server-authorized state: changing `settings.json` directly cannot enable or shorten cleanup. Finite user changes require the policy-change challenge to be consumed, and unauthorized or malformed disk changes are replaced with the last server-authorized policy.
 
 ## Rollout semantics
 
 - Upgraded installations that already contained user threads when the retention migration ran are rollout-protected and receive an explicit `Never` policy.
 - Data-empty installations receive the automatic `7 days` policy.
-- Scheduled execution of that automatic policy remains staged behind `BIGBUD_INTERNAL_THREAD_RETENTION_AUTOMATIC_ROLLOUT=1`. The internal flag enables scheduled selection only; purge recovery still runs, and manual retention and explicit policy changes remain governed by their consent challenges.
+- Selecting a finite policy enables the daily automatic cleanup schedule. Interrupted cleanup recovery still runs independently, while manual cleanup and explicit policy changes remain governed by their consent challenges.
 - The migration records whether an installation was existing or data-empty. Later edits to `settings.json` cannot change that classification or opt a protected installation into finite retention.
 - An authorized policy and its rollout source survive restarts. Missing, malformed, pre-start, and watched finite settings edits do not override that state.
 

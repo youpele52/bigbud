@@ -21,26 +21,23 @@ import type {
   ThreadRetentionRun,
   ThreadRetentionRunItem,
 } from "../../persistence/Services/ThreadRetentionRepository.ts";
+import { isThreadRetentionTerminalRunStatus } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import {
   countOutstandingRetentionItems,
   RETENTION_BACKLOG_LIMIT,
   RETENTION_PAGE_SIZE,
   RETENTION_SLICE_BUDGET_MS,
+  earliestRetentionItemRetry,
+  retentionItemRetryIsDue,
   retentionRetryDelayMs,
   successfulRetentionStatus,
   type ThreadRetentionRepositoryAuditExtensions,
 } from "./ThreadRetention.coordinator.helpers.ts";
+import { makeRetentionCheckpointTransitions } from "./ThreadRetention.coordinator.checkpoints.ts";
 import { makeDispatchSelectedRetentionItems } from "./ThreadRetention.coordinator.dispatch.ts";
 import { makePurgePreparedRetentionItems } from "./ThreadRetention.coordinator.purge.ts";
 import { makeReconcileRequestedRetentionItem } from "./ThreadRetention.coordinator.prepare.ts";
 import type { RetentionRuntimeCleanupResult } from "./ThreadRetention.cleanup.ts";
-
-const TERMINAL_RUN_STATUSES = new Set([
-  "completed",
-  "completed_with_failures",
-  "failed",
-  "cancelled",
-]);
 
 export function makeProcessThreadRetentionRun(input: {
   readonly repository: ThreadRetentionRepositoryShape;
@@ -73,6 +70,11 @@ export function makeProcessThreadRetentionRun(input: {
   const purgePrepared = makePurgePreparedRetentionItems(input);
   const reconcileRequested = makeReconcileRequestedRetentionItem({ ...input, now });
   const dispatchSelected = makeDispatchSelectedRetentionItems({ ...input, now });
+  const { continueRun, pauseForItemRetry } = makeRetentionCheckpointTransitions({
+    repository: input.repository,
+    scheduleWake: input.scheduleWake,
+    now,
+  });
   const deferRun = Effect.fn("ThreadRetention.deferRun")(function* (
     run: ThreadRetentionRun,
     reason: string,
@@ -104,6 +106,7 @@ export function makeProcessThreadRetentionRun(input: {
       updatedAt: deferredAt,
       nextAttemptAt,
       lastErrorCode: reason,
+      releaseActiveSlot: reason === "page_budget",
     });
     if (moved) {
       yield* increment(threadRetentionDeferralsTotal, {
@@ -147,7 +150,7 @@ export function makeProcessThreadRetentionRun(input: {
     const sliceStartedAt = now();
     const deadlineAt = sliceStartedAt + RETENTION_SLICE_BUDGET_MS;
     let run = yield* input.loadRun(runId);
-    if (TERMINAL_RUN_STATUSES.has(run.status)) return;
+    if (isThreadRetentionTerminalRunStatus(run.status)) return;
     if (run.nextAttemptAt !== null && run.nextAttemptAt > new Date().toISOString()) {
       yield* input.scheduleWake(runId, run.nextAttemptAt);
       return;
@@ -155,8 +158,10 @@ export function makeProcessThreadRetentionRun(input: {
 
     if (run.status === "queued" || run.status === "deferred") {
       const items = yield* input.repository.listOutstandingItems(runId, RETENTION_BACKLOG_LIMIT);
-      const hasPurgeWork = items.some((item) => ["prepared", "purging"].includes(item.status));
-      const hasPreparationWork = items.some((item) =>
+      const nowIso = new Date(now()).toISOString();
+      const dueItems = items.filter((item) => retentionItemRetryIsDue(item, nowIso));
+      const hasPurgeWork = dueItems.some((item) => ["prepared", "purging"].includes(item.status));
+      const hasPreparationWork = dueItems.some((item) =>
         ["selected", "deletion_requested"].includes(item.status),
       );
       const nextStatus = hasPurgeWork ? "purging" : hasPreparationWork ? "preparing" : "selecting";
@@ -173,9 +178,12 @@ export function makeProcessThreadRetentionRun(input: {
 
     if (run.status === "selecting") {
       const items = yield* input.repository.listOutstandingItems(runId, RETENTION_BACKLOG_LIMIT);
+      const nowIso = new Date(now()).toISOString();
       if (
-        items.some((item) =>
-          ["selected", "deletion_requested", "prepared", "purging"].includes(item.status),
+        items.some(
+          (item) =>
+            retentionItemRetryIsDue(item, nowIso) &&
+            ["selected", "deletion_requested", "prepared", "purging"].includes(item.status),
         )
       ) {
         yield* input.repository.transitionRun({
@@ -222,6 +230,19 @@ export function makeProcessThreadRetentionRun(input: {
         return;
       }
       if (candidates.length === 0) {
+        const outstanding = yield* input.repository.listOutstandingItems(
+          runId,
+          RETENTION_BACKLOG_LIMIT,
+        );
+        const retryAt = earliestRetentionItemRetry(outstanding);
+        if (retryAt !== null) {
+          const effectiveRetryAt =
+            run.circuitOpenUntil !== null && run.circuitOpenUntil > retryAt
+              ? run.circuitOpenUntil
+              : retryAt;
+          yield* pauseForItemRetry(run, effectiveRetryAt);
+          return;
+        }
         yield* finishRun(run, successfulRetentionStatus(run));
         return;
       }
@@ -262,18 +283,35 @@ export function makeProcessThreadRetentionRun(input: {
         return;
       }
       items = yield* input.repository.listOutstandingItems(runId, RETENTION_BACKLOG_LIMIT);
-      for (const item of items.filter((candidate) => candidate.status === "deletion_requested")) {
+      for (const item of items.filter(
+        (candidate) =>
+          candidate.status === "deletion_requested" &&
+          retentionItemRetryIsDue(candidate, new Date(now()).toISOString()),
+      )) {
         if (now() >= deadlineAt) break;
         const reconciled = yield* reconcileRequested(run, item, deadlineAt);
         if (reconciled === "timeout") break;
       }
       items = yield* input.repository.listOutstandingItems(runId, RETENTION_BACKLOG_LIMIT);
       run = yield* input.loadRun(runId);
-      if (now() >= deadlineAt && items.some((item) => item.status === "deletion_requested")) {
+      if (
+        now() >= deadlineAt &&
+        items.some(
+          (item) =>
+            item.status === "deletion_requested" &&
+            retentionItemRetryIsDue(item, new Date(now()).toISOString()),
+        )
+      ) {
         yield* deferRun(run, "slice_budget");
         return;
       }
-      if (items.some((item) => item.status === "deletion_requested")) {
+      if (
+        items.some(
+          (item) =>
+            item.status === "deletion_requested" &&
+            retentionItemRetryIsDue(item, new Date(now()).toISOString()),
+        )
+      ) {
         yield* deferRun(run, "preparation_pending");
         return;
       }
@@ -287,11 +325,6 @@ export function makeProcessThreadRetentionRun(input: {
         });
         run = yield* input.loadRun(runId);
       } else {
-        const pageWasFull = run.selectedCount > 0 && run.selectedCount % RETENTION_PAGE_SIZE === 0;
-        if (pageWasFull) {
-          yield* deferRun(run, "page_budget");
-          return;
-        }
         yield* input.repository.transitionRun({
           runId,
           expectedStatuses: ["preparing"],
@@ -323,8 +356,14 @@ export function makeProcessThreadRetentionRun(input: {
         return;
       }
       run = yield* input.loadRun(runId);
+      const outstanding = yield* input.repository.listOutstandingItems(
+        runId,
+        RETENTION_BACKLOG_LIMIT,
+      );
+      const isolatedRetryAt = earliestRetentionItemRetry(outstanding);
       const pageWasFull = run.selectedCount > 0 && run.selectedCount % RETENTION_PAGE_SIZE === 0;
-      if (pageWasFull) yield* deferRun(run, "page_budget");
+      if (isolatedRetryAt !== null) yield* continueRun(run);
+      else if (pageWasFull) yield* deferRun(run, "page_budget");
       else yield* finishRun(run, successfulRetentionStatus(run));
     }
   });

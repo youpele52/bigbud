@@ -30,6 +30,7 @@ import {
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
 import { CursorAdapter, type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import {
   PROVIDER,
@@ -288,6 +289,7 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       startSession,
       sendTurn,
       interruptTurn,
+      inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
       readThread,
       rollbackThread,
       respondToRequest,

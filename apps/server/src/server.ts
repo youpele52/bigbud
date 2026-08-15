@@ -26,6 +26,7 @@ import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
 import { makeProviderLogSecurity } from "./server.providerLogs.ts";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
+import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/ProviderTurnLiveness";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
 import { CliProxyCompositionLive } from "./provider/Layers/CliProxy/Composition";
@@ -234,7 +235,11 @@ const makeProviderLayerLive = (
         settleThreadLogs,
         getProviderCapabilities,
         isProviderComposed: (provider) => isProviderRegistered(provider, optionalRegistrations),
-      }).pipe(Layer.provide(adapterRegistryLayer), Layer.provide(providerSessionDirectoryLayer));
+      }).pipe(
+        Layer.provide(adapterRegistryLayer),
+        Layer.provide(providerSessionDirectoryLayer),
+        Layer.provide(ProviderTurnLivenessRepositoryLive),
+      );
     }),
   );
 

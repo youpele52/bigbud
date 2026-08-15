@@ -2,10 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createWindow } from "./windowManager";
 
-const { buildFromTemplateMock, mockWindowInstances, popupMock } = vi.hoisted(() => ({
+const { buildFromTemplateMock, closeHostMock, mockWindowInstances, popupMock } = vi.hoisted(() => ({
   popupMock: vi.fn(),
   buildFromTemplateMock: vi.fn(() => ({ popup: vi.fn() })),
+  closeHostMock: vi.fn(),
   mockWindowInstances: [] as Array<any>,
+}));
+
+vi.mock("./certificateChallengeManager", () => ({
+  certificateChallengeManager: {
+    attachGuest: vi.fn(),
+    closeHost: closeHostMock,
+  },
 }));
 
 type MenuTemplateEntry = {
@@ -41,7 +49,10 @@ vi.mock("electron", () => {
       copyImageAt: vi.fn(),
       send: vi.fn(),
     };
-    on = vi.fn();
+    windowHandlers = new Map<string, (...args: any[]) => void>();
+    on = vi.fn((event: string, handler: (...args: any[]) => void) => {
+      this.windowHandlers.set(event, handler);
+    });
     once = vi.fn();
     show = vi.fn();
     setTitle = vi.fn();
@@ -145,6 +156,28 @@ describe("windowManager context menu", () => {
     );
   });
 
+  it("forwards native browser navigation commands to the renderer", () => {
+    mockWindowInstances.length = 0;
+    const window = createWindowUnderTest();
+    const appCommand = window?.windowHandlers.get("app-command");
+
+    appCommand?.({}, "browser-backward");
+    appCommand?.({}, "browser-forward");
+    appCommand?.({}, "media-play-pause");
+
+    expect(window?.webContents.send).toHaveBeenCalledTimes(2);
+    expect(window?.webContents.send).toHaveBeenNthCalledWith(
+      1,
+      "desktop:menu-action",
+      "browser-backward",
+    );
+    expect(window?.webContents.send).toHaveBeenNthCalledWith(
+      2,
+      "desktop:menu-action",
+      "browser-forward",
+    );
+  });
+
   it("adds Copy Image for image context menus", () => {
     mockWindowInstances.length = 0;
     buildFromTemplateMock.mockClear();
@@ -189,5 +222,22 @@ describe("windowManager context menu", () => {
     copyImageItem?.click?.();
     expect(window?.webContents.copyImageAt).toHaveBeenCalledWith(12, 34);
     expect(popupMock).toHaveBeenCalled();
+  });
+
+  it("cleans up certificate challenges without reading destroyed window state", () => {
+    mockWindowInstances.length = 0;
+    closeHostMock.mockClear();
+    const window = createWindowUnderTest();
+    const originalWebContents = window?.webContents;
+    expect(originalWebContents).toBeTruthy();
+
+    Object.defineProperty(window, "webContents", {
+      get: () => {
+        throw new Error("Object has been destroyed");
+      },
+    });
+
+    expect(() => window?.windowHandlers.get("closed")?.()).not.toThrow();
+    expect(closeHostMock).toHaveBeenCalledWith(originalWebContents);
   });
 });

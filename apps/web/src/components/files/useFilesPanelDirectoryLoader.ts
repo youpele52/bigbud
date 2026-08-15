@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
-import { reconcilePreviewPathAfterDirectoryRefresh } from "./FilesPanel.logic";
+import {
+  getRemovedEntryPaths,
+  reconcilePreviewPathAfterDirectoryRefresh,
+} from "./FilesPanel.logic";
 import { EMPTY_ENTRIES, type DirectoryState } from "./FilesPanel.shared";
 
 interface UseFilesPanelDirectoryLoaderInput {
@@ -13,6 +16,8 @@ interface UseFilesPanelDirectoryLoaderInput {
   readonly setPreviewPosition: (
     previewPosition: { line: number; column: number | null } | null,
   ) => void;
+  readonly onEntriesRemoved: (paths: ReadonlyArray<string>) => void;
+  readonly workspaceKey: string;
 }
 
 export function shouldQueueForceDirectoryRefresh(
@@ -22,6 +27,15 @@ export function shouldQueueForceDirectoryRefresh(
   return loading && force === true;
 }
 
+export function isCurrentDirectoryRequest(
+  requestGeneration: number,
+  currentGeneration: number,
+  requestId: number,
+  currentRequestId: number | undefined,
+): boolean {
+  return requestGeneration === currentGeneration && requestId === currentRequestId;
+}
+
 export function useFilesPanelDirectoryLoader({
   workspaceRoot,
   workspaceExecutionTargetId,
@@ -29,12 +43,25 @@ export function useFilesPanelDirectoryLoader({
   previewPositionRef,
   setPreviewPath,
   setPreviewPosition,
+  onEntriesRemoved,
+  workspaceKey,
 }: UseFilesPanelDirectoryLoaderInput) {
   const [directoryStateByPath, setDirectoryStateByPath] = useState<Record<string, DirectoryState>>(
     {},
   );
   const directoryStateRef = useRef(directoryStateByPath);
   const pendingForceRefreshRef = useRef(new Set<string>());
+  const workspaceGenerationRef = useRef(0);
+  const workspaceIdentityRef = useRef("");
+  const directoryRequestIdsRef = useRef(new Map<string, number>());
+  const workspaceIdentity = `${workspaceKey}:${workspaceRoot ?? ""}:${workspaceExecutionTargetId ?? ""}`;
+
+  if (workspaceIdentityRef.current !== workspaceIdentity) {
+    workspaceIdentityRef.current = workspaceIdentity;
+    workspaceGenerationRef.current += 1;
+    pendingForceRefreshRef.current.clear();
+    directoryRequestIdsRef.current.clear();
+  }
 
   useEffect(() => {
     directoryStateRef.current = directoryStateByPath;
@@ -44,7 +71,8 @@ export function useFilesPanelDirectoryLoader({
     (relativePath: string, options?: { readonly force?: boolean }) => Promise<void>
   >(async () => undefined);
 
-  const runPendingForceRefresh = useCallback((relativePath: string) => {
+  const runPendingForceRefresh = useCallback((relativePath: string, generation: number) => {
+    if (generation !== workspaceGenerationRef.current) return;
     if (!pendingForceRefreshRef.current.delete(relativePath)) {
       return;
     }
@@ -56,12 +84,24 @@ export function useFilesPanelDirectoryLoader({
     async (relativePath: string, options?: { readonly force?: boolean }) => {
       if (!workspaceRoot) return;
 
+      const generation = workspaceGenerationRef.current;
+
       const existing = directoryStateRef.current[relativePath];
       if (shouldQueueForceDirectoryRefresh(existing?.loading === true, options?.force)) {
         pendingForceRefreshRef.current.add(relativePath);
         return;
       }
       if (existing && !options?.force) return;
+
+      const requestId = (directoryRequestIdsRef.current.get(relativePath) ?? 0) + 1;
+      directoryRequestIdsRef.current.set(relativePath, requestId);
+      const isCurrentRequest = () =>
+        isCurrentDirectoryRequest(
+          generation,
+          workspaceGenerationRef.current,
+          requestId,
+          directoryRequestIdsRef.current.get(relativePath),
+        );
 
       setDirectoryStateByPath((current) => ({
         ...current,
@@ -82,6 +122,7 @@ export function useFilesPanelDirectoryLoader({
           ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
           ...(relativePath.length > 0 ? { relativePath } : {}),
         });
+        if (!isCurrentRequest()) return;
         const currentPreviewPath = previewPathRef.current;
         const nextPreviewPath = reconcilePreviewPathAfterDirectoryRefresh({
           previewPath: currentPreviewPath,
@@ -89,6 +130,10 @@ export function useFilesPanelDirectoryLoader({
           previousEntries: existing?.entries ?? EMPTY_ENTRIES,
           nextEntries: result.entries,
         });
+        const removedPaths = getRemovedEntryPaths(
+          existing?.entries ?? EMPTY_ENTRIES,
+          result.entries,
+        );
 
         setDirectoryStateByPath((current) => ({
           ...current,
@@ -104,7 +149,9 @@ export function useFilesPanelDirectoryLoader({
             setPreviewPosition(null);
           }
         }
+        if (removedPaths.length > 0) onEntriesRemoved(removedPaths);
       } catch (error) {
+        if (!isCurrentRequest()) return;
         setDirectoryStateByPath((current) => ({
           ...current,
           [relativePath]: {
@@ -114,13 +161,14 @@ export function useFilesPanelDirectoryLoader({
           },
         }));
       } finally {
-        runPendingForceRefresh(relativePath);
+        runPendingForceRefresh(relativePath, generation);
       }
     },
     [
       previewPathRef,
       previewPositionRef,
       runPendingForceRefresh,
+      onEntriesRemoved,
       setPreviewPath,
       setPreviewPosition,
       workspaceExecutionTargetId,

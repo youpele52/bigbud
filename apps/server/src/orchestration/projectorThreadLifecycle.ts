@@ -10,6 +10,7 @@ import {
   type OrchestrationEvent,
   type OrchestrationReadModel,
   OrchestrationThread,
+  type ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -28,6 +29,17 @@ import {
   ThreadUnarchivedPayload,
   ThreadUnpinnedPayload,
 } from "./Schemas.ts";
+
+function detachChildren(
+  threads: ReadonlyArray<OrchestrationThread>,
+  parentThreadId: ThreadId,
+): OrchestrationThread[] {
+  return threads.map((thread) => {
+    if (thread.parentThread?.threadId !== parentThreadId) return thread;
+    const { parentThread: _, ...detached } = thread;
+    return detached;
+  });
+}
 import { decodeForEvent, updateThread } from "./projectorHelpers.ts";
 
 function resolveSyncedElevatorSummaryUpdate(input: {
@@ -220,12 +232,15 @@ export function projectThreadDeleted(
   return decodeForEvent(ThreadDeletedPayload, event.payload, event.type, "payload").pipe(
     Effect.map((payload) => ({
       ...nextBase,
-      threads: updateThread(nextBase.threads, payload.threadId, {
-        deletingAt: null,
-        deletedAt: payload.deletedAt,
-        pinnedAt: null,
-        updatedAt: payload.deletedAt,
-      }),
+      threads: detachChildren(
+        updateThread(nextBase.threads, payload.threadId, {
+          deletingAt: null,
+          deletedAt: payload.deletedAt,
+          pinnedAt: null,
+          updatedAt: payload.deletedAt,
+        }),
+        payload.threadId,
+      ),
     })),
   );
 }

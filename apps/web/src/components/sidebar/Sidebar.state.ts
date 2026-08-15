@@ -272,6 +272,7 @@ export function useSidebarState(): SidebarState {
     clearSelection: threadActions.clearSelection,
     copyPathToClipboard,
     cancelThreadRename: forwardCancelThreadRename,
+    openRemoteProjectEditDialog: projectAddActions.openRemoteProjectEditDialog,
   });
 
   useEffect(

@@ -39,26 +39,15 @@ export function reconcilePreviewPathAfterDirectoryRefresh({
     return previewPath;
   }
 
-  const previousPaths = new Set(previousEntries.map((entry) => entry.path));
+  return null;
+}
+
+export function getRemovedEntryPaths(
+  previousEntries: ReadonlyArray<ProjectEntry>,
+  nextEntries: ReadonlyArray<ProjectEntry>,
+): string[] {
   const nextPaths = new Set(nextEntries.map((entry) => entry.path));
-  const removedEntries = previousEntries.filter((entry) => !nextPaths.has(entry.path));
-  const addedEntries = nextEntries.filter((entry) => !previousPaths.has(entry.path));
-
-  if (removedEntries.length !== 1 || addedEntries.length !== 1) {
-    return null;
-  }
-
-  const removedEntry = removedEntries[0];
-  const addedEntry = addedEntries[0];
-  if (!removedEntry || !addedEntry) {
-    return null;
-  }
-
-  if (removedEntry.path !== previewPath || removedEntry.kind !== addedEntry.kind) {
-    return null;
-  }
-
-  return addedEntry.path;
+  return previousEntries.filter((entry) => !nextPaths.has(entry.path)).map((entry) => entry.path);
 }
 
 export function applyDirectoryNavigationRequest(
@@ -87,6 +76,7 @@ export function openFilesPanelEntry(
   workspaceRoot: string,
   setPreviewPath: (previewPath: string | null) => void,
   setPreviewPosition: (previewPosition: { line: number; column: number | null } | null) => void,
+  openPreview?: (path: string) => void,
 ): void {
   if (isPdfFilePath(entry.path) || isImageFilePath(entry.path) || isHtmlFilePath(entry.path)) {
     openNewBrowserTab({
@@ -99,8 +89,12 @@ export function openFilesPanelEntry(
   }
 
   if (isVideoFilePath(entry.path) || isCodeRelatedFilePath(entry.path)) {
-    setPreviewPath(entry.path);
-    setPreviewPosition(null);
+    if (openPreview) {
+      openPreview(entry.path);
+    } else {
+      setPreviewPath(entry.path);
+      setPreviewPosition(null);
+    }
     return;
   }
 

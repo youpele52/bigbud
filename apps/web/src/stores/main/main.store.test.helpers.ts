@@ -62,7 +62,13 @@ export function makeState(thread: Thread): AppState {
     sidebarRecentThreadIds: [],
     sidebarPinnedThreadIds: [],
     bootstrapComplete: true,
-    projectCatalogGeneration: 0,
+    projectCatalogCursorByScope: { local: null, remote: null },
+    projectCatalogRemainingCountByScope: { local: null, remote: null },
+    projectCatalogGenerationByScope: { local: 0, remote: 0 },
+    projectCatalogLoadingByScope: { local: false, remote: false },
+    projectCatalogErrorByScope: { local: undefined, remote: undefined },
+    projectCatalogRetryHeadByScope: { local: false, remote: false },
+    projectCatalogRestartProjectIdByScope: { local: null, remote: null },
     threadHydrationById: {},
   };
 }

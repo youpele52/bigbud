@@ -22,26 +22,39 @@ describe("backend startup state", () => {
     vi.useFakeTimers();
     const first = beginBackendStartup(100);
     const second = beginBackendStartup(200);
-    recordBackendStartupStatus(first, "upgrading");
+    expect(recordBackendStartupStatus(first, "upgrading")).toBe(false);
     expect(getBackendStartupState()).toMatchObject({ generation: second, status: "starting" });
 
     vi.advanceTimersByTime(10 * 60 * 1_000);
     expect(getBackendStartupState().status).toBe("timedOut");
-    recordBackendStartupStatus(second, "ready");
+    expect(recordBackendStartupStatus(second, "ready")).toBe(true);
     expect(getBackendStartupState().status).toBe("ready");
+  });
+
+  it("returns transition acceptance for legal, unsupported, stale, and terminal statuses", () => {
+    const stale = beginBackendStartup();
+    const generation = beginBackendStartup();
+
+    expect(recordBackendStartupStatus(stale, "ready")).toBe(false);
+    expect(recordBackendStartupStatus(generation, "unsupported")).toBe(false);
+    expect(recordBackendStartupStatus(generation, "upgrading")).toBe(true);
+    expect(recordBackendStartupStatus(generation, "starting")).toBe(true);
+    expect(recordBackendStartupStatus(generation, "error", "unknown")).toBe(true);
+    expect(recordBackendStartupStatus(generation, "ready")).toBe(false);
+    expect(recordBackendStartupStatus(generation, "error", "unknown")).toBe(false);
   });
 
   it("rejects timeout regressions while allowing only a late ready", () => {
     vi.useFakeTimers();
     const generation = beginBackendStartup();
     vi.advanceTimersByTime(10 * 60 * 1_000);
-    recordBackendStartupStatus(generation, "upgrading");
-    recordBackendStartupStatus(generation, "starting");
-    recordBackendStartupStatus(generation, "error");
+    expect(recordBackendStartupStatus(generation, "upgrading")).toBe(false);
+    expect(recordBackendStartupStatus(generation, "starting")).toBe(false);
+    expect(recordBackendStartupStatus(generation, "error")).toBe(false);
     expect(getBackendStartupState().status).toBe("timedOut");
-    recordBackendStartupStatus(generation, "ready");
+    expect(recordBackendStartupStatus(generation, "ready")).toBe(true);
     expect(getBackendStartupState().status).toBe("ready");
-    recordBackendStartupStatus(generation, "upgrading");
+    expect(recordBackendStartupStatus(generation, "upgrading")).toBe(false);
     expect(getBackendStartupState().status).toBe("ready");
   });
 

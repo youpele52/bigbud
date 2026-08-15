@@ -71,6 +71,19 @@ describe("usePromptQueue command rejection", () => {
     expect(dispatchCommand).toHaveBeenCalledTimes(3);
   });
 
+  it("dispatches the routine text follow-up with authoritative auto delivery", async () => {
+    const dispatchCommand = vi.fn(async (_command: unknown) => ({ sequence: 1 }));
+    window.nativeApi = { orchestration: { dispatchCommand } } as never;
+    __resetNativeApiForTests();
+    await render(<Harness onError={() => {}} />);
+
+    await page.getByRole("button", { name: "Queue" }).click();
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "thread.message.submit", delivery: "auto" }),
+    );
+  });
+
   it("renders a rejection through the established ChatView error surface", async () => {
     window.nativeApi = {
       orchestration: {

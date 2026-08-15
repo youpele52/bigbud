@@ -9,6 +9,7 @@
  */
 import type {
   ApprovalRequestId,
+  ProviderActiveTurnInspection,
   ProviderApprovalDecision,
   ProviderKind,
   ProviderUserInputAnswers,
@@ -99,6 +100,12 @@ export interface ProviderAdapterShape<TError> {
    * Interrupt an active turn.
    */
   readonly interruptTurn: (threadId: ThreadId, turnId?: TurnId) => Effect.Effect<void, TError>;
+
+  /** Authoritative provider-native inspection, or `unavailable` when unsupported. */
+  readonly inspectActiveTurn: (
+    threadId: ThreadId,
+    turnId: TurnId,
+  ) => Effect.Effect<ProviderActiveTurnInspection, TError>;
 
   /**
    * Respond to an interactive approval request.

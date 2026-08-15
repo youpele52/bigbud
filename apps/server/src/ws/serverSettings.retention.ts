@@ -1,6 +1,8 @@
-import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
-import type { ThreadRetentionPolicy } from "@bigbud/contracts/core/settings.threadRetention.ts";
-import { ServerSettingsError } from "@bigbud/contracts";
+import { ServerSettingsError, type ServerSettings } from "@bigbud/contracts/core/settings.ts";
+import {
+  THREAD_RETENTION_POLICIES,
+  type ThreadRetentionPolicy,
+} from "@bigbud/contracts/core/settings.threadRetention.ts";
 import { Effect } from "effect";
 
 export interface ThreadRetentionSettingsOperations {
@@ -44,7 +46,7 @@ export function rawThreadRetentionPolicy(
       return "malformed";
     if (!Object.prototype.hasOwnProperty.call(decoded, "threadRetentionPolicy")) return "absent";
     const policy = (decoded as Record<string, unknown>).threadRetentionPolicy;
-    return ["7-days", "14-days", "30-days", "90-days", "never"].includes(policy as string)
+    return (THREAD_RETENTION_POLICIES as readonly unknown[]).includes(policy)
       ? (policy as ThreadRetentionPolicy)
       : "malformed";
   } catch {

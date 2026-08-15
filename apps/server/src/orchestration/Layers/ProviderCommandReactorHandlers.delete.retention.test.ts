@@ -102,6 +102,7 @@ it.effect("cleans up and finalizes committed retention deletion without aborting
                 status: "deletion_requested",
                 exclusionReason: null,
                 attemptCount: 1,
+                nextAttemptAt: null,
                 lastErrorCode: null,
                 createdAt: occurredAt,
                 updatedAt: occurredAt,
@@ -169,7 +170,9 @@ it.effect("keeps cleanup failure retryable without aborting or terminal failure"
         Layer.mock(EntityPurge)({ requestThread: () => Effect.die("must not request purge") }),
         Layer.mock(ThreadRetentionRepository)({
           findItemByDeletionCommandId: () =>
-            Effect.succeed(Option.some({ runId: "retention-run", threadId } as never)),
+            Effect.succeed(
+              Option.some({ runId: "retention-run", threadId, attemptCount: 1 } as never),
+            ),
           recordItemRetry,
         }),
       ),

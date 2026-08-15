@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { OpenError, OpenInEditorInput, OpenPathInput } from "../workspace/editor";
+import { OpenInTerminalInput } from "../workspace/terminalApplication";
 import {
   GitActionProgressEvent,
   GitCheckoutInput,
@@ -213,6 +214,11 @@ export const WsServerRevokeMobileRemoteSessionRpc = Rpc.make(
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: OpenInEditorInput,
+  error: OpenError,
+});
+
+export const WsShellOpenInTerminalRpc = Rpc.make(WS_METHODS.shellOpenInTerminal, {
+  payload: OpenInTerminalInput,
   error: OpenError,
 });
 

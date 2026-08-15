@@ -5,6 +5,7 @@ import type {
   RecentThreadRetentionFailureSummary,
   ThreadRetentionRepositoryShape,
   ThreadRetentionRun,
+  ThreadRetentionRunItem,
 } from "../../persistence/Services/ThreadRetentionRepository.ts";
 
 export const RETENTION_PAGE_SIZE = 25;
@@ -62,6 +63,14 @@ export const retentionCircuitReopenAt = (
 
 export const retentionRetryDelayMs = (attempt: number) =>
   Math.min(RETENTION_RETRY_CAP_MS, RETENTION_RETRY_BASE_MS * 2 ** Math.max(0, attempt - 1));
+
+export const retentionItemRetryIsDue = (item: ThreadRetentionRunItem, nowIso: string) =>
+  item.nextAttemptAt === null || item.nextAttemptAt <= nowIso;
+
+export const earliestRetentionItemRetry = (items: ReadonlyArray<ThreadRetentionRunItem>) =>
+  items
+    .flatMap((item) => (item.nextAttemptAt === null ? [] : [item.nextAttemptAt]))
+    .toSorted()[0] ?? null;
 
 export const persistRequiredBaselineSequence = Effect.fn(
   "ThreadRetention.persistRequiredBaselineSequence",

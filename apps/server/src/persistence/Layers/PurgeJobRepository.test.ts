@@ -331,4 +331,42 @@ it.layer(repositoryLayer)("PurgeJobRepository", (it) => {
       assert.equal(selected[0]?.attemptCount, 1);
     }),
   );
+
+  it.effect("requires manual recovery after the retry budget is exhausted", () =>
+    Effect.gen(function* () {
+      const repository = yield* PurgeJobRepository;
+      const job = yield* repository.createOrGet({
+        jobId: "purge-exhausted-retries",
+        entityKind: "thread",
+        entityId: "thread-exhausted-retries",
+        resourceManifest: [],
+        createdAt: "2026-08-04T00:00:00.000Z",
+      });
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        assert.isTrue(
+          yield* repository.update({
+            jobId: job.jobId,
+            phase: "awaiting-finalization",
+            status: "failed",
+            lastError: "entity deletion marker is not yet available",
+            updatedAt: `2026-08-04T00:0${attempt + 1}:00.000Z`,
+          }),
+        );
+      }
+
+      const stored = yield* repository.findById(job.jobId);
+      assert.equal(stored._tag, "Some");
+      if (stored._tag === "Some") {
+        assert.equal(stored.value.status, "failed");
+        assert.equal(stored.value.lastError, "manual_recovery_required");
+        assert.equal(stored.value.attemptCount, 5);
+      }
+      assert.notInclude(
+        (yield* repository.listIncomplete(100, "2026-08-05T00:00:00.000Z")).map(
+          (candidate) => candidate.jobId,
+        ),
+        job.jobId,
+      );
+    }),
+  );
 });

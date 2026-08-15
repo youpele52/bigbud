@@ -22,7 +22,7 @@ import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTa
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { toastManager } from "../ui/toast";
 import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
-import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { isRemoteExecutionTargetId, isSshExecutionTargetId } from "./Sidebar.projects.logic";
 import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
 import type {
   SidebarProjectActionsInput,
@@ -47,6 +47,7 @@ export function useSidebarProjectActions({
   clearSelection,
   copyPathToClipboard,
   cancelThreadRename,
+  openRemoteProjectEditDialog,
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
@@ -175,6 +176,9 @@ export function useSidebarProjectActions({
 
       const menuItems = [
         { id: "rename", label: "Rename project" },
+        ...(isSshExecutionTargetId(resolveWorkspaceExecutionTargetId(project))
+          ? ([{ id: "edit-ssh", label: "Edit SSH configuration" }] as const)
+          : []),
         ...(project.cwd ? ([{ id: "copy-path", label: "Copy Project Path" }] as const) : []),
         { id: "delete", label: "Remove project", destructive: true },
       ];
@@ -193,6 +197,10 @@ export function useSidebarProjectActions({
         copyPathToClipboard(project.cwd, { path: project.cwd });
         return;
       }
+      if (clicked === "edit-ssh") {
+        openRemoteProjectEditDialog(project);
+        return;
+      }
       if (clicked !== "delete") return;
 
       requestProjectDelete(projectId);
@@ -200,6 +208,7 @@ export function useSidebarProjectActions({
     [
       cancelThreadRename,
       copyPathToClipboard,
+      openRemoteProjectEditDialog,
       projectRenamingCommittedRef,
       projects,
       requestProjectDelete,

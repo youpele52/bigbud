@@ -15,7 +15,6 @@ it.effect("Never performs recovery but no retention selection", () =>
       getPolicy: Effect.succeed("never"),
       enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
-      isAutomaticRolloutEnabled: () => true,
     });
     assert.deepEqual(yield* Ref.get(events), ["recovery"]);
   }),
@@ -29,7 +28,6 @@ it.effect("prioritizes purge recovery before scheduling retention", () =>
       getPolicy: Effect.succeed("7-days"),
       enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
-      isAutomaticRolloutEnabled: () => true,
     });
     assert.deepEqual(yield* Ref.get(events), ["recovery", "selection"]);
   }),
@@ -47,13 +45,12 @@ it.effect("rechecks the kill switch after recovery", () =>
       getPolicy: Effect.succeed("7-days"),
       enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => disabled,
-      isAutomaticRolloutEnabled: () => true,
     });
     assert.deepEqual(yield* Ref.get(events), ["recovery"]);
   }),
 );
 
-it.effect("keeps scheduled selection behind the internal rollout gate", () =>
+it.effect("schedules finite policies without an internal rollout gate", () =>
   Effect.gen(function* () {
     const events = yield* Ref.make<ReadonlyArray<string>>([]);
     yield* runThreadRetentionScheduledTick({
@@ -61,9 +58,8 @@ it.effect("keeps scheduled selection behind the internal rollout gate", () =>
       getPolicy: Effect.succeed("7-days"),
       enqueue: () => Ref.update(events, (current) => [...current, "selection"]),
       isDisabled: () => false,
-      isAutomaticRolloutEnabled: () => false,
     });
-    assert.deepEqual(yield* Ref.get(events), ["recovery"]);
+    assert.deepEqual(yield* Ref.get(events), ["recovery", "selection"]);
   }),
 );
 
