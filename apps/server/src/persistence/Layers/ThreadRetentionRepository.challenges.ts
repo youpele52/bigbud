@@ -8,11 +8,13 @@ import type {
   RetentionChallenge,
   ThreadRetentionRun,
 } from "../Services/ThreadRetentionRepository.ts";
+import { THREAD_RETENTION_NONTERMINAL_RUN_STATUSES } from "../Services/ThreadRetentionRepository.ts";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 
 export function makeThreadRetentionChallenges<E, R>(input: {
   readonly sql: SqlClient.SqlClient;
+  readonly getRun: (runId: string) => Effect.Effect<Option.Option<ThreadRetentionRun>, E, R>;
   readonly createQueuedRun: (
     run: CreateRetentionRunInput,
   ) => Effect.Effect<ThreadRetentionRun, E, R>;
@@ -110,6 +112,33 @@ export function makeThreadRetentionChallenges<E, R>(input: {
           consumedAt: request.consumedAt,
         });
         if (result !== "consumed") return { consumed: false, result } as const;
+        const equivalent = yield* input.sql<{ runId: string; cutoffAt: string }>`
+          SELECT run_id AS "runId", cutoff_at AS "cutoffAt" FROM thread_retention_runs
+          WHERE trigger_kind = 'manual' AND policy = ${challenge.value.policy}
+            AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+            AND cutoff_at = ${challenge.value.cutoffAt}
+          ORDER BY CASE WHEN active_slot = 1 THEN 0 ELSE 1 END,
+            cutoff_at DESC, created_at ASC, run_id ASC
+          LIMIT 1
+        `;
+        const canonical = equivalent[0];
+        if (canonical !== undefined) {
+          yield* input.sql`
+            UPDATE thread_retention_runs SET status = 'cancelled', completed_at = ${request.consumedAt},
+              updated_at = ${request.consumedAt}, active_slot = NULL
+            WHERE trigger_kind = 'manual' AND policy = ${challenge.value.policy}
+              AND run_id <> ${canonical.runId} AND status = 'queued' AND active_slot IS NULL
+              AND cutoff_at = ${canonical.cutoffAt}
+              AND selected_count = 0 AND requested_count = 0
+              AND NOT EXISTS (
+                SELECT 1 FROM thread_retention_run_items AS item
+                WHERE item.run_id = thread_retention_runs.run_id
+              )
+          `;
+          const run = yield* input.getRun(canonical.runId);
+          if (Option.isNone(run)) return yield* Effect.die("retention run disappeared");
+          return { consumed: true, run: run.value, created: false } as const;
+        }
         return {
           consumed: true,
           run: yield* input.createQueuedRun({
@@ -119,6 +148,7 @@ export function makeThreadRetentionChallenges<E, R>(input: {
             cutoffAt: challenge.value.cutoffAt,
             createdAt: request.consumedAt,
           }),
+          created: true,
         } as const;
       }),
     );

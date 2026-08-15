@@ -8,7 +8,10 @@ import { OrchestrationEngineService } from "../../orchestration/Services/Orchest
 import { PurgeJobRepository } from "../../persistence/Services/PurgeJobRepository.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
-import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
+import {
+  ThreadRetentionRepository,
+  isThreadRetentionTerminalRunStatus,
+} from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
@@ -34,9 +37,16 @@ import {
 import { makeThreadRetentionPreview } from "./ThreadRetention.preview.ts";
 import { makeSetThreadRetentionPolicy } from "./ThreadRetention.policy.ts";
 import {
+  makeThreadRetentionRunWakeScheduler,
   makeThreadRetentionStart,
   makeThreadRetentionWakeScheduler,
 } from "./ThreadRetention.runtime.ts";
+import {
+  forgetFreshManualRun,
+  normalThreadRetentionWork,
+  processThreadRetentionWork,
+  type ThreadRetentionWork,
+} from "./ThreadRetention.worker.ts";
 
 const RETENTION_READY_DELAY_MS = 10 * 60 * 1_000;
 const PURGE_BACKLOG_LIMIT = 100;
@@ -58,10 +68,18 @@ const makeThreadRetention = Effect.gen(function* () {
   const shell = yield* Effect.serviceOption(ThreadShellRunner);
   const settings = yield* ServerSettingsService;
   const providerRuntime = yield* Effect.serviceOption(ProviderSessionRuntimeRepository);
-  const workQueue = yield* Queue.unbounded<string>();
+  const workQueue = yield* Queue.unbounded<ThreadRetentionWork>();
   const scope = yield* Effect.scope;
   const maintenanceReadyAt = yield* Ref.make<number | null>(null);
-  const scheduleWake = yield* makeThreadRetentionWakeScheduler({ workQueue, scope });
+  const freshManualRunIds = yield* Ref.make<ReadonlyArray<string>>([]);
+  const { scheduleWake, cancelWake } = yield* makeThreadRetentionWakeScheduler({
+    workQueue,
+    scope,
+  });
+  const scheduleRunWake = makeThreadRetentionRunWakeScheduler({
+    freshManualRunIds,
+    scheduleWake,
+  });
 
   const loadRun = Effect.fn("ThreadRetention.loadRun")(function* (runId: string) {
     const run = yield* repository.getRun(runId);
@@ -105,38 +123,50 @@ const makeThreadRetention = Effect.gen(function* () {
             return "provider_pressure" as const;
           }
         }
-        const reopenAt = retentionCircuitReopenAt(
-          yield* recentRetentionFailureSummary(
-            repository as ThreadRetentionRepositoryAuditExtensions,
-            Date.now(),
-          ),
+        const outstanding = yield* repository.listOutstandingItems(run.runId, 250);
+        const hasIsolatedRetry = outstanding.some(
+          (item) => item.nextAttemptAt !== null && item.nextAttemptAt > new Date().toISOString(),
         );
+        const reopenAt = hasIsolatedRetry
+          ? null
+          : retentionCircuitReopenAt(
+              yield* recentRetentionFailureSummary(
+                repository as ThreadRetentionRepositoryAuditExtensions,
+                Date.now(),
+              ),
+            );
         if (reopenAt !== null && reopenAt > new Date().toISOString()) {
           return { reason: "recent_failures" as const, wakeAt: reopenAt };
         }
         return null;
       }).pipe(Effect.orDie),
-    scheduleWake,
+    scheduleWake: scheduleRunWake,
     loadRun,
   });
 
   yield* Effect.forkScoped(
     Effect.forever(
       Queue.take(workQueue).pipe(
-        Effect.flatMap(() =>
-          Effect.gen(function* () {
-            const readyAt = yield* Ref.get(maintenanceReadyAt);
-            if (readyAt === null || Date.now() < readyAt) return;
-            const active = yield* repository.listRecoverableRuns(1);
-            if (active[0]) {
-              yield* processQueuedRun(active[0].runId);
-              return;
-            }
-            if ((yield* purgeJobs.countIncomplete()) >= PURGE_BACKLOG_LIMIT) return;
-            const run = yield* repository.claimNextQueuedRun(new Date().toISOString());
-            if (Option.isNone(run)) return;
-            yield* processQueuedRun(run.value.runId);
+        Effect.flatMap((work) =>
+          processThreadRetentionWork({
+            work,
+            maintenanceReadyAt,
+            freshManualRunIds,
+            repository,
+            purgeJobs,
+            purgeBacklogLimit: PURGE_BACKLOG_LIMIT,
+            processQueuedRun,
+            scheduleFreshManualWake: (runId, wakeAt) =>
+              scheduleWake(runId, wakeAt, { _tag: "freshManual", runId }),
+            cancelWake,
           }),
+        ),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("thread retention worker message failed", {
+                cause: Cause.pretty(cause),
+              }),
         ),
       ),
     ),
@@ -169,7 +199,7 @@ const makeThreadRetention = Effect.gen(function* () {
                 outcome: "deferred",
               });
               if (retry.value.nextAttemptAt !== null) {
-                yield* scheduleWake(runId, retry.value.nextAttemptAt);
+                yield* scheduleRunWake(runId, retry.value.nextAttemptAt);
               }
               yield* Effect.logWarning("thread retention run deferred", {
                 reason: "coordinator_failure",
@@ -185,20 +215,23 @@ const makeThreadRetention = Effect.gen(function* () {
       Effect.andThen(
         Effect.gen(function* () {
           const processed = yield* repository.getRun(runId);
-          if (
-            Option.isSome(processed) &&
-            ["completed", "completed_with_failures", "failed", "cancelled"].includes(
-              processed.value.status,
-            )
-          ) {
-            yield* Queue.offer(workQueue, "next");
+          if (Option.isNone(processed)) {
+            yield* forgetFreshManualRun({ runId, freshManualRunIds, cancelWake });
+          } else if (isThreadRetentionTerminalRunStatus(processed.value.status)) {
+            yield* forgetFreshManualRun({ runId, freshManualRunIds, cancelWake });
+          }
+          if ((yield* repository.listRecoverableRuns(1)).length === 0) {
+            yield* Queue.offer(workQueue, normalThreadRetentionWork);
           }
         }),
       ),
     );
   }
 
-  const preview = makeThreadRetentionPreview({ repository, getPolicy: getAuthoritativePolicy });
+  const preview = makeThreadRetentionPreview({
+    repository,
+    purgeJobs,
+  });
 
   const enqueue: ThreadRetentionShape["enqueue"] = ({ challengeToken }) =>
     Effect.gen(function* () {
@@ -213,14 +246,6 @@ const makeThreadRetention = Effect.gen(function* () {
         return yield* retentionError(
           "challenge_invalid",
           "The confirmation no longer matches this action.",
-        );
-      }
-      const challenge = challengeOption.value;
-      const configuredPolicy = yield* getAuthoritativePolicy;
-      if (configuredPolicy !== "never" && configuredPolicy !== challenge.policy) {
-        return yield* retentionError(
-          "validation",
-          "The configured retention period changed. Preview this action again.",
         );
       }
       const now = new Date().toISOString();
@@ -242,12 +267,14 @@ const makeThreadRetention = Effect.gen(function* () {
         return yield* retentionError("challenge_invalid", "The confirmation is invalid.");
       }
       const run = accepted.run;
-      yield* increment(threadRetentionRunsTotal, {
-        trigger: "manual",
-        policy: run.policy,
-        outcome: "queued",
-      });
-      yield* Queue.offer(workQueue, run.runId);
+      if (accepted.created) {
+        yield* increment(threadRetentionRunsTotal, {
+          trigger: "manual",
+          policy: run.policy,
+          outcome: "queued",
+        });
+      }
+      yield* Queue.offer(workQueue, { _tag: "freshManual", runId: run.runId });
       return toPublicThreadRetentionRun(run);
     }).pipe(
       Effect.mapError((error) =>
@@ -269,9 +296,9 @@ const makeThreadRetention = Effect.gen(function* () {
       );
       for (const run of recoverable) {
         if (run.nextAttemptAt !== null && run.nextAttemptAt > new Date().toISOString()) {
-          yield* scheduleWake(run.runId, run.nextAttemptAt);
+          yield* scheduleRunWake(run.runId, run.nextAttemptAt);
         } else {
-          yield* Queue.offer(workQueue, run.runId);
+          yield* Queue.offer(workQueue, normalThreadRetentionWork);
         }
       }
       yield* repository.cleanupAudit({
@@ -302,7 +329,7 @@ const makeThreadRetention = Effect.gen(function* () {
                 })
               : Effect.void,
           ),
-          Effect.flatMap(() => Queue.offer(workQueue, "scheduled")),
+          Effect.flatMap(() => Queue.offer(workQueue, normalThreadRetentionWork)),
           Effect.asVoid,
         );
     },
@@ -351,7 +378,6 @@ const makeThreadRetention = Effect.gen(function* () {
       readyDelayMs: RETENTION_READY_DELAY_MS,
       workQueue,
       runScheduledTick,
-      scheduleWake,
     }),
   } satisfies ThreadRetentionShape;
 });

@@ -20,6 +20,7 @@ import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
 import {
   persistRequiredBaselineSequence,
   retentionFinalizeCommandId,
+  retentionRetryDelayMs,
 } from "../../retention/Layers/ThreadRetention.coordinator.helpers.ts";
 import { increment, threadRetentionItemsTotal } from "../../observability/Metrics.ts";
 
@@ -208,8 +209,11 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
         yield* retention!.recordItemRetry({
           runId: retentionItem.value.runId,
           threadId: thread.id,
-          expectedStatus: "deletion_requested",
+          expectedStatuses: ["deletion_requested"],
           lastErrorCode: "cleanup_failed",
+          nextAttemptAt: new Date(
+            Date.parse(createdAt) + retentionRetryDelayMs(retentionItem.value.attemptCount + 1),
+          ).toISOString(),
           updatedAt: createdAt,
         });
         return;

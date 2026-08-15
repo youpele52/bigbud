@@ -6,6 +6,8 @@ import type {
   CreateRetentionRunInput,
   ThreadRetentionRun,
 } from "../Services/ThreadRetentionRepository.ts";
+import { THREAD_RETENTION_NONTERMINAL_RUN_STATUSES } from "../Services/ThreadRetentionRepository.ts";
+import { PURGE_MAX_ATTEMPTS } from "../Services/PurgeJobRepository.ts";
 import { retentionDurableExclusions } from "./ThreadRetentionRepository.eligibility.ts";
 
 export function makeThreadRetentionQueue<E, R>(input: {
@@ -44,34 +46,27 @@ export function makeThreadRetentionQueue<E, R>(input: {
         if (active.length > 0) return Option.none();
         const queued = yield* input.sql<{
           runId: string;
-          trigger: "manual" | "scheduled";
-          bypassUsed: number;
         }>`
-          SELECT run_id AS "runId", trigger_kind AS trigger,
-            queue_bypass_used AS "bypassUsed"
+          SELECT run_id AS "runId"
           FROM thread_retention_runs
-          WHERE status = 'queued' AND active_slot IS NULL
-          ORDER BY rowid ASC
+          WHERE active_slot IS NULL
+            AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+            AND (next_attempt_at IS NULL OR next_attempt_at <= ${claimedAt})
+          ORDER BY
+            CASE
+              WHEN trigger_kind = 'manual' THEN 0
+              WHEN status <> 'queued' THEN 1
+              ELSE 2
+            END ASC,
+            created_at ASC, run_id ASC
         `;
-        const oldest = queued[0];
-        const firstManualIndex = queued.findIndex((run) => run.trigger === "manual");
-        const manualMayOvertake =
-          oldest?.trigger === "scheduled" &&
-          oldest.bypassUsed === 0 &&
-          firstManualIndex > 0 &&
-          queued.slice(0, firstManualIndex).filter((run) => run.trigger === "scheduled").length ===
-            1;
-        const selected = manualMayOvertake ? queued[firstManualIndex] : oldest;
+        const selected = queued[0];
         if (selected === undefined) return Option.none();
-        if (manualMayOvertake) {
-          yield* input.sql`
-            UPDATE thread_retention_runs SET queue_bypass_used = 1
-            WHERE run_id = ${oldest.runId} AND status = 'queued' AND active_slot IS NULL
-          `;
-        }
         const rows = yield* input.sql<{ runId: string }>`
           UPDATE thread_retention_runs SET active_slot = 1, updated_at = ${claimedAt}
-          WHERE run_id = ${selected.runId} AND status = 'queued' AND active_slot IS NULL
+          WHERE run_id = ${selected.runId} AND active_slot IS NULL
+            AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+            AND (next_attempt_at IS NULL OR next_attempt_at <= ${claimedAt})
           AND NOT EXISTS (
             SELECT 1 FROM thread_retention_runs WHERE active_slot = 1
           )
@@ -82,6 +77,122 @@ export function makeThreadRetentionQueue<E, R>(input: {
       }),
     );
   });
+
+  const claimQueuedManualRun = Effect.fn("ThreadRetentionRepository.claimQueuedManualRun")(
+    function* (runId: string, claimedAt: string, purgeBacklogLimit: number) {
+      return yield* input.sql.withTransaction(
+        Effect.gen(function* () {
+          const rows = yield* input.sql<{ runId: string }>`
+            UPDATE thread_retention_runs SET active_slot = 1, updated_at = ${claimedAt}
+            WHERE run_id = ${runId} AND trigger_kind = 'manual'
+              AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+              AND active_slot IS NULL
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${claimedAt})
+              AND NOT EXISTS (
+                SELECT 1 FROM thread_retention_runs WHERE active_slot = 1
+              )
+              AND (
+                SELECT COUNT(*) FROM purge_jobs
+                WHERE status <> 'completed' AND auto_resume_disabled = 0
+                  AND attempt_count < ${PURGE_MAX_ATTEMPTS}
+              ) < ${purgeBacklogLimit}
+            RETURNING run_id AS "runId"
+          `;
+          const claimedRunId = rows[0]?.runId;
+          return claimedRunId === undefined ? Option.none() : yield* input.getRun(claimedRunId);
+        }),
+      );
+    },
+  );
+
+  const listQueuedManualRuns = Effect.fn("ThreadRetentionRepository.listQueuedManualRuns")(
+    function* (limit: number) {
+      const rows = yield* input.sql<{ runId: string }>`
+        SELECT run_id AS "runId"
+        FROM thread_retention_runs
+        WHERE trigger_kind = 'manual'
+          AND active_slot IS NULL
+          AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+        ORDER BY created_at ASC, run_id ASC
+        LIMIT ${Math.max(1, limit)}
+      `;
+      const runs = yield* Effect.forEach(rows, ({ runId }) => input.getRun(runId));
+      return runs.flatMap((run) => (Option.isSome(run) ? [run.value] : []));
+    },
+  );
+
+  const yieldActiveRunToManual = Effect.fn("ThreadRetentionRepository.yieldActiveRunToManual")(
+    function* (
+      activeRunId: string,
+      manualRunId: string,
+      yieldedAt: string,
+      purgeBacklogLimit: number,
+    ) {
+      return yield* input.sql.withTransaction(
+        Effect.gen(function* () {
+          const manual = yield* input.sql<{ runId: string }>`
+            SELECT run_id AS "runId" FROM thread_retention_runs
+            WHERE run_id = ${manualRunId} AND trigger_kind = 'manual'
+              AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+              AND active_slot IS NULL
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${yieldedAt})
+              AND (
+                SELECT COUNT(*) FROM purge_jobs
+                WHERE status <> 'completed' AND auto_resume_disabled = 0
+                  AND attempt_count < ${PURGE_MAX_ATTEMPTS}
+              ) < ${purgeBacklogLimit}
+            LIMIT 1
+          `;
+          if (manual.length === 0) return Option.none();
+          const active = yield* input.sql<{ status: string }>`
+            SELECT status FROM thread_retention_runs
+            WHERE run_id = ${activeRunId} AND trigger_kind = 'scheduled' AND active_slot = 1
+              AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+            LIMIT 1
+          `;
+          if (active[0] === undefined) return Option.none();
+          const yielded =
+            active[0].status === "deferred"
+              ? yield* input.sql`
+                  UPDATE thread_retention_runs SET active_slot = NULL,
+                    next_attempt_at = CASE
+                      WHEN last_error_code IN (
+                        'cleanup_failed', 'preparation_pending', 'purge_deferred',
+                        'coordinator_failure', 'recent_failures', 'item_retry'
+                      ) THEN next_attempt_at ELSE NULL END,
+                    updated_at = ${yieldedAt}
+                  WHERE run_id = ${activeRunId} AND status = 'deferred' AND active_slot = 1
+                  RETURNING run_id
+                `
+              : yield* input.sql`
+                  UPDATE thread_retention_runs SET status = 'deferred', active_slot = NULL,
+                    next_attempt_at = CASE
+                      WHEN last_error_code IN (
+                        'cleanup_failed', 'preparation_pending', 'purge_deferred',
+                        'coordinator_failure', 'recent_failures', 'item_retry'
+                      ) THEN next_attempt_at ELSE NULL END,
+                    updated_at = ${yieldedAt}
+                  WHERE run_id = ${activeRunId} AND trigger_kind = 'scheduled' AND active_slot = 1
+                    AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+                  RETURNING run_id
+                `;
+          if (yielded.length !== 1) return Option.none();
+          const claimed = yield* input.sql<{ runId: string }>`
+            UPDATE thread_retention_runs SET active_slot = 1, updated_at = ${yieldedAt}
+            WHERE run_id = ${manualRunId} AND trigger_kind = 'manual'
+              AND status IN ${input.sql.in(THREAD_RETENTION_NONTERMINAL_RUN_STATUSES)}
+              AND active_slot IS NULL
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ${yieldedAt})
+              AND NOT EXISTS (SELECT 1 FROM thread_retention_runs WHERE active_slot = 1)
+            RETURNING run_id AS "runId"
+          `;
+          const claimedRunId = claimed[0]?.runId;
+          if (claimedRunId !== undefined) return yield* input.getRun(claimedRunId);
+          return yield* Effect.die("retention manual handoff claim lost");
+        }),
+      );
+    },
+  );
 
   const createOrGetActiveRun = Effect.fn("ThreadRetentionRepository.createOrGetActiveRun")(
     function* (runInput: CreateRetentionRunInput) {
@@ -117,5 +228,13 @@ export function makeThreadRetentionQueue<E, R>(input: {
     },
   );
 
-  return { createOrGetActiveRun, createQueuedRun, createScheduledQueuedRun, claimNextQueuedRun };
+  return {
+    createOrGetActiveRun,
+    createQueuedRun,
+    createScheduledQueuedRun,
+    claimNextQueuedRun,
+    listQueuedManualRuns,
+    claimQueuedManualRun,
+    yieldActiveRunToManual,
+  };
 }

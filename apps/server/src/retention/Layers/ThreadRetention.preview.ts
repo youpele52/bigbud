@@ -1,4 +1,7 @@
-import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
+import {
+  ServerThreadRetentionError,
+  type ThreadRetentionMaintenanceState,
+} from "@bigbud/contracts/server/threadRetention.ts";
 import { Effect, Schema } from "effect";
 
 import {
@@ -11,19 +14,34 @@ import {
   withMetrics,
 } from "../../observability/Metrics.ts";
 import type { ThreadRetentionRepositoryShape } from "../../persistence/Services/ThreadRetentionRepository.ts";
-import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
-import type { ThreadRetentionPolicy } from "@bigbud/contracts/core/settings.threadRetention.ts";
+import type { PurgeJobRepositoryShape } from "../../persistence/Services/PurgeJobRepository.ts";
 import type { ThreadRetentionShape } from "../Services/ThreadRetention.ts";
 import { cutoffForRetentionPolicy } from "./ThreadRetention.logic.ts";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1_000;
+const PURGE_BACKLOG_LIMIT = 100;
 
 const retentionError = (code: ServerThreadRetentionError["code"], message: string) =>
   new ServerThreadRetentionError({ code, message });
 
+export function deriveThreadRetentionMaintenanceState(input: {
+  readonly activeRun?:
+    | { readonly trigger: "manual" | "scheduled"; readonly status: string }
+    | undefined;
+  readonly purgeBacklog: number;
+  readonly purgeBacklogLimit: number;
+}): ThreadRetentionMaintenanceState {
+  if (input.activeRun?.status === "deferred" || input.purgeBacklog >= input.purgeBacklogLimit) {
+    return "safety_deferred";
+  }
+  if (input.activeRun?.trigger === "manual") return "manual_active";
+  if (input.activeRun) return "scheduled_active";
+  return "available";
+}
+
 export function makeThreadRetentionPreview(input: {
   readonly repository: ThreadRetentionRepositoryShape;
-  readonly getPolicy: Effect.Effect<ThreadRetentionPolicy, ProjectionRepositoryError>;
+  readonly purgeJobs: Pick<PurgeJobRepositoryShape, "countIncomplete">;
 }): ThreadRetentionShape["preview"] {
   return (request) =>
     Effect.gen(function* () {
@@ -31,17 +49,6 @@ export function makeThreadRetentionPreview(input: {
         return yield* retentionError(
           "disabled",
           "Thread retention is disabled by the server administrator.",
-        );
-      }
-      const configuredPolicy = yield* input.getPolicy;
-      if (
-        request.trigger === "manual" &&
-        configuredPolicy !== "never" &&
-        request.policy !== configuredPolicy
-      ) {
-        return yield* retentionError(
-          "validation",
-          "Manual retention must use the configured retention period.",
         );
       }
       const generatedAtMs = Date.now();
@@ -74,17 +81,19 @@ export function makeThreadRetentionPreview(input: {
         expiresAt: new Date(generatedAtMs + CHALLENGE_TTL_MS).toISOString(),
       });
       const active = yield* input.repository.listRecoverableRuns(1);
+      const purgeBacklog = yield* input.purgeJobs.countIncomplete();
+      const activeRun = active[0];
+      const maintenanceState = deriveThreadRetentionMaintenanceState({
+        activeRun,
+        purgeBacklog,
+        purgeBacklogLimit: PURGE_BACKLOG_LIMIT,
+      });
       return {
         generatedAt,
         policy: request.policy,
         cutoffAt,
         ...result,
-        maintenanceState:
-          active[0]?.status === "deferred"
-            ? ("deferred" as const)
-            : active.length > 0
-              ? ("active" as const)
-              : ("available" as const),
+        maintenanceState,
         warnings: ["Resource estimates are bounded and may be incomplete."],
         challenge: {
           token: challenge.token,
