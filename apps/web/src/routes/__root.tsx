@@ -32,6 +32,10 @@ import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
 import { shouldShowFileAccessPrompt } from "./-__root.permissionPrompts";
+import {
+  CompactChatShell,
+  MascotShell,
+} from "../components/floating-assistant/FloatingAssistantShell";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -46,6 +50,13 @@ export const Route = createRootRouteWithContext<{
 });
 
 export function RootRouteView() {
+  const desktopWindowRole = window.desktopBridge?.getWindowRole?.() ?? "main";
+  if (desktopWindowRole === "mascot") {
+    return <MascotShell />;
+  }
+  if (desktopWindowRole === "compact-chat") {
+    return <CompactChatRoot />;
+  }
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const [showStartupSplash, setShowStartupSplash] = useState(true);
   const [startupSplashVisible, setStartupSplashVisible] = useState(true);
@@ -124,6 +135,23 @@ export function RootRouteView() {
             />
             {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
           </>
+        </WebSocketConnectionSurface>
+      </AnchoredToastProvider>
+    </ToastProvider>
+  );
+}
+
+function CompactChatRoot() {
+  if (!readNativeApi()) return <StartupSplash />;
+  return (
+    <ToastProvider>
+      <AnchoredToastProvider>
+        <ServerStateBootstrap />
+        <EventRouter />
+        <WebSocketConnectionCoordinator />
+        <DesktopBackendStartupCoordinator />
+        <WebSocketConnectionSurface>
+          <CompactChatShell />
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
     </ToastProvider>

@@ -25,8 +25,16 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     }
 
     const unsubscribe = onMenuAction((action) => {
-      if (action !== "open-settings") return;
-      void navigate({ to: "/settings" });
+      if (action === "open-settings") {
+        void navigate({ to: "/settings" });
+        return;
+      }
+      if (action.startsWith("open-thread:")) {
+        const threadId = action.slice("open-thread:".length);
+        if (threadId.length > 0) {
+          void navigate({ to: "/$threadId", params: { threadId } });
+        }
+      }
     });
 
     return () => {

@@ -2,7 +2,6 @@ import type { ThreadId } from "@bigbud/contracts";
 import { DeepMutable } from "effect/Types";
 import { getLocalStorageItem } from "../../hooks/useLocalStorage";
 import {
-  COMPOSER_DRAFT_STORAGE_KEY,
   COMPOSER_DRAFT_STORAGE_VERSION,
   type ComposerDraftStoreState,
   type ComposerFileAttachment,
@@ -15,6 +14,7 @@ import {
   PersistedComposerDraftStoreStorage,
 } from "./types.store";
 import { normalizeProviderKind, shouldRemoveDraft } from "./normalization.store";
+import { composerStorageKey } from "./storageKey.store";
 
 // ── Storage helpers ───────────────────────────────────────────────────
 
@@ -23,10 +23,7 @@ export function readPersistedAttachmentIdsFromStorage(threadId: ThreadId): strin
     return [];
   }
   try {
-    const persisted = getLocalStorageItem(
-      COMPOSER_DRAFT_STORAGE_KEY,
-      PersistedComposerDraftStoreStorage,
-    );
+    const persisted = getLocalStorageItem(composerStorageKey, PersistedComposerDraftStoreStorage);
     if (!persisted || persisted.version !== COMPOSER_DRAFT_STORAGE_VERSION) {
       return [];
     }

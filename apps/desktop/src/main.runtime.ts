@@ -1,4 +1,3 @@
-import { BrowserWindow } from "electron";
 import type { App } from "electron";
 
 import {
@@ -14,19 +13,11 @@ import {
 
 export function installDesktopSingleInstanceLock(
   appInstance: Pick<App, "on" | "quit" | "requestSingleInstanceLock">,
-  getMainWindow: () => BrowserWindow | null,
+  openMainWindow: () => void,
 ): void {
   if (appInstance.requestSingleInstanceLock()) {
     appInstance.on("second-instance", () => {
-      const window = getMainWindow() ?? BrowserWindow.getAllWindows()[0] ?? null;
-      if (!window) return;
-      if (window.isMinimized()) {
-        window.restore();
-      }
-      if (!window.isVisible()) {
-        window.show();
-      }
-      window.focus();
+      openMainWindow();
     });
     return;
   }

@@ -135,6 +135,17 @@ export function getRecentlyUsedModels(provider: ProviderKind): RecentModelUsage[
     .slice(0, MAX_RECENT_MODELS_PER_PROVIDER);
 }
 
+/** Returns the newest valid profile-local model selection across all providers. */
+export function getNewestRecentlyUsedModel(
+  entries: ReadonlyArray<RecentModelUsage> = readAll(),
+): RecentModelUsage | null {
+  return entries.reduce<RecentModelUsage | null>((newest, entry) => {
+    if (!Number.isFinite(Date.parse(entry.lastUsedAt))) return newest;
+    if (!newest || entry.lastUsedAt > newest.lastUsedAt) return entry;
+    return newest;
+  }, null);
+}
+
 function trimToLimitPerProvider(list: RecentModelUsage[], limit: number): RecentModelUsage[] {
   const counts = new Map<ProviderKind, number>();
   const result: RecentModelUsage[] = [];

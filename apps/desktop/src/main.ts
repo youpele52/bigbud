@@ -1,6 +1,6 @@
 import * as Crypto from "node:crypto";
 
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 
 import {
   clearUpdatePollTimer,
@@ -76,6 +76,9 @@ import {
 } from "./main.runtime";
 import { desktopIpcChannels } from "./main.channels";
 import { resolveDesktopMainConfig } from "./main.config";
+import { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
+import { DesktopPreferencesStore } from "./window/desktopPreferences";
+import { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
 
 const channels = desktopIpcChannels;
 
@@ -110,6 +113,9 @@ let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
 let mobileBackendBaseUrl = "";
 let localMobileBackendBaseUrl = "";
+const windowRegistry = new DesktopWindowRegistry();
+let desktopPreferences: DesktopPreferencesStore;
+let floatingAssistantWindows: FloatingAssistantWindows;
 const cuaDriverLifecycle = makeCuaDriverLifecycle({
   stopBackendAndWaitForExit,
   stopCuaDriverDaemon,
@@ -143,6 +149,22 @@ app.setPath(
     userDataDirName: USER_DATA_DIR_NAME,
   }),
 );
+desktopPreferences = new DesktopPreferencesStore(app.getPath("userData"), logHeader);
+floatingAssistantWindows = new FloatingAssistantWindows({
+  desktopDir: __dirname,
+  desktopScheme: DESKTOP_SCHEME,
+  getSafeExternalUrl,
+  isDevelopment,
+  onOpenMain: () => openMainWindow(),
+  onQuit: () => {
+    prepareForAppQuit("floating-assistant-menu-quit");
+    app.quit();
+  },
+  preferences: desktopPreferences,
+  registry: windowRegistry,
+  resolveIconPath,
+  spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
+});
 const LOG_DIR = resolveDesktopLogDir(app.getPath("userData"));
 
 // Logging convenience wrapper
@@ -178,7 +200,9 @@ function recordMainProcessCrash(error: unknown): void {
   }
 }
 
-installDesktopSingleInstanceLock(app, () => mainWindow);
+installDesktopSingleInstanceLock(app, () => {
+  openMainWindow();
+});
 
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
@@ -250,7 +274,7 @@ configureAppIdentity({
 // Window factory (thin wrapper that closes over main.ts state)
 
 function makeWindow(): BrowserWindow {
-  return createWindow({
+  const window = createWindow({
     appDisplayName: APP_DISPLAY_NAME,
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
@@ -263,6 +287,75 @@ function makeWindow(): BrowserWindow {
     onWindowClosed: (w) => {
       if (mainWindow === w) mainWindow = null;
     },
+  });
+  windowRegistry.register("main", window);
+  return window;
+}
+
+function openMainWindow(threadId?: string): BrowserWindow {
+  const window = mainWindow ?? makeWindow();
+  mainWindow = window;
+  const show = () => {
+    if (window.isMinimized()) window.restore();
+    if (!window.isVisible()) window.show();
+    window.focus();
+    if (threadId) window.webContents.send(channels.menuAction, `open-thread:${threadId}`);
+  };
+  if (window.webContents.isLoadingMainFrame()) window.webContents.once("did-finish-load", show);
+  else show();
+  return window;
+}
+
+function registerFloatingAssistantIpc(): void {
+  ipcMain.removeAllListeners(channels.getWindowRole);
+  ipcMain.on(channels.getWindowRole, (event) => {
+    event.returnValue = windowRegistry.getRole(event.sender);
+  });
+  const register = (channel: string, handler: (value?: unknown) => unknown) => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, (event, value) => {
+      if (!windowRegistry.isTrusted(event.sender)) return false;
+      return handler(value);
+    });
+  };
+  register(channels.openMainWindow, (threadId) => {
+    openMainWindow(typeof threadId === "string" ? threadId : undefined);
+    return true;
+  });
+  register(channels.openCompactChat, async () => {
+    await floatingAssistantWindows.openCompactChat();
+    return true;
+  });
+  register(channels.beginMascotDrag, (point) => floatingAssistantWindows.beginMascotDrag(point));
+  register(channels.moveMascot, (point) => floatingAssistantWindows.moveMascot(point));
+  register(channels.hideCompactChat, () => {
+    floatingAssistantWindows.hideCompactChat();
+    return true;
+  });
+  register(channels.hideMascot, () => {
+    floatingAssistantWindows.hideMascot();
+    return true;
+  });
+  register(channels.disableFloatingAssistant, () => {
+    openMainWindow();
+    floatingAssistantWindows.disable();
+    return true;
+  });
+  register(channels.quitApplication, () => {
+    prepareForAppQuit("floating-assistant-quit");
+    app.quit();
+    return true;
+  });
+  register(
+    channels.getFloatingAssistantEnabled,
+    () => desktopPreferences.get().floatingAssistantEnabled,
+  );
+  register(channels.setFloatingAssistantEnabled, async (enabled) => {
+    if (typeof enabled !== "boolean") return false;
+    desktopPreferences.update({ floatingAssistantEnabled: enabled, mascotVisible: enabled });
+    if (enabled) await floatingAssistantWindows.ensureMascot();
+    else floatingAssistantWindows.disable();
+    return true;
   });
 }
 
@@ -325,6 +418,7 @@ async function bootstrap(): Promise<void> {
     BACKEND_STARTUP_STATE_CHANNEL: channels.backendStartupState,
     BACKEND_STARTUP_GET_STATE_CHANNEL: channels.backendStartupGetState,
     getMainWindow: () => mainWindow,
+    isTrustedRenderer: (webContents) => windowRegistry.isTrusted(webContents),
     getBackendWsUrl: () => backendWsUrl,
     getIsQuitting: () => isQuitting,
     getUpdateState,
@@ -371,9 +465,14 @@ async function bootstrap(): Promise<void> {
       return status;
     },
   });
+  registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");
   mainWindow = makeWindow();
   logHeader("bootstrap main window created");
+  if (desktopPreferences.get().floatingAssistantEnabled) {
+    await floatingAssistantWindows.ensureMascot();
+    logHeader("bootstrap floating assistant created");
+  }
   configureAutoUpdater({
     updateStateChannel: channels.updateState,
     runtimeInfo: desktopRuntimeInfo,
@@ -405,6 +504,7 @@ async function bootstrap(): Promise<void> {
 function prepareForAppQuit(reason: string): void {
   if (isQuitting) return;
   isQuitting = true;
+  floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();
   stopBackend();
@@ -467,9 +567,7 @@ app
     });
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = makeWindow();
-      }
+      openMainWindow();
     });
   })
   .catch((error) => {
@@ -477,7 +575,11 @@ app
   });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && !isQuitting) {
+  if (
+    process.platform !== "darwin" &&
+    !isQuitting &&
+    !desktopPreferences.get().floatingAssistantEnabled
+  ) {
     app.quit();
   }
 });
