@@ -23,6 +23,14 @@ const MASCOT_ANIMATIONS = {
   wave: waveMascot,
 } as const;
 
+const COMPACT_CHAT_TITLE_MAX_LENGTH = 40;
+
+function formatCompactChatTitle(title: string | null) {
+  if (!title) return "New chat";
+  if (title.length <= COMPACT_CHAT_TITLE_MAX_LENGTH) return title;
+  return `${title.slice(0, COMPACT_CHAT_TITLE_MAX_LENGTH - 3)}...`;
+}
+
 function CompactChatHeaderAction(props: {
   disabled?: boolean;
   icon: ReactNode;
@@ -138,12 +146,19 @@ export function MascotShell() {
 
 export function CompactChatShell() {
   const bridge = window.desktopBridge;
-  const { isMaterialized, newChat, selectionUnavailable, threadId } = useCompactChatThread();
+  const { isMaterialized, newChat, restoring, selectionUnavailable, threadId, threadTitle } =
+    useCompactChatThread();
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <BigbudLogo className="h-4 text-primary" />
+          <span
+            className="min-w-0 truncate text-sm text-foreground/80"
+            title={threadTitle ?? "New chat"}
+          >
+            {formatCompactChatTitle(threadTitle)}
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <CompactChatHeaderAction
@@ -169,9 +184,11 @@ export function CompactChatShell() {
           Your selected floating chat model is unavailable. Choose another model before sending.
         </p>
       ) : null}
-      <ThreadComposerSurface threadId={threadId}>
-        {(context) => <CompactThreadConversation {...context} workspaceRoot={undefined} />}
-      </ThreadComposerSurface>
+      {restoring ? null : (
+        <ThreadComposerSurface threadId={threadId}>
+          {(context) => <CompactThreadConversation {...context} workspaceRoot={undefined} />}
+        </ThreadComposerSurface>
+      )}
     </main>
   );
 }
