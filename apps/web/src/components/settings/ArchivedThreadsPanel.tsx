@@ -1,5 +1,5 @@
 import { ArchiveIcon, ArchiveX } from "lucide-react";
-import { isBuiltInChatsProject, type ThreadId } from "@bigbud/contracts";
+import { isBuiltInChatsProject, type AutomationId, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useSettings } from "../../hooks/useSettings";
@@ -24,6 +24,7 @@ export function ArchivedThreadsPanel() {
   const [pendingDeleteConfirmation, setPendingDeleteConfirmation] = useState<{
     threadId: ThreadId;
     title: string;
+    automationId?: AutomationId;
   } | null>(null);
   const archivedGroups = useMemo(() => {
     const projectById = new Map(projects.map((project) => [project.id, project] as const));
@@ -80,7 +81,26 @@ export function ArchivedThreadsPanel() {
           setPendingDeleteConfirmation({ threadId, title: thread.title });
           return;
         }
-        await deleteThread(threadId);
+        try {
+          await deleteThread(threadId);
+        } catch (error) {
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "automation_owned_thread" &&
+            "automationId" in error &&
+            typeof error.automationId === "string"
+          ) {
+            setPendingDeleteConfirmation({
+              threadId,
+              title: thread.title,
+              automationId: error.automationId as AutomationId,
+            });
+            return;
+          }
+          throw error;
+        }
       }
     },
     [appSettings.confirmThreadDelete, deleteThread, threads, unarchiveThread],
@@ -164,16 +184,49 @@ export function ArchivedThreadsPanel() {
         <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
           {pendingDeleteConfirmation ? (
             <ConfirmationPanel
-              title={`Delete thread "${pendingDeleteConfirmation.title}"?`}
-              description="This permanently clears conversation history for this thread."
+              title={
+                pendingDeleteConfirmation.automationId
+                  ? "Thread owned by an automation"
+                  : `Delete thread "${pendingDeleteConfirmation.title}"?`
+              }
+              description={
+                pendingDeleteConfirmation.automationId
+                  ? "Deletion requires deleting the automation first. This thread deletes automatically after its final owner is deleted."
+                  : "This permanently clears conversation history for this thread."
+              }
               cancelLabel="Cancel"
-              confirmLabel="Delete"
-              confirmVariant="destructive"
+              confirmLabel={pendingDeleteConfirmation.automationId ? "View automation" : "Delete"}
+              confirmVariant={pendingDeleteConfirmation.automationId ? "default" : "destructive"}
               onCancel={() => setPendingDeleteConfirmation(null)}
               onConfirm={() => {
                 const threadId = pendingDeleteConfirmation.threadId;
+                if (pendingDeleteConfirmation.automationId) {
+                  window.location.assign(`/automations/${pendingDeleteConfirmation.automationId}`);
+                  return;
+                }
                 setPendingDeleteConfirmation(null);
-                void deleteThread(threadId);
+                void deleteThread(threadId).catch((error) => {
+                  if (
+                    typeof error === "object" &&
+                    error !== null &&
+                    "code" in error &&
+                    error.code === "automation_owned_thread" &&
+                    "automationId" in error &&
+                    typeof error.automationId === "string"
+                  ) {
+                    setPendingDeleteConfirmation({
+                      threadId,
+                      title: pendingDeleteConfirmation.title,
+                      automationId: error.automationId as AutomationId,
+                    });
+                    return;
+                  }
+                  toastManager.add({
+                    type: "error",
+                    title: "Failed to delete thread",
+                    description: error instanceof Error ? error.message : "An error occurred.",
+                  });
+                });
               }}
             />
           ) : null}

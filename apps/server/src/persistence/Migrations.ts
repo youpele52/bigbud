@@ -88,6 +88,7 @@ import Migration0072 from "./Migrations/072_ProjectionProjectCatalogScopeIndexes
 import Migration0073 from "./Migrations/073_ProviderTurnLiveness.ts";
 import Migration0074 from "./Migrations/074_ThreadRetentionQueuedRuns.ts";
 import Migration0076 from "./Migrations/076_ThreadRetentionItemRetries.ts";
+import Migration0077 from "./Migrations/077_AutomationOwnedThreads.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -175,6 +176,7 @@ export const migrationEntries = [
   [73, "ProviderTurnLiveness", Migration0073],
   [74, "ThreadRetentionQueuedRuns", Migration0074],
   [76, "ThreadRetentionItemRetries", Migration0076],
+  [77, "AutomationOwnedThreads", Migration0077],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

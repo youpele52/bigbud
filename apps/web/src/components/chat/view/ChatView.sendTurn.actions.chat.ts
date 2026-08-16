@@ -310,6 +310,9 @@ export async function sendChatTurn({
       input.clearBootstrapSourceThreadId(threadIdForSend);
     }
   });
+  if (turnStartSucceeded && isDraft) {
+    await input.onThreadMaterialized?.(threadIdForSend);
+  }
   input.sendInFlightRef.current = false;
   if (!turnStartSucceeded) {
     input.resetLocalDispatch();

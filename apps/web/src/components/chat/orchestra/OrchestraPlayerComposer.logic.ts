@@ -36,6 +36,7 @@ import {
   resolveDiscoverySearch,
 } from "./OrchestraPlayerComposer.menu";
 import { type ModelOptionsByProvider } from "./OrchestraPlayerComposer.types";
+import { useOrchestraComposerProviderVisibility } from "./OrchestraPlayerComposer.visibility";
 
 export function useOrchestraPlayerComposer(input: {
   assignment: {
@@ -75,7 +76,12 @@ export function useOrchestraPlayerComposer(input: {
     }
   }, [syntheticMenuKind]);
 
-  const selectedProvider = input.assignment.modelSelection.provider;
+  const { hiddenComposerProviders, selectedProvider } = useOrchestraComposerProviderVisibility({
+    modelSelection: input.assignment.modelSelection,
+    providers: input.providers,
+    prompt: input.assignment.prompt,
+    onChange: input.onChange,
+  });
   const providerModels = useMemo(
     () => getProviderModels(input.providers, selectedProvider),
     [input.providers, selectedProvider],
@@ -103,8 +109,8 @@ export function useOrchestraPlayerComposer(input: {
     [input.providers, selectedProvider],
   );
   const searchableModelOptions = useMemo(
-    () => buildSearchableModelOptions(input.modelOptionsByProvider),
-    [input.modelOptionsByProvider],
+    () => buildSearchableModelOptions(input.modelOptionsByProvider, hiddenComposerProviders),
+    [hiddenComposerProviders, input.modelOptionsByProvider],
   );
 
   const isPathTrigger = trigger?.kind === "path";

@@ -48,7 +48,7 @@ function SidecarHeaderAction(props: {
   );
 }
 
-function SideChatConversation({
+export function CompactThreadConversation({
   workspaceRoot,
   ...context
 }: ThreadComposerSurfaceContext & { workspaceRoot: string | undefined }) {
@@ -190,7 +190,7 @@ function SidecarContent(props: {
           />
         </div>
       </div>
-      <SideChatConversation {...context} workspaceRoot={props.workspaceRoot} />
+      <CompactThreadConversation {...context} workspaceRoot={props.workspaceRoot} />
     </>
   );
 }

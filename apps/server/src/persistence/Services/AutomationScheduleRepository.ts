@@ -21,6 +21,7 @@ export const CreateAutomationScheduleInput = Schema.Struct({
   automationId: AutomationId,
   projectId: ProjectId,
   targetThreadId: ThreadId,
+  ownsTargetThread: Schema.optional(Schema.Boolean),
   title: TrimmedNonEmptyString,
   prompt: TrimmedNonEmptyString,
   scheduleKind: Schema.Literals(["custom", "once"]),
@@ -213,7 +214,10 @@ export interface AutomationScheduleRepositoryShape {
   ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
   readonly delete: (
     input: DeleteAutomationScheduleInput,
-  ) => Effect.Effect<void, AutomationScheduleRepositoryError>;
+  ) => Effect.Effect<boolean, AutomationScheduleRepositoryError>;
+  readonly getOwningAutomationId: (
+    threadId: ThreadId,
+  ) => Effect.Effect<Option.Option<AutomationId>, AutomationScheduleRepositoryError>;
   readonly recordRunStarted: (
     input: RecordAutomationRunStartedInput,
   ) => Effect.Effect<void, PersistenceSqlError>;

@@ -5,10 +5,16 @@ import {
   AutomationId,
   AutomationRunId,
   IsoDateTime,
+  ExecutionTargetId,
   ProjectId,
   ThreadId,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
+import {
+  ModelSelection,
+  ProviderInteractionMode,
+  RuntimeMode,
+} from "../orchestration/orchestration.provider";
 
 export const ServerListAutomationsInput = Schema.Struct({
   projectId: ProjectId,
@@ -48,6 +54,27 @@ export const ServerCreateAutomationInput = Schema.Struct({
   runAt: Schema.optional(IsoDateTime),
 });
 export type ServerCreateAutomationInput = typeof ServerCreateAutomationInput.Type;
+
+/** Server-controlled creation parameters for a thread owned by its automation. */
+export const ServerCreateOwnedAutomationInput = Schema.Struct({
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  prompt: TrimmedNonEmptyString,
+  scheduleKind: Schema.Literals(["custom", "once"]),
+  scheduleLabel: TrimmedNonEmptyString,
+  cronExpression: TrimmedNonEmptyString,
+  timezone: Schema.optional(TrimmedNonEmptyString),
+  runAt: Schema.optional(IsoDateTime),
+  modelSelection: ModelSelection,
+  runtimeMode: RuntimeMode,
+  interactionMode: ProviderInteractionMode,
+  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
+  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
+  executionTargetId: Schema.optional(ExecutionTargetId),
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ServerCreateOwnedAutomationInput = typeof ServerCreateOwnedAutomationInput.Type;
 
 export const ServerUpdateAutomationInput = Schema.Struct({
   automationId: AutomationId,

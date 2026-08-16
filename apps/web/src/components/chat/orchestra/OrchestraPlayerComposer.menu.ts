@@ -1,6 +1,7 @@
 import { type ModelSelection, type ProviderKind, type ServerProvider } from "@bigbud/contracts";
 
 import { createModelSelection, getProviderModels } from "~/models/provider";
+import { isComposerProviderVisible } from "~/models/provider/composerVisibility.models";
 
 import { type ComposerTrigger } from "../../../logic/composer";
 import { type ComposerCommandItem } from "../composer/ComposerCommandMenu";
@@ -30,6 +31,7 @@ export function filterUnsupportedSlashCommands(
 
 export function buildSearchableModelOptions(
   modelOptionsByProvider: ModelOptionsByProvider,
+  hiddenComposerProviders: ReadonlyArray<ProviderKind> = [],
 ): ReadonlyArray<{
   provider: ProviderKind;
   providerLabel: string;
@@ -41,7 +43,9 @@ export function buildSearchableModelOptions(
   searchProvider: string;
   searchGroup: string;
 }> {
-  return AVAILABLE_PROVIDER_OPTIONS.flatMap((option) =>
+  return AVAILABLE_PROVIDER_OPTIONS.filter((option) =>
+    isComposerProviderVisible(option.value, hiddenComposerProviders),
+  ).flatMap((option) =>
     modelOptionsByProvider[option.value].map(({ slug, name, subProviderID, group }) => ({
       provider: option.value,
       providerLabel: option.label,

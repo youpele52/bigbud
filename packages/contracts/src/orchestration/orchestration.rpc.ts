@@ -1,6 +1,7 @@
 import { Option, Schema, SchemaIssue, Struct } from "effect";
 import {
   CheckpointRef,
+  AutomationId,
   IsoDateTime,
   MessageId,
   NonNegativeInt,
@@ -228,6 +229,8 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedErrorClass<O
   "OrchestrationDispatchCommandError",
   {
     message: TrimmedNonEmptyString,
+    code: Schema.optional(Schema.Literal("automation_owned_thread")),
+    automationId: Schema.optional(AutomationId),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

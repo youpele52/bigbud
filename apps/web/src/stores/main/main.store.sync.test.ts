@@ -1,13 +1,17 @@
 import {
   DEFAULT_MODEL_BY_PROVIDER,
+  MessageId,
   ProjectId,
   ThreadId,
+  TurnId,
+  type GetSelectedThreadDetailResult,
   type ThreadSummary,
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { syncBoundedCatalog } from "./helpers.lazy.store";
+import { isSessionActivelyRunningTurn } from "../../logic/session";
+import { syncBoundedCatalog, syncSelectedThreadDetail } from "./helpers.lazy.store";
 import { syncServerReadModel } from "./helpers.snapshot.store";
 import { type AppState } from "./main.store";
 import { buildSidebarThreadSummary } from "./mappers.store";
@@ -292,5 +296,101 @@ describe("store read model sync", () => {
       session,
       elevatorSummaryMessageCount: 7,
     });
+  });
+
+  it("reconciles compact chat completion from authoritative thread detail", () => {
+    const threadId = ThreadId.makeUnsafe("compact-thread");
+    const turnId = TurnId.makeUnsafe("compact-turn");
+    const assistantMessageId = MessageId.makeUnsafe("compact-assistant-message");
+    const thread = makeThread({
+      id: threadId,
+      messages: [
+        {
+          id: assistantMessageId,
+          role: "assistant",
+          text: "",
+          turnId,
+          createdAt: "2026-08-16T10:00:01.000Z",
+          streaming: true,
+        },
+      ],
+      latestTurn: {
+        turnId,
+        state: "running",
+        requestedAt: "2026-08-16T10:00:00.000Z",
+        startedAt: "2026-08-16T10:00:01.000Z",
+        completedAt: null,
+        assistantMessageId,
+      },
+      session: {
+        provider: "codex",
+        status: "running",
+        orchestrationStatus: "running",
+        activeTurnId: turnId,
+        createdAt: "2026-08-16T10:00:00.000Z",
+        updatedAt: "2026-08-16T10:00:01.000Z",
+      },
+    });
+    const detail: GetSelectedThreadDetailResult = {
+      projectionSequence: 42,
+      threadId,
+      projectId: thread.projectId,
+      activityTurnId: turnId,
+      messages: [
+        {
+          id: assistantMessageId,
+          role: "assistant",
+          text: "Completed in the main renderer.",
+          attachments: [],
+          attachmentsTruncated: false,
+          turnId,
+          streaming: false,
+          createdAt: "2026-08-16T10:00:01.000Z",
+          updatedAt: "2026-08-16T10:00:05.000Z",
+        },
+      ],
+      messageWindow: {
+        order: "newest-first",
+        requestedCursor: null,
+        newestCursor: null,
+        oldestCursor: null,
+        nextCursor: null,
+        hasOlder: false,
+      },
+      activities: [],
+      activitiesTruncated: false,
+      pendingApprovals: [],
+      pendingApprovalsTruncated: false,
+      pendingUserInputs: [],
+      pendingUserInputsTruncated: false,
+      activePlan: null,
+      activeTasks: [],
+      activeTasksTruncated: false,
+      checkpoints: [],
+      checkpointsTruncated: false,
+    };
+
+    const next = syncSelectedThreadDetail(makeState(thread), detail, false);
+
+    expect(next.threads[0]?.messages).toEqual([
+      expect.objectContaining({
+        id: assistantMessageId,
+        text: "Completed in the main renderer.",
+        streaming: false,
+        completedAt: "2026-08-16T10:00:05.000Z",
+      }),
+    ]);
+    expect(next.threads[0]?.latestTurn).toMatchObject({
+      turnId,
+      state: "completed",
+      completedAt: "2026-08-16T10:00:05.000Z",
+      assistantMessageId,
+    });
+    expect(
+      isSessionActivelyRunningTurn(
+        next.threads[0]?.latestTurn ?? null,
+        next.threads[0]?.session ?? null,
+      ),
+    ).toBe(false);
   });
 });

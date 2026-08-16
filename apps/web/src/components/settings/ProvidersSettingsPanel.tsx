@@ -1,6 +1,7 @@
 import type { ProviderKind } from "@bigbud/contracts";
 
 import { SettingsPageContainer } from "./settingsLayout";
+import { ComposerProvidersSettingsSection } from "./ComposerProvidersSettingsSection";
 import { ProvidersSettingsSection } from "./ProvidersSettingsSection";
 
 export function ProvidersSettingsPanel({
@@ -11,6 +12,7 @@ export function ProvidersSettingsPanel({
   return (
     <SettingsPageContainer>
       <ProvidersSettingsSection expandedProviders={expandedProviders} />
+      <ComposerProvidersSettingsSection />
     </SettingsPageContainer>
   );
 }

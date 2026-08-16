@@ -25,12 +25,14 @@ export function ThreadComposerSurface({
   className,
   children,
   onOptimisticUserMessage,
+  onThreadMaterialized,
   seedPrompt,
   threadId,
   transformPromptForSend,
 }: {
   readonly className?: string;
   readonly onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
+  readonly onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   readonly seedPrompt?: string | undefined;
   readonly threadId: ThreadId;
   readonly transformPromptForSend?: ((prompt: string) => string) | undefined;
@@ -56,6 +58,7 @@ export function ThreadComposerSurface({
     timeline,
     runtime,
     onOptimisticUserMessage,
+    onThreadMaterialized,
     transformPromptForSend,
     enableKeybindings: false,
   });

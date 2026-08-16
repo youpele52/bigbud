@@ -107,16 +107,19 @@ import {
 } from "./migration.store";
 import { partializeComposerDraftStoreState, toHydratedThreadDraft } from "./persistence.store";
 import { createComposerDraftActions } from "./actions.store";
+import { composerStorageKey } from "./storageKey.store";
 
 // ── Debounced storage setup ───────────────────────────────────────────
 
 const COMPOSER_PERSIST_DEBOUNCE_MS = 300;
+const composerLegacyKeysByName =
+  composerStorageKey === COMPOSER_DRAFT_STORAGE_KEY
+    ? { [COMPOSER_DRAFT_STORAGE_KEY]: COMPOSER_DRAFT_LEGACY_STORAGE_KEYS }
+    : {};
 
 const composerDebouncedStorage = createDebouncedStorage(
   resolveStorage(typeof localStorage !== "undefined" ? localStorage : createMemoryStorage(), {
-    legacyKeysByName: {
-      [COMPOSER_DRAFT_STORAGE_KEY]: COMPOSER_DRAFT_LEGACY_STORAGE_KEYS,
-    },
+    legacyKeysByName: composerLegacyKeysByName,
   }),
   COMPOSER_PERSIST_DEBOUNCE_MS,
 );
@@ -141,7 +144,7 @@ export const useComposerDraftStore = create<ComposerDraftStoreState>()(
       ...createComposerDraftActions(set, get, composerDebouncedStorage.flush),
     }),
     {
-      name: COMPOSER_DRAFT_STORAGE_KEY,
+      name: composerStorageKey,
       version: COMPOSER_DRAFT_STORAGE_VERSION,
       storage: createJSONStorage(() => composerDebouncedStorage),
       migrate: migratePersistedComposerDraftStoreState,
