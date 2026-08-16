@@ -15,7 +15,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP_DISPLAY_NAME = "bigbud";
-const DEV_APP_DISPLAY_NAME = "bigbud (Dev)";
 const APP_BUNDLE_ID = "ai.bigbud.desktop";
 const DEV_APP_BUNDLE_ID = "ai.bigbud.desktop.dev";
 const LAUNCHER_VERSION = 4;
@@ -42,19 +41,40 @@ function setPlistString(plistPath, key, value) {
   throw new Error(`Failed to update plist key "${key}" at ${plistPath}: ${details}`.trim());
 }
 
-function patchMainBundleInfoPlist(appBundlePath, iconPath, appBundleId, appDisplayName) {
+function setPlistBoolean(plistPath, key, value) {
+  const replaceResult = spawnSync("plutil", ["-replace", key, "-bool", String(value), plistPath], {
+    encoding: "utf8",
+  });
+  if (replaceResult.status === 0) {
+    return;
+  }
+
+  const insertResult = spawnSync("plutil", ["-insert", key, "-bool", String(value), plistPath], {
+    encoding: "utf8",
+  });
+  if (insertResult.status === 0) {
+    return;
+  }
+
+  const details = [replaceResult.stderr, insertResult.stderr].filter(Boolean).join("\n");
+  throw new Error(`Failed to update plist key "${key}" at ${plistPath}: ${details}`.trim());
+}
+
+function patchMainBundleInfoPlist(appBundlePath, iconPath, appBundleId) {
   const infoPlistPath = join(appBundlePath, "Contents", "Info.plist");
-  setPlistString(infoPlistPath, "CFBundleDisplayName", appDisplayName);
-  setPlistString(infoPlistPath, "CFBundleName", appDisplayName);
+  setPlistString(infoPlistPath, "CFBundleDisplayName", APP_DISPLAY_NAME);
+  setPlistString(infoPlistPath, "CFBundleName", APP_DISPLAY_NAME);
   setPlistString(infoPlistPath, "CFBundleIdentifier", appBundleId);
   setPlistString(infoPlistPath, "CFBundleIconFile", "icon.icns");
+  setPlistBoolean(infoPlistPath, "LSUIElement", false);
+  setPlistBoolean(infoPlistPath, "LSBackgroundOnly", false);
 
   const resourcesDir = join(appBundlePath, "Contents", "Resources");
   copyFileSync(iconPath, join(resourcesDir, "icon.icns"));
   copyFileSync(iconPath, join(resourcesDir, "electron.icns"));
 }
 
-function patchHelperBundleInfoPlists(appBundlePath, appBundleId, appDisplayName) {
+function patchHelperBundleInfoPlists(appBundlePath, appBundleId) {
   const frameworksDir = join(appBundlePath, "Contents", "Frameworks");
   if (!existsSync(frameworksDir)) {
     return;
@@ -74,7 +94,9 @@ function patchHelperBundleInfoPlists(appBundlePath, appBundleId, appDisplayName)
     }
 
     const suffix = entry.name.replace("Electron Helper", "").replace(".app", "").trim();
-    const helperName = suffix ? `${appDisplayName} Helper ${suffix}` : `${appDisplayName} Helper`;
+    const helperName = suffix
+      ? `${APP_DISPLAY_NAME} Helper ${suffix}`
+      : `${APP_DISPLAY_NAME} Helper`;
     const helperIdSuffix = suffix.replace(/[()]/g, "").trim().toLowerCase().replace(/\s+/g, "-");
     const helperBundleId = helperIdSuffix
       ? `${appBundleId}.helper.${helperIdSuffix}`
@@ -186,67 +208,14 @@ function buildMacLauncher(electronBinaryPath, isDevelopment = false) {
   }
 
   rmSync(targetAppBundlePath, { recursive: true, force: true });
-  // Electron frameworks use relative symlinks within the app bundle. The
-  // default cpSync behavior rewrites them to absolute paths into node_modules,
-  // which invalidates the copied bundle for macOS code signing.
-  cpSync(sourceAppBundlePath, targetAppBundlePath, {
-    recursive: true,
-    verbatimSymlinks: true,
-  });
+  cpSync(sourceAppBundlePath, targetAppBundlePath, { recursive: true });
   const appBundleId = isDevelopment ? DEV_APP_BUNDLE_ID : APP_BUNDLE_ID;
-  const appDisplayName = isDevelopment ? DEV_APP_DISPLAY_NAME : APP_DISPLAY_NAME;
-  patchMainBundleInfoPlist(targetAppBundlePath, iconPath, appBundleId, appDisplayName);
-  patchHelperBundleInfoPlists(targetAppBundlePath, appBundleId, appDisplayName);
-  runIconCommand("codesign", [
-    "--force",
-    "--deep",
-    "--sign",
-    "-",
-    "--identifier",
-    appBundleId,
-    targetAppBundlePath,
-  ]);
+  patchMainBundleInfoPlist(targetAppBundlePath, iconPath, appBundleId);
+  patchHelperBundleInfoPlists(targetAppBundlePath, appBundleId);
+  runIconCommand("codesign", ["--force", "--deep", "--sign", "-", targetAppBundlePath]);
   writeFileSync(metadataPath, `${JSON.stringify(expectedMetadata, null, 2)}\n`);
 
   return targetBinaryPath;
-}
-
-/**
- * Resolve a development launch that macOS records as an application launch.
- *
- * Executing Contents/MacOS/Electron directly bypasses Launch Services, which
- * prevents the generated dev bundle from behaving like a normal macOS app in
- * the app switcher and recent-app surfaces. `open -W` keeps a waitable child
- * for the dev watcher, while `--env` preserves the shell environment that the
- * previous direct spawn passed to Electron.
- */
-export function resolveDevelopmentElectronLaunch(appArguments, environment) {
-  const electronBinaryPath = resolveElectronPath(true);
-  if (process.platform !== "darwin") {
-    return { command: electronBinaryPath, args: appArguments };
-  }
-
-  const appBundlePath = resolve(electronBinaryPath, "../../..");
-  const runtimeDir = dirname(appBundlePath);
-  const stdoutPath = join(runtimeDir, "dev.stdout.log");
-  const stderrPath = join(runtimeDir, "dev.stderr.log");
-  writeFileSync(stdoutPath, "", { mode: 0o600 });
-  writeFileSync(stderrPath, "", { mode: 0o600 });
-  const args = ["-n", "-F", "-W", "-o", stdoutPath, "--stderr", stderrPath];
-  for (const [key, value] of Object.entries(environment).toSorted(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    if (
-      typeof value === "string" &&
-      /^[A-Za-z][A-Za-z0-9_]*$/.test(key) &&
-      key !== "ELECTRON_RUN_AS_NODE"
-    ) {
-      args.push("--env", `${key}=${value}`);
-    }
-  }
-  args.push(appBundlePath, "--args", ...appArguments);
-
-  return { command: "/usr/bin/open", args, logPaths: [stdoutPath, stderrPath] };
 }
 
 export function resolveElectronPath(isDevelopment = false) {
