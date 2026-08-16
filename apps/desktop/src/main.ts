@@ -5,41 +5,11 @@ import { app, BrowserWindow, dialog } from "electron";
 import {
   clearUpdatePollTimer,
   checkForUpdates,
-  configureAutoUpdater,
-  downloadAvailableUpdate,
   emitUpdateState,
   getUpdateState,
-  installDownloadedUpdate,
-  updaterConfigured,
 } from "./updater/autoUpdater";
-import {
-  backendPort,
-  backendWsUrl,
-  initBackendManager,
-  setBackendConnectionInfo,
-  startBackend,
-  stopBackend,
-  stopBackendAndWaitForExit,
-} from "./backend/backendManager";
-import {
-  disableDesktopTailscaleRemoteAccess,
-  enableDesktopTailscaleRemoteAccess,
-  getDesktopTailscaleRemoteAccessStatus,
-} from "./backend/tailscaleRemoteAccess";
-import {
-  getComputerUsePermissionsStatus,
-  getComputerUseRuntimeStatus,
-  installComputerUseRuntime,
-  requestComputerUsePermissions,
-  runComputerUseDoctor,
-} from "./backend/cuaDriver";
+import { initBackendManager, stopBackend } from "./backend/backendManager";
 import { stopCuaDriverDaemon } from "./backend/cuaDriver.daemon";
-import {
-  makeCuaDriverLifecycle,
-  requestCuaDriverPermissionsAfterHostPreflight,
-} from "./backend/cuaDriver.lifecycle";
-import { requestHostAccessibilityPermission } from "./backend/cuaHostPermissions";
-import { registerIpcHandlers } from "./window/ipcHandlers";
 import {
   configureBackendStartupState,
   getBackendStartupState,
@@ -63,10 +33,7 @@ import {
   getSafeExternalUrl,
   makeResolveIconPath,
 } from "./window/menuManager";
-import { syncShellEnvironmentAsync } from "./backend/syncShellEnvironment";
 import { createWindow } from "./window/windowManager";
-import { DEFAULT_DESKTOP_BACKEND_PORT, resolveDesktopBackendPort } from "./backend/backendPort";
-import { resolveDesktopMobileRemoteNetwork } from "./backend/mobileRemoteNetwork";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
 import { registerDesktopProtocol, registerDesktopSchemeAsPrivileged } from "./main.protocol";
 import {
@@ -76,6 +43,11 @@ import {
 } from "./main.runtime";
 import { desktopIpcChannels } from "./main.channels";
 import { resolveDesktopMainConfig } from "./main.config";
+import { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
+import { DesktopPreferencesStore } from "./window/desktopPreferences";
+import { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
+import { bootstrapDesktop } from "./main.bootstrap";
+import { registerFloatingAssistantIpc } from "./main.floatingAssistant";
 
 const channels = desktopIpcChannels;
 
@@ -108,19 +80,9 @@ let desktopProtocolRegistered = false;
 let desktopLogSink: QueuedLogSink | null = null;
 let backendLogSink: QueuedLogSink | null = null;
 let restoreStdIoCapture: (() => void) | null = null;
-let mobileBackendBaseUrl = "";
-let localMobileBackendBaseUrl = "";
-const cuaDriverLifecycle = makeCuaDriverLifecycle({
-  stopBackendAndWaitForExit,
-  stopCuaDriverDaemon,
-  startBackend,
-});
-
-async function syncMobileBackendBaseUrlFromTailscaleRemoteAccess(): Promise<void> {
-  const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
-  mobileBackendBaseUrl =
-    status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-}
+const windowRegistry = new DesktopWindowRegistry();
+let desktopPreferences: DesktopPreferencesStore;
+let floatingAssistantWindows: FloatingAssistantWindows;
 
 // Resolved once after logging init.
 const resolveIconPath = makeResolveIconPath(__dirname, process.resourcesPath ?? "", isDevelopment);
@@ -143,6 +105,22 @@ app.setPath(
     userDataDirName: USER_DATA_DIR_NAME,
   }),
 );
+desktopPreferences = new DesktopPreferencesStore(app.getPath("userData"), logHeader);
+floatingAssistantWindows = new FloatingAssistantWindows({
+  desktopDir: __dirname,
+  desktopScheme: DESKTOP_SCHEME,
+  getSafeExternalUrl,
+  isDevelopment,
+  onOpenMain: () => openMainWindow(),
+  onQuit: () => {
+    prepareForAppQuit("floating-assistant-menu-quit");
+    app.quit();
+  },
+  preferences: desktopPreferences,
+  registry: windowRegistry,
+  resolveIconPath,
+  spellcheckEnabled: desktopLinuxRuntimeConfig.spellcheckEnabled,
+});
 const LOG_DIR = resolveDesktopLogDir(app.getPath("userData"));
 
 // Logging convenience wrapper
@@ -154,10 +132,6 @@ function logHeader(message: string): void {
 function flushDiagnosticLogs(): void {
   desktopLogSink?.flush();
   backendLogSink?.flush();
-}
-
-function formatHostForUrl(host: string): string {
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 function recordMainProcessCrash(error: unknown): void {
@@ -178,7 +152,9 @@ function recordMainProcessCrash(error: unknown): void {
   }
 }
 
-installDesktopSingleInstanceLock(app, () => mainWindow);
+installDesktopSingleInstanceLock(app, () => {
+  openMainWindow();
+});
 
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
@@ -250,7 +226,7 @@ configureAppIdentity({
 // Window factory (thin wrapper that closes over main.ts state)
 
 function makeWindow(): BrowserWindow {
-  return createWindow({
+  const window = createWindow({
     appDisplayName: APP_DISPLAY_NAME,
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
@@ -264,135 +240,22 @@ function makeWindow(): BrowserWindow {
       if (mainWindow === w) mainWindow = null;
     },
   });
+  windowRegistry.register("main", window);
+  return window;
 }
 
-// Bootstrap
-
-async function bootstrap(): Promise<void> {
-  logHeader("bootstrap start");
-  const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
-    serverSettingsPath: SERVER_SETTINGS_PATH,
-    hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
-  });
-  const port = await resolveDesktopBackendPort({
-    host: desktopMobileRemoteNetwork.bindHost,
-    startPort: DEFAULT_DESKTOP_BACKEND_PORT,
-  });
-  logHeader(
-    `selected backend port via sequential scan host=${desktopMobileRemoteNetwork.bindHost} startPort=${DEFAULT_DESKTOP_BACKEND_PORT} port=${port}`,
-  );
-  const authToken = Crypto.randomBytes(24).toString("hex");
-  const baseUrl = `ws://${formatHostForUrl(desktopMobileRemoteNetwork.clientHost)}:${port}`;
-  const wsUrl = `${baseUrl}/?token=${encodeURIComponent(authToken)}`;
-  mobileBackendBaseUrl = `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`;
-  localMobileBackendBaseUrl = mobileBackendBaseUrl;
-  setBackendConnectionInfo({
-    port,
-    authToken,
-    wsUrl,
-    host: desktopMobileRemoteNetwork.bindHost,
-  });
-  await syncMobileBackendBaseUrlFromTailscaleRemoteAccess();
-  logHeader(
-    `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileBackendBaseUrl}`,
-  );
-
-  registerIpcHandlers({
-    PICK_FOLDER_CHANNEL: channels.pickFolder,
-    CONFIRM_CHANNEL: channels.confirm,
-    SET_THEME_CHANNEL: channels.setTheme,
-    SET_WINDOW_MATERIAL_CHANNEL: channels.setWindowMaterial,
-    CONTEXT_MENU_CHANNEL: channels.contextMenu,
-    OPEN_EXTERNAL_CHANNEL: channels.openExternal,
-    GET_WS_URL_CHANNEL: channels.getWsUrl,
-    GET_MOBILE_BACKEND_BASE_URL_CHANNEL: channels.getMobileBackendBaseUrl,
-    GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL: channels.getComputerUseRuntimeStatus,
-    GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL: channels.getComputerUsePermissionsStatus,
-    REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL: channels.requestComputerUsePermissions,
-    INSTALL_COMPUTER_USE_RUNTIME_CHANNEL: channels.installComputerUseRuntime,
-    RUN_COMPUTER_USE_DOCTOR_CHANNEL: channels.runComputerUseDoctor,
-    GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: channels.getTailscaleRemoteAccessStatus,
-    ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.enableTailscaleRemoteAccess,
-    DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.disableTailscaleRemoteAccess,
-    NOTIFICATIONS_IS_SUPPORTED_CHANNEL: channels.notificationsIsSupported,
-    NOTIFICATIONS_SHOW_CHANNEL: channels.notificationsShow,
-    COPY_TO_CLIPBOARD_CHANNEL: channels.copyToClipboard,
-    REQUEST_FILE_ACCESS_CHANNEL: channels.requestFileAccess,
-    UPDATE_GET_STATE_CHANNEL: channels.updateGetState,
-    UPDATE_DOWNLOAD_CHANNEL: channels.updateDownload,
-    UPDATE_INSTALL_CHANNEL: channels.updateInstall,
-    UPDATE_CHECK_CHANNEL: channels.updateCheck,
-    BACKEND_STARTUP_STATE_CHANNEL: channels.backendStartupState,
-    BACKEND_STARTUP_GET_STATE_CHANNEL: channels.backendStartupGetState,
-    getMainWindow: () => mainWindow,
-    getBackendWsUrl: () => backendWsUrl,
-    getIsQuitting: () => isQuitting,
-    getUpdateState,
-    getBackendStartupState,
-    isUpdaterConfigured: () => updaterConfigured,
-    checkForUpdates,
-    downloadAvailableUpdate,
-    installDownloadedUpdate,
-    resolveIconPath,
-    getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
-    getComputerUseRuntimeStatus: () => getComputerUseRuntimeStatus(BASE_DIR),
-    getComputerUsePermissionsStatus: () => getComputerUsePermissionsStatus(BASE_DIR),
-    requestHostAccessibilityPermission,
-    requestComputerUsePermissions: (hostAccessibilityTrusted) =>
-      requestCuaDriverPermissionsAfterHostPreflight({
-        hostAccessibilityTrusted,
-        hostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
-        lifecycle: cuaDriverLifecycle,
-        requestPermissions: () => requestComputerUsePermissions(BASE_DIR),
-      }),
-    installComputerUseRuntime: async () => {
-      const result = await installComputerUseRuntime(BASE_DIR, CUA_DRIVER_HOST_BUNDLE_ID);
-      if (!result.ok) return result;
-      await cuaDriverLifecycle.refresh();
-      const status = await getComputerUseRuntimeStatus(BASE_DIR);
-      return { ok: !status.repairRequired, status };
-    },
-    runComputerUseDoctor: () => runComputerUseDoctor(BASE_DIR),
-    getTailscaleRemoteAccessStatus: async () => {
-      const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
-      mobileBackendBaseUrl =
-        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-      return status;
-    },
-    enableTailscaleRemoteAccess: async () => {
-      const status = await enableDesktopTailscaleRemoteAccess(backendPort);
-      mobileBackendBaseUrl =
-        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-      return status;
-    },
-    disableTailscaleRemoteAccess: async () => {
-      const status = await disableDesktopTailscaleRemoteAccess(backendPort);
-      mobileBackendBaseUrl = localMobileBackendBaseUrl;
-      return status;
-    },
-  });
-  logHeader("bootstrap ipc handlers registered");
-  mainWindow = makeWindow();
-  logHeader("bootstrap main window created");
-  configureAutoUpdater({
-    updateStateChannel: channels.updateState,
-    runtimeInfo: desktopRuntimeInfo,
-    isDevelopment,
-    getIsQuitting: () => isQuitting,
-    setIsQuitting: (v) => {
-      isQuitting = v;
-    },
-    stopBackendAndWaitForExit,
-    onBeforeQuitForUpdate: () => {
-      prepareForAppQuit("before-quit-for-update");
-    },
-  });
-  logHeader("bootstrap auto updater configured");
-  logHeader("bootstrap login shell hydration started");
-  await syncShellEnvironmentAsync();
-  logHeader("bootstrap login shell hydration completed");
-  await startBackend();
-  logHeader("bootstrap backend start requested");
+function openMainWindow(threadId?: string): BrowserWindow {
+  const window = mainWindow ?? makeWindow();
+  mainWindow = window;
+  const show = () => {
+    if (window.isMinimized()) window.restore();
+    if (!window.isVisible()) window.show();
+    window.focus();
+    if (threadId) window.webContents.send(channels.menuAction, `open-thread:${threadId}`);
+  };
+  if (window.webContents.isLoadingMainFrame()) window.webContents.once("did-finish-load", show);
+  else show();
+  return window;
 }
 
 // App event handlers
@@ -405,6 +268,7 @@ async function bootstrap(): Promise<void> {
 function prepareForAppQuit(reason: string): void {
   if (isQuitting) return;
   isQuitting = true;
+  floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();
   stopBackend();
@@ -462,14 +326,44 @@ app
       getUpdateState,
       isDevelopment,
     });
-    void bootstrap().catch((error) => {
+    void bootstrapDesktop({
+      baseDir: BASE_DIR,
+      channels,
+      cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
+      desktopPreferences,
+      desktopRuntimeInfo,
+      floatingAssistantWindows,
+      getIsQuitting: () => isQuitting,
+      getMainWindow: () => mainWindow,
+      isDevelopment,
+      logHeader,
+      makeWindow,
+      prepareForAppQuit,
+      registerFloatingAssistantIpc: () =>
+        registerFloatingAssistantIpc({
+          appInstance: app,
+          channels,
+          desktopPreferences,
+          floatingAssistantWindows,
+          openMainWindow,
+          prepareForAppQuit,
+          windowRegistry,
+        }),
+      resolveIconPath,
+      serverSettingsPath: SERVER_SETTINGS_PATH,
+      setIsQuitting: (value) => {
+        isQuitting = value;
+      },
+      setMainWindow: (window) => {
+        mainWindow = window;
+      },
+      windowRegistry,
+    }).catch((error) => {
       handleFatalStartupError("bootstrap", error);
     });
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = makeWindow();
-      }
+      openMainWindow();
     });
   })
   .catch((error) => {
@@ -477,7 +371,11 @@ app
   });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && !isQuitting) {
+  if (
+    process.platform !== "darwin" &&
+    !isQuitting &&
+    !desktopPreferences.get().floatingAssistantEnabled
+  ) {
     app.quit();
   }
 });

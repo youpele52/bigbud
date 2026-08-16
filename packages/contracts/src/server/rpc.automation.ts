@@ -6,6 +6,7 @@ import {
   ServerAutomationError,
   ServerAutomationResult,
   ServerCreateAutomationInput,
+  ServerCreateOwnedAutomationInput,
   ServerDeleteAutomationInput,
   ServerGetAutomationInput,
   ServerGetAutomationResult,
@@ -42,6 +43,12 @@ export const WsServerGetAutomationRpc = Rpc.make(WS_METHODS.serverGetAutomation,
 
 export const WsServerCreateAutomationRpc = Rpc.make(WS_METHODS.serverCreateAutomation, {
   payload: ServerCreateAutomationInput,
+  success: ServerAutomationResult,
+  error: ServerAutomationError,
+});
+
+export const WsServerCreateOwnedAutomationRpc = Rpc.make(WS_METHODS.serverCreateOwnedAutomation, {
+  payload: ServerCreateOwnedAutomationInput,
   success: ServerAutomationResult,
   error: ServerAutomationError,
 });

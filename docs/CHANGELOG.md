@@ -4,6 +4,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
+- Keep bigbud close at hand with the new Floating Assistant: drag its caller anywhere, open a compact chat from any desktop Space, and choose either the bigbud app icon or a hand mascot that waves when you hover.
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
 - Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
@@ -11,6 +12,12 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
 ## v0.2.202 (16 August, 2026)
+
+### Floating Assistant
+
+- Added an optional Floating Assistant in **AI** settings. Its draggable caller stays available alongside the main app, opens a compact chat across your desktop Spaces, and does not close bigbud when you hide that chat.
+- Added a choice of floating callers: the bigbud logo in an app-icon-style tile, or a transparent hand mascot that gives a thumbs-up at rest and waves when you hover. New installations use the hand mascot by default.
+- Added an optional default provider and model for new floating chats. When you leave it unset, bigbud uses your most recently submitted model instead.
 
 ### Faster, Safer File Browsing
 

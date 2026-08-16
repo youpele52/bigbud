@@ -1,9 +1,7 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option } from "effect";
 import {
-  AutomationId,
   CommandId,
   ServerAutomationError,
-  ServerCreateAutomationInput,
   ServerDeleteAutomationInput,
   ServerGetAutomationInput,
   ServerListAutomationRunsInput,
@@ -15,75 +13,14 @@ import {
   WS_METHODS,
 } from "@bigbud/contracts";
 
-import { getNextCronTime } from "../orchestration/Scheduler/cron.ts";
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
-import { AutomationScheduleNotFoundError } from "../persistence/Errors.ts";
 import type { WsRpcContext } from "./wsRpcContext";
-
-const DEFAULT_AUTOMATION_TIMEZONE = "UTC";
-
-function toAutomationError(cause: unknown, message: string) {
-  if (Schema.is(AutomationScheduleNotFoundError)(cause)) {
-    return new ServerAutomationError({
-      message: "Automation not found",
-    });
-  }
-  return Schema.is(ServerAutomationError)(cause)
-    ? cause
-    : new ServerAutomationError({
-        message,
-        cause,
-      });
-}
-
-function resolveNextRunAt(input: {
-  readonly cronExpression: string;
-  readonly runAt?: string | null;
-  readonly scheduleKind: "custom" | "once";
-  readonly timezone: string;
-  readonly now: Date;
-}) {
-  if (input.scheduleKind === "once") {
-    if (!input.runAt) {
-      return Effect.fail(
-        new ServerAutomationError({
-          message: "One-time automations must include a run time",
-        }),
-      );
-    }
-
-    const runAtMs = Date.parse(input.runAt);
-    if (Number.isNaN(runAtMs)) {
-      return Effect.fail(
-        new ServerAutomationError({
-          message: "One-time automations must include a valid run time",
-        }),
-      );
-    }
-
-    if (runAtMs <= input.now.getTime()) {
-      return Effect.fail(
-        new ServerAutomationError({
-          message: "One-time automations must be scheduled in the future",
-        }),
-      );
-    }
-
-    return Effect.succeed(input.runAt);
-  }
-
-  return Effect.try({
-    try: () => getNextCronTime(input.cronExpression, input.now, input.timezone).toISOString(),
-    catch: (cause) =>
-      new ServerAutomationError({
-        message: cause instanceof Error ? cause.message : "Invalid automation schedule",
-        cause,
-      }),
-  });
-}
+import { makeWsRpcAutomationCreateHandlers } from "./wsRpcHandlers.automation.create.ts";
+import { resolveNextRunAt, toAutomationError } from "./wsRpcHandlers.automation.shared.ts";
 
 export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
   return {
+    ...makeWsRpcAutomationCreateHandlers(context),
     [WS_METHODS.serverGetAutomation]: (input: typeof ServerGetAutomationInput.Type) =>
       observeRpcEffect(
         WS_METHODS.serverGetAutomation,
@@ -118,63 +55,6 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
         context.automationScheduleRepository.listAll().pipe(
           Effect.map((automations) => ({ automations })),
           Effect.mapError((cause) => toAutomationError(cause, "Failed to list automations")),
-        ),
-        { "rpc.aggregate": "server" },
-      ),
-    [WS_METHODS.serverCreateAutomation]: (input: typeof ServerCreateAutomationInput.Type) =>
-      observeRpcEffect(
-        WS_METHODS.serverCreateAutomation,
-        Effect.gen(function* () {
-          const thread = yield* context.projectionThreadRepository.getById({
-            threadId: input.targetThreadId,
-          });
-          if (
-            Option.isNone(thread) ||
-            thread.value.deletedAt !== null ||
-            thread.value.projectId !== input.projectId
-          ) {
-            return yield* new ServerAutomationError({
-              message: "Automation thread not found",
-            });
-          }
-
-          const timezone = input.timezone ?? DEFAULT_AUTOMATION_TIMEZONE;
-          const nextRunAt = yield* resolveNextRunAt({
-            cronExpression: input.cronExpression,
-            runAt: input.runAt ?? null,
-            scheduleKind: input.scheduleKind,
-            timezone,
-            now: new Date(),
-          });
-
-          const automation = yield* context.automationScheduleRepository.create({
-            automationId: AutomationId.makeUnsafe(crypto.randomUUID()),
-            projectId: input.projectId,
-            targetThreadId: input.targetThreadId,
-            title: input.title,
-            prompt: input.prompt,
-            scheduleKind: input.scheduleKind,
-            scheduleLabel: input.scheduleLabel,
-            cronExpression: input.cronExpression,
-            timezone,
-            runAt: input.runAt ?? null,
-            nextRunAt,
-          });
-
-          yield* context
-            .dispatchNormalizedCommand({
-              type: "thread.meta.update",
-              commandId: CommandId.makeUnsafe(
-                `server:automation-thread-title:${crypto.randomUUID()}`,
-              ),
-              threadId: input.targetThreadId,
-              title: input.title,
-            })
-            .pipe(Effect.ignore);
-
-          return { automation };
-        }).pipe(
-          Effect.mapError((cause) => toAutomationError(cause, "Failed to create automation")),
         ),
         { "rpc.aggregate": "server" },
       ),
@@ -317,11 +197,25 @@ export function makeWsRpcAutomationHandlers(context: WsRpcContext) {
             });
           }
 
-          yield* context.automationScheduleRepository.delete({
+          const ownedTargetThread = yield* context.automationScheduleRepository.delete({
             automationId: input.automationId,
             deletedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           });
+          if (
+            ownedTargetThread &&
+            (yield* context.automationScheduleRepository.getOwningAutomationId(
+              current.value.targetThreadId,
+            )).pipe(Option.isNone)
+          ) {
+            yield* context.dispatchNormalizedCommand({
+              type: "thread.delete",
+              commandId: CommandId.makeUnsafe(
+                `server:automation-owned-thread-delete:${crypto.randomUUID()}`,
+              ),
+              threadId: current.value.targetThreadId,
+            });
+          }
         }).pipe(
           Effect.mapError((cause) => toAutomationError(cause, "Failed to delete automation")),
         ),

@@ -34,6 +34,7 @@ import {
   type ProjectDirectoryWatchInput,
   type ServerAutomationResult,
   type ServerCreateAutomationInput,
+  type ServerCreateOwnedAutomationInput,
   type ServerCreateMobileRemotePairingInput,
   type ServerDeleteAutomationInput,
   type ServerExportThreadContextInput,
@@ -262,6 +263,9 @@ export interface WsRpcClient {
     ) => Promise<ServerListAllAutomationsResult>;
     readonly createAutomation: (
       input: ServerCreateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly createOwnedAutomation: (
+      input: ServerCreateOwnedAutomationInput,
     ) => Promise<ServerAutomationResult>;
     readonly updateAutomation: (
       input: ServerUpdateAutomationInput,

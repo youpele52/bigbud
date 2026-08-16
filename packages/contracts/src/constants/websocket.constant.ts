@@ -99,6 +99,7 @@ export const WS_METHODS = {
   serverListAutomations: "server.listAutomations",
   serverListAllAutomations: "server.listAllAutomations",
   serverCreateAutomation: "server.createAutomation",
+  serverCreateOwnedAutomation: "server.createOwnedAutomation",
   serverUpdateAutomation: "server.updateAutomation",
   serverPauseAutomation: "server.pauseAutomation",
   serverResumeAutomation: "server.resumeAutomation",

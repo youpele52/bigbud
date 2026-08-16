@@ -4,7 +4,7 @@ import {
   type ServerProvider,
   type ServerProviderModel,
 } from "@bigbud/contracts";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 import { normalizeModelSlug } from "@bigbud/shared/model";
 import {
@@ -15,6 +15,10 @@ import {
 } from "../../../../models/provider";
 import { useEffectiveComposerModelState } from "../../../../stores/composer";
 import { AVAILABLE_PROVIDER_OPTIONS } from "../../provider/ProviderModelPicker";
+import {
+  getComposerProviderFallback,
+  isComposerProviderVisible,
+} from "../../../../models/provider/composerVisibility.models";
 import { getComposerProviderState } from "../../provider/composerProviderRegistry";
 import { getProviderDescriptor, PROVIDER_DESCRIPTORS } from "../../provider/providerDescriptors";
 import { getModelSelectionSubProviderID, modelPickerValue } from "../ChatView.modelSelection.logic";
@@ -41,10 +45,19 @@ export function useComposerProviderState(
       : null;
 
   const requestedProvider = selectedProviderByThreadId ?? threadProvider ?? "codex";
+  const hiddenRequestedProvider = !isComposerProviderVisible(
+    requestedProvider,
+    base.settings.hiddenComposerProviders,
+  );
+  const composerProviderFallback =
+    lockedProvider === null && hiddenRequestedProvider
+      ? getComposerProviderFallback(providerStatuses, base.settings.hiddenComposerProviders)
+      : null;
   const unlockedSelectedProvider = hasThreadStarted
     ? resolveSelectableProvider(providerStatuses, requestedProvider)
     : resolveStartupSelectableProvider(providerStatuses, requestedProvider);
-  const selectedProvider: ProviderKind = lockedProvider ?? unlockedSelectedProvider;
+  const selectedProvider: ProviderKind =
+    lockedProvider ?? composerProviderFallback ?? unlockedSelectedProvider;
 
   const { modelOptions: composerModelOptions, selectedModel } = useEffectiveComposerModelState({
     threadId: base.threadId,
@@ -111,6 +124,12 @@ export function useComposerProviderState(
   ]);
 
   const selectedModelForPicker = modelPickerValue(selectedModelSelection);
+
+  useEffect(() => {
+    if (!composerProviderFallback || !base.activeThread || lockedProvider !== null) return;
+    base.setComposerDraftModelSelection(base.activeThread.id, selectedModelSelection);
+    base.setStickyComposerModelSelection(selectedModelSelection);
+  }, [base, composerProviderFallback, lockedProvider, selectedModelSelection]);
   const modelOptionsByProvider = useMemo<Record<ProviderKind, ReadonlyArray<ServerProviderModel>>>(
     () =>
       Object.fromEntries(
@@ -148,7 +167,9 @@ export function useComposerProviderState(
   const searchableModelOptions = useMemo(
     () =>
       AVAILABLE_PROVIDER_OPTIONS.filter(
-        (option) => lockedProvider === null || option.value === lockedProvider,
+        (option) =>
+          (lockedProvider === null || option.value === lockedProvider) &&
+          isComposerProviderVisible(option.value, base.settings.hiddenComposerProviders),
       ).flatMap((option) =>
         modelOptionsByProvider[option.value].map(({ slug, name, subProviderID, group }) => ({
           provider: option.value,
@@ -162,7 +183,7 @@ export function useComposerProviderState(
           searchGroup: group?.toLowerCase() ?? "",
         })),
       ),
-    [lockedProvider, modelOptionsByProvider],
+    [base.settings.hiddenComposerProviders, lockedProvider, modelOptionsByProvider],
   );
 
   return {

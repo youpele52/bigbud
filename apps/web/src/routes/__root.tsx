@@ -32,6 +32,12 @@ import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
 import { shouldShowFileAccessPrompt } from "./-__root.permissionPrompts";
+import {
+  CompactChatShell,
+  MascotShell,
+} from "../components/floating-assistant/FloatingAssistantShell";
+import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
+import { useCompactChatThread } from "../hooks/useCompactChatThread";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -46,6 +52,18 @@ export const Route = createRootRouteWithContext<{
 });
 
 export function RootRouteView() {
+  const desktopWindowRole = window.desktopBridge?.getWindowRole?.() ?? "main";
+  if (desktopWindowRole === "mascot") {
+    return (
+      <>
+        <MascotStateCoordinator />
+        <MascotShell />
+      </>
+    );
+  }
+  if (desktopWindowRole === "compact-chat") {
+    return <CompactChatRoot />;
+  }
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const [showStartupSplash, setShowStartupSplash] = useState(true);
   const [startupSplashVisible, setStartupSplashVisible] = useState(true);
@@ -124,6 +142,24 @@ export function RootRouteView() {
             />
             {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
           </>
+        </WebSocketConnectionSurface>
+      </AnchoredToastProvider>
+    </ToastProvider>
+  );
+}
+
+function CompactChatRoot() {
+  const compactChat = useCompactChatThread();
+  if (!readNativeApi()) return <StartupSplash />;
+  return (
+    <ToastProvider>
+      <AnchoredToastProvider>
+        <ServerStateBootstrap />
+        <EventRouter ownedThreadId={compactChat.threadId} />
+        <WebSocketConnectionCoordinator />
+        <DesktopBackendStartupCoordinator />
+        <WebSocketConnectionSurface>
+          <CompactChatShell compactChat={compactChat} />
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
     </ToastProvider>

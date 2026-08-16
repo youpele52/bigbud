@@ -345,7 +345,7 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             pause: () => Effect.void,
             resume: () => Effect.void,
             complete: () => Effect.void,
-            delete: () => Effect.void,
+            delete: () => Effect.succeed(false),
             recordRunStarted: () => Effect.void,
             recordRunDispatched: () => Effect.void,
             recordRunFinished: () => Effect.void,

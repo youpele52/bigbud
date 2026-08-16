@@ -1,6 +1,20 @@
-import { type ThreadId } from "@bigbud/contracts";
+import { type AutomationId, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useState } from "react";
 import type { SidebarThreadSummary } from "../../models/types";
+
+function ownedThreadAutomationId(error: unknown): AutomationId | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "automation_owned_thread" &&
+    "automationId" in error &&
+    typeof error.automationId === "string"
+  ) {
+    return error.automationId as AutomationId;
+  }
+  return null;
+}
 
 export function useSidebarThreadDeleteActions(input: {
   confirmThreadDelete: boolean;
@@ -15,6 +29,7 @@ export function useSidebarThreadDeleteActions(input: {
     title: string;
     description: string;
     threadIds: readonly ThreadId[];
+    automationId?: AutomationId;
   } | null>(null);
 
   const dismissPendingDeleteConfirmation = useCallback(() => {
@@ -37,7 +52,19 @@ export function useSidebarThreadDeleteActions(input: {
         return;
       }
 
-      await input.deleteThread(threadId);
+      try {
+        await input.deleteThread(threadId);
+      } catch (error) {
+        const automationId = ownedThreadAutomationId(error);
+        if (!automationId) throw error;
+        setPendingDeleteConfirmation({
+          title: "Thread owned by an automation",
+          description:
+            "Deletion requires deleting the automation first. This thread deletes automatically after its final owner is deleted.",
+          threadIds: [],
+          automationId,
+        });
+      }
     },
     [input],
   );
@@ -50,16 +77,46 @@ export function useSidebarThreadDeleteActions(input: {
     const ids = [...pendingDeleteConfirmation.threadIds];
     setPendingDeleteConfirmation(null);
 
+    if (pendingDeleteConfirmation.automationId) {
+      window.location.assign(`/automations/${pendingDeleteConfirmation.automationId}`);
+      return;
+    }
     if (ids.length === 1) {
-      await input.deleteThread(ids[0]!);
+      try {
+        await input.deleteThread(ids[0]!);
+      } catch (error) {
+        const automationId = ownedThreadAutomationId(error);
+        if (!automationId) throw error;
+        setPendingDeleteConfirmation({
+          title: "Thread owned by an automation",
+          description:
+            "Deletion requires deleting the automation first. This thread deletes automatically after its final owner is deleted.",
+          threadIds: [],
+          automationId,
+        });
+      }
       return;
     }
 
-    const deletedIds = new Set<ThreadId>(ids);
+    const deletedIds = new Set<ThreadId>();
     for (const id of ids) {
-      await input.deleteThread(id, { deletedThreadIds: deletedIds });
+      try {
+        await input.deleteThread(id, { deletedThreadIds: new Set(ids) });
+        deletedIds.add(id);
+      } catch (error) {
+        const automationId = ownedThreadAutomationId(error);
+        if (!automationId) throw error;
+        setPendingDeleteConfirmation({
+          title: "Thread owned by an automation",
+          description:
+            "Deletion requires deleting the automation first. This thread deletes automatically after its final owner is deleted.",
+          threadIds: [],
+          automationId,
+        });
+        break;
+      }
     }
-    input.removeFromSelection(ids);
+    input.removeFromSelection([...deletedIds]);
   }, [input, pendingDeleteConfirmation]);
 
   return {

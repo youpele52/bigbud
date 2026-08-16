@@ -151,6 +151,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     listAutomations: vi.fn(),
     listAllAutomations: vi.fn(),
     createAutomation: vi.fn(),
+    createOwnedAutomation: vi.fn(),
     updateAutomation: vi.fn(),
     pauseAutomation: vi.fn(),
     resumeAutomation: vi.fn(),

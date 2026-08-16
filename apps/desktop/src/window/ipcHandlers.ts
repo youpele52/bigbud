@@ -71,6 +71,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
 
   // State/action accessors
   readonly getMainWindow: () => BrowserWindow | null;
+  readonly isTrustedRenderer?: (webContents: Electron.WebContents) => boolean;
   readonly getBackendWsUrl: () => string;
   readonly getMobileBackendBaseUrl: () => string;
   readonly getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
@@ -121,8 +122,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
 
   ipcMain.removeHandler(BACKEND_STARTUP_GET_STATE_CHANNEL);
   ipcMain.handle(BACKEND_STARTUP_GET_STATE_CHANNEL, (event) => {
-    if (event.sender !== deps.getMainWindow()?.webContents) {
-      throw new Error("Backend startup state is only available to the main renderer.");
+    if (
+      !deps.isTrustedRenderer?.(event.sender) &&
+      event.sender !== deps.getMainWindow()?.webContents
+    ) {
+      throw new Error("Backend startup state is only available to trusted desktop renderers.");
     }
     return deps.getBackendStartupState();
   });
@@ -166,8 +170,8 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   );
 
   ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
-  ipcMain.handle(PICK_FOLDER_CHANNEL, async () => {
-    const owner = BrowserWindow.getFocusedWindow() ?? deps.getMainWindow();
+  ipcMain.handle(PICK_FOLDER_CHANNEL, async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
     const result = owner
       ? await dialog.showOpenDialog(owner, {
           properties: ["openDirectory", "createDirectory"],
@@ -180,12 +184,12 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   });
 
   ipcMain.removeHandler(CONFIRM_CHANNEL);
-  ipcMain.handle(CONFIRM_CHANNEL, async (_event, message: unknown) => {
+  ipcMain.handle(CONFIRM_CHANNEL, async (event, message: unknown) => {
     if (typeof message !== "string") {
       return false;
     }
 
-    const owner = BrowserWindow.getFocusedWindow() ?? deps.getMainWindow();
+    const owner = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
     return showDesktopConfirmDialog(message, owner);
   });
 
@@ -200,13 +204,13 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   });
 
   ipcMain.removeHandler(SET_WINDOW_MATERIAL_CHANNEL);
-  ipcMain.handle(SET_WINDOW_MATERIAL_CHANNEL, async (_event, rawWindowMaterial: unknown) => {
+  ipcMain.handle(SET_WINDOW_MATERIAL_CHANNEL, async (event, rawWindowMaterial: unknown) => {
     const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
     if (!windowMaterial) {
       return;
     }
 
-    const window = BrowserWindow.getFocusedWindow() ?? deps.getMainWindow();
+    const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
     if (!window) {
       return;
     }
@@ -217,7 +221,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.removeHandler(CONTEXT_MENU_CHANNEL);
   ipcMain.handle(
     CONTEXT_MENU_CHANNEL,
-    async (_event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
+    async (event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
       const normalizedItems = items
         .filter((item) => typeof item.id === "string" && typeof item.label === "string")
         .map((item) => ({
@@ -242,7 +246,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
             }
           : null;
 
-      const window = BrowserWindow.getFocusedWindow() ?? deps.getMainWindow();
+      const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
       if (!window) return null;
 
       return new Promise<string | null>((resolve) => {

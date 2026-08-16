@@ -207,6 +207,9 @@ export interface NativeApi {
     createAutomation: (
       input: Automation.ServerCreateAutomationInput,
     ) => Promise<Automation.ServerAutomationResult>;
+    createOwnedAutomation: (
+      input: Automation.ServerCreateOwnedAutomationInput,
+    ) => Promise<Automation.ServerAutomationResult>;
     updateAutomation: (
       input: Automation.ServerUpdateAutomationInput,
     ) => Promise<Automation.ServerAutomationResult>;

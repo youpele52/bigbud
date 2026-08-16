@@ -24,6 +24,7 @@ import {
 } from "./rpc.workspace";
 import {
   WsServerCreateAutomationRpc,
+  WsServerCreateOwnedAutomationRpc,
   WsServerDeleteAutomationRpc,
   WsServerGetAutomationRpc,
   WsServerListAllAutomationsRpc,
@@ -166,6 +167,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
   WsServerCreateAutomationRpc,
+  WsServerCreateOwnedAutomationRpc,
   WsServerUpdateAutomationRpc,
   WsServerPauseAutomationRpc,
   WsServerResumeAutomationRpc,

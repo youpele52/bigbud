@@ -55,15 +55,10 @@ export const retentionExclusionCaseSql = `
           AND json_extract(task.task_json, '$.status') IN ('pending', 'inProgress')
       ) THEN 'active_task'
       WHEN EXISTS (
-        SELECT 1 FROM projection_thread_watches AS watch
-        WHERE watch.status = 'active'
-          AND (watch.watcher_thread_id = t.thread_id OR watch.watched_thread_id = t.thread_id)
-      ) THEN 'watched'
-      WHEN EXISTS (
-        SELECT 1 FROM thread_delegations AS delegation
-        WHERE delegation.state NOT IN ('completed', 'compensated', 'failed')
-          AND (delegation.caller_thread_id = t.thread_id OR delegation.child_thread_id = t.thread_id)
-      ) THEN 'delegated'
+        SELECT 1 FROM automation_schedules AS schedule
+        WHERE schedule.target_thread_id = t.thread_id
+          AND schedule.owns_target_thread = 1 AND schedule.deleted_at IS NULL
+      ) THEN 'automation_owned'
       WHEN EXISTS (
         SELECT 1 FROM automation_schedules AS schedule
         WHERE schedule.target_thread_id = t.thread_id
