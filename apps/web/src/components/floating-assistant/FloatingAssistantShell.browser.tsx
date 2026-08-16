@@ -212,4 +212,26 @@ describe("CompactChatShell", () => {
       queryClient.clear();
     }
   });
+
+  it("shows only the application loader while compact chat is preparing", async () => {
+    useStore.setState({ bootstrapComplete: false });
+    const queryClient = new QueryClient();
+    const router = createCompactRouter(queryClient);
+    const mounted = await render(
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          <RouterProvider router={router as never} />
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>,
+    );
+
+    try {
+      await expect.element(page.getByText("Loading application")).toBeInTheDocument();
+      await expect.element(page.getByRole("button", { name: "New chat" })).not.toBeInTheDocument();
+      await expect.element(page.getByTestId("composer-editor")).not.toBeInTheDocument();
+    } finally {
+      await mounted.unmount();
+      queryClient.clear();
+    }
+  });
 });

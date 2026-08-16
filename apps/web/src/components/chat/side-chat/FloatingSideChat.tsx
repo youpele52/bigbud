@@ -3,6 +3,7 @@ import { MessageCirclePlus, MinusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 
 import { MessagesTimeline } from "~/components/chat/messages/MessagesTimeline";
+import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
 import { WorkingIndicator } from "~/components/chat/common/WorkingIndicator";
 import {
   ThreadActivityDots,
@@ -54,7 +55,7 @@ export function CompactThreadConversation({
 }: ThreadComposerSurfaceContext & { workspaceRoot: string | undefined }) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const [timelineContent, setTimelineContent] = useState<HTMLDivElement | null>(null);
-  const { onScroll } = useSideChatAutoScroll({
+  const { onScroll, scrollToBottom, showScrollToBottom } = useSideChatAutoScroll({
     contentElement: timelineContent,
     contentVersion: context.timeline.timelineEntries,
     isWorking: context.thread.isWorking,
@@ -116,6 +117,7 @@ export function CompactThreadConversation({
             nowIso={context.thread.nowIso}
           />
         ) : null}
+        {showScrollToBottom ? <ScrollToBottomPill onScrollToBottom={scrollToBottom} /> : null}
       </div>
       <div className="px-3 py-2">
         <ChatViewComposer

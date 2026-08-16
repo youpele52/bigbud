@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { isScrollContainerNearBottom } from "~/utils/scroll";
 
@@ -10,6 +10,7 @@ export function useSideChatAutoScroll(input: {
 }) {
   const shouldStickToBottomRef = useRef(true);
   const pendingFrameRef = useRef<number | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const cancelScheduledScroll = useCallback(() => {
     if (pendingFrameRef.current === null) {
@@ -38,11 +39,26 @@ export function useSideChatAutoScroll(input: {
     if (!scrollContainer) {
       return;
     }
-    shouldStickToBottomRef.current = isScrollContainerNearBottom(scrollContainer);
+    const isNearBottom = isScrollContainerNearBottom(scrollContainer);
+    shouldStickToBottomRef.current = isNearBottom;
+    const nextShowScrollToBottom = !isNearBottom;
+    setShowScrollToBottom((current) =>
+      current === nextShowScrollToBottom ? current : nextShowScrollToBottom,
+    );
   }, [input.scrollContainer]);
+
+  const scrollToBottom = useCallback(() => {
+    const scrollContainer = input.scrollContainer;
+    if (!scrollContainer) return;
+    cancelScheduledScroll();
+    shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "auto" });
+  }, [cancelScheduledScroll, input.scrollContainer]);
 
   useLayoutEffect(() => {
     shouldStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
     scheduleScrollToBottom();
     return cancelScheduledScroll;
   }, [cancelScheduledScroll, input.scrollContainer, scheduleScrollToBottom]);
@@ -65,5 +81,5 @@ export function useSideChatAutoScroll(input: {
     scheduleScrollToBottom();
   }, [input.contentVersion, input.isWorking, scheduleScrollToBottom]);
 
-  return { onScroll };
+  return { onScroll, scrollToBottom, showScrollToBottom };
 }

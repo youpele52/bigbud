@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
 import { ThreadComposerSurface } from "~/components/chat/view/ThreadComposerSurface";
+import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -155,6 +156,11 @@ export function CompactChatShell({
     threadId,
     threadTitle,
   } = compactChat;
+
+  if (preparing) {
+    return <BigbudLoader />;
+  }
+
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -207,7 +213,7 @@ export function CompactChatShell({
           </Button>
         </div>
       ) : null}
-      {preparing || projectLoadError ? null : (
+      {projectLoadError ? null : (
         <ThreadComposerSurface
           threadId={threadId}
           onThreadMaterialized={synchronizeMaterializedThread}
