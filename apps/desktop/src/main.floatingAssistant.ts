@@ -80,7 +80,7 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     return true;
   });
   register(channels.setFloatingAssistantCaller, (caller) => {
-    if (caller !== "logo" && caller !== "mascot") return false;
+    if (caller !== "chrome" && caller !== "logo" && caller !== "matte") return false;
     desktopPreferences.update({ floatingAssistantCaller: caller });
     windowRegistry.get("mascot")?.webContents.send(channels.floatingAssistantCallerChanged, caller);
     return true;

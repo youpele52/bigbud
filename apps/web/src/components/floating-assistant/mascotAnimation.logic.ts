@@ -1,6 +1,6 @@
 import type { Thread } from "~/models/types";
 
-export type MascotAnimation = "celebration" | "thinking" | "thumbs-up" | "typing" | "wave";
+export type MascotAnimation = "celebration" | "okay" | "thinking" | "thumbs-up" | "typing" | "wave";
 
 const NEGATED_SUCCESS_PATTERN =
   /\b(?:did(?:n't| not)|is(?:n't| not)|not|was(?:n't| not))\s+(?:amazing|awesome|correct|excellent|great|perfect|right|solved|working|the answer)\b/i;
@@ -55,7 +55,7 @@ export function deriveMascotWorkState(threads: ReadonlyArray<Thread>): {
       (thread.session?.status === "running" && thread.session.activeTurnId != null),
   );
   return {
-    animation: agentIsWorking ? "thinking" : "thumbs-up",
+    animation: agentIsWorking ? "thinking" : "okay",
     agentUncertain: false,
   };
 }

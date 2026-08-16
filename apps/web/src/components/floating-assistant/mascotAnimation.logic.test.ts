@@ -38,7 +38,7 @@ describe("mascot animation logic", () => {
         thread("1", [message("assistant-1", "assistant", "Hello", true)], "running"),
       ]),
     ).toBe("thinking");
-    expect(deriveMascotWorkAnimation([thread("1")])).toBe("thumbs-up");
+    expect(deriveMascotWorkAnimation([thread("1")])).toBe("okay");
   });
 
   it("reports stream progress only when active assistant text changes", () => {

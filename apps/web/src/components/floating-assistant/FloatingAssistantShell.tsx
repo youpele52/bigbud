@@ -1,3 +1,4 @@
+import type { FloatingAssistantCaller } from "@bigbud/contracts/server/ipc.ts";
 import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -7,21 +8,9 @@ import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
-import celebrationMascot from "~/assets/mascot/bigbud-hand/celebration.webp";
-import thinkingMascot from "~/assets/mascot/bigbud-hand/thinking.webp";
-import thumbsUpMascot from "~/assets/mascot/bigbud-hand/thumbs-up.webp";
-import typingMascot from "~/assets/mascot/bigbud-hand/typing.webp";
-import waveMascot from "~/assets/mascot/bigbud-hand/wave.webp";
 
+import { MASCOT_ANIMATIONS } from "./mascotAssets";
 import { useMascotAnimation } from "./useMascotAnimation";
-
-const MASCOT_ANIMATIONS = {
-  celebration: celebrationMascot,
-  thinking: thinkingMascot,
-  "thumbs-up": thumbsUpMascot,
-  typing: typingMascot,
-  wave: waveMascot,
-} as const;
 
 const COMPACT_CHAT_TITLE_MAX_LENGTH = 40;
 
@@ -61,7 +50,7 @@ export function MascotShell() {
   const bridge = window.desktopBridge;
   const dragState = useRef<{ moved: boolean; startX: number; startY: number } | null>(null);
   const didDrag = useRef(false);
-  const [caller, setCaller] = useState<"logo" | "mascot">("mascot");
+  const [caller, setCaller] = useState<FloatingAssistantCaller>("matte");
   const [isHovered, setIsHovered] = useState(false);
   const { animation, animationKey } = useMascotAnimation(isHovered);
 
@@ -71,10 +60,13 @@ export function MascotShell() {
     return bridge.onFloatingAssistantCallerChange?.(setCaller);
   }, [bridge]);
 
+  const finish = caller === "chrome" ? "chrome" : "matte";
+
   return (
     <main
       data-floating-assistant-mascot=""
       data-mascot-animation={animation}
+      data-mascot-finish={finish}
       className="flex h-screen w-screen items-center justify-center bg-transparent"
     >
       <button
@@ -132,8 +124,8 @@ export function MascotShell() {
           <BigbudLogo className="h-14" />
         ) : (
           <img
-            key={animationKey}
-            src={MASCOT_ANIMATIONS[animation]}
+            key={`${finish}:${animationKey}`}
+            src={MASCOT_ANIMATIONS[finish][animation]}
             alt=""
             draggable={false}
             className="size-full object-contain drop-shadow-[0_5px_4px_rgb(0_0_0_/_0.22)]"

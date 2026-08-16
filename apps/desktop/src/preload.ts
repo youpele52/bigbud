@@ -74,7 +74,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(SET_FLOATING_ASSISTANT_CALLER_CHANNEL, caller),
   onFloatingAssistantCallerChange: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, caller: unknown) => {
-      if (caller === "logo" || caller === "mascot") listener(caller);
+      if (caller === "chrome" || caller === "logo" || caller === "matte") listener(caller);
     };
     ipcRenderer.on(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
     return () =>

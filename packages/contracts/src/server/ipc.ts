@@ -33,7 +33,7 @@ export interface ContextMenuItem<T extends string = string> {
 
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
-export type FloatingAssistantCaller = "logo" | "mascot";
+export type FloatingAssistantCaller = "chrome" | "logo" | "matte";
 
 export interface DesktopNotificationInput {
   title: string;
