@@ -35,6 +35,10 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
       DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD,
     );
   });
+
+  test("shows every provider in the composer by default", () => {
+    expect(DEFAULT_CLIENT_SETTINGS.hiddenComposerProviders).toEqual([]);
+  });
 });
 
 describe("DEFAULT_SERVER_SETTINGS", () => {
@@ -96,6 +100,14 @@ it.effect("decodes valid terminal appearance settings", () =>
     assert.strictEqual(parsed.terminalFontFamily, "system-monospace");
     assert.strictEqual(parsed.terminalFontSize, 14);
     assert.strictEqual(parsed.windowMaterial, "translucent");
+  }),
+);
+
+it.effect("defaults composer provider visibility when decoding older settings", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeClientSettings({ terminalFontSize: 14 });
+
+    assert.deepStrictEqual(parsed.hiddenComposerProviders, []);
   }),
 );
 

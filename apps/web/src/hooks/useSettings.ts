@@ -80,9 +80,9 @@ function splitPatch(patch: GenericSettingsPatch): {
  * only re-render when the slice they care about changes.
  */
 
-export function useSettings<T extends UnifiedSettings = UnifiedSettings>(
-  selector?: (s: UnifiedSettings) => T,
-): T {
+export function useSettings<T>(selector: (s: UnifiedSettings) => T): T;
+export function useSettings(): UnifiedSettings;
+export function useSettings<T>(selector?: (s: UnifiedSettings) => T): T | UnifiedSettings {
   const serverSettings = useServerSettings();
   const [clientSettings] = useLocalStorage(
     CLIENT_SETTINGS_STORAGE_KEY,
@@ -99,7 +99,7 @@ export function useSettings<T extends UnifiedSettings = UnifiedSettings>(
     [clientSettings, serverSettings],
   );
 
-  return useMemo(() => (selector ? selector(merged) : (merged as T)), [merged, selector]);
+  return useMemo(() => (selector ? selector(merged) : merged), [merged, selector]);
 }
 
 /**

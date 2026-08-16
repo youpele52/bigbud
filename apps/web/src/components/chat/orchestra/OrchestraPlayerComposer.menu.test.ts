@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildSearchableModelOptions,
   extendReplacementRangeForTrailingSpace,
   filterUnsupportedSlashCommands,
   resolveDiscoverySearch,
@@ -76,5 +77,24 @@ describe("OrchestraPlayerComposer.menu", () => {
     discoverySearch?.onQueryChange("review");
 
     expect(replacements).toEqual(["/skills review"]);
+  });
+
+  it("excludes hidden providers from /model choices", () => {
+    const options = buildSearchableModelOptions(
+      {
+        codex: [{ slug: "gpt-5.4", name: "GPT-5.4" }],
+        claudeAgent: [{ slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" }],
+        cliProxy: [],
+        copilot: [],
+        opencode: [],
+        kilocode: [],
+        pi: [],
+        cursor: [],
+        devin: [],
+      },
+      ["codex"],
+    );
+
+    expect(options.map((option) => option.provider)).toEqual(["claudeAgent"]);
   });
 });

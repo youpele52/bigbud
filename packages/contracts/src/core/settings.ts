@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
 import { ModelSelection } from "../orchestration/orchestration";
+import { ProviderKind } from "../orchestration/orchestration.provider";
 import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
   TIMESTAMP_FORMATS,
@@ -116,6 +117,7 @@ export const ClientSettingsSchema = Schema.Struct({
     "unrestricted",
   ] as const).pipe(Schema.withDecodingDefault(() => "none")),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
