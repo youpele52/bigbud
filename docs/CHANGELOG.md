@@ -4,10 +4,62 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
+- Keep bigbud close at hand with the new Floating Assistant: drag its caller anywhere, open a compact chat from any desktop Space, and choose either the bigbud app icon or a hand mascot that waves when you hover.
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
 - Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
-- Find the right setting in seconds with live filtering that keeps your search in place, narrows the page to matching controls, and clearly says when there are no matches.
+- Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
+- Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
+
+## v0.2.202 (16 August, 2026)
+
+### Floating Assistant
+
+- Added an optional Floating Assistant in **AI** settings. Its draggable caller stays available alongside the main app, opens a compact chat across your desktop Spaces, and does not close bigbud when you hide that chat.
+- Added a choice of floating callers: the bigbud logo in an app-icon-style tile, or a transparent hand mascot that gives a thumbs-up at rest and waves when you hover. New installations use the hand mascot by default.
+- Added an optional default provider and model for new floating chats. When you leave it unset, bigbud uses your most recently submitted model instead.
+
+### Faster, Safer File Browsing
+
+- Added per-workspace Files preview history with **Back** and **Forward** controls, including mouse navigation buttons. bigbud restores your recent preview, cursor position, and scroll position for text, Markdown, and notebook files after you switch workspaces or restart.
+- Prevented stale directory responses from replacing the current Files tree after a workspace switch or newer request. Already handled file-open and directory-navigation requests no longer replay when you reopen the panel.
+- Removed deleted and renamed files from preview history with clear feedback, and close renamed previews rather than opening a potentially unrelated path.
+- Refined file preview headers with compact breadcrumbs, full-path tooltips, and dedicated navigation and close controls.
+
+### Local and Remote Projects, Independently
+
+- Separated local and remote project catalogs so their startup loading, pagination, retries, cursors, and failures no longer affect one another.
+- Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now shows the exact number of projects available to load, with **Load n more projects** capped at five and **Load all n projects** when more remain.
+- Added targeted database indexes and query coverage for efficient project catalog loading at scale.
+
+### SSH Project Editing and External Tools
+
+- Added editing for SSH-backed projects, with target verification, retained-worktree safeguards, optimistic update checks, terminal target updates, and provider-session reconfiguration.
+- Fixed macOS IDE launches so detected applications, including Zed, open the active project or worktree instead of only activating. Positioned file navigation continues to use editor-specific command-line arguments.
+- Added a separate external-terminal picker with verified availability and working-directory launches, independent from your preferred code editor.
+
+### More Reliable Chats and Providers
+
+- Added persisted, provider-neutral supervision for turns that stop producing events. bigbud can inspect silent turns, surface recoverable health states, and safely reconcile them with bounded checks.
+- Routed automatic follow-ups and queued-prompt delivery through shared safety gates, so they remain queued whenever a turn, session startup, active run, or pending interaction is still in progress.
+- Preserved exactly-once queued follow-up delivery across provider completion, failures, terminal activity, replay, and idle-versus-active races. The composer now makes an unconfirmed provider-health state clearer.
+
+### Automatic Thread Cleanup
+
+- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days; **Never** remains available to disable scheduled cleanup.
+- Made daily and confirmed cleanup durable across recovery and restarts, including repaired interrupted purge and projection-baseline recovery, so work waits and resumes safely when it can proceed.
+- Prioritized manual cleanup at safe checkpoints, coalesced equivalent manual requests into one run, and kept individual retry delays from stopping other eligible threads.
+- Improved the cleanup confirmation dialog and status with direct one-off period selection, clearer deletion and preservation details, understandable estimates and exclusions, and plain-language waiting and progress updates; added durable retries, safe worker wake-ups, and regression coverage.
+
+### More Reliable Desktop Startup
+
+- Prevented an optional Plugin Store refresh from stopping the Windows backend when Git is unavailable.
+- Kept desktop startup backoff active until the backend has accepted readiness, rejected stale or terminal readiness records, and avoided accessing destroyed Electron window contents during cleanup.
+
+### Validation
+
+- Added regression coverage for Files history, workspace isolation, stale directory results, preview restoration, removed paths, request consumption, and header navigation.
+- Added catalog, migration, query-plan, SSH reconfiguration, external-launcher, provider-liveness, queued-prompt, cleanup, and desktop-startup coverage.
 
 ## v0.2.201 (12 August, 2026)
 
@@ -59,7 +111,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### More Reliable Workflows
 
-- Added configurable automatic thread retention with previews, confirmation, recovery-aware scheduling, and safe cleanup of eligible inactive threads.
+- Added configurable automatic thread cleanup with previews, confirmation, recovery-aware scheduling, and safe deletion of eligible inactive threads.
 - Improved provider recovery, queued prompts, thread history, and cleanup of browser, terminal, computer-use, checkpoint, and attachment resources across restarts and deletions.
 - Prevented persisted threads, including delegated parent threads, from being recreated before their stored state has been restored.
 - Kept desktop bridge validation correct when a packaged installation uses its configured Node executable.
@@ -89,12 +141,13 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## v0.2.104 (4 August, 2026)
 
-### Automatic Thread Retention
+### Automatic Thread Cleanup
 
-- Added configurable automatic retention for inactive, unpinned threads after 7 days, 14 days, 1 month, or 3 months, with **Never** available to disable scheduled cleanup.
-- Added retention previews, one-time confirmation challenges, manual deletion of eligible threads across projects, progress reporting, and recent run history in General settings.
+- Added configurable automatic thread cleanup for inactive, unpinned threads after 1 day, 2 days, 7 days, 14 days, 30 days, or 90 days, with **Never** available to disable scheduled cleanup.
+- Added cleanup previews, one-time confirmation challenges, manual deletion of eligible threads across projects, progress reporting, and recent cleanup history in General settings.
+- Coalesced equivalent manual cleanup confirmations, prioritized manual work at safe page checkpoints, kept active progress visible ahead of queued runs, and isolated failed-item backoff from successful page continuation.
 - Protected existing installations with a safe rollout default and made retention policy state server-authoritative, so malformed or direct settings-file edits cannot silently enable or shorten retention.
-- Added a dedicated retention service and recovery-aware scheduling path, so automatic cleanup can pause, retry, or require manual attention without blocking normal startup.
+- Added a dedicated cleanup service and recovery-aware scheduling path, so automatic cleanup can pause, retry, or require manual attention without blocking normal startup.
 
 ### Provider Controls and Reliability
 

@@ -45,14 +45,9 @@ layer("ThreadRetentionRepository query plan", (it) => {
       );
       const details = plan.map((row) => row.detail).join("\n");
       assert.include(details, "idx_projection_threads_retention_scan");
-      assert.include(details, "idx_projection_thread_watches_watched_active");
-      assert.include(details, "idx_thread_delegations_active_caller");
+      assert.include(details, "idx_automation_schedules_owned_target_thread");
       assert.include(details, "idx_thread_activity_leases_thread");
       assert.include(details, "idx_worktree_runtime_leases_thread");
-      assert.include(details, "SEARCH watch USING");
-      assert.include(details, "SEARCH delegation USING");
-      assert.notInclude(details, "SCAN watch");
-      assert.notInclude(details, "SCAN delegation");
       assert.notInclude(details, "SCAN lease");
     }),
   );

@@ -91,6 +91,7 @@ export interface UseOnSendInput {
     answers: Record<string, unknown>,
   ) => Promise<void>;
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
+  onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   queueComposerPrompt: (prompt: string) => "queued" | "empty" | "full";
   transformPromptForSend?: ((prompt: string) => string) | undefined;
 }

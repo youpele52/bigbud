@@ -32,6 +32,8 @@ export interface ContextMenuItem<T extends string = string> {
 }
 
 export type DesktopTheme = "light" | "dark" | "system";
+export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
+export type FloatingAssistantCaller = "logo" | "mascot";
 
 export interface DesktopNotificationInput {
   title: string;
@@ -49,6 +51,22 @@ export interface DesktopTailscaleRemoteAccessStatus {
 }
 
 export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge {
+  getWindowRole?: () => DesktopWindowRole | null;
+  openMainWindow?: (threadId?: string) => Promise<boolean>;
+  openCompactChat?: () => Promise<boolean>;
+  beginMascotDrag?: (point: { x: number; y: number }) => Promise<boolean>;
+  moveMascot?: (point: { x: number; y: number }) => Promise<boolean>;
+  hideCompactChat?: () => Promise<boolean>;
+  hideMascot?: () => Promise<boolean>;
+  disableFloatingAssistant?: () => Promise<boolean>;
+  quitApplication?: () => Promise<void>;
+  getFloatingAssistantEnabled?: () => Promise<boolean>;
+  setFloatingAssistantEnabled?: (enabled: boolean) => Promise<boolean>;
+  getFloatingAssistantCaller?: () => Promise<FloatingAssistantCaller>;
+  setFloatingAssistantCaller?: (caller: FloatingAssistantCaller) => Promise<boolean>;
+  onFloatingAssistantCallerChange?: (
+    listener: (caller: FloatingAssistantCaller) => void,
+  ) => () => void;
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;

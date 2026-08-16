@@ -77,6 +77,7 @@ interface FilePreviewMarkdownViewProps {
   onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void;
   onCreateAnnotation?: ((annotation: CodeAnnotationDraft) => void) | undefined;
   onCancelAnnotation: () => void;
+  onScroll?: ((event: React.UIEvent<HTMLDivElement>) => void) | undefined;
 }
 
 export function FilePreviewMarkdownView({
@@ -89,9 +90,14 @@ export function FilePreviewMarkdownView({
   onContextMenu,
   onCreateAnnotation,
   onCancelAnnotation,
+  onScroll,
 }: FilePreviewMarkdownViewProps) {
   return (
-    <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-auto">
+    <div
+      ref={scrollContainerRef}
+      className="relative min-h-0 flex-1 overflow-auto"
+      onScroll={onScroll}
+    >
       <FilePreviewMarkdownContent contents={contents} cwd={cwd} onContextMenu={onContextMenu} />
       {selectedRange && onCreateAnnotation ? (
         <FilePreviewAnnotationComposer

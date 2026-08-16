@@ -1,6 +1,5 @@
 /** Cross-provider orchestration and provider-runtime event routing. */
 import {
-  ProviderInterruptTurnInput,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
   ProviderSendTurnInput,
@@ -12,11 +11,7 @@ import {
 import { Effect, Layer, PubSub, Stream } from "effect";
 
 import {
-  claudeModernizationEventsTotal,
-  claudeRuntimeMetricAttributes,
-  increment,
   providerMetricAttributes,
-  providerRuntimeEventsTotal,
   providerSessionsTotal,
   providerTurnDuration,
   providerTurnsTotal,
@@ -42,6 +37,7 @@ import {
 } from "./ProviderServiceSessionRouting.ts";
 import {
   makeListSessions,
+  makeListSessionsForReconciliation,
   makeRollbackConversation,
   makeRunStopAll,
 } from "./ProviderService.operations.ts";
@@ -49,6 +45,17 @@ import {
   makeStopStaleSessionsForThread,
   makeUpsertSessionBinding,
 } from "./ProviderService.sessionLifecycle.ts";
+import { makeProcessProviderRuntimeEvent } from "./ProviderService.runtimeEvents.ts";
+import { ProviderTurnLivenessRepository } from "../../persistence/Services/ProviderTurnLiveness.ts";
+import {
+  makeTurnLivenessOperations,
+  markProviderTurnTerminal,
+  monitorProviderRuntimeEvents,
+  observeProviderRuntimeEvent,
+  startAcceptedTurnLiveness,
+} from "./ProviderService.turnLiveness.ts";
+import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
+import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -73,6 +80,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const registry = yield* ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory;
+  const turnLiveness = yield* Effect.serviceOption(ProviderTurnLivenessRepository);
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
   const publishRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
@@ -88,23 +96,16 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const providers = yield* registry.listProviders();
   const adapters = yield* Effect.forEach(providers, (provider) => registry.getByProvider(provider));
-  const processRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> => {
-    const claudeAttributes = claudeRuntimeMetricAttributes(event);
-    return Effect.all(
-      [
-        increment(providerRuntimeEventsTotal, {
-          provider: event.provider,
-          eventType: event.type,
-        }),
-        ...(claudeAttributes ? [increment(claudeModernizationEventsTotal, claudeAttributes)] : []),
-      ],
-      { discard: true },
-    ).pipe(Effect.andThen(publishRuntimeEvent(event)));
-  };
+  const processRuntimeEvent = makeProcessProviderRuntimeEvent({
+    observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
+    publish: publishRuntimeEvent,
+  });
 
-  yield* Effect.forEach(adapters, (adapter) =>
-    Stream.runForEach(adapter.streamEvents, processRuntimeEvent).pipe(Effect.forkScoped),
-  ).pipe(Effect.asVoid);
+  yield* monitorProviderRuntimeEvents({
+    adapters,
+    liveness: turnLiveness,
+    process: processRuntimeEvent,
+  });
 
   // Build session routing helpers
   const recoverSessionForThread = makeRecoverSessionForThread(
@@ -180,6 +181,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
       const turn = yield* routed.adapter.sendTurn(input);
+      const turnStartedAt = new Date().toISOString();
+      yield* startAcceptedTurnLiveness(turnLiveness, {
+        threadId: input.threadId,
+        turnId: turn.turnId,
+        provider: routed.adapter.provider,
+        startedAt: turnStartedAt,
+      });
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,
@@ -189,7 +197,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
           activeTurnId: turn.turnId,
           lastRuntimeEvent: "provider.sendTurn",
-          lastRuntimeEventAt: new Date().toISOString(),
+          lastRuntimeEventAt: turnStartedAt,
         },
       });
       yield* analytics.record("provider.turn.sent", {
@@ -215,39 +223,13 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     );
   });
 
-  const interruptTurn: ProviderServiceShape["interruptTurn"] = Effect.fn("interruptTurn")(
-    function* (rawInput) {
-      const input = yield* decodeInputOrValidationError({
-        operation: "ProviderService.interruptTurn",
-        schema: ProviderInterruptTurnInput,
-        payload: rawInput,
-      });
-      let metricProvider = "unknown";
-      return yield* Effect.gen(function* () {
-        const routed = yield* resolveRoutableSession({
-          threadId: input.threadId,
-          operation: "ProviderService.interruptTurn",
-          allowRecovery: true,
-        });
-        metricProvider = routed.adapter.provider;
-        yield* Effect.annotateCurrentSpan({
-          "provider.operation": "interrupt-turn",
-          "provider.kind": routed.adapter.provider,
-          "provider.thread_id": input.threadId,
-          "provider.turn_id": input.turnId,
-        });
-        yield* routed.adapter.interruptTurn(routed.threadId, input.turnId);
-        yield* analytics.record("provider.turn.interrupted", { provider: routed.adapter.provider });
-      }).pipe(
-        Effect.mapError((e) => e as ProviderServiceError),
-        withMetrics({
-          counter: providerTurnsTotal,
-          outcomeAttributes: () =>
-            providerMetricAttributes(metricProvider, { operation: "interrupt" }),
-        }),
-      );
-    },
-  );
+  const interruptTurn = makeInterruptTurn({
+    resolveRoutableSession,
+    analytics,
+    liveness: turnLiveness,
+  });
+
+  const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
 
   const respondToRequest: ProviderServiceShape["respondToRequest"] = Effect.fn("respondToRequest")(
     function* (rawInput) {
@@ -342,6 +324,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         if (routed.isActive) {
           yield* routed.adapter.stopSession(routed.threadId);
         }
+        yield* markProviderTurnTerminal(turnLiveness, {
+          threadId: input.threadId,
+          terminalAt: new Date().toISOString(),
+        });
         yield* options?.settleThreadLogs?.(input.threadId) ?? Effect.void;
         yield* directory.remove(input.threadId);
         yield* analytics.record("provider.session.stopped", { provider: routed.adapter.provider });
@@ -355,7 +341,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     },
   );
 
-  const listSessions: ProviderServiceShape["listSessions"] = makeListSessions(adapters, directory);
+  const listAdapterSessions = makeListSessions(adapters, directory);
+  const listSessions: ProviderServiceShape["listSessions"] = listAdapterSessions;
+  const listSessionsForReconciliation = makeListSessionsForReconciliation(adapters, directory);
+
+  const { listActiveTurnLiveness, recordTurnInspection, claimTurnTerminal } =
+    makeTurnLivenessOperations(turnLiveness);
 
   const getCapabilities: ProviderServiceShape["getCapabilities"] = (provider) =>
     registry.getByProvider(provider).pipe(Effect.map((adapter) => adapter.capabilities));
@@ -376,10 +367,15 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     startSessionFresh,
     sendTurn,
     interruptTurn,
+    inspectActiveTurn,
+    listActiveTurnLiveness,
+    recordTurnInspection,
+    claimTurnTerminal,
     respondToRequest,
     respondToUserInput,
     stopSession,
     listSessions,
+    listSessionsForReconciliation,
     getCapabilities,
     rollbackConversation,
     // Each access creates a fresh PubSub subscription so that multiple

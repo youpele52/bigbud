@@ -4,12 +4,53 @@ import {
   type OrchestrationThread,
   type ProviderSession,
 } from "@bigbud/contracts";
+import { Cause, Effect } from "effect";
+
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationDispatchError } from "../Errors.ts";
 
 import {
   DEFAULT_RUNTIME_MODE,
   mapProviderSessionStatusToOrchestrationStatus,
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
+import {
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
+  PROVIDER_STALLED_SESSION_REASON,
+} from "@bigbud/contracts/constants/providerRuntime.constant";
+
+const PROVIDER_HEALTH_REASONS = new Set<string>([
+  PROVIDER_CHECKING_SESSION_REASON,
+  PROVIDER_LOST_SESSION_REASON,
+  PROVIDER_RECOVERING_SESSION_REASON,
+  PROVIDER_STALLED_SESSION_REASON,
+]);
+
+/**
+ * Dispatches one reconciliation command without allowing an unrelated thread
+ * failure to abort the rest of the reconciliation batch.
+ */
+export function dispatchReconciliationCommandSafely(
+  orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch">,
+  command: OrchestrationCommand,
+): Effect.Effect<void, OrchestrationDispatchError> {
+  return orchestrationEngine.dispatch(command).pipe(
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterruptsOnly(cause)) {
+        return Effect.failCause(cause);
+      }
+      return Effect.logWarning("provider runtime reconciliation command failed", {
+        commandId: command.commandId,
+        commandType: command.type,
+        ...("threadId" in command ? { threadId: command.threadId } : {}),
+        cause: Cause.pretty(cause),
+      });
+    }),
+    Effect.asVoid,
+  );
+}
 
 function areSessionsEqual(
   left: OrchestrationThread["session"],
@@ -37,16 +78,27 @@ function toReconciledSession(input: {
 
   if (liveSession) {
     const status = mapProviderSessionStatusToOrchestrationStatus(liveSession.status);
+    const currentReason = currentSession?.reason ?? null;
+    const preserveSupervisorState =
+      currentSession !== null &&
+      currentSession !== undefined &&
+      currentSession.activeTurnId === liveSession.activeTurnId &&
+      PROVIDER_HEALTH_REASONS.has(currentReason ?? "");
     const nextSession: OrchestrationSession = {
       threadId: thread.id,
-      status,
+      status: preserveSupervisorState ? currentSession.status : status,
       providerName: liveSession.provider,
       runtimeMode: thread.runtimeMode ?? liveSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       activeTurnId: liveSession.activeTurnId ?? null,
-      reason:
-        status === "running" || status === "starting" ? (currentSession?.reason ?? null) : null,
-      lastError:
-        liveSession.lastError ?? (status === "error" ? (currentSession?.lastError ?? null) : null),
+      reason: preserveSupervisorState
+        ? currentReason
+        : status === "running" || status === "starting"
+          ? currentReason
+          : null,
+      lastError: preserveSupervisorState
+        ? currentSession.lastError
+        : (liveSession.lastError ??
+          (status === "error" ? (currentSession?.lastError ?? null) : null)),
       updatedAt: liveSession.updatedAt,
     };
     return areSessionsEqual(currentSession, nextSession) ? null : nextSession;

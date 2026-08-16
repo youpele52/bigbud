@@ -6,13 +6,13 @@ import { showFilePreviewContextMenu } from "./FilePreview.contextMenu";
 import { buildAbsolutePreviewPath, buildFilePreviewBreadcrumb } from "./FilePreview.logic";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
+import type { FilePreviewNavigationProps } from "./FilePreview.types";
 
-interface ImagePreviewProps {
+interface ImagePreviewProps extends FilePreviewNavigationProps {
   cwd: string;
   relativePath: string;
   executionTargetId?: string | undefined;
   projectName?: string | undefined;
-  onBack?: (() => void) | undefined;
 }
 
 export const ImagePreview = memo(function ImagePreview({
@@ -20,7 +20,12 @@ export const ImagePreview = memo(function ImagePreview({
   relativePath,
   executionTargetId,
   projectName,
-  onBack,
+  canNavigateBack,
+  canNavigateForward,
+  onNavigateBack,
+  onNavigateForward,
+  onClose,
+  onPreviewLoadError,
 }: ImagePreviewProps) {
   const [loadError, setLoadError] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
@@ -77,7 +82,12 @@ export const ImagePreview = memo(function ImagePreview({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <FilePreviewHeader
         breadcrumb={breadcrumb}
-        onBack={onBack}
+        absolutePath={absolutePath}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+        onClose={onClose}
         onContextMenu={handleContextMenu}
       />
       <div
@@ -95,7 +105,10 @@ export const ImagePreview = memo(function ImagePreview({
             src={imageUrl}
             alt={breadcrumb.at(-1)?.label ?? relativePath}
             className="max-h-full max-w-full object-contain"
-            onError={() => setLoadError(true)}
+            onError={() => {
+              setLoadError(true);
+              onPreviewLoadError?.();
+            }}
           />
         )}
       </div>

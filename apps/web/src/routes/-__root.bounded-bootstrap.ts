@@ -1,12 +1,12 @@
 import {
   PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
   STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
-  STARTUP_PROJECT_CATALOG_MAX_LIMIT,
   ThreadId,
-  type ProjectId,
   type GetProjectThreadSummariesResult,
   type GetSelectedThreadDetailResult,
   type GetStartupProjectCatalogResult,
+  type ProjectCatalogScope,
+  type ProjectId,
 } from "@bigbud/contracts";
 
 import type { readNativeApi } from "../rpc/nativeApi";
@@ -17,9 +17,10 @@ import {
 } from "../logic/orchestration/thread-hydration-events.logic";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
-type ProjectCatalogCursor = NonNullable<GetStartupProjectCatalogResult["nextCursor"]>;
-
-const PROJECT_CATALOG_PAGE_LIMIT = 5;
+export {
+  loadAllProjectCatalog,
+  loadMoreProjectCatalog,
+} from "./-__root.bounded-bootstrap.projects";
 
 export function resolveSelectedThreadIdFromPath(
   pathname: string,
@@ -65,19 +66,47 @@ export async function runBoundedBootstrap(input: {
       }
     }
 
-    const [sidebarCatalog, catalog] = await Promise.all([
+    const priorityProjectId = selectedDetail?.projectId;
+    const scopes = ["local", "remote"] as const;
+    const [sidebarCatalog, catalogResults] = await Promise.all([
       sidebarCatalogPromise,
-      input.api.orchestration.getStartupProjectCatalog({
-        limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
-        ...(selectedDetail ? { priorityProjectId: selectedDetail.projectId } : {}),
-      }),
+      Promise.allSettled(
+        scopes.map((scope) =>
+          input.api.orchestration.getStartupProjectCatalog({
+            scope,
+            limit: STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT,
+            ...(priorityProjectId ? { priorityProjectId } : {}),
+          }),
+        ),
+      ),
     ]);
-    sequences.push(sidebarCatalog.projectionSequence, catalog.projectionSequence);
+    const catalogs: Partial<Record<ProjectCatalogScope, GetStartupProjectCatalogResult>> = {};
+    const catalogErrors: Partial<Record<ProjectCatalogScope, string>> = {};
+    const catalogRestartProjectIds: Partial<Record<ProjectCatalogScope, ProjectId>> = {};
+    sequences.push(sidebarCatalog.projectionSequence);
+    for (const [index, result] of catalogResults.entries()) {
+      const scope = scopes[index]!;
+      if (result.status === "fulfilled") {
+        catalogs[scope] = result.value;
+        if (
+          priorityProjectId &&
+          result.value.projects.some((project) => project.id === priorityProjectId)
+        ) {
+          catalogRestartProjectIds[scope] = priorityProjectId;
+        }
+        sequences.push(result.value.projectionSequence);
+      } else {
+        catalogErrors[scope] =
+          result.reason instanceof Error ? result.reason.message : "Unable to load projects.";
+      }
+    }
 
     const selectedProjectId = selectedDetail?.projectId;
     const selectedProjectPage =
       selectedProjectId !== undefined &&
-      catalog.projects.some((project) => project.id === selectedProjectId)
+      Object.values(catalogs).some((catalog) =>
+        catalog.projects.some((project) => project.id === selectedProjectId),
+      )
         ? await input.api.orchestration.getProjectThreadSummaries({
             projectId: selectedProjectId,
             limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
@@ -91,7 +120,9 @@ export async function runBoundedBootstrap(input: {
     if (!input.disposed()) {
       const store = useStore.getState();
       store.syncBoundedCatalog(
-        catalog,
+        catalogs,
+        catalogErrors,
+        catalogRestartProjectIds,
         sidebarCatalog,
         selectedProjectPage ? [selectedProjectPage] : [],
       );
@@ -136,103 +167,6 @@ export async function runBoundedBootstrap(input: {
   }
 
   return Math.min(...sequences);
-}
-
-interface ProjectCatalogPageLoad {
-  readonly cursor: ProjectCatalogCursor;
-  readonly generation: number;
-  readonly limit: number;
-  readonly loadAll: boolean;
-  readonly restartProjectId: ProjectId | null;
-  promise: Promise<void>;
-}
-
-let projectCatalogPageLoad: ProjectCatalogPageLoad | null = null;
-
-export function loadMoreProjectCatalog(input: { api: Api }): Promise<void> {
-  return loadProjectCatalog(input, { limit: PROJECT_CATALOG_PAGE_LIMIT, loadAll: false });
-}
-
-export function loadAllProjectCatalog(input: { api: Api }): Promise<void> {
-  return loadProjectCatalog(input, { limit: STARTUP_PROJECT_CATALOG_MAX_LIMIT, loadAll: true });
-}
-
-function loadProjectCatalog(
-  input: { api: Api },
-  options: { readonly limit: number; readonly loadAll: boolean },
-): Promise<void> {
-  const state = useStore.getState();
-  const cursor = state.projectCatalogCursor;
-  if (cursor === null || cursor === undefined) {
-    return Promise.resolve();
-  }
-
-  if (
-    projectCatalogPageLoad !== null &&
-    projectCatalogPageLoad.generation === state.projectCatalogGeneration
-  ) {
-    return projectCatalogPageLoad.promise;
-  }
-
-  const request: ProjectCatalogPageLoad = {
-    cursor,
-    generation: state.projectCatalogGeneration,
-    limit: options.limit,
-    loadAll: options.loadAll,
-    restartProjectId:
-      state.projects.length === 1 && state.projects[0]?.id === cursor.projectId
-        ? state.projects[0].id
-        : null,
-    promise: Promise.resolve(),
-  };
-  useStore.getState().setProjectCatalogLoading(true, undefined, request.generation);
-  projectCatalogPageLoad = request;
-  request.promise = loadProjectCatalogPages(input.api, request)
-    .catch((error: unknown) => {
-      useStore
-        .getState()
-        .setProjectCatalogLoading(
-          false,
-          error instanceof Error ? error.message : "Unable to load projects.",
-          request.generation,
-        );
-      throw error;
-    })
-    .finally(() => {
-      if (projectCatalogPageLoad === request) {
-        projectCatalogPageLoad = null;
-      }
-    });
-  return request.promise;
-}
-
-async function loadProjectCatalogPages(api: Api, request: ProjectCatalogPageLoad): Promise<void> {
-  let cursor: ProjectCatalogCursor | null = request.cursor;
-  let restartProjectId = request.restartProjectId;
-
-  while (cursor !== null) {
-    const page = await api.orchestration.getStartupProjectCatalog(
-      restartProjectId === null
-        ? { limit: request.limit, cursor }
-        : {
-            limit: Math.min(request.limit + 1, STARTUP_PROJECT_CATALOG_MAX_LIMIT),
-            priorityProjectId: restartProjectId,
-          },
-    );
-    if (useStore.getState().projectCatalogGeneration !== request.generation) {
-      return;
-    }
-
-    const hasMorePages = page.nextCursor !== null && page.nextCursor !== undefined;
-    useStore
-      .getState()
-      .appendProjectCatalogPage(page, request.generation, request.loadAll && hasMorePages);
-    if (!request.loadAll) {
-      return;
-    }
-    cursor = page.nextCursor ?? null;
-    restartProjectId = null;
-  }
 }
 
 export async function loadOlderThreadMessages(input: {

@@ -9,7 +9,6 @@ import { Cache, Cause, Duration, Effect, FileSystem, Path, Scope } from "effect"
 
 import { GitCore } from "../../git/Services/GitCore.ts";
 import { GitStatusBroadcaster } from "../../git/Services/GitStatusBroadcaster.ts";
-import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { TextGeneration } from "../../git/Services/TextGeneration.ts";
@@ -55,8 +54,10 @@ import {
   saveProviderCapabilityContextState,
 } from "./ProviderCapabilityContextPersistence.ts";
 import { readProviderMemoryContext } from "./ProviderTurnMemoryContext.ts";
+import { makeExecutionTargetReconfigureHandler } from "./ProviderCommandReactorHandlers.reconfigure.ts";
 import {
   markTurnStartHandled,
+  annotateProviderIntentEvent,
   turnStartKeyForEvent,
   type ProviderIntentEvent,
 } from "./ProviderCommandReactorHandlers.events.ts";
@@ -132,7 +133,6 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     resolveThread,
     setThreadSession,
   });
-
   const expandTurnMessageText = expandProviderInputMentions({
     discoveryRegistry,
     fileSystem,
@@ -322,19 +322,12 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     processUserInputResponseRequested,
   } = processSessionHandlers;
 
+  const processExecutionTargetReconfigure =
+    makeExecutionTargetReconfigureHandler(sessionOpServices);
   const processDomainEvent = Effect.fn("processDomainEvent")(function* (
     event: ProviderIntentEvent,
   ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError, Scope.Scope> {
-    yield* Effect.annotateCurrentSpan({
-      "orchestration.event_type": event.type,
-      ...("threadId" in event.payload
-        ? { "orchestration.thread_id": event.payload.threadId }
-        : { "orchestration.project_id": event.payload.projectId }),
-      ...(event.commandId ? { "orchestration.command_id": event.commandId } : {}),
-    });
-    yield* increment(orchestrationEventsProcessedTotal, {
-      eventType: event.type,
-    });
+    yield* annotateProviderIntentEvent(event);
     switch (event.type) {
       case "thread.runtime-mode-set": {
         const thread = yield* resolveThread(event.payload.threadId);
@@ -349,6 +342,9 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         );
         return;
       }
+      case "thread.meta-updated":
+        yield* processExecutionTargetReconfigure(event);
+        return;
       case "thread.turn-start-requested":
         yield* processTurnStartRequested(event);
         return;

@@ -119,6 +119,7 @@ const startupLayer = (
         Layer.succeed(Open, {
           openBrowser: () => Effect.void,
           openInEditor: () => Effect.void,
+          openInTerminal: () => Effect.void,
           openPath: () => Effect.void,
         }),
         ...(retentionStart

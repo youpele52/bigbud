@@ -8,6 +8,7 @@ import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
 import { projectScriptCwd } from "@bigbud/shared/projectScripts";
 import {
   useServerAvailableEditors,
+  useServerAvailableTerminals,
   useServerDiscoveredAgents,
   useServerDiscoveredSkills,
   useServerKeybindings,
@@ -118,6 +119,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
   );
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
+  const availableTerminals = useServerAvailableTerminals();
   const discoveredAgents = useServerDiscoveredAgents() ?? EMPTY_DISCOVERED_AGENTS;
   const discoveredSkills = useServerDiscoveredSkills() ?? EMPTY_DISCOVERED_SKILLS;
 
@@ -250,6 +252,7 @@ export function useChatViewComposerDerivedState(base: ChatViewBaseState) {
     gitStatusQuery,
     keybindings,
     availableEditors,
+    availableTerminals,
     discoveredAgents,
     discoveredSkills,
     modelOptionsByProvider,

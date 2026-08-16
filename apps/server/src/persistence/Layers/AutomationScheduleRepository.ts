@@ -1,7 +1,7 @@
-import { AutomationSchedule, BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
+import { AutomationId, AutomationSchedule, BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 
 import { AutomationScheduleNotFoundError } from "../Errors.ts";
 import {
@@ -40,6 +40,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           automation_id,
           project_id,
           target_thread_id,
+          owns_target_thread,
           title,
           prompt,
           schedule_kind,
@@ -59,6 +60,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
           ${input.automationId},
           ${input.projectId},
           ${input.targetThreadId},
+          ${input.ownsTargetThread ? 1 : 0},
           ${input.title},
           ${input.prompt},
           ${input.scheduleKind},
@@ -322,17 +324,34 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
 
   const deleteSchedule = (input: typeof DeleteAutomationScheduleInput.Type) =>
     Effect.gen(function* () {
-      const rows = yield* sql<{ readonly automationId: string }>`
+      const rows = yield* sql<{ readonly ownsTargetThread: number }>`
         UPDATE automation_schedules
         SET deleted_at = ${input.deletedAt}, lease_until = NULL, updated_at = ${input.updatedAt}
         WHERE automation_id = ${input.automationId}
           AND deleted_at IS NULL
-        RETURNING automation_id AS "automationId"
+        RETURNING owns_target_thread AS "ownsTargetThread"
       `;
-      if (rows.length === 0) {
+      const deleted = rows[0];
+      if (!deleted) {
         return yield* new AutomationScheduleNotFoundError({ automationId: input.automationId });
       }
+      return deleted.ownsTargetThread === 1;
     });
+
+  const getOwningAutomationId: AutomationScheduleRepositoryShape["getOwningAutomationId"] = (
+    threadId,
+  ) =>
+    mapAutomationSchedulePersistenceError("getOwningAutomationId")(
+      sql<{ readonly automationId: string }>`
+        SELECT automation_id AS "automationId" FROM automation_schedules
+        WHERE target_thread_id = ${threadId} AND owns_target_thread = 1 AND deleted_at IS NULL
+        ORDER BY created_at ASC, automation_id ASC LIMIT 1
+      `.pipe(
+        Effect.map((rows) =>
+          rows[0] ? Option.some(AutomationId.makeUnsafe(rows[0].automationId)) : Option.none(),
+        ),
+      ),
+    );
 
   const create: AutomationScheduleRepositoryShape["create"] = (input) =>
     mapAutomationSchedulePersistenceError("create")(createSchedule(input));
@@ -379,6 +398,7 @@ const makeAutomationScheduleRepository = Effect.gen(function* () {
     resume,
     complete,
     delete: deleteScheduleById,
+    getOwningAutomationId,
     ...runQueries,
   } satisfies AutomationScheduleRepositoryShape;
 });

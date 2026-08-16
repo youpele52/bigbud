@@ -27,10 +27,16 @@ import { makeGetSidebarThreadCatalog } from "./ProjectionCatalogQuery.sidebar.ts
 import { makeListThreads } from "./ProjectionCatalogQuery.listThreads.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
+  scope: Schema.Literals(["local", "remote"]),
   limit: Schema.Number,
+  query: Schema.NullOr(Schema.String),
   priorityProjectId: Schema.NullOr(Schema.String),
   cursorLastUsedAt: Schema.NullOr(Schema.String),
   cursorProjectId: Schema.NullOr(Schema.String),
+});
+
+const ProjectCatalogCountDbRow = Schema.Struct({
+  count: Schema.Number,
 });
 
 const ThreadSummaryQueryRequest = Schema.Struct({
@@ -58,11 +64,30 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   const readProjects = SqlSchema.findAll({
     Request: ProjectCatalogQueryRequest,
     Result: ProjectCatalogDbRow,
-    execute: ({ limit, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => sql`
-      WITH page AS (
+    execute: ({ scope, limit, query, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+      const scopePredicate = sql.unsafe(
+        scope === "local"
+          ? "workspace_execution_target_id = 'local'"
+          : "workspace_execution_target_id <> 'local'",
+      );
+      const pageOrderBy =
+        priorityProjectId === null
+          ? sql.unsafe("last_used_at DESC, project_id ASC")
+          : sql`CASE WHEN project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
+              last_used_at DESC, project_id ASC`;
+      const resultOrderBy =
+        priorityProjectId === null
+          ? sql.unsafe("p.last_used_at DESC, p.project_id ASC")
+          : sql`CASE WHEN p.project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
+              p.last_used_at DESC, p.project_id ASC`;
+      return sql`
+        WITH page AS (
         SELECT *
         FROM projection_projects
         WHERE deleted_at IS NULL
+          AND (${query} IS NULL OR deleting_at IS NULL)
+          AND ${scopePredicate}
+           AND (${query} IS NULL OR instr(lower(title), lower(${query})) > 0)
           AND (
             ${cursorLastUsedAt} IS NULL
             OR ${priorityProjectId} IS NULL
@@ -73,8 +98,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
             OR last_used_at < ${cursorLastUsedAt}
             OR (last_used_at = ${cursorLastUsedAt} AND project_id > ${cursorProjectId})
           )
-        ORDER BY CASE WHEN project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
-          last_used_at DESC, project_id ASC
+        ORDER BY ${pageOrderBy}
         LIMIT ${limit}
       ), stats AS (
         SELECT
@@ -128,9 +152,39 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         CASE WHEN stats.exceptional_thread_count > 0 THEN 1 ELSE 0 END AS "hasExceptionalThreads"
       FROM page p
       JOIN stats ON stats.project_id = p.project_id
-      ORDER BY CASE WHEN p.project_id = ${priorityProjectId} THEN 0 ELSE 1 END,
-        p.last_used_at DESC, p.project_id ASC
-    `,
+      ORDER BY ${resultOrderBy}
+      `;
+    },
+  });
+
+  const countProjects = SqlSchema.findOne({
+    Request: ProjectCatalogQueryRequest,
+    Result: ProjectCatalogCountDbRow,
+    execute: ({ scope, query, priorityProjectId, cursorLastUsedAt, cursorProjectId }) => {
+      const scopePredicate = sql.unsafe(
+        scope === "local"
+          ? "workspace_execution_target_id = 'local'"
+          : "workspace_execution_target_id <> 'local'",
+      );
+      return sql`
+        SELECT COUNT(*) AS count
+        FROM projection_projects
+        WHERE deleted_at IS NULL
+          AND (${query} IS NULL OR deleting_at IS NULL)
+          AND ${scopePredicate}
+           AND (${query} IS NULL OR instr(lower(title), lower(${query})) > 0)
+          AND (
+            ${cursorLastUsedAt} IS NULL
+            OR ${priorityProjectId} IS NULL
+            OR project_id != ${priorityProjectId}
+          )
+          AND (
+            ${cursorLastUsedAt} IS NULL
+            OR last_used_at < ${cursorLastUsedAt}
+            OR (last_used_at = ${cursorLastUsedAt} AND project_id > ${cursorProjectId})
+          )
+      `;
+    },
   });
 
   const readThreads = SqlSchema.findAll({
@@ -217,7 +271,17 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         Effect.all({
           sequence: readProjectionSequence(undefined),
           rows: readProjects({
+            scope: input.scope,
             limit: limit + 1,
+            query: input.query ?? null,
+            priorityProjectId: input.priorityProjectId ?? null,
+            cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
+            cursorProjectId: input.cursor?.projectId ?? null,
+          }),
+          count: countProjects({
+            scope: input.scope,
+            limit: limit + 1,
+            query: input.query ?? null,
             priorityProjectId: input.priorityProjectId ?? null,
             cursorLastUsedAt: input.cursor?.lastUsedAt ?? null,
             cursorProjectId: input.cursor?.projectId ?? null,
@@ -225,13 +289,15 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         }),
       )
       .pipe(
-        Effect.map(({ rows, sequence }) => {
+        Effect.map(({ rows, count, sequence }) => {
           const projects = rows.slice(0, limit).map(normalizeProject);
           const last = projects.at(-1);
+          const remainingCount = Math.max(count.count - projects.length, 0);
           return {
             projectionSequence: sequence.projectionSequence ?? 0,
             projects,
-            ...(rows.length > limit && last
+            remainingCount,
+            ...(remainingCount > 0 && last
               ? { nextCursor: { lastUsedAt: last.lastUsedAt, projectId: last.id } }
               : {}),
           };

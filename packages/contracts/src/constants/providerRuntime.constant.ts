@@ -78,6 +78,12 @@ export const RUNTIME_PLAN_STEP_STATUSES = ["pending", "inProgress", "completed"]
  */
 export const RUNTIME_ITEM_STATUSES = ["inProgress", "completed", "failed", "declined"] as const;
 
+/** Canonical session reason projected when provider activity has gone silent. */
+export const PROVIDER_STALLED_SESSION_REASON = "provider.stalled" as const;
+export const PROVIDER_CHECKING_SESSION_REASON = "provider.checking" as const;
+export const PROVIDER_RECOVERING_SESSION_REASON = "provider.recovering" as const;
+export const PROVIDER_LOST_SESSION_REASON = "provider.lost-session" as const;
+
 /**
  * Content stream kinds for streaming responses.
  *

@@ -17,6 +17,7 @@ export interface SidebarProjectActionsInput {
   clearSelection: () => void;
   copyPathToClipboard: (text: string, ctx: { path: string }) => void;
   cancelThreadRename: () => void;
+  openRemoteProjectEditDialog: (project: Project) => void;
 }
 
 export interface SidebarProjectActionsOutput {

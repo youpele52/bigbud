@@ -90,10 +90,22 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
     const tables: Record<string, ReadonlyArray<Record<string, unknown>>> = {};
     for (const table of PROJECTION_BASELINE_TABLES) {
       const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM ${table}`);
+      const currentThreadIds =
+        table === "projection_threads" ? new Set(rows.map((row) => row.thread_id)) : null;
       const baselineRows =
         table === "projection_projects"
           ? rows.filter((row) => row.project_id !== "__chats__")
-          : rows;
+          : currentThreadIds === null
+            ? rows
+            : rows.map((row) =>
+                row.parent_thread_id === null || currentThreadIds.has(row.parent_thread_id)
+                  ? row
+                  : Object.assign({}, row, {
+                      parent_thread_id: null,
+                      parent_thread_title: null,
+                      parent_thread_project_id: null,
+                    }),
+              );
       tables[table] = baselineRows.map(normalizeRow).toSorted(compareNormalizedRows);
     }
     return JSON.stringify({ tables } satisfies BaselinePayload);
@@ -170,6 +182,9 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
       Effect.flatMap((payload) =>
         sql.withTransaction(
           Effect.gen(function* () {
+            const restoredThreadIds = new Set(
+              (payload.tables.projection_threads ?? []).map((row) => row.thread_id),
+            );
             for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
               yield* sql.unsafe(
                 table === "projection_projects"
@@ -183,7 +198,17 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
                   (column) => column.name,
                 ),
               );
-              for (const row of payload.tables[table] ?? []) {
+              for (const payloadRow of payload.tables[table] ?? []) {
+                const row =
+                  table === "projection_threads" &&
+                  payloadRow.parent_thread_id !== null &&
+                  !restoredThreadIds.has(payloadRow.parent_thread_id)
+                    ? Object.assign({}, payloadRow, {
+                        parent_thread_id: null,
+                        parent_thread_title: null,
+                        parent_thread_project_id: null,
+                      })
+                    : payloadRow;
                 const columns = Object.keys(row);
                 if (columns.length === 0 || columns.some((column) => !allowedColumns.has(column))) {
                   return yield* toPersistenceDecodeCauseError(
@@ -198,6 +223,15 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
                 );
               }
             }
+            yield* sql`
+              UPDATE projection_threads
+              SET parent_thread_id = NULL, parent_thread_title = NULL, parent_thread_project_id = NULL
+              WHERE parent_thread_id IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM projection_threads AS parent
+                  WHERE parent.thread_id = projection_threads.parent_thread_id
+                )
+            `;
             yield* sql`DELETE FROM projection_state`;
             const updatedAt = new Date().toISOString();
             for (const projector of requiredProjectors) {

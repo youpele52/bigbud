@@ -2,7 +2,10 @@ import type { ProjectEntry } from "@bigbud/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { reconcilePreviewPathAfterDirectoryRefresh } from "./FilesPanel.logic";
+import {
+  getRemovedEntryPaths,
+  reconcilePreviewPathAfterDirectoryRefresh,
+} from "./FilesPanel.logic";
 import { renderFilesPanelTree } from "./FilesPanel.tree";
 import type { DirectoryState } from "./FilesPanel.shared";
 
@@ -60,7 +63,7 @@ describe("FilesPanel root loading behavior", () => {
 });
 
 describe("reconcilePreviewPathAfterDirectoryRefresh", () => {
-  it("updates the preview path when a sibling file rename is unambiguous", () => {
+  it("closes the old preview path when a file is renamed", () => {
     expect(
       reconcilePreviewPathAfterDirectoryRefresh({
         previewPath: "docs/CHANGELOG.md",
@@ -72,7 +75,7 @@ describe("reconcilePreviewPathAfterDirectoryRefresh", () => {
           { path: "docs/changelog.md", kind: "file", parentPath: "docs" } satisfies ProjectEntry,
         ],
       }),
-    ).toBe("docs/changelog.md");
+    ).toBeNull();
   });
 
   it("keeps the preview path when the current file still exists", () => {
@@ -123,5 +126,22 @@ describe("reconcilePreviewPathAfterDirectoryRefresh", () => {
         nextEntries: [],
       }),
     ).toBeNull();
+  });
+});
+
+describe("getRemovedEntryPaths", () => {
+  it("reports deleted and renamed old paths for history cleanup", () => {
+    expect(
+      getRemovedEntryPaths(
+        [
+          { path: "docs/old.md", kind: "file" },
+          { path: "docs/keep.md", kind: "file" },
+        ],
+        [
+          { path: "docs/new.md", kind: "file" },
+          { path: "docs/keep.md", kind: "file" },
+        ],
+      ),
+    ).toEqual(["docs/old.md"]);
   });
 });

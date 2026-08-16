@@ -1,6 +1,11 @@
 import "../../index.css";
 
-import { DEFAULT_SERVER_SETTINGS, type NativeApi, type ServerConfig } from "@bigbud/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  type DesktopBridge,
+  type NativeApi,
+  type ServerConfig,
+} from "@bigbud/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,6 +155,7 @@ describe("AiSettingsPanel defaults", () => {
   afterEach(() => {
     resetServerStateForTests();
     __resetNativeApiForTests();
+    delete window.desktopBridge;
   });
 
   it("renders stream replies and stream thinking enabled by default", async () => {
@@ -193,6 +199,22 @@ describe("AiSettingsPanel defaults", () => {
     await page.getByLabelText("Reset default agent browser to default").click();
     expect(updateSettings).toHaveBeenLastCalledWith({ agentBrowserPreference: "bigbud" });
     await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
+  });
+
+  it("places floating assistant settings directly after browser settings", async () => {
+    window.desktopBridge = {
+      getFloatingAssistantEnabled: vi.fn().mockResolvedValue(true),
+      setFloatingAssistantEnabled: vi.fn().mockResolvedValue(true),
+    } as unknown as DesktopBridge;
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    await renderAiSettingsPanel();
+
+    const sectionTitles = Array.from(document.querySelectorAll("h2"), (heading) =>
+      heading.textContent?.trim(),
+    );
+    expect(sectionTitles.indexOf("Floating assistant")).toBe(sectionTitles.indexOf("Browser") + 1);
+    await expect.element(page.getByLabelText("Enable floating assistant")).toBeInTheDocument();
   });
 });
 

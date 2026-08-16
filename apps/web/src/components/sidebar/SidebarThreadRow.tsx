@@ -21,6 +21,7 @@ import { formatRelativeTimeLabel } from "../../utils/timestamp";
 import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
+import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
@@ -28,6 +29,9 @@ import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import {
   mergeRunningTerminalIds,
   prStatusIndicator,
+  providerIconPresentationClass,
+  shouldAnimateProviderIcon,
+  shouldShowThreadConnectingPresentation,
   terminalStatusFromRunningIds,
   type ThreadPr,
 } from "./SidebarThreadRow.status";
@@ -124,17 +128,29 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   }
 
   const isThreadCompleted = threadStatus?.label === "Completed";
-  const providerIconColor =
-    thread.session?.status === "error"
-      ? "text-destructive"
-      : isThreadCompacting
-        ? "text-warning"
-        : isThreadRunning
-          ? "text-info-foreground"
-          : isThreadCompleted
-            ? "text-success"
-            : "text-muted-foreground";
-  const providerIconAnimationClass = isThreadRunning ? "animate-breathe" : "";
+  const connectingStartedAt =
+    thread.session?.status === "connecting" ? thread.session.updatedAt : null;
+  const isConnectingPresentation = shouldShowThreadConnectingPresentation(
+    visibleThreadStatus,
+    connectingStartedAt,
+  );
+  const ProviderIcon =
+    thread.session?.provider && thread.session.provider !== "unknown"
+      ? PROVIDER_ICON_BY_PROVIDER[thread.session.provider]
+      : null;
+  const providerIconColor = providerIconPresentationClass({
+    isCompleted: isThreadCompleted,
+    isCompacting: isThreadCompacting,
+    isConnecting: isConnectingPresentation,
+    isError: thread.session?.status === "error",
+    isRunning: isThreadRunning,
+  });
+  const providerIconAnimationClass = shouldAnimateProviderIcon({
+    isConnecting: isConnectingPresentation,
+    isRunning: isThreadRunning,
+  })
+    ? "animate-breathe motion-reduce:animate-none"
+    : "";
   const normalizedTitle = normalizeElevatorSummaryText(thread.title);
   const normalizedElevatorSummary = normalizeElevatorSummaryText(thread.elevatorSummary);
   const hoverSummary =
@@ -237,22 +253,21 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
           </Tooltip>
         )}
-        {thread.session?.provider &&
-          (() => {
-            if (thread.session.provider === "unknown") return null;
-            const Icon = PROVIDER_ICON_BY_PROVIDER[thread.session.provider];
-            return (
-              <Icon
-                className={`size-3 shrink-0 ${providerIconColor} ${providerIconAnimationClass}`.trim()}
-              />
-            );
-          })()}
-        {visibleThreadStatus && (
+        {ProviderIcon ? (
+          <ProviderIcon
+            aria-hidden="true"
+            focusable="false"
+            className={`size-3 shrink-0 transition-[color,opacity] duration-200 ease-out ${providerIconColor} ${providerIconAnimationClass}`.trim()}
+          />
+        ) : null}
+        {isConnectingPresentation ? (
+          <SidebarThreadConnectingIndicator connectingStartedAt={connectingStartedAt} />
+        ) : visibleThreadStatus ? (
           <ThreadStatusLabel
             status={visibleThreadStatus}
             hideDot={visibleThreadStatus.label === "Completed"}
           />
-        )}
+        ) : null}
         {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}
         {props.renamingThreadId === thread.id ? (
           <input

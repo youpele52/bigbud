@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
+import type { AutomationId } from "@bigbud/contracts";
 import type { useSettings } from "../../hooks/useSettings";
 import type { SidebarThreadSummary } from "../../models/types";
 
@@ -33,6 +34,7 @@ export interface SidebarThreadActionsOutput {
     title: string;
     description: string;
     threadIds: readonly ThreadId[];
+    automationId?: AutomationId;
   } | null;
   dismissPendingDeleteConfirmation: () => void;
   confirmPendingDeleteThreads: () => Promise<void>;

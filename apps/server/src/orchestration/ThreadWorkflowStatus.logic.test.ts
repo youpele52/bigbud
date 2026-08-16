@@ -65,6 +65,34 @@ describe("ThreadWorkflowStatus.logic", () => {
     expect(status.isWorkflowComplete).toBe(false);
   });
 
+  it("reports a stalled provider turn as an error rather than active work", () => {
+    const status = resolveThreadWorkflowStatus(
+      makeThread({
+        session: {
+          threadId: THREAD_ID,
+          status: "running",
+          providerName: "codex",
+          runtimeMode: "approval-required",
+          activeTurnId: "turn-1" as never,
+          reason: "provider.stalled",
+          lastError: "No provider activity has been received.",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        latestTurn: {
+          turnId: "turn-1" as never,
+          state: "running",
+          requestedAt: "2026-01-01T00:00:00.000Z",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: null,
+          assistantMessageId: null,
+        },
+      }),
+    );
+
+    expect(status.workflowStatus).toBe("error");
+    expect(status.isAgentActive).toBe(false);
+  });
+
   it("reports workflow_complete when the latest turn settled without blockers", () => {
     const status = resolveThreadWorkflowStatus(
       makeThread({

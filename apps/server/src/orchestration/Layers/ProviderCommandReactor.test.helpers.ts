@@ -314,10 +314,23 @@ export async function createHarness(input?: {
     startSessionFresh: startSession as ProviderServiceShape["startSessionFresh"],
     sendTurn: sendTurn as ProviderServiceShape["sendTurn"],
     interruptTurn: interruptTurn as ProviderServiceShape["interruptTurn"],
+    inspectActiveTurn: () =>
+      Effect.succeed({ status: "unavailable", observedAt: new Date().toISOString() }),
+    listActiveTurnLiveness: () => Effect.succeed([]),
+    recordTurnInspection: () => Effect.void,
+    claimTurnTerminal: () => Effect.succeed(true),
     respondToRequest: respondToRequest as ProviderServiceShape["respondToRequest"],
     respondToUserInput: respondToUserInput as ProviderServiceShape["respondToUserInput"],
     stopSession: stopSession as ProviderServiceShape["stopSession"],
     listSessions: () => Effect.succeed(runtimeSessions),
+    listSessionsForReconciliation: () =>
+      Effect.succeed({
+        sessions: runtimeSessions,
+        availableProviders: new Set(runtimeSessions.map((session) => session.provider)),
+        unavailableProviders: new Set(),
+        directoryAvailable: true,
+        diagnostics: [],
+      }),
     getCapabilities: (_provider) =>
       Effect.succeed({
         sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",

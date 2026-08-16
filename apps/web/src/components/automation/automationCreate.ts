@@ -1,12 +1,6 @@
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  type ModelSelection,
-  type ProjectId,
-  type ThreadId,
-} from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID, type ModelSelection, type ProjectId } from "@bigbud/contracts";
 
 import { buildExplicitExecutionTargets } from "~/lib/providerExecutionTargets";
-import { newCommandId, newThreadId } from "~/lib/utils";
 import { getDefaultModelSelection } from "~/models/provider/provider.models";
 import type { Project } from "~/models/types";
 import { readNativeApi } from "~/rpc/nativeApi";
@@ -15,10 +9,9 @@ import { useServerProviders } from "~/rpc/serverState";
 import type { AutomationSkillRequest } from "~/lib/automation";
 import type { AutomationProjectOption } from "./automationDirectory";
 import { invalidateAutomationThreadIds } from "./automationThreadIds.store";
-import { syncAutomationTargetThreadModelSelection } from "./automationComposer";
 
 type NativeApi = NonNullable<ReturnType<typeof readNativeApi>>;
-type CreateAutomationInput = Parameters<NativeApi["server"]["createAutomation"]>[0];
+type CreateOwnedAutomationInput = Parameters<NativeApi["server"]["createOwnedAutomation"]>[0];
 type AutomationSummary = Awaited<
   ReturnType<NativeApi["server"]["listAllAutomations"]>
 >["automations"][number];
@@ -58,7 +51,10 @@ export function resolveProjectForAutomationRequest(
 
 function isSameAutomationRequest(
   automation: AutomationSummary,
-  input: Omit<CreateAutomationInput, "targetThreadId">,
+  input: Omit<
+    CreateOwnedAutomationInput,
+    "modelSelection" | "runtimeMode" | "interactionMode" | "branch" | "worktreePath"
+  >,
 ) {
   return (
     automation.deletedAt === null &&
@@ -74,65 +70,48 @@ function isSameAutomationRequest(
 
 async function findExistingAutomation(
   api: NativeApi,
-  input: Omit<CreateAutomationInput, "targetThreadId">,
+  input: Omit<
+    CreateOwnedAutomationInput,
+    "modelSelection" | "runtimeMode" | "interactionMode" | "branch" | "worktreePath"
+  >,
 ) {
   const { automations } = await api.server.listAllAutomations({});
   return automations.find((automation) => isSameAutomationRequest(automation, input)) ?? null;
 }
 
-export async function createAutomationWithRetry(
-  api: NativeApi,
-  input: CreateAutomationInput,
-  attempts = 12,
-) {
-  let lastError: unknown = null;
-
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await api.server.createAutomation(input);
-    } catch (error) {
-      lastError = error;
-      const message = error instanceof Error ? error.message : "";
-      const shouldRetry = message.includes("Automation thread not found") && attempt < attempts - 1;
-      if (!shouldRetry) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Failed to create automation.");
-}
-
-export async function createAutomationTargetThread(input: {
-  api: NativeApi;
+function automationOwnedThreadInput(input: {
   defaultChatCwd: string | null;
   modelSelection: ModelSelection | null;
   projectId: ProjectId;
   project: Project | null;
   providers: ReturnType<typeof useServerProviders>;
-  title: string;
-}): Promise<ThreadId> {
-  const { api, defaultChatCwd, modelSelection, projectId, project, providers, title } = input;
-  const threadId = newThreadId();
+}): Pick<
+  CreateOwnedAutomationInput,
+  | "modelSelection"
+  | "runtimeMode"
+  | "interactionMode"
+  | "branch"
+  | "worktreePath"
+  | "providerRuntimeExecutionTargetId"
+  | "workspaceExecutionTargetId"
+  | "executionTargetId"
+> {
+  const { defaultChatCwd, modelSelection, projectId, project, providers } = input;
+  const base = {
+    modelSelection: modelSelection ?? getDefaultModelSelection(providers),
+    runtimeMode: "full-access" as const,
+    interactionMode: "default" as const,
+    branch: null,
+  };
 
   if (projectId === BUILT_IN_CHATS_PROJECT_ID) {
-    await api.orchestration.dispatchCommand({
-      type: "thread.create",
-      commandId: newCommandId(),
-      threadId,
-      projectId: BUILT_IN_CHATS_PROJECT_ID,
-      title,
+    return {
+      ...base,
       providerRuntimeExecutionTargetId: "local",
       workspaceExecutionTargetId: "local",
-      modelSelection: modelSelection ?? getDefaultModelSelection(providers),
-      runtimeMode: "full-access",
-      interactionMode: "default",
-      branch: null,
+      executionTargetId: "local",
       worktreePath: defaultChatCwd,
-      createdAt: new Date().toISOString(),
-    });
-    return threadId;
+    };
   }
 
   if (!project) {
@@ -143,22 +122,13 @@ export async function createAutomationTargetThread(input: {
     providerRuntimeExecutionTargetId: project.providerRuntimeExecutionTargetId,
     workspaceExecutionTargetId: project.workspaceExecutionTargetId,
   });
-  await api.orchestration.dispatchCommand({
-    type: "thread.create",
-    commandId: newCommandId(),
-    threadId,
-    projectId: project.id,
-    title,
+  return {
+    ...base,
     ...executionTargets,
     modelSelection:
       modelSelection ?? project.defaultModelSelection ?? getDefaultModelSelection(providers),
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    branch: null,
     worktreePath: null,
-    createdAt: new Date().toISOString(),
-  });
-  return threadId;
+  };
 }
 
 export async function createAutomationFromRequest(input: {
@@ -195,7 +165,17 @@ export async function createAutomationFromRequest(input: {
     cronExpression: request.cronExpression,
     timezone: request.timezone,
     ...(request.runAt ? { runAt: request.runAt } : {}),
-  } satisfies Omit<CreateAutomationInput, "targetThreadId">;
+  } satisfies Omit<
+    CreateOwnedAutomationInput,
+    | "modelSelection"
+    | "runtimeMode"
+    | "interactionMode"
+    | "branch"
+    | "worktreePath"
+    | "providerRuntimeExecutionTargetId"
+    | "workspaceExecutionTargetId"
+    | "executionTargetId"
+  >;
 
   const existingAutomation = await findExistingAutomation(api, createInput);
   if (existingAutomation) {
@@ -203,10 +183,9 @@ export async function createAutomationFromRequest(input: {
     return { automation: existingAutomation, created: false as const };
   }
 
-  let targetThreadId: ThreadId | null = null;
-  try {
-    targetThreadId = await createAutomationTargetThread({
-      api,
+  const { automation } = await api.server.createOwnedAutomation({
+    ...createInput,
+    ...automationOwnedThreadInput({
       defaultChatCwd,
       projectId,
       project: projectOptions.find((option) => option.id === projectId)?.isChats
@@ -214,29 +193,8 @@ export async function createAutomationFromRequest(input: {
         : (allProjects.find((project) => project.id === projectId) ?? null),
       modelSelection,
       providers,
-      title: request.title,
-    });
-
-    const { automation } = await createAutomationWithRetry(api, {
-      ...createInput,
-      targetThreadId,
-    });
-    await syncAutomationTargetThreadModelSelection(api, {
-      modelSelection,
-      targetThreadId,
-    });
-    invalidateAutomationThreadIds();
-    return { automation, created: true as const };
-  } catch (error) {
-    if (targetThreadId) {
-      await api.orchestration
-        .dispatchCommand({
-          type: "thread.delete",
-          commandId: newCommandId(),
-          threadId: targetThreadId,
-        })
-        .catch(() => undefined);
-    }
-    throw error;
-  }
+    }),
+  });
+  invalidateAutomationThreadIds();
+  return { automation, created: true as const };
 }

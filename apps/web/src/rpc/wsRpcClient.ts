@@ -138,6 +138,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     shell: {
       openInEditor: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInEditor](input)),
+      openInTerminal: (input) =>
+        transport.request((client) => client[WS_METHODS.shellOpenInTerminal](input)),
       openPath: (input) => transport.request((client) => client[WS_METHODS.shellOpenPath](input)),
     },
     git: {
@@ -228,6 +230,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverListAllAutomations](input)),
       createAutomation: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateAutomation](input)),
+      createOwnedAutomation: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCreateOwnedAutomation](input)),
       updateAutomation: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpdateAutomation](input)),
       pauseAutomation: (input) =>

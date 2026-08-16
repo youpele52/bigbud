@@ -4,12 +4,14 @@ import { ComputerUseAccessSettingsSection } from "./ComputerUseAccessSettingsSec
 import { FileAccessSettingsSection } from "./FileAccessSettingsSection";
 import { SttSettingsSection } from "./SttSettingsSection";
 import { AgentBrowserSettingsSection } from "./AgentBrowserSettingsSection";
+import { FloatingAssistantSettingsSection } from "./FloatingAssistantSettingsSection";
 
 export function AiSettingsPanel() {
   return (
     <SettingsPageContainer>
       <FileAccessSettingsSection />
       <AgentBrowserSettingsSection />
+      <FloatingAssistantSettingsSection />
       <ComputerUseAccessSettingsSection />
       <AiSettingsSection />
       <SttSettingsSection />

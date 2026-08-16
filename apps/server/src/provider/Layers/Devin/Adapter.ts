@@ -30,6 +30,7 @@ import {
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
 import { DevinAdapter, type DevinAdapterShape } from "../../Services/Devin/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import {
   PROVIDER,
@@ -286,6 +287,7 @@ function makeDevinAdapter(options?: DevinAdapterLiveOptions) {
       startSession,
       sendTurn,
       interruptTurn,
+      inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
       readThread,
       rollbackThread,
       respondToRequest,

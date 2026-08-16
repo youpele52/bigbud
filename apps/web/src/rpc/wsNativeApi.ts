@@ -93,6 +93,7 @@ export function createWsNativeApi(): NativeApi {
     },
     shell: {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
+      openInTerminal: (cwd, terminal) => rpcClient.shell.openInTerminal({ cwd, terminal }),
       openPath: (path) => rpcClient.shell.openPath({ path }),
       openExternal: async (url) => {
         const nextUrl = url.trim();
@@ -167,6 +168,7 @@ export function createWsNativeApi(): NativeApi {
       listAutomations: rpcClient.server.listAutomations,
       listAllAutomations: rpcClient.server.listAllAutomations,
       createAutomation: rpcClient.server.createAutomation,
+      createOwnedAutomation: rpcClient.server.createOwnedAutomation,
       updateAutomation: rpcClient.server.updateAutomation,
       pauseAutomation: rpcClient.server.pauseAutomation,
       resumeAutomation: rpcClient.server.resumeAutomation,

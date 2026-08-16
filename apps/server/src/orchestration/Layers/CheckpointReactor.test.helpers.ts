@@ -95,10 +95,26 @@ export function createProviderServiceHarness(
     startSessionFresh: () => unsupported(),
     sendTurn: () => unsupported(),
     interruptTurn: () => unsupported(),
+    inspectActiveTurn: () =>
+      Effect.succeed({ status: "unavailable", observedAt: new Date().toISOString() }),
+    listActiveTurnLiveness: () => Effect.succeed([]),
+    recordTurnInspection: () => Effect.void,
+    claimTurnTerminal: () => Effect.succeed(true),
     respondToRequest: () => unsupported(),
     respondToUserInput: () => unsupported(),
     stopSession: () => unsupported(),
     listSessions,
+    listSessionsForReconciliation: () =>
+      Effect.gen(function* () {
+        const sessions = yield* listSessions();
+        return {
+          sessions,
+          availableProviders: new Set([providerName]),
+          unavailableProviders: new Set(),
+          directoryAvailable: true,
+          diagnostics: [],
+        };
+      }),
     getCapabilities: () =>
       Effect.succeed({
         sessionModelSwitch: "in-session",

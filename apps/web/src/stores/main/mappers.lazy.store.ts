@@ -13,6 +13,7 @@ import {
   toLegacyProvider,
   toLegacySessionStatus,
 } from "./mappers.store";
+import { buildLatestTurn } from "./helpers.store";
 
 export function mapProjectSummary(project: ProjectSummary): Project {
   return {
@@ -161,12 +162,39 @@ export function mergeThreadDetail(
   loadingOlder: boolean,
 ): Thread {
   const detailMessages = detail.messages.map(mapMessage);
-  const messages = [...thread.messages, ...detailMessages]
+  const messages = (
+    loadingOlder ? [...thread.messages, ...detailMessages] : [...detailMessages, ...thread.messages]
+  )
     .filter((message, index, all) => all.findIndex((entry) => entry.id === message.id) === index)
     .toSorted(
       (left, right) =>
         left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
     );
+  const completedAssistantMessage = loadingOlder
+    ? undefined
+    : detailMessages.find(
+        (message) =>
+          message.role === "assistant" &&
+          message.turnId === detail.activityTurnId &&
+          !message.streaming,
+      );
+  const latestTurn =
+    completedAssistantMessage?.turnId &&
+    (thread.latestTurn === null || thread.latestTurn.turnId === completedAssistantMessage.turnId)
+      ? buildLatestTurn({
+          previous: thread.latestTurn,
+          turnId: completedAssistantMessage.turnId,
+          state:
+            thread.latestTurn?.state === "interrupted" || thread.latestTurn?.state === "error"
+              ? thread.latestTurn.state
+              : "completed",
+          requestedAt: thread.latestTurn?.requestedAt ?? completedAssistantMessage.createdAt,
+          startedAt: thread.latestTurn?.startedAt ?? completedAssistantMessage.createdAt,
+          completedAt: completedAssistantMessage.completedAt ?? completedAssistantMessage.createdAt,
+          assistantMessageId: completedAssistantMessage.id,
+          sourceProposedPlan: thread.pendingSourceProposedPlan,
+        })
+      : thread.latestTurn;
   const detailActivities = mergePendingActivities(detail);
   const activities = [...thread.activities, ...detailActivities]
     .filter((activity, index, all) => all.findIndex((entry) => entry.id === activity.id) === index)
@@ -190,6 +218,7 @@ export function mergeThreadDetail(
   return {
     ...thread,
     messages,
+    latestTurn,
     activities: loadingOlder ? thread.activities : activities,
     proposedPlans: loadingOlder ? thread.proposedPlans : proposedPlans,
     turnDiffSummaries: loadingOlder ? thread.turnDiffSummaries : turnDiffSummaries,

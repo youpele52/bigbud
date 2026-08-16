@@ -21,12 +21,15 @@ import {
 import { ProviderUnsupportedError } from "../Errors.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 
+const inspectActiveTurn = vi.fn();
+
 const fakeCodexAdapter: CodexAdapterShape = {
   provider: "codex",
   capabilities: { sessionModelSwitch: "in-session" },
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -44,6 +47,7 @@ const fakeClaudeAdapter: ClaudeAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -66,6 +70,7 @@ const fakeCopilotAdapter: CopilotAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -83,6 +88,7 @@ const fakeOpencodeAdapter: OpencodeAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -100,6 +106,7 @@ const fakeKilocodeAdapter: KilocodeAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -117,6 +124,7 @@ const fakePiAdapter: PiAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -134,6 +142,7 @@ const fakeCursorAdapter: CursorAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),
@@ -151,6 +160,7 @@ const fakeDevinAdapter: DevinAdapterShape = {
   startSession: vi.fn(),
   sendTurn: vi.fn(),
   interruptTurn: vi.fn(),
+  inspectActiveTurn,
   respondToRequest: vi.fn(),
   respondToUserInput: vi.fn(),
   stopSession: vi.fn(),

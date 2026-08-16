@@ -256,7 +256,8 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
       Layer.provide(
         Layer.mergeAll(
           Layer.mock(ProjectionCatalogQuery)({
-            getStartupProjectCatalog: () => Effect.succeed({ projectionSequence: 0, projects: [] }),
+            getStartupProjectCatalog: () =>
+              Effect.succeed({ projectionSequence: 0, projects: [], remainingCount: 0 }),
             getProjectThreadSummaries: ({ projectId }) =>
               Effect.succeed({ projectionSequence: 0, projectId, threads: [] }),
             getSelectedThreadDetail: ({ threadId, messageCursor }) =>
@@ -344,7 +345,7 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             pause: () => Effect.void,
             resume: () => Effect.void,
             complete: () => Effect.void,
-            delete: () => Effect.void,
+            delete: () => Effect.succeed(false),
             recordRunStarted: () => Effect.void,
             recordRunDispatched: () => Effect.void,
             recordRunFinished: () => Effect.void,

@@ -51,6 +51,7 @@ export interface TestProviderAdapterHarness {
   readonly setSession: (session: ProviderSession) => Effect.Effect<void, never>;
   readonly removeSession: (threadId: ThreadId) => Effect.Effect<void, never>;
   readonly failNextListSessions: () => Effect.Effect<void, never>;
+  readonly hangNextListSessions: () => Effect.Effect<void, never>;
 }
 
 export interface SessionState {

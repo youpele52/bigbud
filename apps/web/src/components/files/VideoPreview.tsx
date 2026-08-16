@@ -9,13 +9,13 @@ import { showFilePreviewContextMenu } from "./FilePreview.contextMenu";
 import { buildAbsolutePreviewPath, buildFilePreviewBreadcrumb } from "./FilePreview.logic";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { useFilePreviewRefresh } from "./useFilePreviewRefresh";
+import type { FilePreviewNavigationProps } from "./FilePreview.types";
 
-interface VideoPreviewProps {
+interface VideoPreviewProps extends FilePreviewNavigationProps {
   cwd: string;
   relativePath: string;
   executionTargetId?: string | undefined;
   projectName?: string | undefined;
-  onBack?: (() => void) | undefined;
 }
 
 export const VideoPreview = memo(function VideoPreview({
@@ -23,7 +23,12 @@ export const VideoPreview = memo(function VideoPreview({
   relativePath,
   executionTargetId,
   projectName,
-  onBack,
+  canNavigateBack,
+  canNavigateForward,
+  onNavigateBack,
+  onNavigateForward,
+  onClose,
+  onPreviewLoadError,
 }: VideoPreviewProps) {
   const [loadError, setLoadError] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
@@ -88,7 +93,12 @@ export const VideoPreview = memo(function VideoPreview({
     <div className="flex h-full min-h-0 flex-col bg-background">
       <FilePreviewHeader
         breadcrumb={breadcrumb}
-        onBack={onBack}
+        absolutePath={absolutePath}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onNavigateBack={onNavigateBack}
+        onNavigateForward={onNavigateForward}
+        onClose={onClose}
         onContextMenu={handleContextMenu}
       />
       <div
@@ -115,7 +125,10 @@ export const VideoPreview = memo(function VideoPreview({
             playsInline
             preload="metadata"
             className="max-h-full max-w-full"
-            onError={() => setLoadError(true)}
+            onError={() => {
+              setLoadError(true);
+              onPreviewLoadError?.();
+            }}
           >
             <track kind="captions" />
           </video>

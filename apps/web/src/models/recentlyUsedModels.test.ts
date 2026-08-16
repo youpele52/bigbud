@@ -3,6 +3,7 @@ import {
   recordModelUsage,
   getRecentlyUsedModels,
   clearRecentModels,
+  getNewestRecentlyUsedModel,
   MAX_RECENT_MODELS_PER_PROVIDER,
   normalizeRecentlyUsedModels,
 } from "./recentlyUsedModels";
@@ -61,6 +62,24 @@ describe("recordModelUsage", () => {
 });
 
 describe("getRecentlyUsedModels", () => {
+  it("selects the globally newest valid usage across providers", () => {
+    expect(
+      getNewestRecentlyUsedModel([
+        { provider: "codex", model: "gpt-5", lastUsedAt: "2026-08-15T10:00:00.000Z" },
+        {
+          provider: "claudeAgent",
+          model: "claude-sonnet-4-6",
+          lastUsedAt: "2026-08-15T11:00:00.000Z",
+        },
+        { provider: "copilot", model: "gpt-5", lastUsedAt: "not-a-date" },
+      ]),
+    ).toEqual({
+      provider: "claudeAgent",
+      model: "claude-sonnet-4-6",
+      lastUsedAt: "2026-08-15T11:00:00.000Z",
+    });
+  });
+
   it("returns entries sorted by lastUsedAt descending", () => {
     recordModelUsage("codex", "gpt-5");
     recordModelUsage("codex", "gpt-4o");

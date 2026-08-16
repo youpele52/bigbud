@@ -1,7 +1,7 @@
 import type React from "react";
 import type { MouseEvent, KeyboardEvent, PointerEvent } from "react";
 import type { DragCancelEvent, DragStartEvent, DragEndEvent } from "@dnd-kit/core";
-import type { ProjectId, ThreadId } from "@bigbud/contracts";
+import type { AutomationId, ProjectId, ThreadId } from "@bigbud/contracts";
 import type { useStore } from "../../stores/main";
 import type { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
@@ -164,6 +164,7 @@ export interface SidebarState {
   /** Cancel the add-project flow, resetting both the form and the visibility flag. */
   cancelAddProject: () => void;
   isRemoteProjectDialogOpen: boolean;
+  remoteProjectDialogMode: "add" | "edit";
   remoteProjectDraft: RemoteProjectDraft;
   remoteProjectFieldErrors: Partial<
     Record<"displayName" | "host" | "username" | "port" | "workspaceRoot" | "sshKeyPath", string>
@@ -171,7 +172,9 @@ export interface SidebarState {
   remoteProjectError: string | null;
   remoteProjectVerificationMessage: string | null;
   isVerifyingRemoteProject: boolean;
+  isSavingRemoteProject: boolean;
   openRemoteProjectDialog: () => void;
+  openRemoteProjectEditDialog: (project: Project) => void;
   closeRemoteProjectDialog: () => void;
   updateRemoteProjectDraft: (
     field:
@@ -230,6 +233,7 @@ export interface SidebarState {
     title: string;
     description: string;
     threadIds: readonly ThreadId[];
+    automationId?: AutomationId;
   } | null;
   dismissPendingDeleteConfirmation: () => void;
   confirmPendingDeleteThreads: () => Promise<void>;

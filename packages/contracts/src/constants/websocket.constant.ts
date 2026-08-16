@@ -40,6 +40,7 @@ export const WS_METHODS = {
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
+  shellOpenInTerminal: "shell.openInTerminal",
   shellOpenPath: "shell.openPath",
 
   // Git methods
@@ -98,6 +99,7 @@ export const WS_METHODS = {
   serverListAutomations: "server.listAutomations",
   serverListAllAutomations: "server.listAllAutomations",
   serverCreateAutomation: "server.createAutomation",
+  serverCreateOwnedAutomation: "server.createOwnedAutomation",
   serverUpdateAutomation: "server.updateAutomation",
   serverPauseAutomation: "server.pauseAutomation",
   serverResumeAutomation: "server.resumeAutomation",

@@ -10,7 +10,14 @@ import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
-import { EDITORS, OpenError, OpenPathInput, type EditorId } from "@bigbud/contracts";
+import {
+  EDITORS,
+  OpenError,
+  OpenPathInput,
+  TERMINAL_APPLICATIONS,
+  type EditorId,
+  type TerminalApplicationId,
+} from "@bigbud/contracts";
 import { ServiceMap, Effect, Layer } from "effect";
 import {
   hasDarwinInstallationEvidence,
@@ -18,6 +25,7 @@ import {
   resolveDarwinEditorApp,
   resolveWin32EditorExecutable,
 } from "./open.installation";
+import { hasTargetPosition, resolveEditorArgs } from "./open.editor";
 
 // ==============================
 // Definitions
@@ -30,7 +38,10 @@ export interface OpenInEditorInput {
   readonly editor: EditorId;
 }
 
-type EditorDefinition = (typeof EDITORS)[number];
+export interface OpenInTerminalInput {
+  readonly cwd: string;
+  readonly terminal: TerminalApplicationId;
+}
 
 interface EditorLaunch {
   readonly command: string;
@@ -40,50 +51,6 @@ interface EditorLaunch {
 interface CommandAvailabilityOptions {
   readonly platform?: NodeJS.Platform;
   readonly env?: NodeJS.ProcessEnv;
-}
-
-const TARGET_WITH_POSITION_PATTERN = /^(.*?):(\d+)(?::(\d+))?$/;
-
-function parseTargetPathAndPosition(target: string): {
-  path: string;
-  line: string | undefined;
-  column: string | undefined;
-} | null {
-  const match = TARGET_WITH_POSITION_PATTERN.exec(target);
-  if (!match?.[1] || !match[2]) {
-    return null;
-  }
-
-  return {
-    path: match[1],
-    line: match[2],
-    column: match[3],
-  };
-}
-
-function resolveCommandEditorArgs(editor: EditorDefinition, target: string): ReadonlyArray<string> {
-  const parsedTarget = parseTargetPathAndPosition(target);
-
-  switch (editor.launchStyle) {
-    case "direct-path":
-      return [target];
-    case "goto":
-      return parsedTarget ? ["--goto", target] : [target];
-    case "line-column": {
-      if (!parsedTarget) {
-        return [target];
-      }
-
-      const { path, line, column } = parsedTarget;
-      return [...(line ? ["--line", line] : []), ...(column ? ["--column", column] : []), path];
-    }
-  }
-}
-
-function resolveEditorArgs(editor: EditorDefinition, target: string): ReadonlyArray<string> {
-  const baseArgs: ReadonlyArray<string> =
-    "baseArgs" in editor && Array.isArray(editor.baseArgs) ? editor.baseArgs : [];
-  return [...baseArgs, ...resolveCommandEditorArgs(editor, target)];
 }
 
 function resolveAvailableCommand(
@@ -247,6 +214,22 @@ export function resolveAvailableEditors(
   return available;
 }
 
+export function resolveAvailableTerminals(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): ReadonlyArray<TerminalApplicationId> {
+  return TERMINAL_APPLICATIONS.filter((terminal) => {
+    if (terminal.id === "windows-terminal" && platform !== "win32") return false;
+    if (
+      ["gnome-terminal", "konsole", "xfce4-terminal"].includes(terminal.id) &&
+      platform !== "linux"
+    ) {
+      return false;
+    }
+    return resolveAvailableCommand(terminal.commands, { platform, env }) !== null;
+  }).map((terminal) => terminal.id);
+}
+
 /**
  * OpenShape - Service API for browser and editor launch actions.
  */
@@ -262,6 +245,9 @@ export interface OpenShape {
    * Launches the editor as a detached process so server startup is not blocked.
    */
   readonly openInEditor: (input: OpenInEditorInput) => Effect.Effect<void, OpenError>;
+
+  /** Open a workspace path in a supported external terminal. */
+  readonly openInTerminal: (input: OpenInTerminalInput) => Effect.Effect<void, OpenError>;
 
   /**
    * Open a file or directory with the system's default application.
@@ -301,7 +287,9 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     if (appPath !== null) {
       return {
         command: "open",
-        args: ["-a", appPath, "--args", ...resolveEditorArgs(editorDef, input.cwd)],
+        args: hasTargetPosition(input.cwd)
+          ? ["-a", appPath, "--args", ...resolveEditorArgs(editorDef, input.cwd)]
+          : ["-a", appPath, input.cwd],
       };
     }
   }
@@ -330,6 +318,19 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
   }
 
   return { command: fileManagerCommandForPlatform(platform), args: [input.cwd] };
+});
+
+export const resolveTerminalLaunch = Effect.fn("resolveTerminalLaunch")(function* (
+  input: OpenInTerminalInput,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): Effect.fn.Return<EditorLaunch, OpenError> {
+  const terminal = TERMINAL_APPLICATIONS.find((candidate) => candidate.id === input.terminal);
+  if (!terminal) return yield* new OpenError({ message: `Unknown terminal: ${input.terminal}` });
+
+  const command =
+    resolveAvailableCommand(terminal.commands, { platform, env }) ?? terminal.commands[0];
+  return { command, args: terminal.cwdArgs(input.cwd) };
 });
 
 export const launchDetached = (launch: EditorLaunch) =>
@@ -382,6 +383,7 @@ const make = Effect.gen(function* () {
         catch: (cause) => new OpenError({ message: "Browser auto-open failed", cause }),
       }),
     openInEditor: (input) => Effect.flatMap(resolveEditorLaunch(input), launchDetached),
+    openInTerminal: (input) => Effect.flatMap(resolveTerminalLaunch(input), launchDetached),
     openPath: (input) =>
       launchDetached({
         command: fileManagerCommandForPlatform(process.platform),

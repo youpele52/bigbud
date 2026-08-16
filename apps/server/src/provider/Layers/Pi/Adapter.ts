@@ -12,6 +12,7 @@ import { Effect, Layer, Queue, Random, Stream } from "effect";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { PiAdapter, type PiAdapterShape } from "../../Services/Pi/Adapter.ts";
+import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { makePiAdapterMethods } from "./Adapter.methods.ts";
 import { makeHandleProcessExit, makeHandleStdoutEvent } from "./Adapter.stream.ts";
@@ -124,6 +125,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
   });
 
   return {
+    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",

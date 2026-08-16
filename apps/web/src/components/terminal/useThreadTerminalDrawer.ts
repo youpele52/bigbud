@@ -42,6 +42,17 @@ export interface UseThreadTerminalDrawerResult {
   bumpFocusRequestId: () => void;
 }
 
+export function resolveTerminalExecutionTargetId(input: {
+  readonly serverThread: Parameters<typeof resolveWorkspaceExecutionTargetId>[0] | null | undefined;
+  readonly project: Parameters<typeof resolveWorkspaceExecutionTargetId>[0] | null | undefined;
+}): string | undefined {
+  return input.serverThread
+    ? resolveWorkspaceExecutionTargetId(input.serverThread)
+    : input.project
+      ? resolveWorkspaceExecutionTargetId(input.project)
+      : undefined;
+}
+
 export function useThreadTerminalDrawer(
   threadId: ThreadId,
   launchContext: TerminalLaunchContext | null,
@@ -225,7 +236,7 @@ export function useThreadTerminalDrawer(
     cwd,
     effectiveWorktreePath,
     runtimeEnv,
-    executionTargetId: project ? resolveWorkspaceExecutionTargetId(project) : undefined,
+    executionTargetId: resolveTerminalExecutionTargetId({ serverThread, project }),
     terminalBaseLabel,
     terminalLabelOverrides,
     terminalProviderById,

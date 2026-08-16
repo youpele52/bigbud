@@ -8,6 +8,7 @@ export function makeTestProviderAdapterControls(
   sentTurnInputs: ReadonlyArray<string>,
 ) {
   let listSessionFailuresRemaining = 0;
+  let listSessionHangsRemaining = 0;
 
   return {
     listSessions: () =>
@@ -15,6 +16,10 @@ export function makeTestProviderAdapterControls(
         if (listSessionFailuresRemaining > 0) {
           listSessionFailuresRemaining -= 1;
           return Effect.die(new Error("Test provider listSessions failure"));
+        }
+        if (listSessionHangsRemaining > 0) {
+          listSessionHangsRemaining -= 1;
+          return Effect.never;
         }
         return Effect.sync(() => Array.from(sessions.values(), (state) => state.session));
       }),
@@ -41,6 +46,10 @@ export function makeTestProviderAdapterControls(
     failNextListSessions: (): Effect.Effect<void, never> =>
       Effect.sync(() => {
         listSessionFailuresRemaining += 1;
+      }),
+    hangNextListSessions: (): Effect.Effect<void, never> =>
+      Effect.sync(() => {
+        listSessionHangsRemaining += 1;
       }),
   };
 }

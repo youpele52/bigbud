@@ -8,7 +8,7 @@ import {
   ThreadRetentionRun,
   ThreadRetentionRunItem,
   ThreadRetentionRepository,
-  type CreateRetentionRunInput,
+  isThreadRetentionTerminalRunStatus,
   type RecheckAndClaimRetentionItemInput,
   type ThreadRetentionExclusionReason,
   type ThreadRetentionRepositoryShape,
@@ -18,18 +18,13 @@ import { makeThreadRetentionChallenges } from "./ThreadRetentionRepository.chall
 import { makeThreadRetentionAudit } from "./ThreadRetentionRepository.audit.ts";
 import { makeThreadRetentionPages } from "./ThreadRetentionRepository.pages.ts";
 import { makeThreadRetentionPreview } from "./ThreadRetentionRepository.preview.ts";
+import { makeThreadRetentionQueue } from "./ThreadRetentionRepository.queue.ts";
 import { makeThreadRetentionRetry } from "./ThreadRetentionRepository.retry.ts";
 import {
   retentionDurableExclusions,
   retentionExclusionCase,
 } from "./ThreadRetentionRepository.eligibility.ts";
 
-const terminalRunStatuses = new Set([
-  "completed",
-  "completed_with_failures",
-  "failed",
-  "cancelled",
-]);
 const clampLimit = (limit: number, maximum = 100) =>
   Math.max(1, Math.min(maximum, Math.floor(limit)));
 const mapPersistenceError = (operation: string) =>
@@ -62,6 +57,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         expected_last_activity_at AS "expectedLastActivityAt",
         deletion_command_id AS "deletionCommandId", purge_job_id AS "purgeJobId", status,
         exclusion_reason AS "exclusionReason", attempt_count AS "attemptCount",
+        next_attempt_at AS "nextAttemptAt",
         last_error_code AS "lastErrorCode", created_at AS "createdAt", updated_at AS "updatedAt",
         completed_at AS "completedAt"
       FROM thread_retention_run_items WHERE deletion_command_id = ${deletionCommandId}
@@ -71,6 +67,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       expected_last_activity_at AS "expectedLastActivityAt",
       deletion_command_id AS "deletionCommandId", purge_job_id AS "purgeJobId", status,
       exclusion_reason AS "exclusionReason", attempt_count AS "attemptCount",
+      next_attempt_at AS "nextAttemptAt",
       last_error_code AS "lastErrorCode", created_at AS "createdAt", updated_at AS "updatedAt",
       completed_at AS "completedAt"
     FROM thread_retention_run_items WHERE run_id = ${runId}
@@ -81,6 +78,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       expected_last_activity_at AS "expectedLastActivityAt",
       deletion_command_id AS "deletionCommandId", purge_job_id AS "purgeJobId", status,
       exclusion_reason AS "exclusionReason", attempt_count AS "attemptCount",
+      next_attempt_at AS "nextAttemptAt",
       last_error_code AS "lastErrorCode", created_at AS "createdAt", updated_at AS "updatedAt",
       completed_at AS "completedAt"
     FROM thread_retention_run_items WHERE run_id = ${runId}
@@ -98,35 +96,6 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
     `.pipe(Effect.map((rows) => rows.map((row) => row.threadId)));
   };
 
-  const createOrGetActiveRun = Effect.fn("ThreadRetentionRepository.createOrGetActiveRun")(
-    function* (input: CreateRetentionRunInput) {
-      return yield* sql.withTransaction(
-        Effect.gen(function* () {
-          yield* sql`
-          INSERT INTO thread_retention_runs (
-            run_id, trigger_kind, policy, cutoff_at, status, active_slot, eligible_count,
-            created_at, updated_at
-          ) VALUES (${input.runId}, ${input.trigger}, ${input.policy}, ${input.cutoffAt}, 'queued', 1,
-            (SELECT COUNT(*) FROM projection_threads AS t
-              WHERE t.last_activity_at <= ${input.cutoffAt} AND ${eligible}),
-            ${input.createdAt}, ${input.createdAt})
-          ON CONFLICT DO NOTHING
-        `;
-          const rows = yield* sql<{ runId: string }>`
-          SELECT run_id AS "runId" FROM thread_retention_runs WHERE active_slot = 1 LIMIT 1
-        `;
-          const activeRunId = rows[0]?.runId;
-          if (activeRunId === undefined)
-            return yield* Effect.die("active retention run was not persisted");
-          const active = yield* getRunQuery(activeRunId);
-          if (Option.isNone(active))
-            return yield* Effect.die("active retention run could not be read");
-          return active.value;
-        }),
-      );
-    },
-  );
-
   const recheckAndClaimItem = Effect.fn("ThreadRetentionRepository.recheckAndClaimItem")(function* (
     input: RecheckAndClaimRetentionItemInput,
   ) {
@@ -134,6 +103,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       Effect.gen(function* () {
         const claimed = yield* sql`
           UPDATE thread_retention_run_items SET status = 'deletion_requested',
+            next_attempt_at = NULL,
             attempt_count = attempt_count + 1, updated_at = ${input.claimedAt}
           WHERE run_id = ${input.runId} AND thread_id = ${input.threadId} AND status = 'selected'
             AND expected_last_activity_at = ${input.expectedLastActivityAt}
@@ -166,6 +136,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         }
         const skipped = yield* sql`
           UPDATE thread_retention_run_items SET status = 'skipped', exclusion_reason = ${row.reason},
+            next_attempt_at = NULL,
             attempt_count = attempt_count + 1, updated_at = ${input.claimedAt}, completed_at = ${input.claimedAt}
           WHERE run_id = ${input.runId} AND thread_id = ${input.threadId} AND status = 'selected'
           RETURNING thread_id
@@ -182,7 +153,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
 
   const transitionRun = (input: Parameters<ThreadRetentionRepositoryShape["transitionRun"]>[0]) => {
     if (input.expectedStatuses.length === 0) return Effect.succeed(false);
-    const terminal = terminalRunStatuses.has(input.nextStatus);
+    const terminal = isThreadRetentionTerminalRunStatus(input.nextStatus);
     const hasCursor = input.cursor !== undefined;
     const hasNextAttempt = input.nextAttemptAt !== undefined;
     const hasError = input.lastErrorCode !== undefined;
@@ -190,7 +161,8 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
     const hasEstimatedResources = input.estimatedResourceCount !== undefined;
     const hasRequiredSequence = input.requiredBaselineSequence !== undefined;
     return sql`
-      UPDATE thread_retention_runs SET status = ${input.nextStatus}, active_slot = ${terminal ? null : 1},
+      UPDATE thread_retention_runs SET status = ${input.nextStatus},
+        active_slot = ${terminal || input.releaseActiveSlot === true ? null : 1},
         cursor_last_activity_at = CASE WHEN ${hasCursor ? 1 : 0} = 1 THEN ${input.cursor?.lastActivityAt ?? null} ELSE cursor_last_activity_at END,
         cursor_thread_id = CASE WHEN ${hasCursor ? 1 : 0} = 1 THEN ${input.cursor?.threadId ?? null} ELSE cursor_thread_id END,
         next_attempt_at = CASE WHEN ${hasNextAttempt ? 1 : 0} = 1 THEN ${input.nextAttemptAt ?? null} ELSE next_attempt_at END,
@@ -201,7 +173,9 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
         started_at = CASE WHEN started_at IS NULL AND ${input.nextStatus} <> 'queued' THEN ${input.updatedAt} ELSE started_at END,
         completed_at = CASE WHEN ${terminal ? 1 : 0} = 1 THEN ${input.updatedAt} ELSE NULL END,
         updated_at = ${input.updatedAt}
-      WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)} RETURNING run_id
+      WHERE run_id = ${input.runId} AND status IN ${sql.in(input.expectedStatuses)}
+        AND (status <> 'queued' OR active_slot = 1)
+      RETURNING run_id
     `.pipe(Effect.map((rows) => rows.length === 1));
   };
 
@@ -216,6 +190,7 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
           UPDATE thread_retention_run_items SET status = ${input.nextStatus},
             purge_job_id = COALESCE(${input.purgeJobId ?? null}, purge_job_id),
             exclusion_reason = ${input.exclusionReason ?? null}, last_error_code = ${input.lastErrorCode ?? null},
+            next_attempt_at = NULL,
             attempt_count = attempt_count + 1, updated_at = ${input.updatedAt},
             completed_at = CASE WHEN ${terminal ? 1 : 0} = 1 THEN ${input.updatedAt} ELSE NULL END
           WHERE run_id = ${input.runId} AND thread_id = ${input.threadId}
@@ -242,14 +217,17 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
 
   const recordItemRetry = (
     input: Parameters<ThreadRetentionRepositoryShape["recordItemRetry"]>[0],
-  ) =>
-    sql`
+  ) => {
+    if (input.expectedStatuses.length === 0) return Effect.succeed(false);
+    return sql`
       UPDATE thread_retention_run_items SET attempt_count = attempt_count + 1,
-        last_error_code = ${input.lastErrorCode}, updated_at = ${input.updatedAt}
+        last_error_code = ${input.lastErrorCode}, next_attempt_at = ${input.nextAttemptAt},
+        updated_at = ${input.updatedAt}
       WHERE run_id = ${input.runId} AND thread_id = ${input.threadId}
-        AND status = ${input.expectedStatus}
+        AND status IN ${sql.in(input.expectedStatuses)}
       RETURNING thread_id
     `.pipe(Effect.map((rows) => rows.length === 1));
+  };
 
   const listRuns = (where: "" | "active_slot = 1", limit: number) => sql<ThreadRetentionRun>`
     SELECT run_id AS "runId", trigger_kind AS trigger, policy, cutoff_at AS "cutoffAt", status,
@@ -263,10 +241,29 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       circuit_open_until AS "circuitOpenUntil", created_at AS "createdAt",
       started_at AS "startedAt", updated_at AS "updatedAt", completed_at AS "completedAt"
     FROM thread_retention_runs WHERE ${sql.unsafe(where === "" ? "1 = 1" : where)}
-    ORDER BY created_at DESC, run_id DESC LIMIT ${clampLimit(limit)}
+    ORDER BY
+      CASE
+        WHEN active_slot = 1 THEN 0
+        WHEN trigger_kind = 'manual' AND status <> 'queued'
+          AND status NOT IN ('completed', 'completed_with_failures', 'failed', 'cancelled') THEN 1
+        WHEN trigger_kind = 'manual' AND status = 'queued' THEN 2
+        WHEN trigger_kind = 'scheduled' AND status <> 'queued'
+          AND status NOT IN ('completed', 'completed_with_failures', 'failed', 'cancelled') THEN 3
+        WHEN status = 'queued' THEN 4
+        ELSE 5
+      END ASC,
+      CASE WHEN status IN ('completed', 'completed_with_failures', 'failed', 'cancelled')
+        THEN created_at END DESC,
+      created_at ASC, run_id ASC
+    LIMIT ${clampLimit(limit)}
   `;
 
-  const challenges = makeThreadRetentionChallenges({ sql, createOrGetActiveRun });
+  const queue = makeThreadRetentionQueue({ sql, getRun: getRunQuery });
+  const challenges = makeThreadRetentionChallenges({
+    sql,
+    getRun: getRunQuery,
+    createQueuedRun: queue.createQueuedRun,
+  });
   const cleanupAudit = makeThreadRetentionAudit(sql);
   const pages = makeThreadRetentionPages(sql);
   const preview = makeThreadRetentionPreview(sql);
@@ -285,7 +282,23 @@ const makeThreadRetentionRepository = Effect.gen(function* () {
       listDeletionOwnedThreadIds(threadIds).pipe(mapPersistenceError("listDeletionOwnedThreadIds")),
     preview: (cutoffAt) => preview(cutoffAt).pipe(mapPersistenceError("preview")),
     createOrGetActiveRun: (input) =>
-      createOrGetActiveRun(input).pipe(mapPersistenceError("createOrGetActiveRun")),
+      queue.createOrGetActiveRun(input).pipe(mapPersistenceError("createOrGetActiveRun")),
+    createQueuedRun: (input) =>
+      queue.createQueuedRun(input).pipe(mapPersistenceError("createQueuedRun")),
+    createScheduledQueuedRun: (input) =>
+      queue.createScheduledQueuedRun(input).pipe(mapPersistenceError("createScheduledQueuedRun")),
+    claimNextQueuedRun: (claimedAt) =>
+      queue.claimNextQueuedRun(claimedAt).pipe(mapPersistenceError("claimNextQueuedRun")),
+    listQueuedManualRuns: (limit) =>
+      queue.listQueuedManualRuns(limit).pipe(mapPersistenceError("listQueuedManualRuns")),
+    claimQueuedManualRun: (runId, claimedAt, purgeBacklogLimit) =>
+      queue
+        .claimQueuedManualRun(runId, claimedAt, purgeBacklogLimit)
+        .pipe(mapPersistenceError("claimQueuedManualRun")),
+    yieldActiveRunToManual: (activeRunId, manualRunId, yieldedAt, purgeBacklogLimit) =>
+      queue
+        .yieldActiveRunToManual(activeRunId, manualRunId, yieldedAt, purgeBacklogLimit)
+        .pipe(mapPersistenceError("yieldActiveRunToManual")),
     selectNextPage: (input) =>
       pages.selectNextPage(input).pipe(mapPersistenceError("selectNextPage")),
     insertSelectedItems,

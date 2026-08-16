@@ -391,6 +391,12 @@ export function makeWorkspaceWsRpcHandlers(
       observeRpcEffect(WS_METHODS.shellOpenInEditor, context.open.openInEditor(input), {
         "rpc.aggregate": "workspace",
       }),
+    [WS_METHODS.shellOpenInTerminal]: (
+      input: Parameters<WsRpcContext["open"]["openInTerminal"]>[0],
+    ) =>
+      observeRpcEffect(WS_METHODS.shellOpenInTerminal, context.open.openInTerminal(input), {
+        "rpc.aggregate": "workspace",
+      }),
     [WS_METHODS.shellOpenPath]: (input: Parameters<WsRpcContext["open"]["openPath"]>[0]) =>
       observeRpcEffect(WS_METHODS.shellOpenPath, context.open.openPath(input), {
         "rpc.aggregate": "workspace",

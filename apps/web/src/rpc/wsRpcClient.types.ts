@@ -34,6 +34,7 @@ import {
   type ProjectDirectoryWatchInput,
   type ServerAutomationResult,
   type ServerCreateAutomationInput,
+  type ServerCreateOwnedAutomationInput,
   type ServerCreateMobileRemotePairingInput,
   type ServerDeleteAutomationInput,
   type ServerExportThreadContextInput,
@@ -170,6 +171,10 @@ export interface WsRpcClient {
       readonly cwd: Parameters<NativeApi["shell"]["openInEditor"]>[0];
       readonly editor: Parameters<NativeApi["shell"]["openInEditor"]>[1];
     }) => ReturnType<NativeApi["shell"]["openInEditor"]>;
+    readonly openInTerminal: (input: {
+      readonly cwd: Parameters<NativeApi["shell"]["openInTerminal"]>[0];
+      readonly terminal: Parameters<NativeApi["shell"]["openInTerminal"]>[1];
+    }) => ReturnType<NativeApi["shell"]["openInTerminal"]>;
     readonly openPath: (input: {
       readonly path: Parameters<NativeApi["shell"]["openPath"]>[0];
     }) => ReturnType<NativeApi["shell"]["openPath"]>;
@@ -258,6 +263,9 @@ export interface WsRpcClient {
     ) => Promise<ServerListAllAutomationsResult>;
     readonly createAutomation: (
       input: ServerCreateAutomationInput,
+    ) => Promise<ServerAutomationResult>;
+    readonly createOwnedAutomation: (
+      input: ServerCreateOwnedAutomationInput,
     ) => Promise<ServerAutomationResult>;
     readonly updateAutomation: (
       input: ServerUpdateAutomationInput,

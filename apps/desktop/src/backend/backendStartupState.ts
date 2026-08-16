@@ -42,8 +42,8 @@ function setStatus(
     readonly developmentDiagnostics?: DesktopBackendDevelopmentDiagnostics | undefined;
     readonly reason: DesktopBackendStartupFailureReason;
   },
-): void {
-  if (!canTransition(generation, status)) return;
+): boolean {
+  if (!canTransition(generation, status)) return false;
   state = {
     ...state,
     status,
@@ -59,6 +59,7 @@ function setStatus(
       : {}),
   };
   emit();
+  return true;
 }
 
 function canTransition(generation: number, next: DesktopBackendStartupState["status"]): boolean {
@@ -95,17 +96,20 @@ export function recordBackendStartupStatus(
   generation: number,
   value: unknown,
   reason?: DesktopBackendStartupFailureReason,
-): void {
+): boolean {
   if (value === "upgrading" || value === "starting" || value === "ready") {
-    if (value === "ready") clearDeadline(generation);
-    setStatus(generation, value);
+    const accepted = setStatus(generation, value);
+    if (accepted && value === "ready") clearDeadline(generation);
+    return accepted;
   } else if (value === "error") {
-    clearDeadline(generation);
-    setStatus(generation, "failed", {
+    const accepted = setStatus(generation, "failed", {
       diagnostics: createBackendStartupDiagnostics({ category: "runtime" }),
       reason: reason ?? "unknown",
     });
+    if (accepted) clearDeadline(generation);
+    return accepted;
   }
+  return false;
 }
 
 export function recordBackendStartupFailure(

@@ -32,6 +32,32 @@ export function makePurgePreparedRetentionItems(input: {
     now: () => number = Date.now,
   ) {
     const jobs = [];
+    const markPurgeFailure = (item: ThreadRetentionRunItem, errorCode: string) =>
+      input.repository
+        .transitionItem({
+          runId: run.runId,
+          threadId: item.threadId,
+          expectedStatuses: [item.status],
+          nextStatus: "failed",
+          lastErrorCode: errorCode,
+          updatedAt: new Date(now()).toISOString(),
+        })
+        .pipe(
+          Effect.tap((failed) =>
+            failed ? increment(threadRetentionItemsTotal, { outcome: "failed" }) : Effect.void,
+          ),
+        );
+    const persistPurgeRetry = (item: ThreadRetentionRunItem, nextAttemptAt: string) =>
+      item.nextAttemptAt === nextAttemptAt
+        ? Effect.void
+        : input.repository.recordItemRetry({
+            runId: run.runId,
+            threadId: item.threadId,
+            expectedStatuses: ["prepared", "purging"],
+            lastErrorCode: "purge_failed",
+            nextAttemptAt,
+            updatedAt: new Date(now()).toISOString(),
+          });
     const recoveryFirst = items
       .filter((candidate) => ["prepared", "purging"].includes(candidate.status))
       .toSorted(
@@ -105,6 +131,13 @@ export function makePurgePreparedRetentionItems(input: {
         yield* increment(threadRetentionItemsTotal, { outcome: "failed" });
         continue;
       }
+      if (
+        incomplete.value.status === "failed" &&
+        incomplete.value.updatedAt > new Date(now()).toISOString()
+      ) {
+        yield* persistPurgeRetry(item, incomplete.value.updatedAt);
+        continue;
+      }
       if (item.status === "prepared") {
         if (now() >= deadlineAt) return "timeout" as const;
         yield* input.repository.transitionItem({
@@ -146,6 +179,25 @@ export function makePurgePreparedRetentionItems(input: {
         entityId: job.entityId,
       });
       if (Option.isSome(incomplete)) {
+        const item = items.find((candidate) => candidate.threadId === job.entityId);
+        if (incomplete.value.lastError === "manual_recovery_required") {
+          if (item) yield* markPurgeFailure(item, "manual_recovery_required");
+          continue;
+        }
+        if (
+          incomplete.value.status === "failed" &&
+          incomplete.value.attemptCount >= PURGE_MAX_ATTEMPTS
+        ) {
+          if (item) yield* markPurgeFailure(item, "purge_retry_exhausted");
+          continue;
+        }
+        if (
+          incomplete.value.status === "failed" &&
+          incomplete.value.updatedAt > new Date(now()).toISOString()
+        ) {
+          if (item) yield* persistPurgeRetry(item, incomplete.value.updatedAt);
+          continue;
+        }
         complete = false;
         continue;
       }

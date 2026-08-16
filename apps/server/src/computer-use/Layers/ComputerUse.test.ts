@@ -15,6 +15,7 @@ const THREAD_ID = ThreadId.makeUnsafe("thread-11111111-1111-4111-8111-1111111111
 const open: OpenShape = {
   openBrowser: () => Effect.void,
   openInEditor: () => Effect.void,
+  openInTerminal: () => Effect.void,
   openPath: () => Effect.void,
 };
 

@@ -24,6 +24,7 @@ import {
 } from "./rpc.workspace";
 import {
   WsServerCreateAutomationRpc,
+  WsServerCreateOwnedAutomationRpc,
   WsServerDeleteAutomationRpc,
   WsServerGetAutomationRpc,
   WsServerListAllAutomationsRpc,
@@ -88,6 +89,7 @@ import {
   WsServerVerifyExecutionTargetRpc,
   WsServerWriteHandoffDocumentRpc,
   WsShellOpenInEditorRpc,
+  WsShellOpenInTerminalRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
   WsTerminalClearRpc,
@@ -165,6 +167,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListAllAutomationsRpc,
   WsServerListAutomationsRpc,
   WsServerCreateAutomationRpc,
+  WsServerCreateOwnedAutomationRpc,
   WsServerUpdateAutomationRpc,
   WsServerPauseAutomationRpc,
   WsServerResumeAutomationRpc,
@@ -192,6 +195,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsNotesDeleteRpc,
   WsTeachListProjectsRpc,
   WsShellOpenInEditorRpc,
+  WsShellOpenInTerminalRpc,
   WsShellOpenPathRpc,
   WsSubscribeGitStatusRpc,
   WsGitPullRpc,

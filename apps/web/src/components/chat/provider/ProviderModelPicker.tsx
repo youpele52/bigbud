@@ -31,11 +31,12 @@ import {
 } from "./ProviderModelPicker.models";
 import { getProviderDescriptor } from "./providerDescriptors";
 import { useCliProxyActivation } from "../../../hooks/useCliProxyActivation";
+import { useSettings } from "../../../hooks/useSettings";
+import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
-
 const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;
 const LARGE_PROVIDER_MODEL_LIST_MIN_WIDTH_CLASS = "min-w-[40ch]";
 
@@ -49,13 +50,17 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
   props: ProviderModelPickerProps,
 ) {
   const allRecentUsages = useRecentlyUsedModels();
+  const hiddenComposerProviders = useSettings((settings) => settings.hiddenComposerProviders);
   const visibleProviderOptions = useMemo(
     () =>
-      AVAILABLE_PROVIDER_OPTIONS.filter((option) =>
-        getProviderDescriptor(option.value).isVisible(props.providers),
+      AVAILABLE_PROVIDER_OPTIONS.filter(
+        (option) =>
+          getVisibleComposerProviders(hiddenComposerProviders).includes(option.value) &&
+          getProviderDescriptor(option.value).isVisible(props.providers),
       ),
-    [props.providers],
+    [hiddenComposerProviders, props.providers],
   );
+  const noComposerProviders = getVisibleComposerProviders(hiddenComposerProviders).length === 0;
   const recentOptionsByProvider = useMemo(() => {
     if (!props.enableRecentlyUsed || allRecentUsages.length === 0) return {};
     const result: Partial<Record<ProviderKind, ModelOption[]>> = {};
@@ -166,7 +171,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                 props.compact ? "max-w-42 shrink-0" : "max-w-48 shrink sm:max-w-56 sm:px-3",
                 props.triggerClassName,
               )}
-              disabled={props.disabled}
+              disabled={props.disabled || noComposerProviders}
+              title={noComposerProviders ? "No composer providers are visible" : undefined}
             />
           }
         >
@@ -184,7 +190,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                 props.activeProviderIconClassName,
               )}
             />
-            <span className="min-w-0 flex-1 truncate">{selectedModelLabel}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {noComposerProviders ? "No composer providers" : selectedModelLabel}
+            </span>
             <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
           </span>
         </MenuTrigger>

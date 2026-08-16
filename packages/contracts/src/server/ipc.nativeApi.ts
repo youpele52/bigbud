@@ -18,6 +18,7 @@ import type {
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import type { EditorId } from "../workspace/editor";
+import type { TerminalApplicationId } from "../workspace/terminalApplication";
 import type * as Git from "../workspace/git";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
@@ -97,6 +98,7 @@ export interface NativeApi {
   };
   shell: {
     openInEditor: (cwd: string, editor: EditorId) => Promise<void>;
+    openInTerminal: (cwd: string, terminal: TerminalApplicationId) => Promise<void>;
     openPath: (path: string) => Promise<void>;
     openExternal: (url: string) => Promise<void>;
   };
@@ -204,6 +206,9 @@ export interface NativeApi {
     ) => Promise<Automation.ServerListAllAutomationsResult>;
     createAutomation: (
       input: Automation.ServerCreateAutomationInput,
+    ) => Promise<Automation.ServerAutomationResult>;
+    createOwnedAutomation: (
+      input: Automation.ServerCreateOwnedAutomationInput,
     ) => Promise<Automation.ServerAutomationResult>;
     updateAutomation: (
       input: Automation.ServerUpdateAutomationInput,
