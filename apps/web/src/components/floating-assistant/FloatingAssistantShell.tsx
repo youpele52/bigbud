@@ -218,7 +218,13 @@ export function CompactChatShell({
           threadId={threadId}
           onThreadMaterialized={synchronizeMaterializedThread}
         >
-          {(context) => <CompactThreadConversation {...context} workspaceRoot={undefined} />}
+          {(context) => (
+            <CompactThreadConversation
+              {...context}
+              composerClassName="max-w-[calc(52rem*2/3)]"
+              workspaceRoot={undefined}
+            />
+          )}
         </ThreadComposerSurface>
       )}
     </main>

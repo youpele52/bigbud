@@ -50,9 +50,13 @@ function SidecarHeaderAction(props: {
 }
 
 export function CompactThreadConversation({
+  composerClassName,
   workspaceRoot,
   ...context
-}: ThreadComposerSurfaceContext & { workspaceRoot: string | undefined }) {
+}: ThreadComposerSurfaceContext & {
+  composerClassName?: string;
+  workspaceRoot: string | undefined;
+}) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const [timelineContent, setTimelineContent] = useState<HTMLDivElement | null>(null);
   const { onScroll, scrollToBottom, showScrollToBottom } = useSideChatAutoScroll({
@@ -122,12 +126,12 @@ export function CompactThreadConversation({
       <div className="px-3 py-2">
         <ChatViewComposer
           base={context.base}
-          className="max-w-none"
           compact
           composer={context.composer}
           thread={context.thread}
           runtime={context.runtime}
           interactions={context.interactions}
+          {...(composerClassName ? { className: composerClassName } : {})}
           onOpenOrchestra={() => undefined}
           onOpenReplySource={() => undefined}
         />

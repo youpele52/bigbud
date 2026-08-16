@@ -216,7 +216,7 @@ export function ChatViewComposer({
                           : "Ask anything, @tag files/folders, or use / to show available commands"
               }
               disabled={base.isConnecting || thread.isComposerApprovalState}
-              {...(compact ? { className: "min-h-9 max-h-20 leading-5" } : {})}
+              {...(compact ? { className: "min-h-9 max-h-20 leading-5", compact: true } : {})}
             />
             {providerHealthUnconfirmed ? (
               <p className="mt-1 text-xs text-muted-foreground">

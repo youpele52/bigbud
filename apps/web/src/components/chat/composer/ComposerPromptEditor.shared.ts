@@ -23,6 +23,7 @@ export interface ComposerPromptEditorProps {
   disabled: boolean;
   placeholder: string;
   className?: string;
+  compact?: boolean;
   onRemoveTerminalContext: (contextId: string) => void;
   onChange: (
     nextValue: string,
