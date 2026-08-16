@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import type { MessageId } from "@bigbud/contracts";
+import type { MessageId, ThreadId } from "@bigbud/contracts";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
@@ -18,6 +18,7 @@ interface UseChatViewPromptQueueInput {
   runtime: ChatViewRuntimeState;
   envMode: DraftThreadEnvMode;
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
+  onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   planHandlers: Pick<ReturnType<typeof usePlanHandlers>, "onSubmitPlanFollowUp">;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
 }
@@ -50,6 +51,7 @@ export function useChatViewPromptQueue({
   runtime,
   envMode,
   onOptimisticUserMessage,
+  onThreadMaterialized,
   planHandlers,
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
@@ -126,6 +128,7 @@ export function useChatViewPromptQueue({
     handleInteractionModeChange: runtime.handleInteractionModeChange,
     onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
     onOptimisticUserMessage,
+    onThreadMaterialized,
     queueComposerPrompt: (prompt) => queueComposerPromptRef.current(prompt),
     transformPromptForSend,
   });

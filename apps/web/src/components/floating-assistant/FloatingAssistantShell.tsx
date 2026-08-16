@@ -144,10 +144,25 @@ export function MascotShell() {
   );
 }
 
-export function CompactChatShell() {
+export function CompactChatShell({
+  compactChat,
+}: {
+  compactChat: ReturnType<typeof useCompactChatThread>;
+}) {
   const bridge = window.desktopBridge;
-  const { isMaterialized, newChat, restoring, selectionUnavailable, threadId, threadTitle } =
-    useCompactChatThread();
+  const {
+    isMaterialized,
+    newChat,
+    preparing,
+    projectLoadError,
+    retryProjectLoad,
+    retryThreadSync,
+    selectionUnavailable,
+    synchronizeMaterializedThread,
+    threadSyncError,
+    threadId,
+    threadTitle,
+  } = compactChat;
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -184,8 +199,27 @@ export function CompactChatShell() {
           Your selected floating chat model is unavailable. Choose another model before sending.
         </p>
       ) : null}
-      {restoring ? null : (
-        <ThreadComposerSurface threadId={threadId}>
+      {projectLoadError ? (
+        <div className="flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <span>Floating chat could not load: {projectLoadError}</span>
+          <Button size="xs" variant="outline" onClick={retryProjectLoad}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+      {threadSyncError ? (
+        <div className="flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <span>Floating chat could not synchronize: {threadSyncError}</span>
+          <Button size="xs" variant="outline" onClick={retryThreadSync}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+      {preparing || projectLoadError ? null : (
+        <ThreadComposerSurface
+          threadId={threadId}
+          onThreadMaterialized={synchronizeMaterializedThread}
+        >
           {(context) => <CompactThreadConversation {...context} workspaceRoot={undefined} />}
         </ThreadComposerSurface>
       )}

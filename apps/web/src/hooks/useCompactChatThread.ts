@@ -6,6 +6,7 @@ import { hydrateSelectedThread, runBoundedBootstrap } from "~/routes/-__root.bou
 import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
 import { newThreadId } from "~/lib/utils";
+import { loadProjectForNewThread } from "~/hooks/useHandleNewThread";
 import {
   getCompactChatModelPreference,
   isCompactChatModelPreferenceAvailable,
@@ -46,6 +47,9 @@ export function useCompactChatThread() {
   });
   const { restoring, threadId } = threadState;
   const bootstrapComplete = useStore((state) => state.bootstrapComplete);
+  const compactProject = useStore((state) =>
+    state.projects.find((project) => project.id === BUILT_IN_CHATS_PROJECT_ID),
+  );
   const serverThread = useStore((state) => state.threads.find((thread) => thread.id === threadId));
   const hydrationStatus = useStore(
     (state) => state.threadHydrationById[threadId]?.status ?? "unloaded",
@@ -56,6 +60,9 @@ export function useCompactChatThread() {
   const clearDraftThread = useComposerDraftStore((state) => state.clearDraftThread);
   const providers = useServerProviders() ?? [];
   const [initialSelection, setInitialSelection] = useState(getInitialSelection);
+  const [projectLoadAttempt, setProjectLoadAttempt] = useState(0);
+  const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
+  const [threadSyncError, setThreadSyncError] = useState<string | null>(null);
   const selectionUnavailable = Boolean(
     initialSelection && !isCompactChatModelPreferenceAvailable(initialSelection, providers),
   );
@@ -106,7 +113,41 @@ export function useCompactChatThread() {
   }, [bootstrapComplete, clearDraftThread, restoring, serverThread, threadId]);
 
   useEffect(() => {
-    if (!bootstrapComplete || restoring || serverThread) return;
+    if (!bootstrapComplete || restoring || compactProject) return;
+    const api = readNativeApi();
+    if (!api) {
+      setProjectLoadError("bigbud is not connected to the server.");
+      return;
+    }
+
+    let disposed = false;
+    setProjectLoadError(null);
+    void loadProjectForNewThread({
+      api,
+      projectId: BUILT_IN_CHATS_PROJECT_ID,
+      getProject: () =>
+        useStore.getState().projects.find((project) => project.id === BUILT_IN_CHATS_PROJECT_ID),
+      mergeProjectCatalogPage: useStore.getState().mergeProjectCatalogPage,
+    })
+      .then((project) => {
+        if (!disposed && !project) {
+          setProjectLoadError("The Chats project is unavailable.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setProjectLoadError(
+            error instanceof Error ? error.message : "The Chats project could not be loaded.",
+          );
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [bootstrapComplete, compactProject, projectLoadAttempt, restoring]);
+
+  useEffect(() => {
+    if (!bootstrapComplete || restoring || !compactProject || serverThread) return;
     setDraftThreadContext(threadId, {
       projectId: BUILT_IN_CHATS_PROJECT_ID,
       branch: null,
@@ -120,6 +161,7 @@ export function useCompactChatThread() {
     }
   }, [
     bootstrapComplete,
+    compactProject,
     initialSelection,
     restoring,
     serverThread,
@@ -135,7 +177,7 @@ export function useCompactChatThread() {
       !bootstrapComplete ||
       restoring ||
       !serverThread ||
-      hydrationStatus !== "unloaded"
+      (hydrationStatus !== "unloaded" && hydrationStatus !== "failed")
     ) {
       return;
     }
@@ -153,11 +195,52 @@ export function useCompactChatThread() {
     return true;
   }, [clearDraftThread, prompt, threadId]);
 
+  const retryProjectLoad = useCallback(() => {
+    setProjectLoadAttempt((attempt) => attempt + 1);
+  }, []);
+
+  const synchronizeMaterializedThread = useCallback(
+    async (materializedThreadId: ThreadId) => {
+      const api = readNativeApi();
+      if (!api) {
+        setThreadSyncError("bigbud is not connected to the server.");
+        return;
+      }
+
+      setThreadSyncError(null);
+      try {
+        await runBoundedBootstrap({
+          api,
+          selectedThreadId: materializedThreadId,
+          disposed: () => false,
+        });
+        if (!useStore.getState().threads.some((thread) => thread.id === materializedThreadId)) {
+          throw new Error("The new chat was not found after it was created.");
+        }
+        clearDraftThread(materializedThreadId);
+      } catch (error) {
+        setThreadSyncError(
+          error instanceof Error ? error.message : "The new chat could not be synchronized.",
+        );
+      }
+    },
+    [clearDraftThread],
+  );
+
+  const retryThreadSync = useCallback(() => {
+    void synchronizeMaterializedThread(threadId);
+  }, [synchronizeMaterializedThread, threadId]);
+
   return {
     isMaterialized: Boolean(serverThread),
     newChat,
-    restoring,
+    preparing: restoring || (!compactProject && projectLoadError === null),
+    projectLoadError,
+    retryProjectLoad,
+    retryThreadSync,
     selectionUnavailable,
+    synchronizeMaterializedThread,
+    threadSyncError,
     threadTitle: serverThread?.title ?? null,
     threadId,
   };

@@ -31,7 +31,7 @@ import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 
 /** Subscribes to orchestration/terminal events and applies them to the client store. Renders nothing. */
-export function EventRouter() {
+export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}) {
   const applyOrchestrationEvents = useStore((store) => store.applyOrchestrationEvents);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
   const syncProjects = useUiStateStore((store) => store.syncProjects);
@@ -63,12 +63,19 @@ export function EventRouter() {
   const serverConfig = useServerConfig();
   const serverSettings = useServerSettings();
   const readThinkingStreamingEnabled = useEffectEvent(() => serverSettings.enableThinkingStreaming);
+  const readOwnedThreadId = useEffectEvent(() => ownedThreadId ?? null);
+  const ownsThread = ownedThreadId !== undefined;
 
   const handleWelcome = useEffectEvent((payload: ServerLifecycleWelcomePayload | null) => {
     if (!payload) return;
 
-    migrateLocalSettingsToServer();
     void (async () => {
+      if (ownsThread) {
+        await bootstrapBoundedRef.current(readOwnedThreadId());
+        return;
+      }
+
+      migrateLocalSettingsToServer();
       const selectedThreadId = resolveSelectedThreadIdFromPath(
         readPathname(),
         payload.bootstrapThreadId ?? null,
@@ -225,7 +232,7 @@ export function EventRouter() {
       });
     };
 
-    let selectedThreadId: ThreadId | null = null;
+    let selectedThreadId: ThreadId | null = readOwnedThreadId();
     const bootstrapBounded = async (nextSelectedThreadId: ThreadId | null): Promise<void> => {
       selectedThreadId = nextSelectedThreadId;
       await eventRecovery.runBoundedRecovery("bootstrap", selectedThreadId, () => disposed);
@@ -233,7 +240,9 @@ export function EventRouter() {
     bootstrapBoundedRef.current = bootstrapBounded;
 
     const fallbackToBoundedRecovery = async (): Promise<void> => {
-      selectedThreadId = resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
+      selectedThreadId = ownsThread
+        ? readOwnedThreadId()
+        : resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
       await eventRecovery.runBoundedRecovery("replay-failed", selectedThreadId, () => disposed);
     };
     const unsubDomainEvent = api.orchestration.onDomainEvent(
@@ -299,6 +308,7 @@ export function EventRouter() {
     removeOrphanedTerminalStates,
     applyTerminalEvents,
     clearThreadUi,
+    ownsThread,
     syncProjects,
     syncThreads,
   ]);

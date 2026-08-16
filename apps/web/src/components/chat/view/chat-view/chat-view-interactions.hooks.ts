@@ -1,4 +1,4 @@
-import type { MessageId, TurnId } from "@bigbud/contracts";
+import type { MessageId, ThreadId, TurnId } from "@bigbud/contracts";
 import { useCallback } from "react";
 
 import type { DraftThreadEnvMode } from "~/stores/composer";
@@ -34,6 +34,7 @@ interface ChatViewInteractionsInput {
   base: ChatViewBaseState;
   composer: ChatViewComposerDerivedState;
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
+  onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   thread: ChatViewThreadDerivedState;
   timeline: ChatViewTimelineState;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
@@ -45,6 +46,7 @@ export function useChatViewInteractions({
   base,
   composer,
   onOptimisticUserMessage,
+  onThreadMaterialized,
   thread,
   timeline,
   transformPromptForSend,
@@ -170,6 +172,7 @@ export function useChatViewInteractions({
     envMode,
     planHandlers,
     onOptimisticUserMessage,
+    onThreadMaterialized,
     transformPromptForSend,
   });
 

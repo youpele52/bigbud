@@ -9,11 +9,12 @@ export class DesktopWindowRegistry {
   readonly #rolesByWebContentsId = new Map<number, DesktopWindowRole>();
 
   register(role: DesktopWindowRole, window: BrowserWindow): void {
+    const webContentsId = window.webContents.id;
     this.#windows.set(role, window);
-    this.#rolesByWebContentsId.set(window.webContents.id, role);
+    this.#rolesByWebContentsId.set(webContentsId, role);
     window.once("closed", () => {
       if (this.#windows.get(role) === window) this.#windows.delete(role);
-      this.#rolesByWebContentsId.delete(window.webContents.id);
+      this.#rolesByWebContentsId.delete(webContentsId);
     });
   }
 

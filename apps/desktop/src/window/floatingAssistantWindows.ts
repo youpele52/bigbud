@@ -167,6 +167,9 @@ export class FloatingAssistantWindows {
   }
 
   private createCompactChat(mascot: BrowserWindow): BrowserWindow {
+    if (!this.deps.preferences.get().floatingAssistantEnabled || mascot.isDestroyed()) {
+      throw new Error("Cannot open compact chat while the floating assistant is disabled.");
+    }
     const mascotBounds = mascot.getBounds();
     const display = screen.getDisplayMatching(mascotBounds);
     const bounds = compactChatBounds(mascotBounds, display.workArea);

@@ -37,6 +37,7 @@ import {
   MascotShell,
 } from "../components/floating-assistant/FloatingAssistantShell";
 import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
+import { useCompactChatThread } from "../hooks/useCompactChatThread";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -148,16 +149,17 @@ export function RootRouteView() {
 }
 
 function CompactChatRoot() {
+  const compactChat = useCompactChatThread();
   if (!readNativeApi()) return <StartupSplash />;
   return (
     <ToastProvider>
       <AnchoredToastProvider>
         <ServerStateBootstrap />
-        <EventRouter />
+        <EventRouter ownedThreadId={compactChat.threadId} />
         <WebSocketConnectionCoordinator />
         <DesktopBackendStartupCoordinator />
         <WebSocketConnectionSurface>
-          <CompactChatShell />
+          <CompactChatShell compactChat={compactChat} />
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
     </ToastProvider>

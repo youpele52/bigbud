@@ -9,6 +9,8 @@ interface MockWindow {
   readonly webContents: { id: number };
   readonly hide: ReturnType<typeof vi.fn>;
   readonly destroy: ReturnType<typeof vi.fn>;
+  readonly getBounds: ReturnType<typeof vi.fn>;
+  readonly isDestroyed: ReturnType<typeof vi.fn>;
   readonly setPosition: ReturnType<typeof vi.fn>;
   readonly setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>;
 }
@@ -19,6 +21,7 @@ const { mockWindowInstances } = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({
   BrowserWindow: class MockBrowserWindow {
+    private destroyed = false;
     readonly handlers = new Map<string, (...args: never[]) => void>();
     readonly webContents = {
       id: mockWindowInstances.length + 1,
@@ -29,12 +32,18 @@ vi.mock("electron", () => ({
     readonly show = vi.fn();
     readonly showInactive = vi.fn();
     readonly focus = vi.fn();
-    readonly destroy = vi.fn();
+    readonly destroy = vi.fn(() => {
+      this.destroyed = true;
+      this.handlers.get("closed")?.();
+    });
     readonly setVisibleOnAllWorkspaces = vi.fn();
     readonly setPosition = vi.fn();
     readonly loadURL = vi.fn();
-    readonly getBounds = vi.fn(() => ({ x: 920, y: 720, width: 64, height: 64 }));
-    readonly isDestroyed = vi.fn(() => false);
+    readonly getBounds = vi.fn(() => {
+      if (this.destroyed) throw new Error("Object has been destroyed");
+      return { x: 920, y: 720, width: 64, height: 64 };
+    });
+    readonly isDestroyed = vi.fn(() => this.destroyed);
 
     constructor(readonly options: Record<string, unknown>) {
       mockWindowInstances.push(this);
@@ -170,5 +179,17 @@ describe("FloatingAssistantWindows", () => {
     expect(compactChat.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
       visibleOnFullScreen: true,
     });
+  });
+
+  it("does not touch a destroyed mascot when disable races compact chat creation", async () => {
+    const { registry, windows } = createWindows();
+
+    const compactChat = windows.openCompactChat();
+    windows.disable();
+
+    await expect(compactChat).rejects.toThrow(
+      "Cannot open compact chat while the floating assistant is disabled.",
+    );
+    expect(registry.get("compact-chat")).toBeNull();
   });
 });
