@@ -166,8 +166,7 @@ const THREAD_RETENTION_ELIGIBILITY_REASONS = new Set([
   "pending_work",
   "waiting_for_user",
   "active_task",
-  "watched",
-  "delegated",
+  "automation_owned",
   "scheduled",
 ]);
 

@@ -7,7 +7,6 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Keep bigbud close at hand with the new Floating Assistant: drag its caller anywhere, open a compact chat from any desktop Space, and choose either the bigbud app icon or a hand mascot that waves when you hover.
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
-- Added provider recovery with automatic retries, clearer failure guidance, and Settings actions.
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
 
@@ -31,6 +30,8 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Separated local and remote project catalogs so their startup loading, pagination, retries, cursors, and failures no longer affect one another.
 - Loaded one bounded page for each catalog at startup while preserving the selected project's priority. Each sidebar section now shows the exact number of projects available to load, with **Load n more projects** capped at five and **Load all n projects** when more remain.
 - Added targeted database indexes and query coverage for efficient project catalog loading at scale.
+- Added project results to the Command Palette, including unloaded local and SSH projects. SSH projects verify their connection before opening.
+- Replaced the static SSH badge with live connected, connecting, and disconnected status in the sidebar.
 
 ### SSH Project Editing and External Tools
 
@@ -43,10 +44,15 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 - Added persisted, provider-neutral supervision for turns that stop producing events. bigbud can inspect silent turns, surface recoverable health states, and safely reconcile them with bounded checks.
 - Routed automatic follow-ups and queued-prompt delivery through shared safety gates, so they remain queued whenever a turn, session startup, active run, or pending interaction is still in progress.
 - Preserved exactly-once queued follow-up delivery across provider completion, failures, terminal activity, replay, and idle-versus-active races. The composer now makes an unconfirmed provider-health state clearer.
+- Added Provider Settings controls to hide individual providers from the composer and `/model` menu, with a safe fallback when your current provider becomes hidden.
+
+### Reliable Automations
+
+- Made automation chats server-owned: creating an automation creates its dedicated chat atomically, prevents direct deletion while it is in use, and removes the chat after its final automation is deleted.
 
 ### Automatic Thread Cleanup
 
-- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days; **Never** remains available to disable scheduled cleanup.
+- Added 1-day, 2-day, and 3-day automatic cleanup periods alongside 7, 14, 30, and 90 days. Every finite period now enables daily automatic cleanup; **Never** remains available to disable it.
 - Made daily and confirmed cleanup durable across recovery and restarts, including repaired interrupted purge and projection-baseline recovery, so work waits and resumes safely when it can proceed.
 - Prioritized manual cleanup at safe checkpoints, coalesced equivalent manual requests into one run, and kept individual retry delays from stopping other eligible threads.
 - Improved the cleanup confirmation dialog and status with direct one-off period selection, clearer deletion and preservation details, understandable estimates and exclusions, and plain-language waiting and progress updates; added durable retries, safe worker wake-ups, and regression coverage.

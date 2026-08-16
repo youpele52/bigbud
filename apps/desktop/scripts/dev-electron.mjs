@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { watch } from "node:fs";
 import { join } from "node:path";
 
-import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
+import { desktopDir, resolveDevelopmentElectronLaunch } from "./electron-launcher.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
 const port = Number(process.env.ELECTRON_RENDERER_PORT ?? 5733);
@@ -19,6 +19,7 @@ const watchedDirectories = [
 const forcedShutdownTimeoutMs = 1_500;
 const restartDebounceMs = 120;
 const childTreeGracePeriodMs = 1_200;
+const devAppMarker = `--t3code-dev-root=${desktopDir}`;
 
 await waitForResources({
   baseDir: desktopDir,
@@ -32,6 +33,7 @@ delete childEnv.ELECTRON_RUN_AS_NODE;
 let shuttingDown = false;
 let restartTimer = null;
 let currentApp = null;
+let currentLogTail = null;
 let restartQueue = Promise.resolve();
 const expectedExits = new WeakSet();
 const watchers = [];
@@ -44,12 +46,38 @@ function killChildTreeByPid(pid, signal) {
   spawnSync("pkill", [`-${signal}`, "-P", String(pid)], { stdio: "ignore" });
 }
 
+function killTaggedDevApp(signal) {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  spawnSync("pkill", [`-${signal}`, "-f", "--", devAppMarker], {
+    stdio: "ignore",
+  });
+}
+
 function cleanupStaleDevApps() {
   if (process.platform === "win32") {
     return;
   }
 
-  spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], { stdio: "ignore" });
+  spawnSync("pkill", ["-f", "--", devAppMarker], { stdio: "ignore" });
+}
+
+function startMacDevAppWatchdog() {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  spawn(
+    process.execPath,
+    [
+      join(desktopDir, "scripts", "macos-dev-app-watchdog.mjs"),
+      String(process.pid),
+      Buffer.from(devAppMarker).toString("base64"),
+    ],
+    { detached: true, stdio: "ignore" },
+  ).unref();
 }
 
 function startApp() {
@@ -57,18 +85,24 @@ function startApp() {
     return;
   }
 
-  const app = spawn(
-    resolveElectronPath(true),
-    ["--no-deprecation", `--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
-    {
-      cwd: desktopDir,
-      env: {
-        ...childEnv,
-        VITE_DEV_SERVER_URL: devServerUrl,
-      },
-      stdio: "inherit",
-    },
+  const appEnvironment = {
+    ...childEnv,
+    VITE_DEV_SERVER_URL: devServerUrl,
+  };
+  const launch = resolveDevelopmentElectronLaunch(
+    ["--no-deprecation", devAppMarker, join(desktopDir, "dist-electron", "main.js")],
+    appEnvironment,
   );
+  const app = spawn(launch.command, launch.args, {
+    cwd: desktopDir,
+    env: appEnvironment,
+    stdio: "inherit",
+  });
+  if (launch.logPaths) {
+    currentLogTail = spawn("tail", ["-q", "-n", "+1", "-F", ...launch.logPaths], {
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+  }
 
   currentApp = app;
 
@@ -76,6 +110,7 @@ function startApp() {
     if (currentApp === app) {
       currentApp = null;
     }
+    stopLogTail();
 
     if (!shuttingDown) {
       scheduleRestart();
@@ -86,12 +121,18 @@ function startApp() {
     if (currentApp === app) {
       currentApp = null;
     }
+    stopLogTail();
 
     const exitedAbnormally = signal !== null || code !== 0;
     if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
       scheduleRestart();
     }
   });
+}
+
+function stopLogTail() {
+  currentLogTail?.kill("SIGTERM");
+  currentLogTail = null;
 }
 
 async function stopApp() {
@@ -102,6 +143,7 @@ async function stopApp() {
 
   currentApp = null;
   expectedExits.add(app);
+  stopLogTail();
 
   await new Promise((resolve) => {
     let settled = false;
@@ -116,6 +158,7 @@ async function stopApp() {
     };
 
     app.once("exit", finish);
+    killTaggedDevApp("TERM");
     app.kill("SIGTERM");
     killChildTreeByPid(app.pid, "TERM");
 
@@ -124,6 +167,7 @@ async function stopApp() {
         return;
       }
 
+      killTaggedDevApp("KILL");
       app.kill("SIGKILL");
       killChildTreeByPid(app.pid, "KILL");
       finish();
@@ -205,6 +249,7 @@ async function shutdown(exitCode) {
 
 startWatchers();
 cleanupStaleDevApps();
+startMacDevAppWatchdog();
 startApp();
 
 process.once("SIGINT", () => {
