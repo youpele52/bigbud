@@ -1,23 +1,88 @@
 import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
-import { useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
 import { ThreadComposerSurface } from "~/components/chat/view/ThreadComposerSurface";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
+import celebrationMascot from "~/assets/mascot/bigbud-hand/celebration.webp";
+import thinkingMascot from "~/assets/mascot/bigbud-hand/thinking.webp";
+import thumbsUpMascot from "~/assets/mascot/bigbud-hand/thumbs-up.webp";
+import typingMascot from "~/assets/mascot/bigbud-hand/typing.webp";
+import waveMascot from "~/assets/mascot/bigbud-hand/wave.webp";
+
+import { useMascotAnimation } from "./useMascotAnimation";
+
+const MASCOT_ANIMATIONS = {
+  celebration: celebrationMascot,
+  thinking: thinkingMascot,
+  "thumbs-up": thumbsUpMascot,
+  typing: typingMascot,
+  wave: waveMascot,
+} as const;
+
+function CompactChatHeaderAction(props: {
+  disabled?: boolean;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  const button = (
+    <Button
+      size="icon-xs"
+      variant="ghost"
+      aria-label={props.label}
+      disabled={props.disabled}
+      onClick={props.onClick}
+    >
+      {props.icon}
+    </Button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span />}>{button}</TooltipTrigger>
+      <TooltipPopup side="bottom">{props.label}</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 export function MascotShell() {
   const bridge = window.desktopBridge;
   const dragState = useRef<{ moved: boolean; startX: number; startY: number } | null>(null);
   const didDrag = useRef(false);
+  const [caller, setCaller] = useState<"logo" | "mascot">("mascot");
+  const [isHovered, setIsHovered] = useState(false);
+  const { animation, animationKey } = useMascotAnimation(isHovered);
+
+  useEffect(() => {
+    if (!bridge?.getFloatingAssistantCaller) return;
+    void bridge.getFloatingAssistantCaller().then(setCaller);
+    return bridge.onFloatingAssistantCallerChange?.(setCaller);
+  }, [bridge]);
+
   return (
-    <main className="flex h-screen w-screen items-center justify-center bg-transparent p-1">
+    <main
+      data-floating-assistant-mascot=""
+      data-mascot-animation={animation}
+      className="flex h-screen w-screen items-center justify-center bg-transparent"
+    >
       <button
         type="button"
         aria-label="Open floating assistant chat"
-        className="flex size-14 cursor-pointer items-center justify-center bg-transparent p-0 text-foreground transition-opacity hover:opacity-80"
+        className={
+          caller === "logo"
+            ? "flex size-28 cursor-pointer items-center justify-center rounded-[36px] border border-white/15 bg-gradient-to-br from-neutral-700 via-neutral-900 to-neutral-950 p-0 text-white shadow-[0_8px_16px_rgb(0_0_0_/_0.28),inset_0_1px_0_rgb(255_255_255_/_0.16)] transition-transform hover:scale-[1.03] active:scale-95"
+            : "flex size-36 cursor-grab touch-none select-none items-center justify-center bg-transparent p-0 text-foreground transition-opacity hover:opacity-80 active:cursor-grabbing"
+        }
+        draggable={false}
+        onDragStart={(event) => event.preventDefault()}
+        onPointerEnter={() => setIsHovered(true)}
+        onPointerLeave={() => setIsHovered(false)}
         onPointerDown={(event) => {
+          if (event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
           didDrag.current = false;
           dragState.current = { moved: false, startX: event.screenX, startY: event.screenY };
@@ -37,8 +102,12 @@ export function MascotShell() {
           void bridge?.moveMascot?.({ x: event.screenX, y: event.screenY });
         }}
         onPointerCancel={() => {
+          if (dragState.current?.moved) didDrag.current = true;
           dragState.current = null;
-          didDrag.current = false;
+        }}
+        onLostPointerCapture={() => {
+          if (dragState.current?.moved) didDrag.current = true;
+          dragState.current = null;
         }}
         onClick={(event) => {
           if (didDrag.current) {
@@ -51,7 +120,17 @@ export function MascotShell() {
           void bridge?.openCompactChat?.();
         }}
       >
-        <BigbudLogo className="h-7" />
+        {caller === "logo" ? (
+          <BigbudLogo className="h-14" />
+        ) : (
+          <img
+            key={animationKey}
+            src={MASCOT_ANIMATIONS[animation]}
+            alt=""
+            draggable={false}
+            className="size-full object-contain drop-shadow-[0_5px_4px_rgb(0_0_0_/_0.22)]"
+          />
+        )}
       </button>
     </main>
   );
@@ -67,31 +146,22 @@ export function CompactChatShell() {
           <BigbudLogo className="h-4 text-primary" />
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            aria-label="Open bigbud"
+          <CompactChatHeaderAction
+            label="Open bigbud"
             disabled={!isMaterialized}
+            icon={<ExternalLinkIcon className="size-3.5" />}
             onClick={() => void bridge?.openMainWindow?.(threadId)}
-          >
-            <ExternalLinkIcon className="size-3.5" />
-          </Button>
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            aria-label="New chat"
+          />
+          <CompactChatHeaderAction
+            label="New chat"
+            icon={<PlusIcon className="size-3.5" />}
             onClick={() => void newChat()}
-          >
-            <PlusIcon className="size-3.5" />
-          </Button>
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            aria-label="Hide chat"
+          />
+          <CompactChatHeaderAction
+            label="Hide chat"
+            icon={<XIcon className="size-3.5" />}
             onClick={() => void bridge?.hideCompactChat?.()}
-          >
-            <XIcon className="size-3.5" />
-          </Button>
+          />
         </div>
       </header>
       {selectionUnavailable ? (

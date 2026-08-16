@@ -4,6 +4,7 @@ import * as Path from "node:path";
 export interface DesktopPreferences {
   version: 1;
   floatingAssistantEnabled: boolean;
+  floatingAssistantCaller: "logo" | "mascot";
   mascotVisible: boolean;
   mascotBounds: { x: number; y: number } | null;
 }
@@ -11,6 +12,7 @@ export interface DesktopPreferences {
 const defaults: DesktopPreferences = {
   version: 1,
   floatingAssistantEnabled: false,
+  floatingAssistantCaller: "mascot",
   mascotVisible: true,
   mascotBounds: null,
 };
@@ -30,7 +32,11 @@ function decode(value: unknown): DesktopPreferences | null {
   if (state.version !== 1 || typeof state.floatingAssistantEnabled !== "boolean") return null;
   if (typeof state.mascotVisible !== "boolean") return null;
   if (state.mascotBounds !== null && !isFinitePoint(state.mascotBounds)) return null;
-  return state as DesktopPreferences;
+  return {
+    ...state,
+    // Existing profiles predate caller selection and should receive the new hand mascot.
+    floatingAssistantCaller: state.floatingAssistantCaller === "logo" ? "logo" : "mascot",
+  } as DesktopPreferences;
 }
 
 export class DesktopPreferencesStore {

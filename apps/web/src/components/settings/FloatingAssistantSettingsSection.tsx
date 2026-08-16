@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ProviderModelPicker } from "~/components/chat/provider/ProviderModelPicker";
 import { PROVIDER_DESCRIPTORS } from "~/components/chat/provider/providerDescriptors";
+import thumbsUpMascot from "~/assets/mascot/bigbud-hand/thumbs-up.webp";
+import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
+import { Radio, RadioGroup } from "~/components/ui/radio-group";
 import { getProviderModels } from "~/models/provider";
 import {
   COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY,
@@ -20,6 +23,7 @@ const EMPTY_PROVIDERS: ReturnType<typeof useServerProviders> = [];
 export function FloatingAssistantSettingsSection() {
   const bridge = window.desktopBridge;
   const [enabled, setEnabled] = useState(false);
+  const [caller, setCaller] = useState<"logo" | "mascot">("mascot");
   const providers = useServerProviders() ?? EMPTY_PROVIDERS;
   const [modelPreference, setModelPreference] = useLocalStorage(
     COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY,
@@ -46,6 +50,11 @@ export function FloatingAssistantSettingsSection() {
   useEffect(() => {
     if (!bridge?.getFloatingAssistantEnabled) return;
     void bridge.getFloatingAssistantEnabled().then(setEnabled);
+  }, [bridge]);
+
+  useEffect(() => {
+    if (!bridge?.getFloatingAssistantCaller) return;
+    void bridge.getFloatingAssistantCaller().then(setCaller);
   }, [bridge]);
 
   if (!bridge?.setFloatingAssistantEnabled) return null;
@@ -100,6 +109,36 @@ export function FloatingAssistantSettingsSection() {
           />
         }
       />
+      <SettingsRow
+        title="Floating chat caller"
+        description="Choose the button that opens floating chat. More mascot actions will be added here."
+      >
+        <RadioGroup
+          value={caller}
+          className="mt-3 grid gap-2 sm:grid-cols-2"
+          onValueChange={(value) => {
+            if (value !== "logo" && value !== "mascot") return;
+            const update = bridge?.setFloatingAssistantCaller;
+            if (!update) return;
+            const previous = caller;
+            setCaller(value);
+            void update(value).then((updated) => {
+              if (!updated) setCaller(previous);
+            });
+          }}
+        >
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
+            <Radio value="logo" />
+            <BigbudLogo className="h-4" />
+            <span className="text-sm font-medium">bigbud logo</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/70 px-3 py-2.5">
+            <Radio value="mascot" />
+            <img src={thumbsUpMascot} alt="" className="size-8 object-contain" />
+            <span className="text-sm font-medium">Hand mascot</span>
+          </label>
+        </RadioGroup>
+      </SettingsRow>
     </SettingsSection>
   );
 }

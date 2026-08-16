@@ -33,6 +33,7 @@ export interface ContextMenuItem<T extends string = string> {
 
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
+export type FloatingAssistantCaller = "logo" | "mascot";
 
 export interface DesktopNotificationInput {
   title: string;
@@ -61,6 +62,11 @@ export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertific
   quitApplication?: () => Promise<void>;
   getFloatingAssistantEnabled?: () => Promise<boolean>;
   setFloatingAssistantEnabled?: (enabled: boolean) => Promise<boolean>;
+  getFloatingAssistantCaller?: () => Promise<FloatingAssistantCaller>;
+  setFloatingAssistantCaller?: (caller: FloatingAssistantCaller) => Promise<boolean>;
+  onFloatingAssistantCallerChange?: (
+    listener: (caller: FloatingAssistantCaller) => void,
+  ) => () => void;
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;

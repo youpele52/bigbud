@@ -38,4 +38,7 @@ export const desktopIpcChannels = {
   quitApplication: "desktop:quit-application",
   getFloatingAssistantEnabled: "desktop:get-floating-assistant-enabled",
   setFloatingAssistantEnabled: "desktop:set-floating-assistant-enabled",
+  getFloatingAssistantCaller: "desktop:get-floating-assistant-caller",
+  setFloatingAssistantCaller: "desktop:set-floating-assistant-caller",
+  floatingAssistantCallerChanged: "desktop:floating-assistant-caller-changed",
 } as const;

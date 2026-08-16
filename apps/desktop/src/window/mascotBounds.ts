@@ -1,6 +1,6 @@
 import type { Rectangle } from "electron";
 
-export const MASCOT_SIZE = 64;
+export const MASCOT_SIZE = 160;
 export const COMPACT_CHAT_SIZE = { width: 480, height: 620 } as const;
 export const COMPACT_CHAT_MIN_SIZE = { width: 360, height: 440 } as const;
 

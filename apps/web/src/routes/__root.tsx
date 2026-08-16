@@ -36,6 +36,7 @@ import {
   CompactChatShell,
   MascotShell,
 } from "../components/floating-assistant/FloatingAssistantShell";
+import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
 
 const STARTUP_SPLASH_EXIT_DURATION_MS = 220;
 
@@ -52,7 +53,12 @@ export const Route = createRootRouteWithContext<{
 export function RootRouteView() {
   const desktopWindowRole = window.desktopBridge?.getWindowRole?.() ?? "main";
   if (desktopWindowRole === "mascot") {
-    return <MascotShell />;
+    return (
+      <>
+        <MascotStateCoordinator />
+        <MascotShell />
+      </>
+    );
   }
   if (desktopWindowRole === "compact-chat") {
     return <CompactChatRoot />;

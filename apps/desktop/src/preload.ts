@@ -46,6 +46,9 @@ const DISABLE_FLOATING_ASSISTANT_CHANNEL = "desktop:disable-floating-assistant";
 const QUIT_APPLICATION_CHANNEL = "desktop:quit-application";
 const GET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:get-floating-assistant-enabled";
 const SET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:set-floating-assistant-enabled";
+const GET_FLOATING_ASSISTANT_CALLER_CHANNEL = "desktop:get-floating-assistant-caller";
+const SET_FLOATING_ASSISTANT_CALLER_CHANNEL = "desktop:set-floating-assistant-caller";
+const FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL = "desktop:floating-assistant-caller-changed";
 const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" } as const;
 // This is evaluated inside the isolated preload, not supplied by the renderer.
 const allowDevelopmentDiagnostics = process.defaultApp === true;
@@ -66,6 +69,17 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getFloatingAssistantEnabled: () => ipcRenderer.invoke(GET_FLOATING_ASSISTANT_ENABLED_CHANNEL),
   setFloatingAssistantEnabled: (enabled) =>
     ipcRenderer.invoke(SET_FLOATING_ASSISTANT_ENABLED_CHANNEL, enabled),
+  getFloatingAssistantCaller: () => ipcRenderer.invoke(GET_FLOATING_ASSISTANT_CALLER_CHANNEL),
+  setFloatingAssistantCaller: (caller) =>
+    ipcRenderer.invoke(SET_FLOATING_ASSISTANT_CALLER_CHANNEL, caller),
+  onFloatingAssistantCallerChange: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, caller: unknown) => {
+      if (caller === "logo" || caller === "mascot") listener(caller);
+    };
+    ipcRenderer.on(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
+  },
   getWsUrl: () => {
     const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);
     return typeof result === "string" ? result : null;

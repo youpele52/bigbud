@@ -24,6 +24,7 @@ export class FloatingAssistantWindows {
   #mascotCreation: Promise<BrowserWindow> | null = null;
   #compactCreation: Promise<BrowserWindow> | null = null;
   #mascotDragOffset: { x: number; y: number } | null = null;
+  #mascotBoundsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: FloatingAssistantWindowsDeps) {}
 
@@ -83,12 +84,14 @@ export class FloatingAssistantWindows {
   }
 
   disable(): void {
+    this.flushMascotBounds();
     this.deps.preferences.update({ floatingAssistantEnabled: false, mascotVisible: false });
     this.deps.registry.get("compact-chat")?.destroy();
     this.deps.registry.get("mascot")?.destroy();
   }
 
   destroyForQuit(): void {
+    this.flushMascotBounds();
     for (const window of [
       this.deps.registry.get("compact-chat"),
       this.deps.registry.get("mascot"),
@@ -98,8 +101,10 @@ export class FloatingAssistantWindows {
   }
 
   private createMascot(): BrowserWindow {
-    const workArea = screen.getPrimaryDisplay().workArea;
     const anchor = this.deps.preferences.get().mascotBounds;
+    const workArea = anchor
+      ? screen.getDisplayNearestPoint(anchor).workArea
+      : screen.getPrimaryDisplay().workArea;
     const bounds = clampBounds(
       {
         x: anchor?.x ?? workArea.x + workArea.width - MASCOT_SIZE - 16,
@@ -111,7 +116,9 @@ export class FloatingAssistantWindows {
     );
     const window = new BrowserWindow({
       ...bounds,
+      backgroundColor: "#00000000",
       frame: false,
+      hasShadow: false,
       transparent: process.platform !== "linux",
       show: false,
       focusable: true,
@@ -127,8 +134,7 @@ export class FloatingAssistantWindows {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     this.deps.registry.register("mascot", window);
     window.on("moved", () => {
-      const next = window.getBounds();
-      this.deps.preferences.update({ mascotBounds: { x: next.x, y: next.y } });
+      this.scheduleMascotBoundsSave(window);
     });
     window.on("close", (event) => {
       if (!window.isDestroyed()) {
@@ -138,6 +144,26 @@ export class FloatingAssistantWindows {
     });
     this.load(window, "mascot");
     return window;
+  }
+
+  private scheduleMascotBoundsSave(window: BrowserWindow): void {
+    if (this.#mascotBoundsSaveTimer !== null) clearTimeout(this.#mascotBoundsSaveTimer);
+    this.#mascotBoundsSaveTimer = setTimeout(() => {
+      this.#mascotBoundsSaveTimer = null;
+      if (window.isDestroyed()) return;
+      const next = window.getBounds();
+      this.deps.preferences.update({ mascotBounds: { x: next.x, y: next.y } });
+    }, 150);
+  }
+
+  private flushMascotBounds(): void {
+    if (this.#mascotBoundsSaveTimer === null) return;
+    clearTimeout(this.#mascotBoundsSaveTimer);
+    this.#mascotBoundsSaveTimer = null;
+    const mascot = this.deps.registry.get("mascot");
+    if (!mascot || mascot.isDestroyed()) return;
+    const next = mascot.getBounds();
+    this.deps.preferences.update({ mascotBounds: { x: next.x, y: next.y } });
   }
 
   private createCompactChat(mascot: BrowserWindow): BrowserWindow {

@@ -77,6 +77,17 @@
   }
 }
 
+/* The mascot runs in a transparent Electron window, not the app shell. */
+html:has([data-floating-assistant-mascot]),
+body:has([data-floating-assistant-mascot]),
+#root:has([data-floating-assistant-mascot]) {
+  background-color: transparent;
+}
+
+body:has([data-floating-assistant-mascot])::after {
+  display: none;
+}
+
 @font-face {
   font-family: "MesloLGL Nerd Font Mono";
   src: url("/fonts/MesloLGLNerdFontMono-Regular.ttf") format("truetype");
