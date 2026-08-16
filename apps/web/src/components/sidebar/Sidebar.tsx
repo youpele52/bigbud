@@ -182,8 +182,12 @@ export default function Sidebar() {
                   title={s.pendingDeleteConfirmation.title}
                   description={s.pendingDeleteConfirmation.description}
                   cancelLabel="Cancel"
-                  confirmLabel="Delete"
-                  confirmVariant="destructive"
+                  confirmLabel={
+                    s.pendingDeleteConfirmation.automationId ? "View automation" : "Delete"
+                  }
+                  confirmVariant={
+                    s.pendingDeleteConfirmation.automationId ? "default" : "destructive"
+                  }
                   onCancel={s.dismissPendingDeleteConfirmation}
                   onConfirm={() => {
                     void s.confirmPendingDeleteThreads();

@@ -168,6 +168,7 @@ export function createWsNativeApi(): NativeApi {
       listAutomations: rpcClient.server.listAutomations,
       listAllAutomations: rpcClient.server.listAllAutomations,
       createAutomation: rpcClient.server.createAutomation,
+      createOwnedAutomation: rpcClient.server.createOwnedAutomation,
       updateAutomation: rpcClient.server.updateAutomation,
       pauseAutomation: rpcClient.server.pauseAutomation,
       resumeAutomation: rpcClient.server.resumeAutomation,

@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
@@ -122,6 +122,18 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
         ORCHESTRATION_WS_METHODS.dispatchCommand,
         Effect.gen(function* () {
           const normalizedCommand = yield* context.normalizeDispatchCommand(command);
+          if (normalizedCommand.type === "thread.delete") {
+            const owner = yield* context.automationScheduleRepository.getOwningAutomationId(
+              normalizedCommand.threadId,
+            );
+            if (Option.isSome(owner)) {
+              return yield* new OrchestrationDispatchCommandError({
+                message: `This thread is owned by automation '${owner.value}'. Delete the automation first; the thread will be deleted automatically.`,
+                code: "automation_owned_thread",
+                automationId: owner.value,
+              });
+            }
+          }
           if (normalizedCommand.type === "thread.shell.run") {
             return yield* context.dispatchShellCommand(normalizedCommand);
           }

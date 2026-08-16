@@ -125,6 +125,7 @@ layer("ThreadRetentionRepository", (it) => {
       yield* seedThread("watched");
       yield* seedThread("delegated");
       yield* seedThread("scheduled");
+      yield* seedThread("owned");
       const sql = yield* SqlClient.SqlClient;
       yield* sql`UPDATE projection_threads SET pinned_at = ${now} WHERE thread_id = 'pinned'`;
       yield* sql`
@@ -160,23 +161,25 @@ layer("ThreadRetentionRepository", (it) => {
       `;
       yield* sql`
         INSERT INTO automation_schedules (
-          automation_id, project_id, target_thread_id, title, prompt, cron_expression,
-          timezone, next_run_at, created_at, updated_at
-        ) VALUES ('schedule-preview', ${projectId}, 'scheduled', 'Schedule', 'Prompt',
-          '* * * * *', 'UTC', ${now}, ${oldAt}, ${oldAt})
+          automation_id, project_id, target_thread_id, owns_target_thread, title, prompt,
+          cron_expression, timezone, next_run_at, paused_at, created_at, updated_at
+        ) VALUES
+          ('schedule-preview', ${projectId}, 'scheduled', 0, 'Schedule', 'Prompt',
+            '* * * * *', 'UTC', ${now}, NULL, ${oldAt}, ${oldAt}),
+          ('owned-preview', ${projectId}, 'owned', 1, 'Owned', 'Prompt',
+            '* * * * *', 'UTC', NULL, ${now}, ${oldAt}, ${oldAt})
       `;
       const repository = yield* ThreadRetentionRepository;
       const preview = yield* repository.preview(cutoffAt);
-      assert.equal(preview.eligibleCount, 0);
+      assert.equal(preview.eligibleCount, 3);
       assert.deepEqual(preview.exclusionCounts, [
         { reason: "active_task", count: 1 },
-        { reason: "delegated", count: 1 },
+        { reason: "automation_owned", count: 1 },
         { reason: "pending_work", count: 1 },
         { reason: "pinned", count: 1 },
         { reason: "running", count: 1 },
         { reason: "scheduled", count: 1 },
         { reason: "waiting_for_user", count: 1 },
-        { reason: "watched", count: 2 },
       ]);
     }),
   );

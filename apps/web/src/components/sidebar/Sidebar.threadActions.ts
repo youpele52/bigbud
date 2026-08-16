@@ -324,11 +324,12 @@ export function useSidebarThreadActions({
         return;
       }
 
-      const deletedIds = new Set<ThreadId>(ids);
+      const deletedIds = new Set<ThreadId>();
       for (const id of ids) {
-        await deleteThread(id, { deletedThreadIds: deletedIds });
+        await deleteThread(id, { deletedThreadIds: new Set(ids) });
+        deletedIds.add(id);
       }
-      removeFromSelection(ids);
+      removeFromSelection([...deletedIds]);
     },
     [
       appSettings.confirmThreadDelete,
