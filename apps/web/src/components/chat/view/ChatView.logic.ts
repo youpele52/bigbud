@@ -217,6 +217,17 @@ export function deriveComposerSendState(options: {
   };
 }
 
+export function buildUnconfirmedSessionSendToastCopy(): {
+  title: string;
+  description: string;
+} {
+  return {
+    title: "Starting a new turn",
+    description:
+      "Provider status isn't confirmed yet, so this send starts a new turn now instead of waiting. You can keep going — if the last turn is still running, you might see both for a moment.",
+  };
+}
+
 export function buildExpiredTerminalContextToastCopy(
   expiredTerminalContextCount: number,
   variant: "omitted" | "empty",

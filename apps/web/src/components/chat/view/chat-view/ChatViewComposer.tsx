@@ -220,7 +220,7 @@ export function ChatViewComposer({
             />
             {providerHealthUnconfirmed ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Provider status is unconfirmed. Follow-ups will wait until sending is safe.
+                Provider status is unconfirmed. Sending starts a new turn instead of waiting.
               </p>
             ) : null}
           </div>

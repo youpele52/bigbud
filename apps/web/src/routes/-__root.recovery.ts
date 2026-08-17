@@ -20,6 +20,7 @@ import {
   createOrchestrationRecoveryCoordinator,
   deriveOrchestrationBatchEffects,
   deriveReplayRetryDecision,
+  RECOVERY_OPERATION_TIMEOUT_MS,
   retryTransportRecoveryOperation,
   type ReplayRetryTracker,
 } from "../logic/orchestration";
@@ -215,7 +216,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     try {
       const replay = await retryTransportRecoveryOperation(
         () => input.api.orchestration.replayEvents(fromSequenceExclusive),
-        { shouldAbort: disposed },
+        { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (replay.availability === "gap") {
         replayRetryTracker = null;
@@ -276,9 +277,6 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           },
         );
       }
-      if (replayCompletion.shouldReplay) {
-        fallbackToBoundedRecovery();
-      }
       return;
     }
 
@@ -319,7 +317,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     try {
       const projectionSequence = await retryTransportRecoveryOperation(
         () => runBoundedBootstrap({ api: input.api, selectedThreadId, disposed }),
-        { shouldAbort: disposed },
+        { shouldAbort: disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (!disposed()) {
         reconcileSnapshotDerivedState();
@@ -329,8 +327,15 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
           });
         }
       }
-    } catch {
+    } catch (error) {
       recovery.failSnapshotRecovery();
+      if (import.meta.env.MODE !== "test") {
+        console.warn("[orchestration-recovery]", "Snapshot recovery failed.", {
+          reason,
+          error,
+          state: recovery.getState(),
+        });
+      }
     }
   };
 
