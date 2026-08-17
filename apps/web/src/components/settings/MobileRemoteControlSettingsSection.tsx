@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLinkIcon, SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
+import { ArrowUpRightIcon, SmartphoneIcon, TabletSmartphoneIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -223,7 +223,7 @@ export function MobileRemoteControlSettingsSection() {
               className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-4 hover:text-foreground hover:decoration-solid"
             >
               Get step-by-step setup help
-              <ExternalLinkIcon className="size-3" />
+              <ArrowUpRightIcon className="size-3" />
             </a>
           </p>
         </SettingsRow>

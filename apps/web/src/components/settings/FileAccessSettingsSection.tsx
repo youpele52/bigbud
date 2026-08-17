@@ -5,7 +5,7 @@ import {
   CheckIcon,
   XIcon,
   RotateCcwIcon,
-  ExternalLinkIcon,
+  ArrowUpRightIcon,
 } from "lucide-react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -192,7 +192,7 @@ export function FileAccessSettingsSection() {
               className="gap-1.5 text-xs"
               onClick={handleOpenSystemSettings}
             >
-              <ExternalLinkIcon className="size-3" />
+              <ArrowUpRightIcon className="size-3" />
               Open
             </Button>
           }

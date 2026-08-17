@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ExternalLinkIcon } from "lucide-react";
 import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { resolveAndPersistPreferredEditor } from "../../models/editor";
 import { ensureNativeApi } from "../../rpc/nativeApi";
@@ -77,7 +76,6 @@ export function AboutSettingsSection() {
         control={
           <Button size="xs" variant="outline" onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}>
             View changelog
-            <ExternalLinkIcon className="size-3.5" />
           </Button>
         }
       />
@@ -89,10 +87,9 @@ export function AboutSettingsSection() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="-ml-2.5 gap-1.5 text-muted-foreground text-xs"
+                className="-ml-2.5 text-muted-foreground text-xs"
                 onClick={() => openExternalUrl(url)}
               >
-                <ExternalLinkIcon className="size-3" />
                 {label}
               </Button>
             </li>
