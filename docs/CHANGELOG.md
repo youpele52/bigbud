@@ -14,7 +14,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Floating Assistant
 
-- Added chrome and matte finish options for the floating hand mascot, with matching animations, saved preferences, and a new chrome default for new installations.
+- Added chrome and matte finish options for the floating hand mascot, with matching animations and saved preferences. New installations turn the Floating Assistant on and use the matte hand unless you already saved a preference. The mascot also points when bigbud shows an in-app toast or a task-completion notification.
 - Added recent thread and project navigation to the floating chat, including project-specific thread lists, new-thread actions, recent completion indicators, and safe switching when an unsent draft exists.
 - Matched floating-chat composer and provider/model picker sizing more closely to the main chat while preserving the shared chat controls and sidebar ordering.
 - Reworked mascot synchronization to use bounded catalog loading, event replay, reconnect recovery, and placeholder threads instead of waiting for a full snapshot, so the mascot can reflect active work sooner and on larger local databases.
@@ -22,6 +22,7 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 ### More Reliable Desktop Startup
 
 - Fixed macOS development and packaged applications appearing as background processes instead of normal foreground apps. bigbud now remains available in the Dock and Cmd-Tab, with coverage for activation policy and application identity.
+- Added **Restart bigbud** in Application settings (desktop only), just above Diagnostics, as a manual recovery hatch. It relaunches the app and stops the local engine; in-flight turns and unsent composer text do not survive.
 
 ### Safer Thread Cleanup
 
@@ -29,7 +30,13 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ### Refined Settings
 
-- Updated settings actions to use the current arrow-up-right icon treatment and removed redundant decorative icons from About links for a cleaner, more consistent interface.
+- Marked settings actions that leave the app with an arrow-up-right icon after the label, including About links, **View changelog**, **Open logs folder**, provider setup guides, and System Settings.
+
+### More Reliable Chats
+
+- When provider health is still unconfirmed, sending now starts a new turn instead of waiting in the queue. A short toast explains that you can keep going, and both turns may show briefly if the last one is still running.
+- Timed out stuck event replay and startup recovery after 15 seconds so a hung snapshot no longer blocks live chat updates.
+- Limited startup session and latest-turn loading to the same operational thread window as chats, instead of reading those full tables, so large local databases start more reliably.
 
 ### Validation
 
