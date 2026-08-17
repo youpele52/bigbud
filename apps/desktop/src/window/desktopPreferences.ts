@@ -13,7 +13,7 @@ export interface DesktopPreferences {
 
 const defaults: DesktopPreferences = {
   version: 1,
-  floatingAssistantEnabled: false,
+  floatingAssistantEnabled: true,
   floatingAssistantCaller: "matte",
   mascotVisible: true,
   mascotBounds: null,

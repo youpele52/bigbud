@@ -11,6 +11,7 @@ import {
   deriveReplayRetryDecision,
   retryTransportRecoveryOperation,
   type ReplayRetryTracker,
+  RECOVERY_OPERATION_TIMEOUT_MS,
 } from "~/logic/orchestration";
 import { DEFAULT_INTERACTION_MODE, DEFAULT_RUNTIME_MODE, type Thread } from "~/models/types";
 import { runBoundedBootstrap } from "~/routes/-__root.bounded-bootstrap";
@@ -75,6 +76,11 @@ function ensurePlaceholderThread(event: OrchestrationEvent) {
   }));
 }
 
+function logRecovery(message: string, details?: Record<string, unknown>) {
+  if (import.meta.env.MODE === "test") return;
+  console.warn("[orchestration-recovery]", message, details);
+}
+
 export function startMascotOrchestrationSync(input: {
   readonly api: NativeApi;
   readonly applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
@@ -85,11 +91,6 @@ export function startMascotOrchestrationSync(input: {
   let replayRetryTracker: ReplayRetryTracker | null = null;
   const pendingEvents: OrchestrationEvent[] = [];
   let flushScheduled = false;
-
-  const logRecovery = (message: string, details?: Record<string, unknown>) => {
-    if (import.meta.env.MODE === "test") return;
-    console.warn("[orchestration-recovery]", message, details);
-  };
 
   const applyAcceptedEvents = (events: ReadonlyArray<OrchestrationEvent>) => {
     if (events.length === 0) return;
@@ -124,7 +125,7 @@ export function startMascotOrchestrationSync(input: {
     try {
       const replay = await retryTransportRecoveryOperation(
         () => input.api.orchestration.replayEvents(fromSequenceExclusive),
-        { shouldAbort: () => disposed },
+        { shouldAbort: () => disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (replay.availability === "gap") {
         replayRetryTracker = null;
@@ -182,7 +183,7 @@ export function startMascotOrchestrationSync(input: {
             selectedThreadId: null,
             disposed: () => disposed,
           }),
-        { shouldAbort: () => disposed },
+        { shouldAbort: () => disposed, timeoutMs: RECOVERY_OPERATION_TIMEOUT_MS },
       );
       if (disposed) return;
       if (recovery.completeSnapshotRecovery(projectionSequence)) {

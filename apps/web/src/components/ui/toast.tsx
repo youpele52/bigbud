@@ -20,6 +20,7 @@ import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
+import { announceMascotAttention } from "../floating-assistant/mascotAttention.logic";
 
 export type ThreadToastData = {
   threadId?: ThreadId | null;
@@ -31,6 +32,17 @@ export type ThreadToastData = {
 
 const toastManager = Toast.createToastManager<ThreadToastData>();
 const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
+
+function attachMascotAttention(manager: { add: typeof toastManager.add }) {
+  const add = manager.add.bind(manager);
+  manager.add = ((...args: Parameters<typeof add>) => {
+    announceMascotAttention();
+    return add(...args);
+  }) as typeof manager.add;
+}
+
+attachMascotAttention(toastManager);
+attachMascotAttention(anchoredToastManager);
 type ToastId = ReturnType<typeof toastManager.add>;
 const threadToastVisibleTimeoutRemainingMs = new Map<ToastId, number>();
 

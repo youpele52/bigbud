@@ -23,7 +23,7 @@ const EMPTY_PROVIDERS: ReturnType<typeof useServerProviders> = [];
 
 export function FloatingAssistantSettingsSection() {
   const bridge = window.desktopBridge;
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState(true);
   const [caller, setCaller] = useState<FloatingAssistantCaller>("matte");
   const providers = useServerProviders() ?? EMPTY_PROVIDERS;
   const [modelPreference, setModelPreference] = useLocalStorage(

@@ -21,10 +21,12 @@ afterEach(() => {
 });
 
 describe("DesktopPreferencesStore", () => {
-  it("defaults the floating assistant caller to the matte-black hand", () => {
+  it("defaults the floating assistant on with the matte-black hand", () => {
     const store = new DesktopPreferencesStore(createTemporaryDirectory(), () => undefined);
 
+    expect(store.get().floatingAssistantEnabled).toBe(true);
     expect(store.get().floatingAssistantCaller).toBe("matte");
+    expect(store.get().mascotVisible).toBe(true);
   });
 
   it("migrates the legacy mascot caller to matte black", () => {

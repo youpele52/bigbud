@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { toastManager } from "../components/ui/toast";
+import { announceMascotAttention } from "../components/floating-assistant/mascotAttention.logic";
 import { useSettings } from "../hooks/useSettings";
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
@@ -31,7 +32,9 @@ export async function showSystemTaskCompletionNotification(
   const bridge = window.desktopBridge;
   if (bridge?.notifications) {
     try {
-      return await bridge.notifications.show({ title, body });
+      const shown = await bridge.notifications.show({ title, body });
+      if (shown) announceMascotAttention();
+      return shown;
     } catch {
       // Fall through to web Notification API
     }
@@ -55,6 +58,7 @@ export async function showSystemTaskCompletionNotification(
 
   const notification = new Notification(title, { body });
   void notification;
+  announceMascotAttention();
   return true;
 }
 

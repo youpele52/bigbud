@@ -21,6 +21,7 @@ export const MASCOT_ANIMATIONS = {
   chrome: {
     celebration: chromeCelebration,
     okay: chromeOkay,
+    pointing: chromeThinking,
     thinking: chromeThinking,
     "thumbs-up": chromeThumbsUp,
     typing: chromeTyping,
@@ -29,6 +30,7 @@ export const MASCOT_ANIMATIONS = {
   matte: {
     celebration: matteCelebration,
     okay: matteOkay,
+    pointing: matteThinking,
     thinking: matteThinking,
     "thumbs-up": matteThumbsUp,
     typing: matteTyping,

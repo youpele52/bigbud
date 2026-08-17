@@ -6,7 +6,7 @@ import type { DesktopPreferencesStore } from "./window/desktopPreferences";
 import type { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
 
 interface RegisterFloatingAssistantIpcOptions {
-  readonly appInstance: Pick<App, "quit">;
+  readonly appInstance: Pick<App, "quit" | "relaunch">;
   readonly channels: typeof desktopIpcChannels;
   readonly desktopPreferences: DesktopPreferencesStore;
   readonly floatingAssistantWindows: FloatingAssistantWindows;
@@ -61,6 +61,12 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
   });
   register(channels.quitApplication, () => {
     prepareForAppQuit("floating-assistant-quit");
+    appInstance.quit();
+    return true;
+  });
+  register(channels.restartApplication, () => {
+    appInstance.relaunch();
+    prepareForAppQuit("settings-restart");
     appInstance.quit();
     return true;
   });

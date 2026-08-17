@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DesktopWindowRegistry } from "./DesktopWindowRegistry";
-import { FloatingAssistantWindows } from "./floatingAssistantWindows";
+import {
+  buildMascotContextMenuTemplate,
+  FloatingAssistantWindows,
+} from "./floatingAssistantWindows";
 
 interface MockWindow {
   readonly handlers: Map<string, (...args: never[]) => void>;
@@ -81,6 +84,7 @@ function createWindows(mascotBounds: { x: number; y: number } | null = null) {
     isDevelopment: false,
     onOpenMain: vi.fn(),
     onQuit: vi.fn(),
+    onRestart: vi.fn(),
     preferences: {
       get: () => ({
         version: 1,
@@ -191,5 +195,28 @@ describe("FloatingAssistantWindows", () => {
       "Cannot open compact chat while the floating assistant is disabled.",
     );
     expect(registry.get("compact-chat")).toBeNull();
+  });
+
+  it("places Restart bigbud immediately before Quit bigbud", () => {
+    const labels = buildMascotContextMenuTemplate({
+      onDisable: vi.fn(),
+      onHideMascot: vi.fn(),
+      onOpenChat: vi.fn(),
+      onOpenMain: vi.fn(),
+      onQuit: vi.fn(),
+      onRestart: vi.fn(),
+    }).map((item) => ("label" in item ? item.label : item.type));
+
+    expect(labels).toEqual([
+      "Open chat",
+      "New chat",
+      "Open bigbud",
+      "separator",
+      "Hide mascot",
+      "Disable floating assistant",
+      "separator",
+      "Restart bigbud",
+      "Quit bigbud",
+    ]);
   });
 });

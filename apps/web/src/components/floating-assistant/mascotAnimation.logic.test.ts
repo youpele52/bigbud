@@ -9,6 +9,7 @@ import {
   hasNewAgentUncertainty,
   hasNewCelebratoryFeedback,
   isCelebratoryFeedback,
+  selectMascotAnimation,
 } from "./mascotAnimation.logic";
 
 function message(id: string, role: ChatMessage["role"], text: string, streaming = false) {
@@ -96,5 +97,30 @@ describe("mascot animation logic", () => {
 
     expect(hasNewAgentUncertainty([previous], [uncertain])).toBe(true);
     expect(hasNewAgentUncertainty([uncertain], [uncertain])).toBe(false);
+  });
+
+  it("uses the pointing pose for app attention ahead of idle and hover", () => {
+    expect(
+      selectMascotAnimation({
+        agentUncertain: false,
+        isCelebrating: false,
+        hasAttention: true,
+        isHovered: true,
+        isGreeting: false,
+        assistantIsActivelyTyping: false,
+        workAnimation: "okay",
+      }),
+    ).toBe("pointing");
+    expect(
+      selectMascotAnimation({
+        agentUncertain: false,
+        isCelebrating: true,
+        hasAttention: true,
+        isHovered: false,
+        isGreeting: false,
+        assistantIsActivelyTyping: false,
+        workAnimation: "okay",
+      }),
+    ).toBe("celebration");
   });
 });

@@ -44,6 +44,7 @@ const HIDE_COMPACT_CHAT_CHANNEL = "desktop:hide-compact-chat";
 const HIDE_MASCOT_CHANNEL = "desktop:hide-mascot";
 const DISABLE_FLOATING_ASSISTANT_CHANNEL = "desktop:disable-floating-assistant";
 const QUIT_APPLICATION_CHANNEL = "desktop:quit-application";
+const RESTART_APPLICATION_CHANNEL = "desktop:restart-application";
 const GET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:get-floating-assistant-enabled";
 const SET_FLOATING_ASSISTANT_ENABLED_CHANNEL = "desktop:set-floating-assistant-enabled";
 const GET_FLOATING_ASSISTANT_CALLER_CHANNEL = "desktop:get-floating-assistant-caller";
@@ -66,6 +67,7 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   hideMascot: () => ipcRenderer.invoke(HIDE_MASCOT_CHANNEL),
   disableFloatingAssistant: () => ipcRenderer.invoke(DISABLE_FLOATING_ASSISTANT_CHANNEL),
   quitApplication: () => ipcRenderer.invoke(QUIT_APPLICATION_CHANNEL),
+  restartApplication: () => ipcRenderer.invoke(RESTART_APPLICATION_CHANNEL),
   getFloatingAssistantEnabled: () => ipcRenderer.invoke(GET_FLOATING_ASSISTANT_ENABLED_CHANNEL),
   setFloatingAssistantEnabled: (enabled) =>
     ipcRenderer.invoke(SET_FLOATING_ASSISTANT_ENABLED_CHANNEL, enabled),

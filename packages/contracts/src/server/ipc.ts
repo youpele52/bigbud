@@ -60,6 +60,7 @@ export interface DesktopBridge extends DesktopComputerUseBridge, DesktopCertific
   hideMascot?: () => Promise<boolean>;
   disableFloatingAssistant?: () => Promise<boolean>;
   quitApplication?: () => Promise<void>;
+  restartApplication?: () => Promise<void>;
   getFloatingAssistantEnabled?: () => Promise<boolean>;
   setFloatingAssistantEnabled?: (enabled: boolean) => Promise<boolean>;
   getFloatingAssistantCaller?: () => Promise<FloatingAssistantCaller>;

@@ -1,6 +1,13 @@
 import type { Thread } from "~/models/types";
 
-export type MascotAnimation = "celebration" | "okay" | "thinking" | "thumbs-up" | "typing" | "wave";
+export type MascotAnimation =
+  | "celebration"
+  | "okay"
+  | "pointing"
+  | "thinking"
+  | "thumbs-up"
+  | "typing"
+  | "wave";
 
 const NEGATED_SUCCESS_PATTERN =
   /\b(?:did(?:n't| not)|is(?:n't| not)|not|was(?:n't| not))\s+(?:amazing|awesome|correct|excellent|great|perfect|right|solved|working|the answer)\b/i;
@@ -62,6 +69,23 @@ export function deriveMascotWorkState(threads: ReadonlyArray<Thread>): {
 
 export function deriveMascotWorkAnimation(threads: ReadonlyArray<Thread>): MascotAnimation {
   return deriveMascotWorkState(threads).animation;
+}
+
+export function selectMascotAnimation(input: {
+  agentUncertain: boolean;
+  isCelebrating: boolean;
+  hasAttention: boolean;
+  isHovered: boolean;
+  isGreeting: boolean;
+  assistantIsActivelyTyping: boolean;
+  workAnimation: MascotAnimation;
+}): MascotAnimation {
+  if (input.agentUncertain) return "thinking";
+  if (input.isCelebrating) return "celebration";
+  if (input.hasAttention) return "pointing";
+  if (input.isHovered || input.isGreeting) return "wave";
+  if (input.assistantIsActivelyTyping) return "typing";
+  return input.workAnimation;
 }
 
 export function hasAssistantStreamProgress(
