@@ -4,11 +4,37 @@ Every bigbud release, in one place. New features, thoughtful improvements, and h
 
 ## What's new?
 
-- Keep bigbud close at hand with the new Floating Assistant: drag its caller anywhere, open a compact chat from any desktop Space, and choose either the bigbud app icon or a hand mascot that waves when you hover.
+- Keep bigbud close at hand with the Floating Assistant: drag its caller anywhere, open compact chat from any desktop Space, jump between recent projects and threads, see when work is complete, and choose the bigbud app icon or a chrome or matte hand mascot with animated states.
 - Discover and install provider-neutral plugins from the new Plugin Store, with searchable listings, artwork, update notices, and safer installed revisions; custom plugins are coming soon.
 - Open bigbud and get moving faster: providers appear right away, your selected chat is ready sooner, and large project lists load smoothly in the background as you ask for more.
 - Never lose your place in a file: bigbud keeps a preview history per project, so Back and Forward flip through them and your exact spot is waiting even after a restart.
 - Changed hosts or SSH keys? No need to remove and re-add the project. bigbud now lets you edit an existing SSH remote's connection — host, port, key, remote path, even where the provider runs. It verifies the new target before saving and repoints your terminals so nothing breaks.
+
+## v0.2.203 (17 August, 2026)
+
+### Floating Assistant
+
+- Added chrome and matte finish options for the floating hand mascot, with matching animations, saved preferences, and a new chrome default for new installations.
+- Added recent thread and project navigation to the floating chat, including project-specific thread lists, new-thread actions, recent completion indicators, and safe switching when an unsent draft exists.
+- Matched floating-chat composer and provider/model picker sizing more closely to the main chat while preserving the shared chat controls and sidebar ordering.
+- Reworked mascot synchronization to use bounded catalog loading, event replay, reconnect recovery, and placeholder threads instead of waiting for a full snapshot, so the mascot can reflect active work sooner and on larger local databases.
+
+### More Reliable Desktop Startup
+
+- Fixed macOS development and packaged applications appearing as background processes instead of normal foreground apps. bigbud now remains available in the Dock and Cmd-Tab, with coverage for activation policy and application identity.
+
+### Safer Thread Cleanup
+
+- Added a migration that reconstructs missing thread and project deletion markers from canonical deletion events, allowing stalled cleanup jobs to finish safely while preserving existing markers.
+
+### Refined Settings
+
+- Updated settings actions to use the current arrow-up-right icon treatment and removed redundant decorative icons from About links for a cleaner, more consistent interface.
+
+### Validation
+
+- Added regression coverage for mascot synchronization, mascot preferences, deletion-marker backfill, floating-chat completion navigation, and macOS application identity.
+- Verified focused floating-chat browser coverage, formatting, linting, and workspace type checks.
 
 ## v0.2.202 (16 August, 2026)
 
