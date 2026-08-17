@@ -50,8 +50,8 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
               messageRows: startupWindowSql.listActiveThreadMessageRows(undefined),
               activityRows: startupWindowSql.listActiveThreadActivityRows(undefined),
               taskRows: startupWindowSql.listActiveThreadTaskRows(undefined),
-              sessionRows: snapshotSql.listThreadSessionRows(undefined),
-              latestTurnRows: snapshotSql.listLatestTurnRows(undefined),
+              sessionRows: startupWindowSql.listOperationalSessionRows(undefined),
+              latestTurnRows: startupWindowSql.listOperationalLatestTurnRows(undefined),
               stateRows: snapshotSql.listProjectionStateRows(undefined),
               threadWatchRows: snapshotSql.listThreadWatchRows(undefined),
             });
