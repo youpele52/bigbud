@@ -68,8 +68,7 @@ function ensurePlaceholderThread(event: OrchestrationEvent) {
   const threadId = eventThreadId(event);
   if (threadId === null) return;
   if (useStore.getState().threads.some((thread) => thread.id === threadId)) return;
-  const session =
-    event.type === "thread.session-set" ? mapSession(event.payload.session) : null;
+  const session = event.type === "thread.session-set" ? mapSession(event.payload.session) : null;
   const updatedAt = event.occurredAt;
   useStore.setState((state) => ({
     threads: [...state.threads, placeholderThread(threadId, session, updatedAt)],
