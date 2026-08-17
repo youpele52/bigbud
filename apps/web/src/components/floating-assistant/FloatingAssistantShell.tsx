@@ -1,5 +1,5 @@
 import type { FloatingAssistantCaller } from "@bigbud/contracts/server/ipc.ts";
-import { ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
+import { PlusIcon, SquareArrowOutUpRightIcon, XIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 
+import { CompactChatPicker } from "./CompactChatPicker";
 import { MASCOT_ANIMATIONS } from "./mascotAssets";
 import { useMascotAnimation } from "./useMascotAnimation";
 
@@ -177,7 +178,7 @@ export function CompactChatShell({
           <CompactChatHeaderAction
             label="Open bigbud"
             disabled={!isMaterialized}
-            icon={<ExternalLinkIcon className="size-3.5" />}
+            icon={<SquareArrowOutUpRightIcon className="size-3.5" />}
             onClick={() => void bridge?.openMainWindow?.(threadId)}
           />
           <CompactChatHeaderAction
@@ -222,6 +223,7 @@ export function CompactChatShell({
             <CompactThreadConversation
               {...context}
               composerClassName="max-w-[calc(52rem*2/3)]"
+              projectPicker={<CompactChatPicker compactChat={compactChat} />}
               workspaceRoot={undefined}
             />
           )}

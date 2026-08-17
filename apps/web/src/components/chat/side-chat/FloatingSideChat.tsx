@@ -51,10 +51,12 @@ function SidecarHeaderAction(props: {
 
 export function CompactThreadConversation({
   composerClassName,
+  projectPicker,
   workspaceRoot,
   ...context
 }: ThreadComposerSurfaceContext & {
   composerClassName?: string;
+  projectPicker?: ReactNode;
   workspaceRoot: string | undefined;
 }) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
@@ -136,6 +138,11 @@ export function CompactThreadConversation({
           onOpenReplySource={() => undefined}
         />
       </div>
+      {projectPicker ? (
+        <div className="px-3 pb-2">
+          <div className="mx-auto w-full max-w-[calc(52rem*2/3)] ps-3">{projectPicker}</div>
+        </div>
+      ) : null}
     </>
   );
 }

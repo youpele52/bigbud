@@ -16,6 +16,7 @@ export interface ProviderModelPickerProps {
   enableRecentlyUsed?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  menuItemClassName?: string;
   popupClassName?: string;
   subPopupClassName?: string;
   modelListSearchbarClassName?: string;

@@ -264,6 +264,7 @@ export function ChatViewComposer({
                 planCardLabel={thread.planCardLabel}
                 interactionMode={base.interactionMode}
                 runtimeMode={base.runtimeMode}
+                compact={compact}
                 providerTraitsMenuContent={interactions.providerTraitsMenuContent}
                 onOpenOrchestra={onOpenOrchestra}
                 onOpenSideChat={onOpenSideChat}
