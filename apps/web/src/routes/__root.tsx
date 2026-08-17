@@ -55,14 +55,12 @@ export function RootRouteView() {
   const desktopWindowRole = window.desktopBridge?.getWindowRole?.() ?? "main";
   if (desktopWindowRole === "mascot") {
     return (
-      <ToastProvider>
-        <AnchoredToastProvider>
-          <MascotStateCoordinator />
-          <WebSocketConnectionCoordinator />
-          <DesktopBackendStartupCoordinator />
-          <MascotShell />
-        </AnchoredToastProvider>
-      </ToastProvider>
+      <>
+        <MascotStateCoordinator />
+        <WebSocketConnectionCoordinator />
+        <DesktopBackendStartupCoordinator />
+        <MascotShell />
+      </>
     );
   }
   if (desktopWindowRole === "compact-chat") {
