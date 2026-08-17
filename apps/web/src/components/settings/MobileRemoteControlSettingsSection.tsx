@@ -223,7 +223,7 @@ export function MobileRemoteControlSettingsSection() {
               className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-4 hover:text-foreground hover:decoration-solid"
             >
               Get step-by-step setup help
-              <ArrowUpRightIcon className="size-3" />
+              <ArrowUpRightIcon className="size-3" aria-hidden="true" />
             </a>
           </p>
         </SettingsRow>

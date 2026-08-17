@@ -92,6 +92,7 @@ describe("AboutSettingsPanel observability", () => {
   afterEach(() => {
     resetServerStateForTests();
     __resetNativeApiForTests();
+    delete window.desktopBridge;
   });
 
   it("shows diagnostics inside About with a single logs-folder action", async () => {
@@ -110,6 +111,7 @@ describe("AboutSettingsPanel observability", () => {
     await expect.element(page.getByRole("button", { name: "GitHub" })).toBeInTheDocument();
     await expect.element(page.getByText("Diagnostics")).toBeInTheDocument();
     await expect.element(page.getByText("Open logs folder")).toBeInTheDocument();
+    await expect.element(page.getByText("Restart bigbud")).not.toBeInTheDocument();
     await expect
       .element(page.getByText("/repo/project/.t3/logs", { exact: true }))
       .toBeInTheDocument();
@@ -120,6 +122,23 @@ describe("AboutSettingsPanel observability", () => {
         ),
       )
       .toBeInTheDocument();
+  });
+
+  it("shows Restart bigbud before diagnostics on desktop", async () => {
+    const restartApplication = vi.fn().mockResolvedValue(undefined);
+    window.desktopBridge = { restartApplication } as unknown as DesktopBridge;
+    setServerConfigSnapshot(createBaseServerConfig());
+
+    await render(
+      <AppAtomRegistryProvider>
+        <AboutSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    const restartButton = page.getByRole("button", { name: "Restart bigbud" });
+    await expect.element(restartButton).toBeInTheDocument();
+    await restartButton.click();
+    expect(restartApplication).toHaveBeenCalledOnce();
   });
 
   it("opens the logs folder in the preferred editor", async () => {

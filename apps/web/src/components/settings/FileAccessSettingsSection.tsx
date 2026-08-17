@@ -192,8 +192,8 @@ export function FileAccessSettingsSection() {
               className="gap-1.5 text-xs"
               onClick={handleOpenSystemSettings}
             >
-              <ArrowUpRightIcon className="size-3" />
               Open
+              <ArrowUpRightIcon className="size-3" />
             </Button>
           }
         />

@@ -342,8 +342,8 @@ export function ComputerUseAccessSettingsSection() {
                 className="gap-1.5 text-xs"
                 onClick={handleOpenAccessibilitySettings}
               >
-                <ArrowUpRightIcon className="size-3" />
                 Accessibility
+                <ArrowUpRightIcon className="size-3" />
               </Button>
               <Button
                 variant="ghost"
@@ -351,8 +351,8 @@ export function ComputerUseAccessSettingsSection() {
                 className="gap-1.5 text-xs"
                 onClick={handleOpenScreenRecordingSettings}
               >
-                <ArrowUpRightIcon className="size-3" />
                 Screen Recording
+                <ArrowUpRightIcon className="size-3" />
               </Button>
             </div>
           }
