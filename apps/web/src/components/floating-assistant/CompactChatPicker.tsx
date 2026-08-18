@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronDownIcon, FolderIcon, SquarePenIcon } from "lucide-react";
+import { ChevronDownIcon, FolderIcon, SquarePenIcon } from "lucide-react";
 import { isBuiltInChatsProject, type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useMemo } from "react";
 
@@ -118,7 +118,7 @@ export function CompactChatPicker({
         {completedThreads.length > 0 ? (
           <span
             aria-label={`${completedThreads.length} completed thread${completedThreads.length === 1 ? "" : "s"}`}
-            className="size-1.5 shrink-0 rounded-full bg-primary"
+            className="size-1.5 shrink-0 rounded-full bg-success"
           />
         ) : null}
       </MenuTrigger>
@@ -128,7 +128,6 @@ export function CompactChatPicker({
             <MenuGroupLabel className="sm:text-xs">Completed</MenuGroupLabel>
             <ThreadMenuItems
               threads={completedThreads}
-              completed
               currentThreadId={compactChat.threadId}
               onSelect={selectThread}
             />
@@ -188,12 +187,10 @@ export function CompactChatPicker({
 }
 
 function ThreadMenuItems({
-  completed = false,
   currentThreadId,
   onSelect,
   threads,
 }: {
-  completed?: boolean;
   currentThreadId: ThreadId;
   onSelect: (threadId: ThreadId, projectId: ProjectId) => void;
   threads: ReadonlyArray<SidebarThreadSummary>;
@@ -206,22 +203,33 @@ function ThreadMenuItems({
     );
   }
 
-  return threads.map((thread) => (
-    <MenuItem
-      key={thread.id}
-      disabled={thread.id === currentThreadId}
-      inset
-      className={
-        thread.id === currentThreadId
-          ? "text-xs text-foreground data-disabled:opacity-100"
-          : "text-xs text-muted-foreground"
-      }
-      {...(thread.id === currentThreadId
-        ? {}
-        : { onClick: () => onSelect(thread.id, thread.projectId) })}
-    >
-      {completed ? <CheckIcon className="size-3 text-primary" /> : null}
-      <span className="truncate">{thread.title}</span>
-    </MenuItem>
-  ));
+  return threads.map((thread) => {
+    const status = resolveThreadStatusPill({ thread });
+
+    return (
+      <MenuItem
+        key={thread.id}
+        disabled={thread.id === currentThreadId}
+        inset
+        className={
+          thread.id === currentThreadId
+            ? "text-xs text-foreground data-disabled:opacity-100"
+            : "text-xs text-muted-foreground"
+        }
+        {...(thread.id === currentThreadId
+          ? {}
+          : { onClick: () => onSelect(thread.id, thread.projectId) })}
+      >
+        {status ? (
+          <span
+            aria-hidden="true"
+            className={`size-1.5 shrink-0 rounded-full ${
+              status.label === "Completed" ? "bg-success" : status.dotClass
+            }`}
+          />
+        ) : null}
+        <span className="truncate">{thread.title}</span>
+      </MenuItem>
+    );
+  });
 }
