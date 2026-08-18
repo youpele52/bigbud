@@ -17,8 +17,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import { OpencodeAdapter, type OpencodeAdapterShape } from "../../Services/Opencode/Adapter.ts";
-import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { PROVIDER, type ActiveOpencodeSession } from "./Adapter.types.ts";
+import { makeActiveTurnInspection } from "./Adapter.activeTurnInspection.ts";
 import { makeNextEventId, makeEventStampFactory } from "./Adapter.stream.ts";
 import { makeSessionMethods, type SessionMethodDeps } from "./Adapter.session.ts";
 
@@ -75,7 +75,7 @@ const makeOpencodeAdapter = Effect.fn("makeOpencodeAdapter")(function* (
       sessionModelSwitch: "in-session",
     },
     ...sessionMethods,
-    inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),
+    inspectActiveTurn: makeActiveTurnInspection({ sessions }),
     get streamEvents() {
       return Stream.fromQueue(runtimeEventQueue);
     },
